@@ -11,8 +11,9 @@
   ],
   "parent": "qeu",
   "acceptance_criteria": "The real epic is closed in ticks with a merged PR opened by ticfac; three restarts recorded with zero duplicate attempts and zero false closes, verified from the .ticfac/ record; the tag exists; the report is committed.",
+  "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.431225Z",
-  "updated_at": "2026-09-02T22:41:13.591596Z",
+  "updated_at": "2026-09-02T22:41:13.64099Z",
   "started_at": "2026-09-02T22:41:13.591595Z"
 }
