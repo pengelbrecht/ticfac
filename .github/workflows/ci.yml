@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          # No dependency cache: this module is stdlib-only, so there is no
+          # go.sum for setup-go to key a cache on. Turn this on in the same
+          # commit as the first dependency.
+          cache: false
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l . | grep -v '^contracts/' || true)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test -short
+        run: go test -short ./...
+
+      # The full suite, which additionally builds the binary and asserts the
+      # exit code a shell sees for `ticfac run-epic <id>`.
+      - name: go test
+        run: go test ./...
+
+      - name: ticfac run-epic fails closed
+        run: |
+          go build -o /tmp/ticfac ./cmd/ticfac
+          set +e
+          out="$(/tmp/ticfac run-epic x 2>&1)"
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -ne 2 ]; then
+            echo "exit code $code, want 2"; exit 1
+          fi
+          case "$out" in
+            *"no executor configured"*) ;;
+            *) echo "the refusal does not say 'no executor configured'"; exit 1 ;;
+          esac
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          # No dependency cache: this module is stdlib-only, so there is no
+          # go.sum for setup-go to key a cache on. Turn this on in the same
+          # commit as the first dependency.
+          cache: false
+
+      # The offline gate. It makes no network call, so no network failure can
+      # turn this job green by skipping it: the vendored bundle is verified
+      # against its own manifest and against contracts.pin.json's digests.
+      - name: Verify the vendored bundle offline
+        run: go run ./cmd/contracts check
+
+      # The online half: fetch pengelbrecht/ticks at the PINNED REF and require
+      # the vendored copy to be what ticks published there, byte for byte. This
+      # is the step that makes "vendored" mean "pinned" rather than "copied".
+      - name: Verify the vendored bundle against the pinned ticks ref
+        run: go run ./cmd/contracts verify-upstream
+
+      # Every reader for every file in the bundle. Named as its own step so a
+      # contract problem is legible in the log instead of surfacing as one
+      # failure among many inside `go test ./...`.
+      - name: Run every contract reader
+        run: go test ./internal/contracts/... ./internal/schema/... -v
+
+      # The negative control, made visible. contracts/README.md's rule is that
+      # a check nothing has ever seen fail is not known to be a check, so CI
+      # breaks a vendored fixture on purpose and requires the check to refuse
+      # it — then restores it and requires the check to pass again.
+      - name: A deliberately broken vendored fixture fails
+        run: |
+          printf '\n' >> contracts/message-context.json
+          if go run ./cmd/contracts check; then
+            echo "FAIL: the check passed with an edited fixture — it is not a check"
+            exit 1
+          fi
+          echo "refused, as it must be"
+          git checkout -- contracts/message-context.json
+          go run ./cmd/contracts check
