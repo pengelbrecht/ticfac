@@ -205,11 +205,20 @@ func TestManifestCommandsAgainstRealTk(t *testing.T) {
 
 func gitInit(t *testing.T, dir string) {
 	t.Helper()
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = dir
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v\n%s", err, output)
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+		}
 	}
+	runGit("init", "-q")
+	runGit("config", "user.name", "ticfac fixture")
+	runGit("config", "user.email", "fixture@example.com")
+	runGit("remote", "add", "origin", "https://example.com/example/fixture.git")
+	writeFixtureFile(t, dir, "fixture.txt", "fixture repository\n")
+	runGit("add", "fixture.txt")
+	runGit("commit", "-q", "-m", "fixture repository")
 }
 
 func seedFixture(t *testing.T, repo string) {
@@ -221,7 +230,7 @@ func seedFixture(t *testing.T, repo string) {
 	writeTick := func(id, title, kind, status string, blockedBy []string, parent string) {
 		tick := map[string]any{
 			"id": id, "title": title, "status": status, "priority": 1,
-			"type": kind, "owner": "", "created_by": "fixture",
+			"type": kind, "owner": "fixture", "created_by": "fixture",
 			"created_at": "2026-09-02T00:00:00Z", "updated_at": "2026-09-02T00:00:00Z",
 		}
 		if len(blockedBy) != 0 {
@@ -243,10 +252,10 @@ func seedFixture(t *testing.T, repo string) {
 	writeTick("b01", "Blocked fixture task", "task", "open", []string{"a01"}, "e01")
 	writeTick("d01", "Closed dependency", "task", "closed", nil, "")
 
-	writeFixtureFile(t, repo, "base.txt", "one\ntwo\n")
-	writeFixtureFile(t, repo, "ours.txt", "ours-one\ntwo\n")
-	writeFixtureFile(t, repo, "theirs.txt", "one\ntheirs-two\n")
-	writeFixtureFile(t, repo, "merged.txt", "ours-one\ntwo\n")
+	writeFixtureFile(t, repo, "base.txt", fixtureTickJSON("m01", "merge base", "base description"))
+	writeFixtureFile(t, repo, "ours.txt", fixtureTickJSON("m01", "merge ours", "base description"))
+	writeFixtureFile(t, repo, "theirs.txt", fixtureTickJSON("m01", "merge base", "theirs description"))
+	writeFixtureFile(t, repo, "merged.txt", fixtureTickJSON("m01", "merge ours", "base description"))
 	ancestor := "{\"ts\":\"2026-09-02T00:00:00Z\",\"tick\":\"a01\",\"action\":\"create\",\"actor\":\"fixture\",\"data\":{\"title\":\"Fixture task\"}}\n"
 	writeFixtureFile(t, repo, "ancestor.jsonl", ancestor)
 	writeFixtureFile(t, repo, "current.jsonl", ancestor+"{\"ts\":\"2026-09-02T00:01:00Z\",\"tick\":\"a01\",\"action\":\"note\",\"actor\":\"ours\",\"data\":{\"note\":\"ours\"}}\n")
@@ -259,4 +268,17 @@ func writeFixtureFile(t *testing.T, repo, name, content string) {
 	if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
+}
+
+func fixtureTickJSON(id, title, description string) string {
+	tick := map[string]any{
+		"id": id, "title": title, "description": description,
+		"status": "open", "priority": 1, "type": "task", "owner": "fixture",
+		"created_by": "fixture", "created_at": "2026-09-02T00:00:00Z", "updated_at": "2026-09-02T00:00:00Z",
+	}
+	data, err := json.Marshal(tick)
+	if err != nil {
+		panic(fmt.Sprintf("marshal fixture tick: %v", err))
+	}
+	return string(data) + "\n"
 }
