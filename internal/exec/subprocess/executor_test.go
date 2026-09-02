@@ -357,6 +357,44 @@ func TestAReportOverAnEmptyBranchIsNoCommits(t *testing.T) {
 	}
 }
 
+// vcx: a codex run that hits its account's flat-rate seat usage limit before
+// making any commit collects as its own failure class — quota_exhausted —
+// rather than the generic runner_error a broken route would report. SPEC
+// §4.3: quota exhaustion is never reported as a broken route. The log is the
+// golden fixture testdata/codex-usage-limit.log, captured 2026-09-02.
+func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "quota_exhausted"})
+	handle := f.Start(f.spec("run-19/tick-ttt/attempt-1", "ttt"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictNoCommits {
+		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	}
+	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureQuotaExhausted {
+		t.Errorf("outcome %s/%s, want %s/%s",
+			collected.Result.Outcome, collected.Result.FailureClass, OutcomeFailed, FailureQuotaExhausted)
+	}
+}
+
+// vcx: a runner invoked with a flag it does not recognise exits 2 before ever
+// reaching the model — this executor's own mistake, not the runner's conduct
+// — so it collects as infrastructure_error rather than runner_error.
+func TestAUsageErrorExitCollectsAsInfrastructureError(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "usage_error"})
+	handle := f.Start(f.spec("run-20/tick-uuu/attempt-1", "uuu"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictNoCommits {
+		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	}
+	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureInfrastructure {
+		t.Errorf("outcome %s/%s, want %s/%s",
+			collected.Result.Outcome, collected.Result.FailureClass, OutcomeFailed, FailureInfrastructure)
+	}
+}
+
 // The boundary is enforced by the substrate and every attempt is REPORTED —
 // including the exempt files, which are NOT violations: config, the runner
 // table and the learnings are a worker's to amend, the records are not.

@@ -68,6 +68,22 @@ hang)
 	commit
 	while :; do sleep 1; done
 	;;
+quota_exhausted)
+	# No commit, no report: the shape of a codex run that hit its flat-rate
+	# seat's usage limit before writing anything. The log is golden —
+	# testdata/codex-usage-limit.log, captured 2026-09-02 (see the qg5
+	# notes: the codex live test was blocked by the account's usage limit,
+	# reset 22:13, the same run this fixture is drawn from).
+	cat "$(dirname "$0")/codex-usage-limit.log" >&2
+	exit 1
+	;;
+usage_error)
+	# No commit, no report, exit 2: the shape of an argv this executor got
+	# wrong, so the runner refuses before it ever reaches the model.
+	printf 'codex: unknown flag: --bogus-flag\n' >&2
+	printf 'Usage: codex exec [flags] <prompt>\n' >&2
+	exit 2
+	;;
 slow_report)
 	commit
 	sleep "${FAKE_RUNNER_SLEEP:-2}"

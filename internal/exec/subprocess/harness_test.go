@@ -206,6 +206,14 @@ func (f *fixture) Start(spec *JobSpec) *JobHandle {
 	return handle
 }
 
+// stopEverything kills every process a handle in this fixture named, and WAITS
+// for each to actually exit before returning. It is registered with
+// t.Cleanup, which runs cleanups in LIFO order, so it runs before the
+// t.TempDir() cleanups registered earlier in newRepo/newFixture — but a kill
+// signal sent and not waited for is not the same fact as the process being
+// gone: a supervisor still flushing a write when TempDir's RemoveAll starts
+// is "directory not empty", not a passing test. Waiting here is what makes
+// the ordering promise real rather than merely likely.
 func (f *fixture) stopEverything() {
 	for _, handle := range f.handles {
 		local, err := handle.Local()
@@ -213,9 +221,16 @@ func (f *fixture) stopEverything() {
 			continue
 		}
 		st := newStore(local.State)
-		for _, pid := range []int{st.runnerPID(), st.supervisorPID()} {
+		pids := []int{st.runnerPID(), st.supervisorPID()}
+		for _, pid := range pids {
 			if pid > 0 && processAlive(pid) {
 				_ = signalGroup(pid, sigKill())
+			}
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for _, pid := range pids {
+			for pid > 0 && processAlive(pid) && time.Now().Before(deadline) {
+				time.Sleep(20 * time.Millisecond)
 			}
 		}
 	}

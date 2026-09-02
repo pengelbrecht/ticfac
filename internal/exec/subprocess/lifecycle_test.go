@@ -128,9 +128,14 @@ func TestA1StopRefusesToIssueAndRevocationPrecedesTeardown(t *testing.T) {
 		if err := g.Executor.RequestStop("operator", "called off"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Executor.Start(g.spec("run-a1/tick-s1/attempt-1", "s1")); err != nil {
+		handle, err := g.Executor.Start(g.spec("run-a1/tick-s1/attempt-1", "s1"))
+		if err != nil {
 			t.Fatalf("with the guard off the start should have been allowed, and it failed for another reason: %v", err)
 		}
+		// This supervisor outlives the call: it is not tracked by g.Start, so
+		// without this the fixture's cleanup does not know it exists and it
+		// keeps writing into the state dir while t.TempDir() removes it.
+		g.handles = append(g.handles, handle)
 	})
 
 	t.Run("revoke_before_teardown", func(t *testing.T) {
