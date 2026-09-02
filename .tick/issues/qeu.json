@@ -2,12 +2,14 @@
   "id": "qeu",
   "title": "Phase 1: the reconciler and the local subprocess executor",
   "description": "SPEC §12 Phase 1 (docs/projects/2026-09-01-ticfac-architecture/SPEC.md (in pengelbrecht/ticks)). Mirrors epic 4ik in the ticks tracker, which holds the roadmap; this epic holds the code ticks because ticks is one tracker per repository. Build the deterministic lifecycle in code — claims, waves, gates, merge, boundary checks, cleanup ordering — as a restartable reconciler for one epic at concurrency one, and the local subprocess executor behind the four-operation protocol (start/inspect/cancel/collect) with claude, codex and pi as runner values. ticfac talks to ticks ONLY through tk --json (contract 1, contracts/tk-json-manifest.json) and the pinned contract bundle 3.0.0; every contract gets a ticfac Go reader. Do not build an event bus, plugin system, or same-repo multi-epic execution to make the gate pass. Legacy defects that must be solved by design (from ticks epic 72y, recorded on 4ik): executor-owned RESULT path; identity (repo key, run, tick, attempt); boundary on tracker records only with config exempt; diff against the recorded attempt base; timer push; in-flight state settled by whoever finds it next; finished-worker detection from durable evidence with no lost-event race; zero orphaned worktrees after cleanup.",
+  "notes": "2026-09-02 20:05 - runner-state: substrate=herdr requested=auto reason=auto-herdr-available (HERDR_ENV=1, herdr 0.8.2). Integration branch epic/qeu off main.\n2026-09-02 21:15 - Retro input: [environment.commands] should verify 'tk version --json' serves contract 1 — a stale tk on PATH cost y7o a round trip.",
   "status": "open",
   "priority": 2,
   "type": "epic",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "Gate: one real epic in the ticks repository completes through ticfac run-epic locally with a claude or codex runner, killed and restarted after dispatch, after collection and before closure, with no duplicate work and no false success; the Appendix A conformance suite (contracts/lifecycle-invariants.json, bundle 3.0.0) is green against the real reconciler and executor; the run leaves a .ticfac/runs/\u003cid\u003e/ record and a ticfac/run-\u003cid\u003e tag; go test -short ./... green; CI verifies the pinned bundle.",
+  "base_branch": "main",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.242815Z",
-  "updated_at": "2026-09-02T15:23:43.242815Z"
+  "updated_at": "2026-09-02T19:15:53.141451Z"
 }

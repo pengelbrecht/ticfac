@@ -2,7 +2,7 @@
   "id": "cc5",
   "title": "Gate run: a real ticks epic through ticfac run-epic with kill and restart at the three points",
   "description": "The Phase 1 gate (SPEC §12). Pick a small real epic in the ticks repository (coordinate with the operator for which; a 2-3 tick epic is enough), run it with ticfac run-epic and a claude or codex runner from a laptop, and kill the reconciler after dispatch, after collection and before closure, restarting each time from a FRESH CLONE. Record: the .ticfac/runs/\u003cid\u003e/ directory on the integration branch, the ticfac/run-\u003cid\u003e tag, the PR the run opened, and a report RESULT-\u003cthis-tick\u003e.md with timings, cost if metered, every restart and what the reconciler adopted. This report is the evidence that closes ticks-tracker tick 421 (final review of 4ik) — say so in the report. Commit RESULT even though no source changed — the report is the deliverable.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,7 +11,9 @@
   ],
   "parent": "qeu",
   "acceptance_criteria": "The real epic is closed in ticks with a merged PR opened by ticfac; three restarts recorded with zero duplicate attempts and zero false closes, verified from the .ticfac/ record; the tag exists; the report is committed.",
+  "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.431225Z",
-  "updated_at": "2026-09-02T15:23:43.431225Z"
+  "updated_at": "2026-09-02T22:41:13.64099Z",
+  "started_at": "2026-09-02T22:41:13.591595Z"
 }

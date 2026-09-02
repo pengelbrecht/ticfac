@@ -1,0 +1,11 @@
+{
+  "id": "q08094ef6e116",
+  "tick_id": "cc5",
+  "kind": "ask",
+  "awaiting": "input",
+  "question": {
+    "id": "q08094ef6e116",
+    "text": "Phase 1 gate run (cc5) needs two things only you can give. (1) WHICH epic in the ticks repository to run through ticfac run-epic: the ticks tracker has no small ready epic today (3dd 'Remove tk board' is childless and large; djo is deferred) — either name an existing one or create/authorise a new 2-3 tick epic there (a roadmap change I may not make). (2) Authorisation to touch the live ticks repo and spend: the run pushes an epic/\u003cid\u003e integration branch, .ticfac/runs/\u003cid\u003e/ records and a ticfac/run-\u003cid\u003e tag to github.com/pengelbrecht/ticks, opens a PR there, claims/closes those ticks through tk, and dispatches a real claude (or codex) runner three times with kill+restart from fresh clones. Reply with: epic id (or 'create: \u003ctitle\u003e — \u003c2-3 tick scope\u003e'), runner (claude|codex), and 'go'. Everything else in the epic is done: waves 1-4 merged on epic/qeu, gate and CI green (PR #1 draft)."
+  },
+  "created_at": "2026-09-02T22:41:13.641281Z"
+}
