@@ -1,0 +1,17 @@
+{
+  "id": "qg5",
+  "title": "Local subprocess executor: start/inspect/cancel/collect over a worktree per attempt, runner claude|codex|pi",
+  "description": "internal/exec/subprocess: the four operations over JobSpec/JobHandle/JobStatus/JobResult (contracts/job-protocol.json). start: git worktree per attempt on branch tick/\u003cid\u003e from JobSpec.source_ref, runner launched headless (claude -p / codex exec / pi, full-auto flags), the worker prompt rendered from the tick and the RESULT path OWNED by the executor (absolute, inside the attempt worktree, JobSpec.artifact_prefix) so the worker cwd is irrelevant. inspect: pid liveness, worktree state, commits beyond the recorded base, RESULT presence and STATUS line — completion is DURABLE EVIDENCE ONLY, never process exit; settled-but-incomplete is a distinct status. cancel: revoke (kill process tree) before any teardown, idempotent. collect: read the branch, parse RESULT, boundary diff against the attempt base SHA restricted to tracker records (.tick/issues, .tick/activity; config.md, runners.toml, learnings.md exempt). Timer push of in-progress work to origin (Appendix A #5). Handle identity = (repo key, run, tick, attempt). Also expose the Unix-style JSON commands ticfac-exec-subprocess start|inspect|cancel|collect \u003c json. REQUIRED TESTS (Peter, 2026-09-02): finished-worker detection with no lost-event race (worker settles while nobody inspects; next inspect sees it); a killed-and-re-issued wait sees settled work immediately; a worker that cds to /tmp then writes RESULT still collects; two repos with the same tick id concurrently do not collide; cleanup leaves zero run-created worktrees/branches; kill -9 of the executor mid-job leaves a reconcilable handle. Use a fake runner script for unit tests; one opt-in live test with a real claude or codex.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "b6s"
+  ],
+  "parent": "qeu",
+  "acceptance_criteria": "Four operations pass the job-protocol goldens; the required tests above are green with a fake runner; the lifecycle-invariants suite passes against this executor for the invariants it covers; ticfac-exec-subprocess round-trips JSON on stdin/stdout; go test -short ./internal/exec/... green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-02T15:23:43.349504Z",
+  "updated_at": "2026-09-02T15:23:43.349504Z"
+}

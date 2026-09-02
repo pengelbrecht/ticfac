@@ -1,0 +1,17 @@
+{
+  "id": "y7o",
+  "title": "tk client: every manifest command over tk --json, contract 1, fail closed on mismatch",
+  "description": "internal/tk: a client for the 15 commands in contracts/tk-json-manifest.json (reads: version, show, list, ready, next, deps, graph, status; writes: claim = update --status in_progress, update, note, close, reopen; exit-code drivers merge-file/merge-activity). Every call passes --json-contract 1 (TK_JSON_CONTRACT) and surfaces exit 11 as a typed ErrUnsupportedContract; exit 8 (dispatch width) typed. Responses are validated against the manifest schemas with internal/schema before use. Tests run against a real tk binary in a fixture repository (tk init in a temp dir), skipped with a clear message when tk is not on PATH, plus a fake for unit tests. Minimum tk version from the manifest is checked once at startup.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "b6s"
+  ],
+  "parent": "qeu",
+  "acceptance_criteria": "A table test exercises all 15 commands against a fixture repo and validates each response against its manifest schema; an unsupported contract fails closed with the typed error; go test -short ./internal/tk/... green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-02T15:23:43.295075Z",
+  "updated_at": "2026-09-02T15:23:43.295075Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "b6s",
+  "title": "Bootstrap: Go module, CLI skeleton, CI, pinned contract bundle 3.0.0 with a Go reader per contract",
+  "description": "Go module github.com/pengelbrecht/ticfac (stdlib-first). CLI ticfac with run-epic \u003cid\u003e that fails closed (\"no executor configured\", exit 2) and version --json. CI (GitHub Actions): go test -short ./..., go vet, and a contracts job that fetches pengelbrecht/ticks at a pinned ref (contracts/ at bundle 3.0.0, mode pinned — see cloud/factory/contracts.pin.json and contracts/CHANGELOG.md in ticks for the pin shape and the rule) into a vendored contracts/ directory, verifies digests, and runs every reader. A ticfac Go reader (test) for EVERY bundle file: job-protocol, ticfac-run-state (incl. the 7 CAS sequences over a git fake), lifecycle-invariants (13 named tests over the fake harness), tk-json-manifest, credential-ownership, tracker-layout, collect-vocabulary, worker-boot-contract, message-context, runners-config-contract, sandbox-image-cases, signal-source-cases, sweep-policy-cases, sweep-selection-contract. Port the strict JSON-Schema-subset validator (ticks internal/tkcontract/schema.go semantics: 10 keywords, unknown keyword is a parse error) into internal/schema. This tick owns go.mod/go.sum and the contracts/ vendoring for the wave.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "qeu",
+  "acceptance_criteria": "go build ./... and go test -short ./... green; ticfac run-epic x exits 2 with the fail-closed message; CI green on main with the contracts job verifying bundle 3.0.0 digests and running all 14 readers; a deliberately broken vendored fixture fails CI (recorded in a tick note with the run URL).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-02T15:23:43.268446Z",
+  "updated_at": "2026-09-02T15:23:43.268446Z"
+}

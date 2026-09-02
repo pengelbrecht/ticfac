@@ -1,0 +1,17 @@
+{
+  "id": "gcx",
+  "title": "Final review of Phase 1 diff",
+  "description": "Review the full Phase 1 diff against the epic acceptance and SPEC §12 Phase 1, with the Appendix A invariants and the required detection/orphan tests as the checklist. Resolve or route findings before close-out.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "cc5"
+  ],
+  "parent": "qeu",
+  "role": "review",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-02T15:23:43.460006Z",
+  "updated_at": "2026-09-02T15:23:43.460006Z"
+}
