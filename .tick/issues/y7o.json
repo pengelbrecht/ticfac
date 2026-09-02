@@ -1,8 +1,8 @@
 {
   "id": "y7o",
   "title": "tk client: every manifest command over tk --json, contract 1, fail closed on mismatch",
-  "description": "internal/tk: a client for the 15 commands in contracts/tk-json-manifest.json (reads: version, show, list, ready, next, deps, graph, status; writes: claim = update --status in_progress, update, note, close, reopen; exit-code drivers merge-file/merge-activity). Every call passes --json-contract 1 (TK_JSON_CONTRACT) and surfaces exit 11 as a typed ErrUnsupportedContract; exit 8 (dispatch width) typed. Responses are validated against the manifest schemas with internal/schema before use. Tests run against a real tk binary in a fixture repository (tk init in a temp dir), skipped with a clear message when tk is not on PATH, plus a fake for unit tests. Minimum tk version from the manifest is checked once at startup.",
-  "status": "open",
+  "description": "internal/tk: a client for the 15 commands in contracts/tk-json-manifest.json (reads: version, show, list, ready, next, deps, graph, status; writes: claim = update --status in_progress, update, note, close, reopen; exit-code drivers merge-file/merge-activity). Every call passes --json-contract 1 (TK_JSON_CONTRACT) and surfaces exit 11 as a typed ErrUnsupportedContract; exit 8 (dispatch width) typed. Responses are validated against the manifest schemas with internal/schema before use. Tests run against a real tk binary in a fixture repository (tk init in a temp dir), skipped with a clear message when tk is not on PATH, plus a fake for unit tests. Minimum tk version from the manifest is checked once at startup.\n\n## How this fits\nYou own internal/tk. A real tk binary is on PATH on this machine (tk version prints 'dev'); tests must still skip cleanly when it is absent. The executor (qg5) and run-state store (xkd) are concurrent siblings — do not depend on them.\n\nIntegration branch epic/qeu already contains wave 1 (tick b6s, commit 38889bad1fd725a897bd1a4fd75ef41217d3acfa): Go module github.com/pengelbrecht/ticfac (stdlib-only, go 1.24), the vendored contract bundle 3.0.0 under contracts/ (NEVER edit it; go test refuses local edits), internal/schema (ParseSchema/ParseDefs/Validate — the validator to use for every bundle document; its refusal strings are contract surface), internal/contracts (Dir()/RepoRoot() locate the bundle from any test depth), and internal/contracts/parity with one reader per bundle file — including a test-scoped CAS fake (parity/cas_fake_test.go) and lifecycle harness (parity/lifecycle_harness_test.go) that your real implementation must agree with. Read README.md, CONTRACTS.md and the RESULT of wave 1 in git history (commit message of 9a3faa3) before starting. Three ticks run in parallel in this wave (qg5 executor, xkd run-state store, y7o tk client); stay inside your own package directory, do not touch go.mod (no third-party deps — stdlib only), README.md, or files owned by the other two. Verify your base: git merge-base --is-ancestor 38889bad1fd725a897bd1a4fd75ef41217d3acfa HEAD.",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,5 +13,6 @@
   "acceptance_criteria": "A table test exercises all 15 commands against a fixture repo and validates each response against its manifest schema; an unsupported contract fails closed with the typed error; go test -short ./internal/tk/... green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.295075Z",
-  "updated_at": "2026-09-02T15:23:43.295075Z"
+  "updated_at": "2026-09-02T18:52:04.524376Z",
+  "started_at": "2026-09-02T18:52:04.524376Z"
 }
