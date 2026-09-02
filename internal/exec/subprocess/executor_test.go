@@ -265,7 +265,7 @@ func TestKillingTheExecutorMidJobLeavesAReconcilableHandle(t *testing.T) {
 		return err == nil && info.Size() > 0
 	})
 	handle := readHandleFile(t, handlePath)
-	f.handles = append(f.handles, handle)
+	f.track(handle)
 	local, err := handle.Local()
 	if err != nil {
 		t.Fatal(err)

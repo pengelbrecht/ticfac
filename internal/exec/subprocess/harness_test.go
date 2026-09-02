@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +57,11 @@ type testRepo struct {
 	Dir    string
 	Origin string
 	Base   string
+
+	// Root is the raw t.TempDir() this repository and its origin live under.
+	// stopEverything removes it itself, ahead of t.TempDir()'s own cleanup for
+	// the same path — see the comment there for why that matters.
+	Root string
 }
 
 // newRepo makes a repository with one commit and a bare origin to push to.
@@ -82,7 +89,7 @@ func newRepo(t *testing.T, name string) *testRepo {
 		t.Fatal(err)
 	}
 	base := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
-	return &testRepo{t: t, Dir: resolved, Origin: origin, Base: base}
+	return &testRepo{t: t, Dir: resolved, Origin: origin, Base: base, Root: root}
 }
 
 func mustRun(t *testing.T, dir string, name string, args ...string) string {
@@ -108,8 +115,13 @@ type fixture struct {
 	t        *testing.T
 	Repo     *testRepo
 	StateDir string
-	Executor *Executor
-	handles  []*JobHandle
+	// StateRoot is the raw t.TempDir() StateDir was carved from, and is only
+	// set when this fixture allocated it itself (opts.stateDir == ""). Two
+	// fixtures sharing one caller-supplied state root (the two-repos-same-tick
+	// test) must not have either one delete it out from under the other.
+	StateRoot string
+	Executor  *Executor
+	handles   []*JobHandle
 }
 
 type fixtureOptions struct {
@@ -133,8 +145,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	}
 	repo := newRepo(t, opts.name)
 	state := opts.stateDir
+	stateRoot := ""
 	if state == "" {
-		state = filepath.Join(t.TempDir(), "state")
+		stateRoot = t.TempDir()
+		state = filepath.Join(stateRoot, "state")
 	}
 
 	argv := opts.runnerArgv
@@ -164,7 +178,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{t: t, Repo: repo, StateDir: state, Executor: executor}
+	f := &fixture{t: t, Repo: repo, StateDir: state, StateRoot: stateRoot, Executor: executor}
 	t.Cleanup(f.stopEverything)
 	return f
 }
@@ -202,37 +216,110 @@ func (f *fixture) Start(spec *JobSpec) *JobHandle {
 	if err != nil {
 		f.t.Fatalf("start %s: %v", spec.JobID, err)
 	}
+	return f.track(handle)
+}
+
+// track remembers a handle this fixture is responsible for stopping. Every
+// caller of Executor.Start — through the Start wrapper above, or directly
+// where a test needs the raw error a guard-off redispatch returns — must run
+// its handle through this, or stopEverything never learns the process exists.
+func (f *fixture) track(handle *JobHandle) *JobHandle {
 	f.handles = append(f.handles, handle)
 	return handle
 }
 
-// stopEverything kills every process a handle in this fixture named, and WAITS
-// for each to actually exit before returning. It is registered with
-// t.Cleanup, which runs cleanups in LIFO order, so it runs before the
-// t.TempDir() cleanups registered earlier in newRepo/newFixture — but a kill
-// signal sent and not waited for is not the same fact as the process being
-// gone: a supervisor still flushing a write when TempDir's RemoveAll starts
-// is "directory not empty", not a passing test. Waiting here is what makes
-// the ordering promise real rather than merely likely.
-func (f *fixture) stopEverything() {
-	for _, handle := range f.handles {
-		local, err := handle.Local()
-		if err != nil {
+// runnerStartedPID pulls the runner's pid out of the ObsStarted detail
+// supervisor.go writes: "%s runner, pid %d, worktree %s".
+var runnerStartedPID = regexp.MustCompile(`runner, pid (\d+)`)
+
+// trackedPIDs is every process this fixture launched for one handle: the
+// supervisor pid the handle itself carries — frozen at the moment Start
+// returned it, so a LATER Start over the SAME attempt (a guard-off
+// redispatch) cannot make an earlier handle forget its own supervisor by
+// overwriting the pid file a fresh store read would otherwise see — plus
+// every runner pid the attempt's observation log has ever recorded. The log
+// is read rather than the current runner.pid file for the same reason: a
+// second supervisor's runner overwrites the first's pid FILE, and the log is
+// append-only, so it is the only place the first runner's pid still exists.
+func (f *fixture) trackedPIDs(handle *JobHandle) []int {
+	local, err := handle.Local()
+	if err != nil {
+		return nil
+	}
+	pids := []int{local.PID}
+	st := newStore(local.State)
+	observations, _ := st.observationsFrom("")
+	for _, obs := range observations {
+		m := runnerStartedPID.FindStringSubmatch(obs.Detail)
+		if m == nil {
 			continue
 		}
-		st := newStore(local.State)
-		pids := []int{st.runnerPID(), st.supervisorPID()}
-		for _, pid := range pids {
-			if pid > 0 && processAlive(pid) {
-				_ = signalGroup(pid, sigKill())
+		if pid, err := strconv.Atoi(m[1]); err == nil {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// stopEverything kills every process this fixture ever tracked, and WAITS for
+// each to actually exit, before removing the temp directories it allocated
+// itself. It is registered with t.Cleanup, which runs cleanups in LIFO order:
+// later registrations run first, and newRepo's and newFixture's t.TempDir()
+// calls both happen before this is registered in newFixture, so this always
+// runs before either of THIS fixture's own TempDir cleanups — a second
+// fixture constructed afterward in the same test nests the same way around
+// its own pair, never interleaved with this one's.
+//
+// A kill signal sent and not waited for is not the same fact as the process
+// being gone: a supervisor still flushing a write when TempDir's RemoveAll
+// starts is "directory not empty", not a passing test. And even a confirmed
+// gone process does not guarantee every fd or mapping into these directories
+// released in the same instant kill() returned, so the removal below retries
+// rather than leaving that race to t.TempDir()'s own single attempt.
+func (f *fixture) stopEverything() {
+	seen := map[int]bool{}
+	var pids []int
+	for _, handle := range f.handles {
+		for _, pid := range f.trackedPIDs(handle) {
+			if pid > 0 && !seen[pid] {
+				seen[pid] = true
+				pids = append(pids, pid)
 			}
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for _, pid := range pids {
-			for pid > 0 && processAlive(pid) && time.Now().Before(deadline) {
-				time.Sleep(20 * time.Millisecond)
-			}
+	}
+	for _, pid := range pids {
+		if processAlive(pid) {
+			_ = signalGroup(pid, sigKill())
 		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for _, pid := range pids {
+		for processAlive(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	removeWithRetry(f.StateRoot)
+	removeWithRetry(f.Repo.Root)
+}
+
+// removeWithRetry removes a directory this fixture allocated with
+// t.TempDir(), ahead of that same t.TempDir()'s own later cleanup, retrying
+// "directory not empty" for a bounded time rather than assuming a killed
+// process has released everything it touched in that directory the instant
+// it stops existing.
+func removeWithRetry(path string) {
+	if path == "" {
+		return
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := os.RemoveAll(path); err == nil {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
