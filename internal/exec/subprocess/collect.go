@@ -4,7 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"time"
 )
 
@@ -152,17 +154,77 @@ func (e *Executor) classify(st *store, commits int, hasReport bool,
 	case cancelled:
 		return VerdictMissingResult, OutcomeCancelled, "", reasonCancelled
 	case commits == 0:
-		return VerdictNoCommits, OutcomeFailed, FailureRunnerError, VerdictNoCommits
+		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case !hasReport || report.Status == "":
 		if st.wallClockExceeded() {
 			return VerdictMissingResult, OutcomeFailed, FailureWallClockExceeded, VerdictMissingResult
 		}
-		return VerdictMissingResult, OutcomeFailed, FailureRunnerError, VerdictMissingResult
+		return VerdictMissingResult, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictMissingResult
 	case len(violations) > 0:
 		return VerdictBoundaryViolation, OutcomeFailed, FailureRunnerError, VerdictBoundaryViolation
 	default:
 		return VerdictReadyToMerge, OutcomeSucceeded, "", VerdictReadyToMerge
 	}
+}
+
+// quotaExhaustedPattern is the runner's own words for having hit a flat-rate
+// seat's usage limit. codex's exact sentence is golden in
+// testdata/codex-usage-limit.log (captured 2026-09-02); claude and pi phrase
+// the same fact differently, so the pattern matches the words every runner's
+// message shares rather than one CLI's exact sentence.
+var quotaExhaustedPattern = regexp.MustCompile(`(?i)usage limit`)
+
+// failureHintScanBytes bounds how much of a runner log this executor reads
+// for a hint: the signal is always the runner's LAST words, and a log this
+// executor did not write is not one it should read in full just to classify
+// it.
+const failureHintScanBytes = 16 * 1024
+
+// failureClass turns a generic runner_error into a more specific class when
+// the runner's exit and its log tail say why, per contracts/job-protocol.json.
+// This is diagnostic material only (SPEC §10.1): it is read only after the
+// verdict is already a failure, and it never promotes a run to succeeded — it
+// only says which of several kinds of failure this one was, so a flat-rate
+// seat that ran out of quota is not reported as this executor's own broken
+// route (SPEC §4.3), and an argv this executor got wrong is not blamed on the
+// runner's own conduct.
+func (e *Executor) failureClass(st *store, fallback string) string {
+	tail := logTail(st.path(fileRunnerLog), failureHintScanBytes)
+	if quotaExhaustedPattern.MatchString(tail) {
+		return FailureQuotaExhausted
+	}
+	// Exit 2 is the CLI convention for a usage error — a flag or argument the
+	// runner rejected before it ever reached the model. That is a wrong
+	// invocation, not the runner's conduct.
+	if code, settled := st.exitCode(); settled && code == 2 {
+		return FailureInfrastructure
+	}
+	return fallback
+}
+
+// logTail reads at most max bytes from the end of path, or "" if it cannot be
+// read at all — a missing or unreadable log is not itself a failure to
+// report, just a hint this collect will not have.
+func logTail(path string, max int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	if info.Size() > max {
+		if _, err := f.Seek(-max, io.SeekEnd); err != nil {
+			return ""
+		}
+	}
+	raw, err := io.ReadAll(f)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // reasonCancelled is not a verdict — the collect vocabulary is closed and this

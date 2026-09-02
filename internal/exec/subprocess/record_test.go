@@ -240,6 +240,31 @@ func TestTheRecordsTheFourOperationsEmitValidateAgainstTheContract(t *testing.T)
 	validate("its role result", "role_result", success.RoleResult)
 }
 
+// vcx: the failure classes this package infers from the runner's exit and its
+// log tail — beyond the four the branch and the report alone already produce
+// — must be words the contract's own vocabulary admits, or a hint here is a
+// value the reconciler refuses at the schema.
+func TestTheInferredFailureClassesAreInTheContractVocabulary(t *testing.T) {
+	_, _, defs := loadProtocol(t)
+
+	class, ok := defs["failure_class"]
+	if !ok {
+		t.Fatal("the bundle carries no failure_class def")
+	}
+	for _, want := range []string{FailureQuotaExhausted, FailureInfrastructure} {
+		found := false
+		for _, allowed := range class.Enum {
+			if allowed == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s is not one of the contract's failure_class values %v", want, class.Enum)
+		}
+	}
+}
+
 // The contract's local-subprocess handle golden is not decoration: it spells
 // the three keys a local handle carries, and this executor's handle carries
 // them under the same names.
