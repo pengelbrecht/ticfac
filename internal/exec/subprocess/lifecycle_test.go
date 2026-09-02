@@ -135,7 +135,7 @@ func TestA1StopRefusesToIssueAndRevocationPrecedesTeardown(t *testing.T) {
 		// This supervisor outlives the call: it is not tracked by g.Start, so
 		// without this the fixture's cleanup does not know it exists and it
 		// keeps writing into the state dir while t.TempDir() removes it.
-		g.handles = append(g.handles, handle)
+		g.track(handle)
 	})
 
 	t.Run("revoke_before_teardown", func(t *testing.T) {
@@ -278,7 +278,7 @@ func TestA6ALiveAttemptIsAdoptedAndAnUnansweredOneIsHeld(t *testing.T) {
 	if oneLocal.PID == twoLocal.PID {
 		t.Fatal("with the guard off no second process was started; the guard is not what stops the redispatch")
 	}
-	g.handles = append(g.handles, two)
+	g.track(two)
 }
 
 // A7 — read back after write. A write that silently did not land must not look
@@ -307,7 +307,7 @@ func TestA7TheAttemptRecordIsReadBackBeforeAHandleIsReturned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("with the guard off start should have returned its unconfirmed handle: %v", err)
 	}
-	g.handles = append(g.handles, handle)
+	g.track(handle)
 	if got := g.inspect(handle).State; got != StateLost {
 		t.Fatalf("the unconfirmed handle inspects as %s; it names a record that does not exist", got)
 	}

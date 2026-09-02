@@ -65,8 +65,11 @@ boundary)
 	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
+	# `exec` replaces this shell with the sleeper, so the runner's process
+	# group has exactly one member for a group-kill to reach, never a
+	# transient window with a forked child the group signal could miss.
 	commit
-	while :; do sleep 1; done
+	exec sleep 86400
 	;;
 quota_exhausted)
 	# No commit, no report: the shape of a codex run that hit its flat-rate
