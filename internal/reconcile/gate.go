@@ -47,11 +47,15 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		return err
 	}
 
+	// The profile digest is the digest of the profile THIS tick's role was
+	// dispatched under, not the run's set: a check run under a different
+	// profile evaluated something else, and that is what the fingerprint is
+	// for.
 	fingerprint := Fingerprint{
 		"source_sha":              merged.AttemptHead,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": r.gateDigest,
-		"profile_digest":          digestOf("profile", r.profile),
+		"profile_digest":          r.profileFor(marker.Role).Digest,
 	}
 
 	passed := true
@@ -162,7 +166,7 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 			Backend:               nil,
 			Role:                  runstate.Ptr(marker.Role),
 			ProfileDigest:         runstate.Ptr(fingerprint["profile_digest"]),
-			Model:                 nil,
+			Model:                 runstate.Ptr(r.profileFor(marker.Role).Model),
 			ContextManifestDigest: runstate.Ptr(fingerprint["context_manifest_digest"]),
 		},
 		Check:      runstate.Check{ID: command.Name, Kind: "command", Command: []string{"sh", "-c", command.Command}},
@@ -216,7 +220,7 @@ func (r *Reconciler) currentTarget(marker attemptHandle) (Fingerprint, error) {
 		"source_sha":              head,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": gate.Digest(),
-		"profile_digest":          digestOf("profile", r.profile),
+		"profile_digest":          r.profileFor(marker.Role).Digest,
 	}, nil
 }
 

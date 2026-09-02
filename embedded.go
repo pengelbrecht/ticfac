@@ -8,7 +8,7 @@
 // has to travel inside the executable.
 package ticfac
 
-import _ "embed"
+import "embed"
 
 // PinJSON is contracts.pin.json: which ticks ref the vendored bundle came
 // from, and which bundle version this build's code was written against.
@@ -20,3 +20,20 @@ var PinJSON []byte
 //
 //go:embed contracts/bundle.json
 var BundleJSON []byte
+
+// ProfilesFS is `profiles/`: the versioned role profiles a run is dispatched
+// with. It travels inside the executable for the reason the pin does — a
+// profile read off disk at run time could disagree with the binary beside it,
+// and the profile is what every attempt record's provenance names.
+//
+//go:embed profiles
+var ProfilesFS embed.FS
+
+// JobProtocolJSON is contracts/job-protocol.json, the schemas the reconciler
+// validates a role-result envelope against before it acts on one. Embedded for
+// the same reason: a controller run outside this checkout has no contracts
+// directory to read, and a validation that silently does not happen is the
+// hole the envelope exists to close.
+//
+//go:embed contracts/job-protocol.json
+var JobProtocolJSON []byte

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -95,6 +96,12 @@ type Dispatch struct {
 	// BudgetUSD is the EFFECTIVE budget: already clamped, because a job is
 	// issued the number that will govern (Appendix A #12).
 	BudgetUSD *float64
+
+	// Profile is the resolved role profile this dispatch is made under —
+	// executor, runner, model and prompt, and nothing else (SPEC §4.5). The
+	// factory reads the RUNNER off it, because which agent CLI serves a role is
+	// executor configuration and not a field of the closed protocol records.
+	Profile *profile.Profile
 }
 
 // Options configure a reconciler. Everything it talks to is passed in rather
@@ -163,10 +170,16 @@ type Options struct {
 	BudgetUSD  float64
 	CeilingUSD float64
 
-	// Profile identifies the runner profile jobs are dispatched with. It is
-	// digested into every piece of evidence, because a check run under a
-	// different profile evaluated something else.
-	Profile string
+	// ProfileDir is the profiles directory role profiles are resolved from.
+	// Empty is the copy compiled into this binary, which is the production
+	// path: a profile read off disk at run time could disagree with the binary
+	// beside it, and the profile is what every record's provenance cites.
+	ProfileDir string
+
+	// Tier selects a `[roles.<name>.tiers.<tier>]` overlay in the target
+	// repository's runner configuration. Empty applies none; a tier that
+	// configuration does not declare is refused at construction.
+	Tier string
 
 	Now func() time.Time
 
@@ -200,7 +213,12 @@ type Reconciler struct {
 
 	gate       GateCommands
 	gateDigest string
-	profile    string
+
+	// profiles is the resolved role profile per role, and profileSet digests
+	// all of them together: a checkpoint is not about one role, so it names the
+	// SET the run was made under.
+	profiles   map[string]*profile.Profile
+	profileSet string
 
 	pollInterval  time.Duration
 	wipeThreshold time.Duration
@@ -310,9 +328,6 @@ func New(opts Options) (*Reconciler, error) {
 	if opts.WallSeconds <= 0 {
 		opts.WallSeconds = DefaultWallSeconds
 	}
-	if opts.Profile == "" {
-		opts.Profile = "local-subprocess/implement-tick"
-	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -341,6 +356,22 @@ func New(opts Options) (*Reconciler, error) {
 			"and closing a tick behind a gate that does not exist is a close nothing stands behind", opts.GateConfig)
 	}
 
+	// The role profiles, resolved BEFORE anything is dispatched. A profile that
+	// does not exist, names an executor this phase does not have or a runner
+	// this host cannot launch is a refusal here — three ticks into an epic is
+	// not when a run should discover it.
+	profiles, err := profile.ResolveAll(profile.Options{
+		Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: opts.Tier,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+	for _, role := range profile.Roles {
+		if err := usableProfile(profiles[role]); err != nil {
+			return nil, fmt.Errorf("reconcile: %w", err)
+		}
+	}
+
 	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote}
 	if _, err := g.run("", "rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("reconcile: %s is not a git repository: %w", opts.Repo, err)
@@ -353,7 +384,8 @@ func New(opts Options) (*Reconciler, error) {
 		branch:        opts.IntegrationBranch,
 		gate:          gate,
 		gateDigest:    gate.Digest(),
-		profile:       opts.Profile,
+		profiles:      profiles,
+		profileSet:    profileSetDigest(profiles),
 		pollInterval:  opts.PollInterval,
 		wipeThreshold: opts.WipeThreshold,
 		stepCap:       opts.StepCap,
@@ -704,7 +736,7 @@ func (r *Reconciler) provenance(tick *string, attempt *int, phase runstate.Phase
 		WorkspaceID:           nil,
 		Backend:               nil,
 		Role:                  nil,
-		ProfileDigest:         runstate.Ptr(digestOf("profile", r.profile)),
+		ProfileDigest:         runstate.Ptr(r.profileSet),
 		Model:                 nil,
 		ContextManifestDigest: runstate.Ptr(r.gateDigest),
 	}
@@ -734,6 +766,15 @@ const (
 	RefusedMerge       = "merge_failed"        // the attempt does not integrate onto the epic branch
 	RefusedGate        = "gate_failed"         // the integrated gate did not pass
 	RefusedStale       = "stale_evidence"      // the gate's evidence is no longer about what would be published
+
+	// The two a ROLE job adds. Its deliverable is an answer, so its failures
+	// are the answer's: one nobody could validate, and one that validated and
+	// asks for a person. Both leave the process tick OPEN, and they are
+	// distinct because they send the next repair somewhere different — the
+	// first at whatever produced the envelope, the second at the person the
+	// answer asked for.
+	RefusedRoleResult = "role_result_invalid"     // the role-result envelope did not validate
+	RefusedRoleAnswer = "role_answer_needs_human" // the answer is BLOCKED or NEEDS_CONTEXT
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9
