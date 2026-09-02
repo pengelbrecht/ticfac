@@ -28,7 +28,12 @@
 //     caller, never from parsing it.
 //
 // The executor is a HOST, not a protocol participant beyond those four
-// operations: which runner to launch, where state lives and which remote to
-// push to are configuration (Options), because the protocol records are closed
-// and a field invented here would be a field the reconciler ignores.
+// operations: which runner to launch, WHICH MODEL to launch it on, the ROLE
+// PROMPT the worker prompt opens with, where state lives and which remote to
+// push to are all configuration (Options), because the protocol records are
+// closed and a field invented here would be a field the reconciler ignores.
+// The caller resolves those three from its role profile; this package applies
+// them — the model through the runner's own flag, in the one table where the
+// runners differ, and a model routed to a runner with no such flag is refused
+// rather than dropped.
 package subprocess

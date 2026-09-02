@@ -21,6 +21,10 @@ import (
 //
 //	TICFAC_LIVE_RUNNER=claude go test ./internal/exec/subprocess -run TestLive -v
 //
+// TICFAC_LIVE_MODEL names a model to launch it on, which is the only way the
+// model flag in the runner table gets executed rather than merely asserted:
+// the flag is this repository's claim about three programs it does not own.
+//
 // It asks for the smallest thing that exercises the whole contract: read the
 // tick record, make one commit, write the report at the absolute path this
 // executor owns.
@@ -32,7 +36,7 @@ func TestLiveRunnerCompletesARealTick(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode: the live test spends real money")
 	}
-	if _, ok := runnerArgv[runner]; !ok {
+	if _, ok := runners[runner]; !ok {
 		t.Fatalf("TICFAC_LIVE_RUNNER=%s is not one of %s", runner, strings.Join(KnownRunners(), ", "))
 	}
 	if _, err := exec.LookPath(runner); err != nil {
@@ -47,6 +51,7 @@ func TestLiveRunnerCompletesARealTick(t *testing.T) {
 		Repo:           repo.Dir,
 		StateDir:       state,
 		Runner:         runner,
+		Model:          os.Getenv("TICFAC_LIVE_MODEL"),
 		SupervisorArgv: []string{executorBin, "supervise"},
 		PushInterval:   30 * time.Second,
 	})

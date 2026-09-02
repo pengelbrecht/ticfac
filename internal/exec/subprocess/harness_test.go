@@ -123,6 +123,8 @@ type fixtureOptions struct {
 	noRemote     bool
 	name         string
 	stateDir     string
+	model        string
+	rolePrompt   string
 	writeFile    func(path string, data []byte, perm fs.FileMode) error
 }
 
@@ -154,6 +156,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		StateDir:       state,
 		Runner:         "claude",
 		RunnerArgv:     argv,
+		Model:          opts.model,
+		RolePrompt:     opts.rolePrompt,
 		SupervisorArgv: []string{executorBin, "supervise"},
 		Remote:         remote,
 		Attempt:        opts.attempt,

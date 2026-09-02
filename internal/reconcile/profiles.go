@@ -46,13 +46,43 @@ func usableProfile(p *profile.Profile) error {
 			"run did not use is provenance that lies", p.Role, p.Executor, subprocess.ExecutorName)
 	}
 	known := subprocess.KnownRunners()
+	found := false
 	for _, name := range known {
 		if name == p.Runner {
-			return nil
+			found = true
+			break
 		}
 	}
-	return fmt.Errorf("profile %s names runner %q, which is not one of %s: a dispatch that discovers this after the "+
-		"tick is claimed has claimed a tick nothing will work on", p.Role, p.Runner, strings.Join(known, ", "))
+	if !found {
+		return fmt.Errorf("profile %s names runner %q, which is not one of %s: a dispatch that discovers this after "+
+			"the tick is claimed has claimed a tick nothing will work on", p.Role, p.Runner, strings.Join(known, ", "))
+	}
+	// The model has to be APPLICABLE, not merely recorded. A runner this
+	// executor cannot tell which model to use, handed one, would run its own
+	// default while the attempt record, the evidence and the provenance all
+	// named something else — so it is refused here, before a tick is claimed.
+	if p.Model != "" && !runnerAcceptsModel(p.Runner) {
+		return fmt.Errorf("profile %s routes model %q to runner %q, which this executor cannot tell which model to "+
+			"use: a model recorded as applied and silently not applied is provenance that lies", p.Role, p.Model, p.Runner)
+	}
+	return nil
+}
+
+// runnerAcceptsModel is the executor's answer, behind a variable so the guard
+// above can be exercised. Every runner this executor knows takes a model today,
+// so that refusal has no reachable case in production — and a guard no test can
+// reach is a guard nobody knows works.
+var runnerAcceptsModel = subprocess.RunnerAcceptsModel
+
+// promptDigest is the digest of the role prompt a dispatch was made with. It is
+// what the marker carries instead of the prompt itself: the text is in the
+// profile and in the executor's own attempt record, and what the run state
+// needs is a value two records can be compared on.
+func promptDigest(p *profile.Profile) string {
+	if p == nil {
+		return ""
+	}
+	return digestOf("role-prompt", p.Prompt)
 }
 
 // profileSetDigest is the digest of ALL the profiles a run was made under. A

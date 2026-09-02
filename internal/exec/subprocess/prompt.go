@@ -22,11 +22,24 @@ import (
 func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "You are implementing one unit of work from the ticks tracker, in an isolated git\n")
-	fmt.Fprintf(&b, "worktree on branch %s. You are running headless: nobody will answer a question.\n\n", record.Branch)
+	// The ROLE comes first, and it comes from the caller's profile: what this
+	// job is is the profile's to say, and the mechanics below are the
+	// executor's. With no role prompt the opening is the implementation
+	// worker's, which is what every job was before profiles existed.
+	if role := strings.TrimSpace(record.RolePrompt); role != "" {
+		fmt.Fprintf(&b, "%s\n\n", role)
+		fmt.Fprintf(&b, "You are running headless in an isolated git worktree on branch %s: nobody will\n", record.Branch)
+		fmt.Fprintf(&b, "answer a question, and the rest of this prompt is how this job is run.\n\n")
+	} else {
+		fmt.Fprintf(&b, "You are implementing one unit of work from the ticks tracker, in an isolated git\n")
+		fmt.Fprintf(&b, "worktree on branch %s. You are running headless: nobody will answer a question.\n\n", record.Branch)
+	}
 
 	fmt.Fprintf(&b, "## The job\n\n")
 	fmt.Fprintf(&b, "- role: %s\n", spec.Role)
+	if record.Model != "" {
+		fmt.Fprintf(&b, "- model: %s\n", record.Model)
+	}
 	fmt.Fprintf(&b, "- job: %s (attempt %d)\n", spec.JobID, record.Attempt)
 	for _, in := range spec.Inputs {
 		fmt.Fprintf(&b, "- %s: %s\n", in.Kind, in.ID)
@@ -82,6 +95,7 @@ func runnerEnv(record *attemptRecord, spec *JobSpec) []string {
 		"TICFAC_ATTEMPT=" + fmt.Sprint(record.Attempt),
 		"TICFAC_TICK=" + record.TickID,
 		"TICFAC_ROLE=" + spec.Role,
+		"TICFAC_MODEL=" + record.Model,
 		"TICFAC_PROMPT_FILE=" + record.State + "/" + filePrompt,
 	}
 }
