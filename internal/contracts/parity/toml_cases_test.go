@@ -14,10 +14,13 @@ import (
 //	contracts/sweep-policy-cases.json
 //
 // Each is INPUT (a TOML document) -> EXPECTED (accepted with a parsed result,
-// or refused). ticfac has no TOML reader — it is stdlib-first and nothing in
-// Phase 1 reads `.tick/runners.toml` — so the cases cannot be executed here,
-// and pretending otherwise would be the failure contracts/README.md names: a
-// check that reads as if it asserted something while asserting nothing.
+// or refused). ticfac's only reader of `.tick/runners.toml` is
+// internal/reconcile's, and it reads ONE table — `[testing.commands]`, the
+// integrated gate — because that is the only thing the reconciler is allowed to
+// run. It parses none of `[sandbox]`, `[signals]` or `[sweeps]`, so these cases
+// still cannot be executed here, and pretending otherwise would be the failure
+// contracts/README.md names: a check that reads as if it asserted something
+// while asserting nothing.
 //
 // What these readers do instead is hold the tables to the properties a case
 // table has to have to be worth executing later, and — where the fixture's

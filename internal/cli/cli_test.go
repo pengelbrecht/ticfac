@@ -151,3 +151,38 @@ func repoRoot() (string, error) {
 		dir = parent
 	}
 }
+
+// With an executor on PATH the refusal moves on to the next thing that can
+// refuse. What must NOT happen is a run reported against a repository or a
+// tracker this build cannot use.
+func TestRunEpicRefusesAnUnusableRepositoryRatherThanReportingARun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	build := exec.Command("go", "build", "-o", filepath.Join(bin, "ticfac-exec-subprocess"), "./cmd/ticfac-exec-subprocess")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run-epic", "--repo", t.TempDir(), "no-such-epic"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code %d, want 1: %s%s", code, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("a refusal wrote to stdout: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "run-epic") {
+		t.Errorf("stderr does not say which command refused: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), NoExecutorMessage) {
+		t.Errorf("an executor is on PATH and the refusal still says %q: %q", NoExecutorMessage, stderr.String())
+	}
+}
