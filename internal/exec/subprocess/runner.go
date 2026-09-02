@@ -19,16 +19,19 @@ import (
 // configuration (Options.Runner, `--runner`).
 
 // EnvRunnerArgv overrides the argv table for a runner whose headless flags
-// this build has wrong — newline-separated, the prompt marked by
-// promptPlaceholder or appended last. It is an escape hatch, not a
-// configuration surface: a runner that needs it permanently belongs in the
-// table above.
+// this build has wrong — newline-separated, with the placeholders below, or
+// the prompt appended last. It is an escape hatch, not a configuration
+// surface: a runner that needs it permanently belongs in the table.
 const EnvRunnerArgv = "TICFAC_RUNNER_ARGV"
 
-// promptPlaceholder is where the rendered worker prompt goes in a runner's
-// argv. It is a placeholder rather than a trailing append because not every
-// CLI takes the prompt last.
-const promptPlaceholder = "{{prompt}}"
+// The placeholders an argv template may carry. They are substituted per
+// ATTEMPT, not per build: the git common directory is a different path in
+// every repository, so a table entry that spelled one would be right in
+// exactly one checkout.
+const (
+	promptPlaceholder       = "{{prompt}}"
+	gitCommonDirPlaceholder = "{{git_common_dir}}"
+)
 
 // runnerArgv is the headless, full-auto invocation of each runner. The prompt
 // is passed as an argument, never on stdin: a runner whose stdin is a pipe
@@ -38,13 +41,26 @@ var runnerArgv = map[string][]string{
 	// it non-interactive rather than blocked on a prompt nobody will answer.
 	"claude": {"claude", "-p", "--permission-mode", "bypassPermissions", promptPlaceholder},
 
-	// `codex exec` is the non-interactive mode; `--full-auto` is its
-	// low-friction sandboxed execution.
-	"codex": {"codex", "exec", "--full-auto", promptPlaceholder},
+	// `codex exec` is the non-interactive mode and `-s workspace-write` is its
+	// sandbox: writable inside the workspace, and no approval prompt arises,
+	// so `-a`/`--ask-for-approval` is the interactive CLI's flag and not this
+	// one's. `--dangerously-bypass-approvals-and-sandbox` would also run, and
+	// is deliberately not what this table asks for.
+	//
+	// --add-dir is not optional here, and the reason is this executor's own
+	// design: every attempt runs in a LINKED worktree, whose `.git` is a file
+	// pointing at the repository's common directory somewhere else entirely.
+	// A sandbox rooted at the worktree therefore contains no index, no refs
+	// and no object database, and codex can edit files and cannot commit one
+	// — which collect reads as `no-commits`, an empty branch that looks
+	// exactly like a worker that never did anything.
+	"codex": {"codex", "exec", "-s", "workspace-write", "--add-dir", gitCommonDirPlaceholder, promptPlaceholder},
 
-	// pi's headless flag is the one of the three this repository has not yet
-	// run for itself. Override it with Options.RunnerArgv until the live test
-	// has confirmed it.
+	// pi's headless mode is `--print` / `-p`: "process prompt and exit". Its
+	// tools are enabled by default in that mode and it has no approval flag to
+	// pass — the trust flags it does have (`-a`, `-na`) are about project-local
+	// extensions and skills, not about tool use, so this executor does not
+	// hand it one.
 	"pi": {"pi", "-p", promptPlaceholder},
 }
 
@@ -59,9 +75,25 @@ func KnownRunners() []string {
 	return out
 }
 
+// launch is what one attempt substitutes into its runner's argv template.
+type launch struct {
+	// Prompt is the rendered worker prompt.
+	Prompt string
+
+	// GitCommonDir is the repository's shared git directory, resolved for THIS
+	// attempt's repository. A runner that sandboxes its own file access is
+	// given it explicitly, because a linked worktree's git state lives outside
+	// the worktree.
+	GitCommonDir string
+}
+
 // resolveRunner turns a runner name and an optional override into the argv the
-// supervisor will exec, with the prompt substituted in.
-func resolveRunner(name string, override []string, prompt string) ([]string, error) {
+// supervisor will exec.
+//
+// A placeholder whose value is empty is an ERROR rather than an empty
+// argument: `--add-dir ""` is a flag that parses, sandboxes nothing, and
+// surfaces two steps later as a worker that could not commit.
+func resolveRunner(name string, override []string, at launch) ([]string, error) {
 	argv := override
 	if len(argv) == 0 {
 		known, ok := runnerArgv[name]
@@ -70,20 +102,29 @@ func resolveRunner(name string, override []string, prompt string) ([]string, err
 		}
 		argv = known
 	}
+
 	out := make([]string, 0, len(argv)+1)
-	substituted := false
+	prompted := false
 	for _, arg := range argv {
-		if arg == promptPlaceholder {
-			out = append(out, prompt)
-			substituted = true
-			continue
+		switch arg {
+		case promptPlaceholder:
+			out = append(out, at.Prompt)
+			prompted = true
+		case gitCommonDirPlaceholder:
+			if at.GitCommonDir == "" {
+				return nil, fmt.Errorf("the %s argv needs %s and this attempt resolved none: "+
+					"a linked worktree's git state is outside the worktree, and a runner that cannot reach it "+
+					"cannot commit", name, gitCommonDirPlaceholder)
+			}
+			out = append(out, at.GitCommonDir)
+		default:
+			out = append(out, arg)
 		}
-		out = append(out, arg)
 	}
-	if !substituted {
+	if !prompted {
 		// An argv with no placeholder gets the prompt last, which is what a
 		// bare command in Options.RunnerArgv means.
-		out = append(out, prompt)
+		out = append(out, at.Prompt)
 	}
 	return out, nil
 }

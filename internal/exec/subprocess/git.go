@@ -67,11 +67,17 @@ func repoRoot(dir string) (string, error) {
 	return resolved, nil
 }
 
-// repoKey identifies the REPOSITORY, not the checkout: the common git
-// directory is shared by a repository's worktrees and differs between two
-// clones on one machine. It is half of a handle's identity, which is what
-// keeps the same tick id in two repositories from colliding.
-func repoKey(dir string) (string, error) {
+// gitCommonDir is the repository's shared git directory — the real one, which
+// every linked worktree's `.git` FILE points at rather than contains.
+//
+// It is asked for twice and for two different reasons. It identifies the
+// repository (see repoKey), and it is the directory an attempt's runner must
+// be able to write: a worktree under the executor's state root cannot commit
+// unless the index, refs and logs under this path are writable too, and those
+// are nowhere near the worktree. It is always RESOLVED and never spelled as
+// `.git`, because in a linked worktree `.git` is a file and in a submodule or
+// a separate-git-dir checkout it is somewhere else entirely.
+func gitCommonDir(dir string) (string, error) {
 	out, err := git(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return "", err
@@ -79,7 +85,19 @@ func repoKey(dir string) (string, error) {
 	if resolved, err := filepath.EvalSymlinks(out); err == nil {
 		out = resolved
 	}
-	sum := sha256.Sum256([]byte(filepath.Clean(out)))
+	return filepath.Clean(out), nil
+}
+
+// repoKey identifies the REPOSITORY, not the checkout: the common git
+// directory is shared by a repository's worktrees and differs between two
+// clones on one machine. It is half of a handle's identity, which is what
+// keeps the same tick id in two repositories from colliding.
+func repoKey(dir string) (string, error) {
+	common, err := gitCommonDir(dir)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(common))
 	return hex.EncodeToString(sum[:])[:16], nil
 }
 
