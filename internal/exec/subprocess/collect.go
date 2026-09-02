@@ -168,11 +168,14 @@ func (e *Executor) classify(st *store, commits int, hasReport bool,
 }
 
 // quotaExhaustedPattern is the runner's own words for having hit a flat-rate
-// seat's usage limit. codex's exact sentence is golden in
-// testdata/codex-usage-limit.log (captured 2026-09-02); claude and pi phrase
-// the same fact differently, so the pattern matches the words every runner's
-// message shares rather than one CLI's exact sentence.
-var quotaExhaustedPattern = regexp.MustCompile(`(?i)usage limit`)
+// seat's usage limit, captured from two real live-test runs and golden here:
+// codex's "You've hit your usage limit" (testdata/codex-usage-limit.log,
+// captured 2026-09-02 19:56) and pi's "You're out of extra usage"
+// (testdata/pi-out-of-usage.log, captured 2026-09-02 22:12) — pi's API error
+// does not share codex's wording at all, so this is a small explicit
+// alternation between the two captured phrasings rather than one pattern
+// guessed to cover both.
+var quotaExhaustedPattern = regexp.MustCompile(`(?i)usage limit|out of extra usage`)
 
 // failureHintScanBytes bounds how much of a runner log this executor reads
 // for a hint: the signal is always the runner's LAST words, and a log this
