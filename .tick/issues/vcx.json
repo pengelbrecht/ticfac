@@ -1,0 +1,17 @@
+{
+  "id": "vcx",
+  "title": "Executor: classify quota_exhausted and runner_error from runner evidence at collect",
+  "description": "Follow-up from qg5 (DONE_WITH_CONCERNS). contracts/job-protocol.json defines a quota_exhausted failure class so a flat-rate seat running out of quota is not reported as a broken route; today a codex run that hits its usage limit collects as no-commits / runner_error. Add a failure-class hint derived from the runner's exit and its log tail (diagnostic material only — never a completion signal): codex 'You have hit your usage limit' / claude and pi equivalents -\u003e quota_exhausted; unknown flag or usage error (exit 2) -\u003e a distinct configuration class per the contract vocabulary; otherwise runner_error. Golden a codex usage-limit log captured on 2026-09-02 as a fixture. Scope: internal/exec/subprocess only (collect.go, report/vocabulary tests). Do not touch internal/reconcile (built concurrently by px2) or any other package. Read RESULT of qg5 in git history and lifecycle_test.go before starting.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "qg5"
+  ],
+  "parent": "qeu",
+  "acceptance_criteria": "A fake-runner test that exits 1 with the codex usage-limit text collects with failure class quota_exhausted; a fake exiting 2 with a usage error collects with the contract's configuration class; the classes used exist in contracts/job-protocol.json (asserted by test); go test -short ./internal/exec/... green",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-02T19:59:47.720909Z",
+  "updated_at": "2026-09-02T19:59:47.720909Z"
+}
