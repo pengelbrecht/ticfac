@@ -1,0 +1,32 @@
+# Worker routing for herd-substrate epic runs. Schema and semantics: the ticks
+# skill's references/runners-config.md.
+version = 2
+
+[orchestration]
+substrate = "auto"
+max_parallel = 4
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+effort = "high"
+
+[roles.implement.tiers.economy]
+model = "haiku"
+effort = "low"
+
+[roles.implement.tiers.strong]
+model = "opus"
+effort = "high"
+
+[roles.implement.tiers.balanced]
+kind = "codex"
+model = "gpt-5.6-luna"
+effort = "max"
+
+[testing.commands]
+go = { command = "go test -short -count=1 ./...", description = "Go" }
+
+[environment.commands]
+which-go = { command = "which go", description = "Go toolchain on PATH" }
+git-config-user-email = { command = "git config user.email", description = "git identity configured" }
