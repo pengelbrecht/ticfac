@@ -377,6 +377,26 @@ func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 	}
 }
 
+// vcx: pi's own words for the same fact — an account out of extra usage —
+// share none of codex's wording ("You've hit your usage limit" vs "You're out
+// of extra usage"), so this is what proves the pattern is a real alternation
+// between two captured phrasings rather than one guess that happens to cover
+// codex.
+func TestAPiOutOfUsageRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "pi_out_of_usage"})
+	handle := f.Start(f.spec("run-21/tick-vvv/attempt-1", "vvv"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictNoCommits {
+		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	}
+	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureQuotaExhausted {
+		t.Errorf("outcome %s/%s, want %s/%s",
+			collected.Result.Outcome, collected.Result.FailureClass, OutcomeFailed, FailureQuotaExhausted)
+	}
+}
+
 // vcx: a runner invoked with a flag it does not recognise exits 2 before ever
 // reaching the model — this executor's own mistake, not the runner's conduct
 // — so it collects as infrastructure_error rather than runner_error.
