@@ -34,9 +34,23 @@ type Options struct {
 	StateDir string
 
 	// Runner is claude | codex | pi. RunnerArgv overrides the table entirely,
-	// which is how the tests drive a fake runner.
+	// which is how the tests drive a fake runner — and an override is the
+	// WHOLE invocation, so nothing below is inserted into one.
 	Runner     string
 	RunnerArgv []string
+
+	// Model is the model the caller's profile resolved for this job, applied
+	// through the runner's own model flag. Empty launches the runner as it is,
+	// on whatever model its own configuration chooses. It is host
+	// configuration and not a JobSpec field, because the protocol's records
+	// are closed and a field invented here would be one the reconciler ignores.
+	Model string
+
+	// RolePrompt is the profile's prompt for this job's role: the instruction
+	// that says what the role IS, which the rendered worker prompt opens with.
+	// The executor owns the mechanics around it — the report path, the
+	// boundary, the status vocabulary — and never the role.
+	RolePrompt string
 
 	// SupervisorArgv is how this executor re-invokes itself to supervise an
 	// attempt. Defaults to the running executable plus "supervise".
@@ -316,6 +330,8 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		Worktree:      filepath.Join(dir, dirWorktree),
 		State:         dir,
 		Runner:        e.opts.Runner,
+		Model:         e.opts.Model,
+		RolePrompt:    e.opts.RolePrompt,
 		WallSeconds:   spec.Limits.WallSeconds,
 		PushInterval:  int(e.opts.PushInterval / time.Second),
 		PushOnTimer:   e.guarded("push_on_timer"),
@@ -347,7 +363,8 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve the repository's git common directory: %w", err)
 	}
-	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, launch{Prompt: prompt, GitCommonDir: common})
+	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv,
+		launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model})
 	if err != nil {
 		return nil, err
 	}

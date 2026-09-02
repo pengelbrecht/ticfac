@@ -67,6 +67,14 @@ type attemptRecord struct {
 	RunnerArgv []string `json:"runner_argv"`
 	RunnerEnv  []string `json:"runner_env"`
 
+	// Model and RolePrompt are what the caller's PROFILE resolved for this
+	// job. They are recorded because "which model ran this, under which role
+	// instruction" is a question an attempt has to be able to answer after the
+	// worktree is gone — and because the prompt file beside this record is the
+	// rendered whole, not the role's own half.
+	Model      string `json:"model,omitempty"`
+	RolePrompt string `json:"role_prompt,omitempty"`
+
 	WallSeconds  int `json:"wall_seconds"`
 	PushInterval int `json:"push_interval_seconds"`
 

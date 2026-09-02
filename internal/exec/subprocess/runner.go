@@ -33,13 +33,31 @@ const (
 	gitCommonDirPlaceholder = "{{git_common_dir}}"
 )
 
-// runnerArgv is the headless, full-auto invocation of each runner. The prompt
+// runnerDef is one runner's entry: how to launch it headless, and the flag
+// that names a model to it.
+//
+// The model flag lives HERE, beside the argv it belongs to, for the same reason
+// the argv does: the runner is the only thing that differs between the three,
+// and it differs in exactly one table. ModelFlag empty means this runner cannot
+// be told which model to use, which is a refusal when one is routed rather than
+// a value quietly dropped — a model recorded as applied and silently not
+// applied is provenance that lies.
+type runnerDef struct {
+	Argv      []string
+	ModelFlag string
+}
+
+// runners is the headless, full-auto invocation of each runner. The prompt
 // is passed as an argument, never on stdin: a runner whose stdin is a pipe
 // that never closes is a runner that waits forever.
-var runnerArgv = map[string][]string{
+var runners = map[string]runnerDef{
 	// `-p` is claude's headless print mode; the permission mode is what makes
 	// it non-interactive rather than blocked on a prompt nobody will answer.
-	"claude": {"claude", "-p", "--permission-mode", "bypassPermissions", promptPlaceholder},
+	// `--model <name>` takes an alias (sonnet, opus) or a full model name.
+	"claude": {
+		Argv:      []string{"claude", "-p", "--permission-mode", "bypassPermissions", promptPlaceholder},
+		ModelFlag: "--model",
+	},
 
 	// `codex exec` is the non-interactive mode and `-s workspace-write` is its
 	// sandbox: writable inside the workspace, and no approval prompt arises,
@@ -54,31 +72,54 @@ var runnerArgv = map[string][]string{
 	// and no object database, and codex can edit files and cannot commit one
 	// — which collect reads as `no-commits`, an empty branch that looks
 	// exactly like a worker that never did anything.
-	"codex": {"codex", "exec", "-s", "workspace-write", "--add-dir", gitCommonDirPlaceholder, promptPlaceholder},
+	// `codex exec` spells the model `-m, --model <MODEL>`.
+	"codex": {
+		Argv:      []string{"codex", "exec", "-s", "workspace-write", "--add-dir", gitCommonDirPlaceholder, promptPlaceholder},
+		ModelFlag: "-m",
+	},
 
 	// pi's headless mode is `--print` / `-p`: "process prompt and exit". Its
 	// tools are enabled by default in that mode and it has no approval flag to
 	// pass — the trust flags it does have (`-a`, `-na`) are about project-local
 	// extensions and skills, not about tool use, so this executor does not
 	// hand it one.
-	"pi": {"pi", "-p", promptPlaceholder},
+	// pi spells it `--model <pattern>`, which takes a pattern, a `provider/id`
+	// or a bare id.
+	"pi": {
+		Argv:      []string{"pi", "-p", promptPlaceholder},
+		ModelFlag: "--model",
+	},
 }
 
 // KnownRunners is the closed set, sorted, for a caller that wants to say what
 // it accepts.
 func KnownRunners() []string {
-	out := make([]string, 0, len(runnerArgv))
-	for name := range runnerArgv {
+	out := make([]string, 0, len(runners))
+	for name := range runners {
 		out = append(out, name)
 	}
 	sort.Strings(out)
 	return out
 }
 
+// RunnerAcceptsModel reports whether this executor can tell a runner which
+// model to use. A caller that routes a model asks BEFORE it dispatches: a
+// refusal at construction is a run that did not start, and a refusal at launch
+// is a tick already claimed for work nothing will do.
+func RunnerAcceptsModel(name string) bool {
+	def, ok := runners[name]
+	return ok && def.ModelFlag != ""
+}
+
 // launch is what one attempt substitutes into its runner's argv template.
 type launch struct {
 	// Prompt is the rendered worker prompt.
 	Prompt string
+
+	// Model is the model the job's PROFILE resolved, empty when none was
+	// routed — in which case the runner is launched exactly as it was and
+	// chooses its own.
+	Model string
 
 	// GitCommonDir is the repository's shared git directory, resolved for THIS
 	// attempt's repository. A runner that sandboxes its own file access is
@@ -96,12 +137,22 @@ type launch struct {
 func resolveRunner(name string, override []string, at launch) ([]string, error) {
 	argv := override
 	if len(argv) == 0 {
-		known, ok := runnerArgv[name]
+		def, ok := runners[name]
 		if !ok {
 			return nil, fmt.Errorf("runner %q is not one of %s", name, strings.Join(KnownRunners(), ", "))
 		}
-		argv = known
+		// The model goes in before the prompt is substituted, because the
+		// prompt is a POSITIONAL argument to all three of these CLIs and a flag
+		// after it would be read as part of it.
+		withModelArgv, err := withModel(name, def, at.Model)
+		if err != nil {
+			return nil, err
+		}
+		argv = withModelArgv
 	}
+	// An override is the whole invocation — the escape hatch a build with a
+	// runner's flags wrong reaches for — so nothing is inserted into one. The
+	// caller who set it owns whether it names a model.
 
 	out := make([]string, 0, len(argv)+1)
 	prompted := false
@@ -125,6 +176,37 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 		// An argv with no placeholder gets the prompt last, which is what a
 		// bare command in Options.RunnerArgv means.
 		out = append(out, at.Prompt)
+	}
+	return out, nil
+}
+
+// withModel puts the model in front of the prompt placeholder, or at the end
+// of an argv that has none — which is the same position, since a template
+// without a placeholder gets the prompt appended last.
+//
+// A runner with no model flag and a model to apply is refused. Launching it
+// anyway would run whatever model that runner defaults to while the attempt
+// record, the evidence and the provenance all said something else.
+func withModel(name string, def runnerDef, model string) ([]string, error) {
+	if model == "" {
+		return def.Argv, nil
+	}
+	if def.ModelFlag == "" {
+		return nil, fmt.Errorf("the profile routes model %q to runner %q, and this executor knows no flag that "+
+			"tells %s which model to use: launching it anyway would run one model while every record named another",
+			model, name, name)
+	}
+	out := make([]string, 0, len(def.Argv)+2)
+	inserted := false
+	for _, arg := range def.Argv {
+		if arg == promptPlaceholder && !inserted {
+			out = append(out, def.ModelFlag, model)
+			inserted = true
+		}
+		out = append(out, arg)
+	}
+	if !inserted {
+		out = append(out, def.ModelFlag, model)
 	}
 	return out, nil
 }

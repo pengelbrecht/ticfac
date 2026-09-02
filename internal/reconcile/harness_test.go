@@ -421,14 +421,19 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, error) {
 	// The runner comes off the dispatch's profile exactly as the production
 	// factory takes it; the argv is the fake runner's, so a routed runner is
 	// observable without an agent CLI on the machine.
-	runner := "claude"
-	if d.Profile != nil && d.Profile.Runner != "" {
-		runner = d.Profile.Runner
+	runner, model, rolePrompt := "claude", "", ""
+	if d.Profile != nil {
+		if d.Profile.Runner != "" {
+			runner = d.Profile.Runner
+		}
+		model, rolePrompt = d.Profile.Model, d.Profile.Prompt
 	}
 	executor, err := subprocess.New(subprocess.Options{
 		Repo:           d.Repo,
 		StateDir:       d.StateDir,
 		Runner:         runner,
+		Model:          model,
+		RolePrompt:     rolePrompt,
 		RunnerArgv:     f.Runner,
 		SupervisorArgv: []string{executorBin, "supervise"},
 		Remote:         d.Remote,

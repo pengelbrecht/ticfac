@@ -37,6 +37,15 @@ type attemptHandle struct {
 	WriteRef  string `json:"write_ref"`
 	BaseSHA   string `json:"base_sha"`
 	StateRoot string `json:"state_root"`
+
+	// Model and PromptDigest are the two halves of the profile that reach the
+	// runner PROCESS — the model through the runner's own model flag, the
+	// prompt as the role instruction the worker prompt opens with. They are
+	// recorded here, in the marker's open handle object, because the closed
+	// provenance record can say WHICH profile a job was dispatched under and
+	// has nowhere to say that its prompt and model were actually applied.
+	Model        string `json:"model"`
+	PromptDigest string `json:"prompt_digest"`
 }
 
 func (a attemptHandle) asMap() map[string]any {
@@ -44,6 +53,7 @@ func (a attemptHandle) asMap() map[string]any {
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
 		"role": a.Role, "repo": a.Repo, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA, "state_root": a.StateRoot,
+		"model": a.Model, "prompt_digest": a.PromptDigest,
 	}
 }
 
@@ -65,6 +75,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Role: get("role"), Repo: get("repo"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"), StateRoot: get("state_root"),
+		Model: get("model"), PromptDigest: get("prompt_digest"),
 	}
 }
 
@@ -297,6 +308,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 		Executor: subprocess.ExecutorName, JobID: jobID, Attempt: number, TickID: entry.TickID,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
+		Model: dispatch.Profile.Model, PromptDigest: promptDigest(dispatch.Profile),
 	}
 	return dispatch, marker
 }
@@ -553,11 +565,13 @@ func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, ma
 // DefaultExecutor is the factory a production run uses: the local subprocess
 // executor, one per dispatch, pointed at a state directory this run owns.
 //
-// The runner comes from the dispatch's PROFILE, because which agent CLI serves
-// a role is executor configuration and the protocol's records are closed — a
-// runner field invented on this side would be a field the executor's contract
-// does not have. `runner` is the fallback an operator names on the command
-// line, for a dispatch whose profile did not resolve one.
+// Three of the profile's four fields reach the executor here, as HOST
+// configuration: the runner it launches, the model it launches it on, and the
+// role prompt the worker prompt opens with. None of them is a JobSpec field —
+// the protocol's records are closed, and a field invented on this side would be
+// one the reconciler's own contract does not have. `runner` is the fallback an
+// operator names on the command line, for a dispatch whose profile resolved
+// none.
 func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, error) {
 	return func(d Dispatch) (Executor, error) {
 		supervisor, err := supervisorArgv()
@@ -566,14 +580,19 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 		}
 		// A local, not the captured fallback: a profile that routed one
 		// dispatch must not become the default for the next one.
-		dispatched := runner
-		if d.Profile != nil && d.Profile.Runner != "" {
-			dispatched = d.Profile.Runner
+		dispatched, model, rolePrompt := runner, "", ""
+		if d.Profile != nil {
+			if d.Profile.Runner != "" {
+				dispatched = d.Profile.Runner
+			}
+			model, rolePrompt = d.Profile.Model, d.Profile.Prompt
 		}
 		return subprocess.New(subprocess.Options{
 			Repo:           d.Repo,
 			StateDir:       d.StateDir,
 			Runner:         dispatched,
+			Model:          model,
+			RolePrompt:     rolePrompt,
 			RunnerArgv:     runnerArgv,
 			SupervisorArgv: supervisor,
 			Remote:         d.Remote,

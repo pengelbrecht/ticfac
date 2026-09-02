@@ -608,6 +608,47 @@ func TestTheRunnerIsHandedThePromptAndTheReportPath(t *testing.T) {
 	}
 }
 
+// The PROFILE's prompt reaches the runner. It is the role's own instruction —
+// what this job IS — and the executor puts it first and then adds the mechanics
+// around it: a profile whose prompt stopped at the attempt record would be a
+// profile three of whose four fields did nothing.
+func TestTheRolePromptReachesTheRunner(t *testing.T) {
+	const rolePrompt = "# review-epic\n\nYou are reviewing an epic at its frontier, READ-ONLY."
+	f := newFixture(t, fixtureOptions{mode: "echo_prompt", rolePrompt: rolePrompt, model: "a-model"})
+	handle := f.Start(f.spec("run-17/tick-qqq/attempt-1", "qqq"))
+	f.waitSettled(handle)
+
+	local, _ := handle.Local()
+	raw, err := os.ReadFile(filepath.Join(local.Worktree, "prompt-seen.txt"))
+	if err != nil {
+		t.Fatalf("the runner did not receive a prompt: %v", err)
+	}
+	seen := string(raw)
+	if !strings.Contains(seen, "You are reviewing an epic at its frontier, READ-ONLY.") {
+		t.Errorf("the role prompt did not reach the runner:\n%s", seen)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(seen), "# review-epic") {
+		t.Error("the role prompt is not what the worker reads first; the mechanics come after the role")
+	}
+	// The mechanics are still there — the role replaces the opening line, not
+	// the contract the executor owns.
+	if !strings.Contains(seen, local.ResultPath) || !strings.Contains(seen, "STATUS: "+StatusBlocked) {
+		t.Error("the role prompt displaced the report path or the status vocabulary")
+	}
+	if !strings.Contains(seen, "- model: a-model") {
+		t.Error("the prompt does not tell the worker which model it is running as")
+	}
+
+	// And the attempt record says what it ran as, after the worktree is gone.
+	record, err := newStore(local.State).readAttempt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Model != "a-model" || !strings.Contains(record.RolePrompt, "READ-ONLY") {
+		t.Errorf("the attempt record does not carry the profile's model and role prompt: %+v", record.Model)
+	}
+}
+
 // ------------------------------------------------------------------ helpers ---
 
 // startInOwnGroup runs a shell in a process group of its own, so a test can

@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -379,4 +381,126 @@ func containsCommit(t *testing.T, f *fixture, commit, container string) bool {
 	mustRun(t, f.Repo.Dir, "git", "fetch", "--quiet", "origin")
 	cmd := mustRunAllowingFailure(f.Repo.Dir, "git", "merge-base", "--is-ancestor", commit, container)
 	return cmd
+}
+
+// ------------------------------------------- the profile reaches the job ---
+
+// The profile's PROMPT and MODEL are not only recorded — they reach the job.
+// A profile whose prompt stopped at the attempt record would be a profile two
+// of whose four fields did nothing, and a run whose provenance named a model
+// nothing was launched with would be provenance that lies.
+func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+	r, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+
+	profiles, err := profile.ResolveAll(profile.Options{RunnersConfig: f.Repo.Dir + "/.tick/runners.toml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for tick, role := range map[string]string{"a1": "implement-tick", "rv": "review-epic", "co": "closeout-epic"} {
+		want := profiles[role]
+		dispatch := f.dispatch(tick)
+		if dispatch.Profile == nil {
+			t.Fatalf("%s was dispatched under no profile", tick)
+		}
+		if dispatch.Profile.Prompt != want.Prompt || dispatch.Profile.Model != want.Model {
+			t.Errorf("%s was dispatched with a profile that is not %s's", tick, role)
+		}
+
+		// The prompt the executor actually rendered for this attempt, read out
+		// of the executor's own state: it opens with the ROLE's instruction and
+		// still carries the mechanics the executor owns.
+		rendered := renderedPrompt(t, dispatch.StateDir)
+		opening := strings.SplitN(strings.TrimSpace(want.Prompt), "\n", 2)[0]
+		if !strings.HasPrefix(strings.TrimSpace(rendered), opening) {
+			t.Errorf("%s's prompt does not open with the %s profile's prompt (%q):\n%s",
+				tick, role, opening, first(rendered, 400))
+		}
+		if !strings.Contains(rendered, "- model: "+want.Model) {
+			t.Errorf("%s's prompt does not name the model the profile routed (%s)", tick, want.Model)
+		}
+		if !strings.Contains(rendered, "STATUS: "+subprocess.StatusBlocked) {
+			t.Errorf("%s's prompt lost the status vocabulary the executor owns", tick)
+		}
+	}
+
+	// And the marker on origin says the two were applied, so a reader of the
+	// run state can tell a profile that was resolved from one that was used.
+	attempts, err := openStore(t, f, r).Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles := map[string]string{"a1": "implement-tick", "a2": "implement-tick", "b1": "implement-tick",
+		"rv": "review-epic", "co": "closeout-epic"}
+	for _, attempt := range attempts {
+		want := profiles[roles[attempt.TickID]]
+		handle := handleFromMap(attempt.JobHandle)
+		if handle.Model != want.Model {
+			t.Errorf("the marker for %s says model %q, want %q", attempt.TickID, handle.Model, want.Model)
+		}
+		if handle.PromptDigest != digestOf("role-prompt", want.Prompt) {
+			t.Errorf("the marker for %s does not digest the role prompt it was dispatched with", attempt.TickID)
+		}
+	}
+}
+
+// A model routed to a runner this executor cannot tell which model to use is
+// refused at CONSTRUCTION — before a tick is claimed, and before any record
+// says a model was applied.
+func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	for _, role := range profile.Roles {
+		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
+	}
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.ProfileDir = dir
+
+	// Every runner this executor knows takes a model today, so the guard is
+	// exercised by making one say it does not — which is the case it exists
+	// for, and the only way to reach it.
+	if _, err := New(opts); err != nil {
+		t.Fatalf("a model routed to a runner that takes one was refused: %v", err)
+	}
+
+	restore := runnerAcceptsModel
+	t.Cleanup(func() { runnerAcceptsModel = restore })
+	runnerAcceptsModel = func(string) bool { return false }
+
+	_, err := New(opts)
+	if err == nil {
+		t.Fatal("a model routed to a runner that cannot be told which model to use was accepted")
+	}
+	if !strings.Contains(err.Error(), "sonnet") || !strings.Contains(err.Error(), "provenance that lies") {
+		t.Errorf("the refusal does not say what was wrong: %v", err)
+	}
+}
+
+// renderedPrompt is the prompt the executor wrote for a dispatch, found under
+// the state directory this run gave it. The file's name is the executor's, so
+// it is searched for rather than recomputed here.
+func renderedPrompt(t *testing.T, stateRoot string) string {
+	t.Helper()
+	dir, ok := findAttemptState(stateRoot)
+	if !ok {
+		t.Fatalf("no attempt state under %s", stateRoot)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "prompt.md"))
+	if err != nil {
+		t.Fatalf("the executor wrote no prompt for the attempt at %s: %v", dir, err)
+	}
+	return string(raw)
+}
+
+func first(text string, n int) string {
+	if len(text) <= n {
+		return text
+	}
+	return text[:n]
 }

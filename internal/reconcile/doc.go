@@ -43,11 +43,16 @@
 //     else — resolved by internal/profile from this repository's `profiles/`
 //     directory and routed by `[roles.*]` in the TARGET repository's
 //     `.tick/runners.toml`, so an operator configures a run in the one place
-//     they already configure `tk herd`. The role, the model and the profile's
-//     digest go into the provenance of every record the dispatch produces,
-//     which is what makes "under which profile was this decided" answerable
-//     later. That reader is internal/profile's own and NOT this package's gate
-//     reader: routing may not become a second way to authorise a command line.
+//     they already configure `tk herd`. Three of the four reach the executor as
+//     host configuration — the runner it launches, the model it launches on,
+//     and the role prompt the worker prompt opens with — and the fourth, the
+//     executor name, is what this phase checks it can honour. The role, the
+//     model and the profile's digest go into the provenance of every record the
+//     dispatch produces, and the dispatch marker records that the model and the
+//     prompt were APPLIED, which is what makes "under which profile was this
+//     decided, and did it actually run that way" answerable later. That reader
+//     is internal/profile's own and NOT this package's gate reader: routing may
+//     not become a second way to authorise a command line.
 //
 //   - REVIEW AND CLOSEOUT ARE JOBS, on the same executor, dispatched at the
 //     CONTROLLER's state — the integration branch as origin has it — and the
