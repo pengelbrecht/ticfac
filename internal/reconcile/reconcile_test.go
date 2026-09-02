@@ -115,11 +115,15 @@ func TestTheRunLeavesACheckpointAndAnAttemptRecordPerDispatch(t *testing.T) {
 		}
 	}
 
-	// The gate's evidence is on origin too, one record per check per attempt,
-	// fingerprinted to what it evaluated.
+	// The gate's evidence is on origin too, one record per check per attempt
+	// that MERGED something, fingerprinted to what it evaluated. The review is
+	// dispatched read-only and integrates nothing, so there is nothing for an
+	// integrated gate to be about: what stands behind its close is the
+	// validated role-result envelope, recorded as a decision.
 	keys := store.EvidenceKeys()
-	if len(keys) != 5 {
-		t.Fatalf("evidence keys %v; one per tick's gate was expected", keys)
+	want := []string{"gate-a1-1-tree", "gate-a2-2-tree", "gate-b1-3-tree", "gate-co-5-tree"}
+	if strings.Join(keys, " ") != strings.Join(want, " ") {
+		t.Fatalf("evidence keys %v, want %v", keys, want)
 	}
 	for _, key := range keys {
 		evidence, ok, err := store.Evidence(key)

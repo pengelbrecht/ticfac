@@ -49,7 +49,9 @@ run-epic flags:
   --base <ref>        what the integration branch is cut from (default: HEAD)
   --run-id <id>       the run's id (default: epic-<epic-id>)
   --owner <name>      who claims a tick in the tracker (default: ticfac)
-  --runner <name>     claude | codex | pi (default: $TICFAC_RUNNER, else claude)
+  --runner <name>     claude | codex | pi, when a profile routes none (default: $TICFAC_RUNNER, else claude)
+  --tier <name>       a [roles.*.tiers.<name>] overlay in the target repo's runners.toml
+  --profiles <dir>    resolve role profiles from this directory instead of the compiled-in ones
   --state-root <dir>  where attempt state lives, OUTSIDE the repository
   --gate <file>       the runners.toml the integrated gate is read from
   --budget <usd>      the budget an operator asks for
@@ -91,6 +93,8 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		runID     = fs.String("run-id", "", "the run's id")
 		owner     = fs.String("owner", "ticfac", "who claims a tick in the tracker")
 		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
+		tier      = fs.String("tier", "", "a [roles.*.tiers.<name>] overlay in the target repository's runners.toml")
+		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
 		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
 		gate      = fs.String("gate", "", "the runners.toml the integrated gate is read from")
 		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
@@ -139,6 +143,8 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		NewExecutor:       reconcile.DefaultExecutor(*runner, nil, 60*time.Second),
 		ExecStateRoot:     *stateRoot,
 		GateConfig:        *gate,
+		ProfileDir:        *profiles,
+		Tier:              *tier,
 		WallSeconds:       *wall,
 		BudgetUSD:         *budget,
 		CeilingUSD:        *ceiling,

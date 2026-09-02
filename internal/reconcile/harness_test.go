@@ -270,6 +270,15 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
+// mustRunAllowingFailure is mustRun for a question whose answer is the exit
+// code — `merge-base --is-ancestor` says yes or no, and neither is an error.
+func mustRunAllowingFailure(dir, name string, args ...string) bool {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	return cmd.Run() == nil
+}
+
 func mustRun(t *testing.T, dir, name string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(name, args...)
@@ -313,7 +322,15 @@ type fixture struct {
 	// the number "the live attempt was redispatched" is, rather than an
 	// impression from a journal.
 	starts map[string]int
-	mu     sync.Mutex
+
+	// specs and dispatches are what the reconciler actually ASKED for, per
+	// tick: the JobSpec it issued and the dispatch it built the executor from.
+	// A profile that routed nothing and a grade that was not issued are both
+	// invisible in a journal.
+	specs      map[string]*subprocess.JobSpec
+	dispatches map[string]Dispatch
+
+	mu sync.Mutex
 
 	// wrap decorates every executor this fixture builds, for a test that has
 	// to see the ORDER the reconciler asks for operations in.
@@ -343,6 +360,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	}
 	f := &fixture{
 		t: t, Root: root, Repo: repo, starts: map[string]int{},
+		specs: map[string]*subprocess.JobSpec{}, dispatches: map[string]Dispatch{},
 		Tracker:   newTracker(t, root),
 		StateRoot: filepath.Join(root, "exec-state"),
 		Runner:    fakeRunnerArgv(t, opts.mode),
@@ -396,10 +414,21 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 }
 
 func (f *fixture) newExecutor(d Dispatch) (Executor, error) {
+	f.mu.Lock()
+	f.dispatches[d.TickID] = d
+	f.mu.Unlock()
+
+	// The runner comes off the dispatch's profile exactly as the production
+	// factory takes it; the argv is the fake runner's, so a routed runner is
+	// observable without an agent CLI on the machine.
+	runner := "claude"
+	if d.Profile != nil && d.Profile.Runner != "" {
+		runner = d.Profile.Runner
+	}
 	executor, err := subprocess.New(subprocess.Options{
 		Repo:           d.Repo,
 		StateDir:       d.StateDir,
-		Runner:         "claude",
+		Runner:         runner,
 		RunnerArgv:     f.Runner,
 		SupervisorArgv: []string{executorBin, "supervise"},
 		Remote:         d.Remote,
@@ -427,8 +456,35 @@ type recordingExecutor struct {
 func (e *recordingExecutor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
 	e.fixture.mu.Lock()
 	e.fixture.starts[spec.JobID]++
+	e.fixture.specs[tickOfJob(spec.JobID)] = spec
 	e.fixture.mu.Unlock()
 	return e.Executor.Start(spec)
+}
+
+// tickOfJob reads the tick out of a job id. The reconciler owns the id's shape
+// — the executor deliberately does not parse it — so this is the test's reader
+// of the test's own fixture, not a second implementation of anything.
+func tickOfJob(jobID string) string {
+	for _, part := range strings.Split(jobID, "/") {
+		if rest, ok := strings.CutPrefix(part, "tick-"); ok {
+			return rest
+		}
+	}
+	return jobID
+}
+
+// spec is the JobSpec one tick was dispatched with.
+func (f *fixture) spec(tick string) *subprocess.JobSpec {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.specs[tick]
+}
+
+// dispatch is the Dispatch one tick's executor was built from.
+func (f *fixture) dispatch(tick string) Dispatch {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.dispatches[tick]
 }
 
 // startCount is how many times the executor was asked to start one job.

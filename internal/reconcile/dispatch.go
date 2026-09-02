@@ -98,6 +98,13 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 			"so this dispatch waits for a person and not for the clock", unit)
 	}
 
+	if isRoleJob(entry.Role) {
+		// Review and closeout are jobs like any other, on the same executor —
+		// what differs is that the reconciler acts on the ANSWER they return
+		// rather than on a branch it merges.
+		return r.processRoleJob(ctx, entry)
+	}
+
 	handle, executor, marker, err := r.claimDispatch(ctx, entry)
 	if err != nil {
 		return err
@@ -181,13 +188,12 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return nil, nil, marker, err
 	}
 
-	tickID, attemptNumber := tick, number
 	outcome, err := r.store.PutAttempt(runstate.Attempt{
 		Attempt:      number,
 		TickID:       tick,
 		DispatchedAt: r.now().UTC().Format(time.RFC3339),
 		JobHandle:    marker.asMap(),
-		Provenance:   r.provenance(&tickID, &attemptNumber, runstate.PhaseWorker, ""),
+		Provenance:   r.attemptProvenance(dispatch),
 	})
 	if err != nil {
 		return nil, nil, marker, fmt.Errorf("record the dispatch of %s: %w", tick, err)
@@ -269,10 +275,19 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemptHandle) {
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
 	stateDir := filepath.Join(r.opts.ExecStateRoot, r.runID, entry.TickID, fmt.Sprintf("%d", number))
+
+	// A role job is dispatched at the CONTROLLER's state — the integration
+	// branch as origin has it now — because that is what it is about. An
+	// implementation tick branches from the run's base like any other.
+	base := r.base
+	if isRoleJob(entry.Role) {
+		base = r.controllerBase()
+	}
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
-		WriteRef: "refs/heads/tick/" + entry.TickID, BaseSHA: r.base, StateDir: stateDir,
+		WriteRef: "refs/heads/tick/" + entry.TickID, BaseSHA: base, StateDir: stateDir,
+		Profile: r.profileFor(entry.Role),
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -281,7 +296,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 	marker := attemptHandle{
 		Executor: subprocess.ExecutorName, JobID: jobID, Attempt: number, TickID: entry.TickID,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
-		WriteRef: dispatch.WriteRef, BaseSHA: r.base, StateRoot: stateDir,
+		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 	}
 	return dispatch, marker
 }
@@ -298,15 +313,28 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 		},
 		Capabilities:   subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
 		Inputs:         []subprocess.Input{{Kind: "tick", ID: d.TickID}, {Kind: "epic", ID: d.EpicID}},
-		OutputSchema:   "ticfac.role-result.v1",
+		OutputSchema:   outputSchemaFor(d.Role),
 		ArtifactPrefix: "runs/" + d.RunID + "/" + d.TickID + "/",
 		Credentials: subprocess.Credentials{
 			Model:  subprocess.ModelCredential{Shorthand: "issued-by-host"},
-			Source: subprocess.SourceCredential{Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "write", WriteRefPrefix: "refs/heads/tick/"}},
+			Source: sourceCredentialFor(d.Role),
 		},
 		// The EFFECTIVE budget, not the requested one: a job is issued the
 		// number that will govern (Appendix A #12).
 		Limits: subprocess.Limits{WallSeconds: r.opts.WallSeconds, MaxCostUSD: d.BudgetUSD},
+	}
+}
+
+// sourceCredentialFor is the source half of the job's credentials. A read-only
+// grade carries NO write_ref_prefix — the contract refuses one, and the reason
+// is the point: read-only means the issuer hands out no push credential, so
+// there is no namespace left to bound.
+func sourceCredentialFor(role string) subprocess.SourceCredential {
+	if sourceGradeFor(role) == "read-only" {
+		return subprocess.SourceCredential{Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "read-only"}}
+	}
+	return subprocess.SourceCredential{
+		Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "write", WriteRefPrefix: "refs/heads/tick/"},
 	}
 }
 
@@ -369,6 +397,7 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) Dispatch {
 	if dispatch.Role == "" {
 		dispatch.Role = "implement-tick"
 	}
+	dispatch.Profile = r.profileFor(dispatch.Role)
 	return dispatch
 }
 
@@ -523,16 +552,28 @@ func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, ma
 
 // DefaultExecutor is the factory a production run uses: the local subprocess
 // executor, one per dispatch, pointed at a state directory this run owns.
+//
+// The runner comes from the dispatch's PROFILE, because which agent CLI serves
+// a role is executor configuration and the protocol's records are closed — a
+// runner field invented on this side would be a field the executor's contract
+// does not have. `runner` is the fallback an operator names on the command
+// line, for a dispatch whose profile did not resolve one.
 func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, error) {
 	return func(d Dispatch) (Executor, error) {
 		supervisor, err := supervisorArgv()
 		if err != nil {
 			return nil, err
 		}
+		// A local, not the captured fallback: a profile that routed one
+		// dispatch must not become the default for the next one.
+		dispatched := runner
+		if d.Profile != nil && d.Profile.Runner != "" {
+			dispatched = d.Profile.Runner
+		}
 		return subprocess.New(subprocess.Options{
 			Repo:           d.Repo,
 			StateDir:       d.StateDir,
-			Runner:         runner,
+			Runner:         dispatched,
 			RunnerArgv:     runnerArgv,
 			SupervisorArgv: supervisor,
 			Remote:         d.Remote,

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "role": "closeout-epic",
+  "version": "1.0.0",
+  "executor": "local-subprocess",
+  "runner": "claude",
+  "model": "sonnet",
+  "prompt": "closeout-epic.md"
+}

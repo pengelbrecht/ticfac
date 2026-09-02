@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
 // Three `.tick/runners.toml` case tables — STRUCTURAL:
@@ -14,13 +16,14 @@ import (
 //	contracts/sweep-policy-cases.json
 //
 // Each is INPUT (a TOML document) -> EXPECTED (accepted with a parsed result,
-// or refused). ticfac's only reader of `.tick/runners.toml` is
-// internal/reconcile's, and it reads ONE table — `[testing.commands]`, the
-// integrated gate — because that is the only thing the reconciler is allowed to
-// run. It parses none of `[sandbox]`, `[signals]` or `[sweeps]`, so these cases
-// still cannot be executed here, and pretending otherwise would be the failure
-// contracts/README.md names: a check that reads as if it asserted something
-// while asserting nothing.
+// or refused). ticfac has two readers of `.tick/runners.toml`, and each reads
+// one table family: internal/reconcile's reads `[testing.commands]`, the
+// integrated gate, because that is the only thing the reconciler is allowed to
+// RUN; internal/profile's reads `[roles.*]`, the routing a job is dispatched
+// under. Neither parses `[sandbox]`, `[signals]` or `[sweeps]`, so the outcomes
+// these three tables pin still cannot be executed here, and pretending
+// otherwise would be the failure contracts/README.md names: a check that reads
+// as if it asserted something while asserting nothing.
 //
 // What these readers do instead is hold the tables to the properties a case
 // table has to have to be worth executing later, and — where the fixture's
@@ -28,6 +31,15 @@ import (
 // values are checked against runners-config-contract.json's image pattern,
 // which is a real cross-file assertion: the two files disagreeing means one of
 // them is wrong today, not when a TOML reader arrives.
+//
+// One part of them IS executable now. Every case document in all three tables
+// is a WHOLE `.tick/runners.toml`, and every one of them declares
+// `[roles.implement]` — because ticks' own validator requires it. ticfac has a
+// reader of that table since tick q4u (internal/profile), so the documents are
+// run through it below: every one of those documents is a real configuration
+// file, and each must be read the same way. It is the whole of what this repository can execute against
+// these tables today, and it is not nothing — a roles reader that choked on a
+// multi-line string, an inline table or a `__proto__` key would fail here.
 
 type tomlCase struct {
 	Name     string   `json:"name"`
@@ -176,6 +188,45 @@ func TestSandboxImageCases(t *testing.T) {
 	if !strings.Contains(strings.ToLower(rawString(t, file)), "rm -rf") {
 		t.Errorf("%s no longer carries a shell-fragment case; an image reference is a name and "+
 			"never a place to hide one", file)
+	}
+}
+
+// The executable half: ticfac's `[roles.*]` reader over every case document in
+// all three tables. The reader owns ONE table family and must be indifferent to
+// everything else in a real config — including the tables that carry a
+// multi-line string, an inline table, a shell fragment and a `__proto__` key.
+func TestTheRolesReaderReadsEveryCaseDocument(t *testing.T) {
+	files := []string{"sandbox-image-cases.json", "signal-source-cases.json", "sweep-policy-cases.json"}
+	documents := 0
+	for _, file := range files {
+		var table tomlCaseTable
+		readContract(t, file, &table)
+		for _, c := range table.Cases {
+			documents++
+			roles, err := profile.ParseRoles(c.TOML)
+			if err != nil {
+				t.Errorf("%s/%s: the roles reader refused a whole config document: %v", file, c.Name, err)
+				continue
+			}
+			// Every document in the bundle declares exactly this role, and it
+			// is the reader's job to find it and nothing else.
+			implement, ok := roles["implement"]
+			if !ok {
+				t.Errorf("%s/%s: the reader found no [roles.implement] in a document that declares one: %v",
+					file, c.Name, roles)
+				continue
+			}
+			if implement.Kind != "claude" {
+				t.Errorf("%s/%s: [roles.implement] read as kind %q", file, c.Name, implement.Kind)
+			}
+			if len(roles) != 1 {
+				t.Errorf("%s/%s: the reader read %v; every other table in these documents is somebody else's",
+					file, c.Name, roles)
+			}
+		}
+	}
+	if documents < 30 {
+		t.Errorf("only %d case documents were read; the three tables carry many more", documents)
 	}
 }
 

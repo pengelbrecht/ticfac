@@ -35,6 +35,30 @@
 //     Polling IS the keepalive, at a cadence pinned well under the substrate's
 //     wipe threshold.
 //
+// Two things a run decides before it dispatches anything, and records so that
+// what it decided outlives it:
+//
+//   - THE ROLE PROFILE. Every job is dispatched under a profile that is exactly
+//     {executor, runner, model, prompt} — SPEC §4.5's Phase 1 rule, and nothing
+//     else — resolved by internal/profile from this repository's `profiles/`
+//     directory and routed by `[roles.*]` in the TARGET repository's
+//     `.tick/runners.toml`, so an operator configures a run in the one place
+//     they already configure `tk herd`. The role, the model and the profile's
+//     digest go into the provenance of every record the dispatch produces,
+//     which is what makes "under which profile was this decided" answerable
+//     later. That reader is internal/profile's own and NOT this package's gate
+//     reader: routing may not become a second way to authorise a command line.
+//
+//   - REVIEW AND CLOSEOUT ARE JOBS, on the same executor, dispatched at the
+//     CONTROLLER's state — the integration branch as origin has it — and the
+//     review read-only, so its inability to write a ref is the issuer's
+//     decision rather than the model's manners. What the reconciler acts on is
+//     their role-result envelope (contracts/job-protocol.json), VALIDATED
+//     before anything is decided on it and recorded as a decision. A malformed
+//     envelope fails closed: the process tick stays open, because acting on an
+//     answer nobody could validate is how an unchecked model response becomes a
+//     verdict.
+//
 // The five lifecycle invariants the local subprocess executor names as not its
 // own — A3 (the step cap), A4 (poll as keepalive), A11 (a struck-out unit is
 // released by a person), A12 (budgets reported after clamping) and A13
