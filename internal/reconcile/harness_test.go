@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -330,6 +332,11 @@ type fixture struct {
 	specs      map[string]*subprocess.JobSpec
 	dispatches map[string]Dispatch
 
+	// handles is every handle Start ever returned, in order. The supervisor
+	// pid on a handle is frozen at that moment, which is what a pid FILE is
+	// not: a second Start over the same attempt overwrites the file.
+	handles []*subprocess.JobHandle
+
 	mu sync.Mutex
 
 	// wrap decorates every executor this fixture builds, for a test that has
@@ -365,7 +372,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		StateRoot: filepath.Join(root, "exec-state"),
 		Runner:    fakeRunnerArgv(t, opts.mode),
 	}
-	t.Cleanup(f.stopEverything)
+	t.Cleanup(f.teardown)
 	return f
 }
 
@@ -463,7 +470,24 @@ func (e *recordingExecutor) Start(spec *subprocess.JobSpec) (*subprocess.JobHand
 	e.fixture.starts[spec.JobID]++
 	e.fixture.specs[tickOfJob(spec.JobID)] = spec
 	e.fixture.mu.Unlock()
-	return e.Executor.Start(spec)
+
+	handle, err := e.Executor.Start(spec)
+	// Tracked whatever the run does next. A run cut between this return and
+	// the reconciler's own record — which is exactly where the restart tests
+	// cut it — still leaves a supervisor this fixture is responsible for
+	// stopping, and the handle is where its pid is frozen.
+	e.fixture.track(handle)
+	return handle, err
+}
+
+// track remembers a handle this fixture must stop. Every Start goes through it.
+func (f *fixture) track(handle *subprocess.JobHandle) {
+	if handle == nil {
+		return
+	}
+	f.mu.Lock()
+	f.handles = append(f.handles, handle)
+	f.mu.Unlock()
 }
 
 // tickOfJob reads the tick out of a job id. The reconciler owns the id's shape
@@ -499,27 +523,129 @@ func (f *fixture) startCount(jobID string) int {
 	return f.starts[jobID]
 }
 
+// teardown is what t.Cleanup runs: stop everything, then remove the temp root
+// this fixture allocated. The two are separate because a test may stop a
+// fixture's processes MID-TEST and go on using its directories — A8 kills the
+// hung attempt and then clones the fixture's own origin — so only the cleanup
+// path removes anything.
+func (f *fixture) teardown() {
+	f.stopEverything()
+	// Ahead of t.TempDir()'s own single attempt, and retried: a process that
+	// has just stopped existing has not necessarily released every fd into
+	// these directories in the same instant kill() returned.
+	removeWithRetry(f.Root)
+}
+
+// stopEverything kills every process this fixture's runs left behind and WAITS
+// for each to actually be gone. It is idempotent, and safe to call mid-test.
+//
+// teardown is registered with t.Cleanup, which runs cleanups in LIFO order: newFixture
+// takes its t.TempDir() before registering this, so this always runs first. But
+// a kill signal SENT is not the same fact as a process being GONE — a
+// supervisor mid-push into `repo-origin.git` when t.TempDir()'s RemoveAll
+// starts is "directory not empty", not a passing test. That is the flake this
+// waits out, and it is the same one internal/exec/subprocess fixed in 39a5259;
+// the discipline here is that fix's.
+//
+// Two half-measures are deliberately avoided. The runner is NOT in its
+// supervisor's process group — the executor puts each in a group of its own —
+// so killing supervisors alone leaves runners writing. And the pid FILES are
+// not the whole population: a redispatch over a live attempt (the
+// never_redispatch_live negative control) starts a second supervisor over the
+// same state directory, which overwrites `runner.pid`, so the first runner
+// exists only in the append-only observation log and on the handle the first
+// Start returned.
 func (f *fixture) stopEverything() {
-	// Whatever is still running under the fixture's state root is stopped by
-	// killing the process groups the executor recorded there. The state root is
-	// the fixture's own, so nothing outside this test is signalled.
+	pids := f.leftoverPIDs()
+	for _, pid := range pids {
+		if processAlive(pid) {
+			_ = syscallKillGroup(pid)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for _, pid := range pids {
+		for processAlive(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+}
+
+// leftoverPIDs is every process this fixture may still have running, from three
+// sources that each catch what the others miss:
+//
+//   - the supervisor pid frozen on every handle Start returned, which a later
+//     Start over the same attempt cannot overwrite;
+//   - every `supervisor.pid` and `runner.pid` under this fixture's state root,
+//     which catches an attempt whose handle the run never handed back — a run
+//     cut mid-dispatch by the restart tests' simulated kill;
+//   - every runner pid an attempt's observation log has EVER recorded, which is
+//     the only place a runner survives its pid file being overwritten.
+func (f *fixture) leftoverPIDs() []int {
+	f.mu.Lock()
+	handles := append([]*subprocess.JobHandle{}, f.handles...)
+	f.mu.Unlock()
+
+	seen := map[int]bool{}
+	var pids []int
+	add := func(pid int) {
+		if pid > 0 && !seen[pid] {
+			seen[pid] = true
+			pids = append(pids, pid)
+		}
+	}
+
+	for _, handle := range handles {
+		if local, err := handle.Local(); err == nil {
+			add(local.PID)
+		}
+	}
 	_ = filepath.Walk(f.StateRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
 		switch filepath.Base(path) {
 		case "supervisor.pid", "runner.pid":
-			raw, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return nil
-			}
 			var pid int
-			if _, scanErr := fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &pid); scanErr == nil && pid > 0 {
-				_ = syscallKillGroup(pid)
+			if _, scanErr := fmt.Sscanf(strings.TrimSpace(string(raw)), "%d", &pid); scanErr == nil {
+				add(pid)
+			}
+		case "observations.jsonl":
+			for _, match := range runnerStartedPID.FindAllStringSubmatch(string(raw), -1) {
+				if pid, convErr := strconv.Atoi(match[1]); convErr == nil {
+					add(pid)
+				}
 			}
 		}
 		return nil
 	})
+	return pids
+}
+
+// runnerStartedPID pulls a runner's pid out of the `started` observation the
+// supervisor writes: "%s runner, pid %d, worktree %s".
+var runnerStartedPID = regexp.MustCompile(`runner, pid (\d+)`)
+
+// removeWithRetry removes a directory this fixture allocated with t.TempDir(),
+// ahead of that same t.TempDir()'s own later cleanup, retrying "directory not
+// empty" for a bounded time.
+func removeWithRetry(path string) {
+	if path == "" {
+		return
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := os.RemoveAll(path); err == nil {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // run builds a reconciler and runs it, returning the result and whatever

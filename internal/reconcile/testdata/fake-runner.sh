@@ -50,8 +50,11 @@ boundary)
 	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
+	# `exec` replaces this shell with the sleeper, so the runner's process
+	# group has exactly one member for a group kill to reach, never a
+	# transient window with a forked child a group signal could miss.
 	commit
-	while :; do sleep 1; done
+	exec sleep 86400
 	;;
 *)
 	printf 'unknown FAKE_RUNNER_MODE %s\n' "$mode" >&2
