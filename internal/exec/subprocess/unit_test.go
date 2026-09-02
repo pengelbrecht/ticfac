@@ -1,6 +1,8 @@
 package subprocess
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -126,10 +128,11 @@ func TestThePushTimerIsAClockAndACredential(t *testing.T) {
 }
 
 // The runner table is the one place the three agents differ, and the prompt
-// reaches every one of them.
+// reaches every one of them with no placeholder left behind.
 func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
+	at := launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git"}
 	for _, name := range KnownRunners() {
-		argv, err := resolveRunner(name, nil, "PROMPT-BODY")
+		argv, err := resolveRunner(name, nil, at)
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
@@ -141,19 +144,83 @@ func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
 			t.Errorf("%s: the prompt does not reach the runner: %v", name, argv)
 		}
 		for _, arg := range argv {
-			if strings.Contains(arg, promptPlaceholder) {
+			if strings.Contains(arg, "{{") {
 				t.Errorf("%s: an unsubstituted placeholder survived: %v", name, argv)
 			}
 		}
 	}
-	if _, err := resolveRunner("emacs", nil, "p"); err == nil {
+	if _, err := resolveRunner("emacs", nil, at); err == nil {
 		t.Error("an unknown runner was accepted; the set is closed")
 	}
 	// An override with no placeholder gets the prompt last.
-	argv, err := resolveRunner("claude", []string{"/bin/sh", "-c", "true"}, "p")
-	if err != nil || argv[len(argv)-1] != "p" {
+	argv, err := resolveRunner("claude", []string{"/bin/sh", "-c", "true"}, at)
+	if err != nil || argv[len(argv)-1] != "PROMPT-BODY" {
 		t.Errorf("override argv %v, err %v", argv, err)
 	}
+}
+
+// codex sandboxes its own file access, and every attempt runs in a LINKED
+// worktree whose `.git` is a FILE pointing at the repository's common
+// directory. So the argv carries that directory, resolved for the attempt's
+// own repository — and the executor refuses to launch rather than pass an
+// empty one, because `--add-dir ""` parses, sandboxes nothing, and surfaces
+// two steps later as a branch with no commits.
+func TestTheCodexArgvCarriesTheResolvedGitCommonDir(t *testing.T) {
+	argv, err := resolveRunner("codex", nil, launch{Prompt: "P", GitCommonDir: "/checkouts/repo/.git"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"codex", "exec", "-s", "workspace-write", "--add-dir", "/checkouts/repo/.git", "P"}
+	if strings.Join(argv, " ") != strings.Join(want, " ") {
+		t.Fatalf("codex argv\n  got  %v\n  want %v", argv, want)
+	}
+	if contains(argv, "--full-auto") {
+		t.Error("`codex exec` has no --full-auto flag; it exits 2 before the runner ever starts")
+	}
+	if _, err := resolveRunner("codex", nil, launch{Prompt: "P"}); err == nil {
+		t.Fatal("codex was launched with no git common directory to add")
+	}
+}
+
+// The value the codex argv carries is the REAL common directory of a linked
+// worktree's repository — never the literal `.git`, which in a worktree is a
+// file, and never the worktree's own path.
+func TestTheGitCommonDirIsTheRepositorysAndNotTheWorktreesDotGit(t *testing.T) {
+	repo := newRepo(t, "common")
+	linked := filepath.Join(t.TempDir(), "linked")
+	mustRun(t, repo.Dir, "git", "worktree", "add", "--quiet", "-b", "linked-branch", linked)
+
+	common, err := gitCommonDir(repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromWorktree, err := gitCommonDir(linked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if common != fromWorktree {
+		t.Errorf("the repository and its linked worktree resolve different common dirs:\n  %s\n  %s", common, fromWorktree)
+	}
+	if !filepath.IsAbs(common) {
+		t.Errorf("the common dir %q is not absolute", common)
+	}
+	// The linked worktree's own .git is a FILE, which is exactly why the
+	// runner has to be given the directory it points at.
+	info, err := os.Stat(filepath.Join(linked, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.IsDir() {
+		t.Fatal("this git makes a linked worktree's .git a directory; the add-dir argument would be unnecessary")
+	}
+	if index := filepath.Join(common, "index"); !fileExists(index) {
+		t.Errorf("%s holds no index; it is not the directory a runner must be able to write", common)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // state and terminal come from one function, so a status cannot say a job is

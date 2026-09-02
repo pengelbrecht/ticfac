@@ -339,7 +339,15 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err := e.opts.writeFile(st.path(filePrompt), []byte(prompt), 0o644); err != nil {
 		return nil, err
 	}
-	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, prompt)
+	// The runner's argv is rendered per ATTEMPT, because part of it is this
+	// repository's git common directory: a sandboxed runner in a linked
+	// worktree cannot commit without it, and it is a different path in every
+	// checkout.
+	common, err := gitCommonDir(e.repo)
+	if err != nil {
+		return nil, fmt.Errorf("resolve the repository's git common directory: %w", err)
+	}
+	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, launch{Prompt: prompt, GitCommonDir: common})
 	if err != nil {
 		return nil, err
 	}
