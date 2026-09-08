@@ -185,6 +185,9 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		for _, path := range collected.BoundaryViolations {
 			fmt.Fprintf(stderr, "boundary violation: the attempt wrote %s\n", path)
 		}
+		for _, path := range collected.ArtifactViolations {
+			fmt.Fprintf(stderr, "boundary violation: the attempt committed its own report or artifact at %s\n", path)
+		}
 		record = collected.Result
 	case "dispose":
 		handle, err := ParseJobHandle(input)

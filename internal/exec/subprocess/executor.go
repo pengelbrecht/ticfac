@@ -421,6 +421,12 @@ func (e *Executor) makeWorktree(record *attemptRecord) error {
 	if err := worktreeAdd(e.repo, record.Worktree, record.Branch, record.BaseSHA); err != nil {
 		return fmt.Errorf("create the attempt worktree: %w", err)
 	}
+	// The RESULT artifact is this executor's own report, read from the
+	// worktree at collect and never repository content: excluded here, before
+	// the runner ever starts, so a runner's own `git add -A` cannot stage it.
+	if err := excludeFromGit(record.Worktree, record.Spec.ArtifactPrefix); err != nil {
+		return fmt.Errorf("exclude the artifact prefix from git in the attempt worktree: %w", err)
+	}
 	return nil
 }
 

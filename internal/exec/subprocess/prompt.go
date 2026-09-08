@@ -67,6 +67,9 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 		StatusDone, StatusDoneWithConcerns, StatusNeedsContext, StatusBlocked)
 	fmt.Fprintf(&b, "A report with no recognisable status line reads as a missing report, whatever else\n")
 	fmt.Fprintf(&b, "it says. Commit your source and tests on %s before you write it.\n\n", record.Branch)
+	fmt.Fprintf(&b, "Do NOT commit the report itself. It lives under %s, which this worktree's git\n", spec.ArtifactPrefix)
+	fmt.Fprintf(&b, "already excludes — a plain `git add -A` will not pick it up — and if it lands on\n")
+	fmt.Fprintf(&b, "%s anyway this attempt is refused as a boundary violation, whatever else it did.\n\n", record.Branch)
 
 	fmt.Fprintf(&b, "## Boundaries\n\n")
 	fmt.Fprintf(&b, "- Do not run `tk`, and do not write under %s. Those are the tracker's and the\n",

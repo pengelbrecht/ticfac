@@ -29,6 +29,12 @@ type Collection struct {
 	Report             Report
 	HasReport          bool
 	BoundaryViolations []string
+	// ArtifactViolations are paths under the job's OWN artifact_prefix that
+	// nonetheless made it into the diff — the backstop behind Start's git
+	// exclude finding a runner that bypassed it. Kept separate from
+	// BoundaryViolations (the tracker's own .tick/.ticfac authority) because
+	// the two are different problems even though both refuse the same way.
+	ArtifactViolations []string
 	Message            string
 }
 
@@ -74,10 +80,21 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 			Detail: "boundary violation: the attempt wrote " + path})
 	}
 
+	// The backstop: Start already excludes the artifact prefix from git in
+	// this worktree, so a compliant runner's `git add -A` cannot stage it.
+	// This is unconditional, not gated by the A10 guard above — it is a
+	// different invariant this executor added, not one contracts/
+	// lifecycle-invariants.json's guard matrix knows about.
+	artifactViolations := ArtifactPrefixViolations(changed, record.Spec.ArtifactPrefix)
+	for _, path := range artifactViolations {
+		_ = st.observe(Observation{At: e.stamp(), Kind: ObsExited,
+			Detail: "boundary violation: the attempt committed its own report or artifact at " + path})
+	}
+
 	report, hasReport := e.readReport(record)
 	_, cancelled := st.cancelled()
 
-	verdict, outcome, class, reason := e.classify(st, commits, hasReport, report, violations, cancelled)
+	verdict, outcome, class, reason := e.classify(st, commits, hasReport, report, violations, artifactViolations, cancelled)
 
 	result := &JobResult{
 		SchemaVersion: SchemaVersion,
@@ -107,7 +124,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 				"commits":             commits,
 				"branch":              record.Branch,
 				"report_path":         report.Path,
-				"boundary_violations": stringsOrEmpty(violations),
+				"boundary_violations": stringsOrEmpty(append(append([]string{}, violations...), artifactViolations...)),
 				"needs_human":         report.NeedsHuman(),
 			},
 		}
@@ -119,7 +136,8 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 		Report:             report,
 		HasReport:          hasReport,
 		BoundaryViolations: violations,
-		Message:            e.message(reason, class, record, violations),
+		ArtifactViolations: artifactViolations,
+		Message:            e.message(reason, class, record, append(append([]string{}, violations...), artifactViolations...)),
 	}
 
 	// Persisted, and read back before anything acts on it: disposal asks this
@@ -148,7 +166,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 // a cancellation and a worker that never reported both leave no report, and
 // telling a person the same sentence about both is Appendix A #9's failure.
 func (e *Executor) classify(st *store, commits int, hasReport bool,
-	report Report, violations []string, cancelled bool) (verdict, outcome, class, reason string) {
+	report Report, violations, artifactViolations []string, cancelled bool) (verdict, outcome, class, reason string) {
 
 	switch {
 	case cancelled:
@@ -162,6 +180,15 @@ func (e *Executor) classify(st *store, commits int, hasReport bool,
 		return VerdictMissingResult, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictMissingResult
 	case len(violations) > 0:
 		return VerdictBoundaryViolation, OutcomeFailed, FailureRunnerError, VerdictBoundaryViolation
+	case len(artifactViolations) > 0:
+		// The RESULT artifact riding into the branch is the exact incident
+		// this executor's own exclude exists to stop (see git.go's
+		// excludeFromGit); finding one here means a runner bypassed it. It
+		// reads as the same closed-vocabulary verdict a tracker write does —
+		// collect does not invent a fifth word — and it is merge-blocking for
+		// the same reason: an attempt that put its own report artifact into
+		// the branch is not one to merge as-is, whatever else it did.
+		return VerdictBoundaryViolation, OutcomeFailed, FailureRunnerError, reasonArtifactCommitted
 	default:
 		return VerdictReadyToMerge, OutcomeSucceeded, "", VerdictReadyToMerge
 	}
@@ -234,6 +261,12 @@ func logTail(path string, max int64) string {
 // executor does not add a fifth word to it. It is a message key.
 const reasonCancelled = "cancelled"
 
+// reasonArtifactCommitted is not a verdict either — it collects as
+// VerdictBoundaryViolation, the closed vocabulary's own word for this shape of
+// problem — but it is not the SAME sentence as a tracker-record write, so it
+// gets its own message key the same way reasonCancelled does.
+const reasonArtifactCommitted = "artifact-committed"
+
 // failureMessages keeps two failures from sharing one sentence. Appendix A #9
 // is not about the class field, which has six values for many more failures —
 // it is about the MESSAGE a person reads, and "the run broke" is the message
@@ -243,6 +276,7 @@ var failureMessages = map[string]string{
 	VerdictMissingResult:     "there is no report at the path this executor owns, so the attempt never said what it did",
 	VerdictBoundaryViolation: "the attempt committed records under an authority that is not its own",
 	reasonCancelled:          "the attempt was cancelled: its credential was revoked and then it was stopped",
+	reasonArtifactCommitted:  "the attempt committed its own report or artifact into the branch, under the prefix this executor owns",
 	VerdictReadyToMerge:      "",
 }
 
@@ -263,7 +297,7 @@ func (e *Executor) message(reason, class string, record *attemptRecord, violatio
 		return ""
 	case class == FailureWallClockExceeded:
 		return fmt.Sprintf("%s: it was stopped at its wall clock of %d seconds", base, record.WallSeconds)
-	case reason == VerdictBoundaryViolation:
+	case reason == VerdictBoundaryViolation, reason == reasonArtifactCommitted:
 		return fmt.Sprintf("%s: %v", base, violations)
 	case reason == VerdictNoCommits:
 		return fmt.Sprintf("%s (%s)", base, short(record.BaseSHA))

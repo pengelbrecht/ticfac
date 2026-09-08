@@ -129,3 +129,27 @@ func OutsideBoundary(path string) bool {
 	}
 	return false
 }
+
+// ArtifactPrefixViolations is the backstop behind Start's git exclude: it
+// returns, in order, the paths in a diff that fall under a JOB'S OWN
+// artifact_prefix. The executor owns that path (JobSpec.artifact_prefix) and
+// reads the report from the worktree at collect — it must never ride into
+// the repository, and Start already keeps a compliant runner's `git add -A`
+// from staging it. Finding one here means something bypassed that exclude
+// (a runner that force-added it, most likely), and it is reported the same
+// way a tracker-record write is: as a boundary this executor did not ask for
+// and does not merge.
+func ArtifactPrefixViolations(paths []string, prefix string) []string {
+	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
+	if prefix == "" {
+		return nil
+	}
+	var out []string
+	for _, path := range paths {
+		clean := strings.TrimPrefix(strings.TrimSpace(path), "./")
+		if clean == prefix || strings.HasPrefix(clean, prefix+"/") {
+			out = append(out, clean)
+		}
+	}
+	return out
+}
