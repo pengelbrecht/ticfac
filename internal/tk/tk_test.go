@@ -293,3 +293,61 @@ func TestInPointsTheClientAtAnotherCheckout(t *testing.T) {
 		t.Errorf("the relocated client dropped the environment: %v", runner.requests[1].Env)
 	}
 }
+
+// The two merge drivers are the only manifest commands GIT invokes, and it
+// invokes them by the name a repository's .gitattributes declares. What a host
+// has to put in front of git is a command line with git's own four tokens, in
+// the manifest's argument order — and built FROM the manifest, so a driver
+// whose arity changed is an error rather than a merge with the wrong arguments.
+func TestTheMergeDriversAreConfiguredFromTheManifest(t *testing.T) {
+	runner := &recordingRunner{results: []Result{{Stdout: []byte(versionJSON())}}}
+	client, err := New(Options{Runner: runner, Binary: "/opt/a dir/tk", Dir: "/fixture"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	drivers, err := client.MergeDrivers()
+	if err != nil {
+		t.Fatalf("MergeDrivers: %v", err)
+	}
+	want := map[string]string{
+		"tick":          `TK_JSON_CONTRACT=1 '/opt/a dir/tk' merge-file %O %A %B %P`,
+		"tick-activity": `TK_JSON_CONTRACT=1 '/opt/a dir/tk' merge-activity %O %A %B %P`,
+	}
+	for name, line := range want {
+		if got := drivers[name]; got != line {
+			t.Errorf("merge.%s.driver = %q, want %q", name, got, line)
+		}
+	}
+	if len(drivers) != len(want) {
+		t.Errorf("MergeDrivers returned %v, want exactly %v", drivers, want)
+	}
+
+	// The fallback a host with a tracker that cannot say which tk it runs
+	// gets: the same lines, as `tk` on PATH.
+	fallback, err := DefaultMergeDrivers()
+	if err != nil {
+		t.Fatalf("DefaultMergeDrivers: %v", err)
+	}
+	if got := fallback["tick"]; got != `TK_JSON_CONTRACT=1 'tk' merge-file %O %A %B %P` {
+		t.Errorf("the default merge.tick.driver = %q", got)
+	}
+}
+
+// A merge driver git passes four arguments to and a manifest command taking
+// some other number are not the same command, and a host that shipped the
+// difference would merge tracker records with arguments tk never declared.
+func TestAMergeDriverWhoseArityChangedIsAnError(t *testing.T) {
+	runner := &recordingRunner{results: []Result{{Stdout: []byte(versionJSON())}}}
+	client, err := New(Options{Runner: runner, Dir: "/fixture"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	command := client.manifest.Commands["merge-file"]
+	command.Argv = []string{"merge-file", "<base>", "<ours>", "<theirs>"}
+	client.manifest.Commands["merge-file"] = command
+
+	if _, err := client.MergeDrivers(); err == nil {
+		t.Fatal("a three-argument merge-file was configured as a git merge driver")
+	}
+}

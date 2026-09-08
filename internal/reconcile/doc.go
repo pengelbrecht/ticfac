@@ -44,6 +44,20 @@
 //     job's, is made at the integration branch as origin has it now: a worker
 //     reads its blockers out of the `.tick/` of the commit it branched from.
 //
+//     And because the tracker is READ from that branch, the branch is refreshed
+//     from the epic's base before anything is planned (refresh.go): an
+//     integration branch is cut from the base once and diverges the moment
+//     either side writes — and both sides write tracker records. The same gate
+//     run paid for this half too: two follow-up ticks were filed on ticks' main
+//     after epic cia finished, the next run read its tracker from `epic/cia`
+//     where neither existed, and refused with "no dispatchable tick" while `tk
+//     graph` on main listed both. So origin's base branch is merged into
+//     origin's integration branch at run start and at every restart, with TK'S
+//     OWN merge drivers in front of git for the formats tk owns, under the
+//     store's compare-and-swap — and a conflict is a typed refusal
+//     (base_refresh_conflict), never a silent skip back into planning from a
+//     tracker that is missing ticks.
+//
 //   - LONG WAITS ARE SPREAD ACROSS BOUNDED STEPS, and each leg re-derives its
 //     state from durable facts rather than from the previous leg's memory.
 //     Polling IS the keepalive, at a cadence pinned well under the substrate's
