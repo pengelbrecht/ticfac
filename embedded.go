@@ -37,3 +37,12 @@ var ProfilesFS embed.FS
 //
 //go:embed contracts/job-protocol.json
 var JobProtocolJSON []byte
+
+// TkJSONManifestJSON is contracts/tk-json-manifest.json, the command surface
+// internal/tk drives tk through. Embedded for the same reason as the pin and
+// the job protocol: a shipped binary has no checkout beside it to read this
+// from, and internal/contracts.RepoRoot's go.mod walk finds nothing above a
+// bare install directory.
+//
+//go:embed contracts/tk-json-manifest.json
+var TkJSONManifestJSON []byte

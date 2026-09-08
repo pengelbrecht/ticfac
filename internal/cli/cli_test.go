@@ -135,6 +135,52 @@ func TestTheBuiltBinaryExitsTwo(t *testing.T) {
 	}
 }
 
+// A shipped binary has no checkout beside it: nothing above a bare install
+// directory holds a go.mod. Before this test's fix, the tk client located its
+// JSON manifest by walking up from the process's working directory looking
+// for one, so a binary run from outside this repository failed the tracker
+// with "cannot locate the repository root" before it ever got to using it.
+// The manifest now travels embedded in the binary; this proves it reads from
+// a cwd with no repository above it at all.
+func TestTheBuiltBinaryLoadsTheManifestOutsideTheRepo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	binary := filepath.Join(bin, "ticfac")
+	build := exec.Command("go", "build", "-o", binary, "./cmd/ticfac")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build ticfac: %v\n%s", err, out)
+	}
+	buildSub := exec.Command("go", "build", "-o", filepath.Join(bin, "ticfac-exec-subprocess"), "./cmd/ticfac-exec-subprocess")
+	buildSub.Dir = root
+	if out, err := buildSub.CombinedOutput(); err != nil {
+		t.Fatalf("go build ticfac-exec-subprocess: %v\n%s", err, out)
+	}
+
+	// t.TempDir() sits under the OS temp directory, never under this
+	// repository's checkout — exactly the "no go.mod above me" cwd a shipped
+	// binary runs from. It doubles as --repo: an empty, non-tick directory,
+	// so the run fails closed on the tracker or the repository, never on the
+	// manifest.
+	outside := t.TempDir()
+
+	cmd := exec.Command(binary, "run-epic", "--repo", outside, "x")
+	cmd.Dir = outside
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("ticfac run-epic x succeeded from outside the repository:\n%s", out)
+	}
+	if strings.Contains(string(out), "cannot locate the repository root") {
+		t.Fatalf("manifest loading depends on a repository checkout beside the binary:\n%s", out)
+	}
+}
+
 func repoRoot() (string, error) {
 	dir, err := os.Getwd()
 	if err != nil {
