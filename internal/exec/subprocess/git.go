@@ -119,6 +119,48 @@ func worktreeAdd(repo, dir, branch, base string) error {
 	return err
 }
 
+// excludeFromGit keeps one path prefix out of this worktree's git without
+// touching a single tracked file: it is appended to the exclude file
+// `git rev-parse --git-path info/exclude` resolves FROM THE WORKTREE, so a
+// runner that runs `git add -A` cannot stage a path this executor owns —
+// whether the runner writes it before or after that add. (In every git this
+// was built and tested against, info/exclude is one of the files a linked
+// worktree shares with the repository's common git directory rather than
+// keeping privately — gitrepository-layout(5)'s "info" entry says so
+// explicitly — so this in fact excludes the prefix repo-wide, in every
+// worktree of this repository. That is still correct here: an artifact
+// prefix is unique per attempt, so one attempt's line never matches another
+// attempt's paths, and the alternative — writing the pattern into a tracked
+// .gitignore — is the one thing this function must not do.)
+func excludeFromGit(worktree, prefix string) error {
+	trimmed := strings.Trim(strings.TrimSpace(prefix), "/")
+	if trimmed == "" {
+		return fmt.Errorf("artifact_prefix is empty: nothing to exclude")
+	}
+	path, err := git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return fmt.Errorf("resolve this worktree's git exclude file: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	line := "/" + trimmed
+	if existing, err := os.ReadFile(path); err == nil {
+		for _, have := range strings.Split(string(existing), "\n") {
+			if strings.TrimSpace(have) == line {
+				return nil
+			}
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(line + "\n")
+	return err
+}
+
 func worktreeRemove(repo, dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		_, err := git(repo, "worktree", "prune")

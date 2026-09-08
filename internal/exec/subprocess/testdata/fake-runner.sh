@@ -56,6 +56,23 @@ silent)
 nocommit)
 	report
 	;;
+report_then_addall)
+	# The shape wtd exists for: the report is written FIRST, then the worker
+	# runs `git add -A` and commits everything in the worktree, exactly the
+	# way the uqe worker's report ended up on the gate-cia-2 attempt branch.
+	# The executor's own git exclude (written at Start, before this runner
+	# ever ran) must keep the report off the branch regardless.
+	report
+	commit
+	;;
+force_report)
+	# The negative case the collect backstop exists for: a worker that
+	# force-adds the excluded report (`git add -f`) bypasses the exclude
+	# outright. collect must still catch it off the branch diff.
+	report
+	git -C "$TICFAC_WORKTREE" add -f "$TICFAC_RESULT_PATH" >/dev/null 2>&1
+	commit
+	;;
 boundary)
 	mkdir -p "$TICFAC_WORKTREE/.tick/issues"
 	printf '{"id":"%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/$TICFAC_TICK.json"

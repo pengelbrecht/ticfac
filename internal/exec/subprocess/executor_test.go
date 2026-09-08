@@ -441,6 +441,83 @@ func TestTrackerRecordsAreABoundaryViolationAndTheLearningsAreNot(t *testing.T) 
 	}
 }
 
+// wtd: the RESULT artifact is this executor's own report, read from the
+// worktree at collect, and it must never become repository content — even
+// when the runner writes the report FIRST and then runs a blanket `git add
+// -A` over everything in the worktree, which is exactly how the uqe worker's
+// report ended up on the gate-cia-2 attempt branch (found by the Phase 1 gate
+// run, cc5). Start excludes the artifact prefix from git in the attempt
+// worktree before the runner ever launches, so the add-all still leaves it
+// off the branch, and collect reads it from the worktree exactly as it would
+// any other report.
+func TestTheReportNeverRidesIntoTheBranch(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "report_then_addall"})
+	handle := f.Start(f.spec("run-wtd/tick-www/attempt-1", "www"))
+	f.waitSettled(handle)
+
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultRel, err := filepath.Rel(local.Worktree, local.ResultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultRel = filepath.ToSlash(resultRel)
+
+	changed := runGit(t, f.Repo.Dir, "diff", "--name-only", f.Repo.Base, local.Branch)
+	if strings.Contains(changed, resultRel) {
+		t.Fatalf("the report %s rode into the branch despite the git add -A:\n%s", resultRel, changed)
+	}
+	// The worker's own work is still there — only the report was excluded.
+	if !strings.Contains(changed, "worked.txt") {
+		t.Fatalf("the fake runner's own commit did not land:\n%s", changed)
+	}
+
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s (%s), want %s", collected.Verdict, collected.Message, VerdictReadyToMerge)
+	}
+	if len(collected.ArtifactViolations) != 0 {
+		t.Fatalf("no path should have reached the branch, got violations %v", collected.ArtifactViolations)
+	}
+	if collected.Result.Outcome != OutcomeSucceeded {
+		t.Errorf("outcome %s, want %s", collected.Result.Outcome, OutcomeSucceeded)
+	}
+	if !collected.HasReport || collected.Report.Status != StatusDone {
+		t.Fatalf("collect did not read the report from the worktree: hasReport=%v report=%+v",
+			collected.HasReport, collected.Report)
+	}
+}
+
+// wtd: the git exclude is the prevention; this is the backstop. A runner that
+// bypasses it outright (`git add -f` on the excluded path) still must not
+// collect as ready to merge — collect diffs the branch itself and refuses,
+// the same boundary-class verdict a tracker-record write gets, whatever else
+// the attempt did.
+func TestACommittedArtifactIsCaughtAsABoundaryViolation(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "force_report"})
+	handle := f.Start(f.spec("run-wtd/tick-xxx/attempt-1", "xxx"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictBoundaryViolation {
+		t.Fatalf("verdict %s (%s), want %s", collected.Verdict, collected.Message, VerdictBoundaryViolation)
+	}
+	if len(collected.ArtifactViolations) != 1 || !strings.HasPrefix(collected.ArtifactViolations[0], "runs/") {
+		t.Fatalf("artifact violations %v; the forced report should be the one violation", collected.ArtifactViolations)
+	}
+	if collected.Result.Outcome != OutcomeFailed {
+		t.Errorf("a force-committed artifact collected as %s", collected.Result.Outcome)
+	}
+	if collected.Result.RoleResult == nil {
+		t.Fatal("the worker reported, so the result must carry its report")
+	}
+	if got := collected.Result.RoleResult.Result["verdict"]; got != VerdictBoundaryViolation {
+		t.Errorf("the role result reports verdict %v", got)
+	}
+}
+
 // A live attempt is ADOPTED, never redispatched: the same handle comes back
 // and no second process is started.
 func TestALiveAttemptIsAdoptedRatherThanRedispatched(t *testing.T) {
