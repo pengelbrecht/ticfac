@@ -2,6 +2,7 @@
   "id": "wtd",
   "title": "Executor: keep the RESULT artifact out of the attempt's commits",
   "description": "Found by the Phase 1 gate run (cc5, run gate-cia-2 on ticks epic cia): the uqe worker committed its report runs/gate-cia-2/uqe/RESULT-uqe.md into the attempt branch, so the artifact became repository content on the integration branch and in the ticks PR (#80). The executor owns the RESULT path (JobSpec.artifact_prefix, inside the attempt worktree) and reads it from the worktree at collect; it must never ride into the repository. Fix in internal/exec/subprocess: exclude the artifact prefix from git in the attempt worktree without touching tracked files — write it to the worktree's git info/exclude (git rev-parse --git-path info/exclude resolves the linked worktree's own exclude file) at Start, and have collect refuse (boundary-class message, not merge-blocking unless you decide so — decide and log) when the branch nonetheless carries a path under the artifact prefix; also make the worker prompt say the report is not to be committed. Tests: a fake runner that 'git add -A' commits everything must not get the RESULT into the branch; collect still reads the report from the worktree; the executor's existing suite stays green. Scope: internal/exec/subprocess only.\n\n## How this fits\nWave 6 of epic qeu, the last implementation tick before the final review. Integration commit 10ca7eb42362b7c20ee1c9ebf06365bfc880686f on epic/qeu. No other worker is active in internal/exec/subprocess. Stdlib only; no go.mod/README/contracts edits. Verify your base: git merge-base --is-ancestor 10ca7eb42362b7c20ee1c9ebf06365bfc880686f HEAD.",
+  "notes": "2026-09-08 13:06 - runner-state: substrate=herdr kind=claude branch=tick/wtd worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-wtd workspace=wM3 base=10ca7eb42362b7c20ee1c9ebf06365bfc880686f agent=tick-wtd pane=wM3:p1 session=7817adfb-7959-4793-980b-ccb6e39535d5",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "An attempt whose runner commits with git add -A leaves no path under artifact_prefix on the branch; collect reads the report from the worktree; go test -short ./internal/exec/... green; go test -short ./... green",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-08T11:05:51.875292Z",
-  "updated_at": "2026-09-08T11:05:51.974506Z",
+  "updated_at": "2026-09-08T11:06:00.638578Z",
   "started_at": "2026-09-08T11:05:51.974505Z"
 }
