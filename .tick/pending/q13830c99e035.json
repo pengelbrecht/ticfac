@@ -1,0 +1,11 @@
+{
+  "id": "q13830c99e035",
+  "tick_id": "cc5",
+  "kind": "ask",
+  "awaiting": "input",
+  "question": {
+    "id": "q13830c99e035",
+    "text": "Gate run done: ticks epic cia completed through ticfac (tag ticfac/run-gate-cia-2, report RESULT-cc5.md committed). Acceptance needs the epic closed in ticks with the PR MERGED: https://github.com/pengelbrecht/ticks/pull/80 (epic/cia -\u003e main). Merging into ticks main is your call. Reply 'merge' to have me merge it (regular merge, no squash) and close epic cia once CI is green, or merge it yourself and reply 'merged'."
+  },
+  "created_at": "2026-09-08T11:07:39.559779Z"
+}
