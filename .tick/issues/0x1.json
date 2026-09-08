@@ -2,8 +2,8 @@
   "id": "0x1",
   "title": "Durable run records must not carry host-absolute paths (role-result report_path)",
   "description": "Found on the ticks PR #80 opened by the Phase 1 gate run: .ticfac/runs/gate-cia-2/decisions/{1,2}.json carry result.report_path as a host-absolute path under the operator's home directory (the executor's state root), which is operator-specific content in a public repository (ticks' public-repo guard and ticfac's own Rules forbid it). Every durable record on the integration branch — attempt, decision, evidence, checkpoint — must carry only run-relative facts: make report_path relative to the attempt worktree root (or the artifact_prefix), and audit the executor's JobResult/RoleResult and the reconciler's provenance for any other absolute path or hostname (state_root in the dispatch marker's job_handle is the reconciler's identity for adoption — keep what adoption needs but store it under an explicitly local, non-durable key or relative to the state root recorded once). Add a test that scans every record a fixture run pushes to origin for '/Users/', '/home/', the temp dir and the hostname, and fails on any hit. Scope: internal/exec/subprocess (report_path) and internal/reconcile (records/provenance).\n\n## How this fits\nWave 6 of epic qeu; wtd (artifact exclusion in the executor) has just merged at c57477e6e9235d24f3572912687c603c8f889e3d — build on it. No other worker is active. Stdlib only; no go.mod/README/contracts edits. Verify your base: git merge-base --is-ancestor c57477e6e9235d24f3572912687c603c8f889e3d HEAD.",
-  "notes": "2026-09-08 13:23 - runner-state: substrate=herdr kind=claude branch=tick/0x1 worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-0x1 workspace=wMB base=c57477e6e9235d24f3572912687c603c8f889e3d agent=tick-0x1 pane=wMB:p1 session=e7ee31d3-9afa-4ee7-8772-7b4afbed0279\n2026-09-08 13:47 - Orchestrator: 225c3a1 merged provisionally; full short gate running.",
-  "status": "in_progress",
+  "notes": "2026-09-08 13:23 - runner-state: substrate=herdr kind=claude branch=tick/0x1 worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-0x1 workspace=wMB base=c57477e6e9235d24f3572912687c603c8f889e3d agent=tick-0x1 pane=wMB:p1 session=e7ee31d3-9afa-4ee7-8772-7b4afbed0279\n2026-09-08 13:47 - Orchestrator: 225c3a1 merged provisionally; full short gate running.\n2026-09-08 13:56 - Gate: go test -short ./... green on the merged tree.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,6 +11,7 @@
   "acceptance_criteria": "A fixture run's records on origin contain no absolute host path or hostname (test); restart-by-identity still adopts a live attempt; go test -short ./... green",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-08T11:23:40.087493Z",
-  "updated_at": "2026-09-08T11:47:27.981122Z",
-  "started_at": "2026-09-08T11:23:40.201629Z"
+  "updated_at": "2026-09-08T11:56:04.317207Z",
+  "closed_at": "2026-09-08T11:56:04.317207Z",
+  "closed_reason": "Completed: report_path is worktree-relative; state_root and repo no longer round-trip through the durable job_handle (recomputed from run/tick/attempt on adoption); no_host_path_test scans every record a fixture run pushes"
 }
