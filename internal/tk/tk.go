@@ -156,6 +156,25 @@ func NewClient(options Options) (*Client, error) {
 	return New(options)
 }
 
+// In returns this client pointed at another checkout of the repository — tk's
+// own `--repo`, which is the directory every command runs in.
+//
+// The startup version check is not repeated, and could not need to be: the
+// binary, the pinned JSON contract and the manifest are the client's, and only
+// the working tree the tracker reads and writes differs. A caller that wants a
+// different binary or a different contract wants New, not this.
+//
+// It exists because WHERE a tracker write lands is the caller's decision:
+// ticfac's reconciler runs tk in a worktree checked out on the epic's
+// integration branch, so that a claim, a note and a close are records it can
+// commit and push rather than uncommitted edits in a checkout on main.
+func (c *Client) In(dir string) *Client {
+	clone := *c
+	clone.dir = dir
+	clone.env = cloneEnv(c.env)
+	return &clone
+}
+
 // Version returns the version response captured during startup. It does not
 // invoke tk again; the minimum-version check is intentionally once per client.
 func (c *Client) Version(_ context.Context) (VersionInfo, error) {

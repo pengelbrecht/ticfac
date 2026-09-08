@@ -256,3 +256,40 @@ func versionJSONWithTk(version string) string {
 func graphJSON() string {
 	return `{"epic":{"id":"e1","title":"epic"},"needs_planning":false,"missing_process_ticks":[],"unjustified_gates":[],"stats":{"total_tasks":1,"wave_count":1,"max_parallel":1,"ready_for_agent":1,"awaiting_human":0,"deferred":0},"dispatch":{"max_parallel":0,"in_flight":0,"in_flight_ids":[],"free":-1,"now":[]},"waves":[{"wave":1,"parallel":1,"ready":true,"tasks":[{"id":"a1","title":"fixture","priority":1,"status":"open","agent_ready":true}]}],"critical_path":1}`
 }
+
+// In points a client at another checkout and changes nothing else: same
+// binary, same pinned contract, same environment, and no second startup probe.
+// It is what lets a caller decide WHERE a tracker write lands — ticfac's
+// reconciler runs tk in a worktree on the epic's integration branch, so that a
+// claim, a note and a close are records it can commit and push.
+func TestInPointsTheClientAtAnotherCheckout(t *testing.T) {
+	runner := &recordingRunner{results: []Result{
+		{Stdout: []byte(`{"tk":"dev","contract":1,"supported_contracts":[1],"min_tk_version":"0.32.0","manifest":"contracts/tk-json-manifest.json"}`)},
+		{Stdout: []byte(`{"id":"a1","title":"fixture","status":"open","priority":1,"type":"task","owner":"","created_by":"fixture","created_at":"2026-09-02T00:00:00Z","updated_at":"2026-09-02T00:00:00Z"}`)},
+	}}
+	here, there := t.TempDir(), t.TempDir()
+
+	client, err := New(Options{Runner: runner, Dir: here, Env: map[string]string{"TK_FIXTURE": "yes"}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	relocated := client.In(there)
+	if _, err := relocated.Show(context.Background(), "a1"); err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+	if len(runner.requests) != 2 {
+		t.Fatalf("runner saw %d calls; In probed the version again", len(runner.requests))
+	}
+	if got := runner.requests[1].Dir; got != there {
+		t.Errorf("the relocated client ran in %q, want %q", got, there)
+	}
+	if client.dir != here {
+		t.Errorf("In moved the client it was called on: %q", client.dir)
+	}
+	if got := runner.requests[1].Env[contractEnv]; got != contractEnvValue {
+		t.Errorf("the relocated client dropped the contract pin: %q", got)
+	}
+	if got := runner.requests[1].Env["TK_FIXTURE"]; got != "yes" {
+		t.Errorf("the relocated client dropped the environment: %v", runner.requests[1].Env)
+	}
+}

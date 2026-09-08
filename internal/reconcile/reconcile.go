@@ -211,6 +211,13 @@ type Reconciler struct {
 	base    string
 	baseRef string
 
+	// tracker is the tracker as this run uses it: pointed at a worktree on the
+	// integration branch, and pushing every write. It is built in Run, because
+	// the worktree it runs in is the integration branch's head — which does not
+	// exist until Run has made sure the branch does.
+	tracker     Tracker
+	trackerTree *trackerTree
+
 	gate       GateCommands
 	gateDigest string
 
@@ -258,21 +265,23 @@ type Event struct {
 // contract: a close before the gate is a close nothing stands behind, and a
 // cleanup before the close throws away the only copy of what was closed.
 const (
-	StageSkipped     = "skipped"
-	StageHeld        = "held"
-	StageClaimed     = "claimed"
-	StageDispatched  = "dispatched"
-	StageAdopted     = "adopted"
-	StageWaiting     = "waiting"
-	StageCollected   = "collected"
-	StageRejected    = "rejected"
-	StageIntegrated  = "integrated"
-	StageGatePassed  = "gate_passed"
-	StageGateFailed  = "gate_failed"
-	StageStale       = "stale_evidence"
-	StageClosed      = "closed"
-	StageCleanedUp   = "cleaned_up"
-	StageRunFinished = "run_finished"
+	StageSkipped      = "skipped"
+	StageHeld         = "held"
+	StageClaimed      = "claimed"
+	StageDispatched   = "dispatched"
+	StageAdopted      = "adopted"
+	StageWaiting      = "waiting"
+	StageCollected    = "collected"
+	StageRejected     = "rejected"
+	StageIntegrated   = "integrated"
+	StagePublished    = "published"
+	StageGatePassed   = "gate_passed"
+	StageGateFailed   = "gate_failed"
+	StageStale        = "stale_evidence"
+	StageClosed       = "closed"
+	StageRedispatched = "redispatched"
+	StageCleanedUp    = "cleaned_up"
+	StageRunFinished  = "run_finished"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -477,6 +486,24 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.base, r.baseRef = base, refFor(r.branch)
 
+	// The tracker's own checkout: a DETACHED worktree on the integration
+	// branch, so that a claim, a note and a close are records this run can
+	// commit and push rather than uncommitted edits in a checkout on main.
+	// Every write through r.tracker publishes before it returns.
+	tree, err := openTrackerTree(r.git, r.opts.Remote, r.branch, r.runID)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: prepare the tracker's worktree on %s: %w", r.branch, err)
+	}
+	defer tree.close()
+	relocated, ok := relocate(r.opts.Tracker, tree.dir)
+	if !ok {
+		return nil, fmt.Errorf("reconcile: the tracker cannot be pointed at %s: it would write its records into "+
+			"%s, where they are uncommitted edits on whatever that checkout has out — and a tracker record that is "+
+			"not on %s is one the next wave's worker cannot read", tree.dir, r.opts.Repo, r.opts.Remote)
+	}
+	r.trackerTree = tree
+	r.tracker = &durableTracker{inner: relocated, tree: tree, r: r}
+
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,
 	})
@@ -500,7 +527,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		}
 	}
 
-	graph, err := r.opts.Tracker.Graph(ctx, r.opts.EpicID)
+	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 	}

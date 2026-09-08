@@ -205,17 +205,17 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 		return err
 	}
 
-	current, err := r.opts.Tracker.Show(ctx, tick)
+	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
 		note := fmt.Sprintf("ticfac run %s: the %s job (attempt %d) returned a validated %s envelope at %s — %s: %s",
 			r.runID, answer.Role, marker.Attempt, answer.SchemaID, short(marker.BaseSHA), answer.Status, answer.Summary)
-		if _, err := r.opts.Tracker.Note(ctx, tick, note); err != nil {
+		if _, err := r.tracker.Note(ctx, tick, note); err != nil {
 			return fmt.Errorf("note the %s answer on %s: %w", answer.Role, tick, err)
 		}
-		if _, err := r.opts.Tracker.Close(ctx, tick); err != nil {
+		if _, err := r.tracker.Close(ctx, tick); err != nil {
 			return fmt.Errorf("close %s: %w", tick, err)
 		}
 	}
