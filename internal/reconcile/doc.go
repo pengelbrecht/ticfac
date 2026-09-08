@@ -8,7 +8,7 @@
 // declares, closes the tick through the tracker, and only then cleans the
 // attempt up.
 //
-// Four rules shape every line of it, and each is a rule this repository has
+// Five rules shape every line of it, and each is a rule this repository has
 // already paid for once (SPEC Appendix A, contracts/lifecycle-invariants.json):
 //
 //   - EVERY EFFECT IS PRECEDED BY THE COMPARE-AND-SWAP THAT PROVES IT HAS NOT
@@ -29,6 +29,20 @@
 //     deliberately minimal reader in toml.go. Nothing else in this package
 //     authorises a command line, which is why that reader refuses every other
 //     table rather than parsing it.
+//
+//   - DURABLE MEANS PUSHED, FOR BOTH AUTHORITIES. A run has two — the tracker
+//     and git — and the tracker's records are files in `.tick/`. So tk is run
+//     in a DETACHED worktree of its own on the EpicRun integration branch
+//     (tracker.go), and every claim, note and close is followed IN THE SAME
+//     STEP by a commit of `.tick/` onto that branch and a push, under the same
+//     compare-and-swap internal/runstate uses. The reconciler's own checkout is
+//     never written and main is never written. This is not decoration: a Phase
+//     1 gate run closed two ticks behind their gates, the checkpoint said
+//     closed, origin said open — the writes were uncommitted edits in a
+//     checkout on main — and the next wave's worker read the blocker as open
+//     and answered BLOCKED. Which is also why EVERY dispatch, not only a role
+//     job's, is made at the integration branch as origin has it now: a worker
+//     reads its blockers out of the `.tick/` of the commit it branched from.
 //
 //   - LONG WAITS ARE SPREAD ACROSS BOUNDED STEPS, and each leg re-derives its
 //     state from durable facts rather than from the previous leg's memory.

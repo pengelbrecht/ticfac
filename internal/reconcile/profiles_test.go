@@ -210,12 +210,24 @@ func TestTheReviewRunsReadOnlyAtTheControllerState(t *testing.T) {
 		t.Errorf("the review ran at %s, which %s does not contain", short(spec.Source.BaseSHA), r.IntegrationBranch())
 	}
 
-	// And an implementation tick is NOT dispatched there: it branches from the
-	// run's base like any other.
-	if implement := f.spec("a1"); implement == nil || implement.Source.BaseSHA != f.Repo.Base {
-		t.Errorf("a1 was dispatched at %s, not at the run's base", short(implement.Source.BaseSHA))
+	// An implementation tick is dispatched at the integration branch too — a
+	// worker has to see the waves before it, both their merged code and the
+	// tracker records this reconciler pushed as it closed them — but at the
+	// state the branch had when ITS turn came, which is earlier than the
+	// review's.
+	implement := f.spec("a1")
+	if implement == nil {
+		t.Fatal("a1 was never dispatched")
 	}
-	if implement := f.spec("a1"); implement.Credentials.Source.Grade() != "write" {
+	if !containsCommit(t, f, implement.Source.BaseSHA, spec.Source.BaseSHA) {
+		t.Errorf("a1 was dispatched at %s, which the review's state %s does not contain",
+			short(implement.Source.BaseSHA), short(spec.Source.BaseSHA))
+	}
+	if implement.Source.BaseSHA == spec.Source.BaseSHA {
+		t.Errorf("a1 and the review were dispatched at the same state %s; three ticks merged in between",
+			short(spec.Source.BaseSHA))
+	}
+	if implement.Credentials.Source.Grade() != "write" {
 		t.Errorf("an implementation tick was issued grade %q", implement.Credentials.Source.Grade())
 	}
 }

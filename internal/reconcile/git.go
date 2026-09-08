@@ -27,6 +27,14 @@ func (g *repoGit) run(dir string, args ...string) (string, error) {
 }
 
 func (g *repoGit) try(dir string, args ...string) (stdout, stderr string, err error) {
+	return g.tryEnv(dir, nil, args...)
+}
+
+// tryEnv is try with environment overrides appended. The one override this
+// package uses is GIT_INDEX_FILE: the tracker's commits are assembled in a
+// throwaway index, so a worktree a run is using never has its own index
+// rewritten under it.
+func (g *repoGit) tryEnv(dir string, extraEnv []string, args ...string) (stdout, stderr string, err error) {
 	if dir == "" {
 		dir = g.dir
 	}
@@ -36,7 +44,7 @@ func (g *repoGit) try(dir string, args ...string) (stdout, stderr string, err er
 		"-c", "commit.gpgsign=false",
 	}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), extraEnv...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
 	err = cmd.Run()

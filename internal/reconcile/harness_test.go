@@ -60,13 +60,33 @@ func TestMain(m *testing.M) {
 // fakeTracker is a tk client's answers, kept in a JSON file so that two
 // reconciler incarnations — the one that is killed and the one that restarts —
 // see the same tracker, exactly as they would see the same `.tick/` directory.
+//
+// Every write also MIRRORS the tick's record to `.tick/issues/<id>.json` in the
+// checkout the tracker is POINTED AT, because that is what tk does: a tracker
+// record is a file in the repository it is about. The reconciler's job is to
+// make those files durable, so a fake that only mutated a map would leave the
+// thing under test with nothing to commit.
 type fakeTracker struct {
 	path string
-	mu   sync.Mutex
+
+	// mu is shared by the whole family of relocated fakes: they are one
+	// tracker, and two of them writing the state file at once is the test's own
+	// race and not the reconciler's.
+	mu *sync.Mutex
+
+	// dir is the checkout this tracker writes its records into — tk's own
+	// `--repo`. Empty until a run points it at one.
+	dir string
 
 	// calls counts what was asked of the tracker, so "the tick was closed
 	// twice" is a number and not an impression.
 	calls map[string]int
+}
+
+// In is the fake's half of the reconciler's relocation: the same tracker, with
+// its records written into another checkout.
+func (f *fakeTracker) In(dir string) Tracker {
+	return &fakeTracker{path: f.path, mu: f.mu, dir: dir, calls: f.calls}
 }
 
 type trackerState struct {
@@ -79,7 +99,7 @@ type trackerState struct {
 
 func newTracker(t *testing.T, dir string) *fakeTracker {
 	t.Helper()
-	tracker := &fakeTracker{path: filepath.Join(dir, "tracker.json"), calls: map[string]int{}}
+	tracker := &fakeTracker{path: filepath.Join(dir, "tracker.json"), mu: &sync.Mutex{}, calls: map[string]int{}}
 	state := trackerState{
 		Epic:  "qeu",
 		Waves: [][]string{{"a1", "a2"}, {"b1"}, {"rv", "co"}},
@@ -121,6 +141,25 @@ func (f *fakeTracker) save(state trackerState) error {
 		return err
 	}
 	return os.WriteFile(f.path, raw, 0o644)
+}
+
+// record is the file tk would leave behind: the tick, as JSON, at
+// `.tick/issues/<id>.json` of the checkout this tracker runs in. A tracker
+// pointed at nothing writes nothing, which is the fixture's way of saying a
+// tracker nobody relocated has no repository to write into.
+func (f *fakeTracker) record(tick tk.Tick) error {
+	if f.dir == "" {
+		return nil
+	}
+	dir := filepath.Join(f.dir, ".tick", "issues")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(tick, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, tick.ID+".json"), append(raw, '\n'), 0o644)
 }
 
 func (f *fakeTracker) count(name string) int {
@@ -204,7 +243,10 @@ func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, erro
 	}
 	apply(&tick)
 	state.Ticks[tickID] = tick
-	return tick, f.save(state)
+	if err := f.save(state); err != nil {
+		return tick, err
+	}
+	return tick, f.record(tick)
 }
 
 // ---------------------------------------------------------------- repo ---

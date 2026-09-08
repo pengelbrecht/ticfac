@@ -87,7 +87,7 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	// before doing anything is the compare-and-swap for the close: a tick that
 	// is already closed is an effect that already happened, and a restarted
 	// run must not do it again.
-	current, err := r.opts.Tracker.Show(ctx, tick)
+	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
 		return fmt.Errorf("read tick %s: %w", tick, err)
 	}
@@ -172,6 +172,18 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
+		if r.spent(existing) {
+			// SETTLED, and it produced nothing. Adopting it would re-collect
+			// the same refusal for as long as the run is restarted, so this is
+			// a new ATTEMPT — a new number, a new marker, and a base that is
+			// the integration branch as origin has it now, which is what makes
+			// a worker that answered BLOCKED about an open blocker worth
+			// dispatching again once that blocker is closed.
+			r.record(tick, StageRedispatched,
+				"attempt %d settled with nothing on %s and was rejected; a new attempt is dispatched rather than "+
+					"the spent one adopted", existing.Attempt, branchOf(handleFromMap(existing.JobHandle).WriteRef))
+			continue
+		}
 		// Appendix A #6: an attempt under this identity has already been
 		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
 		// never redispatched.
@@ -242,7 +254,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	}
 
 	// The effect, now that the marker proves it has not happened.
-	if _, err := r.opts.Tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
+	if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
 		return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
 	}
 	r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
@@ -263,6 +275,69 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return nil, nil, marker, err
 	}
 	return handle, executor, marker, nil
+}
+
+// spent reports whether an attempt on origin is one there is nothing left to
+// adopt: it was REJECTED, and it left no commit beyond the base it was cut
+// from.
+//
+// Both halves are durable facts, which is the point — the first is in the
+// checkpoint a restart reads from origin, the second is the attempt's write ref
+// on origin, and neither asks the executor whether it remembers a job. The
+// second is deliberately the same question the collect vocabulary's
+// `no-commits` asks: the ref usually EXISTS, because the executor pushes the
+// branch it was given whether or not the worker committed anything to it, so
+// "there is no ref" and "the ref carries nothing" have to be one answer.
+//
+// A rejected attempt that DID leave commits is a different thing entirely: its
+// work exists, the refusal was about the work, and redispatching it would throw
+// away the only copy of what a person has to look at.
+func (r *Reconciler) spent(record runstate.Attempt) bool {
+	if r.tickState(record.TickID) != "rejected" {
+		return false
+	}
+	marker := handleFromMap(record.JobHandle)
+	branch := branchOf(marker.WriteRef)
+	head, err := r.git.remoteHead(branch)
+	if err != nil {
+		// Nobody can say what the attempt left. That is not evidence it left
+		// nothing, and settling it either way from a failed read would be the
+		// guess Appendix A #6 forbids.
+		return false
+	}
+	if head == "" || head == marker.BaseSHA {
+		return true
+	}
+	if err := r.git.fetch(branch); err != nil {
+		return false
+	}
+	// Contained in the base it was cut from: the branch moved nowhere.
+	return r.git.contains(head, marker.BaseSHA)
+}
+
+// tickState is where the run believes one tick stands, as the checkpoint has
+// it: seeded from origin at Run, updated by setTick.
+func (r *Reconciler) tickState(tickID string) string {
+	for _, ts := range r.ticks {
+		if ts.TickID == tickID {
+			return ts.State
+		}
+	}
+	return ""
+}
+
+// rejectDurably records that an attempt was rejected, ON ORIGIN, before the
+// refusal is returned.
+//
+// A rejection that lives only in this process's memory is a rejection the next
+// incarnation cannot see: it reads the checkpoint, finds the attempt marker,
+// adopts the dead job and re-collects the same refusal forever. The checkpoint
+// is what makes "this attempt is spent" a fact somebody else can read.
+func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string) error {
+	r.setTick(marker.TickID, "rejected")
+	_, err := r.checkpoint(runstate.StateRunning,
+		fmt.Sprintf("attempt %d of %s is rejected (%s): %s", marker.Attempt, marker.TickID, verdict, firstLine(message)))
+	return err
 }
 
 // startFailure keeps the executor's typed refusals typed. "Nobody can say
@@ -287,13 +362,14 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
 	stateDir := filepath.Join(r.opts.ExecStateRoot, r.runID, entry.TickID, fmt.Sprintf("%d", number))
 
-	// A role job is dispatched at the CONTROLLER's state — the integration
-	// branch as origin has it now — because that is what it is about. An
-	// implementation tick branches from the run's base like any other.
-	base := r.base
-	if isRoleJob(entry.Role) {
-		base = r.controllerBase()
-	}
+	// EVERY dispatch is made at the integration branch as origin has it NOW,
+	// not at the base the run was cut from. A role job because that is what it
+	// is about; an implementation tick because a later wave's worker has to see
+	// the waves before it — their merged code, and the tracker records this
+	// reconciler pushed as it closed them. A worker that branched from the
+	// run's base reads `.tick/issues/<blocker>.json` as it was before the run
+	// and answers BLOCKED about a tick that is closed.
+	base := r.controllerBase()
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
@@ -531,7 +607,9 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 		verdict = subprocess.VerdictReadyToMerge
 	}
 	if verdict != subprocess.VerdictReadyToMerge {
-		r.setTick(marker.TickID, "rejected")
+		if err := r.rejectDurably(marker, collected.Verdict, collected.Message); err != nil {
+			return nil, err
+		}
 		r.record(marker.TickID, StageRejected, "%s: %s", collected.Verdict, collected.Message)
 		return nil, r.refuse(RefusedCollect, marker.TickID, "attempt %d of %s is %s: %s",
 			marker.Attempt, marker.TickID, collected.Verdict, collected.Message)

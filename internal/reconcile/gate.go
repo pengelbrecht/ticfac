@@ -237,17 +237,17 @@ func (r *Reconciler) closeTick(ctx context.Context, entry planEntry, marker atte
 		return err
 	}
 
-	current, err := r.opts.Tracker.Show(ctx, tick)
+	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
 		note := fmt.Sprintf("ticfac run %s: attempt %d merged into %s as %s; the integrated gate (%s) passed.",
 			r.runID, marker.Attempt, r.branch, short(merged.GateSHA), r.gate)
-		if _, err := r.opts.Tracker.Note(ctx, tick, note); err != nil {
+		if _, err := r.tracker.Note(ctx, tick, note); err != nil {
 			return fmt.Errorf("note the gate evidence on %s: %w", tick, err)
 		}
-		if _, err := r.opts.Tracker.Close(ctx, tick); err != nil {
+		if _, err := r.tracker.Close(ctx, tick); err != nil {
 			return fmt.Errorf("close %s: %w", tick, err)
 		}
 	}

@@ -42,9 +42,27 @@ silent)
 nocommit)
 	report
 	;;
+blocked-first)
+	# Attempt 1 is a worker that found a blocker of its own still open and said
+	# so: a report with STATUS: BLOCKED, and no commit at all. Every later
+	# attempt is the same worker dispatched again after that blocker closed.
+	if [ "$TICFAC_ATTEMPT" = "1" ]; then
+		status=BLOCKED
+		report
+	else
+		commit
+		report
+	fi
+	;;
 boundary)
+	# A record under the tracker's authority, at a path the RECONCILER's own
+	# tracker does not write. The file the worker would really forge is
+	# `.tick/issues/$TICFAC_TICK.json`, and the reconciler writes that one as it
+	# claims and closes the tick — so a fixture that forged the same path would
+	# be refused by a merge conflict, and the negative control (the guard off,
+	# the write reaching origin unnoticed) could never be observed at all.
 	mkdir -p "$TICFAC_WORKTREE/.tick/issues"
-	printf '{"id":"%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/$TICFAC_TICK.json"
+	printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
 	commit
 	report
 	;;
