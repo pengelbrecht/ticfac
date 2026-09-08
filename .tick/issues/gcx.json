@@ -9,11 +9,12 @@
   "blocked_by": [
     "cc5",
     "vcx",
-    "u65"
+    "u65",
+    "cgx"
   ],
   "parent": "qeu",
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.460006Z",
-  "updated_at": "2026-09-08T08:45:33.075862Z"
+  "updated_at": "2026-09-08T09:17:07.417711Z"
 }
