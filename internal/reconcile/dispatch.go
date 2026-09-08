@@ -19,9 +19,22 @@ import (
 // each effect has not already happened in front of it.
 
 // attemptHandle is what the dispatch marker carries. It is the reconciler's
-// half of the identity: which job, which attempt, and the directory this run
-// gave that dispatch so a RESTART ON A FRESH CLONE can find the attempt the
-// previous reconciler started without guessing at an executor's naming.
+// half of the identity: which job, which attempt, and (in StateRoot) the
+// directory this run gave that dispatch so a RESTART ON A FRESH CLONE can find
+// the attempt the previous reconciler started without guessing at an
+// executor's naming.
+//
+// StateRoot and Repo are both HOST paths — StateRoot under this run's
+// ExecStateRoot, Repo the reconciler's own checkout — and neither rides into
+// the durable marker asMap() writes to origin (SPEC's public-repo guard: no
+// host-absolute path in a committed record). Neither needs to: StateRoot is a
+// pure function of durable facts already on the marker (ExecStateRoot, the run
+// id, the tick id, the attempt number), so execStateDir recomputes it
+// identically on every restart, and Repo is host configuration a restarted
+// reconciler is given again through Options — dispatchFor falls back to
+// r.opts.Repo whenever the marker's own Repo is empty. handleFromMap leaves
+// both empty; a caller that is about to adopt fills StateRoot in with
+// execStateDir first, and Repo resolves itself through that fallback.
 //
 // The executor's own handle is not written here, and could not be: the marker
 // is created BEFORE the dispatch, because a marker written afterwards guards
@@ -32,11 +45,11 @@ type attemptHandle struct {
 	Attempt   int    `json:"attempt"`
 	TickID    string `json:"tick_id"`
 	Role      string `json:"role"`
-	Repo      string `json:"repo"`
+	Repo      string `json:"-"`
 	Remote    string `json:"remote"`
 	WriteRef  string `json:"write_ref"`
 	BaseSHA   string `json:"base_sha"`
-	StateRoot string `json:"state_root"`
+	StateRoot string `json:"-"`
 
 	// Model and PromptDigest are the two halves of the profile that reach the
 	// runner PROCESS — the model through the runner's own model flag, the
@@ -48,15 +61,22 @@ type attemptHandle struct {
 	PromptDigest string `json:"prompt_digest"`
 }
 
+// asMap is the durable form of the marker: everything BUT StateRoot and Repo,
+// both host paths recovered on the read side (see attemptHandle) rather than
+// ever committed.
 func (a attemptHandle) asMap() map[string]any {
 	return map[string]any{
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
-		"role": a.Role, "repo": a.Repo, "remote": a.Remote, "write_ref": a.WriteRef,
-		"base_sha": a.BaseSHA, "state_root": a.StateRoot,
-		"model": a.Model, "prompt_digest": a.PromptDigest,
+		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
+		"base_sha": a.BaseSHA,
+		"model":    a.Model, "prompt_digest": a.PromptDigest,
 	}
 }
 
+// handleFromMap reads a marker's durable fields back. StateRoot and Repo are
+// not among them (see attemptHandle): a caller that is about to adopt this
+// marker sets StateRoot from execStateDir, and Repo resolves itself through
+// dispatchFor's fallback to r.opts.Repo.
 func handleFromMap(raw map[string]any) attemptHandle {
 	get := func(key string) string {
 		if value, ok := raw[key].(string); ok {
@@ -73,10 +93,20 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
-		Role: get("role"), Repo: get("repo"), Remote: get("remote"), WriteRef: get("write_ref"),
-		BaseSHA: get("base_sha"), StateRoot: get("state_root"),
-		Model: get("model"), PromptDigest: get("prompt_digest"),
+		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
+		BaseSHA: get("base_sha"),
+		Model:   get("model"), PromptDigest: get("prompt_digest"),
 	}
+}
+
+// execStateDir is the directory one dispatch's executor state lives under: a
+// pure function of the run's own ExecStateRoot plus the run id, tick id and
+// attempt number, all of which are already durable facts elsewhere. Because it
+// is deterministic, it is recomputed rather than carried in a durable record —
+// which is what keeps a host-specific path out of every record this run pushes
+// to origin.
+func (r *Reconciler) execStateDir(tickID string, attempt int) string {
+	return filepath.Join(r.opts.ExecStateRoot, r.runID, tickID, fmt.Sprintf("%d", attempt))
 }
 
 // processTick takes one tick from wherever it already is to closed.
@@ -188,6 +218,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
 		// never redispatched.
 		marker := handleFromMap(existing.JobHandle)
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		handle, executor, err := r.adopt(marker)
 		if err != nil {
 			return nil, nil, marker, err
@@ -232,6 +263,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			return nil, nil, marker, fmt.Errorf("attempt %d of %s is on origin and unreadable: %v", number, tick, err)
 		}
 		marker = handleFromMap(recorded.JobHandle)
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		handle, executor, adoptErr := r.adopt(marker)
 		if adoptErr != nil {
 			return nil, nil, marker, adoptErr
@@ -360,7 +392,7 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 // is issued the number that will govern.
 func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemptHandle) {
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
-	stateDir := filepath.Join(r.opts.ExecStateRoot, r.runID, entry.TickID, fmt.Sprintf("%d", number))
+	stateDir := r.execStateDir(entry.TickID, number)
 
 	// EVERY dispatch is made at the integration branch as origin has it NOW,
 	// not at the base the run was cut from. A role job because that is what it
