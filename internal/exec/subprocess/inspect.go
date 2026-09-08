@@ -167,10 +167,15 @@ func (e *Executor) alive(st *store, record *attemptRecord) bool {
 // readReport reads the report from the path the executor owns, and failing
 // that from the branch — a worker that committed its report and whose worktree
 // has since been removed still reported.
+//
+// report.Path is always run-relative (record.ResultRel), never
+// record.ResultPath: the absolute form is a host path under this executor's
+// state root, and it rides into a durable decision record via
+// RoleResult.Result — a fact this repository's own public-repo guard forbids.
 func (e *Executor) readReport(record *attemptRecord) (Report, bool) {
 	if raw, err := os.ReadFile(record.ResultPath); err == nil {
 		report := ParseReport(string(raw))
-		report.Path = record.ResultPath
+		report.Path = record.ResultRel
 		return report, true
 	}
 	head := headOf(record.Repo, record.Branch)
