@@ -1,0 +1,13 @@
+{
+  "id": "n0r",
+  "title": "Run feed: structured real-time event stream for dashboards and widgets",
+  "description": "Operator idea (2026-09-08, during the Phase 1 gate run): ticfac should emit a detailed, structured (JSON) feed of a run — checkpoints, stages per tick, attempts, dispatch/heartbeat/collect events, gate evidence, decisions — consumable in real time by client dashboards and widgets (herdr mission control, a web board, a menu-bar widget, the operator channel). Today the only observables are the .ticfac/ records on the integration branch and the executor's observations.jsonl, and a headless run has no herdr presence at all, so an operator cannot see that workers are alive. Candidate shape: one append-only JSONL event stream per run (the reconciler's journal stages + executor observations, with the run/tick/attempt identity on every line), written locally and optionally mirrored (file tail, HTTP/SSE, or the run-state store), with a versioned event schema in the contract bundle so every client parses the same thing. Roadmap placement is the human's call — proposed for the retro.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "To be planned: event schema in the contract bundle; the reconciler and executor emit every stage/observation as an event with identity; a reference consumer (e.g. the herdr-ticks dashboard) renders a live run from the feed alone.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-08T10:38:04.398529Z",
+  "updated_at": "2026-09-08T10:38:04.398529Z"
+}
