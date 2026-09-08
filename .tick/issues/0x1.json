@@ -1,0 +1,15 @@
+{
+  "id": "0x1",
+  "title": "Durable run records must not carry host-absolute paths (role-result report_path)",
+  "description": "Found on the ticks PR #80 opened by the Phase 1 gate run: .ticfac/runs/gate-cia-2/decisions/{1,2}.json carry result.report_path as a host-absolute path under the operator's home directory (the executor's state root), which is operator-specific content in a public repository (ticks' public-repo guard and ticfac's own Rules forbid it). Every durable record on the integration branch — attempt, decision, evidence, checkpoint — must carry only run-relative facts: make report_path relative to the attempt worktree root (or the artifact_prefix), and audit the executor's JobResult/RoleResult and the reconciler's provenance for any other absolute path or hostname (state_root in the dispatch marker's job_handle is the reconciler's identity for adoption — keep what adoption needs but store it under an explicitly local, non-durable key or relative to the state root recorded once). Add a test that scans every record a fixture run pushes to origin for '/Users/', '/home/', the temp dir and the hostname, and fails on any hit. Scope: internal/exec/subprocess (report_path) and internal/reconcile (records/provenance).\n\n## How this fits\nWave 6 of epic qeu; wtd (artifact exclusion in the executor) has just merged at c57477e6e9235d24f3572912687c603c8f889e3d — build on it. No other worker is active. Stdlib only; no go.mod/README/contracts edits. Verify your base: git merge-base --is-ancestor c57477e6e9235d24f3572912687c603c8f889e3d HEAD.",
+  "status": "in_progress",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "qeu",
+  "acceptance_criteria": "A fixture run's records on origin contain no absolute host path or hostname (test); restart-by-identity still adopts a live attempt; go test -short ./... green",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-08T11:23:40.087493Z",
+  "updated_at": "2026-09-08T11:23:40.20163Z",
+  "started_at": "2026-09-08T11:23:40.201629Z"
+}
