@@ -265,6 +265,7 @@ type Event struct {
 // contract: a close before the gate is a close nothing stands behind, and a
 // cleanup before the close throws away the only copy of what was closed.
 const (
+	StageRefreshed    = "base_refreshed"
 	StageSkipped      = "skipped"
 	StageHeld         = "held"
 	StageClaimed      = "claimed"
@@ -525,6 +526,29 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			r.record("", StageRunFinished, "the run is already %s: %s", checkpoint.State, checkpoint.Reason)
 			return r.result(checkpoint.State, checkpoint.Reason), nil
 		}
+	}
+
+	// The epic's BASE branch, folded in before anything is planned. The
+	// integration branch is where this run reads its tracker from, and it
+	// diverges from the base the moment either side writes: a tick filed on the
+	// base after the branch forked is one this run cannot see until the fold
+	// happens (refresh.go).
+	if err := r.refreshFromBase(ctx); err != nil {
+		var refusal *Refusal
+		if !asRefusal(err, &refusal) {
+			return nil, fmt.Errorf("reconcile: refresh %s from the epic's base branch: %w", r.branch, err)
+		}
+		r.failure = refusal
+		if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
+			return nil, cErr
+		}
+		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, refusal.Error())
+		return r.result(runstate.StateFailed, refusal.Error()), nil
+	}
+	// What the fold pushed is what every later read of this branch must see,
+	// including the store's own: its view was fetched before the fold.
+	if _, err := store.Fetch(); err != nil {
+		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
 	}
 
 	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
@@ -793,6 +817,13 @@ const (
 	RefusedMerge       = "merge_failed"        // the attempt does not integrate onto the epic branch
 	RefusedGate        = "gate_failed"         // the integrated gate did not pass
 	RefusedStale       = "stale_evidence"      // the gate's evidence is no longer about what would be published
+
+	// The one a RUN adds, before any tick is planned: the epic's base branch
+	// does not fold into its integration branch. It is distinct from
+	// RefusedMerge because it is about a different pair of branches and sends
+	// the next repair somewhere else — at the base, and at whoever wrote both
+	// sides of the conflicting file, not at an attempt.
+	RefusedBaseRefresh = "base_refresh_conflict"
 
 	// The two a ROLE job adds. Its deliverable is an answer, so its failures
 	// are the answer's: one nobody could validate, and one that validated and

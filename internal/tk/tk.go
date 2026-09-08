@@ -296,6 +296,92 @@ func (c *Client) MergeActivity(ctx context.Context, ancestor, current, other, pa
 	})
 }
 
+// ------------------------------------------------- the merge drivers ---
+//
+// tk's two merge drivers are the only commands in the manifest git itself
+// invokes, and it invokes them BY NAME: a repository declares
+// `.tick/issues/*.json merge=tick` in its `.gitattributes`, and git looks up
+// `merge.tick.driver` in its configuration. A host that merges two branches of
+// a repository whose tracker records both sides wrote — ticfac's reconciler
+// folding an epic's base branch into its integration branch — has to put those
+// commands in front of git, or the resolution is git's line-based one over a
+// format tk owns: a conflict where the driver produces a union, or worse, a
+// clean merge of a record neither side wrote.
+
+// MergeDriverNames maps the merge-driver name a repository declares for the
+// tracker's records onto the manifest command that serves it. The names are
+// ticks' own, from its `.gitattributes`:
+//
+//	.tick/issues/*.json           merge=tick
+//	.tick/activity/activity.jsonl merge=tick-activity
+var MergeDriverNames = map[string]string{
+	"tick":          "merge-file",
+	"tick-activity": "merge-activity",
+}
+
+// gitMergeArguments are git's tokens for the four arguments it passes a custom
+// merge driver, in the order the manifest declares them: the ancestor's
+// version, OURS — which the driver writes its result over — theirs, and the
+// pathname being merged.
+var gitMergeArguments = []string{"%O", "%A", "%B", "%P"}
+
+// MergeDrivers is the `merge.<name>.driver` configuration a merge of tracker
+// records needs: every name in MergeDriverNames, mapped to the command line
+// git runs for it, as THIS client's tk.
+//
+// The command is built from the manifest's argv rather than spelled out here,
+// so a driver whose arity changed under a tracker upgrade is an error the
+// caller reads rather than a merge git performs with the wrong arguments.
+func (c *Client) MergeDrivers() (map[string]string, error) {
+	drivers := make(map[string]string, len(MergeDriverNames))
+	for name, id := range MergeDriverNames {
+		line, err := c.mergeDriver(id)
+		if err != nil {
+			return nil, err
+		}
+		drivers[name] = line
+	}
+	return drivers, nil
+}
+
+// DefaultMergeDrivers is MergeDrivers for a tk on PATH, from the manifest this
+// binary was compiled against. It is what a host holding a tracker that cannot
+// say which tk it runs falls back to — every tracker in this codebase is tk,
+// and a merge of tracker records without tk's drivers is not one worth making.
+func DefaultMergeDrivers() (map[string]string, error) {
+	m, err := loadManifest("")
+	if err != nil {
+		return nil, err
+	}
+	return (&Client{binary: "tk", manifest: m}).MergeDrivers()
+}
+
+func (c *Client) mergeDriver(id string) (string, error) {
+	command, ok := c.manifest.Commands[id]
+	if !ok {
+		return "", fmt.Errorf("tk manifest has no command %q", id)
+	}
+	if len(command.Argv) != 1+len(gitMergeArguments) {
+		return "", fmt.Errorf("tk manifest command %q declares argv %v; git passes a custom merge driver %d "+
+			"arguments (%s)", id, command.Argv, len(gitMergeArguments), strings.Join(gitMergeArguments, " "))
+	}
+	// The contract is pinned the way every other invocation pins it. git runs
+	// a merge driver THROUGH THE SHELL, so it is pinned as the shell does it.
+	parts := append([]string{
+		ContractEnv + "=" + ContractEnvValue,
+		shellQuote(c.binary),
+		command.Argv[0],
+	}, gitMergeArguments...)
+	return strings.Join(parts, " "), nil
+}
+
+// shellQuote makes one word out of a path git will hand to a shell. The tk a
+// host runs is a path it chose, and a path with a space in it is not this
+// package's business to refuse.
+func shellQuote(word string) string {
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+}
+
 func (c *Client) invokeJSON(ctx context.Context, id string, values map[string]string, into any) error {
 	command, args, err := c.command(id, values)
 	if err != nil {
