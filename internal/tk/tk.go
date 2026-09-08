@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pengelbrecht/ticfac/internal/contracts"
+	ticfac "github.com/pengelbrecht/ticfac"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -91,8 +91,10 @@ type Options struct {
 	Env map[string]string
 	// Runner replaces subprocess execution. It is intended for unit tests.
 	Runner Runner
-	// ContractsDir locates the vendored contract bundle. Empty discovers it
-	// from the repository root, as internal/contracts does elsewhere.
+	// ContractsDir locates the vendored contract bundle on disk. Empty (the
+	// production default) uses the manifest embedded in this binary instead
+	// of reading anything from disk — a shipped binary has no checkout beside
+	// it. Tests set this to point at a fixture manifest.
 	ContractsDir string
 }
 
@@ -366,19 +368,24 @@ func (c *Client) validateStartupVersion(version VersionInfo) error {
 	return nil
 }
 
+// loadManifest resolves the tk JSON manifest and parses it. An empty
+// directory (the production default) reads the manifest embedded in this
+// binary rather than the vendored contracts/ directory on disk — a shipped
+// binary has no checkout beside it, and internal/contracts.RepoRoot's go.mod
+// walk finds nothing above a bare install directory. A non-empty directory is
+// a test fixture pointing at an on-disk manifest.
 func loadManifest(directory string) (*manifest, error) {
 	if directory == "" {
-		var err error
-		directory, err = contracts.Dir()
-		if err != nil {
-			return nil, fmt.Errorf("locate tk JSON manifest: %w", err)
-		}
+		return parseManifest(ticfac.TkJSONManifestJSON)
 	}
 	raw, err := os.ReadFile(filepath.Join(directory, "tk-json-manifest.json"))
 	if err != nil {
 		return nil, fmt.Errorf("read tk JSON manifest: %w", err)
 	}
+	return parseManifest(raw)
+}
 
+func parseManifest(raw []byte) (*manifest, error) {
 	var published struct {
 		Comment            string `json:"$comment"`
 		Contract           int    `json:"contract"`
