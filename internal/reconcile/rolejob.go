@@ -150,7 +150,7 @@ func (r *Reconciler) collectRole(entry planEntry, handle *subprocess.JobHandle, 
 	// The envelope validated, and it says a person is needed. For a role job
 	// that IS the verdict — its only deliverable is the answer — so the tick
 	// stays open for the person it asked for.
-	if answer.Status == subprocess.StatusBlocked || answer.Status == subprocess.StatusNeedsContext {
+	if needsHuman(answer.Status) {
 		r.setTick(tick, "rejected")
 		r.record(tick, StageRejected, "%s answered %s", entry.Role, answer.Status)
 		return nil, nil, r.refuse(RefusedRoleAnswer, tick,

@@ -881,6 +881,18 @@ const (
 	// answer asked for.
 	RefusedRoleResult = "role_result_invalid"     // the role-result envelope did not validate
 	RefusedRoleAnswer = "role_answer_needs_human" // the answer is BLOCKED or NEEDS_CONTEXT
+
+	// The one an IMPLEMENTATION tick adds, and the one that closes repair G's
+	// false-close path: the attempt produced a branch that would merge, and its
+	// report ends BLOCKED or NEEDS_CONTEXT. It is distinct from RefusedCollect
+	// because the two send the next repair somewhere else — collect_failed is
+	// about work that is not there or not mergeable, and is answered by
+	// dispatching the tick again; this one is about work that IS there and an
+	// answer that asks for a PERSON, and dispatching again would only produce
+	// the same question. It is distinct from RefusedRoleAnswer because a role
+	// job's answer IS its deliverable, while this one arrives beside a branch
+	// somebody now has to decide about.
+	RefusedNeedsHuman = "attempt_needs_human"
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9
