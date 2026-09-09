@@ -2,8 +2,8 @@
   "id": "lo3",
   "title": "Review repair G: a BLOCKED report with commits is never merged or closed",
   "description": "Found by repair F (0c1) while fixing the teardown paths — a false-close path, so it is treated as a blocker. internal/exec/subprocess/collect.go:169-193 classify only asks whether a report exists, not what it says, and internal/reconcile collect only checks the verdict, so a worker that commits and reports STATUS: BLOCKED collects as ready-to-merge: its work is merged, gated and the tick CLOSED, with the escalation (report.NeedsHuman(), already computed into the role result) ignored. The fixtures never caught it because the blocked-first runner mode reports BLOCKED with no commit. Fix: make the reconciler refuse on RoleResult.Status (BLOCKED/NEEDS_CONTEXT are escalations, never a merge), or have classify return a needs-human verdict — pick the seam that keeps the executor honest about what the report says and the reconciler as the party that decides; document the choice in RESULT-G.md. Add a fake-runner mode that commits then reports BLOCKED (internal/reconcile/testdata/fake-runner.sh), and a test that the attempt is refused, torn down with its branch kept (disposeRejected path from 0c1), the tick stays open with the escalation surfaced, and nothing lands on the integration branch. Check the existing blocked-first test still holds. Use go test -short -timeout 45m for the reconcile package, foreground only.\n\n## How this fits\nWave 10 of epic qeu (single ticket) from integration commit e7a596b35acbe944836abe6946e97c4608941842 on epic/qeu, which now contains repairs E (604) and F (0c1). Verify your base: git merge-base --is-ancestor e7a596b35acbe944836abe6946e97c4608941842 HEAD.",
-  "notes": "2026-09-09 16:06 - runner-state: substrate=herdr kind=claude branch=tick/lo3 worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-lo3 workspace=wNE base=e7a596b35acbe944836abe6946e97c4608941842 agent=tick-lo3 pane=wNE:p1 session=de8e8314-c6dd-48ad-b05b-2710ddffc7eb",
-  "status": "in_progress",
+  "notes": "2026-09-09 16:06 - runner-state: substrate=herdr kind=claude branch=tick/lo3 worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-lo3 workspace=wNE base=e7a596b35acbe944836abe6946e97c4608941842 agent=tick-lo3 pane=wNE:p1 session=de8e8314-c6dd-48ad-b05b-2710ddffc7eb\n2026-09-09 16:43 - runner-state: collected and merged into epic/qeu (merge commit 3c7d8b8); build+vet clean; wave gate running (gate14)",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,6 +11,7 @@
   "acceptance_criteria": "A worker that commits and reports STATUS: BLOCKED (or NEEDS_CONTEXT) is collected as an escalation, its work is not merged, the tick is not closed, and the attempt is torn down keeping its branch; a fixture with commit+BLOCKED fails before the fix and passes after; go test -short -timeout 45m ./... green",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-09T14:06:27.396314Z",
-  "updated_at": "2026-09-09T14:06:43.606023Z",
-  "started_at": "2026-09-09T14:06:43.580255Z"
+  "updated_at": "2026-09-09T14:55:10.279318Z",
+  "closed_at": "2026-09-09T14:55:10.279318Z",
+  "closed_reason": "Merged into epic/qeu; a BLOCKED report carrying commits is now an escalation (new RefusedNeedsHuman reason) routed to a person via settle, never merged and never closed. Wave gate green: go test -short -timeout 45m ./... EXIT=0 (reconcile 727s)."
 }
