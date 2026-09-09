@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -447,13 +448,20 @@ func (a *adapter) run(s lifecycleStep) string {
 	}
 }
 
+// jobIdentity is the run/tick/attempt identity a write ref carries. The
+// lifecycle fixture names its jobs directly, so this is where that name becomes
+// the identity the ref (and the credential's namespace) is built from.
+func (a *adapter) jobIdentity(job string) string {
+	return fmt.Sprintf("run-%s/tick-%s/attempt-1", a.reconciler().runID, job)
+}
+
 func (a *adapter) executorFor(job string) Executor {
 	a.t.Helper()
 	r := a.reconciler()
 	executor, err := r.opts.NewExecutor(Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: job, Attempt: 1,
 		JobID: job, Role: "implement-tick", Repo: r.opts.Repo, Remote: r.opts.Remote,
-		WriteRef: "refs/heads/tick/" + job, BaseSHA: r.base,
+		WriteRef: attemptWriteRef(a.jobIdentity(job)), BaseSHA: r.base,
 		StateDir: filepath.Join(r.opts.ExecStateRoot, r.runID, job, "1"),
 	})
 	if err != nil {
@@ -467,7 +475,7 @@ func (a *adapter) jobSpecFor(job string) *subprocess.JobSpec {
 	return r.jobSpec(Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: job, Attempt: 1,
 		JobID: job, Role: "implement-tick", Repo: r.opts.Repo, Remote: r.opts.Remote,
-		WriteRef: "refs/heads/tick/" + job, BaseSHA: r.base,
+		WriteRef: attemptWriteRef(a.jobIdentity(job)), BaseSHA: r.base,
 	})
 }
 

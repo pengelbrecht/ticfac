@@ -91,6 +91,19 @@ func (r *Reconciler) collectRole(entry planEntry, handle *subprocess.JobHandle, 
 	r.setTick(tick, "reported")
 	r.record(tick, StageCollected, "%s answered %s (%s)", entry.Role, collected.Result.Outcome, collected.Verdict)
 
+	// collect's rule, for the same reason: a boundary measured from a base the
+	// enforced party can rewrite is not a boundary, and the base this run
+	// dispatched is on the marker rather than beside the worker's worktree.
+	if collected.Result != nil && marker.BaseSHA != "" && collected.Result.Source.BaseSHA != marker.BaseSHA {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageRejected, "the collect was measured from %s, not from the dispatched base %s",
+			short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+		return nil, nil, r.refuse(RefusedBoundary, tick,
+			"the %s job for %s was collected against base %s, but this run dispatched it at %s: the diff the "+
+				"boundary check read is not the diff of this attempt",
+			entry.Role, tick, short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+	}
+
 	if len(collected.BoundaryViolations) > 0 && r.guarded(guardSubstrateEnforcesBoundary) {
 		r.setTick(tick, "rejected")
 		r.record(tick, StageRejected, "boundary violation: %s", strings.Join(collected.BoundaryViolations, ", "))
