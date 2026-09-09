@@ -1,0 +1,12 @@
+{
+  "id": "dtn",
+  "title": "Phase 2: durable hold table and tracker-mediated release for A11 (strike-out)",
+  "description": "ma5 shipped A11 adapter-only: MayDispatch reads holds, but the hold table is written only by the lifecycle fixture's adapter and a person's release is 'ticfac settle' recorded as a decision. Making it real needs (a) a durable hold in the checkpoint: extend $defs.tick_state or add a holds field (checkpoint schema is additionalProperties:false) in the contract bundle; (b) release through the tracker via tk awaiting/approve, which must be added to the Tracker seam and the pinned tk-json manifest. See RESULT-ma5.md item 7 and the section note above A11 in internal/reconcile/guards.go.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-09T13:04:40.396571Z",
+  "updated_at": "2026-09-09T13:04:40.396571Z"
+}
