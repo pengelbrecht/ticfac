@@ -84,8 +84,11 @@
 //
 //   - REVIEW AND CLOSEOUT ARE JOBS, on the same executor, dispatched at the
 //     CONTROLLER's state — the integration branch as origin has it — and the
-//     review read-only, so its inability to write a ref is the issuer's
-//     decision rather than the model's manners. What the reconciler acts on is
+//     review read-only, which the executor keeps where it launches the job: a
+//     read-only attempt is issued no push credential and its runner process is
+//     built without the credentials or the git configuration a push needs
+//     (internal/exec/subprocess/grade.go), so the refusal is the issuer's and
+//     not the model's manners. What the reconciler acts on is
 //     their role-result envelope (contracts/job-protocol.json), VALIDATED
 //     before anything is decided on it and recorded as a decision. A malformed
 //     envelope fails closed: the process tick stays open, because acting on an

@@ -67,6 +67,15 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 				"Push it, keep the branch, or dispose with an explicit reason.", record.Branch)
 	}
 
+	// The exclude line comes out FIRST, while the worktree it was resolved
+	// from still exists. "No run-created worktree and no run-created branch"
+	// has to include the one edit this executor made to a file it does not
+	// own, or every attempt this host ever ran leaves a line in the operator's
+	// info/exclude that nothing will ever remove.
+	if err := unexcludeFromGit(excludeDirFor(record), record.Spec.ArtifactPrefix); err != nil {
+		return fmt.Errorf("remove the artifact prefix from this repository's git exclude file: %w", err)
+	}
+
 	if err := worktreeRemove(record.Repo, record.Worktree); err != nil {
 		return fmt.Errorf("remove the attempt worktree: %w", err)
 	}
@@ -78,6 +87,16 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 	_ = st.observe(Observation{At: e.stamp(), Kind: ObsExited,
 		Detail: disposalNote(record, opts, persisted)})
 	return nil
+}
+
+// excludeDirFor is the directory the exclude file is resolved from: the
+// attempt's worktree while it is still there, because that is where the append
+// resolved it, and the repository once it is gone.
+func excludeDirFor(record *attemptRecord) string {
+	if _, err := os.Stat(record.Worktree); err == nil {
+		return record.Worktree
+	}
+	return record.Repo
 }
 
 // onRemote answers whether the attempt's commits already exist somewhere this

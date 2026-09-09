@@ -73,6 +73,28 @@ force_report)
 	git -C "$TICFAC_WORKTREE" add -f "$TICFAC_RESULT_PATH" >/dev/null 2>&1
 	commit
 	;;
+push)
+	# The runner tries to advance a ref itself, which is the thing a source
+	# grade has to make impossible rather than merely decline to do for it.
+	# Two pushes: through the remote NAME and through the remote's URL, since
+	# an explicit URL bypasses remote.<name>.pushurl. The outcome goes in the
+	# STATE directory (the worktree's parent), never in the worktree, so the
+	# attempt's own branch and boundary diff stay exactly what they would be.
+	commit
+	out="$TICFAC_WORKTREE/../push"
+	origin_url=$(git -C "$TICFAC_WORKTREE" remote get-url origin 2>/dev/null || printf '')
+	{
+		printf '## by name\n'
+		git -C "$TICFAC_WORKTREE" push origin HEAD:refs/heads/pushed-by-runner 2>&1
+		printf 'exit %s\n' "$?"
+		printf '## by url (%s)\n' "$origin_url"
+		if [ -n "$origin_url" ]; then
+			git -C "$TICFAC_WORKTREE" push "$origin_url" HEAD:refs/heads/pushed-by-url 2>&1
+			printf 'exit %s\n' "$?"
+		fi
+	} > "$out.log" 2>&1
+	report
+	;;
 boundary)
 	mkdir -p "$TICFAC_WORKTREE/.tick/issues"
 	printf '{"id":"%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/$TICFAC_TICK.json"

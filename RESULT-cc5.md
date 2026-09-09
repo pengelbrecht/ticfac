@@ -24,7 +24,7 @@ Each restart was a **fresh `git clone`** of the ticks origin; the executor's sta
 | after collection | 10:02:32Z, seq 7: uhw `integrated`, state `gating` | still exactly one attempt marker | run 7 re-ran the integrated gate (`go`, `pi-runner`) and recorded evidence |
 | before closure | 10:09:02Z, inside `tk close uhw` (SIGKILL from a tk wrapper), seq 12 state `publishing` | evidence on origin, tracker still `in_progress` — no false close | run 8 closed uhw once, then ran uqe, t62, review, close-out to completion (11:04:33Z, seq 43, `completed`) |
 
-Attempts on origin: 1 uhw, 2 uqe, 3 t62, 4 brp (review-epic, read-only source grade, no push credential issued), 5 glo (closeout-epic). Five ticks, five attempts, zero duplicates. Runner wall clock: uhw 1m48s, uqe 9m05s, t62 14m17s, brp 8m58s, glo 2m38s. The integration branch carries 72 `ticfac run` commits (run-state records and tracker writes) plus the ticks' own source commits.
+Attempts on origin: 1 uhw, 2 uqe, 3 t62, 4 brp (review-epic, read-only source grade; the timed push was off for it, which is all the grade did on the binaries that run carried — the grade is enforced at the runner's launch as of tick gi2, after this run), 5 glo (closeout-epic). Five ticks, five attempts, zero duplicates. Runner wall clock: uhw 1m48s, uqe 9m05s, t62 14m17s, brp 8m58s, glo 2m38s. The integration branch carries 72 `ticfac run` commits (run-state records and tracker writes) plus the ticks' own source commits.
 
 Review job verdict (decision 1): DONE_WITH_CONCERNS with two findings on the guard scoping — filed in the ticks tracker as m9j (F1) and l5w (F2). Close-out job verdict (decision 2): DONE_WITH_CONCERNS, asking that the PR be opened and the findings filed; both done by the operator side of this run.
 

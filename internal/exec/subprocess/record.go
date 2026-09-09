@@ -177,8 +177,13 @@ func (c *SourceCredential) UnmarshalJSON(data []byte) error {
 }
 
 // Grade is the source grade whichever form the credential took. It is the
-// security boundary: read-only means this executor issues no push credential,
-// so git write is refused by the ISSUER and not by the runner's good manners.
+// security boundary, and it is kept where the attempt's PROCESS is created
+// rather than in what the runner is asked to do: a read-only grade is issued
+// no push credential, and its runner is launched with every source credential
+// stripped from its environment and its git configuration pinned so that no
+// push resolves to a remote (grade.go). What that does not make it is a kernel
+// sandbox — which is why every attempt is also diffed against its recorded
+// base and reported (Appendix A #10).
 func (c SourceCredential) Grade() string {
 	if c.Grant != nil {
 		return c.Grant.Grade
