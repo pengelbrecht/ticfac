@@ -36,6 +36,14 @@ func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Colle
 		return merge{}, err
 	}
 
+	// Nothing was collected, because nothing needed to be: a resumed run whose
+	// attempt is already merged does not collect it a second time (processTick).
+	// The merge that happened is proven here rather than remembered, and if it
+	// cannot be proven nothing is integrated.
+	if collected == nil {
+		return r.integratedAlready(tick, branch)
+	}
+
 	head, err := r.durableAttemptHead(branch, collected)
 	if err != nil {
 		return merge{}, r.refuse(RefusedMerge, tick, "%v", err)
@@ -91,6 +99,37 @@ func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Colle
 	return merge{}, r.refuse(RefusedMerge, tick,
 		"%s moved under this reconciler %d times running while merging %s; that is an operational problem, "+
 			"not a conflict to spin on", r.branch, maxMergePushes, tick)
+}
+
+// integratedAlready is the merge of an attempt this run has already merged.
+//
+// It merges nothing and can merge nothing: the only thing it does is read
+// origin for the attempt's head and the integration branch's, and report the
+// pair when the second already CONTAINS the first. A head that is not
+// contained is refused — there is then no merge to stand on and no collect to
+// make one from, and integrating on the strength of a head nobody collected is
+// the false completion durableAttemptHead exists to refuse.
+func (r *Reconciler) integratedAlready(tick, branch string) (merge, error) {
+	head, err := r.git.remoteHead(branch)
+	if err != nil {
+		return merge{}, err
+	}
+	epicHead, err := r.git.remoteHead(r.branch)
+	if err != nil {
+		return merge{}, err
+	}
+	if err := r.git.fetch(r.branch); err != nil {
+		return merge{}, err
+	}
+	if head == "" || !r.git.contains(head, epicHead) {
+		return merge{}, r.refuse(RefusedMerge, tick,
+			"%s was not collected in this incarnation and %s does not carry its head either: nothing says what "+
+				"this attempt produced, and nothing is merged on the strength of a head nobody checked",
+			branch, r.branch)
+	}
+	r.setTick(tick, "integrated")
+	r.record(tick, StageIntegrated, "%s is already contained in %s", short(head), r.branch)
+	return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
 }
 
 // mergeInWorktree performs the merge itself. A conflict is refused rather than
@@ -157,9 +196,22 @@ func (r *Reconciler) durableAttemptHead(branch string, collected *subprocess.Col
 		return local, nil
 	}
 
-	// The collected head is not what origin has. Push it: a fast-forward makes
-	// origin agree with what was collected, and anything else is origin
-	// holding commits this attempt did not produce.
+	// The collected head is not what origin has. Before pushing it, ask whether
+	// this checkout HAS it: a restart on a fresh clone reads the collected head
+	// out of a record the previous clone wrote, and the objects behind it stayed
+	// in that clone. The push then fails for a reason that has nothing to do
+	// with origin, and blaming origin for holding something else sends the next
+	// repair at the wrong problem.
+	if _, err := r.git.resolve(local); err != nil {
+		return "", fmt.Errorf(
+			"the collected head %s of %s is not a commit this checkout has, so it cannot be put on %s (which "+
+				"holds %s): the attempt was collected in another clone and its objects are still there. Nothing "+
+				"is merged; run this from the checkout that holds the attempt, or push %s from it first",
+			short(local), branch, r.opts.Remote, short(remote), branch)
+	}
+
+	// Push it: a fast-forward makes origin agree with what was collected, and
+	// anything else is origin holding commits this attempt did not produce.
 	if _, stderr, err := r.git.try("", "push", r.opts.Remote, local+":"+refFor(branch)); err != nil {
 		return "", fmt.Errorf(
 			"the collected head %s of %s could not be put on %s, which holds %s instead: %s. Nothing is merged: "+

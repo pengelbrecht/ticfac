@@ -78,6 +78,12 @@ the executor can still address, records the release durably as a decision
 naming who made it, and the next run dispatches a NEW attempt instead of
 adopting the released one. Whatever the released attempt committed stays on its
 own write ref.
+
+It releases one other attempt: one this run REJECTED while it was holding
+commits nothing merged. No run collects that attempt again (the teardown the
+refusal ran removed its worktree) and no run dispatches over it (that would
+orphan the only copy of the work), so a person reads the branch and then says
+here that the run may go on.
 `
 
 // Run executes one invocation and returns the process exit code. Everything is
