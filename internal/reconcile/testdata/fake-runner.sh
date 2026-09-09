@@ -98,6 +98,21 @@ boundary)
 	commit
 	report
 	;;
+push-per-tick)
+	# Every worker tries to advance a ref of its OWN on origin, twice: through
+	# the remote's name and through the url that remote resolves to. The ref
+	# carries the tick, so one origin tells the two source grades apart — the
+	# write-grade ticks land theirs, and the read-only review is launched
+	# unable to land any. The outcome is not written into the worktree, so no
+	# tick's branch or boundary diff changes shape because of it.
+	commit
+	git -C "$TICFAC_WORKTREE" push origin "HEAD:refs/heads/pushed-by-$TICFAC_TICK" >/dev/null 2>&1
+	url=$(git -C "$TICFAC_WORKTREE" remote get-url origin 2>/dev/null || printf '')
+	if [ -n "$url" ]; then
+		git -C "$TICFAC_WORKTREE" push "$url" "HEAD:refs/heads/pushed-by-url-$TICFAC_TICK" >/dev/null 2>&1
+	fi
+	report
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process

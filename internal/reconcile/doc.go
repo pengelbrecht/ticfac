@@ -87,8 +87,17 @@
 //     review read-only, which the executor keeps where it launches the job: a
 //     read-only attempt is issued no push credential and its runner process is
 //     built without the credentials or the git configuration a push needs
-//     (internal/exec/subprocess/grade.go), so the refusal is the issuer's and
-//     not the model's manners. What the reconciler acts on is
+//     (internal/exec/subprocess/grade.go). What that closes, in the words that
+//     file and profiles/review-epic.md use too: an ACCIDENTAL push fails at
+//     launch configuration — no `git push`, by remote name, by URL, by
+//     absolute path or by relative path, bare or otherwise, resolves to a
+//     remote, and no credential is reachable to authenticate one. A
+//     DELIBERATE runner is NOT stopped by this executor: `git -c` on its own
+//     command line, or a longer `url.<prefix>.pushInsteadOf` in a config it
+//     writes itself, overrides an env-pinned key, and a credential it brings
+//     itself (an ssh identity under ~/.ssh, `-c credential.helper=…`) is one
+//     the scrub never held. The backstop for THAT party is the boundary diff
+//     taken at collect, not the launch. What the reconciler acts on is
 //     their role-result envelope (contracts/job-protocol.json), VALIDATED
 //     before anything is decided on it and recorded as a decision. A malformed
 //     envelope fails closed: the process tick stays open, because acting on an

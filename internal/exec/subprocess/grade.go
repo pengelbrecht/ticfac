@@ -36,14 +36,26 @@ import (
 //     place. pushInsteadOf rewrites PUSHES only, so a read-only job can still
 //     fetch and read — which is what a review job is for.
 //
-// What this is not: a kernel sandbox. A process that can write files can still
-// write to a filesystem path it can reach, and a runner that deliberately
-// passes `git -c` on its own command line overrides an env-pinned key. The
-// claim this file earns is the narrower and checkable one — a read-only
-// attempt is issued no source credential and its git resolves no push target
-// — and it is why the executor ALSO diffs every attempt against its recorded
-// base and reports what it finds (Appendix A #10: compliance is not a property
-// of the model).
+// WHAT THIS CLOSES AND WHAT IT DOES NOT — the same sentence
+// internal/reconcile/doc.go and profiles/review-epic.md state, because a
+// boundary described three ways is a boundary nobody can check:
+//
+// An ACCIDENTAL push fails at launch configuration. No `git push` — by remote
+// name, by URL, by absolute path, by relative path, bare or otherwise —
+// resolves to a remote, and no credential is reachable to authenticate one.
+//
+// A DELIBERATE runner is NOT stopped by this executor. `git -c` on its own
+// command line, or a longer `url.<prefix>.pushInsteadOf` in a config it writes
+// itself, overrides an env-pinned key by git's own precedence rules; a
+// credential it brings itself — an ssh identity under ~/.ssh, `-c
+// credential.helper=…` — is one this scrub never held; and a process that can
+// write files can write to any filesystem path it can reach. This is not a
+// kernel sandbox and the executor is not the party that catches that runner.
+//
+// The backstop for THAT party is the boundary diff taken at collect
+// (collect.go), which is why every attempt is diffed against its recorded base
+// and reported whatever its grade said (Appendix A #10: compliance is not a
+// property of the model).
 
 // The two grades contracts/job-protocol.json allows. Anything that is not
 // exactly "write" is treated as read-only, because a grade this executor
@@ -63,10 +75,28 @@ const pushRefusedURL = "ticfac-read-only-grade://refused-by-issuer"
 // url.<pushRefusedURL>.pushInsteadOf entry, so an explicit `git push <url>`
 // that names no configured remote is rewritten too — the remote.<name>.pushurl
 // pins below only cover the remotes the worktree already has.
+//
+// This list is not sufficient on its own and never was: a BARE relative path
+// (`link`, `sub/origin.git` — a symlink or a checkout beside the worktree)
+// starts with none of these, so nothing rewrote it and the push landed. That
+// is what pushCatchAll below is for; the named prefixes stay because they say
+// what a push target looks like, and because a shape that is matched by name
+// does not depend on git's handling of an empty prefix.
 var pushURLPrefixes = []string{
 	"https://", "http://", "ssh://", "git://", "ftp://", "ftps://", "file://",
 	"git@", "/", "./", "../", "~",
 }
+
+// pushCatchAll is the EMPTY prefix, and it is the entry that makes the rewrite
+// total. git picks the LONGEST url.<prefix>.pushInsteadOf whose prefix the
+// literal url starts with; a zero-length prefix starts every url, so it is the
+// match for anything the named shapes above did not claim — a bare relative
+// path being the one that got through. Longest-match is also why it cannot
+// shadow them: any named prefix that applies is longer, and every entry
+// rewrites to the same refusal anyway.
+//
+// It rewrites PUSHES only, so a read-only job still fetches and reads.
+const pushCatchAll = ""
 
 // sourceCredentialEnv is the environment a git write authenticates with. Every
 // one of these is removed for a read-only grade.
@@ -191,7 +221,7 @@ func readOnlyPins(remotes remoteSet) [][2]string {
 	// known remote URL is its own entry under the same key.
 	seen := map[string]bool{}
 	add := func(prefix string) {
-		if prefix == "" || seen[prefix] {
+		if seen[prefix] {
 			return
 		}
 		seen[prefix] = true
@@ -201,8 +231,14 @@ func readOnlyPins(remotes remoteSet) [][2]string {
 		add(prefix)
 	}
 	for _, url := range remotes.URLs {
+		if url == "" {
+			continue
+		}
 		add(url)
 	}
+	// Last, and it is the one that closes the set: everything the named
+	// shapes did not match.
+	add(pushCatchAll)
 	return pins
 }
 

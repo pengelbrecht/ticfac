@@ -3,6 +3,9 @@ package subprocess
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -175,11 +178,19 @@ func TestTheReadOnlySandboxScrubsSourceCredentialsAndKeepsTheModelGrant(t *testi
 			t.Errorf("remote.%s.pushurl pinned to %q, want %q", name, got, pushRefusedURL)
 		}
 	}
-	redirects := strings.Join(pins["url."+pushRefusedURL+".pushInsteadOf"], " ")
+	rewrites := pins["url."+pushRefusedURL+".pushInsteadOf"]
+	redirects := strings.Join(rewrites, " ")
 	for _, prefix := range []string{"https://", "ssh://", "git@", "/", "git@example.com:org/repo.git"} {
 		if !strings.Contains(redirects, prefix) {
 			t.Errorf("a push to a url starting %q is not redirected; the pushurl pins only cover remote NAMES", prefix)
 		}
+	}
+	// The empty prefix, which is what makes the set total: a bare relative
+	// path starts with none of the named shapes. Joining the values above
+	// would hide it, so it is asked for by itself.
+	if !slices.Contains(rewrites, pushCatchAll) {
+		t.Errorf("there is no catch-all pushInsteadOf entry among %q: a push to a BARE relative path "+
+			"(`link`, `sub/origin.git`) starts with no listed prefix and is not rewritten at all", rewrites)
 	}
 
 	// A write grade is launched exactly as this process was.
@@ -295,4 +306,147 @@ func excludeHas(t *testing.T, path, line string) bool {
 		}
 	}
 	return false
+}
+
+// -------------------------------------- every shape a push target can take ---
+//
+// The pins are PREFIX rewrites, so "does `git push origin` fail" is not the
+// question. The question is whether any other spelling of the same origin gets
+// through — and one did: a BARE relative path (`link`, `sub/origin.git`)
+// starts with none of the shapes pushURLPrefixes lists, so nothing rewrote it
+// and the ref landed on the remote with no `git -c` trickery at all. These
+// three tests are the review's bypass probe, kept.
+
+// sandboxEnvFor is the environment ONE worktree's runner is launched with,
+// built by the same sandboxFor the supervisor calls. HOME is a directory of
+// the test's own, so the host's global git config cannot decide the answer.
+func sandboxEnvFor(t *testing.T, worktree, grade string) []string {
+	t.Helper()
+	base := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir()}
+	return sandboxFor(base, &attemptRecord{SourceGrade: grade}, readRemotes(worktree)).Env
+}
+
+// pushUnder runs one git command with exactly the environment a grade
+// produces. Its output is for the failure message; what the test acts on is
+// whether the ref appeared on ORIGIN.
+func pushUnder(dir string, env []string, args ...string) string {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = env
+	out, _ := cmd.CombinedOutput()
+	return string(out)
+}
+
+// Probe case 4. Each shape runs TWICE: once under a write grade, where it must
+// land the ref — a case that cannot reach origin at all proves nothing — and
+// once under the read-only grade, where it must not.
+func TestAReadOnlyGradeRefusesEveryShapeAPushTargetCanBeWrittenAs(t *testing.T) {
+	repo := newRepo(t, "pushshapes")
+	origin, err := filepath.EvalSymlinks(repo.Origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Two bare relative paths — no scheme, no leading `/`, `./`, `../` or `~`.
+	// These are the spellings that used to reach origin unrewritten.
+	if err := os.Symlink(origin, filepath.Join(repo.Dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo.Dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(origin, filepath.Join(repo.Dir, "sub", "origin.git")); err != nil {
+		t.Fatal(err)
+	}
+
+	shapes := []struct{ name, target string }{
+		{"the remote's name", "origin"},
+		{"an absolute path", origin},
+		{"a file:// url", "file://" + origin},
+		{"a ../ relative path", "../" + filepath.Base(repo.Origin)},
+		{"an explicitly relative path", "./link"},
+		{"a BARE relative path", "link"},
+		{"a BARE relative path one directory down", "sub/origin.git"},
+	}
+
+	write := sandboxEnvFor(t, repo.Dir, gradeWrite)
+	readOnly := sandboxEnvFor(t, repo.Dir, gradeReadOnly)
+
+	for i, shape := range shapes {
+		t.Run(shape.name, func(t *testing.T) {
+			// Numbered rather than named: a ref name is not allowed to carry
+			// the punctuation these targets are made of.
+			control := fmt.Sprintf("refs/heads/control-%d", i)
+			refused := fmt.Sprintf("refs/heads/refused-%d", i)
+
+			out := pushUnder(repo.Dir, write, "push", shape.target, "HEAD:"+control)
+			if !refExists(t, repo.Origin, control) {
+				t.Fatalf("a WRITE grade could not push to %q, so this case says nothing about the read-only "+
+					"grade — the target is unreachable, not refused:\n%s", shape.target, out)
+			}
+
+			out = pushUnder(repo.Dir, readOnly, "push", shape.target, "HEAD:"+refused)
+			if refExists(t, repo.Origin, refused) {
+				t.Errorf("a read-only attempt advanced %s on origin by pushing to %q. The grade is the security "+
+					"boundary and it is kept at launch: every shape a push target can be written as has to be "+
+					"rewritten, including one that starts with no prefix at all:\n%s", refused, shape.target, out)
+			}
+		})
+	}
+}
+
+// Probe cases 3 and 5: the residual, pinned so that the sentence four files
+// state about it stays true. Both need a DELIBERATE `git -c` on the runner's
+// own command line, which overrides an env-pinned key by git's own precedence
+// and which no launch configuration can take back.
+//
+// If either of these ever starts failing, the executor got STRONGER: fix the
+// expectation here and then fix the residual sentence in grade.go,
+// internal/reconcile/doc.go and profiles/review-epic.md, which all say this
+// party is not stopped.
+func TestTheReadOnlyGradesResidualIsADeliberateOverrideOnTheCommandLine(t *testing.T) {
+	repo := newRepo(t, "residual")
+	origin, err := filepath.EvalSymlinks(repo.Origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readOnly := sandboxEnvFor(t, repo.Dir, gradeReadOnly)
+
+	t.Run("a longer url.<prefix>.pushInsteadOf wins over the pin", func(t *testing.T) {
+		url := "file://" + origin + "/"
+		out := pushUnder(repo.Dir, readOnly,
+			"-c", "url."+url+".pushInsteadOf="+url,
+			"push", url, "HEAD:refs/heads/residual-longer-prefix")
+		if !refExists(t, repo.Origin, "refs/heads/residual-longer-prefix") {
+			t.Errorf("git no longer takes the LONGEST matching pushInsteadOf prefix from the command line, so "+
+				"the residual three files describe is narrower than they say:\n%s", out)
+		}
+	})
+
+	t.Run("a -c remote.<x>.url with its own pushInsteadOf", func(t *testing.T) {
+		url := "file://" + origin
+		out := pushUnder(repo.Dir, readOnly,
+			"-c", "remote.evil.url="+url,
+			"-c", "url."+url+".pushInsteadOf="+url,
+			"push", "evil", "HEAD:refs/heads/residual-c-remote")
+		if !refExists(t, repo.Origin, "refs/heads/residual-c-remote") {
+			t.Errorf("a remote invented on the command line no longer reaches origin, so the residual three "+
+				"files describe is narrower than they say:\n%s", out)
+		}
+	})
+
+	// And the half that IS kept whatever the command line rewrites: the
+	// sandbox resolves no credential. A local path needs none, which is why
+	// the two cases above land; a remote that does need one gets nothing from
+	// this process — no helper, no askpass, no terminal.
+	t.Run("and it still resolves no credential", func(t *testing.T) {
+		cmd := exec.Command("git", "-c", "url.https://forge.example.com/.pushInsteadOf=https://forge.example.com/",
+			"credential", "fill")
+		cmd.Dir = repo.Dir
+		cmd.Env = readOnly
+		cmd.Stdin = strings.NewReader("protocol=https\nhost=forge.example.com\n\n")
+		out, err := cmd.CombinedOutput()
+		if err == nil || strings.Contains(string(out), "password=") {
+			t.Errorf("the read-only sandbox resolved a credential for a host that needs one: %v\n%s", err, out)
+		}
+	})
 }

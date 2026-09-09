@@ -181,7 +181,8 @@ func (c *SourceCredential) UnmarshalJSON(data []byte) error {
 // rather than in what the runner is asked to do: a read-only grade is issued
 // no push credential, and its runner is launched with every source credential
 // stripped from its environment and its git configuration pinned so that no
-// push resolves to a remote (grade.go). What that does not make it is a kernel
+// push resolves to a remote (grade.go, which states in one place exactly what
+// that closes and what it does not). What it does not make it is a kernel
 // sandbox — which is why every attempt is also diffed against its recorded
 // base and reported (Appendix A #10).
 func (c SourceCredential) Grade() string {

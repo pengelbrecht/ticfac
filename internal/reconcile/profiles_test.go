@@ -175,8 +175,19 @@ func openStore(t *testing.T, f *fixture, r *Reconciler) *runstate.Store {
 
 // SPEC §6.3: the review runs at the epic boundary, READ-ONLY, against what the
 // controller integrated — not against the state the run started from.
+//
+// "Read-only" is asserted here on the LAUNCHED process and not only on the
+// JobSpec field: every worker in this run — the write-grade ticks and the
+// review alike — tries to advance a ref of its own on origin, and the ref
+// carries the tick, so the same origin answers for both grades. The
+// write-grade ticks landing theirs is what makes the review's absence a grade
+// and not a broken fixture. The shapes a push target can be WRITTEN as are
+// exhausted one layer down, in internal/exec/subprocess/grade_test.go
+// (TestAReadOnlyGradeRefusesEveryShapeAPushTargetCanBeWrittenAs); what this
+// test adds is that the reconciler actually dispatches the review into that
+// sandbox.
 func TestTheReviewRunsReadOnlyAtTheControllerState(t *testing.T) {
-	f := newFixture(t, fixtureOptions{})
+	f := newFixture(t, fixtureOptions{mode: "push-per-tick"})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
@@ -191,6 +202,20 @@ func TestTheReviewRunsReadOnlyAtTheControllerState(t *testing.T) {
 	}
 	if grade := spec.Credentials.Source.Grade(); grade != "read-only" {
 		t.Errorf("the review was issued source access at grade %q", grade)
+	}
+
+	// The grade as the launched process kept it. `a1` is a write-grade
+	// implementation tick and `rv` is the review; both runners ran the same
+	// two pushes.
+	if !remoteHasRef(t, f, "refs/heads/pushed-by-a1") || !remoteHasRef(t, f, "refs/heads/pushed-by-url-a1") {
+		t.Fatal("a WRITE-grade attempt could not advance a ref on origin either, so this run says nothing " +
+			"about the read-only grade — the fixture's pushes are not reaching origin at all")
+	}
+	for _, ref := range []string{"refs/heads/pushed-by-rv", "refs/heads/pushed-by-url-rv"} {
+		if remoteHasRef(t, f, ref) {
+			t.Errorf("the review advanced %s on origin: the read-only grade is a property of the process the "+
+				"reconciler dispatched, not of the field it set on the JobSpec", ref)
+		}
 	}
 	if prefix := spec.Credentials.Source.WriteRefPrefix(); prefix != "" {
 		t.Errorf("a read-only grade bounded a write namespace %q; there is no write to bound", prefix)
@@ -386,6 +411,14 @@ func remoteHeadOf(t *testing.T, f *fixture, branch string) string {
 		t.Fatalf("origin has no %s", branch)
 	}
 	return sha
+}
+
+// remoteHasRef asks ORIGIN whether one ref exists at all, which is the only
+// authority on whether a push landed.
+func remoteHasRef(t *testing.T, f *fixture, ref string) bool {
+	t.Helper()
+	out := mustRun(t, f.Repo.Dir, "git", "ls-remote", "origin", ref)
+	return strings.TrimSpace(out) != ""
 }
 
 func containsCommit(t *testing.T, f *fixture, commit, container string) bool {
