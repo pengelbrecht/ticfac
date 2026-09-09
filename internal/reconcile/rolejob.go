@@ -44,7 +44,11 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 	// Its decision is already recorded (recordDecision is created if absent),
 	// its worktree went with the teardown that followed the refusal, and what
 	// is left to do is the gate. processTick's reason, in full there.
-	if integrated := r.integratedHead(marker); integrated != "" {
+	integrated, err := r.integratedHead(marker)
+	if err != nil {
+		return err
+	}
+	if integrated != "" {
 		r.record(entry.TickID, StageCollected,
 			"the %s job's attempt %d is already merged into %s at %s; it is not collected a second time",
 			entry.Role, marker.Attempt, r.branch, short(integrated))

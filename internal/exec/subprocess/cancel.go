@@ -157,6 +157,19 @@ func (e *Executor) hasSettled(st *store) bool {
 		// exactly the case Cancel exists to be able to record a refusal for.
 		return false
 	}
+	// A LIVE process outranks the report here, and only here. observe answers
+	// the inspect question — "what is the durable evidence about this attempt"
+	// — so it reads the report first and calls an attempt that wrote one
+	// `succeeded` without asking the operating system anything. That is right
+	// for inspect and wrong for this: a worker writes its report and then keeps
+	// going (it commits after, it tidies up, it runs one more check), and a
+	// cancel that treated it as settled would revoke, kill the process tree,
+	// write NO durable refusal, and then acknowledge that no stop was
+	// requested — an ack that contradicts what the cancel just did, on the one
+	// path where a person is trying to stop something that is still spending.
+	if e.alive(st, record) {
+		return false
+	}
 	state, _ := e.observe(st, record)
 	return terminalState(state)
 }

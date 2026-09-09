@@ -1,0 +1,11 @@
+{
+  "id": "q5a272cc12df6",
+  "tick_id": "o3n",
+  "kind": "ask",
+  "awaiting": "input",
+  "question": {
+    "id": "q5a272cc12df6",
+    "text": "o3n cannot be dispatched right now: the Claude account is at 93% of its session limit (resets 7pm Europe/Copenhagen) and the herd spawn's first-round-trip probe fails under that pressure. The Fable quota is already exhausted. Options: (a) wait for the 7pm reset and dispatch then, (b) dispatch on a different runner tier or provider now, (c) implement the two blockers in the orchestrator session directly instead of a worker. Default if unanswered: wait for the reset and dispatch on opus."
+  },
+  "created_at": "2026-09-09T15:05:34.004661Z"
+}

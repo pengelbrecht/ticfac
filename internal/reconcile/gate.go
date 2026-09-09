@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -350,13 +351,29 @@ func evidenceKey(tick string, attempt int, check string) string {
 // restarted; a new run id does not help, because the merge is still there and a
 // new attempt cut from the integration head finds the work already done.
 //
-// So a FAILED record is keyed to the commit it ran on. When the previous record
-// for this check failed and the commit now being gated is a DIFFERENT one — a
-// person fixed the check or the tree and pushed it, which moves the integration
-// branch — this run asks for a record of its own and the gate runs again. When
-// the commit is the same, the key is the same and the recorded verdict stands:
-// re-running a check on a commit nothing changed about would spend the same
-// minutes to reach the same answer, and evidence is never overwritten.
+// So a record is keyed to the commit it ran on, whatever it says. When the
+// previous record for this check was made at a DIFFERENT commit — a person
+// fixed the check or the tree and pushed it, which moves the integration
+// branch — this run asks for a record of its own and the check runs again.
+// When the commit is the same, the key is the same and the recorded verdict
+// stands: re-running a check on a commit nothing changed about would spend the
+// same minutes to reach the same answer, and evidence is never overwritten.
+//
+// A PASS is keyed the same way, and that is the point rather than an oversight.
+// The gate is a list of commands and each one carries its own record, so a
+// verdict that reused a pass from an earlier commit would close the tick under
+// this commit's fingerprint on the strength of a check no run ever performed
+// here: the tree that passed and the tree being closed are not the same tree.
+// A pass says something about the commit it ran on and about no other.
+//
+// What "a different commit" means is the SOURCE tree, not the commit id. The
+// run writes its own records to `.ticfac/` on the branch it gates, so the
+// integration head moves whenever the run checkpoints — every resume, with no
+// change to anything a gate command reads. Keying on the raw commit is wrong in
+// both directions at once: too loose across a real change (the pass above) and
+// too tight across the run's own bookkeeping, where it re-pays for the whole
+// gate on every restart. sourceFingerprint is the key that is right in both:
+// the gated commit's top-level tree with the run's own entry dropped.
 func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA string) (string, error) {
 	base := evidenceKey(tick, attempt, check)
 	if gateSHA == "" {
@@ -369,10 +386,68 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 	if err != nil {
 		return "", err
 	}
-	if !ok || existing.Result == "pass" || existing.Provenance.SourceSHA == gateSHA {
+	if !ok || existing.Provenance.SourceSHA == gateSHA {
+		return base, nil
+	}
+	same, err := r.sameSourceTree(existing.Provenance.SourceSHA, gateSHA)
+	if err != nil {
+		// Nobody can say whether the two commits carry the same source. The
+		// safe direction is to run the check again under a key of its own: a
+		// gate paid for twice costs minutes, and a gate reused across a tree
+		// nobody compared closes a tick on evidence about another tree.
+		r.record(tick, StageGateFailed,
+			"the source of %s could not be compared with the recorded %s, so the check runs again: %v",
+			short(gateSHA), short(existing.Provenance.SourceSHA), err)
+		return base + "-" + short(gateSHA), nil
+	}
+	if same {
 		return base, nil
 	}
 	return base + "-" + short(gateSHA), nil
+}
+
+// sameSourceTree reports whether two commits carry the same source as a gate
+// command sees it: the same top-level tree, with the run's own `.ticfac/`
+// records left out of the comparison.
+//
+// Top-level is enough because a tree hash covers everything under it, so any
+// change at any depth moves the entry that contains it. Leaving `.ticfac` out
+// is what makes a checkpoint invisible here — it is the run writing down what
+// it is doing, on the branch it happens to be gating, and no gate command reads
+// it.
+func (r *Reconciler) sameSourceTree(a, b string) (bool, error) {
+	left, err := r.sourceFingerprint(a)
+	if err != nil {
+		return false, err
+	}
+	right, err := r.sourceFingerprint(b)
+	if err != nil {
+		return false, err
+	}
+	return left == right, nil
+}
+
+func (r *Reconciler) sourceFingerprint(commit string) (string, error) {
+	out, err := r.git.run("", "ls-tree", commit)
+	if err != nil {
+		return "", fmt.Errorf("read the tree of %s: %w", short(commit), err)
+	}
+	entries := make([]string, 0, 8)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// "<mode> <type> <sha>\t<name>"
+		_, name, ok := strings.Cut(line, "\t")
+		if !ok || name == runstate.Root {
+			continue
+		}
+		entries = append(entries, line)
+	}
+	sort.Strings(entries)
+	sum := sha256.Sum256([]byte(strings.Join(entries, "\n")))
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // gateWaitDelay is how long the gate's output may keep the wait alive after

@@ -165,7 +165,11 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	// and merges nothing, and what decides the close is the gate, which does
 	// run again.
 	var collected *subprocess.Collection
-	if integrated := r.integratedHead(marker); integrated != "" {
+	integrated, err := r.integratedHead(marker)
+	if err != nil {
+		return err
+	}
+	if integrated != "" {
 		r.record(tick, StageCollected,
 			"attempt %d is already merged into %s at %s; it is not collected a second time",
 			marker.Attempt, r.branch, short(integrated))
@@ -178,7 +182,7 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 
 	merged, err := r.integrate(marker, collected)
 	if err != nil {
-		r.disposeRefused(handle, executor, marker, err)
+		r.rejectRefusedAttempt(handle, executor, marker, err)
 		return err
 	}
 
@@ -526,14 +530,24 @@ func (r *Reconciler) remoteWork(branch, base string) (string, error) {
 // idempotence, and it is asked of ORIGIN rather than of this checkout's memory
 // of it.
 func (r *Reconciler) integrated(commit string) bool {
+	integrated, err := r.integratedOn(commit)
+	return err == nil && integrated
+}
+
+// integratedOn is integrated with the read error kept. A caller that must not
+// turn an unreachable remote into a verdict uses this one.
+func (r *Reconciler) integratedOn(commit string) (bool, error) {
 	epicHead, err := r.git.remoteHead(r.branch)
-	if err != nil || epicHead == "" {
-		return false
+	if err != nil {
+		return false, fmt.Errorf("read %s on %s: %w", r.branch, r.opts.Remote, err)
+	}
+	if epicHead == "" {
+		return false, nil
 	}
 	if err := r.git.fetch(r.branch); err != nil {
-		return false
+		return false, fmt.Errorf("fetch %s from %s: %w", r.branch, r.opts.Remote, err)
 	}
-	return r.git.contains(commit, epicHead)
+	return r.git.contains(commit, epicHead), nil
 }
 
 // integratedHead is the attempt's head when this run has already merged it,
@@ -546,15 +560,29 @@ func (r *Reconciler) integrated(commit string) bool {
 // Nothing is merged on the strength of it — integrate only ever reports
 // "already contained" for such an attempt — so what it decides is whether a
 // second collect happens, not what reaches the integration branch.
-func (r *Reconciler) integratedHead(marker attemptHandle) string {
+//
+// A remote that cannot be READ is an error rather than an answer. Reporting
+// "not merged" for an unreachable origin is the same guess disposition refuses
+// to make twenty lines above, and it is the more expensive direction of the
+// two: the run would collect an attempt it already merged, and report the
+// worktree it removed itself as a missing report.
+func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 	head, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA)
-	if err != nil || head == "" {
-		return ""
+	if err != nil {
+		return "", fmt.Errorf("read %s on %s to see whether attempt %d of %s is already integrated: %w",
+			branchOf(marker.WriteRef), r.opts.Remote, marker.Attempt, marker.TickID, err)
 	}
-	if !r.integrated(head) {
-		return ""
+	if head == "" {
+		return "", nil
 	}
-	return head
+	integrated, err := r.integratedOn(head)
+	if err != nil {
+		return "", err
+	}
+	if !integrated {
+		return "", nil
+	}
+	return head, nil
 }
 
 // tickState is where the run believes one tick stands, as the checkpoint has
@@ -1107,6 +1135,45 @@ func (r *Reconciler) disposeRefused(handle *subprocess.JobHandle, executor Execu
 	}
 	r.disposeRejected(handle, executor, marker, fmt.Sprintf("attempt %d of %s was refused (%s): %s",
 		marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message)))
+}
+
+// rejectRefusedAttempt is disposeRefused for a refusal that ENDS the attempt
+// without anything having reached the integration branch.
+//
+// The merge's refusals are that shape. Nothing merged, so the "already merged"
+// short circuit in processTick does not fire on the next incarnation, and a
+// tick nobody recorded as rejected is still adoptable — which sends the next
+// run back through collect, into the worktree THIS run's teardown removed, for
+// a `missing-result` that describes this reconciler's own cleanup instead of
+// the conflict that actually happened. The verdict a person needs is lost, and
+// it is lost permanently, because every later run repeats the same sequence.
+//
+// Recording the rejection on origin FIRST is what stops it: disposition then
+// finds a rejected tick whose branch carries commits origin has and the epic
+// branch does not, and HOLDS the work for a person instead of collecting a
+// second time. The teardown that follows is unchanged — it keeps the branch,
+// because those commits are the only copy of what the refusal was about.
+//
+// The gate's refusal does not come through here and must not: its merge is
+// already on the integration branch, so the next run recognises the attempt as
+// integrated, skips the collect on that evidence, and re-runs the gate.
+func (r *Reconciler) rejectRefusedAttempt(handle *subprocess.JobHandle, executor Executor, marker attemptHandle, err error) {
+	var refusal *Refusal
+	if !asRefusal(err, &refusal) {
+		return
+	}
+	if rejectErr := r.rejectDurably(marker, refusal.Reason, refusal.Message); rejectErr != nil {
+		// The refusal itself is what the caller returns; a checkpoint that
+		// would not write is recorded and does not replace it.
+		r.record(marker.TickID, StageRejected,
+			"attempt %d of %s was refused (%s) and the rejection could not be checkpointed: %v",
+			marker.Attempt, marker.TickID, refusal.Reason, rejectErr)
+	} else {
+		r.record(marker.TickID, StageRejected,
+			"attempt %d of %s was refused (%s): %s", marker.Attempt, marker.TickID,
+			refusal.Reason, firstLine(refusal.Message))
+	}
+	r.disposeRefused(handle, executor, marker, err)
 }
 
 // tearDownSettled tears an attempt down without addressing it first.

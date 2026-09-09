@@ -102,6 +102,16 @@ boundary)
 	commit
 	report
 	;;
+report_then_hang)
+	# The shape a cancel has to get right: the report is written and the worker
+	# is STILL RUNNING. Real workers do this constantly — they write the report
+	# and then commit, tidy up, or run one more check — and a cancel that read
+	# the report and called the attempt settled would revoke, kill the process
+	# tree, record NO refusal, and acknowledge that no stop was requested.
+	commit
+	report
+	exec sleep 86400
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process

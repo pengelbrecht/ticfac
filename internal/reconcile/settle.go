@@ -228,6 +228,26 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 		// to look at them and say the run may go on, and this is where they say
 		// it. Whatever the attempt left on its branch stays there: the release
 		// keeps the branch, and the next run's attempt gets a ref of its own.
+		//
+		// Unless the work is ALREADY MERGED, which is the gate's refusal and
+		// not the merge's. Everything the sentence above says about "the only
+		// copy" is then false: the commits are on the integration branch, the
+		// next run recognises the attempt as integrated and re-runs the gate on
+		// its own, and a release would instead send it to dispatch a fresh
+		// attempt from a base that already contains the work — a worker with
+		// nothing to do, whose empty branch is refused, forever. The repair for
+		// a failing gate is the tree, not the tracker.
+		if merged, err := r.attemptIsMerged(marker); err != nil {
+			return nil, nil, status.State, err
+		} else if merged {
+			return nil, nil, status.State, fmt.Errorf(
+				"reconcile: attempt %d of %s was rejected, but its work is already merged into %s: releasing it "+
+					"would dispatch a fresh attempt from a base that already carries the work, and there would be "+
+					"nothing for it to do. Nothing is released. The gate is what refused, and the gate is keyed by "+
+					"the commit it ran on: fix the check or the tree, push it to %s, and run the epic again under "+
+					"this run id",
+				marker.Attempt, marker.TickID, r.branch, r.branch)
+		}
 		return handle, executor, status.State, nil
 	case status.Terminal:
 		return nil, nil, status.State, fmt.Errorf(
@@ -259,6 +279,22 @@ func (r *Reconciler) rejectedDurably(marker attemptHandle) bool {
 		}
 	}
 	return false
+}
+
+// attemptIsMerged asks ORIGIN whether the integration branch already carries
+// what this attempt produced. A read that fails is an error and never a "no":
+// answering "not merged" for an unreachable remote is what would let the
+// release this function guards go through on a guess.
+func (r *Reconciler) attemptIsMerged(marker attemptHandle) (bool, error) {
+	head, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA)
+	if err != nil {
+		return false, fmt.Errorf("reconcile: read %s on %s to see whether attempt %d of %s is already merged: %w",
+			branchOf(marker.WriteRef), r.opts.Remote, marker.Attempt, marker.TickID, err)
+	}
+	if head == "" {
+		return false, nil
+	}
+	return r.integratedOn(head)
 }
 
 // recordSettlement writes the release to origin, as a decision.

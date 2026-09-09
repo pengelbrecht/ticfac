@@ -734,3 +734,331 @@ func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
 		t.Errorf("a1 is %s; DONE_WITH_CONCERNS is not an escalation", current.Status)
 	}
 }
+
+// A merge refusal is a verdict about work that EXISTS, and the next run has to
+// be able to say so.
+//
+// The bug this pins: the teardown that follows a refusal removes the attempt's
+// worktree, and the report lives inside it. Nothing merged, so the resumed run
+// does not take the "already integrated" path; nothing recorded the tick as
+// rejected, so disposition adopted the attempt and collected it a SECOND time —
+// against a directory this reconciler had removed itself. The conflict came
+// back as `collect_failed: missing-result`, every run, forever, and the merge
+// conflict a person needed to see was gone.
+func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+
+	// Stop once the attempt is collected: its work is on its branch and
+	// nothing has merged it yet, which is where a conflict is made.
+	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageCollected)})
+	killedAfter(t, err, "a1", StageCollected)
+
+	// The conflict itself: the integration branch gains a commit that touches
+	// the same file the worker wrote, with different content. This is the
+	// ordinary shape — two ticks that edited one file — and not a contrivance.
+	conflictOnIntegrationBranch(t, f.Repo, "work-a1.txt", "a change nobody merged around\n")
+
+	run, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.Failure == nil {
+		t.Fatalf("the conflicting attempt was not refused; the run ended %s: %s", result.State, result.Reason)
+	}
+	if result.Failure.Reason != RefusedMerge {
+		t.Fatalf("the run failed as %s (%s), want %s",
+			result.Failure.Reason, firstLine(result.Failure.Message), RefusedMerge)
+	}
+
+	// The whole finding. The refusal has to be about the MERGE, and never
+	// about a report this run removed on its way out of the previous one.
+	if strings.Contains(result.Failure.Message, "missing-result") {
+		t.Errorf("the refusal blames a missing report rather than the conflict: %s", result.Failure.Message)
+	}
+	stages := run.Stages("a1")
+	if !contains(stages, StageRejected) {
+		t.Errorf("a1's stages %v do not record the rejection; nothing durable stops the next collect", stages)
+	}
+	for _, forbidden := range []string{StageIntegrated, StageGatePassed, StageClosed} {
+		if contains(stages, forbidden) {
+			t.Errorf("a1 reached %s behind a merge conflict; its stages are %v", forbidden, stages)
+		}
+	}
+
+	// The teardown is still the rejected one's: the worktree goes, the BRANCH
+	// stays, because those commits are the only copy of what the conflict is
+	// about and a person is about to read them.
+	marker := attemptMarker(t, f, "a1", 1)
+	branch := branchOf(marker.WriteRef)
+	head := branchHead(f.Repo.Dir, branch)
+	if head == "" || head == marker.BaseSHA {
+		t.Fatalf("%s carries nothing beyond its base; the teardown took the work the refusal is about", branch)
+	}
+	assertOneWorktree(t, f.Repo.Dir)
+
+	// And the run after that reports the held work instead of collecting a
+	// worktree that is gone. This is the assertion that used to fail with
+	// `collect_failed: missing-result`.
+	second, resumed, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if resumed.Failure == nil || resumed.Failure.Reason != RefusedRejectedWork {
+		t.Fatalf("the resumed run failed as %+v, want %s", resumed.Failure, RefusedRejectedWork)
+	}
+	if strings.Contains(resumed.Failure.Message, "missing-result") {
+		t.Errorf("the resumed refusal blames a missing report: %s", resumed.Failure.Message)
+	}
+	if !strings.Contains(resumed.Failure.Message, branch) {
+		t.Errorf("the resumed refusal does not name the branch the work is on: %s", resumed.Failure.Message)
+	}
+	if got := second.Stages("a1"); contains(got, StageRedispatched) || contains(got, StageDispatched) {
+		t.Errorf("the refused attempt was dispatched over rather than held: %v", got)
+	}
+}
+
+// conflictOnIntegrationBranch puts a commit on the integration branch that
+// touches `file` with content of its own, so the next merge of an attempt that
+// wrote the same file conflicts.
+func conflictOnIntegrationBranch(t *testing.T, repo *testRepo, file, content string) {
+	t.Helper()
+	pushOnIntegrationBranch(t, repo, file, content)
+}
+
+// pushOnIntegrationBranch writes one file on the integration branch and pushes
+// it, the way anything other than this run moves the branch.
+func pushOnIntegrationBranch(t *testing.T, repo *testRepo, file, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	mustRun(t, dir, "git", "clone", "--quiet", "--branch", "epic/qeu", repo.Origin, dir)
+	configure(t, dir)
+	writeAndCommit(t, dir, file, content)
+	mustRun(t, dir, "git", "push", "--quiet", "origin", "HEAD:refs/heads/epic/qeu")
+	sha := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo.Dir, "git", "fetch", "--quiet", "origin", "refs/heads/epic/qeu")
+	return sha
+}
+
+// commitOnto builds one commit directly on `base`, changing one file, and
+// leaves it in the reconciler's own checkout. It is how a test says "the same
+// tree plus exactly this" — the parent is named rather than inherited from
+// whatever the branch has since become.
+func commitOnto(t *testing.T, repo *testRepo, base, file, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	mustRun(t, dir, "git", "clone", "--quiet", "--no-checkout", repo.Dir, dir)
+	configure(t, dir)
+	mustRun(t, dir, "git", "fetch", "--quiet", repo.Dir, base)
+	mustRun(t, dir, "git", "checkout", "--quiet", "--detach", base)
+	writeAndCommit(t, dir, file, content)
+	sha := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo.Dir, "git", "fetch", "--quiet", dir, sha)
+	return sha
+}
+
+func writeAndCommit(t *testing.T, dir, file, content string) {
+	t.Helper()
+	path := filepath.Join(dir, file)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRun(t, dir, "git", "add", "-A")
+	mustRun(t, dir, "git", "commit", "--quiet", "-m", "an edit of "+file)
+}
+
+// A PASS is evidence about the commit it ran on, and about no other.
+//
+// The bug this pins: gateEvidenceKey rekeyed a record by the gate's commit only
+// when the previous record had FAILED. A gate is a list of commands, each with
+// a record of its own, so a run at a new commit reused every check that had
+// passed at the old one — and then published the whole verdict under the new
+// commit's fingerprint and closed the tick behind it. The tree that passed and
+// the tree that was closed were not the same tree.
+func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %v: %v", result, err)
+	}
+
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	keys := store.EvidenceKeys()
+	if len(keys) == 0 {
+		t.Fatal("the run recorded no evidence")
+	}
+
+	// A record this run actually wrote, and the commit it ran on.
+	var passed *runstate.Evidence
+	for _, key := range keys {
+		evidence, ok, err := store.Evidence(key)
+		if err != nil || !ok {
+			t.Fatalf("read evidence %s: %v", key, err)
+		}
+		if evidence.Result == "pass" {
+			passed = evidence
+			break
+		}
+	}
+	if passed == nil {
+		t.Fatal("the completed run recorded no passing check; this fixture proves nothing about reuse")
+	}
+	if passed.Provenance.TickID == nil || passed.Provenance.Attempt == nil {
+		t.Fatalf("evidence %s names no tick and attempt", passed.Key)
+	}
+	tick, attempt := *passed.Provenance.TickID, *passed.Provenance.Attempt
+	base := evidenceKey(tick, attempt, passed.Check.ID)
+
+	r, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// gateEvidenceKey reads the run's records, so it needs the store the run
+	// itself opens; New defers that to Run.
+	r.store = store
+
+	// The same commit is the same key: re-running a check on a commit nothing
+	// changed about would spend the same minutes for the same answer, and the
+	// record already there is never overwritten.
+	same, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same != base {
+		t.Errorf("the key at the very commit the check ran on is %q, want the plain key %q", same, base)
+	}
+
+	// A commit that changes only the run's OWN records is the same source, so
+	// the check is not paid for again. This is what a resume looks like: the
+	// integration head moves every time the run checkpoints.
+	bookkeeping := commitOnto(t, f.Repo, passed.Provenance.SourceSHA,
+		runstate.Root+"/runs/r-fixture/a-record.json", "{}\n")
+	unchanged, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged != base {
+		t.Errorf("a commit that only wrote the run's own records is keyed %q; the gate would be paid for twice "+
+			"on every resume", unchanged)
+	}
+
+	// A commit that changes the SOURCE is a different key, and this is the
+	// repair: the pass above says nothing about this tree, so the check runs
+	// again and records its own answer rather than inheriting one.
+	moved := commitOnto(t, f.Repo, passed.Provenance.SourceSHA, "README.md", "a genuinely different tree\n")
+	rekeyed, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rekeyed == base {
+		t.Fatalf("a check that passed at %s was reused as evidence at %s: both are keyed %q",
+			short(passed.Provenance.SourceSHA), short(moved), base)
+	}
+	if !strings.HasPrefix(rekeyed, base) || !strings.Contains(rekeyed, short(moved)) {
+		t.Errorf("the rekeyed evidence key %q does not name the commit it will run on", rekeyed)
+	}
+
+	// And nothing was overwritten on the way: the original record still stands
+	// under its own key, saying what it said about the commit it ran on.
+	still, ok, err := store.Evidence(base)
+	if err != nil || !ok {
+		t.Fatalf("the original record under %s is gone: %v", base, err)
+	}
+	if still.Provenance.SourceSHA != passed.Provenance.SourceSHA || still.Result != "pass" {
+		t.Errorf("the original record changed: %s %s", still.Result, short(still.Provenance.SourceSHA))
+	}
+}
+
+// An unreachable remote is an error, never an answer.
+//
+// The bug this pins: integratedHead swallowed the read error and answered "not
+// merged" — the opposite of the rule disposition states twenty lines above it,
+// and the more expensive direction of the two. A run that could not read origin
+// would collect an attempt it had already merged, against the worktree its own
+// teardown removed, and report a missing report for it.
+func TestAnUnreadableRemoteIsNotAnAnswerAboutWhatIsIntegrated(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %v: %v", result, err)
+	}
+	marker := attemptMarker(t, f, "a1", 1)
+
+	r, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// With origin readable, the merged attempt is recognised as merged.
+	head, err := r.integratedHead(marker)
+	if err != nil {
+		t.Fatalf("reading a reachable origin failed: %v", err)
+	}
+	if head == "" {
+		t.Fatal("a merged attempt was not recognised as integrated; this fixture proves nothing")
+	}
+
+	// Now origin cannot be read at all.
+	mustRun(t, f.Repo.Dir, "git", "remote", "set-url", "origin",
+		filepath.Join(f.Root, "a-remote-that-is-not-there.git"))
+
+	if _, err := r.integratedHead(marker); err == nil {
+		t.Fatal("an unreadable origin answered \"not merged\" instead of failing; the run would collect a merged attempt")
+	}
+}
+
+// A gate failure is repaired in the tree, not released in the tracker.
+//
+// The bug this pins: settle accepted any durably rejected attempt, including
+// one whose work is already on the integration branch — which is exactly what a
+// gate failure leaves. Releasing it sends the next run to dispatch a fresh
+// attempt from a base that already carries the work, so the worker has nothing
+// to do and its empty branch is refused. The tick loops there.
+func TestSettleRefusesToReleaseARejectedAttemptWhoseWorkIsAlreadyMerged(t *testing.T) {
+	failing := fixtureOptions{gate: failingGate}
+	f := newFixture(t, failing)
+
+	_, result, err := f.run(f.Repo, failing)
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedGate {
+		t.Fatalf("the run failed as %+v, want %s", result.Failure, RefusedGate)
+	}
+
+	// The premise: the gate refused AFTER the merge, so the work is on the
+	// integration branch and the attempt is durably rejected.
+	marker := attemptMarker(t, f, "a1", 1)
+	r, err := New(f.options(f.Repo, failing))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.store = openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	if !r.rejectedDurably(marker) {
+		t.Fatal("the gate-refused attempt is not recorded as rejected; this fixture proves nothing about release")
+	}
+	merged, err := r.attemptIsMerged(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !merged {
+		t.Fatal("the gate-refused attempt's work is not on the integration branch; this fixture has the wrong premise")
+	}
+
+	settler, err := New(f.options(f.Repo, failing))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = settler.Settle(context.Background(), "a1", 1, "an operator")
+	if err == nil {
+		t.Fatal("an attempt whose work is already merged was released; the next run would dispatch over it for nothing")
+	}
+	// Appendix A #9: the refusal sends the next repair at the real problem,
+	// which for a failing gate is the tree.
+	if !strings.Contains(err.Error(), "already merged") {
+		t.Errorf("the refusal does not say why the release is refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "run the epic again") {
+		t.Errorf("the refusal does not say what to do instead: %v", err)
+	}
+}

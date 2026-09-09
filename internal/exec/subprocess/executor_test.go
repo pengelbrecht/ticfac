@@ -822,3 +822,57 @@ func formatObservations(observations []Observation) string {
 	}
 	return b.String()
 }
+
+// A worker that wrote its report and is still running has not settled.
+//
+// The bug this pins: hasSettled asked observe, and observe answers the INSPECT
+// question — durable evidence first, so an attempt with a report reads as
+// `succeeded` without the operating system being asked anything. That is right
+// for inspect and wrong for a cancel: a worker writes its report and then keeps
+// going, and the cancel would revoke the credential, kill the process tree, and
+// then acknowledge that no stop was requested, with no durable refusal written.
+// The ack contradicted what the cancel had just done, on the one path where a
+// person is trying to stop something that is still spending.
+func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "report_then_hang"})
+	spec := f.spec("run-15/tick-rrr/attempt-1", "rrr")
+	handle := f.Start(spec)
+	st := f.store(handle)
+
+	// The report is on disk AND the runner is alive: exactly the state the
+	// old code called settled.
+	waitFor(t, "the report to be written while the runner is still alive", 20*time.Second, func() bool {
+		local, err := handle.Local()
+		if err != nil {
+			return false
+		}
+		if _, err := os.Stat(local.ResultPath); err != nil {
+			return false
+		}
+		return st.runnerPID() > 0 && processAlive(st.runnerPID())
+	})
+	runner := st.runnerPID()
+
+	ack, err := f.Executor.Cancel(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ack.StopRequested {
+		t.Error("the acknowledgement says no stop was requested, and there was a live runner it stopped")
+	}
+	if !ack.CredentialsRevoked || ack.Order != OrderRevokeThenStop {
+		t.Errorf("acknowledgement %+v", ack)
+	}
+	waitFor(t, "the runner to stop", 15*time.Second, func() bool { return !processAlive(runner) })
+
+	// And the cancellation is DURABLE. This is the half that was missing: with
+	// no record written, the next inspect answered from the report instead, and
+	// nothing anywhere said the attempt had been stopped by a person.
+	if _, ok := st.cancelled(); !ok {
+		t.Fatal("the cancellation of a live attempt wrote no durable record")
+	}
+	status := f.inspect(handle)
+	if status.State != StateCancelled {
+		t.Errorf("a cancelled attempt inspects as %s; the report outranked the cancellation", status.State)
+	}
+}
