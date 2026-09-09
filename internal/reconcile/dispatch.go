@@ -448,7 +448,10 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 // sourceCredentialFor is the source half of the job's credentials. A read-only
 // grade carries NO write_ref_prefix — the contract refuses one, and the reason
 // is the point: read-only means the issuer hands out no push credential, so
-// there is no namespace left to bound.
+// there is no namespace left to bound. The executor is what keeps that: it
+// issues a read-only attempt no credential and launches its runner without the
+// environment or the git configuration a push needs
+// (internal/exec/subprocess/grade.go).
 func sourceCredentialFor(role string) subprocess.SourceCredential {
 	if sourceGradeFor(role) == "read-only" {
 		return subprocess.SourceCredential{Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "read-only"}}

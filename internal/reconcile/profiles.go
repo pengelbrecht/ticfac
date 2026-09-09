@@ -114,8 +114,10 @@ func isRoleJob(role string) bool {
 // sourceGradeFor is the grade the host issues source access at.
 //
 // SPEC §6.3 puts review-epic at the epic boundary, running READ-ONLY against
-// the integrated ref: the executor issues it no push credential at all, so a
-// review that tried to advance a ref is refused by the issuer rather than by
+// the integrated ref: the executor issues it no push credential and launches
+// its runner with every source credential stripped and its git configuration
+// pinned so no push resolves to a remote (internal/exec/subprocess/grade.go),
+// so a review that tried to advance a ref is refused by the issuer rather than by
 // the model's good manners. A closeout writes — a retro and the learnings it
 // compacts are its output — so it is dispatched at the write grade and its work
 // is integrated and gated like any other.

@@ -96,34 +96,58 @@ func Supervise(stateDir string) error {
 		return fmt.Errorf("supervise %s: the attempt record names no runner argv", stateDir)
 	}
 
-	runner := exec.Command(record.RunnerArgv[0], record.RunnerArgv[1:]...)
-	runner.Dir = record.Worktree
-	runner.Env = append(os.Environ(), record.RunnerEnv...)
-	runner.Stdout = log
-	runner.Stderr = log
-	runner.SysProcAttr = newProcessGroup()
-
-	if err := runner.Start(); err != nil {
-		note("the runner could not be started: %v", err)
-		_ = st.observe(Observation{At: now(), Kind: ObsExited, Detail: "the runner could not be started: " + err.Error()})
-		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
-		return err
-	}
-	runnerPID := runner.Process.Pid
-	_ = atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644)
-	_ = st.observe(Observation{
-		At:     now(),
-		Kind:   ObsStarted,
-		Detail: fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, runnerPID, record.Worktree),
-	})
-	note("started %s (pid %d) on %s", record.Runner, runnerPID, record.Branch)
-
 	// A signal aimed at the supervisor takes the runner with it. Cancel kills
 	// both groups itself; this is for every other way a supervisor is asked to
 	// stop, because a runner whose supervisor is gone is a process nothing is
 	// left to collect.
+	//
+	// It is registered BEFORE the runner exists, not after it is recorded: the
+	// window between those two points is one where a TERM would kill this
+	// process by default, and the whole point of handling it is that a stopped
+	// supervisor settles its attempt rather than leaving one nobody can. The
+	// channel buffers one, so a signal that arrives during startup is handled
+	// by the loop below rather than lost.
 	stopping := make(chan os.Signal, 1)
 	signal.Notify(stopping, syscall.SIGTERM, syscall.SIGINT)
+
+	// The SOURCE GRADE is applied here, at the one moment the runner process
+	// does not exist yet. For a read-only grade the environment it is about to
+	// inherit is stripped of every source credential and its git config is
+	// pinned so that no push resolves to a remote — see grade.go. Doing it at
+	// launch rather than in the runner's instructions is the difference
+	// between a boundary the issuer keeps and one the model is asked to.
+	box := sandboxFor(os.Environ(), record, readRemotes(record.Worktree))
+
+	runner := exec.Command(record.RunnerArgv[0], record.RunnerArgv[1:]...)
+	runner.Dir = record.Worktree
+	runner.Env = append(box.Env, record.RunnerEnv...)
+	runner.Stdout = log
+	runner.Stderr = log
+	runner.SysProcAttr = newProcessGroup()
+
+	// observe is the inspect cursor: a lost observation is a fact a second
+	// process can never read back, so a failed append is written to the runner
+	// log — the one durable place left — rather than dropped.
+	observe := func(kind, detail string) {
+		if err := st.observe(Observation{At: now(), Kind: kind, Detail: detail}); err != nil {
+			note("the %s observation could not be appended (%v); it is only here: %s", kind, err, detail)
+		}
+	}
+
+	if err := runner.Start(); err != nil {
+		note("the runner could not be started: %v", err)
+		observe(ObsExited, "the runner could not be started: "+err.Error())
+		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
+		return err
+	}
+	runnerPID := runner.Process.Pid
+	if err := atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644); err != nil {
+		note("the runner pid file could not be written (%v); cancel reaches this runner through the "+
+			"observation log's pid instead", err)
+	}
+	observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, runnerPID, record.Worktree))
+	observe(ObsCredentialIssued, box.note(record))
+	note("started %s (pid %d) on %s", record.Runner, runnerPID, record.Branch)
 
 	push := &pusher{
 		interval: time.Duration(record.PushInterval) * time.Second,
@@ -170,7 +194,7 @@ func Supervise(stateDir string) error {
 			switch outcome := push.maybePush(st.credentialLive()); outcome {
 			case "pushed":
 				_ = atomicWrite(st.path(fileLastPush), []byte(now()+"\n"), 0o644)
-				_ = st.observe(Observation{At: now(), Kind: ObsHeartbeat, Detail: "pushed " + record.Branch + " to " + record.Remote})
+				observe(ObsHeartbeat, "pushed "+record.Branch+" to "+record.Remote)
 			case "refused_revoked":
 				note("the credential is revoked; nothing is pushed")
 			case "push_failed":
@@ -185,9 +209,22 @@ func Supervise(stateDir string) error {
 		case sig := <-stopping:
 			note("supervisor received %s; stopping the runner", sig)
 			stopTree(runnerPID)
-			// Nothing is recorded as settled here: the durable fact about a
-			// cancellation is the cancel record, and a stop is not an exit.
-			return nil
+			// A stop is not an exit — but an attempt nobody settles is an
+			// attempt nobody CAN settle. Returning here left no runner.exit
+			// and no live pid, which inspect reads as `lost`; the reconciler
+			// refuses a handle it cannot address, marks the tick rejected,
+			// and — because the branch may already carry timer-pushed commits
+			// — re-adopts and re-refuses the same attempt on every restart
+			// after that, forever. So the stop settles the attempt as FAILED,
+			// with the signal in the exit code the way a shell reports one.
+			// Which stop it was is still the cancel record's to say: a cancel
+			// writes that before it signals, and inspect reads it first.
+			code := stopExitCode(sig)
+			observe(ObsExited, fmt.Sprintf(
+				"the supervisor was stopped by %s and settled the attempt as failed with %d; "+
+					"a stop is not a completion, and an unsettled attempt is one nobody can ever settle", sig, code))
+			note("settled as failed (%d) after %s", code, sig)
+			return atomicWrite(st.path(fileRunnerExit), []byte(strconv.Itoa(code)+"\n"), 0o644)
 		}
 	}
 
@@ -199,13 +236,21 @@ func Supervise(stateDir string) error {
 		_ = atomicWrite(st.path(fileLastPush), []byte(now()+"\n"), 0o644)
 	}
 
-	_ = st.observe(Observation{
-		At:     now(),
-		Kind:   ObsExited,
-		Detail: fmt.Sprintf("the %s runner exited with %d; completion is read from the branch and the report, never from this", record.Runner, code),
-	})
+	observe(ObsExited, fmt.Sprintf(
+		"the %s runner exited with %d; completion is read from the branch and the report, never from this",
+		record.Runner, code))
 	note("the runner exited with %d", code)
 	return atomicWrite(st.path(fileRunnerExit), []byte(strconv.Itoa(code)+"\n"), 0o644)
+}
+
+// stopExitCode is the exit code a stopped attempt settles with: the shell's
+// 128+signal, so 143 reads as SIGTERM and 130 as SIGINT to anybody who looks
+// at runner.exit later.
+func stopExitCode(sig os.Signal) int {
+	if s, ok := sig.(syscall.Signal); ok && s > 0 {
+		return 128 + int(s)
+	}
+	return 128
 }
 
 // pushTick is how often the timer is ASKED, which is half the interval: a
@@ -219,11 +264,13 @@ func pushTick(interval time.Duration) time.Duration {
 	return 100 * time.Millisecond
 }
 
-// canPush is the SOURCE GRADE, enforced by the issuer. A read-only grade means
-// this executor issues nothing that can advance a ref — it is not a rule the
-// runner is asked to respect.
+// canPush is one HALF of the source grade: whether this supervisor's own timed
+// push runs. The other half — whether the RUNNER can push — is not a question
+// this timer answers, and used to be answered by nothing at all; it is
+// enforced at launch in grade.go, where a read-only attempt's process is built
+// without the credentials or the git configuration a push needs.
 func (r *attemptRecord) canPush() bool {
-	return r.Remote != "" && r.SourceGrade == "write"
+	return r.Remote != "" && !r.readOnly()
 }
 
 // stopTree stops a runner and everything it started: TERM, a moment to write

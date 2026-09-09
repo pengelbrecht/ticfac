@@ -380,15 +380,33 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	// The credential is issued only after everything that could refuse has
 	// refused, and it is a file, because the process that revokes it and the
 	// process that would spend it are not the same process.
-	token := make([]byte, 16)
-	if _, err := rand.Read(token); err != nil {
-		return nil, err
+	//
+	// It is the SOURCE credential, so a read-only grade is issued none — not
+	// one that is issued and then declined to be spent. The durable record of
+	// a read-only attempt therefore shows no credential to revoke, which is
+	// what "the issuer hands out no push credential" has to look like on disk.
+	// The supervisor records what the grade did to the runner's own process
+	// when it launches it (grade.go); this observation is what start can say.
+	if record.readOnly() {
+		if err := st.observe(Observation{At: e.stamp(), Kind: ObsCredentialIssued,
+			Detail: fmt.Sprintf("source grade %s: no push credential is issued for this attempt, "+
+				"and its runner is launched without the credentials or the git configuration a push needs",
+				record.SourceGrade)}); err != nil {
+			return nil, fmt.Errorf("record that no push credential was issued: %w", err)
+		}
+	} else {
+		token := make([]byte, 16)
+		if _, err := rand.Read(token); err != nil {
+			return nil, err
+		}
+		if err := st.issueCredential(hex.EncodeToString(token)); err != nil {
+			return nil, err
+		}
+		if err := st.observe(Observation{At: e.stamp(), Kind: ObsCredentialIssued,
+			Detail: fmt.Sprintf("source grade %s, remote %q", record.SourceGrade, record.Remote)}); err != nil {
+			return nil, fmt.Errorf("record the issued credential: %w", err)
+		}
 	}
-	if err := st.issueCredential(hex.EncodeToString(token)); err != nil {
-		return nil, err
-	}
-	_ = st.observe(Observation{At: e.stamp(), Kind: ObsCredentialIssued,
-		Detail: fmt.Sprintf("source grade %s, remote %q", record.SourceGrade, record.Remote)})
 
 	// A7: the attempt record is read back before anything acts on it. A handle
 	// for a record that did not land is a job nobody can find.
@@ -404,9 +422,32 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err := st.writeAttempt(record, e.guarded("read_back_after_write")); err != nil {
 		return nil, err
 	}
-	_ = e.opts.writeFile(st.path(fileSupervisorPID), []byte(strconv.Itoa(pid)+"\n"), 0o644)
+	// The pid FILE is what a SECOND process reads to stop this attempt —
+	// cancel finds the supervisor through it, and a handle from a restarted
+	// controller carries nothing else that can. So it is written and READ
+	// BACK, and a write that did not land stops the supervisor it could not
+	// record rather than leaving a process no later cancel can reach.
+	if err := e.writePID(st, pid); err != nil {
+		stopTree(pid)
+		return nil, err
+	}
 
 	return e.handleFor(record), nil
+}
+
+// writePID writes one pid file and confirms it reads back as the pid it named
+// (Appendix A #7, for the file that makes a process addressable).
+func (e *Executor) writePID(st *store, pid int) error {
+	if err := e.opts.writeFile(st.path(fileSupervisorPID), []byte(strconv.Itoa(pid)+"\n"), 0o644); err != nil {
+		return fmt.Errorf("record the supervisor pid: %w", err)
+	}
+	if !e.guarded("read_back_after_write") {
+		return nil
+	}
+	if got := st.supervisorPID(); got != pid {
+		return fmt.Errorf("the supervisor pid file read back as %d, not %d: nothing later could stop this attempt", got, pid)
+	}
+	return nil
 }
 
 func (e *Executor) makeWorktree(record *attemptRecord) error {
@@ -482,8 +523,10 @@ func (e *Executor) handleFor(record *attemptRecord) *JobHandle {
 }
 
 // remoteFor is the remote in-progress work is pushed to, or "" when there is
-// none to push to. A read-only source grade issues no push credential at all,
-// which is enforced in attemptRecord.canPush.
+// none to push to. A read-only source grade is issued no push credential and
+// gets no timed push (attemptRecord.canPush), and its RUNNER is launched
+// unable to reach a push target at all — see grade.go, which is where the
+// grade stops being a field and becomes a property of the process.
 func (e *Executor) remoteFor(spec *JobSpec) string {
 	remote := e.opts.Remote
 	if remote == "" {

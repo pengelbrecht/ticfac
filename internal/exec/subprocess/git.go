@@ -132,6 +132,11 @@ func worktreeAdd(repo, dir, branch, base string) error {
 // prefix is unique per attempt, so one attempt's line never matches another
 // attempt's paths, and the alternative — writing the pattern into a tracked
 // .gitignore — is the one thing this function must not do.)
+//
+// The line is NOT permanent: unexcludeFromGit below takes it out again at
+// disposal, so an executor that has disposed of everything it created leaves
+// the operator's exclude file as it found it — the same promise disposal makes
+// about the worktree and the branch.
 func excludeFromGit(worktree, prefix string) error {
 	trimmed := strings.Trim(strings.TrimSpace(prefix), "/")
 	if trimmed == "" {
@@ -159,6 +164,52 @@ func excludeFromGit(worktree, prefix string) error {
 	defer f.Close()
 	_, err = f.WriteString(line + "\n")
 	return err
+}
+
+// unexcludeFromGit removes the one line excludeFromGit appended, and is what
+// keeps that write from being a permanent edit to a file this executor does
+// not own. It is called from disposal with the ATTEMPT WORKTREE while it still
+// exists, so the exclude file it rewrites is resolved exactly the way the
+// append resolved it; `dir` may be the repository instead once the worktree is
+// gone, which resolves to the same shared file in every git this was built
+// against.
+//
+// Absent line, absent file and absent git are all "nothing to remove" rather
+// than errors: disposal must not fail because a cleanup it already did cannot
+// be done twice. Two attempts disposing at the same instant can still lose one
+// line the way two appending at the same instant can lose one — the append has
+// always had that race, and an artifact prefix is per attempt, so the loss is
+// a stale line rather than a staged report.
+func unexcludeFromGit(dir, prefix string) error {
+	trimmed := strings.Trim(strings.TrimSpace(prefix), "/")
+	if trimmed == "" {
+		return nil
+	}
+	path, err := git(dir, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return nil
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	line := "/" + trimmed
+	kept := make([]string, 0, 8)
+	removed := false
+	for _, have := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(have) == line {
+			removed = true
+			continue
+		}
+		kept = append(kept, have)
+	}
+	if !removed {
+		return nil
+	}
+	return atomicWrite(path, []byte(strings.Join(kept, "\n")), 0o644)
 }
 
 func worktreeRemove(repo, dir string) error {
@@ -242,6 +293,38 @@ func hasRemote(repo, remote string) bool {
 		}
 	}
 	return false
+}
+
+// readRemotes is every remote a worktree has and every URL those remotes
+// resolve to, fetch and push alike. It is asked for by the source grade: a
+// read-only attempt pins one pushurl per NAME and one pushInsteadOf per URL,
+// so both `git push origin` and `git push <the url origin means>` land on the
+// same refusal.
+//
+// A repository with no remotes answers empty, which is the right answer: there
+// is then nothing to pin, and the prefix rewrites still cover an explicit URL.
+func readRemotes(dir string) remoteSet {
+	out, err := git(dir, "remote", "-v")
+	if err != nil {
+		return remoteSet{}
+	}
+	var set remoteSet
+	names, urls := map[string]bool{}, map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		if name := fields[0]; !names[name] {
+			names[name] = true
+			set.Names = append(set.Names, name)
+		}
+		if url := fields[1]; !urls[url] {
+			urls[url] = true
+			set.URLs = append(set.URLs, url)
+		}
+	}
+	return set
 }
 
 // pushBranch makes in-progress work durable. Plain, never forced: this

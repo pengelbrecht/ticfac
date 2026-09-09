@@ -44,8 +44,15 @@ func (e *Executor) Cancel(h *JobHandle) (*CancelAck, error) {
 		return nil, fmt.Errorf("revoke the attempt credential: %w", err)
 	}
 	if !alreadyCancelled {
-		_ = st.observe(Observation{At: e.stamp(), Kind: ObsCredentialRevoked,
-			Detail: "revoked before any stop was requested"})
+		// The observation stream is what a second process reads this
+		// cancellation out of, so a lost append is reported rather than
+		// swallowed. Cancel is idempotent — the revocation and the record it
+		// acknowledges are written once — so a caller that retries on this
+		// error re-records nothing and simply tries the append again.
+		if err := st.observe(Observation{At: e.stamp(), Kind: ObsCredentialRevoked,
+			Detail: "revoked before any stop was requested"}); err != nil {
+			return nil, fmt.Errorf("record the revocation: %w", err)
+		}
 	}
 
 	record := existing
@@ -76,8 +83,10 @@ func (e *Executor) Cancel(h *JobHandle) (*CancelAck, error) {
 		if err := e.opts.writeFile(st.path(fileCancel), mustJSON(record), 0o644); err != nil {
 			return nil, err
 		}
-		_ = st.observe(Observation{At: e.stamp(), Kind: ObsCancelRequested,
-			Detail: "stop requested after the credential was revoked"})
+		if err := st.observe(Observation{At: e.stamp(), Kind: ObsCancelRequested,
+			Detail: "stop requested after the credential was revoked"}); err != nil {
+			return nil, fmt.Errorf("record the stop request: %w", err)
+		}
 	}
 
 	return &CancelAck{

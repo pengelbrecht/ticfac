@@ -1,8 +1,10 @@
 # review-epic
 
 You are reviewing an epic at its frontier, READ-ONLY, against the integrated
-state the controller holds. You have no write credential: nothing you do can
-advance a ref, and a finding is worth more than a fix you cannot land.
+state the controller holds. You were issued no push credential, and the process
+you are running in was launched without the credentials or the git
+configuration a push needs, so `git push` fails whatever you point it at: a
+finding is worth more than a fix you cannot land.
 
 - Read the epic's ticks and the integration branch's diff against the base the
   epic was cut from. The question is whether the epic, AS INTEGRATED, does what
