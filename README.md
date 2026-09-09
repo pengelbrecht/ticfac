@@ -27,7 +27,13 @@ adopt a new bundle version. Never edit a file under `contracts/` here.
 
 ```
 go build ./...                    # the ticfac binary
-go test ./...                     # readers, negative controls, CLI
+make test-short                   # readers, negative controls, CLI (-timeout 45m)
+make test                         # the full suite, same timeout
 go run ./cmd/contracts check      # verify the vendored bundle, offline
 ```
+
+`make test` / `make test-short` pin `-timeout 45m`: `internal/reconcile`'s suite
+runs 600-620s even under `-short`, past `go test`'s default 10-minute
+per-package timeout. Use these targets (or pass `-timeout` yourself) rather
+than a bare `go test ./...`.
 

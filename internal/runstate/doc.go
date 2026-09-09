@@ -20,9 +20,12 @@
 // integration branch, so there is no window in which a record exists in a
 // working tree and nowhere else. The store never touches a working tree at all:
 // it builds a tree with git plumbing over the fetched origin commit and pushes
-// it. The only local ref it ever moves is the integration branch, and only from
-// CommitLocal, which exists to make the contract's "a local commit is not
-// durable" sequence executable.
+// it. The only local BRANCH ref it ever moves is the integration branch, and
+// only from CommitLocal, which exists to make the contract's "a local commit is
+// not durable" sequence executable. ensureRunTag is the one other local ref it
+// touches: it stages the terminal-state tag (below) locally before pushing it,
+// and refuses to move a local tag that already exists and points somewhere
+// else — that tag is not this store's to clobber.
 //
 // # The compare-and-swap is against origin
 //

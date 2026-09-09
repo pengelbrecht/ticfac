@@ -320,6 +320,45 @@ func TestTerminalStatePlacesTheRunTag(t *testing.T) {
 	}
 }
 
+// ensureRunTag stages the run tag LOCALLY before pushing it (store.go). A
+// local tag under that name already existing and pointing somewhere else
+// belongs to something else sharing this checkout — not the run this store is
+// writing — so placing the run tag must refuse to force-move it rather than
+// silently discard whatever it pointed to.
+func TestTerminalStateRefusesToClobberAForeignLocalTag(t *testing.T) {
+	o := newOrigin(t)
+	s := o.actor("A", testRun)
+
+	if _, err := s.PutCheckpoint(testCheckpoint(StateRunning, "wave 1 running")); err != nil {
+		t.Fatal(err)
+	}
+
+	// A local tag under the run's own name, already pointing at the
+	// non-terminal commit just written — as if something else in this
+	// checkout placed it first. The store moves no local branch ref of its
+	// own (CommitLocal aside, unused here), so the object has to be fetched
+	// into the checkout before it can be tagged.
+	tag := TagName(testRun)
+	foreign := s.head
+	gitRun(t, s.git.dir, "fetch", "--quiet", "origin", foreign)
+	gitRun(t, s.git.dir, "tag", tag, foreign)
+
+	if _, err := s.PutCheckpoint(testCheckpoint(StateCompleted, "the run is over")); err == nil {
+		t.Fatal("the terminal checkpoint should have refused to move the foreign local tag")
+	}
+
+	// The local tag was not force-moved onto the new terminal commit.
+	after := strings.TrimSpace(gitRun(t, s.git.dir, "rev-parse", "refs/tags/"+tag))
+	if after != foreign {
+		t.Errorf("the local tag moved from %s to %s", foreign, after)
+	}
+	// And nothing was placed on origin either: a refused local stage must
+	// never reach the push.
+	if _, placed, err := s.RunTag(); err != nil || placed {
+		t.Errorf("origin carries the tag despite the local clobber refusal (%v %v)", placed, err)
+	}
+}
+
 // What a restarted reconciler does: recovery is a fetch, and then this.
 func TestARestartedReconcilerReadsTheRunBack(t *testing.T) {
 	o := newOrigin(t)

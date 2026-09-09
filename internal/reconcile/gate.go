@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -150,6 +151,21 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 		result = "fail"
 	}
 
+	// The command ran in `dir`, a throwaway os.MkdirTemp worktree OUTSIDE the
+	// repository (git.go's tempWorktree) — a host-local path a failing
+	// command's own output (a stack trace, a shell error line naming its
+	// $PWD) can carry verbatim. Redact it, the reconciler's own repository
+	// checkout, and the operator's home directory before anything here is
+	// recorded: this evidence is pushed to origin, which may be a public repo.
+	redactPaths := []string{dir, r.opts.Repo}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		redactPaths = append(redactPaths, home)
+	}
+	var redacted bool
+	stdout, changedOut := redactHostPaths(stdout, redactPaths)
+	stderr, changedErr := redactHostPaths(stderr, redactPaths)
+	redacted = changedOut || changedErr
+
 	tickID, attempt := marker.TickID, marker.Attempt
 	record := runstate.Evidence{
 		Key: key,
@@ -178,7 +194,7 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 			Stdout:    bound(stdout),
 			Stderr:    bound(stderr),
 			Truncated: len(stdout) > maxInlineOutput || len(stderr) > maxInlineOutput,
-			Redacted:  false,
+			Redacted:  redacted,
 			MaxBytes:  maxInlineOutput,
 		}},
 		Result:         result,
@@ -295,6 +311,31 @@ func runShell(ctx context.Context, dir, command string, timeout time.Duration) (
 		// process never reported one.
 		return stdout, stderr, -1, err
 	}
+}
+
+// redactHostPaths strips every occurrence of any of paths from text, and
+// reports whether it changed anything. A path is matched both as given and
+// through its resolved form, so a symlinked host temp directory (macOS's
+// /tmp -> /private/tmp, for one) is caught either way a command happened to
+// print it.
+func redactHostPaths(text string, paths []string) (redacted string, changed bool) {
+	redacted = text
+	for _, path := range paths {
+		if path == "" {
+			continue
+		}
+		candidates := []string{path}
+		if real, err := filepath.EvalSymlinks(path); err == nil && real != path {
+			candidates = append(candidates, real)
+		}
+		for _, candidate := range candidates {
+			if strings.Contains(redacted, candidate) {
+				redacted = strings.ReplaceAll(redacted, candidate, "<redacted-host-path>")
+				changed = true
+			}
+		}
+	}
+	return redacted, changed
 }
 
 func bound(text string) string {
