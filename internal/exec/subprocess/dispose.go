@@ -60,11 +60,19 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 			record.Attempt, record.JobID)
 	}
 
+	// The one refusal a Reason does NOT lift. A Reason permits disposal of an
+	// attempt whose FACTS were never persisted, because "we threw it away" then
+	// has an author; it has never had anything to say about commits. A caller
+	// holding a reason it believes in — "the tick is closed", "the attempt was
+	// rejected" — is exactly the caller most likely to be wrong about whether
+	// the work reached a remote, and this deletes the only copy when it is.
+	// KeepBranch is the way to dispose of such an attempt: the worktree goes,
+	// the commits stay.
 	head := headOf(record.Repo, record.Branch)
-	if !opts.KeepBranch && head != "" && opts.Reason == "" && !e.onRemote(record, head) {
+	if !opts.KeepBranch && head != "" && !e.onRemote(record, head) {
 		return refuse(RefusedBranchUnsafe,
 			"branch %s holds commits no remote has: deleting it would discard the only copy. "+
-				"Push it, keep the branch, or dispose with an explicit reason.", record.Branch)
+				"Push it, or dispose with KeepBranch.", record.Branch)
 	}
 
 	// The exclude line comes out FIRST, while the worktree it was resolved
@@ -101,7 +109,16 @@ func excludeDirFor(record *attemptRecord) string {
 
 // onRemote answers whether the attempt's commits already exist somewhere this
 // disposal is not about to delete.
+//
+// The base is one such place. A branch still at (or behind) the commit it was
+// cut from carries no commit of its own, so there is nothing on it to lose —
+// which is what a read-only attempt and an attempt that committed nothing both
+// look like, and neither should be kept forever for the sake of commits that
+// are not there.
 func (e *Executor) onRemote(record *attemptRecord, head string) bool {
+	if record.BaseSHA != "" && isAncestor(record.Repo, head, record.BaseSHA) {
+		return true
+	}
 	if record.Remote == "" {
 		return false
 	}

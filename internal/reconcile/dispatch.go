@@ -219,7 +219,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		// never redispatched.
 		marker := handleFromMap(existing.JobHandle)
 		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
-		handle, executor, err := r.adopt(marker)
+		handle, executor, err := r.adopt(ctx, marker)
 		if err != nil {
 			return nil, nil, marker, err
 		}
@@ -229,84 +229,147 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return handle, executor, marker, nil
 	}
 
+	number := nextAttemptNumber(attempts)
+	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
+		dispatch, marker := r.planDispatch(entry, number)
+
+		r.setTick(tick, "ready")
+		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
+			return nil, nil, marker, err
+		}
+
+		outcome, err := r.store.PutAttempt(runstate.Attempt{
+			Attempt:      number,
+			TickID:       tick,
+			DispatchedAt: r.now().UTC().Format(time.RFC3339),
+			JobHandle:    marker.asMap(),
+			Provenance:   r.attemptProvenance(dispatch),
+		})
+		if err != nil {
+			return nil, nil, marker, fmt.Errorf("record the dispatch of %s: %w", tick, err)
+		}
+		if !outcome.EffectPermitted() {
+			// The loser of a dispatch race is refused by the repository, not by
+			// a lock it might have lost — and it must NOT start a job.
+			handle, executor, adopted, ok, err := r.adoptConflicted(ctx, tick, number, string(outcome))
+			if err != nil {
+				return nil, nil, adopted, err
+			}
+			if ok {
+				return handle, executor, adopted, nil
+			}
+			// The number is somebody else's tick. Recompute it against origin
+			// as it stands NOW rather than adopting another tick's job.
+			refreshed, err := r.store.Attempts()
+			if err != nil {
+				return nil, nil, marker, err
+			}
+			if next := nextAttemptNumber(refreshed); next > number {
+				number = next
+			} else {
+				number++
+			}
+			continue
+		}
+
+		// Appendix A #7: the marker is read back from ORIGIN before anything
+		// acts on it. A write that silently did not land must not look like a
+		// dispatch somebody can find — and this one is what stops the next
+		// incarnation from dispatching again.
+		if _, err := r.store.Fetch(); err != nil {
+			return nil, nil, marker, err
+		}
+		if _, ok, err := r.store.Attempt(number); err != nil || !ok {
+			return nil, nil, marker, fmt.Errorf(
+				"the dispatch marker for %s attempt %d did not land on %s: nothing is started behind a record that "+
+					"does not exist (%v)", tick, number, r.opts.Remote, err)
+		}
+
+		// The effect, now that the marker proves it has not happened.
+		if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
+			return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
+		}
+		r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
+
+		executor, err := r.opts.NewExecutor(dispatch)
+		if err != nil {
+			return nil, nil, marker, fmt.Errorf("build the executor for %s: %w", tick, err)
+		}
+		handle, err := executor.Start(r.jobSpec(dispatch))
+		if err != nil {
+			return nil, nil, marker, r.startFailure(tick, err)
+		}
+		r.noteAlive(dispatch.JobID)
+		r.setAttempt(tick, number)
+		r.setTick(tick, "dispatched")
+		r.record(tick, StageDispatched, "attempt %d started as %s", number, dispatch.JobID)
+		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
+			return nil, nil, marker, err
+		}
+		return handle, executor, marker, nil
+	}
+	return nil, nil, attemptHandle{}, fmt.Errorf(
+		"%d dispatch numbers running were taken by other ticks of this run while dispatching %s; that is an "+
+			"operational problem, not a race to spin on", maxDispatchConflicts, tick)
+}
+
+// maxDispatchConflicts bounds the recompute-on-a-taken-number loop, for
+// integrate's reason: a number moving forever under a writer is an operational
+// problem to report, not a conflict to spin on.
+const maxDispatchConflicts = 8
+
+// nextAttemptNumber is the number a new dispatch takes. Attempt numbers are
+// RUN-wide, not per tick: the run state store keys attempts by number alone.
+func nextAttemptNumber(attempts []runstate.Attempt) int {
 	number := len(attempts) + 1
 	for _, existing := range attempts {
 		if existing.Attempt >= number {
 			number = existing.Attempt + 1
 		}
 	}
-	dispatch, marker := r.planDispatch(entry, number)
+	return number
+}
 
-	r.setTick(tick, "ready")
-	if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
-		return nil, nil, marker, err
-	}
+// adoptConflicted resolves the marker origin already held at the number this
+// reconciler chose. It reports whether that marker was adopted.
+//
+// The check that makes it safe is the tick id. Attempt numbers are run-wide,
+// so the record that refused this create is not necessarily ABOUT this tick —
+// two reconcilers dispatching different ticks of one run race for the same
+// number, and the loser reading the winner's marker would adopt another tick's
+// job: its worktree, its branch, its report, collected and merged under this
+// tick's name. A record for a different tick is therefore not adopted at all;
+// the caller recomputes the number against origin as it stands now.
+func (r *Reconciler) adoptConflicted(ctx context.Context, tick string, number int, outcome string) (
+	*subprocess.JobHandle, Executor, attemptHandle, bool, error) {
 
-	outcome, err := r.store.PutAttempt(runstate.Attempt{
-		Attempt:      number,
-		TickID:       tick,
-		DispatchedAt: r.now().UTC().Format(time.RFC3339),
-		JobHandle:    marker.asMap(),
-		Provenance:   r.attemptProvenance(dispatch),
-	})
-	if err != nil {
-		return nil, nil, marker, fmt.Errorf("record the dispatch of %s: %w", tick, err)
-	}
-	if !outcome.EffectPermitted() {
-		// The loser of a dispatch race is refused by the repository, not by a
-		// lock it might have lost — and it must NOT start a job.
-		if _, err := r.store.Fetch(); err != nil {
-			return nil, nil, marker, err
-		}
-		recorded, ok, err := r.store.Attempt(number)
-		if err != nil || !ok {
-			return nil, nil, marker, fmt.Errorf("attempt %d of %s is on origin and unreadable: %v", number, tick, err)
-		}
-		marker = handleFromMap(recorded.JobHandle)
-		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
-		handle, executor, adoptErr := r.adopt(marker)
-		if adoptErr != nil {
-			return nil, nil, marker, adoptErr
-		}
-		r.record(tick, StageAdopted, "the dispatch marker was already on origin (%s); this reconciler adopted rather than dispatching", outcome)
-		return handle, executor, marker, nil
-	}
-
-	// Appendix A #7: the marker is read back from ORIGIN before anything acts
-	// on it. A write that silently did not land must not look like a dispatch
-	// somebody can find — and this one is what stops the next incarnation from
-	// dispatching again.
 	if _, err := r.store.Fetch(); err != nil {
-		return nil, nil, marker, err
+		return nil, nil, attemptHandle{}, false, err
 	}
-	if _, ok, err := r.store.Attempt(number); err != nil || !ok {
-		return nil, nil, marker, fmt.Errorf(
-			"the dispatch marker for %s attempt %d did not land on %s: nothing is started behind a record that "+
-				"does not exist (%v)", tick, number, r.opts.Remote, err)
+	recorded, ok, err := r.store.Attempt(number)
+	if err != nil || !ok {
+		return nil, nil, attemptHandle{}, false, fmt.Errorf(
+			"attempt %d of %s is on origin and unreadable: %v", number, tick, err)
 	}
-
-	// The effect, now that the marker proves it has not happened.
-	if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
-		return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
+	if recorded.TickID != tick {
+		r.record(tick, StageRedispatched,
+			"attempt %d on origin is %s's, not %s's; the number is recomputed rather than another tick's job adopted",
+			number, recorded.TickID, tick)
+		return nil, nil, attemptHandle{}, false, nil
 	}
-	r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
-
-	executor, err := r.opts.NewExecutor(dispatch)
+	marker := handleFromMap(recorded.JobHandle)
+	marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
+	handle, executor, err := r.adopt(ctx, marker)
 	if err != nil {
-		return nil, nil, marker, fmt.Errorf("build the executor for %s: %w", tick, err)
+		return nil, nil, marker, false, err
 	}
-	handle, err := executor.Start(r.jobSpec(dispatch))
-	if err != nil {
-		return nil, nil, marker, r.startFailure(tick, err)
-	}
-	r.noteAlive(dispatch.JobID)
-	r.setAttempt(tick, number)
-	r.setTick(tick, "dispatched")
-	r.record(tick, StageDispatched, "attempt %d started as %s", number, dispatch.JobID)
-	if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
-		return nil, nil, marker, err
-	}
-	return handle, executor, marker, nil
+	// The checkpoint says which attempt this tick is on however the reconciler
+	// got there: a run that adopted rather than dispatched still has to say 1
+	// and not 0, because the next incarnation reads that number.
+	r.setAttempt(tick, recorded.Attempt)
+	r.record(tick, StageAdopted,
+		"the dispatch marker was already on origin (%s); this reconciler adopted rather than dispatching", outcome)
+	return handle, executor, marker, true, nil
 }
 
 // spent reports whether an attempt on origin is one there is nothing left to
@@ -405,7 +468,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
-		WriteRef: "refs/heads/tick/" + entry.TickID, BaseSHA: base, StateDir: stateDir,
+		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		Profile: r.profileFor(entry.Role),
 	}
 	if r.budget.Effective > 0 {
@@ -419,6 +482,29 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 		Model: dispatch.Profile.Model, PromptDigest: promptDigest(dispatch.Profile),
 	}
 	return dispatch, marker
+}
+
+// attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
+// §4.3's golden shape: refs/heads/ticfac/run-<run>/tick-<tick>/attempt-<n>.
+// The job id already carries that identity, so the ref is the job id under the
+// namespace the source grant bounds.
+//
+// Every attempt of every run gets a ref of its own, and that is the whole
+// point. One ref per TICK made the git identity coarser than the dispatch
+// identity the rest of this package is built on (repo key, run, tick,
+// attempt): a second attempt found the branch already there and was refused
+// live by the executor, its pushes collided non-fast-forward, and a merge
+// could not tell one attempt's commits from another's.
+func attemptWriteRef(jobID string) string {
+	return "refs/heads/ticfac/" + jobID
+}
+
+// attemptRefPrefix is the namespace ONE RUN's write grade may advance —
+// job-protocol.json's `write_ref_prefix`, bounded per run rather than per
+// installation so a credential issued for this run cannot advance another
+// run's attempt refs.
+func attemptRefPrefix(runID string) string {
+	return "refs/heads/ticfac/run-" + runID + "/"
 }
 
 func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
@@ -437,7 +523,7 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 		ArtifactPrefix: "runs/" + d.RunID + "/" + d.TickID + "/",
 		Credentials: subprocess.Credentials{
 			Model:  subprocess.ModelCredential{Shorthand: "issued-by-host"},
-			Source: sourceCredentialFor(d.Role),
+			Source: sourceCredentialFor(d.Role, d.RunID),
 		},
 		// The EFFECTIVE budget, not the requested one: a job is issued the
 		// number that will govern (Appendix A #12).
@@ -452,12 +538,12 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 // issues a read-only attempt no credential and launches its runner without the
 // environment or the git configuration a push needs
 // (internal/exec/subprocess/grade.go).
-func sourceCredentialFor(role string) subprocess.SourceCredential {
+func sourceCredentialFor(role, runID string) subprocess.SourceCredential {
 	if sourceGradeFor(role) == "read-only" {
 		return subprocess.SourceCredential{Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "read-only"}}
 	}
 	return subprocess.SourceCredential{
-		Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "write", WriteRefPrefix: "refs/heads/tick/"},
+		Grant: &subprocess.SourceGrant{Issuer: "host", Grade: "write", WriteRefPrefix: attemptRefPrefix(runID)},
 	}
 }
 
@@ -467,11 +553,14 @@ func sourceCredentialFor(role string) subprocess.SourceCredential {
 // It never dispatches. If the executor has an attempt under the dispatch's
 // private state root, the handle for it is reconstructed and INSPECTED; if
 // there is none, nothing was ever started and the job is started now.
-func (r *Reconciler) adopt(marker attemptHandle) (*subprocess.JobHandle, Executor, error) {
+func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subprocess.JobHandle, Executor, error) {
 	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
 	}
+	// The marker and the claim are two effects, in that order, and adopting is
+	// what happens when a reconciler died between them.
+	r.replayClaim(ctx, marker.TickID)
 	state, found := findAttemptState(marker.StateRoot)
 	if !found {
 		// The marker landed and the dispatch did not: the previous reconciler
@@ -502,6 +591,40 @@ func (r *Reconciler) adopt(marker attemptHandle) (*subprocess.JobHandle, Executo
 	}
 	r.noteAlive(marker.JobID)
 	return handle, executor, nil
+}
+
+// replayClaim makes the tracker say this tick is being worked, for an attempt
+// that is being ADOPTED rather than dispatched.
+//
+// claimDispatch's order is marker, then claim, then start, because a marker
+// written after the dispatch guards nothing. The cost of that order is a
+// window: a reconciler that died between the create and the claim left a
+// marker on origin and a tick the tracker still reads as open. Nothing else
+// closes that window — adopt never dispatches, so it never reaches
+// claimDispatch's claim — and a tick worked through a whole run while the
+// tracker says nobody holds it is the tracker lying about its own subject.
+//
+// It is settled from the tracker's OWN answer rather than from a memory of
+// having claimed, so it is idempotent: a tick already in progress is left
+// alone, and a tracker that cannot be read is reported rather than guessed at.
+// A failure here is not fatal — the attempt exists either way, and refusing a
+// tick because its claim could not be replayed would strand work that is
+// already running.
+func (r *Reconciler) replayClaim(ctx context.Context, tick string) {
+	current, err := r.tracker.Show(ctx, tick)
+	if err != nil {
+		r.record(tick, StageAdopted, "the adopted attempt's tick could not be read from the tracker: %v", err)
+		return
+	}
+	if current.Status != "open" {
+		return
+	}
+	if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
+		r.record(tick, StageAdopted, "the adopted attempt's tick could not be claimed: %v", err)
+		return
+	}
+	r.record(tick, StageClaimed,
+		"claimed for %s while adopting: the dispatch that made the marker never reached its claim", r.opts.Owner)
 }
 
 func (r *Reconciler) dispatchFor(marker attemptHandle) Dispatch {
@@ -624,6 +747,28 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 	r.setTick(marker.TickID, "reported")
 	r.record(marker.TickID, StageCollected, "verdict %s (%s)", collected.Verdict, collected.Result.Outcome)
 
+	// Appendix A #10's premise is that compliance is not a property of the
+	// model, and a boundary measured from a base the enforced party can choose
+	// is not a boundary. The executor reads the base out of the attempt record
+	// beside the worker's own worktree, owned by the worker's uid; the
+	// reconciler's marker is on ORIGIN, written before the dispatch and never
+	// in the worker's reach. So the two are compared, and a diff measured from
+	// anything but the base this run dispatched is refused rather than trusted:
+	// a base moved forward to the attempt's own head makes every change
+	// invisible, boundary violations included.
+	if collected.Result != nil && marker.BaseSHA != "" && collected.Result.Source.BaseSHA != marker.BaseSHA {
+		if err := r.rejectDurably(marker, collected.Verdict, "the collected base is not the dispatched base"); err != nil {
+			return nil, err
+		}
+		r.record(marker.TickID, StageRejected, "the collect was measured from %s, not from the dispatched base %s",
+			short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+		r.disposeRejected(handle, executor, marker, "the collected base is not the base this run dispatched")
+		return nil, r.refuse(RefusedBoundary, marker.TickID,
+			"attempt %d of %s was collected against base %s, but this run dispatched it at %s: the diff the boundary "+
+				"check read is not the diff of this attempt, so nothing it reports about it can be believed",
+			marker.Attempt, marker.TickID, short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+	}
+
 	// Appendix A #10's reporting half: a boundary that refuses silently tells
 	// nobody the model tried. The executor enforced it; the reconciler says so
 	// where a person reading the run will find it, and refuses the merge.
@@ -632,6 +777,7 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 		if r.guarded(guardSubstrateEnforcesBoundary) {
 			r.setTick(marker.TickID, "rejected")
 			r.record(marker.TickID, StageRejected, "boundary violation: %s", strings.Join(collected.BoundaryViolations, ", "))
+			r.disposeRejected(handle, executor, marker, "the attempt wrote under an authority that is not its own")
 			return nil, r.refuse(RefusedBoundary, marker.TickID,
 				"attempt %d of %s wrote under an authority that is not its own (%s): %s",
 				marker.Attempt, marker.TickID, strings.Join(collected.BoundaryViolations, ", "), collected.Message)
@@ -646,6 +792,8 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 			return nil, err
 		}
 		r.record(marker.TickID, StageRejected, "%s: %s", collected.Verdict, collected.Message)
+		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
+			" is "+collected.Verdict)
 		return nil, r.refuse(RefusedCollect, marker.TickID, "attempt %d of %s is %s: %s",
 			marker.Attempt, marker.TickID, collected.Verdict, collected.Message)
 	}
@@ -664,15 +812,92 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, marker attemptHandle) {
 	reason := fmt.Sprintf("attempt %d of %s is merged into %s and the tick is closed",
 		marker.Attempt, marker.TickID, r.branch)
+	r.tearDown(handle, executor, marker, reason, false)
+}
+
+// disposeRejected is cleanUp for an attempt that will never be merged.
+//
+// Nothing used to dispose of a rejection at all — Dispose was reached only
+// after a close — so every refused attempt left its worktree and its branch in
+// the operator's checkout forever, and the next attempt of the same tick found
+// them there. That is the third thing this repair is about, and it is why the
+// teardown happens HERE, in the two places a collect refuses, rather than at
+// the end of a run that a refusal stops before it gets there.
+//
+// What it must not do is take the work with it. The refusal is what a person
+// reads next, and a branch is where they read it from, so a branch that
+// carries commits beyond its base is KEPT and only the worktree goes. Nothing
+// about "the attempt failed" makes its commits disposable.
+func (r *Reconciler) disposeRejected(handle *subprocess.JobHandle, executor Executor, marker attemptHandle, reason string) {
+	if handle == nil || executor == nil {
+		return
+	}
+	r.tearDown(handle, executor, marker, reason, r.attemptCarriesWork(marker))
+}
+
+// attemptCarriesWork asks the same question spent() asks, of the LOCAL branch:
+// is there a commit on it that the base it was cut from does not already have?
+func (r *Reconciler) attemptCarriesWork(marker attemptHandle) bool {
+	branch := branchOf(marker.WriteRef)
+	head, err := r.git.resolve(branch)
+	if err != nil || head == "" {
+		return false
+	}
+	if marker.BaseSHA == "" {
+		return true
+	}
+	return head != marker.BaseSHA && !r.git.contains(head, marker.BaseSHA)
+}
+
+// tearDown is Appendix A #1's order, and disposal's safety, in one place.
+//
+// The credential dies first and the attempt second: a container torn down
+// before its credential is revoked can spend on the way out. Then the executor
+// refuses to delete a branch whose head no remote has, and that refusal is
+// HONOURED rather than argued with — the reconciler retries keeping the
+// branch, so the commits stay and the worktree still goes. A teardown that
+// answered "delete it anyway" would be the reconciler taking back the one
+// safety the executor has against a run that thought it was finished.
+func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, marker attemptHandle,
+	reason string, keepBranch bool) {
+
 	if _, err := executor.Cancel(handle); err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the attempt's credential could not be revoked: %v", err)
 		return
 	}
-	if err := executor.Dispose(handle, subprocess.DisposeOptions{Reason: reason}); err != nil {
+	err := executor.Dispose(handle, subprocess.DisposeOptions{Reason: reason, KeepBranch: keepBranch})
+	if err != nil && !keepBranch && isBranchUnsafe(err) {
+		// The retry is a teardown of its own, so A1's order is kept for it
+		// too: revoke, then tear down. Cancel is idempotent — the credential
+		// is already gone and saying so again costs a record that is already
+		// there — and the alternative is a dispose with no revoke in front of
+		// it, which is the shape the invariant exists to refuse.
+		if _, err := executor.Cancel(handle); err != nil {
+			r.record(marker.TickID, StageCleanedUp, "the attempt's credential could not be revoked: %v", err)
+			return
+		}
+		if retry := executor.Dispose(handle, subprocess.DisposeOptions{Reason: reason, KeepBranch: true}); retry != nil {
+			r.record(marker.TickID, StageCleanedUp, "the attempt was not disposed: %v", retry)
+			return
+		}
+		r.record(marker.TickID, StageCleanedUp,
+			"%s; the branch is kept because it holds commits %s does not have", reason, r.opts.Remote)
+		return
+	}
+	if err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the attempt was not disposed: %v", err)
 		return
 	}
+	if keepBranch {
+		r.record(marker.TickID, StageCleanedUp, "%s; the worktree is gone and the branch is kept for the commits on it", reason)
+		return
+	}
 	r.record(marker.TickID, StageCleanedUp, "%s", reason)
+}
+
+func isBranchUnsafe(err error) bool {
+	refusal, ok := subprocess.AsRefusal(err)
+	return ok && refusal.Reason == subprocess.RefusedBranchUnsafe
 }
 
 // DefaultExecutor is the factory a production run uses: the local subprocess

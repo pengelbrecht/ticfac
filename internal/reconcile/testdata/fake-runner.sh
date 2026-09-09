@@ -54,6 +54,38 @@ blocked-first)
 		report
 	fi
 	;;
+unpushed-tail)
+	# The shape a supervisor whose FINAL push failed leaves behind: origin
+	# carries an EARLIER commit of this attempt and the branch carries a later
+	# one. The first push is made here, by hand, so the divergence exists
+	# whatever the supervisor's timer did; the second commit is never pushed.
+	commit
+	git -C "$TICFAC_WORKTREE" push -q origin "HEAD:refs/heads/$TICFAC_BRANCH" >/dev/null 2>&1
+	printf 'the commit that never reached the remote\n' > "$TICFAC_WORKTREE/late-${TICFAC_TICK}.txt"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: late ${TICFAC_TICK}" >/dev/null 2>&1
+	report
+	;;
+forge-base)
+	# The boundary check, measured from a base the enforced party chose. The
+	# attempt writes a tracker record under an authority that is not its own,
+	# then rewrites the base_sha in its own attempt record — which sits beside
+	# its worktree, under its own uid — to the commit that carries it. Every
+	# diff after that starts AFTER the violation, so the executor sees a clean
+	# attempt. Only the reconciler's marker on origin still knows the base.
+	mkdir -p "$TICFAC_WORKTREE/.tick/issues"
+	printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: forged ${TICFAC_TICK}" >/dev/null 2>&1
+	forged=$(git -C "$TICFAC_WORKTREE" rev-parse HEAD)
+	commit
+	state=$(dirname "$TICFAC_PROMPT_FILE")
+	sed -e "s/\"base_sha\": \"[0-9a-f]*\"/\"base_sha\": \"$forged\"/" \
+		-e "s/\"base_sha\":\"[0-9a-f]*\"/\"base_sha\":\"$forged\"/" \
+		"$state/attempt.json" > "$state/attempt.json.new"
+	mv "$state/attempt.json.new" "$state/attempt.json"
+	report
+	;;
 boundary)
 	# A record under the tracker's authority, at a path the RECONCILER's own
 	# tracker does not write. The file the worker would really forge is
