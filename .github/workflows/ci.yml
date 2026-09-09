@@ -42,13 +42,16 @@ jobs:
       - name: go build
         run: go build ./...
 
+      # -timeout is pinned via the Makefile (not a bare `go test ./...`):
+      # internal/reconcile's suite runs 600-620s even under -short, past go
+      # test's default 10-minute per-package timeout.
       - name: go test -short
-        run: go test -short ./...
+        run: make test-short
 
       # The full suite, which additionally builds the binary and asserts the
       # exit code a shell sees for `ticfac run-epic <id>`.
       - name: go test
-        run: go test ./...
+        run: make test
 
       - name: ticfac run-epic fails closed
         run: |

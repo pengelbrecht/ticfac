@@ -21,8 +21,10 @@ const maxContendedPushes = 8
 type Options struct {
 	// Repo is a git repository the store may run in. The store never reads or
 	// writes a working tree: it builds commits with plumbing over the fetched
-	// origin commit. The one local ref it moves is Branch, and only from
-	// CommitLocal, so the repository must not have Branch checked out.
+	// origin commit. The one local BRANCH ref it moves is Branch, and only
+	// from CommitLocal, so the repository must not have Branch checked out.
+	// (ensureRunTag also stages a local TAG ref before pushing it, but never a
+	// pre-existing one that points somewhere else — see doc.go.)
 	Repo string
 	// Remote is the remote holding the durable authority. Default "origin".
 	Remote string
@@ -660,6 +662,16 @@ func (s *Store) ensureRunTag() error {
 		return nil
 	}
 	tag := TagName(s.runID)
+	// A pre-existing LOCAL tag by this name is not this store's to move: the
+	// store's own contract is that the tag it places is the ORIGIN one
+	// (RunTag reads origin, never local), so a local tag under the same name
+	// pointing elsewhere belongs to something else sharing this checkout and
+	// force-moving it would be silent data loss for whoever owns it.
+	if existing, _, err := s.git.try(nil, nil, "rev-parse", "--verify", "--quiet", "refs/tags/"+tag); err == nil {
+		if existing != "" && existing != s.head {
+			return fmt.Errorf("runstate: local tag %s already points to %s (not the run head %s); refusing to move a pre-existing local tag this store does not own", tag, existing, s.head)
+		}
+	}
 	if _, err := s.git.run("tag", "-f", tag, s.head); err != nil {
 		return err
 	}
