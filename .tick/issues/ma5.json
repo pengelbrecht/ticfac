@@ -1,0 +1,17 @@
+{
+  "id": "ma5",
+  "title": "Review repair D: run stays resumable after a refusal, bounded settlement wait, gate timeout, push-loop errors, A11/A12/A13 in production",
+  "description": "Should-fix findings from the final review in internal/reconcile, sequenced after repair A (same package): (1) reconcile.go:689-697 every per-tick refusal writes a terminal StateFailed checkpoint, so a normal restart says 'already failed' and the spent-attempt redispatch (dispatch.go:205-216) is reachable only in a crash window; make a refusal leave the run resumable (a non-terminal 'stopped'/'held' state, or a documented restart path) so a rejected attempt is redispatched on the next run without a new --run-id. (2) dispatch.go:566 waitForSettlement has no reconciler-side deadline (pid reuse keeps 'running' forever; EPERM counts as alive in process_unix.go:28): bound by IssuedAt + WallSeconds + margin and refuse as unaddressed past it. (3) dispatch.go:496/581 a lost attempt (supervisor died before settlement) is held forever with no operator path: give the operator a way to settle it — a 'ticfac settle \u003crun\u003e \u003ctick\u003e \u003cattempt\u003e' or an explicit --release, recorded as a decision — consistent with A6 (never redispatch a live one). (4) gate.go:279 runShell: set cmd.WaitDelay and run the gate in its own process group, killing the group on timeout. (5) integrate.go:78 and refresh.go:94-106 push loops retry any error 8 times as if it were a lease race; classify with leaseRefused and return other errors. (6) A13: record the SHA the gate actually ran on (merged.GateSHA) in the evidence fingerprint/record, and let freshness detect the integration target moving (gate.go:54-56, 210-224). (7) A11: StrikeOut/ClockRelease/PersonRelease have no production caller and holds are in-memory only (guards.go:117): a rejected or BLOCKED attempt strikes the unit out, the hold is persisted in the checkpoint, and a person releases it through the tracker (tk awaiting/approve) — or, if you decide the wiring belongs to Phase 2, record that decision with tk-visible evidence and make the doc/comment say adapter-only; decide and log. (8) A12: print the effective budget after clamping to the operator (cli.go:162-165) and refuse a JobSpec whose MaxCostUSD nothing enforces, or document it as informational. (9) prune registered-but-missing temp worktrees at startup (git.go:145-160 defer-only removal), and assert 'git worktree list' is clean after a fixture run. (10) tracker.go:270 comment: state that same-path concurrent writes are last-writer-wins at concurrency one. Use -timeout 45m for the reconcile package.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "7mj"
+  ],
+  "parent": "qeu",
+  "acceptance_criteria": "A restart after a refusal redispatches the spent attempt without a new run id (test); settlement wait is bounded (test with a fake pid); gate timeout kills the process group (test); push errors are classified; evidence carries the gate SHA; A11 hold persists across restart (or the decision is logged and documented); worktree list clean after a run (test); go test -short -timeout 45m ./... green",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-09T08:01:18.656866Z",
+  "updated_at": "2026-09-09T08:01:18.656866Z"
+}
