@@ -381,11 +381,21 @@ func TestARoleAnswerThatAsksForAPersonLeavesTheTickOpen(t *testing.T) {
 // produced without touching the executor package — and it stands in for the
 // thing that actually produces one: a model.
 func corruptRoleResult(apply func(*subprocess.RoleResult)) func(Executor) Executor {
-	return func(inner Executor) Executor { return &corrupting{Executor: inner, apply: apply} }
+	return corruptRoleResultFor("review-epic", apply)
+}
+
+// corruptRoleResultFor is corruptRoleResult aimed at ONE role. The role is
+// named rather than assumed because every job on this executor returns an
+// envelope — an implementation tick's as much as a review's — and a corrupter
+// that rewrote all of them would change the first tick of the run when the test
+// is about the last.
+func corruptRoleResultFor(role string, apply func(*subprocess.RoleResult)) func(Executor) Executor {
+	return func(inner Executor) Executor { return &corrupting{Executor: inner, role: role, apply: apply} }
 }
 
 type corrupting struct {
 	Executor
+	role  string
 	apply func(*subprocess.RoleResult)
 }
 
@@ -394,7 +404,7 @@ func (c *corrupting) CollectDetail(handle *subprocess.JobHandle) (*subprocess.Co
 	if err != nil || collected.Result == nil || collected.Result.RoleResult == nil {
 		return collected, err
 	}
-	if collected.Result.RoleResult.Role == "review-epic" {
+	if collected.Result.RoleResult.Role == c.role {
 		c.apply(collected.Result.RoleResult)
 	}
 	return collected, nil

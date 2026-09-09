@@ -570,3 +570,167 @@ func openRunStore(t *testing.T, repo, branch, runID string) *runstate.Store {
 	}
 	return store
 }
+
+// ------------------------------------------ repair G: the false-close path ---
+
+// A worker that COMMITTED and answered BLOCKED is an escalation, never a merge.
+//
+// The hole repair F found while it was fixing the teardowns: collect's verdict
+// only ever asked whether a report EXISTS, not what it says, and this
+// reconciler only ever read the verdict. So the one shape the fixtures never
+// produced — commits, a report, and STATUS: BLOCKED on the end of it — collected
+// as `ready-to-merge`, and the work was merged, gated and the tick CLOSED with
+// the worker's escalation sitting unread in a role result nobody looked at.
+// `blocked-first` never caught it because a blocked worker there commits
+// nothing, so `no-commits` refused it for a reason that had nothing to do with
+// what it said.
+//
+// The rule this asserts is the role job's, for the same reason: BLOCKED and
+// NEEDS_CONTEXT are answers that ask for a person, so the tick stays OPEN, the
+// branch is kept for the person to read, and nothing reaches the integration
+// branch.
+func TestAnAttemptThatCommittedAndAnsweredBlockedIsAnEscalationAndNotAMerge(t *testing.T) {
+	escalating := fixtureOptions{mode: "blocked-with-work"}
+	f := newFixture(t, escalating)
+
+	run, result, err := f.run(f.Repo, escalating)
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedNeedsHuman {
+		t.Fatalf("the run failed as %+v, want %s", result.Failure, RefusedNeedsHuman)
+	}
+
+	// Appendix A #9: the message is what sends the next repair somewhere. This
+	// one has to carry the worker's own words, because the person it asks for
+	// is the only one who can act on them.
+	if !strings.Contains(result.Failure.Message, subprocess.StatusBlocked) {
+		t.Errorf("the refusal does not say the worker answered BLOCKED: %s", result.Failure.Message)
+	}
+	if !strings.Contains(result.Failure.Message, "production credential") {
+		t.Errorf("the refusal does not carry what the worker said: %s", result.Failure.Message)
+	}
+
+	// The tick is NOT closed. This is the whole finding: it used to be.
+	current, err := f.Tracker.Show(context.Background(), "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status == "closed" {
+		t.Fatalf("a1 was closed behind a worker that said it was blocked (%s)", current.ClosedReason)
+	}
+
+	// Nothing of the attempt's own reached the integration branch: the merge is
+	// what the escalation refuses, and a refusal that merged first would be no
+	// refusal at all.
+	marker := attemptMarker(t, f, "a1", 1)
+	branch := branchOf(marker.WriteRef)
+	head := branchHead(f.Repo.Dir, branch)
+	if head == "" || head == marker.BaseSHA {
+		t.Fatalf("%s carries nothing beyond its base; this fixture proves nothing about an attempt that committed", branch)
+	}
+	if containsCommit(t, f, head, refFor("epic/qeu")) {
+		t.Errorf("%s is on the integration branch; the escalated attempt was merged", short(head))
+	}
+	stages := run.Stages("a1")
+	if !contains(stages, StageRejected) {
+		t.Errorf("a1's stages %v do not record the rejection", stages)
+	}
+	for _, forbidden := range []string{StageIntegrated, StageGatePassed, StageClosed} {
+		if contains(stages, forbidden) {
+			t.Errorf("a1 reached %s behind an escalation; its stages are %v", forbidden, stages)
+		}
+	}
+
+	// And the teardown is the rejected one's (0c1): the credential dies, the
+	// worktree goes, the BRANCH stays — it is where the person reads the work
+	// the escalation is about.
+	assertOneWorktree(t, f.Repo.Dir)
+	if _, err := os.Stat(filepath.Join(attemptStateDir(t, f, marker), "credential")); !os.IsNotExist(err) {
+		t.Errorf("the escalated attempt's credential is still live: %v", err)
+	}
+	if now := branchHead(f.Repo.Dir, branch); now != head {
+		t.Errorf("%s moved to %q; the teardown took the work the escalation is about", branch, now)
+	}
+
+	// And running the epic again does NOT quietly answer the escalation by
+	// dispatching over it: the attempt holds commits nothing merged, so the
+	// resume reports them and names the branch. A person settles it — which is
+	// the same route every rejected attempt that left work already takes.
+	second, resumed, err := f.run(f.Repo, escalating)
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if resumed.Failure == nil || resumed.Failure.Reason != RefusedRejectedWork {
+		t.Fatalf("the resumed run failed as %+v, want %s", resumed.Failure, RefusedRejectedWork)
+	}
+	if !strings.Contains(resumed.Failure.Message, branch) {
+		t.Errorf("the resumed refusal does not name the branch the work is on: %s", resumed.Failure.Message)
+	}
+	if got := second.Stages("a1"); contains(got, StageRedispatched) || contains(got, StageDispatched) {
+		t.Errorf("the escalated attempt was dispatched over rather than reported: %v", got)
+	}
+}
+
+// NEEDS_CONTEXT is the same answer with a different word on it, and the seam
+// that refuses is the report's STATUS — not the one status a fixture happens to
+// write. The envelope is rewritten on the way out of the executor, which is the
+// only place a status that is neither DONE nor the fake runner's own can come
+// from without a fake runner mode per status word.
+func TestAnAttemptThatAnsweredNeedsContextIsRefusedTheSameWay(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+	f.wrap = corruptRoleResultFor("implement-tick", func(result *subprocess.RoleResult) {
+		result.Status = subprocess.StatusNeedsContext
+		result.Summary = "which remote owns the branch"
+	})
+
+	_, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedNeedsHuman {
+		t.Fatalf("the run failed as %+v, want %s", result.Failure, RefusedNeedsHuman)
+	}
+	if !strings.Contains(result.Failure.Message, subprocess.StatusNeedsContext) {
+		t.Errorf("the refusal does not say what the worker answered: %s", result.Failure.Message)
+	}
+	if !strings.Contains(result.Failure.Message, "which remote owns the branch") {
+		t.Errorf("the refusal does not carry what the worker said: %s", result.Failure.Message)
+	}
+	current, err := f.Tracker.Show(context.Background(), "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status == "closed" {
+		t.Fatalf("a1 was closed behind a worker that asked for context (%s)", current.ClosedReason)
+	}
+}
+
+// The other side of the same seam: DONE_WITH_CONCERNS is NOT an escalation. It
+// is the status a worker uses to hand its concerns on with work that stands, and
+// a reconciler that stopped on it would stop on the ordinary case.
+func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
+	f := newFixture(t, fixtureOptions{})
+	f.wrap = corruptRoleResultFor("implement-tick", func(result *subprocess.RoleResult) {
+		result.Status = subprocess.StatusDoneWithConcerns
+		result.Summary = "the suite passes but the migration is untested"
+	})
+
+	_, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	current, err := f.Tracker.Show(context.Background(), "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Errorf("a1 is %s; DONE_WITH_CONCERNS is not an escalation", current.Status)
+	}
+}

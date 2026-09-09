@@ -1006,8 +1006,49 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 		return nil, r.refuse(RefusedCollect, marker.TickID, "attempt %d of %s is %s: %s",
 			marker.Attempt, marker.TickID, collected.Verdict, collected.Message)
 	}
+
+	// The branch would merge. What the worker SAID is the other half of the
+	// answer, and until repair G nothing read it: `ready-to-merge` says the
+	// attempt left commits and a report, not that the report agreed.
+	//
+	// The seam is here and not in the executor's classify on purpose. The
+	// collect vocabulary is four words shared by three implementations
+	// (contracts/collect-vocabulary.json), and a fifth invented for this would
+	// have to be invented identically in all three or they would disagree about
+	// the same tick with nothing failing. The executor is already honest about
+	// what the report says — it parses the STATUS line and puts it, with
+	// needs_human, in the role-result envelope — and the decision of what an
+	// escalation MEANS for a merge is the reconciler's, exactly as it is for a
+	// role job (collectRole, same two statuses, same refusal to close).
+	//
+	// It runs AFTER the verdict check rather than before it because an attempt
+	// that is `no-commits` or `missing-result` is already refused and already
+	// torn down, and the verdict is the more specific thing to tell a person
+	// about it — `blocked-first`, the fixture that answers BLOCKED with nothing
+	// committed, keeps reading as `no-commits`, which is what it is.
+	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+		if err := r.rejectDurably(marker, collected.Verdict, answer.Status+": "+answer.Summary); err != nil {
+			return nil, err
+		}
+		r.record(marker.TickID, StageRejected, "the worker answered %s: %s", answer.Status, answer.Summary)
+		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
+			" answered "+answer.Status)
+		return nil, r.refuse(RefusedNeedsHuman, marker.TickID,
+			"attempt %d of %s answered %s: %s. Its work is on %s and is NOT merged and the tick is NOT closed: a "+
+				"worker that asks for a person is not answered by merging what it wrote and closing the tick behind it",
+			marker.Attempt, marker.TickID, answer.Status, answer.Summary, branchOf(marker.WriteRef))
+	}
 	_ = status
 	return collected, nil
+}
+
+// needsHuman is the escalation set, read from the STATUS the worker wrote: the
+// two answers that reach a person whatever the verdict says about the branch.
+// It is subprocess.Report.NeedsHuman's rule applied to the status the executor
+// already carried into the role-result envelope, which is the value that
+// survives into the run's durable records.
+func needsHuman(status string) bool {
+	return status == subprocess.StatusBlocked || status == subprocess.StatusNeedsContext
 }
 
 // --------------------------------------------------------- the clean-up ---

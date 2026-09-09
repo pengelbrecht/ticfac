@@ -54,6 +54,17 @@ blocked-first)
 		report
 	fi
 	;;
+blocked-with-work)
+	# The escalation the fixtures never had: a worker that DID the work, committed
+	# it, and still ends its report with STATUS: BLOCKED — it found something only
+	# a person can settle and said so. `blocked-first` reports BLOCKED with no
+	# commit, so every check that only ever asked "is there a commit?" passed it
+	# for the wrong reason; this mode is the same escalation with a branch that
+	# looks perfectly mergeable.
+	commit
+	status="BLOCKED — the migration needs a production credential nobody gave me"
+	report
+	;;
 unpushed-tail)
 	# The shape a supervisor whose FINAL push failed leaves behind: origin
 	# carries an EARLIER commit of this attempt and the branch carries a later
