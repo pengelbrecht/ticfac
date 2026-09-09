@@ -637,7 +637,10 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		state = runstate.StateFailed
 		reason = fmt.Sprintf("%s did not pass: the run stopped rather than integrating over an unproven change. "+
 			"Running the epic again under this run id resumes it — a rejected attempt that left nothing is "+
-			"redispatched, and nothing that already passed is redone",
+			"redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is "+
+			"keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt "+
+			"that was rejected holding commits nothing merged is reported rather than dispatched over, and "+
+			"nothing that already passed is redone",
 			strings.Join(failed, ", "))
 	}
 	if _, err := r.checkpoint(state, reason); err != nil {
@@ -854,6 +857,14 @@ const (
 	RefusedMerge       = "merge_failed"        // the attempt does not integrate onto the epic branch
 	RefusedGate        = "gate_failed"         // the integrated gate did not pass
 	RefusedStale       = "stale_evidence"      // the gate's evidence is no longer about what would be published
+
+	// The one a RESUME adds. An attempt this run already rejected left commits
+	// that nothing merged — on origin's ref, or, when every push it ever made
+	// failed, only on the branch in this checkout. It is distinct from
+	// RefusedCollect because it sends the next repair somewhere else: not at
+	// the worker, which is finished, but at the commits and at the person who
+	// decides what happens to them.
+	RefusedRejectedWork = "rejected_attempt_carries_work"
 
 	// The one a RUN adds, before any tick is planned: the epic's base branch
 	// does not fold into its integration branch. It is distinct from

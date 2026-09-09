@@ -39,8 +39,31 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 		return err
 	}
 
+	// A resumed run does not collect a job it has already MERGED — a closeout
+	// whose write reached the integration branch and whose gate then refused.
+	// Its decision is already recorded (recordDecision is created if absent),
+	// its worktree went with the teardown that followed the refusal, and what
+	// is left to do is the gate. processTick's reason, in full there.
+	if integrated := r.integratedHead(marker); integrated != "" {
+		r.record(entry.TickID, StageCollected,
+			"the %s job's attempt %d is already merged into %s at %s; it is not collected a second time",
+			entry.Role, marker.Attempt, r.branch, short(integrated))
+		merged, err := r.integrate(marker, nil)
+		if err != nil {
+			r.disposeRefused(handle, executor, marker, err)
+			return err
+		}
+		if err := r.gateAndClose(ctx, entry, marker, nil, merged); err != nil {
+			r.disposeRefused(handle, executor, marker, err)
+			return err
+		}
+		r.cleanUp(handle, executor, marker)
+		return nil
+	}
+
 	collected, answer, err := r.collectRole(entry, handle, executor, marker, status)
 	if err != nil {
+		r.disposeRefused(handle, executor, marker, err)
 		return err
 	}
 
@@ -56,9 +79,11 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 	if sourceGradeFor(entry.Role) == "write" && collected.Result.Source.Commits > 0 {
 		merged, err := r.integrate(marker, collected)
 		if err != nil {
+			r.disposeRefused(handle, executor, marker, err)
 			return err
 		}
 		if err := r.gateAndClose(ctx, entry, marker, collected, merged); err != nil {
+			r.disposeRefused(handle, executor, marker, err)
 			return err
 		}
 	} else if err := r.closeRoleTick(ctx, marker, answer); err != nil {

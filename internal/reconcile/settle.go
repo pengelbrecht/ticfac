@@ -37,6 +37,12 @@ import (
 //     it dispatches a new one, at a new number, with a write ref of its own, so
 //     whatever the dead attempt left on its branch stays there for a person.
 //
+// The second attempt a person has to be able to release is the one this run
+// REJECTED while it was holding commits: nothing merged them, so the next run
+// neither collects it (its worktree went with the teardown the refusal ran) nor
+// dispatches over it (that would orphan the only copy). dispatch.go's
+// holdAttemptWork refusal names this command; this is the other end of it.
+//
 // The credential goes first and the attempt second (Appendix A #1), for the
 // reason a teardown always does: a container torn down before its credential is
 // revoked can spend on the way out.
@@ -181,11 +187,14 @@ func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by 
 // attempt, and refuses every answer but the one a person may release.
 //
 // A live attempt is not settled here (A6): it is addressable, so it is
-// cancelled through the executor and not released behind its back. A settled
-// one is not settled here either — the next run collects it — and an attempt
+// cancelled through the executor and not released behind its back. An attempt
 // this host has no state for was never started here, so the next run starts it
-// rather than holding it. What is left is exactly `lost`: started, and nobody
-// can say whether it is running.
+// rather than holding it. That leaves two a person may release: `lost` —
+// started, and nobody can say whether it is running — and an attempt that
+// settled itself and THIS RUN REJECTED, whose commits no run will merge and no
+// run will dispatch over until somebody says what happens to them. A settled
+// attempt the run has not rejected is still refused: the next run collects it,
+// and releasing it would throw away the report it left.
 func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
 	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
 	if err != nil {
@@ -210,10 +219,21 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 		return nil, nil, "", fmt.Errorf("reconcile: inspect attempt %d of %s: %w", marker.Attempt, marker.TickID, err)
 	}
 	switch {
+	case status.Terminal && r.rejectedDurably(marker):
+		// A settled attempt this run already REJECTED is the other thing a
+		// person has to be able to release. The next run does not collect it —
+		// the teardown that followed the refusal removed the worktree the
+		// collect reads — and it does not dispatch over it either, because its
+		// commits are the only copy of what the refusal was about. Somebody has
+		// to look at them and say the run may go on, and this is where they say
+		// it. Whatever the attempt left on its branch stays there: the release
+		// keeps the branch, and the next run's attempt gets a ref of its own.
+		return handle, executor, status.State, nil
 	case status.Terminal:
 		return nil, nil, status.State, fmt.Errorf(
-			"reconcile: attempt %d of %s settled itself as %s: the next run collects it, and releasing a settled "+
-				"attempt would throw away the report it left", marker.Attempt, marker.TickID, status.State)
+			"reconcile: attempt %d of %s settled itself as %s and this run has not rejected it: the next run "+
+				"collects it, and releasing a settled attempt would throw away the report it left",
+			marker.Attempt, marker.TickID, status.State)
 	case status.State != subprocess.StateLost:
 		return nil, nil, status.State, fmt.Errorf(
 			"reconcile: attempt %d of %s is %s — the executor can still address it. A live attempt is cancelled, "+
@@ -221,6 +241,24 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 			marker.Attempt, marker.TickID, status.State)
 	}
 	return handle, executor, status.State, nil
+}
+
+// rejectedDurably reports whether the run's own checkpoint ON ORIGIN records
+// this attempt of this tick as rejected. It is read as a FIELD of a durable
+// record rather than inferred from the executor's state or from prose: an
+// operator's release is permitted by what the run wrote down, not by what this
+// process remembers.
+func (r *Reconciler) rejectedDurably(marker attemptHandle) bool {
+	checkpoint, ok, err := r.store.Checkpoint()
+	if err != nil || !ok {
+		return false
+	}
+	for _, ts := range checkpoint.Ticks {
+		if ts.TickID == marker.TickID && ts.State == "rejected" && ts.Attempt == marker.Attempt {
+			return true
+		}
+	}
+	return false
 }
 
 // recordSettlement writes the release to origin, as a decision.

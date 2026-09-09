@@ -79,8 +79,13 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 
 	passed := true
 	var failures []string
-	for _, command := range r.gate {
-		key := evidenceKey(tick, marker.Attempt, command.Name)
+	keys := make([]string, len(r.gate))
+	for i, command := range r.gate {
+		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA)
+		if err != nil {
+			return err
+		}
+		keys[i] = key
 
 		// Appendix A #13: a record that cannot say what it evaluated is not
 		// evidence. All four fingerprint fields or none of it.
@@ -104,7 +109,10 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		r.record(tick, StageGateFailed, "the integrated gate did not pass: %s", strings.Join(failures, ", "))
 		return r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s: %s. The tick is NOT closed: a close behind a failing "+
-				"gate is a close nothing stands behind", short(merged.GateSHA), tick, strings.Join(failures, ", "))
+				"gate is a close nothing stands behind. The merge is already on %s, so the repair is to fix the "+
+				"check or the tree, push it to %s, and run the epic again under this run id: the gate runs again "+
+				"because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+			short(merged.GateSHA), tick, strings.Join(failures, ", "), r.branch, r.branch)
 	}
 	r.record(tick, StageGatePassed, "the integrated gate passed on %s (%s)", short(merged.GateSHA), r.gate)
 
@@ -115,8 +123,7 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	if err != nil {
 		return err
 	}
-	for _, command := range r.gate {
-		key := evidenceKey(tick, marker.Attempt, command.Name)
+	for _, key := range keys {
 		if outcome := r.PublishEvidence(key, target); outcome != "published" {
 			moved := fingerprint.Mismatch(target)
 			r.record(tick, StageStale, "the gate's evidence is no longer about what would be published (%s): %s",
@@ -329,6 +336,43 @@ func (r *Reconciler) closeTick(ctx context.Context, entry planEntry, marker atte
 // attempt number — asks for a new one.
 func evidenceKey(tick string, attempt int, check string) string {
 	return fmt.Sprintf("gate-%s-%d-%s", tick, attempt, check)
+}
+
+// gateEvidenceKey is the key this run will record one check under, and it is
+// where a FAILED gate gets its way out.
+//
+// The plain key is per (tick, attempt, check) and the record under it is
+// created if absent and never overwritten, which is right for a gate that
+// passed — a restarted run re-reads what it already paid for — and was a dead
+// end for a gate that failed. The attempt's merge is already on the integration
+// branch, so a resume finds it "already contained", re-reads the recorded
+// `fail` without running anything, and refuses again for as long as the run is
+// restarted; a new run id does not help, because the merge is still there and a
+// new attempt cut from the integration head finds the work already done.
+//
+// So a FAILED record is keyed to the commit it ran on. When the previous record
+// for this check failed and the commit now being gated is a DIFFERENT one — a
+// person fixed the check or the tree and pushed it, which moves the integration
+// branch — this run asks for a record of its own and the gate runs again. When
+// the commit is the same, the key is the same and the recorded verdict stands:
+// re-running a check on a commit nothing changed about would spend the same
+// minutes to reach the same answer, and evidence is never overwritten.
+func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA string) (string, error) {
+	base := evidenceKey(tick, attempt, check)
+	if gateSHA == "" {
+		return base, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return "", err
+	}
+	existing, ok, err := r.store.Evidence(base)
+	if err != nil {
+		return "", err
+	}
+	if !ok || existing.Result == "pass" || existing.Provenance.SourceSHA == gateSHA {
+		return base, nil
+	}
+	return base + "-" + short(gateSHA), nil
 }
 
 // gateWaitDelay is how long the gate's output may keep the wait alive after

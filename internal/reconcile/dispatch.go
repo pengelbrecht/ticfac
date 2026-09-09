@@ -156,17 +156,34 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 		return err
 	}
 
-	collected, err := r.collect(handle, executor, marker, status)
-	if err != nil {
-		return err
+	// A resumed run does not collect an attempt it has already MERGED. The
+	// refusal that stopped the previous incarnation — the gate, or the
+	// freshness check after it — tore the attempt down, so its worktree is
+	// gone, and a second collect would report a missing report this run
+	// removed itself instead of the verdict the attempt really had. Nothing is
+	// merged on the strength of this: integrate reports "already contained"
+	// and merges nothing, and what decides the close is the gate, which does
+	// run again.
+	var collected *subprocess.Collection
+	if integrated := r.integratedHead(marker); integrated != "" {
+		r.record(tick, StageCollected,
+			"attempt %d is already merged into %s at %s; it is not collected a second time",
+			marker.Attempt, r.branch, short(integrated))
+	} else {
+		collected, err = r.collect(handle, executor, marker, status)
+		if err != nil {
+			return err
+		}
 	}
 
 	merged, err := r.integrate(marker, collected)
 	if err != nil {
+		r.disposeRefused(handle, executor, marker, err)
 		return err
 	}
 
 	if err := r.gateAndClose(ctx, entry, marker, collected, merged); err != nil {
+		r.disposeRefused(handle, executor, marker, err)
 		return err
 	}
 
@@ -218,7 +235,10 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
-		if r.spent(existing) {
+		marker := handleFromMap(existing.JobHandle)
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
+		switch disposition, where := r.disposition(existing, marker); disposition {
+		case redispatchAttempt:
 			// SETTLED, and it produced nothing. Adopting it would re-collect
 			// the same refusal for as long as the run is restarted, so this is
 			// a new ATTEMPT — a new number, a new marker, and a base that is
@@ -227,14 +247,36 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// dispatching again once that blocker is closed.
 			r.record(tick, StageRedispatched,
 				"attempt %d settled with nothing on %s and was rejected; a new attempt is dispatched rather than "+
-					"the spent one adopted", existing.Attempt, branchOf(handleFromMap(existing.JobHandle).WriteRef))
+					"the spent one adopted", existing.Attempt, branchOf(marker.WriteRef))
 			continue
+		case holdAttemptWork:
+			// REJECTED, and the commits are still there. Dispatching over it
+			// would orphan the only copy of what a person has to look at, and
+			// collecting it again would report a missing report this run
+			// deleted itself when it tore the refused attempt down. So the run
+			// stops here and says where the work is and who moves it on.
+			r.record(tick, StageRejected,
+				"attempt %d was rejected and its commits are still there (%s); it is neither adopted nor "+
+					"redispatched", existing.Attempt, where)
+			// The teardown, in case the incarnation that rejected this attempt
+			// never reached its own: the rejection is recorded on origin before
+			// anything is torn down, so a run killed in between leaves a live
+			// credential and a registered worktree that nothing else would ever
+			// come back for. It is idempotent, and it keeps the branch.
+			r.tearDownSettled(marker, fmt.Sprintf(
+				"attempt %d of %s was rejected and holds commits nothing merged", existing.Attempt, tick))
+			return nil, nil, marker, r.refuse(RefusedRejectedWork, tick,
+				"attempt %d of %s was rejected and the work it committed is still there — %s — and nothing merged "+
+					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
+					"attempt's worktree, so a second collect would report a missing report rather than the verdict "+
+					"the attempt really had) nor dispatches over it (that would orphan the only copy). Read the "+
+					"branch; then take the work, or release the attempt with "+
+					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt",
+				existing.Attempt, tick, where, r.opts.EpicID, tick, existing.Attempt)
 		}
 		// Appendix A #6: an attempt under this identity has already been
 		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
 		// never redispatched.
-		marker := handleFromMap(existing.JobHandle)
-		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		handle, executor, err := r.adopt(ctx, marker)
 		if err != nil {
 			return nil, nil, marker, err
@@ -388,42 +430,131 @@ func (r *Reconciler) adoptConflicted(ctx context.Context, tick string, number in
 	return handle, executor, marker, true, nil
 }
 
-// spent reports whether an attempt on origin is one there is nothing left to
-// adopt: it was REJECTED, and it left no commit beyond the base it was cut
-// from.
+// attemptDisposition is what this run does with an attempt of the same tick
+// that origin already carries a marker for.
+type attemptDisposition int
+
+const (
+	// adoptAttempt: the attempt is re-addressed and never redispatched
+	// (Appendix A #6). It is the default, and every unknown answer lands here.
+	adoptAttempt attemptDisposition = iota
+
+	// redispatchAttempt: it was REJECTED and left no commit anywhere, so
+	// adopting it would re-collect the same refusal for as long as the run is
+	// restarted. A new attempt takes its place, at a new number and a ref of
+	// its own.
+	redispatchAttempt
+
+	// holdAttemptWork: it was REJECTED and its commits exist, unmerged. The
+	// work is the only copy of what a person has to look at, and this run has
+	// nothing left to do to it.
+	holdAttemptWork
+)
+
+// disposition decides which of the three an attempt on origin is.
 //
-// Both halves are durable facts, which is the point — the first is in the
-// checkpoint a restart reads from origin, the second is the attempt's write ref
-// on origin, and neither asks the executor whether it remembers a job. The
-// second is deliberately the same question the collect vocabulary's
-// `no-commits` asks: the ref usually EXISTS, because the executor pushes the
-// branch it was given whether or not the worker committed anything to it, so
-// "there is no ref" and "the ref carries nothing" have to be one answer.
+// The first question is durable: the checkpoint a restart reads from origin
+// says whether this tick's attempt was rejected. The second is about the work,
+// and it is asked of BOTH refs the work can be on, which is the repair here.
+// Asking origin alone declared an attempt spent whose every push had failed —
+// the integrate refusal in durableAttemptHead is exactly that shape — and the
+// next run then dispatched over it and orphaned the local branch holding the
+// only copy. The local branch is one `git rev-parse` away in the checkout this
+// run is working in, so it is read before anything is called spent.
 //
-// A rejected attempt that DID leave commits is a different thing entirely: its
-// work exists, the refusal was about the work, and redispatching it would throw
-// away the only copy of what a person has to look at.
-func (r *Reconciler) spent(record runstate.Attempt) bool {
+// The third question is what separates a gate failure from every other
+// refusal: an attempt whose head the integration branch already CARRIES was
+// merged, and the thing that refused it was the gate over that merge or the
+// freshness check after it. That one is adopted, so that a person who fixed
+// the check or the tree gets the gate run again (gate.go's evidence key) rather
+// than a refusal about work that is already integrated.
+func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) (attemptDisposition, string) {
 	if r.tickState(record.TickID) != "rejected" {
-		return false
+		return adoptAttempt, ""
 	}
-	marker := handleFromMap(record.JobHandle)
 	branch := branchOf(marker.WriteRef)
-	head, err := r.git.remoteHead(branch)
+
+	remote, err := r.remoteWork(branch, marker.BaseSHA)
 	if err != nil {
 		// Nobody can say what the attempt left. That is not evidence it left
 		// nothing, and settling it either way from a failed read would be the
 		// guess Appendix A #6 forbids.
-		return false
+		return adoptAttempt, ""
 	}
-	if head == "" || head == marker.BaseSHA {
-		return true
+	if remote != "" {
+		if r.integrated(remote) {
+			return adoptAttempt, ""
+		}
+		return holdAttemptWork, fmt.Sprintf("%s carries %s on %s, and %s does not have it",
+			branch, short(remote), r.opts.Remote, r.branch)
+	}
+	if local := r.attemptWorkHead(marker); local != "" {
+		return holdAttemptWork, fmt.Sprintf(
+			"%s carries %s in this checkout, and %s has no commit of this attempt at all",
+			branch, short(local), r.opts.Remote)
+	}
+	return redispatchAttempt, ""
+}
+
+// remoteWork is the attempt's head on ORIGIN when that head carries a commit
+// beyond the base the attempt was cut from, and "" when it carries none.
+//
+// "There is no ref" and "the ref carries nothing" are deliberately one answer:
+// the executor pushes the branch it was given whether or not the worker
+// committed anything to it, which is the same thing the collect vocabulary's
+// `no-commits` says.
+func (r *Reconciler) remoteWork(branch, base string) (string, error) {
+	head, err := r.git.remoteHead(branch)
+	if err != nil {
+		return "", err
+	}
+	if head == "" || head == base {
+		return "", nil
 	}
 	if err := r.git.fetch(branch); err != nil {
+		return "", err
+	}
+	if r.git.contains(head, base) {
+		// Contained in the base it was cut from: the branch moved nowhere.
+		return "", nil
+	}
+	return head, nil
+}
+
+// integrated reports whether the integration branch on origin already carries
+// a commit. It is the same containment question integrate asks for its own
+// idempotence, and it is asked of ORIGIN rather than of this checkout's memory
+// of it.
+func (r *Reconciler) integrated(commit string) bool {
+	epicHead, err := r.git.remoteHead(r.branch)
+	if err != nil || epicHead == "" {
 		return false
 	}
-	// Contained in the base it was cut from: the branch moved nowhere.
-	return r.git.contains(head, marker.BaseSHA)
+	if err := r.git.fetch(r.branch); err != nil {
+		return false
+	}
+	return r.git.contains(commit, epicHead)
+}
+
+// integratedHead is the attempt's head when this run has already merged it,
+// and "" otherwise. It is what tells a resumed run not to collect an attempt a
+// second time: the refusal that stopped the previous incarnation tore the
+// attempt's worktree down, and a collect that reads a worktree the reconciler
+// itself removed reports a missing report rather than the verdict the attempt
+// really had.
+//
+// Nothing is merged on the strength of it — integrate only ever reports
+// "already contained" for such an attempt — so what it decides is whether a
+// second collect happens, not what reaches the integration branch.
+func (r *Reconciler) integratedHead(marker attemptHandle) string {
+	head, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA)
+	if err != nil || head == "" {
+		return ""
+	}
+	if !r.integrated(head) {
+		return ""
+	}
+	return head
 }
 
 // tickState is where the run believes one tick stands, as the checkpoint has
@@ -913,18 +1044,84 @@ func (r *Reconciler) disposeRejected(handle *subprocess.JobHandle, executor Exec
 	r.tearDown(handle, executor, marker, reason, r.attemptCarriesWork(marker))
 }
 
-// attemptCarriesWork asks the same question spent() asks, of the LOCAL branch:
-// is there a commit on it that the base it was cut from does not already have?
+// disposeRefused is disposeRejected for the refusals raised AFTER the collect.
+//
+// The three the collect itself raises tore their attempt down; the others —
+// the merge's four, the gate's, the freshness check's, and a role job's four —
+// ran no teardown at all, so a refused attempt left a LIVE credential file, a
+// registered worktree and a branch in the operator's checkout, one set per
+// refused attempt of every refused tick. The rule is the rejected one's,
+// because it is the same rule: revoke first, remove the worktree, and KEEP a
+// branch that carries commits — the refusal is what a person reads next and
+// the branch is where they read it from.
+//
+// Only a REFUSAL tears anything down. An operational error — an unreachable
+// remote, a tracker that would not answer — is not a verdict on the attempt,
+// and a run that disposed of an attempt over one would be throwing work away
+// because a network was down.
+func (r *Reconciler) disposeRefused(handle *subprocess.JobHandle, executor Executor, marker attemptHandle, err error) {
+	var refusal *Refusal
+	if !asRefusal(err, &refusal) {
+		return
+	}
+	r.disposeRejected(handle, executor, marker, fmt.Sprintf("attempt %d of %s was refused (%s): %s",
+		marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message)))
+}
+
+// tearDownSettled tears an attempt down without addressing it first.
+//
+// It is for the one attempt nothing else will ever come back for: one this run
+// rejected, whose commits mean it is neither collected again nor dispatched
+// over. The handle is rebuilt from the executor state this host holds, the way
+// a settlement rebuilds it, and no inspect is asked — there is nothing left to
+// ask about. Everything it does is idempotent, so a run that reaches this on
+// every resume revokes an already-dead credential and prunes an already-removed
+// worktree, and the BRANCH is always kept: those commits are the only copy.
+//
+// A host that holds no state for the attempt has nothing to tear down, which is
+// what a restart on another machine looks like.
+func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
+	state, found := findAttemptState(marker.StateRoot)
+	if !found {
+		return
+	}
+	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
+	if err != nil {
+		r.record(marker.TickID, StageCleanedUp, "the executor for the rejected attempt could not be built: %v", err)
+		return
+	}
+	r.tearDown(&subprocess.JobHandle{
+		SchemaVersion: subprocess.SchemaVersion,
+		JobID:         marker.JobID,
+		Attempt:       marker.Attempt,
+		Executor:      subprocess.ExecutorName,
+		Handle:        map[string]any{"state": state},
+	}, executor, marker, reason, true)
+}
+
+// attemptCarriesWork asks the same question disposition asks of origin, of the
+// LOCAL branch: is there a commit on it that the base it was cut from does not
+// already have?
 func (r *Reconciler) attemptCarriesWork(marker attemptHandle) bool {
+	return r.attemptWorkHead(marker) != ""
+}
+
+// attemptWorkHead is the local branch's head when it carries a commit beyond
+// the attempt's base, and "" when it carries none or there is no such branch in
+// this checkout.
+func (r *Reconciler) attemptWorkHead(marker attemptHandle) string {
 	branch := branchOf(marker.WriteRef)
 	head, err := r.git.resolve(branch)
 	if err != nil || head == "" {
-		return false
+		return ""
 	}
 	if marker.BaseSHA == "" {
-		return true
+		return head
 	}
-	return head != marker.BaseSHA && !r.git.contains(head, marker.BaseSHA)
+	if head == marker.BaseSHA || r.git.contains(head, marker.BaseSHA) {
+		return ""
+	}
+	return head
 }
 
 // tearDown is Appendix A #1's order, and disposal's safety, in one place.

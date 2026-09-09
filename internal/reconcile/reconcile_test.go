@@ -167,9 +167,28 @@ func TestAFailingGateStopsTheCloseAndSaysWhichCheckRefused(t *testing.T) {
 	if !contains(stages, StageGateFailed) {
 		t.Fatalf("stages %v do not record the gate failure", stages)
 	}
-	if contains(stages, StageClosed) || contains(stages, StageCleanedUp) {
-		t.Fatalf("stages %v close or clean up after a failing gate", stages)
+	if contains(stages, StageClosed) {
+		t.Fatalf("stages %v close after a failing gate", stages)
 	}
+	// The clean-up after a failing gate is a TEARDOWN, and it is not the
+	// disposal of anything a person needs. Every refusal class used to run none
+	// at all — the credential stayed live and the worktree stayed registered in
+	// the operator's checkout, one per refused attempt — so the gate's refusal
+	// tears the attempt down like the collect's does. What it must not take
+	// with it is the branch: a person reads the refusal and then reads the
+	// commits it is about.
+	if !contains(stages, StageCleanedUp) {
+		t.Fatalf("stages %v leave the refused attempt's credential and worktree behind", stages)
+	}
+	spec := f.spec("a1")
+	if spec == nil {
+		t.Fatal("a1 was never dispatched")
+	}
+	if head := branchHead(f.Repo.Dir, branchOf(spec.Source.WriteRef)); head == "" {
+		t.Errorf("the teardown after the failing gate deleted %s, which carries the work",
+			branchOf(spec.Source.WriteRef))
+	}
+	assertOneWorktree(t, f.Repo.Dir)
 	if !strings.Contains(result.Reason, "a1") {
 		t.Errorf("the run's reason does not name the tick that failed: %q", result.Reason)
 	}
