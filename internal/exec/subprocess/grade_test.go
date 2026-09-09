@@ -258,8 +258,12 @@ func TestASignalledSupervisorSettlesTheAttemptItStops(t *testing.T) {
 // Disposal leaves the operator's exclude file as it found it. "No run-created
 // worktree and no run-created branch" has to include the one line this
 // executor appends to a file it does not own.
+//
+// The attempt is read-only and commits nothing (a review's deliverable is its
+// report), so its branch is still at the base and disposal may delete it: the
+// branch-safety refusal is about commits no remote has, and there are none.
 func TestDisposalRemovesTheExcludeLineItAdded(t *testing.T) {
-	f := newFixture(t, fixtureOptions{mode: "report", name: "exclude"})
+	f := newFixture(t, fixtureOptions{mode: "nocommit", name: "exclude"})
 	spec := readOnlySpec(f, "run-grade/tick-ex/attempt-1", "ex")
 	handle := f.Start(spec)
 	f.waitSettled(handle)
