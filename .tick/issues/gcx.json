@@ -2,8 +2,8 @@
   "id": "gcx",
   "title": "Final review of Phase 1 diff",
   "description": "Review the full Phase 1 diff against the epic acceptance and SPEC §12 Phase 1, with the Appendix A invariants and the required detection/orphan tests as the checklist. Resolve or route findings before close-out.",
-  "notes": "2026-09-08 20:22 - decision: Start the final review while cc5 is parked on the operator's PR-merge decision? → Yes — unblock gcx from cc5: every source tick is closed and cc5 only adds RESULT-cc5.md; the review covers the full epic diff and cc5's remaining condition is a human merge in another repo — Keeps the frontier moving; close-out (9h0) still cannot complete until cc5 closes\n2026-09-09 10:01 - Final review (4 reviewer agents: spec, correctness, tests/docs, security; frontier + opus): 36 findings — 5 blocker, 22 should-fix, 9 nit. Blockers: (1) integrate merges origin's tick branch head over the collected local head → false close + lost write; (2) one write_ref per tick across attempts/runs → redispatch refused, non-ff pushes; (3) read-only source grade not enforced by the issuer (runner inherits git credentials); plus stale doc/prompt claims of (3). Routed: repair A (7mj) blockers 1-2 + adopt/claim/boundary-base; repair B (gi2) blocker 3 + TERM settlement + docs; repair C (d85) CI timeout, runstate tag doc, gate redaction, evidence test; repair D (ma5, after A) resumable refusal, bounded wait, gate process group, push-error classes, A11/A12/A13. Reports: /private/tmp/claude-501/-Users-peterengelbrecht-Development-ticfac/1687f85b-9680-4c8b-ad98-ebe61eb3bfb3/scratchpad/review/findings-all.md. Review reopens on their close.",
-  "status": "in_progress",
+  "notes": "2026-09-08 20:22 - decision: Start the final review while cc5 is parked on the operator's PR-merge decision? → Yes — unblock gcx from cc5: every source tick is closed and cc5 only adds RESULT-cc5.md; the review covers the full epic diff and cc5's remaining condition is a human merge in another repo — Keeps the frontier moving; close-out (9h0) still cannot complete until cc5 closes\n2026-09-09 10:01 - Final review (4 reviewer agents: spec, correctness, tests/docs, security; frontier + opus): 36 findings — 5 blocker, 22 should-fix, 9 nit. Blockers: (1) integrate merges origin's tick branch head over the collected local head → false close + lost write; (2) one write_ref per tick across attempts/runs → redispatch refused, non-ff pushes; (3) read-only source grade not enforced by the issuer (runner inherits git credentials); plus stale doc/prompt claims of (3). Routed: repair A (7mj) blockers 1-2 + adopt/claim/boundary-base; repair B (gi2) blocker 3 + TERM settlement + docs; repair C (d85) CI timeout, runstate tag doc, gate redaction, evidence test; repair D (ma5, after A) resumable refusal, bounded wait, gate process group, push-error classes, A11/A12/A13. Reports: /private/tmp/claude-501/-Users-peterengelbrecht-Development-ticfac/1687f85b-9680-4c8b-ad98-ebe61eb3bfb3/scratchpad/review/findings-all.md. Review reopens on their close.\n2026-09-09 10:02 - Released the dispatch slot while repairs run; review resumes when 7mj, gi2, d85, ma5 close.",
+  "status": "open",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -23,6 +23,5 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.460006Z",
-  "updated_at": "2026-09-09T08:01:18.811589Z",
-  "started_at": "2026-09-08T18:22:50.307863Z"
+  "updated_at": "2026-09-09T08:02:02.331122Z"
 }
