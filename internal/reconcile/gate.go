@@ -48,12 +48,30 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		return err
 	}
 
+	// What this evidence will say it evaluated (Appendix A #13).
+	//
+	// `source_sha` is the commit the gate ACTUALLY RAN ON — the merge of the
+	// attempt into the integration branch, which is what a `phase: integrated`
+	// record's source is and how contracts/job-protocol.json's own golden
+	// integrated-gate example spells it. Recording the attempt's head there
+	// instead was the hole this fingerprint had: the gate ran on a commit no
+	// record named, so nothing downstream could tell which integration the
+	// verdict was about, and freshness could only ever notice the ATTEMPT
+	// branch moving.
+	//
+	// `attempt_head` is the other half — the head the collect and the boundary
+	// check read — kept as a field of its own so that a branch moved under a
+	// passed gate is still caught. Neither is derivable from the other: the
+	// merge commit's second parent is the attempt head only while the merge is
+	// the one this run made.
+	//
 	// The profile digest is the digest of the profile THIS tick's role was
 	// dispatched under, not the run's set: a check run under a different
 	// profile evaluated something else, and that is what the fingerprint is
 	// for.
 	fingerprint := Fingerprint{
-		"source_sha":              merged.AttemptHead,
+		"source_sha":              merged.GateSHA,
+		"attempt_head":            merged.AttemptHead,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": r.gateDigest,
 		"profile_digest":          r.profileFor(marker.Role).Digest,
@@ -93,17 +111,19 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	// Appendix A #13's other half: the target may have moved between the check
 	// and the publication. The record is still true about what it evaluated and
 	// is no longer true about what is being published.
-	target, err := r.currentTarget(marker)
+	target, err := r.currentTarget(marker, merged)
 	if err != nil {
 		return err
 	}
 	for _, command := range r.gate {
 		key := evidenceKey(tick, marker.Attempt, command.Name)
 		if outcome := r.PublishEvidence(key, target); outcome != "published" {
-			r.record(tick, StageStale, "the gate's evidence is no longer about what would be published (%s)", outcome)
+			moved := fingerprint.Mismatch(target)
+			r.record(tick, StageStale, "the gate's evidence is no longer about what would be published (%s): %s",
+				outcome, strings.Join(moved, "; "))
 			return r.refuse(RefusedStale, tick,
-				"the gate's evidence for %s evaluated %s and the current target is %s: publishing it would state a "+
-					"verdict about something else", tick, fingerprint["source_sha"], target["source_sha"])
+				"the gate's evidence for %s is no longer about what would be published (%s): publishing it would "+
+					"state a verdict about something else", tick, strings.Join(moved, "; "))
 		}
 	}
 
@@ -170,10 +190,14 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 	record := runstate.Evidence{
 		Key: key,
 		Provenance: runstate.Provenance{
-			RunID:                 r.runID,
-			TickID:                &tickID,
-			Attempt:               &attempt,
-			SourceRef:             marker.WriteRef,
+			RunID:   r.runID,
+			TickID:  &tickID,
+			Attempt: &attempt,
+			// The ref and the commit the gate ran on: the integration branch,
+			// and the merge this run made on it. A `phase: integrated` record
+			// whose source is the attempt's own branch says the check ran
+			// somewhere it did not.
+			SourceRef:             fingerprint["integration_ref"],
 			SourceSHA:             fingerprint["source_sha"],
 			IntegrationRef:        runstate.Ptr(fingerprint["integration_ref"]),
 			Phase:                 runstate.PhaseIntegrated,
@@ -223,17 +247,39 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 // fresh. It is deliberately re-read from origin rather than remembered: a
 // freshness check against a value the checker itself carried forward would
 // always be fresh.
-func (r *Reconciler) currentTarget(marker attemptHandle) (Fingerprint, error) {
+//
+// The integration half is a CONTAINMENT question rather than an equality one,
+// and it has to be: the integration branch moves under this run constantly —
+// every checkpoint and every tracker record this reconciler pushes lands on it
+// — so "origin's head is still exactly the commit the gate ran on" would be
+// false a second after the merge and would refuse every close. What must still
+// hold is that the branch about to be published STILL CARRIES the commit that
+// was gated. A branch that was reset, force-pushed or rebuilt from elsewhere
+// no longer does, and that is the moving target A13 is about: the target's
+// `source_sha` is then origin's head, which is not what the record states.
+func (r *Reconciler) currentTarget(marker attemptHandle, merged merge) (Fingerprint, error) {
 	head, err := r.git.remoteHead(branchOf(marker.WriteRef))
 	if err != nil {
 		return nil, err
+	}
+	epicHead, err := r.git.remoteHead(r.branch)
+	if err != nil {
+		return nil, err
+	}
+	gated := merged.GateSHA
+	if err := r.git.fetch(r.branch); err != nil {
+		return nil, err
+	}
+	if !r.git.contains(gated, epicHead) {
+		gated = epicHead
 	}
 	gate, err := ReadGateCommands(r.opts.GateConfig)
 	if err != nil {
 		return nil, err
 	}
 	return Fingerprint{
-		"source_sha":              head,
+		"source_sha":              gated,
+		"attempt_head":            head,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": gate.Digest(),
 		"profile_digest":          r.profileFor(marker.Role).Digest,
@@ -285,9 +331,25 @@ func evidenceKey(tick string, attempt int, check string) string {
 	return fmt.Sprintf("gate-%s-%d-%s", tick, attempt, check)
 }
 
+// gateWaitDelay is how long the gate's output may keep the wait alive after
+// the gate's own processes are gone.
+//
+// The reconciler reads the gate's output through a pipe (a strings.Builder is
+// not a file, so os/exec makes one), and cmd.Wait does not return until that
+// pipe is closed — which a grandchild holding the write end can put off
+// indefinitely, timeout or no timeout. WaitDelay is the bound on that: past it
+// the pipes are closed under whoever still holds them and Wait returns.
+const gateWaitDelay = 5 * time.Second
+
 // runShell runs one declared gate command. It is `sh -c` because that is what
 // the configuration is: a command LINE, written by the repository's author, in
 // the same shell the person who wrote it ran it in.
+//
+// The timeout is a real bound rather than a hope, in the two halves it takes
+// (gate_unix.go): the shell runs as a process GROUP leader and the cancellation
+// kills the GROUP, so a server or watcher the gate started dies with it; and
+// WaitDelay bounds the wait on the output pipe, so a child that outlived the
+// kill cannot hold the run open through it.
 func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -295,6 +357,14 @@ func runShell(ctx context.Context, dir, command string, timeout time.Duration) (
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0")
+	cmd.SysProcAttr = gateProcessGroup()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return killGateGroup(cmd.Process.Pid)
+	}
+	cmd.WaitDelay = gateWaitDelay
 	var out, errOut strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	err = cmd.Run()

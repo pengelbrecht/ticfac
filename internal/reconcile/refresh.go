@@ -91,7 +91,7 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		_, _, pushErr := r.git.try("", "push",
+		_, stderr, pushErr := r.git.try("", "push",
 			"--force-with-lease="+refFor(r.branch)+":"+epicHead,
 			r.opts.Remote, merged+":"+refFor(r.branch))
 		if pushErr == nil {
@@ -99,6 +99,13 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 			r.record("", StageRefreshed, "%s of %s is folded into %s as %s",
 				short(baseHead), base, r.branch, short(merged))
 			return nil
+		}
+		if !leaseRefused(stderr) {
+			// integrate.go's reason: an auth failure, an unreachable remote or
+			// a declined push is not a lease race, and reporting it as one
+			// sends the next repair at a conflict nobody had.
+			return fmt.Errorf("push the refresh of %s from %s to %s: %w: %s",
+				r.branch, base, r.opts.Remote, pushErr, firstLine(stderr))
 		}
 		// The branch moved under this writer — the run-state store's own
 		// records land on it. Rebuild the fold on the new head rather than

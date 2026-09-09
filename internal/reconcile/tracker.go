@@ -254,8 +254,16 @@ func (t *trackerTree) staged() ([]change, error) {
 
 // treeOn applies a change set onto another commit's tree and returns the tree
 // it produced. Applying the PATHS rather than replacing the subtree is what
-// keeps a tracker write from clobbering whatever else landed in `.tick/`
-// between this writer's read and its push.
+// keeps a tracker write from clobbering whatever else landed in OTHER `.tick/`
+// paths between this writer's read and its push.
+//
+// What it does not do — and at concurrency one does not have to — is merge two
+// writes to the SAME path. This writer's blob for a path it touched replaces
+// whatever the head it rebuilt onto has there: last writer wins, per path. One
+// epic at concurrency one has exactly one tracker writer, so the only writes
+// that can race are this run's own, sequenced; a second concurrent writer of
+// the same tick record would need a merge this function deliberately does not
+// invent.
 func (t *trackerTree) treeOn(commit string, changes []change) (string, error) {
 	index, done, err := tempIndex()
 	if err != nil {

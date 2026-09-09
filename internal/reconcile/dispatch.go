@@ -192,8 +192,24 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	if err != nil {
 		return nil, nil, attemptHandle{}, err
 	}
+	// The attempts a PERSON released (settle.go). Read here rather than once
+	// at the start of the run: a settlement made while the run is stopped at
+	// an earlier tick is one this dispatch must already see.
+	released, err := r.settlements()
+	if err != nil {
+		return nil, nil, attemptHandle{}, err
+	}
 	for _, existing := range attempts {
 		if existing.TickID != tick {
+			continue
+		}
+		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
+			// A person settled it. It is not adopted — nobody could address it,
+			// which is why they were asked — and whatever it left on its own
+			// write ref stays there: a new attempt gets a ref of its own.
+			r.record(tick, StageSettled,
+				"attempt %d was released by %s at %s; a new attempt is dispatched rather than the released one adopted",
+				existing.Attempt, was.by, was.at)
 			continue
 		}
 		if !r.guarded(guardNeverRedispatchLive) {
@@ -527,6 +543,18 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 		},
 		// The EFFECTIVE budget, not the requested one: a job is issued the
 		// number that will govern (Appendix A #12).
+		//
+		// What governs it in THIS phase is worth saying plainly, because a
+		// number in a record reads like an enforced limit: `max_cost_usd`
+		// binds a METERED credential (subprocess.Limits), and the model
+		// credential a local subprocess attempt is issued is flat-rate
+		// ("issued-by-host") — nothing meters what a runner spends against it.
+		// So the number here is INFORMATIONAL for this executor: it travels
+		// with the job, it is what every record and the operator's own
+		// submission line say, and the thing that actually stops a job on this
+		// host is the wall clock beside it. A metered executor is where it
+		// starts binding, and the JobSpec already carries what such an
+		// executor needs.
 		Limits: subprocess.Limits{WallSeconds: r.opts.WallSeconds, MaxCostUSD: d.BudgetUSD},
 	}
 }
@@ -687,6 +715,7 @@ func findAttemptState(root string) (string, bool) {
 // threshold.
 func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) (*subprocess.JobStatus, error) {
 	step := r.OpenStep(r.stepCap)
+	deadline := r.settlementDeadline(marker)
 	cursor := ""
 	for {
 		if err := ctx.Err(); err != nil {
@@ -707,6 +736,30 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
 				"attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, "+
 					"which is not the same as nothing running", marker.Attempt, marker.TickID)
+		}
+
+		// The reconciler's OWN deadline. The job's wall clock is the
+		// supervisor's to enforce, and a supervisor that died without settling
+		// enforces nothing: `running` then rests on a pid, and a pid is a
+		// number the operating system reuses — one that belongs to somebody
+		// else's process now answers signal 0 (and EPERM, "alive and not ours
+		// to signal", answers it too). Nothing in the poll loop notices,
+		// because the wipe threshold measures the interval between polls and
+		// not the age of the job, so the run would address a dead attempt
+		// forever at perfect cadence.
+		//
+		// Past its own wall clock plus a full wipe threshold of grace for the
+		// supervisor to write its terminal record, an attempt still reading
+		// `running` is one nobody can say is running. That is `unaddressed`,
+		// not `wiped`: the substrate did not take it away, and a person is the
+		// next actor (settle.go).
+		if now := r.now(); now.After(deadline) {
+			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
+				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued: its supervisor never "+
+					"settled it, and a pid that outlives its job is a number the host reuses. Nobody can say whether "+
+					"it is running; release it with `ticfac settle %s %s %d --release \"<who>\"` once you have looked",
+				marker.Attempt, marker.TickID, status.State, now.Sub(deadline).Round(time.Second),
+				r.opts.WallSeconds, r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
 		// The poll IS the keepalive. Its answer is about the substrate, not
@@ -732,6 +785,31 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		}
 		r.sleep(r.pollInterval)
 	}
+}
+
+// settlementDeadline is the moment after which an unsettled attempt is one
+// nobody can say is running.
+//
+// It is derived from DURABLE facts, not from when this incarnation started
+// waiting: the dispatch marker on origin says when the attempt was issued, so
+// a restart that adopts an attempt inherits the same deadline rather than
+// giving a dead job a fresh hour every time somebody restarts the run. The
+// grace on top of the job's own wall clock is one wipe threshold — long enough
+// for a supervisor that is merely slow to write its terminal record, and
+// bounded, which is the whole point.
+//
+// A marker that cannot be read leaves the deadline measured from NOW. That is
+// weaker and deliberately not fatal: an unbounded wait is the failure this
+// exists to remove, and refusing a tick because a timestamp would not parse
+// would be a worse one.
+func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
+	issued := r.now()
+	if record, ok, err := r.store.Attempt(marker.Attempt); err == nil && ok && record.TickID == marker.TickID {
+		if at, parseErr := time.Parse(time.RFC3339, record.DispatchedAt); parseErr == nil {
+			issued = at
+		}
+	}
+	return issued.Add(time.Duration(r.opts.WallSeconds)*time.Second + r.wipeThreshold)
 }
 
 // ---------------------------------------------------------- the collect ---

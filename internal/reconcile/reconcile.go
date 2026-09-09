@@ -282,6 +282,8 @@ const (
 	StageClosed       = "closed"
 	StageRedispatched = "redispatched"
 	StageCleanedUp    = "cleaned_up"
+	StageResumed      = "resumed"
+	StageSettled      = "settled"
 	StageRunFinished  = "run_finished"
 )
 
@@ -479,6 +481,17 @@ type Result struct {
 // every effect is preceded by the compare-and-swap that proves it has not
 // already happened.
 func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
+	// What the last incarnation was killed in the middle of. Every worktree
+	// this package makes is removed by a defer, and a killed process runs no
+	// defer: the directories are gone with the temp filesystem, and only the
+	// registrations git keeps for them are left (git.go).
+	if pruned, err := r.git.pruneWorktrees(); err != nil {
+		return nil, fmt.Errorf("reconcile: prune the worktrees a previous incarnation registered: %w", err)
+	} else if pruned != "" {
+		r.record("", StageResumed, "pruned worktree registrations a previous incarnation left behind: %s",
+			firstLine(pruned))
+	}
+
 	// The integration branch has to exist before anything can be recorded
 	// about the run: the run-state store's authority is origin's copy of it.
 	base, err := r.git.ensureRemoteBranch(r.branch, r.opts.BaseRef)
@@ -516,15 +529,37 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
 	}
 
-	// Recovery is a fetch and then a read. A checkpoint that is already
-	// terminal is a run somebody finished; replaying it must not restart it.
+	// Recovery is a fetch and then a read. A checkpoint that is FINISHED is a
+	// run somebody completed or cancelled; replaying it must not restart it.
+	//
+	// A FAILED one is a different thing, and reading it as finished was a hole
+	// this repair closed. A run fails because one tick did not pass — the gate
+	// refused, the worker answered BLOCKED, the attempt left nothing — and the
+	// repair for every one of those is a person doing something (closing the
+	// blocker, fixing the check) and running the epic again. The run is
+	// therefore RESUMABLE: the same run id, the same integration branch, the
+	// same attempt numbering, and the spent attempt redispatched by
+	// claimDispatch as a new one. Refusing to resume it forced an operator to
+	// invent a new --run-id, which starts a run whose attempt numbers and
+	// evidence keys have no relationship to the records of the one it is
+	// continuing.
+	//
+	// What makes this safe is that nothing here trusts the checkpoint's own
+	// account of a tick: the tracker is asked whether each tick is closed, the
+	// dispatch marker on origin decides whether an attempt is adopted, and the
+	// evidence record decides whether a gate has to run again. The checkpoint
+	// is where the run stopped, not permission to redo anything.
 	if checkpoint, ok, err := store.Checkpoint(); err != nil {
 		return nil, err
 	} else if ok {
 		r.sequence, r.ticks = checkpoint.Sequence, checkpoint.Ticks
-		if checkpoint.State.Terminal() {
+		if checkpoint.State.Terminal() && checkpoint.State != runstate.StateFailed {
 			r.record("", StageRunFinished, "the run is already %s: %s", checkpoint.State, checkpoint.Reason)
 			return r.result(checkpoint.State, checkpoint.Reason), nil
+		}
+		if checkpoint.State == runstate.StateFailed {
+			r.record("", StageResumed, "the run stopped at %s and is resumed under the same run id: %s",
+				checkpoint.State, checkpoint.Reason)
 		}
 	}
 
@@ -600,7 +635,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)
 	if len(failed) > 0 {
 		state = runstate.StateFailed
-		reason = fmt.Sprintf("%s did not pass: the run stopped rather than integrating over an unproven change",
+		reason = fmt.Sprintf("%s did not pass: the run stopped rather than integrating over an unproven change. "+
+			"Running the epic again under this run id resumes it — a rejected attempt that left nothing is "+
+			"redispatched, and nothing that already passed is redone",
 			strings.Join(failed, ", "))
 	}
 	if _, err := r.checkpoint(state, reason); err != nil {

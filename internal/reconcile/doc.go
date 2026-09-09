@@ -101,4 +101,12 @@
 // (evidence fingerprinted, publication checks freshness) — are this package's,
 // and lifecycle_test.go replays the fixture's own sequences against the real
 // reconciler for each of them.
+//
+// Four of the five are kept by the shipped binary. A11's read site is
+// (MayDispatch, before every dispatch) and its release is (`ticfac settle`,
+// recorded as a decision), but its hold TABLE is written only by the fixture's
+// adapter: a durable hold needs a tick state the closed vocabulary does not
+// have and a person's release needs a tracker verb this seam does not carry,
+// so that wiring is Phase 2's — decided and written down in guards.go rather
+// than left to be rediscovered.
 package reconcile

@@ -67,13 +67,22 @@ func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Colle
 		if err != nil {
 			return merge{}, err
 		}
-		_, _, pushErr := r.git.try("", "push",
+		_, stderr, pushErr := r.git.try("", "push",
 			"--force-with-lease="+refFor(r.branch)+":"+epicHead,
 			r.opts.Remote, merged+":"+refFor(r.branch))
 		if pushErr == nil {
 			r.setTick(tick, "integrated")
 			r.record(tick, StageIntegrated, "merged %s into %s as %s", short(head), r.branch, short(merged))
 			return merge{AttemptHead: head, EpicHead: merged, GateSHA: merged, Merged: true}, nil
+		}
+		if !leaseRefused(stderr) {
+			// Not a lease race: an authentication failure, an unreachable
+			// remote, a hook that declined the push. Retrying it eight times
+			// and then reporting "the branch moved under this reconciler"
+			// sends the next repair at a conflict nobody had — the error is
+			// this one, and it is returned as it arrived.
+			return merge{}, fmt.Errorf("push the merge of %s into %s to %s: %w: %s",
+				tick, r.branch, r.opts.Remote, pushErr, firstLine(stderr))
 		}
 		// The branch moved under this writer — the run-state store's own
 		// records land on it. Rebuild the merge on the new head rather than

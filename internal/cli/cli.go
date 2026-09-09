@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/pengelbrecht/ticfac"
@@ -39,8 +40,9 @@ const NoExecutorMessage = reconcile.NoExecutorMessage
 const usage = `ticfac — execution and orchestration for ticks
 
 usage:
-  ticfac run-epic <epic-id>   run one epic through the reconciler
-  ticfac version [--json]     report this build and the contract bundle it serves
+  ticfac run-epic <epic-id>                     run one epic through the reconciler
+  ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
+  ticfac version [--json]                       report this build and the contract bundle it serves
 
 run-epic flags:
   --repo <dir>        the checkout attempts branch from (default: cwd)
@@ -57,6 +59,25 @@ run-epic flags:
   --budget <usd>      the budget an operator asks for
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
+
+The effective budget — what an operator asked for, clamped to the deployment
+ceiling — is printed before the run starts, while it can still be cancelled
+cheaply. It binds a METERED credential; the local subprocess executor issues a
+flat-rate one, so on this host the number travels with the job and is reported
+everywhere, and the wall clock is what actually stops one.
+
+settle flags:
+  --release <who>     the person releasing the attempt (required)
+  --repo, --remote, --branch, --run-id, --state-root, --gate, --profiles,
+  --tier, --runner    as for run-epic: the same run, addressed the same way
+
+An attempt whose supervisor died without settling it reads as lost, and every
+restart holds it rather than starting a second job over the same identity
+(Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
+the executor can still address, records the release durably as a decision
+naming who made it, and the next run dispatches a NEW attempt instead of
+adopting the released one. Whatever the released attempt committed stays on its
+own write ref.
 `
 
 // Run executes one invocation and returns the process exit code. Everything is
@@ -71,6 +92,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "run-epic":
 		return runEpic(args[1:], stdout, stderr)
+	case "settle":
+		return settle(args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
@@ -122,6 +145,17 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		return ExitNoExecutor
 	}
 
+	// Appendix A #12, at the surface an operator actually reads: the number
+	// that will GOVERN, said at submission while the run can still be
+	// cancelled cheaply. An operator who asked for 40 under an 8 ceiling is
+	// told 8 here and not in a journal nobody sees — and told what the number
+	// does on this host, because a budget printed like an enforced limit is
+	// worse than no line at all.
+	if *budget > 0 || *ceiling > 0 {
+		clamped := reconcile.ClampBudget(*budget, *ceiling)
+		fmt.Fprintf(stdout, "%s\n", budgetLine(clamped))
+	}
+
 	if *runner == "" {
 		*runner = "claude"
 	}
@@ -166,6 +200,108 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 	if result.State != "completed" {
 		return 1
 	}
+	return 0
+}
+
+// budgetLine is the one sentence A12 is about. It says the effective number
+// first, because that is the one that will govern, and says what it binds:
+// `max_cost_usd` binds a metered credential, and the local subprocess executor
+// issues a flat-rate one, so on this host the number is carried and reported
+// rather than enforced — the wall clock is what stops a job.
+func budgetLine(budget reconcile.Budget) string {
+	line := fmt.Sprintf("budget: $%.2f effective", budget.Effective)
+	if budget.Clamped {
+		line += fmt.Sprintf(" (asked $%.2f, clamped to the deployment ceiling $%.2f)",
+			budget.Requested, budget.Ceiling)
+	} else if budget.Ceiling > 0 {
+		line += fmt.Sprintf(" (asked $%.2f, under the deployment ceiling $%.2f)",
+			budget.Requested, budget.Ceiling)
+	}
+	return line + "; it is issued with every job and reported in every record, and on the local subprocess " +
+		"executor it is informational — a flat-rate credential meters nothing, and the wall clock is what bounds a job"
+}
+
+// settle releases one attempt nobody can address, on a person's word. See
+// internal/reconcile/settle.go for why a person is the next actor at all.
+func settle(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var (
+		repo      = fs.String("repo", "", "the checkout the run works in")
+		remote    = fs.String("remote", "origin", "the remote holding the run's durable authority")
+		branch    = fs.String("branch", "", "the EpicRun integration branch")
+		runID     = fs.String("run-id", "", "the run's id")
+		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
+		tier      = fs.String("tier", "", "a [roles.*.tiers.<name>] overlay in the target repository's runners.toml")
+		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
+		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
+		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
+		release   = fs.String("release", "", "the person releasing the attempt")
+	)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) != 3 {
+		fmt.Fprintf(stderr, "ticfac settle: exactly one epic id, tick id and attempt number are required\n")
+		return 2
+	}
+	epicID, tickID := rest[0], rest[1]
+	attempt, err := strconv.Atoi(rest[2])
+	if err != nil || attempt < 1 {
+		fmt.Fprintf(stderr, "ticfac settle: %q is not an attempt number\n", rest[2])
+		return 2
+	}
+	if *release == "" {
+		fmt.Fprintf(stderr, "ticfac settle: --release names who is releasing the attempt; a release with no "+
+			"author is the clock release Appendix A #11 refuses\n")
+		return 2
+	}
+	if err := reconcile.CheckExecutor(); err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s: %s.\n%v\n", epicID, NoExecutorMessage, err)
+		return ExitNoExecutor
+	}
+	if *runner == "" {
+		*runner = "claude"
+	}
+	tracker, err := tk.New(tk.Options{Dir: *repo})
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s: the tracker is not usable: %v\n", epicID, err)
+		return 1
+	}
+
+	reconciler, err := reconcile.New(reconcile.Options{
+		Repo:              *repo,
+		Remote:            *remote,
+		EpicID:            epicID,
+		RunID:             *runID,
+		IntegrationBranch: *branch,
+		Owner:             "ticfac",
+		Tracker:           tracker,
+		NewExecutor:       reconcile.DefaultExecutor(*runner, nil, 60*time.Second),
+		ExecStateRoot:     *stateRoot,
+		GateConfig:        *gate,
+		ProfileDir:        *profiles,
+		Tier:              *tier,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)
+		return 1
+	}
+
+	settled, err := reconciler.Settle(context.Background(), tickID, attempt, *release)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
+		return 1
+	}
+	if !settled.Recorded {
+		fmt.Fprintf(stdout, "attempt %d of %s was already released by %s; nothing was written\n",
+			settled.Attempt, settled.TickID, settled.ReleasedBy)
+		return 0
+	}
+	fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		"The next run dispatches a new attempt; whatever this one committed stays on its own write ref.\n",
+		settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
 	return 0
 }
 

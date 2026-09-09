@@ -18,6 +18,11 @@ import (
 // an evidence fingerprint that publication checks against the current target.
 // Each also carries the fixture's guard name, so lifecycle_test.go can turn
 // exactly one off and watch the rule stop being kept.
+//
+// One of the five is a mechanism only HALF of which production reaches, and it
+// says so where it lives: A11's hold is read before every dispatch and written
+// by nothing but the fixture's adapter — see the note above that section, and
+// the decision behind it.
 
 // ------------------------------------------------------------------- A3 ---
 
@@ -99,6 +104,35 @@ func (r *Reconciler) noteAlive(job string) {
 
 // ------------------------------------------------------------------ A11 ---
 
+// A11 is here as a MECHANISM WITH A LIVE READ SITE AND NO PRODUCTION WRITER,
+// and that is a decision this repair made deliberately rather than an omission
+// it missed (tick ma5).
+//
+// MayDispatch is asked before every dispatch (dispatch.go), so a hold placed
+// on a unit really does stop one. What no production path does is PLACE a
+// hold: nothing in Run calls StrikeOut, and this table lives in memory, so a
+// hold would not survive the restart that is the whole point of holding
+// something for a person.
+//
+// Making it real needs two things this phase's contracts do not have, and both
+// outlive this epic:
+//
+//   - a durable place for the hold. `$defs.tick_state` is a closed vocabulary
+//     (ready, dispatched, reported, integrated, rejected, closed) and the
+//     checkpoint schema takes no other field, so a hold cannot be written into
+//     the one record a restart reads.
+//   - a release a PERSON makes through the tracker. The tracker seam is
+//     graph/show/claim/note/close; `tk awaiting` and `tk approve` are not on
+//     it, and a release the reconciler could make for itself is the clock
+//     release this invariant exists to refuse.
+//
+// Both are contract changes, so the wiring is Phase 2's and the table stays
+// what it is today: read in production, written by the lifecycle fixture's
+// adapter. What this repair DID ship is the operator's half of the same
+// problem for the one hold a run can actually reach — an attempt nobody can
+// address is released by a person, through `ticfac settle`, and the release is
+// recorded durably as a decision (settle.go).
+
 // HoldOutcome is the answer at the read site.
 type HoldOutcome string
 
@@ -114,6 +148,7 @@ type hold struct {
 }
 
 // StrikeOut holds a unit — a repository, a branch, a tick — out of dispatch.
+// It has no production caller today; see the note above this section.
 func (r *Reconciler) StrikeOut(unit, reason string) {
 	r.holds[unit] = &hold{reason: reason, struck: true}
 }
@@ -172,12 +207,27 @@ type Budget struct {
 	Clamped   bool    `json:"clamped"`
 }
 
+// ClampBudget is the clamp itself, as a value: what an operator asked for, the
+// ceiling their deployment allows, and the number that will actually govern.
+//
+// It is exported because the number A12 is about has to be said BEFORE the run
+// — at submission, while the run can still be cancelled cheaply — and that is
+// the command line's moment, not the reconciler's (internal/cli). One
+// implementation, so the number printed to an operator and the number issued
+// to a job cannot be two different arithmetics.
+func ClampBudget(requested, ceiling float64) Budget {
+	budget := Budget{Requested: requested, Ceiling: ceiling, Effective: requested}
+	if ceiling > 0 && requested > ceiling {
+		budget.Effective, budget.Clamped = ceiling, true
+	}
+	return budget
+}
+
 // SetBudget clamps a requested budget to the deployment ceiling. The clamp is
 // correct and stays; what A12 is about is which number gets REPORTED.
 func (r *Reconciler) SetBudget(requested, ceiling float64) string {
-	r.budget = Budget{Requested: requested, Ceiling: ceiling, Effective: requested}
-	if ceiling > 0 && requested > ceiling {
-		r.budget.Effective, r.budget.Clamped = ceiling, true
+	r.budget = ClampBudget(requested, ceiling)
+	if r.budget.Clamped {
 		return "clamped"
 	}
 	return "as_requested"
@@ -205,6 +255,13 @@ func (r *Reconciler) Budget() Budget { return r.budget }
 // contracts/job-protocol.json's `$defs.provenance` spells them. The mapping is
 // contracts/lifecycle-invariants.json's, and it is followed rather than
 // re-derived.
+//
+// They are the REQUIRED four, not the only four a record may state. A
+// fingerprint that says something more about what it evaluated — the gate
+// records `attempt_head` beside the integrated `source_sha` (gate.go) — is
+// still complete, and freshness checks everything it stated: a field a record
+// names and the target contradicts is exactly the thing this invariant exists
+// to catch.
 var FingerprintFields = []string{
 	"source_sha", "integration_ref", "context_manifest_digest", "profile_digest",
 }
@@ -222,6 +279,40 @@ func (f Fingerprint) Complete() bool {
 		}
 	}
 	return true
+}
+
+// Mismatch names every field this fingerprint states that the target does not
+// agree with, as "field: recorded -> target". It is what a refusal says out
+// loud: "the evidence is stale" without naming what moved sends the next
+// repair looking for it.
+func (f Fingerprint) Mismatch(target Fingerprint) []string {
+	var moved []string
+	for _, field := range f.fields() {
+		if f[field] != target[field] {
+			moved = append(moved, fmt.Sprintf("%s: %s was gated, %s is the target now",
+				field, short(f[field]), short(target[field])))
+		}
+	}
+	return moved
+}
+
+// fields is every field this fingerprint is checked on: the contract's four,
+// and anything else it states.
+func (f Fingerprint) fields() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(f)+len(FingerprintFields))
+	for _, field := range FingerprintFields {
+		seen[field] = true
+		out = append(out, field)
+	}
+	extra := make([]string, 0, len(f))
+	for field := range f {
+		if !seen[field] {
+			extra = append(extra, field)
+		}
+	}
+	sort.Strings(extra)
+	return append(out, extra...)
 }
 
 // Digest is a stable identity for a fingerprint, for a caller that wants one
@@ -260,10 +351,10 @@ func (r *Reconciler) PublishEvidence(key string, target Fingerprint) string {
 		return "refused_stale"
 	}
 	if r.guarded(guardPublicationChecksFreshness) {
-		for _, field := range FingerprintFields {
-			if record[field] != target[field] {
-				return "refused_stale"
-			}
+		// Every field the RECORD states, not only the contract's four: a
+		// record that said more about what it evaluated is held to all of it.
+		if len(record.Mismatch(target)) > 0 {
+			return "refused_stale"
 		}
 	}
 	r.published = append(r.published, key)

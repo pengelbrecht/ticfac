@@ -232,3 +232,42 @@ func TestRunEpicRefusesAnUnusableRepositoryRatherThanReportingARun(t *testing.T)
 		t.Errorf("an executor is on PATH and the refusal still says %q: %q", NoExecutorMessage, stderr.String())
 	}
 }
+
+// A12 at the surface an operator reads: the number that will GOVERN is printed
+// at submission, while the run can still be cancelled cheaply. Before this, the
+// clamp happened and the effective number went into the reconciler's in-memory
+// journal — so an operator asking for 40 under a ceiling of 8 was never told 8
+// by anything they could see.
+func TestTheEffectiveBudgetIsPrintedBeforeTheRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary")
+	}
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	build := exec.Command("go", "build", "-o", filepath.Join(bin, "ticfac-exec-subprocess"), "./cmd/ticfac-exec-subprocess")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var stdout, stderr bytes.Buffer
+	// The run itself refuses on the repository, which is not what this is
+	// about: the budget line has to be there BEFORE anything that can refuse.
+	Run([]string{"run-epic", "--repo", t.TempDir(), "--budget", "40", "--ceiling", "8", "no-such-epic"},
+		&stdout, &stderr)
+
+	line := stdout.String()
+	if !strings.Contains(line, "$8.00 effective") {
+		t.Errorf("the operator is not told the number that will govern: %q", line)
+	}
+	if !strings.Contains(line, "clamped") || !strings.Contains(line, "$40.00") {
+		t.Errorf("the line does not say what was asked for or that it was clamped: %q", line)
+	}
+	if !strings.Contains(line, "informational") {
+		t.Errorf("the line does not say what the number does on this host: %q", line)
+	}
+}
