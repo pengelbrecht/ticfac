@@ -254,6 +254,10 @@ func TestAGateThatFailedRunsAgainOnceTheTreeIsFixed(t *testing.T) {
 	// The evidence says both things, and neither was overwritten: the failure
 	// on the commit it ran on, and the pass on the commit the person fixed.
 	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	r, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	base, ok, err := store.Evidence(evidenceKey("a1", 1, "tree"))
 	if err != nil || !ok {
 		t.Fatalf("the failing gate left no evidence under its own key: %v", err)
@@ -278,8 +282,19 @@ func TestAGateThatFailedRunsAgainOnceTheTreeIsFixed(t *testing.T) {
 			t.Errorf("the second record ran on %s, the commit the first one failed on",
 				short(record.Provenance.SourceSHA))
 		}
-		if !strings.HasSuffix(key, short(record.Provenance.SourceSHA)) {
-			t.Errorf("evidence %s is not keyed by the commit it ran on (%s)", key, short(record.Provenance.SourceSHA))
+		// The suffix is the SOURCE's fingerprint, not the commit's. o3n made
+		// that the key so the rekey cannot chain: the run writes its own
+		// records to the branch it gates, so keying by commit re-mints a key
+		// and re-pays the whole gate on every resume. What this asserts is the
+		// property that matters — the key belongs to the tree this record ran
+		// on, and to no other.
+		fingerprint, err := r.sourceFingerprint(record.Provenance.SourceSHA)
+		if err != nil {
+			t.Fatalf("fingerprint the source of %s: %v", short(record.Provenance.SourceSHA), err)
+		}
+		if !strings.HasSuffix(key, short(fingerprint)) {
+			t.Errorf("evidence %s is not keyed by the source it ran on (%s at %s)",
+				key, short(fingerprint), short(record.Provenance.SourceSHA))
 		}
 	}
 	if passed != 1 {

@@ -241,12 +241,14 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 			return nil, nil, status.State, err
 		} else if merged {
 			return nil, nil, status.State, fmt.Errorf(
-				"reconcile: attempt %d of %s was rejected, but its work is already merged into %s: releasing it "+
-					"would dispatch a fresh attempt from a base that already carries the work, and there would be "+
-					"nothing for it to do. Nothing is released. The gate is what refused, and the gate is keyed by "+
-					"the commit it ran on: fix the check or the tree, push it to %s, and run the epic again under "+
-					"this run id",
-				marker.Attempt, marker.TickID, r.branch, r.branch)
+				"reconcile: attempt %d of %s was rejected, but %s already carries its work: releasing it would "+
+					"dispatch a fresh attempt from a base that already has the work, and there would be nothing "+
+					"for it to do. Nothing is released. The gate is what refused, and its evidence is keyed by the "+
+					"SOURCE it ran on: fix the check or the tree, push it to %s, and run the epic again under this "+
+					"run id — the gate runs again because the tree is a different tree. (If the work was REVERTED "+
+					"on %s, this refusal is asking the wrong question: containment survives a revert, so it still "+
+					"reads as merged. There is no release for that case yet — ticfac tick z8b)",
+				marker.Attempt, marker.TickID, r.branch, r.branch, r.branch)
 		}
 		return handle, executor, status.State, nil
 	case status.Terminal:

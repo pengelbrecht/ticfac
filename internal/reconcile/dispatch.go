@@ -182,7 +182,7 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 
 	merged, err := r.integrate(marker, collected)
 	if err != nil {
-		r.rejectRefusedAttempt(handle, executor, marker, err)
+		r.disposeRefused(handle, executor, marker, err)
 		return err
 	}
 
@@ -1135,45 +1135,6 @@ func (r *Reconciler) disposeRefused(handle *subprocess.JobHandle, executor Execu
 	}
 	r.disposeRejected(handle, executor, marker, fmt.Sprintf("attempt %d of %s was refused (%s): %s",
 		marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message)))
-}
-
-// rejectRefusedAttempt is disposeRefused for a refusal that ENDS the attempt
-// without anything having reached the integration branch.
-//
-// The merge's refusals are that shape. Nothing merged, so the "already merged"
-// short circuit in processTick does not fire on the next incarnation, and a
-// tick nobody recorded as rejected is still adoptable — which sends the next
-// run back through collect, into the worktree THIS run's teardown removed, for
-// a `missing-result` that describes this reconciler's own cleanup instead of
-// the conflict that actually happened. The verdict a person needs is lost, and
-// it is lost permanently, because every later run repeats the same sequence.
-//
-// Recording the rejection on origin FIRST is what stops it: disposition then
-// finds a rejected tick whose branch carries commits origin has and the epic
-// branch does not, and HOLDS the work for a person instead of collecting a
-// second time. The teardown that follows is unchanged — it keeps the branch,
-// because those commits are the only copy of what the refusal was about.
-//
-// The gate's refusal does not come through here and must not: its merge is
-// already on the integration branch, so the next run recognises the attempt as
-// integrated, skips the collect on that evidence, and re-runs the gate.
-func (r *Reconciler) rejectRefusedAttempt(handle *subprocess.JobHandle, executor Executor, marker attemptHandle, err error) {
-	var refusal *Refusal
-	if !asRefusal(err, &refusal) {
-		return
-	}
-	if rejectErr := r.rejectDurably(marker, refusal.Reason, refusal.Message); rejectErr != nil {
-		// The refusal itself is what the caller returns; a checkpoint that
-		// would not write is recorded and does not replace it.
-		r.record(marker.TickID, StageRejected,
-			"attempt %d of %s was refused (%s) and the rejection could not be checkpointed: %v",
-			marker.Attempt, marker.TickID, refusal.Reason, rejectErr)
-	} else {
-		r.record(marker.TickID, StageRejected,
-			"attempt %d of %s was refused (%s): %s", marker.Attempt, marker.TickID,
-			refusal.Reason, firstLine(refusal.Message))
-	}
-	r.disposeRefused(handle, executor, marker, err)
 }
 
 // tearDownSettled tears an attempt down without addressing it first.

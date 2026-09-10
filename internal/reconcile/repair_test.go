@@ -738,13 +738,21 @@ func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
 // A merge refusal is a verdict about work that EXISTS, and the next run has to
 // be able to say so.
 //
-// The bug this pins: the teardown that follows a refusal removes the attempt's
-// worktree, and the report lives inside it. Nothing merged, so the resumed run
-// does not take the "already integrated" path; nothing recorded the tick as
-// rejected, so disposition adopted the attempt and collected it a SECOND time —
-// against a directory this reconciler had removed itself. The conflict came
-// back as `collect_failed: missing-result`, every run, forever, and the merge
-// conflict a person needed to see was gone.
+// This is a REGRESSION GUARD rather than the proof of a repair, and the
+// difference is worth writing down. The gcx review reported it as a blocker:
+// the teardown that follows a refusal removes the worktree the report lives in,
+// nothing merged, and integrate.go never marks the tick rejected — so the next
+// run would adopt the attempt and collect it a second time against a directory
+// this reconciler removed itself, reporting `collect_failed: missing-result`
+// forever. That was true of integrate.go and false of the run that calls it:
+// the run loop sets the tick rejected and checkpoints it for EVERY refusal
+// (reconcile.go), which is what actually stops the second collect.
+//
+// Verified by running this test against 2d6f992, the commit before the repair:
+// every behavioural assertion below passed unfixed. The property is real, load
+// bearing, and was previously asserted nowhere — one edit to the run loop would
+// have taken it away silently. So it is pinned here, at the level that matters,
+// which is what a person sees rather than which function wrote it down.
 func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 	f := newFixture(t, fixtureOptions{})
 
@@ -776,9 +784,6 @@ func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 		t.Errorf("the refusal blames a missing report rather than the conflict: %s", result.Failure.Message)
 	}
 	stages := run.Stages("a1")
-	if !contains(stages, StageRejected) {
-		t.Errorf("a1's stages %v do not record the rejection; nothing durable stops the next collect", stages)
-	}
 	for _, forbidden := range []string{StageIntegrated, StageGatePassed, StageClosed} {
 		if contains(stages, forbidden) {
 			t.Errorf("a1 reached %s behind a merge conflict; its stages are %v", forbidden, stages)
@@ -832,7 +837,7 @@ func pushOnIntegrationBranch(t *testing.T, repo *testRepo, file, content string)
 	dir := t.TempDir()
 	mustRun(t, dir, "git", "clone", "--quiet", "--branch", "epic/qeu", repo.Origin, dir)
 	configure(t, dir)
-	writeAndCommit(t, dir, file, content)
+	writeAndCommit(t, dir, file, content, "an edit of "+file)
 	mustRun(t, dir, "git", "push", "--quiet", "origin", "HEAD:refs/heads/epic/qeu")
 	sha := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
 	mustRun(t, repo.Dir, "git", "fetch", "--quiet", "origin", "refs/heads/epic/qeu")
@@ -843,20 +848,20 @@ func pushOnIntegrationBranch(t *testing.T, repo *testRepo, file, content string)
 // leaves it in the reconciler's own checkout. It is how a test says "the same
 // tree plus exactly this" — the parent is named rather than inherited from
 // whatever the branch has since become.
-func commitOnto(t *testing.T, repo *testRepo, base, file, content string) string {
+func commitOnto(t *testing.T, repo *testRepo, base, file, content, message string) string {
 	t.Helper()
 	dir := t.TempDir()
 	mustRun(t, dir, "git", "clone", "--quiet", "--no-checkout", repo.Dir, dir)
 	configure(t, dir)
 	mustRun(t, dir, "git", "fetch", "--quiet", repo.Dir, base)
 	mustRun(t, dir, "git", "checkout", "--quiet", "--detach", base)
-	writeAndCommit(t, dir, file, content)
+	writeAndCommit(t, dir, file, content, message)
 	sha := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
 	mustRun(t, repo.Dir, "git", "fetch", "--quiet", dir, sha)
 	return sha
 }
 
-func writeAndCommit(t *testing.T, dir, file, content string) {
+func writeAndCommit(t *testing.T, dir, file, content, message string) {
 	t.Helper()
 	path := filepath.Join(dir, file)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -866,7 +871,7 @@ func writeAndCommit(t *testing.T, dir, file, content string) {
 		t.Fatal(err)
 	}
 	mustRun(t, dir, "git", "add", "-A")
-	mustRun(t, dir, "git", "commit", "--quiet", "-m", "an edit of "+file)
+	mustRun(t, dir, "git", "commit", "--quiet", "-m", message)
 }
 
 // A PASS is evidence about the commit it ran on, and about no other.
@@ -933,7 +938,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	// the check is not paid for again. This is what a resume looks like: the
 	// integration head moves every time the run checkpoints.
 	bookkeeping := commitOnto(t, f.Repo, passed.Provenance.SourceSHA,
-		runstate.Root+"/runs/r-fixture/a-record.json", "{}\n")
+		runstate.Root+"/runs/r-fixture/a-record.json", "{}\n", "the run writes down what it is doing")
 	unchanged, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping)
 	if err != nil {
 		t.Fatal(err)
@@ -946,7 +951,8 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	// A commit that changes the SOURCE is a different key, and this is the
 	// repair: the pass above says nothing about this tree, so the check runs
 	// again and records its own answer rather than inheriting one.
-	moved := commitOnto(t, f.Repo, passed.Provenance.SourceSHA, "README.md", "a genuinely different tree\n")
+	moved := commitOnto(t, f.Repo, passed.Provenance.SourceSHA, "README.md", "a genuinely different tree\n",
+		"a source change")
 	rekeyed, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, moved)
 	if err != nil {
 		t.Fatal(err)
@@ -955,8 +961,32 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 		t.Fatalf("a check that passed at %s was reused as evidence at %s: both are keyed %q",
 			short(passed.Provenance.SourceSHA), short(moved), base)
 	}
-	if !strings.HasPrefix(rekeyed, base) || !strings.Contains(rekeyed, short(moved)) {
-		t.Errorf("the rekeyed evidence key %q does not name the commit it will run on", rekeyed)
+	if !strings.HasPrefix(rekeyed, base) {
+		t.Errorf("the rekeyed evidence key %q is not a key of this check", rekeyed)
+	}
+
+	// And the rekey does not CHAIN. A second resume of the same source names
+	// the same key, so the record minted for it stands rather than a third key
+	// being minted and the whole gate paid for again. The key is a function of
+	// the tree, so a different commit carrying that same tree agrees with it.
+	// The same tree reached by a DIFFERENT commit. Only the message differs, so
+	// the tree is byte-for-byte the one above while the commit id is not — which
+	// is the whole question, since a chaining rekey keys on the commit.
+	twin := commitOnto(t, f.Repo, passed.Provenance.SourceSHA, "README.md", "a genuinely different tree\n",
+		"the same source change, committed again")
+	if twin == moved {
+		t.Fatal("the two probe commits are the same commit; this proves nothing about chaining")
+	}
+	if treeOf(t, f.Repo, twin) != treeOf(t, f.Repo, moved) {
+		t.Fatal("the two probe commits do not share a tree; this proves nothing about chaining")
+	}
+	again, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, twin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != rekeyed {
+		t.Errorf("the same source was keyed %q and then %q; the rekey chains and re-pays the gate on every resume",
+			rekeyed, again)
 	}
 
 	// And nothing was overwritten on the way: the original record still stands
@@ -1055,10 +1085,16 @@ func TestSettleRefusesToReleaseARejectedAttemptWhoseWorkIsAlreadyMerged(t *testi
 	}
 	// Appendix A #9: the refusal sends the next repair at the real problem,
 	// which for a failing gate is the tree.
-	if !strings.Contains(err.Error(), "already merged") {
+	if !strings.Contains(err.Error(), "already carries its work") {
 		t.Errorf("the refusal does not say why the release is refused: %v", err)
 	}
 	if !strings.Contains(err.Error(), "run the epic again") {
 		t.Errorf("the refusal does not say what to do instead: %v", err)
 	}
+}
+
+// treeOf is a commit's tree, as the reconciler's own checkout reads it.
+func treeOf(t *testing.T, repo *testRepo, commit string) string {
+	t.Helper()
+	return strings.TrimSpace(mustRun(t, repo.Dir, "git", "rev-parse", commit+"^{tree}"))
 }

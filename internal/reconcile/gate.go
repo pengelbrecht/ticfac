@@ -389,42 +389,35 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 	if !ok || existing.Provenance.SourceSHA == gateSHA {
 		return base, nil
 	}
-	same, err := r.sameSourceTree(existing.Provenance.SourceSHA, gateSHA)
+
+	// The suffix is the SOURCE's fingerprint and never the commit's, so that
+	// the key is a function of the tree alone. Keying it by commit would make
+	// the rekey a chain one link long: the comparison here is always against
+	// the record at the PLAIN key, so a second resume compares the same old
+	// record against a second new commit, mints a second suffix, and pays for
+	// the whole gate again — the outcome the fingerprint exists to prevent. Two
+	// resumes of the same tree now name the same key, and the record already
+	// under it stands.
+	gated, err := r.sourceFingerprint(gateSHA)
+	if err != nil {
+		return "", fmt.Errorf("fingerprint the source of %s for the gate's evidence key: %w", short(gateSHA), err)
+	}
+	recorded, err := r.sourceFingerprint(existing.Provenance.SourceSHA)
 	if err != nil {
 		// Nobody can say whether the two commits carry the same source. The
 		// safe direction is to run the check again under a key of its own: a
 		// gate paid for twice costs minutes, and a gate reused across a tree
-		// nobody compared closes a tick on evidence about another tree.
-		r.record(tick, StageGateFailed,
-			"the source of %s could not be compared with the recorded %s, so the check runs again: %v",
-			short(gateSHA), short(existing.Provenance.SourceSHA), err)
-		return base + "-" + short(gateSHA), nil
+		// nobody compared closes a tick on evidence about another tree. The
+		// key is still the tree's, so this does not chain either.
+		r.record(tick, StageStale,
+			"the source of the recorded %s could not be read, so %s is gated under a key of its own: %v",
+			short(existing.Provenance.SourceSHA), short(gateSHA), err)
+		return base + "-" + short(gated), nil
 	}
-	if same {
+	if gated == recorded {
 		return base, nil
 	}
-	return base + "-" + short(gateSHA), nil
-}
-
-// sameSourceTree reports whether two commits carry the same source as a gate
-// command sees it: the same top-level tree, with the run's own `.ticfac/`
-// records left out of the comparison.
-//
-// Top-level is enough because a tree hash covers everything under it, so any
-// change at any depth moves the entry that contains it. Leaving `.ticfac` out
-// is what makes a checkpoint invisible here — it is the run writing down what
-// it is doing, on the branch it happens to be gating, and no gate command reads
-// it.
-func (r *Reconciler) sameSourceTree(a, b string) (bool, error) {
-	left, err := r.sourceFingerprint(a)
-	if err != nil {
-		return false, err
-	}
-	right, err := r.sourceFingerprint(b)
-	if err != nil {
-		return false, err
-	}
-	return left == right, nil
+	return base + "-" + short(gated), nil
 }
 
 func (r *Reconciler) sourceFingerprint(commit string) (string, error) {
