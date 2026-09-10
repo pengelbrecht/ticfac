@@ -9,11 +9,14 @@ import (
 // contracts/runners-config-contract.json — EXECUTABLE.
 //
 // Two rules over `.tick/runners.toml`: what `[sandbox].image` may be, and what
-// `[orchestration].max_parallel` may be. ticfac reads neither file yet, but
-// both rules are pinned as data — a regexp with a maximum length, and a
-// minimum — so both are executable here from the fixture alone. The accepted
-// and refused lists are the parity: a pattern relaxed on one side and not the
-// other shows up as an accepted string this reader refuses.
+// `[orchestration].max_parallel` may be. Neither table is read by ticfac —
+// `internal/reconcile/toml.go` and `internal/profile/roles.go` read
+// `[testing.commands]` and `[roles.*]` instead, and this fixture does not (yet)
+// pin either of those. Both rules it DOES pin are pinned as data — a regexp
+// with a maximum length, and a minimum — so both are executable here from the
+// fixture alone. The accepted and refused lists are the parity: a pattern
+// relaxed on one side and not the other shows up as an accepted string this
+// reader refuses.
 //
 // The image rule is the one that matters to ticfac: it is what stands between
 // a repository's configuration and a container reference, and

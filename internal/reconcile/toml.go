@@ -137,6 +137,15 @@ func parseInlineCommand(line int, value string) (*GateCommand, error) {
 }
 
 func assign(line int, entry *GateCommand, key, raw string) error {
+	// [testing.commands] entries are pinned to exactly these two keys
+	// (contracts/runners-config-contract.json, testing.commands): a key
+	// outside that set is not a future upgrade this reader should tolerate —
+	// it is a malformed entry, and reading two keys off it while ignoring the
+	// rest would silently authorise less than the author wrote.
+	if key != "command" && key != "description" {
+		return fmt.Errorf("runners.toml:%d: [testing.commands] entry declares %q, which is not command or description",
+			line, key)
+	}
 	text, err := parseString(raw)
 	if err != nil {
 		return fmt.Errorf("runners.toml:%d: %s: %w", line, key, err)
@@ -146,10 +155,6 @@ func assign(line int, entry *GateCommand, key, raw string) error {
 		entry.Command = text
 	case "description":
 		entry.Description = text
-	default:
-		// Ignored rather than refused: this reader owns two keys of a table
-		// whose schema belongs to ticks, and refusing a key ticks adds later
-		// would make an unrelated upgrade break the gate.
 	}
 	return nil
 }

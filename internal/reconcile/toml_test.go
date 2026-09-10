@@ -103,6 +103,25 @@ func TestABareStringCommandIsRefused(t *testing.T) {
 	}
 }
 
+// [testing.commands] entries are pinned to exactly `command` and
+// `description` (contracts/runners-config-contract.json, testing.commands). A
+// third key is not a future schema addition to tolerate — it is a malformed
+// entry, and the refusal must name the file and the offending line.
+func TestAThirdKeyInACommandsEntryIsRefused(t *testing.T) {
+	for _, document := range []string{
+		"[testing.commands]\ngo = { command = \"go test ./...\", timeout = \"30s\" }\n",
+		"[testing.commands.go]\ncommand = \"go test ./...\"\ntimeout = \"30s\"\n",
+	} {
+		_, err := parseGateCommands(document)
+		if err == nil {
+			t.Fatalf("%q was accepted with an unrecognised key", document)
+		}
+		if !strings.Contains(err.Error(), "runners.toml") || !strings.Contains(err.Error(), "timeout") {
+			t.Errorf("%q was refused with %q, which does not name the file and the offending key", document, err)
+		}
+	}
+}
+
 // This repository's own runners.toml is the one document the reader must not
 // get wrong: it is what the epic's integrated gate runs.
 func TestThisRepositorysGateIsReadable(t *testing.T) {
