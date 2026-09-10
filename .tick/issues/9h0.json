@@ -2,7 +2,7 @@
   "id": "9h0",
   "title": "Close out Phase 1: retro, close ticks-tracker 4ik, flesh out Phase 2 (Herdr executor) here",
   "description": "Run the epic-close retro; then in the ticks tracker close 421 and ep3 with the gate evidence and close 4ik; then flesh out Phase 2 (Herdr executor, ticks tick jrj and its required-gate-tests note) into ticks here, including its EPIC-SKELETON.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,5 +13,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.487606Z",
-  "updated_at": "2026-09-02T15:23:43.487606Z"
+  "updated_at": "2026-09-10T06:13:41.30097Z",
+  "started_at": "2026-09-10T06:13:41.30097Z"
 }
