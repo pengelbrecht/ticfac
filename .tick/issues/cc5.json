@@ -12,10 +12,9 @@
   ],
   "parent": "qeu",
   "acceptance_criteria": "The real epic is closed in ticks with a merged PR opened by ticfac; three restarts recorded with zero duplicate attempts and zero false closes, verified from the .ticfac/ record; the tag exists; the report is committed.",
-  "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.431225Z",
-  "updated_at": "2026-09-10T08:11:08.514004Z",
+  "updated_at": "2026-09-10T08:28:34.959946Z",
   "closed_at": "2026-09-10T08:11:08.514004Z",
   "closed_reason": "Operator decision: mark the PR ready and merge on test evidence rather than re-running the live gate. The AC1 attestation stays stale-but-recorded — RESULT-cc5.md's run is real and complete (ticks epic cia, claude runner, three kills, 5 ticks, 5 attempts, 0 duplicates, no false close) but was attested on binaries from 2ea1c22, ~50 commits before HEAD, across the seams the three cuts exercise. Every mechanism is covered by tests against the real reconciler and the real shipped supervisor binary; the gap is written up in the epic retro under Verification. PR #1 merged on green CI at b98e865."
 }

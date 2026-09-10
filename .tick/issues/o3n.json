@@ -9,10 +9,9 @@
   "owner": "peter@engelbrecht.dk",
   "parent": "qeu",
   "acceptance_criteria": "A merge refusal keeps what the next collect reads: a test drives a conflicting attempt through integrate, asserts the refusal, and asserts the next run reports the MERGE refusal (not collect_failed: missing-result) — either by keeping the worktree for a re-collectable refusal or by marking the tick rejected so disposition stops re-collecting; the choice is logged in the RESULT file with its reasoning. A passing check is re-run when the commit changes: a test with a multi-command gate asserts that a check which passed at commit A is not reused as evidence at commit B, and gate.go's doc comment says what the code actually does. cancel.go hasSettled checks liveness before it trusts a report's success. integratedHead returns an operational error rather than \"not merged\" when the remote cannot be read. rejectedDurably refuses to release an attempt whose work is already merged. go test -short -timeout 45m ./... green (make test-short).",
-  "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-09T14:54:53.293601Z",
-  "updated_at": "2026-09-09T21:03:58.129571Z",
+  "updated_at": "2026-09-10T08:28:34.932006Z",
   "closed_at": "2026-09-09T20:52:55.159154Z",
   "closed_reason": "Both blockers fixed with tests that fail without the fix; three should-fix items also in; one excluded item folded in (decision logged on qeu). Wave gate green (EXIT=0, reconcile 725s). Merged as b7c89a2. The parked question (how to dispatch under the session limit) was answered by the operator: do it in opus — implemented in the orchestrator session, since the herd spawn probe is what fails under that pressure."
 }
