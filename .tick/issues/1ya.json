@@ -1,0 +1,18 @@
+{
+  "id": "1ya",
+  "title": "Factory move D: retire the factory from ticks",
+  "description": "The deletion half, in the TICKS repo. A separate PR against a separate repo and CI, deliberately not bundled into a ticfac-side tick.\n\nDelete from ticks: internal/factory, internal/gatewaytrace, cloud/factory, cloud/sandbox. Remove cmd/tk/cmd/factory.go and factory_dashboard.go, and the run|stop|status|logs|trace|supervisor subcommands from cloud.go, cloud_logs.go, cloud_trace.go and cloud_supervisor.go. Drop the module-root embeds those leave unused.\n\nDo NOT delete internal/tkcontract. It cannot move: cmd/tk's own version and root contract gate use it.\n\nDo this only once the ticfac side actually works end to end — a deletion before that leaves no way back. Same rule the herd retirement tick follows.\n\nUntil this lands, 'extracted' means 'copied', and two codebases drift.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "b3a",
+    "0e1"
+  ],
+  "parent": "av8",
+  "acceptance_criteria": "ticks no longer carries the factory tree, the gateway-trace package, the cloud build contexts, or the factory and cloud commands; internal/tkcontract is untouched; ticks builds and its tests pass; the same commands work from the ticfac CLI; the ticfac gate is green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-10T10:55:23.607341Z",
+  "updated_at": "2026-09-10T10:55:23.607341Z"
+}
