@@ -37,8 +37,19 @@ func TestLiveRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SessionSnapshot: %v", err)
 	}
-	if snap.Protocol != ProtocolVersion {
-		t.Errorf("snapshot protocol = %d, want %d", snap.Protocol, ProtocolVersion)
+	// The live server may be newer than the pin — this machine ran herdr
+	// 0.9.0 / protocol 22 at capture time — so the range, not equality, is
+	// the contract. And the snapshot re-check must keep ServerInfo honest:
+	// what the snapshot just reported is what the client now knows.
+	if snap.Protocol < MinProtocolVersion {
+		t.Errorf("snapshot protocol = %d, below the supported floor %d", snap.Protocol, MinProtocolVersion)
+	}
+	if snap.Protocol > ProtocolWarnVersion {
+		t.Logf("note: live server speaks protocol %d, newer than the warn line %d", snap.Protocol, ProtocolWarnVersion)
+	}
+	if snap.Protocol != c.ServerInfo().Protocol {
+		t.Errorf("snapshot protocol = %d but ServerInfo says %d — the re-check must refresh what the client knows",
+			snap.Protocol, c.ServerInfo().Protocol)
 	}
 	if len(snap.Panes) == 0 {
 		t.Error("live session reported no panes")

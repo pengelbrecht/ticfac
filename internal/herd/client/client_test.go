@@ -4,7 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -38,7 +43,11 @@ func TestNewPerformsHandshake(t *testing.T) {
 }
 
 func TestNewFailsClosedBelowMinProtocol(t *testing.T) {
-	for _, protocol := range []int{0, 19} {
+	// 18 is below the floor (19); 0 is a server that reported no protocol at
+	// all. Both fail closed. (19 itself is IN range now: every fixture is
+	// 0.8.0-era protocol 19, so the floor dropped below the pin — see
+	// TestNewAppliesSupportedProtocolRange for the floor being accepted.)
+	for _, protocol := range []int{0, 18} {
 		srv := newFakeServer(t, func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
 			return respond(w, req.ID, pongResultProtocol(protocol))
 		})
@@ -70,27 +79,341 @@ func TestNewFailsClosedBelowMinProtocol(t *testing.T) {
 // TestNewAcceptsForwardCompatibleProtocol pins the range policy: a server
 // NEWER than the pin is assumed forward-compatible and must succeed (degrading
 // to a warning), while a server BELOW the minimum still hard-stops above.
-func TestNewAcceptsForwardCompatibleProtocol(t *testing.T) {
-	srv := newFakeServer(t, func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
-		return respond(w, req.ID, pongResultProtocol(21))
-	})
+// TestSupportedProtocolConstantsAreDistinct pins the three protocol
+// constants to three DISTINCT values with three distinct jobs. A single
+// constant cannot say all of: the oldest server this client can speak to
+// (19 — every fixture is protocol 19, and the 19 -> 20 shape diff was
+// purely additive), the newest this package was verified against
+// (20 — the herdr 0.8.2 pin), and the newest observed live without a
+// warning (22 — the captured herdr 0.9.0 ping).
+func TestSupportedProtocolConstantsAreDistinct(t *testing.T) {
+	if MinProtocolVersion != 19 || ProtocolVersion != 20 || ProtocolWarnVersion != 22 {
+		t.Fatalf("protocol constants = floor %d, pin %d, warn %d; want 19 / 20 / 22",
+			MinProtocolVersion, ProtocolVersion, ProtocolWarnVersion)
+	}
+	if !(MinProtocolVersion < ProtocolVersion && ProtocolVersion < ProtocolWarnVersion) {
+		t.Fatal("protocol constants are not three strictly distinct values")
+	}
+}
 
-	var warning strings.Builder
-	c, err := New(t.Context(), Options{SocketPath: srv.Path(), ProtocolWarning: &warning})
+// TestNewAppliesSupportedProtocolRange pins the handshake's range policy
+// across the whole supported band: the floor (19) is accepted SILENTLY — a
+// protocol-19 server sends a strict subset of the shapes this client
+// decodes; the pin (20), the unseen gap (21) and the observed live upgrade
+// (22, herdr 0.9.0) are all silent; anything above the warn line (22)
+// proceeds WITH a warning — a forward-compatible upgrade degrades to a
+// warning, never a refusal. There is no hard upper bound.
+func TestNewAppliesSupportedProtocolRange(t *testing.T) {
+	tests := []struct {
+		protocol int
+		wantWarn bool
+	}{
+		{19, false}, // floor: 0.8.0-era shapes, all fixtures decode
+		{20, false}, // pin: herdr 0.8.2
+		{21, false}, // newer than the pin, still inside the silent band
+		{22, false}, // newest observed: herdr 0.9.0, captured live
+		{23, true},  // newer than anything observed: warn, but proceed
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("protocol_%d", tc.protocol), func(t *testing.T) {
+			srv := newFakeServer(t, func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+				return respond(w, req.ID, pongResultProtocol(tc.protocol))
+			})
+
+			var warning strings.Builder
+			c, err := New(t.Context(), Options{SocketPath: srv.Path(), ProtocolWarning: &warning})
+			if err != nil {
+				t.Fatalf("protocol %d: New returned %v, want success", tc.protocol, err)
+			}
+			if c == nil {
+				t.Fatalf("protocol %d: New returned no client", tc.protocol)
+			}
+			if got := c.ServerInfo().Protocol; got != uint32(tc.protocol) {
+				t.Errorf("ServerInfo().Protocol = %d, want %d", got, tc.protocol)
+			}
+			if tc.wantWarn {
+				if warning.Len() == 0 {
+					t.Errorf("protocol %d: no warning emitted, want a forward-compatibility warning", tc.protocol)
+				}
+				if !strings.Contains(warning.String(), "newer than protocol 22") {
+					t.Errorf("warning = %q, want it to name the warn line 22", warning.String())
+				}
+			} else if warning.Len() != 0 {
+				t.Errorf("protocol %d: warning = %q, want silence inside the supported band", tc.protocol, warning.String())
+			}
+		})
+	}
+}
+
+// snapshotResult builds a session_snapshot result advertising the given
+// protocol and version over an otherwise empty session. Workspaces, tabs,
+// panes and agents are all optional in the snapshot shape — herdr omits keys
+// it has no data for — so this exercises exactly the mid-run re-report path:
+// the client reads the protocol field it already decodes.
+func snapshotResult(protocol uint32, version string) string {
+	body, err := json.Marshal(map[string]any{
+		"type": "session_snapshot",
+		"snapshot": map[string]any{
+			"version":    version,
+			"protocol":   protocol,
+			"workspaces": []any{},
+			"tabs":       []any{},
+			"panes":      []any{},
+			"agents":     []any{},
+			"layouts":    []any{},
+		},
+	})
 	if err != nil {
-		t.Fatalf("protocol 21: New returned %v, want success with a warning", err)
+		panic(err)
 	}
-	if c == nil {
-		t.Fatal("protocol 21: New returned no client")
+	return string(body)
+}
+
+// TestSessionSnapshotRechecksProtocolBelowFloor scripts herdr DOWNGRADING
+// mid-run: the handshake accepted a protocol-20 server, a later snapshot
+// reports protocol 18. The re-check must fail the call closed (shapes older
+// than the floor are undecodable) and stay OPERATIONAL — the client is not
+// torn down, so the next snapshot against a server back in range succeeds.
+// A refused call, never a dead client.
+func TestSessionSnapshotRechecksProtocolBelowFloor(t *testing.T) {
+	calls := 0
+	c, srv := newTestClient(t, map[string]fakeHandler{
+		MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			calls++
+			if calls == 1 {
+				return respond(w, req.ID, snapshotResult(18, "0.7.0"))
+			}
+			return respond(w, req.ID, snapshotResult(20, "0.8.2"))
+		},
+	})
+	if got := c.ServerInfo().Protocol; got != ProtocolVersion {
+		t.Fatalf("handshake protocol = %d, want %d", got, ProtocolVersion)
 	}
-	if got := c.ServerInfo().Protocol; got != 21 {
-		t.Errorf("ServerInfo().Protocol = %d, want 21", got)
+
+	_, err := c.SessionSnapshot(t.Context())
+	var mismatch *ProtocolMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("SessionSnapshot on protocol 18: err = %v, want *ProtocolMismatchError", err)
 	}
-	if warning.Len() == 0 {
-		t.Error("protocol 21: no warning emitted, want a forward-compatibility warning")
+	if mismatch.Actual != 18 || mismatch.Min != MinProtocolVersion {
+		t.Errorf("mismatch = %+v, want Actual 18 and Min %d", *mismatch, MinProtocolVersion)
 	}
-	if !strings.Contains(warning.String(), "newer than protocol 20") {
-		t.Errorf("warning = %q, want it to name the newer protocol", warning.String())
+	if !strings.Contains(mismatch.Error(), srv.Path()) || !strings.Contains(mismatch.Error(), "refusing to continue") {
+		t.Errorf("mismatch message = %q, want endpoint + fail-closed wording", mismatch.Error())
+	}
+	// ServerInfo reports what the server speaks NOW, even when that
+	// observation is what the refusal was made from.
+	if got := c.ServerInfo().Protocol; got != 18 {
+		t.Errorf("ServerInfo().Protocol = %d after the mid-run downgrade, want 18", got)
+	}
+
+	// The refusal is operational: the next call dials fresh, re-observes a
+	// protocol back in range, and succeeds.
+	snap, err := c.SessionSnapshot(t.Context())
+	if err != nil {
+		t.Fatalf("SessionSnapshot after a mid-run refusal: %v, want success", err)
+	}
+	if snap.Protocol != 20 {
+		t.Errorf("snapshot protocol = %d, want 20", snap.Protocol)
+	}
+	if got := c.ServerInfo().Protocol; got != 20 {
+		t.Errorf("ServerInfo().Protocol = %d after recovery, want 20", got)
+	}
+}
+
+// TestSessionSnapshotRechecksProtocolAboveWarn: a mid-run upgrade PAST the
+// warn line (22) still succeeds — a forward-compatible upgrade degrades to
+// a warning, never a refusal — and the warning names what was observed. The
+// tick requires this proceed: nothing about a newer protocol stops a run.
+func TestSessionSnapshotRechecksProtocolAboveWarn(t *testing.T) {
+	var warning strings.Builder
+	c, _ := newTestClientOpts(t, map[string]fakeHandler{
+		MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respond(w, req.ID, snapshotResult(23, "0.9.1"))
+		},
+	}, Options{ProtocolWarning: &warning})
+
+	snap, err := c.SessionSnapshot(t.Context())
+	if err != nil {
+		t.Fatalf("SessionSnapshot on protocol 23: %v, want success with a warning", err)
+	}
+	if snap.Protocol != 23 {
+		t.Errorf("snapshot protocol = %d, want 23", snap.Protocol)
+	}
+	if !strings.Contains(warning.String(), "protocol 23") || !strings.Contains(warning.String(), "newer than protocol 22") {
+		t.Errorf("warning = %q, want it to name the observed protocol 23 and the warn line 22", warning.String())
+	}
+	// ServerInfo must refresh: provenance records what the server speaks
+	// NOW, not what it spoke at connect.
+	if got := c.ServerInfo(); got.Protocol != 23 || got.Version != "0.9.1" {
+		t.Errorf("ServerInfo = %s/%d, want 0.9.1/23", got.Version, got.Protocol)
+	}
+}
+
+// TestSessionSnapshotNoticesObservedUpgradeSilently: the REAL upgrade this
+// machine took (herdr 0.8.2 -> 0.9.0, protocol 20 -> 22, live 2026-09-10)
+// must stay silent — 22 is observed, not surprising — while ServerInfo still
+// notices the change. A client built against 0.8.2 keeps working against
+// 0.9.0 with zero ceremony.
+func TestSessionSnapshotNoticesObservedUpgradeSilently(t *testing.T) {
+	var warning strings.Builder
+	c, _ := newTestClientOpts(t, map[string]fakeHandler{
+		MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respond(w, req.ID, snapshotResult(22, "0.9.0"))
+		},
+	}, Options{ProtocolWarning: &warning})
+
+	snap, err := c.SessionSnapshot(t.Context())
+	if err != nil {
+		t.Fatalf("SessionSnapshot on protocol 22: %v, want success", err)
+	}
+	if snap.Protocol != 22 {
+		t.Errorf("snapshot protocol = %d, want 22", snap.Protocol)
+	}
+	if warning.Len() != 0 {
+		t.Errorf("warning = %q, want silence: herdr 0.9.0 / protocol 22 is the live-observed upgrade", warning.String())
+	}
+	if got := c.ServerInfo(); got.Protocol != 22 || got.Version != "0.9.0" {
+		t.Errorf("ServerInfo = %s/%d, want 0.9.0/22", got.Version, got.Protocol)
+	}
+	// Capabilities are a handshake field: a snapshot re-report refreshes
+	// the protocol, but never silently drops what the ping advertised.
+	if err := c.RequireCapability(CapabilityLiveHandoff); err != nil {
+		t.Errorf("RequireCapability(live_handoff) after a silent upgrade to 0.9.0 = %v, want nil", err)
+	}
+}
+
+// TestRequireCapabilityRefusedByName: a server advertising only
+// detached_server_daemon must refuse live_handoff BY NAME — naming the
+// capability, the herdr version and the endpoint — while the capability it
+// DOES have passes. An unknown name is refused too: the known set is what
+// the server may advertise, anything else is not a capability.
+func TestRequireCapabilityRefusedByName(t *testing.T) {
+	// Only detached_server_daemon; live_handoff explicitly absent.
+	c, srv := newTestClientOpts(t, map[string]fakeHandler{
+		MethodPing: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respond(w, req.ID, `{"type":"pong","version":"0.9.0","protocol":22,"capabilities":{"live_handoff":false,"detached_server_daemon":true}}`)
+		},
+	}, Options{})
+
+	if err := c.RequireCapability(CapabilityDetachedServerDaemon); err != nil {
+		t.Errorf("RequireCapability(detached_server_daemon) = %v, want nil — the server advertises it", err)
+	}
+
+	err := c.RequireCapability(CapabilityLiveHandoff)
+	var capErr *CapabilityError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("RequireCapability(live_handoff) = %v, want *CapabilityError", err)
+	}
+	if capErr.Capability != CapabilityLiveHandoff {
+		t.Errorf("refused capability = %q, want %q", capErr.Capability, CapabilityLiveHandoff)
+	}
+	if capErr.ServerVersion != "0.9.0" || capErr.Protocol != 22 {
+		t.Errorf("refusal = %+v, want it to cite herdr 0.9.0 / protocol 22", *capErr)
+	}
+	msg := capErr.Error()
+	for _, want := range []string{"live_handoff", "0.9.0", srv.Path()} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal %q does not name %q — a missing feature must be refused BY NAME", msg, want)
+		}
+	}
+
+	if err := c.RequireCapability("not_a_capability"); err == nil {
+		t.Error("RequireCapability on an unknown name succeeded, want refusal")
+	}
+}
+
+// TestRequireCapabilityAcceptsAdvertised: the captured herdr 0.8.2 pong
+// advertises both capabilities this package knows.
+func TestRequireCapabilityAcceptsAdvertised(t *testing.T) {
+	c, _ := newTestClient(t, nil)
+	for _, name := range []string{CapabilityLiveHandoff, CapabilityDetachedServerDaemon} {
+		if err := c.RequireCapability(name); err != nil {
+			t.Errorf("RequireCapability(%s) = %v, want nil — the 0.8.2 pong advertises it", name, err)
+		}
+	}
+}
+
+// TestServerCapabilitiesHasNilAndUnknown: absence fails closed. A nil
+// capabilities block advertises nothing; an unknown name is never a
+// capability.
+func TestServerCapabilitiesHasNilAndUnknown(t *testing.T) {
+	var nilCaps *ServerCapabilities
+	if nilCaps.Has(CapabilityLiveHandoff) {
+		t.Error("nil ServerCapabilities claims live_handoff — absence must fail closed")
+	}
+	full := &ServerCapabilities{LiveHandoff: true, DetachedServerDaemon: true}
+	if !full.Has(CapabilityLiveHandoff) || !full.Has(CapabilityDetachedServerDaemon) {
+		t.Error("advertised capabilities not found")
+	}
+	if full.Has("not_a_capability") {
+		t.Error("unknown capability name answered true, want false")
+	}
+}
+
+// TestDialTellsNotRunningFromWrongVersion: "herdr is not running" and "herdr
+// is the wrong version" must be distinguishable at exit — the ticks CLI's
+// herd_shared.go used to flatten both into ExitGeneric. Both not-running
+// shapes — no socket file, leftover socket file with nothing listening —
+// classify as NotRunningError; a protocol refusal does not.
+//
+// Paths use a short os.MkdirTemp("", ...) prefix rather than t.TempDir():
+// darwin caps unix socket paths around 104 bytes.
+func TestDialTellsNotRunningFromWrongVersion(t *testing.T) {
+	dir, err := os.MkdirTemp("", "hd-not-running")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	// Herdr was never started: no socket file at the endpoint.
+	absent := filepath.Join(dir, "absent.sock")
+	if _, err := NewUnixTransport(absent).Dial(t.Context()); !IsNotRunning(err) {
+		t.Fatalf("dial on an absent socket: err = %v, want IsNotRunning", err)
+	}
+	_, err = New(t.Context(), Options{SocketPath: absent})
+	if !IsNotRunning(err) {
+		t.Fatalf("New on an absent socket: err = %v, want IsNotRunning", err)
+	}
+	var nre *NotRunningError
+	if !errors.As(err, &nre) || nre.Endpoint != absent {
+		t.Fatalf("New on an absent socket: err = %v, want *NotRunningError naming %s", err, absent)
+	}
+	if !strings.Contains(nre.Error(), "not running") {
+		t.Errorf("error = %q, want it to say herdr is not running", nre.Error())
+	}
+
+	// Herdr exited and left its socket file behind: connection refused is
+	// ALSO not running, and the underlying cause stays inspectable.
+	ghost := filepath.Join(dir, "ghost.sock")
+	ln, err := net.Listen("unix", ghost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Go's unix listener unlinks the socket on Close; keep the file to
+	// simulate herdr exiting without cleanup.
+	ln.(*net.UnixListener).SetUnlinkOnClose(false)
+	ln.Close() // the file remains; nothing accepts
+	_, err = NewUnixTransport(ghost).Dial(t.Context())
+	if !IsNotRunning(err) {
+		t.Fatalf("dial on a leftover socket: err = %v, want IsNotRunning", err)
+	}
+	if !errors.Is(err, syscall.ECONNREFUSED) {
+		t.Errorf("err = %v, want it to wrap ECONNREFUSED so callers can still inspect the cause", err)
+	}
+
+	// But a server that IS running the wrong protocol is NOT a not-running
+	// failure: it is a protocol refusal.
+	srv := newFakeServer(t, func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+		return respond(w, req.ID, pongResultProtocol(18))
+	})
+	_, err = New(t.Context(), Options{SocketPath: srv.Path()})
+	if IsNotRunning(err) {
+		t.Fatalf("protocol refusal misclassified as not running: %v", err)
+	}
+	var mismatch *ProtocolMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("wrong-version err = %v, want *ProtocolMismatchError", err)
 	}
 }
 

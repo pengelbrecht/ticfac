@@ -3,8 +3,11 @@ package client
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
+	"syscall"
 	"time"
 )
 
@@ -52,6 +55,14 @@ func NewUnixTransport(socketPath string) *UnixTransport {
 func (t *UnixTransport) Endpoint() string { return t.SocketPath }
 
 // Dial opens a unix stream connection to the herdr socket.
+//
+// Two dial failures mean specifically that NO herdr is listening: the socket
+// file does not exist (herdr was never started) and connection refused (the
+// file is a leftover of a herdr that exited). Both are typed as
+// [NotRunningError] so callers can tell "herdr is not running" from "herdr
+// is the wrong version" ([ProtocolMismatchError]) — an exit path that
+// flattens both into one generic failure sends the user hunting for a
+// version fix when the real problem is `herdr daemon` never ran.
 func (t *UnixTransport) Dial(ctx context.Context) (Conn, error) {
 	timeout := t.DialTimeout
 	if timeout <= 0 {
@@ -63,9 +74,43 @@ func (t *UnixTransport) Dial(ctx context.Context) (Conn, error) {
 	var d net.Dialer
 	nc, err := d.DialContext(dialCtx, "unix", t.SocketPath)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
+			return nil, &NotRunningError{Endpoint: t.SocketPath, Err: err}
+		}
 		return nil, fmt.Errorf("herd/client: dial %s: %w", t.SocketPath, err)
 	}
 	return newNetConn(nc), nil
+}
+
+// NotRunningError means nothing is listening at the herdr endpoint: herdr
+// was never started, or it exited and left its socket file behind. It is one
+// of the two ways connecting to herdr fails, and the one that means "herdr
+// is not running" as opposed to "herdr is the wrong version"
+// ([ProtocolMismatchError]). The underlying cause stays wrapped, so
+// callers can still inspect it.
+type NotRunningError struct {
+	// Endpoint is the socket path that was dialled.
+	Endpoint string
+	// Err is the underlying dial error: fs.ErrNotExist when no socket file
+	// exists, syscall.ECONNREFUSED when one exists but nothing accepts on it.
+	Err error
+}
+
+// Error implements error.
+func (e *NotRunningError) Error() string {
+	return fmt.Sprintf("herd/client: herdr is not running at %s: %v", e.Endpoint, e.Err)
+}
+
+// Unwrap keeps the underlying dial error inspectable.
+func (e *NotRunningError) Unwrap() error { return e.Err }
+
+// IsNotRunning reports whether err means no herdr is listening at the
+// endpoint — herdr was never started, or it exited and left its socket file
+// behind. It is the classifier exit paths need to separate "not running"
+// from "wrong version": see [NotRunningError].
+func IsNotRunning(err error) bool {
+	var nre *NotRunningError
+	return errors.As(err, &nre)
 }
 
 // maxLineBytes caps a single protocol line. session.snapshot on a large

@@ -42,11 +42,30 @@ func (c *Client) Ping(ctx context.Context) (ServerInfo, error) {
 // SessionSnapshot returns the whole session — workspaces, tabs, panes and
 // agents — in a single call. It is the cheapest way to reconcile tracker state
 // against reality, and the reconcile command's primary input.
+//
+// It is also the protocol RE-CHECK point. The herdr protocol is
+// one-request-per-connection — every call dials afresh — so herdr may have
+// been upgraded or downgraded since this client connected. A snapshot
+// re-reports the server's protocol and version, and that observation is
+// checked against the supported range here: below the floor the call fails
+// closed with [ProtocolMismatchError] (the client is not torn down — the
+// next call dials fresh and re-observes), above the warn line it proceeds
+// with a warning via [Options.ProtocolWarning], and in every case
+// [Client.ServerInfo] is refreshed to what the server speaks now. The
+// re-check is operational: it refuses a call that could not be decoded, and
+// never a tick (see the av8 contract).
 func (c *Client) SessionSnapshot(ctx context.Context) (*SessionSnapshot, error) {
 	var out struct {
 		Snapshot SessionSnapshot `json:"snapshot"`
 	}
 	if err := c.call(ctx, MethodSessionSnapshot, resultSessionSnapshot, struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	// Record the observation first, even when the re-check below refuses:
+	// ServerInfo reports what the server ACTUALLY speaks now, not what it
+	// spoke when this client connected.
+	c.noteServer(out.Snapshot.Protocol, out.Snapshot.Version)
+	if err := c.checkProtocol(out.Snapshot.Protocol, out.Snapshot.Version, MethodSessionSnapshot); err != nil {
 		return nil, err
 	}
 	return &out.Snapshot, nil

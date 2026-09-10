@@ -47,7 +47,13 @@
 // a forward-compatible upgrade should degrade, not stop every run. Only a
 // server BELOW the minimum fails closed with a [ProtocolMismatchError] — its
 // response shapes are older than anything this package has decoded, so a
-// best-effort continue would be a guess.
+// best-effort continue would be a guess. The range is re-checked whenever a
+// reply re-reports the protocol — session.snapshot carries it, so a server
+// upgraded between calls is caught mid-run — and optional server features
+// are refused by name at the point of use ([Client.RequireCapability]),
+// never silently assumed. Connecting fails two distinguishable ways, and the
+// package keeps them separate: [NotRunningError] for a dead endpoint,
+// [ProtocolMismatchError] for a live server speaking too old a protocol.
 //
 // # Socket path
 //
