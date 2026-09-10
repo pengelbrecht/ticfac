@@ -140,7 +140,19 @@ func TestAProfileThisBuildCannotHonourIsRefusedAtConstruction(t *testing.T) {
 	writeProfile(t, dir, "review-epic", `"executor": "local-subprocess", "runner": "claude", "model": "opus"`)
 	writeProfile(t, dir, "closeout-epic", `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
 
-	f := newFixture(t, fixtureOptions{})
+	// The runner a job is dispatched with is what the ROUTING says, not only
+	// what the profile ships (tick wgi: profiles read through the validated
+	// config reader), so the unlaunchable runner has to be routed to be seen.
+	// The executor is the profile's alone — roles route nothing about it.
+	const geminiRoutedGate = `version = 2
+
+[roles.implement]
+kind = "gemini"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
+`
+	f := newFixture(t, fixtureOptions{gate: geminiRoutedGate})
 	opts := f.options(f.Repo, fixtureOptions{})
 	opts.ProfileDir = dir
 	if _, err := New(opts); err == nil {
