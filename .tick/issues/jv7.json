@@ -2,7 +2,8 @@
   "id": "jv7",
   "title": "A supported protocol range, capabilities that are read, and a re-check on reconnect",
   "description": "Give the client a real supported RANGE, read the capabilities it already\ndecodes, and stop assuming the version it saw at connect is the version it is\nstill talking to.\n\nToday (in the lifted client, protocol.go:31,41,52): ProtocolVersion,\nMinProtocolVersion and ProtocolWarnVersion are ALL 20. The supported range is a\nsingle point, so an older herdr is refused outright and a newer one warns on\nevery connect. That is the structural cause of upgrade breakage in both\ndirections.\n\nAlso today:\n- Capabilities are decoded and never read. ServerCapabilities{LiveHandoff,\n  DetachedServerDaemon} (types.go:85-88) is referenced nowhere outside a test,\n  so every feature is assumed present.\n- The check happens ONCE, in New (client.go:107). SessionSnapshot carries a\n  protocol field (types.go:231) that no production code reads. A herdr that\n  restarts under a different version mid-run is never re-checked.\n\nDo:\n- Separate the three constants into what they actually mean: the oldest protocol\n  this client can speak, the newest it was verified against, and the newest it\n  will speak without a warning. Support a RANGE, with no upper bound — an\n  unknown-but-newer server proceeds.\n- Branch on capabilities rather than assuming. A feature the server does not\n  advertise is refused BY NAME at the point of use, not discovered as a failure.\n- Re-check on every reconnect, and read the protocol field the snapshot already\n  carries. A version change mid-run must be noticed.\n- A version or capability refusal is OPERATIONAL. It must never reject a tick or\n  tear an attempt down — see the never-a-verdict tick, which owns the tests.\n- Distinguish \"herdr is not running\" from \"herdr is the wrong version\". Today\n  both flatten to one generic exit (herd_shared.go:21-27).",
-  "status": "open",
+  "notes": "2026-09-10 13:14 - runner-state: dispatched on pi/cloudflare GLM-5.3 effort=high (default tier) from base a085b31",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,5 +14,6 @@
   "acceptance_criteria": "Floor, verified-against and warn are three distinct values and a newer-than-verified server proceeds without refusal; a capability the server does not advertise is refused by name at the point of use rather than failing later; the protocol is re-checked on reconnect and the snapshot's protocol field is read; 'herdr is not running' and 'herdr is the wrong version' are distinguishable at the exit; tests cover a server below the floor, above the warn version, one missing a capability, and one that changes version mid-run; go test -short -timeout 45m ./... green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:22:15.915072Z",
-  "updated_at": "2026-09-10T08:22:15.915072Z"
+  "updated_at": "2026-09-10T11:14:22.731311Z",
+  "started_at": "2026-09-10T11:09:56.385066Z"
 }
