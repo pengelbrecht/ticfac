@@ -1,6 +1,5 @@
 # RESULT — wgi: Split the runners config
 
-**STATUS: DONE** (test evidence at the bottom; final `make test-short` run on the finished tree, green).
 
 ## The decision this tick existed to make
 
@@ -60,6 +59,8 @@ When ticks retires its execution machinery, its loader must come to tolerate the
 
 - `go test ./internal/herd/config/ ./internal/profile/ ./internal/contracts/...` green (local, repeatedly).
 - ticks untouched at main e123f461; its config suite still passes there (run for evidence, not modified).
-- `make test-short` (GOTEST_TIMEOUT=45m, as required — never a bare `go test`), on the final tree, after all edits: **green** (reconcile ~888s at the wave-1 gate; the host was under 40–80 load from sibling wave workers, so wall clocks ran long).
+- `make test-short` (GOTEST_TIMEOUT=45m, as required — never a bare `go test`), on the committed tree, final run: **green, every package ok** — `internal/reconcile` 652.5s fresh with the fixture changes, `internal/herd/config`, `internal/profile`, `internal/contracts/parity` all green. The first full-suite run acted as the canary and caught exactly one regression — `TestAProfileThisBuildCannotHonourIsRefusedAtConstruction` (the new `[roles.implement]` routing masked the deliberately-unlaunchable runner) — fixed and committed as its own commit before the final gate.
 
 Sandboxed decision ladder: 2 decisions logged (`tk decide av8`, `tk decide wgi`); 1 follow-up tick created (9t0); no money, credentials, live systems, or scope changes involved.
+
+STATUS: DONE
