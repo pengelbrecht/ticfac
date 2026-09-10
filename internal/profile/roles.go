@@ -19,9 +19,12 @@ import (
 // model a role is dispatched with — so it gets a reader of its own that can run
 // nothing at all.
 //
-// It is not a TOML parser either. It reads two keys of one table family,
-// ignores every other table, and refuses a line inside a roles table that it
-// cannot read, naming the line.
+// It is not a TOML parser either. It ignores every other table, and within a
+// roles table it reads two keys — the two a profile has anywhere to put — and
+// silently passes over the keys ticks' schema defines but ticfac does not yet
+// route on (`effort`, `args`, `harness`). A key outside that whole set is not
+// a future upgrade to tolerate: it is a malformed entry, and this reader
+// refuses it naming the line.
 
 // Role is one `[roles.<name>]` declaration, and the tier overlays under it.
 // `kind` is ticks' word for the runner; the two keys this reader owns are the
@@ -80,9 +83,17 @@ func ParseRoles(document string) (map[string]Role, error) {
 			return nil, fmt.Errorf("runners.toml:%d: %q is not a key/value in [%s]", number+1, text, section)
 		}
 		if key != "kind" && key != "model" {
-			// A key this reader does not own: the schema of that table belongs
-			// to ticks, and refusing a key ticks adds later would break every
-			// run's routing on an unrelated upgrade.
+			if !isIgnorableRoleKey(key, tier != "") {
+				// A key outside the pinned shape entirely: not a future
+				// upgrade to route around silently, but a malformed entry.
+				return nil, fmt.Errorf("runners.toml:%d: [%s] declares %q, which is not a key this reader recognises",
+					number+1, section, key)
+			}
+			// A key this reader does not own but the pinned shape does: ticks'
+			// schema defines it (effort, args, and at the role level harness),
+			// ticfac does not yet route on it, and ignoring it here is not the
+			// same as ignoring an unknown key — the shape it belongs to is
+			// still pinned and enforced above.
 			continue
 		}
 		text, err := parseString(value)
@@ -113,6 +124,21 @@ func (r *Role) assign(key, value string) {
 		r.Kind = value
 	case "model":
 		r.Model = value
+	}
+}
+
+// isIgnorableRoleKey reports whether key is valid in a `[roles.<name>]` or
+// `[roles.<name>.tiers.<tier>]` table by ticks' own schema, but is not one of
+// the two keys this reader consumes. `harness` is documentary and valid only
+// at the role level, never on a tier overlay.
+func isIgnorableRoleKey(key string, inTier bool) bool {
+	switch key {
+	case "effort", "args":
+		return true
+	case "harness":
+		return !inTier
+	default:
+		return false
 	}
 }
 

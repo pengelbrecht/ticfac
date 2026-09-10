@@ -98,16 +98,42 @@ func TestARolesTableThisReaderCannotReadIsRefused(t *testing.T) {
 	}
 }
 
-// A key this reader does not own is IGNORED rather than refused: the schema of
-// that table belongs to ticks, and refusing a key ticks adds later would make
-// an unrelated upgrade break every run's routing.
-func TestAKeyThisReaderDoesNotOwnIsIgnored(t *testing.T) {
-	roles, err := ParseRoles("[roles.implement]\nkind = \"claude\"\neffort = \"high\"\nbudget_usd = 5\n")
+// A key ticks' own schema defines but this reader does not route on yet
+// (`effort`, `args`, and — at the role level — `harness`) is IGNORED rather
+// than refused: the pinned shape allows it, and ticfac simply has nowhere to
+// put it yet.
+func TestAKeyThisReaderDoesNotOwnButTheShapeAllowsIsIgnored(t *testing.T) {
+	roles, err := ParseRoles("[roles.implement]\nkind = \"claude\"\neffort = \"high\"\nargs = [\"--foo\"]\nharness = \"claude\"\n")
 	if err != nil {
-		t.Fatalf("a role with keys this reader does not own was refused: %v", err)
+		t.Fatalf("a role with keys the pinned shape allows was refused: %v", err)
 	}
 	if roles["implement"].Kind != "claude" {
 		t.Errorf("[roles.implement] read as %+v", roles["implement"])
+	}
+}
+
+// A key outside the pinned shape entirely is a malformed entry, not a future
+// schema addition to route around silently: it is REFUSED, naming the file,
+// the table and the line.
+func TestAKeyOutsideThePinnedShapeIsRefused(t *testing.T) {
+	_, err := ParseRoles("[roles.implement]\nkind = \"claude\"\nbudget_usd = 5\n")
+	if err == nil {
+		t.Fatal("a role with a key outside the pinned shape was accepted")
+	}
+	if !strings.Contains(err.Error(), "runners.toml") || !strings.Contains(err.Error(), "budget_usd") {
+		t.Errorf("refused with %q, which does not name the file and the offending key", err)
+	}
+}
+
+// `harness` is documentary and valid only at the role level per ticks'
+// schema — never on a tier overlay, which has no field for it.
+func TestHarnessOnATierOverlayIsRefused(t *testing.T) {
+	_, err := ParseRoles("[roles.implement]\nkind = \"claude\"\n\n[roles.implement.tiers.economy]\nmodel = \"haiku\"\nharness = \"claude\"\n")
+	if err == nil {
+		t.Fatal("harness on a tier overlay was accepted")
+	}
+	if !strings.Contains(err.Error(), "runners.toml") || !strings.Contains(err.Error(), "harness") {
+		t.Errorf("refused with %q, which does not name the file and the offending key", err)
 	}
 }
 
