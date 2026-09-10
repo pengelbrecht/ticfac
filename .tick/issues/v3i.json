@@ -2,7 +2,8 @@
   "id": "v3i",
   "title": "Move the Factory and its embedded payload to the ticfac CLI",
   "description": "Move the Factory to the ticfac CLI.\n\nFirst, a correction to the Phase 2 scope. jrj says to move this \"without hidden\ntk dispatch shims\", implying they exist. THEY DO NOT. A survey found no\nexec.Command(\"tk\", ...), no os.Executable, and no re-entry into the cobra tree\nanywhere in internal/factory. The one place that touches tk's command surface\nruns the OTHER way: internal/factory/tkcommands.go regex-scans the embedded\nshell entrypoints for `tk \u003csub\u003e` invocations and asks a caller-supplied\n`has(chain []string) bool` whether this binary implements them. The cobra lookup\nlives in the caller in cmd/tk. That is a gate, not a shim. Do not go hunting.\n\nWhat moves: ~7745 non-test lines over 24 files, five packages —\ninternal/factory (5290: deploy, credential setup, status, supervisor read,\nrollout, migration, wrangler/docker drivers, bundle staging),\ninternal/factory/dashboard (1502, a read-only TUI over runs and gates),\ninternal/factory/credentials (232, reads/writes ~/.ticfacrc), plus three doc.go\ncontract-parity homes.\n\nCommands: `tk factory deploy|setup|status|dashboard` (cmd/tk/cmd/factory.go:57,\n133, 212; factory_dashboard.go:74) and the thin slice `tk cloud\nrun|stop|status|logs|trace|supervisor` uses (LoadCredentials, ReadSupervisor,\nSupervisor*, SecretGatewayBaseURL, RunWorkflowName).\n\nIn Go terms it is near-standalone: no import of internal/tick, tickboard or\ntkcontract from production code. THE REAL COST IS THE EMBEDDED PAYLOAD. //go:embed\ncannot reach across modules, so moving internal/factory means moving\ncloud/factory and cloud/sandbox and the module-root embedded.go with it;\ncloud/sandbox alone is 236K of build context. Then the required-tk-commands gate\nneeds a way to interrogate a tk it no longer ships beside.\n\nTouchpoints are few: `~/.tick/factory/bundle` as a staging dir (deploy.go:142),\none `git remote get-url origin` (setup.go:1406), docker (toolchain.go:59,124)\nand wrangler (wrangler.go:206). No herdr references at all. It never reads or\nwrites a tracker record.\n\nThis tick is INDEPENDENT of the herdr executor work and can run in parallel with\nit. If it grows past one tick, split it rather than widening it — say so in the\nRESULT file and propose the split.",
-  "status": "open",
+  "notes": "2026-09-10 11:40 - runner-state: dispatched on claude/sonnet effort=high (default tier, per the default-then-escalate decision) from base 7151b15; workspace wPG branch tick/v3i",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -10,5 +11,6 @@
   "acceptance_criteria": "factory, its dashboard and its credentials build and pass under ticfac with their embedded payload; the factory and cloud commands work from the ticfac CLI; the required-tk-commands gate still verifies the entrypoints against a tk it no longer ships beside, and the RESULT file says how; ticks no longer carries the factory tree; no ticks Go package is imported; go test -short -timeout 45m ./... green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:23:40.597801Z",
-  "updated_at": "2026-09-10T08:23:40.597801Z"
+  "updated_at": "2026-09-10T09:40:35.824864Z",
+  "started_at": "2026-09-10T09:40:00.989861Z"
 }

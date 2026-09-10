@@ -24,6 +24,18 @@ kind = "codex"
 model = "gpt-5.6-luna"
 effort = "max"
 
+# pi on cloudflare. Verified live 2026-09-10 (ticfac tick gjk): pi has no
+# permission gate to bypass — it ran a write tool unprompted with no flag — so
+# `--approve` (trust project-local files) is the whole of its full-auto story.
+# herdr's pi integration is current (v8). Resume works. pi's status line names
+# the model actually in use, which is the read-back that catches a bad id.
+# Evidence: .tick/logs/herd/av8/gjk.RESULT.md
+[roles.implement.tiers.frontier]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+args = ["--approve"]
+
 [testing.commands]
 go = { command = "go test -short -count=1 ./...", description = "Go" }
 
