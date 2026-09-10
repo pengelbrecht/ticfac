@@ -1,0 +1,12 @@
+{
+  "id": "iqy",
+  "title": "runstate: decide whether ticfac/run-\u003cid\u003e tag follows a resumed run",
+  "description": "Since ma5, a failed run is resumed under the same run id. PutCheckpoint places the run tag on any terminal state and ensureRunTag leaves an existing origin tag where it is, so a run that failed, was resumed and then completed keeps its tag at the failure point (store contract: a restart replaying a terminal checkpoint must not move it). Decide whether the tag should follow the resumed run's final checkpoint; if so, change it in internal/runstate. Also consider a 'cancelled' CLI verb: today nothing writes cancelled, so a failed run is resumed on every invocation. See RESULT-ma5.md 'What the next tick should know'.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-09T13:04:40.459979Z",
+  "updated_at": "2026-09-09T13:04:40.459979Z"
+}

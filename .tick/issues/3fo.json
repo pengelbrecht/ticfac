@@ -1,0 +1,12 @@
+{
+  "id": "3fo",
+  "title": "Harden A2 liveness: compare process start time, treat EPERM as unknown",
+  "description": "processAlive in internal/exec/subprocess/process_unix.go:21-37 is kill(pid,0) with no start-time comparison and treats EPERM as alive, so a reused pid reads live. ma5 bounded the consequence (settlement deadline refuses attempt_unaddressed past the attempt's own wall clock) but the check itself is unhardened. Record the supervisor's start time in the attempt record and compare it on inspect (sysctl kinfo_proc on darwin, /proc/\u003cpid\u003e/stat starttime on linux); EPERM means 'exists, not ours' and should be reported as unknown, not alive. Source: final re-review of qeu, A2 partial.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-09T13:14:08.916819Z",
+  "updated_at": "2026-09-09T13:14:08.916819Z"
+}

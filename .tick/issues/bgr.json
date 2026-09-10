@@ -1,0 +1,13 @@
+{
+  "id": "bgr",
+  "title": "Cancel serves two callers: an operator stop and a teardown revoke, and only one wants a cancellation record",
+  "description": "From the qeu final review (gcx), wave 11 review pass. Introduced by wave 11.\n\no3n made Cancel's hasSettled ask the operating system before trusting a report,\nwhich is right for the case it was written for: an operator stopping a worker\nthat wrote its report and kept running. Before the fix that cancel revoked the\ncredential, killed the process tree, wrote NO durable refusal, and acknowledged\nthat no stop was requested.\n\nBut Cancel has two callers that want different things, and the fix only\nconsidered one:\n\n- The OPERATOR stop. Something is still spending and a person wants it stopped.\n  A live process means the attempt has not settled, and a durable cancel.json is\n  exactly the record that should exist.\n- The TEARDOWN (dispatch.go tearDown, reached from cleanUp AFTER a successful\n  collect, gate and close). Cancel is called only to keep A1's order — revoke\n  before dispose. Here the attempt SUCCEEDED. If its runner happens to still be\n  alive in the narrow window after the report is written (the shape the\n  `report_then_addall` fixture exists for: report first, then commit), the\n  liveness check now calls it unsettled and writes cancel.json over an attempt\n  that finished. inspect reads cancel.json first, so a successfully closed\n  attempt afterwards reads as `cancelled`.\n\nThe impact today is small — cleanUp is the last thing a run does and the tick is\nalready closed — but the record is false, and this codebase's whole argument is\nthat its durable records are true.\n\nWhat to decide: whether Cancel should take the caller's intent (a stop versus a\nteardown-revoke), or whether the executor should distinguish \"settled itself\"\nfrom \"has nothing left to stop\" as two separate questions, or whether tearDown\nshould call a revoke-only operation instead of Cancel. The third is probably\ncleanest — tearDown does not want a cancellation, it wants A1's order — but it\nadds an executor operation, so it is a contract question rather than a patch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A successful attempt whose runner is still alive when cleanUp runs is NOT recorded as cancelled, and still has its credential revoked before dispose; an operator cancelling a live worker still gets a durable cancel.json and StopRequested true; a test covers both callers against the same live-after-report fixture.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-09T21:07:14.500492Z",
+  "updated_at": "2026-09-09T21:07:14.500492Z"
+}

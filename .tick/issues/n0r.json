@@ -1,0 +1,15 @@
+{
+  "id": "n0r",
+  "title": "Run feed: structured real-time event stream for dashboards and widgets",
+  "description": "Operator idea (2026-09-08, during the Phase 1 gate run): ticfac should emit a detailed, structured (JSON) feed of a run — checkpoints, stages per tick, attempts, dispatch/heartbeat/collect events, gate evidence, decisions — consumable in real time by client dashboards and widgets (herdr mission control, a web board, a menu-bar widget, the operator channel). Today the only observables are the .ticfac/ records on the integration branch and the executor's observations.jsonl, and a headless run has no herdr presence at all, so an operator cannot see that workers are alive. Candidate shape: one append-only JSONL event stream per run (the reconciler's journal stages + executor observations, with the run/tick/attempt identity on every line), written locally and optionally mirrored (file tail, HTTP/SSE, or the run-state store), with a versioned event schema in the contract bundle so every client parses the same thing. Roadmap placement is the human's call — proposed for the retro.",
+  "notes": "2026-09-08 12:38 - Operator example (2026-09-08): a menu-bar utility that monitors one or more factories — so the feed must be consumable across factories/hosts, not only per run on one machine: a stable event schema, a way to subscribe per factory (poll the run-state index or a push endpoint), and enough identity per event (factory, repo key, run, tick, attempt) to render a multi-factory summary. SPEC §9 already assigns 'execution dashboards' to ticfac and allows a rebuildable index (D1) over .ticfac/ as exhaust, never authority — the feed should be built as that exhaust.\n2026-09-08 12:39 - Parked awaiting input: roadmap placement is the operator's decision (not part of epic qeu); not dispatchable until placed.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "To be planned: event schema in the contract bundle; the reconciler and executor emit every stage/observation as an event with identity; a reference consumer (e.g. the herdr-ticks dashboard) renders a live run from the feed alone.",
+  "awaiting": "input",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-08T10:38:04.398529Z",
+  "updated_at": "2026-09-08T10:39:02.349752Z"
+}

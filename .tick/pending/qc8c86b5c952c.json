@@ -1,0 +1,11 @@
+{
+  "id": "qc8c86b5c952c",
+  "tick_id": "cc5",
+  "kind": "ask",
+  "awaiting": "input",
+  "question": {
+    "id": "qc8c86b5c952c",
+    "text": "The three-cut live restart evidence in RESULT-cc5.md was produced on binaries at 2ea1c22, before the wave 8 repairs (attempt refs, merge-head rule, refusal disposal, settlement deadline, read-only sandbox). Tests pin every one of those on the final tree. Do you want one more live cut (kill+restart of a real epic in the ticks repo on the final binary, ~30-60 min, pushes to the ticks repo) before PR #1 is marked ready, or is the test evidence sufficient for Phase 1? Default if unanswered: mark PR ready on test evidence and note the gap in the retro."
+  },
+  "created_at": "2026-09-09T13:14:08.978089Z"
+}

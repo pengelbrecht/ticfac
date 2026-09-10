@@ -12,4 +12,28 @@ pinned contract bundle under `contracts/` there; it never imports ticks' Go
 packages. Migration phases and gates: SPEC §12. Roadmap and state: the
 `hzm` project in ticks' tracker.
 
-Status: Phase 1 (reconciler and local subprocess executor) — starting.
+Status: Phase 1 (reconciler and local subprocess executor) — in progress.
+
+## Contracts
+
+`contracts/` is a **vendored, pinned copy** of the ticks contract bundle —
+version 3.0.0, fetched from `pengelbrecht/ticks` at the commit recorded in
+`contracts.pin.json`. It is verified offline by digest on every test run and
+against GitHub at the pinned ref in CI, and every file in it has a Go reader in
+`internal/contracts/parity`. `CONTRACTS.md` says how that works and how to
+adopt a new bundle version. Never edit a file under `contracts/` here.
+
+## Development
+
+```
+go build ./...                    # the ticfac binary
+make test-short                   # readers, negative controls, CLI (-timeout 45m)
+make test                         # the full suite, same timeout
+go run ./cmd/contracts check      # verify the vendored bundle, offline
+```
+
+`make test` / `make test-short` pin `-timeout 45m`: `internal/reconcile`'s suite
+runs 600-620s even under `-short`, past `go test`'s default 10-minute
+per-package timeout. Use these targets (or pass `-timeout` yourself) rather
+than a bare `go test ./...`.
+

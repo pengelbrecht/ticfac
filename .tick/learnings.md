@@ -24,6 +24,36 @@ alone. **Rule:** When parallel ticks share a contract, the merge gate is the onl
 from durable evidence (does the thing exist?) by whoever finds it next, never by trusting the
 claimer to return.
 
+## Reviews and repairs
+
+**Problem:** A review called something a blocker, a repair was built on it, and the repair introduced
+a real regression — the premise ("integrate never marks the tick rejected") was true of the function
+and false of the run that calls it. **Rule:** Before repairing a reported defect, REPRODUCE it at the
+base commit. A worktree at the base plus the new test costs minutes and settles it.
+
+**Problem:** A regression test "failed before the fix", so the fix looked proven — but it failed only
+on a stage-record assertion while every behavioural assertion passed unfixed. **Rule:** Read WHICH
+assertion fails at the base. One failing line is not evidence the behaviour changed.
+
+**Problem:** A reviewer reported "no RESULT file was written" for three ticks that all wrote one;
+cleanup had archived them to `.tick/logs/herd/<epic>/<id>.RESULT.md` and the worktrees were gone.
+**Rule:** Point a reviewer at the ARCHIVE, not the worktree, for any tick already cleaned up.
+
+**Problem:** A fix keyed gate evidence by commit; the run writes its own `.ticfac/` records to the
+branch it gates, so the key was wrong in both directions at once — reused across a real change, and
+re-minted on every resume. **Rule:** When a run writes to the artifact it measures, key evidence by
+the SOURCE (tree minus the run's own path), never by the commit.
+
+**Problem:** A rekeyed evidence key was compared only against the record at the plain key, so each
+resume minted another key. **Rule:** A derived key must be a function of the thing it identifies, not
+of the history that produced it — or it chains.
+
+## Fixtures
+
+**Problem:** A test built two commits with the same parent, content, message and author and asserted
+they differed; inside one second git gave them one SHA. **Rule:** Make fixture commits differ by
+something intentional (the message) and assert the property you rely on (same tree, different commit).
+
 ## Verification ticks
 
 **Problem:** Workers finishing a verification tick left a clean tree and did NOT commit
@@ -38,3 +68,12 @@ Single-quote or heredoc tick text containing backticks, `$`, `()` or `<>`.
 
 **Problem:** `git add .tick/ && git commit` captured foreign staged files. **Rule:** `git add
 .tick/ && git commit .tick/`. Confirm `MERGE_HEAD` is empty after any merge.
+
+**Problem:** `tk close` on a tick left `awaiting: input` printed usage text and exited non-zero; the
+real error ("a verdict is a human's decision") appeared only with a short `--reason`. **Rule:** A
+close that prints usage is a REFUSAL, not a bad flag. Re-run with `--reason done` to read it. A tick
+parked with `tk ask` needs `--from human` once the human has answered.
+
+**Problem:** `tk herd spawn` reported "the probe never reached the composer" while the composer was
+fine; the account was at 93% of its session limit. **Rule:** Before believing a spawn's diagnosis,
+send text to the pane by hand. A capacity failure and a broken pane read identically.

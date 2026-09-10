@@ -1,0 +1,17 @@
+{
+  "id": "u65",
+  "title": "tk client: locate the manifest from the embedded bundle, not the repository root",
+  "description": "Found by the Phase 1 gate run (cc5): a built ticfac binary run outside the ticfac checkout fails with \"the tracker is not usable: locate tk JSON manifest: no go.mod above /: cannot locate the repository root\". internal/tk locates contracts/tk-json-manifest.json through internal/contracts.RepoRoot() (a go.mod walk from cwd). A shipped binary has no checkout beside it. Read the manifest from the embedded bundle (root embedded.go already embeds contracts/ for version --json and the reconciler role-result validator uses the embedded job-protocol.json) and drop the RepoRoot dependency from the runtime path; keep RepoRoot for tests only. Scope: internal/tk (and embedded.go if a new export is needed). Do not touch internal/reconcile, internal/exec or other packages. Regression test: a test that builds the ticfac binary and runs \"ticfac run-epic --repo \u003cfixture\u003e x\" from a temp cwd outside the repo must get past manifest loading (it may then fail closed for another reason, but never with \"cannot locate the repository root\").\n\n## How this fits\nWave 5 of epic qeu, running in parallel with the gate run cc5 (a report-only tick that touches no source). Integration commit cafe14885e3e22485cf757fa49fe261a52f103d8 on epic/qeu. Stdlib only; no go.mod/README/contracts edits. Verify your base: git merge-base --is-ancestor cafe14885e3e22485cf757fa49fe261a52f103d8 HEAD.",
+  "notes": "2026-09-08 10:48 - runner-state: substrate=herdr kind=claude branch=tick/u65 worktree=/Users/peterengelbrecht/.herdr/worktrees/ticfac/tick-u65 workspace=wKQ base=19995afcf8e76436c3c2bce032fdca3ec3aa413f agent=tick-u65 pane=wKQ:p1 session=387e6fe3-b1e2-4084-818e-73cf10879866\n2026-09-08 11:05 - Orchestrator: 2db432a merged provisionally; tk+cli short tests and the non-short outside-repo binary test green. Full gate + close deferred to the end of the wave (with cc5).\n2026-09-08 11:27 - Gate: go test -short ./... green on the merged tree (with u65).",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "qeu",
+  "acceptance_criteria": "ticfac binary run with cwd outside the repository loads the manifest; go test -short ./internal/tk/... ./internal/cli/... green; go test -short ./... green",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-08T08:45:33.050317Z",
+  "updated_at": "2026-09-08T09:27:22.269871Z",
+  "closed_at": "2026-09-08T09:27:22.269871Z",
+  "closed_reason": "Completed: internal/tk loads the tk JSON manifest from the embedded bundle (root embedded.go), removing the repo-root walk from the runtime path; regression test builds the binary and runs it from a cwd outside the repository"
+}
