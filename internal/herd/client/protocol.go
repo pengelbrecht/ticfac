@@ -28,6 +28,12 @@ import (
 // workspaces, two panes, one agent) rather than live dumps: they exist to pin
 // decoding of a known shape, and a live capture would churn them every time
 // the operator opens a window. Their provenance headers say what they are.
+//
+// One curated edit, tick bcv: the agent objects now carry the four
+// load-bearing keys (agent_status, interactive_ready, name, agent_session)
+// with a null value where the agent has none — the 0.8.0-era captures
+// predate them, and the strict decoder refuses an agent object that omits
+// one, because an omitted key is indistinguishable from a renamed field.
 const ProtocolVersion uint32 = 20
 
 // MinProtocolVersion is the lowest protocol [New] will talk to. A server below

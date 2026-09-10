@@ -340,7 +340,7 @@ func TestWorktreeMethodsDecodeCapturedFixtures(t *testing.T) {
 func TestAgentStartSendsCompiledArgv(t *testing.T) {
 	c, srv := newTestClient(t, map[string]fakeHandler{
 		MethodAgentStart: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
-			return respond(w, req.ID, `{"type":"agent_started","agent":{"terminal_id":"term_z","agent":"claude","agent_status":"working","workspace_id":"w9","tab_id":"w9:t1","pane_id":"w9:p1","focused":false,"revision":1},"argv":["claude","--permission-mode","bypassPermissions","--model","opus"]}`)
+			return respond(w, req.ID, `{"type":"agent_started","agent":{"terminal_id":"term_z","agent":"claude","agent_status":"working","workspace_id":"w9","tab_id":"w9:t1","pane_id":"w9:p1","focused":false,"revision":1,"name":"tick-xw7","interactive_ready":true,"agent_session":null},"argv":["claude","--permission-mode","bypassPermissions","--model","opus"]}`)
 		},
 	})
 
@@ -369,7 +369,7 @@ func TestAgentStartSendsCompiledArgv(t *testing.T) {
 func TestAgentPromptSendsInlineWait(t *testing.T) {
 	c, srv := newTestClient(t, map[string]fakeHandler{
 		MethodAgentPrompt: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
-			return respond(w, req.ID, `{"type":"agent_prompted","agent":{"terminal_id":"term_z","agent_status":"idle","workspace_id":"w9","tab_id":"w9:t1","pane_id":"w9:p1","focused":false,"revision":2}}`)
+			return respond(w, req.ID, `{"type":"agent_prompted","agent":{"terminal_id":"term_z","agent_status":"idle","workspace_id":"w9","tab_id":"w9:t1","pane_id":"w9:p1","focused":false,"revision":2,"name":null,"interactive_ready":true,"agent_session":null}}`)
 		},
 	})
 

@@ -289,9 +289,15 @@ func (e Event) OutputMatched() (*PaneOutputMatched, error) {
 //
 // A stream ends when the caller cancels the context passed to
 // [Client.EventsSubscribe], when [EventStream.Close] is called (both leave Err
-// nil), or when the connection or a payload fails (Err non-nil). That
-// distinction is the contract a waiter keys on: nil Err means "you stopped
-// it", non-nil means "it broke and you have a gap to reconcile".
+// nil), or when the connection fails (Err non-nil). That distinction is the
+// contract a waiter keys on: nil Err means "you stopped it", non-nil means
+// "it broke and you have a gap to reconcile".
+//
+// A line that is not a decodable event envelope does NOT end the stream: it
+// is skipped, counted by [EventStream.SkippedEvents] and described by
+// [EventStream.LastSkipped], and the subscription keeps running. One bad
+// event must not kill the stream — the subscription's continuity is worth
+// more than any single line.
 //
 // The channel is buffered to [Options.EventBuffer] events. Once the buffer
 // fills, the reader blocks on the socket — a slow consumer gets backpressure,
@@ -306,6 +312,8 @@ type EventStream struct {
 	closeOnce sync.Once
 	mu        sync.Mutex
 	err       error
+	skipped   int
+	lastSkip  string
 	done      chan struct{}
 }
 
@@ -344,6 +352,34 @@ func (s *EventStream) setErr(err error) {
 	if s.err == nil {
 		s.err = err
 	}
+}
+
+// recordSkip counts one discarded stream line and remembers why, so a
+// consumer can report skips without having to watch for them live.
+func (s *EventStream) recordSkip(reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.skipped++
+	s.lastSkip = reason
+}
+
+// SkippedEvents reports how many stream lines were discarded as malformed
+// rather than delivered. A non-zero count means the server sent something
+// this client could not decode — worth reporting, never worth losing the
+// subscription over.
+func (s *EventStream) SkippedEvents() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.skipped
+}
+
+// LastSkipped returns the recorded reason the most recent skipped line was
+// discarded — the offending line, truncated, and its decode error — or ""
+// when nothing has been skipped.
+func (s *EventStream) LastSkipped() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastSkip
 }
 
 // EventsSubscribe opens a push-event stream. This is the surface the herdr CLI
@@ -506,8 +542,12 @@ func (s *EventStream) run(ctx context.Context) {
 		}
 		var ev Event
 		if err := json.Unmarshal(line, &ev); err != nil {
-			s.setErr(fmt.Errorf("herd/client: malformed event %s: %w", truncateForError(line), err))
-			return
+			// One bad line is one lost event, not a lost subscription.
+			// Skip it, record it, keep reading — a wave's fan-in is
+			// worth more than any single event, and the skip stays
+			// countable through [EventStream.SkippedEvents].
+			s.recordSkip(fmt.Sprintf("malformed event %s: %v", truncateForError(line), err))
+			continue
 		}
 		if ev.Kind == "" {
 			// Not an event envelope. An out-of-band error response ends the
