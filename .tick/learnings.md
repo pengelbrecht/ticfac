@@ -24,6 +24,10 @@ alone. **Rule:** When parallel ticks share a contract, the merge gate is the onl
 from durable evidence (does the thing exist?) by whoever finds it next, never by trusting the
 claimer to return.
 
+**Problem:** A bare `go test ./...` died at the default 10-minute PER-PACKAGE timeout because
+`internal/reconcile` alone takes ~600-620s even under `-short`. **Rule:** Run tests through the
+Makefile (`make test-short` / `make test`), which pins `GOTEST_TIMEOUT := 45m` exactly for this.
+
 ## Reviews and repairs
 
 **Problem:** A review called something a blocker, a repair was built on it, and the repair introduced
