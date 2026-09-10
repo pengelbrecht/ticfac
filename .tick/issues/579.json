@@ -3,7 +3,7 @@
   "title": "Lift the herdr transport client into ticfac, unchanged",
   "description": "Move the herdr TRANSPORT into ticfac, unchanged. Behaviour-preserving lift, so\nevery later tick hardens code that already lives here.\n\nWhat moves, from ticks `internal/herd/`:\n- `client/` (14 files, ~4394 lines) — the typed unix-socket JSON client. Its\n  types are pure herdr wire shapes (types.go); no tracker type crosses that\n  boundary, which is why it lifts cleanly. `events.go` (626 lines) is the reason\n  the package exists: the herdr CLI has no `events.subscribe`.\n- `herdtest/` (~1513 lines) — the one canonical fake herdr server.\n- `gitcmd/` (36 lines) — the shared git shell-out, if ticfac has no equivalent;\n  prefer ticfac's existing git helper and drop this.\n\nWhat does NOT move: `state/` (its `Manifest` mixes herdr identity with tracker\nidentity, and ticfac already has JobHandle + run-state for both halves).\n\nRules:\n- No behaviour change. This tick is a move plus package renames plus whatever\n  the compiler demands. Hardening is w2's job — resist fixing what you find, and\n  write it down instead.\n- ticks keeps working. Until the retire tick, ticks may vendor or import nothing\n  from ticfac; leave its copy in place and note the duplication. Do NOT delete\n  from ticks here.\n- Record anything you notice that later ticks should fix, in your RESULT file.\n\nNote for the record: the fake advertises protocol 20 / herdr 0.8.2\n(`herdtest/replies.go:13,41`) but its recorded shapes are herdr 0.8.0 /\nprotocol 19 (`client/testdata/event_stream.ndjson:1`), and\n`session_snapshot.json` was hand-edited to claim 20 over a 0.8.0 body. Do not\nfix that here; the drift tick owns it.",
   "notes": "2026-09-10 11:40 - runner-state: dispatched on claude/sonnet effort=high (default tier, per the default-then-escalate decision) from base 7151b15; workspace wPE branch tick/579",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,6 +11,7 @@
   "acceptance_criteria": "internal/herd/client and its fake build and pass inside ticfac under a ticfac package path, with no import of any ticks package; the event-stream fixtures come with them; go test -short -timeout 45m ./... green (make test-short); ticks is untouched and still builds.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:21:14.227711Z",
-  "updated_at": "2026-09-10T09:40:35.735032Z",
-  "started_at": "2026-09-10T09:40:00.935698Z"
+  "updated_at": "2026-09-10T11:09:10.825564Z",
+  "closed_at": "2026-09-10T11:09:10.825564Z",
+  "closed_reason": "Lifted internal/herd/client (the typed unix-socket JSON client, including its 626-line event handling) and herdtest (the canonical fake herdr server) into ticfac, ~6000 lines, no behaviour change, no ticks import. It respected the no-fix rule and recorded what it found instead: stale cross-package doc references to wait and spawn (which do not move), and a protocol observation routed to the drift tick yod. Merged; wave gate green (EXIT=0, reconcile 888s)."
 }
