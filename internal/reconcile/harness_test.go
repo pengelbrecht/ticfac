@@ -338,7 +338,15 @@ func mustRun(t *testing.T, dir, name string, args ...string) string {
 // -------------------------------------------------------------- gates ---
 
 // passingGate is the smallest honest gate: it reads the integrated tree.
+// The roles block mirrors the shipped implement-tick profile exactly
+// (claude/sonnet), so the fixture exercises routing without changing any
+// resolved model: the format requires [roles] in every runners.toml, and
+// since tick wgi the profile reader validates the whole execution half.
 const passingGate = `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
 
 [testing.commands]
 tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
@@ -347,6 +355,10 @@ tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description 
 // failingGate refuses everything, so that a run's close can be shown to depend
 // on it.
 const failingGate = `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
 
 [testing.commands]
 tree = { command = "exit 3", description = "always refuses" }

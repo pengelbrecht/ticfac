@@ -23,6 +23,10 @@ import (
 // run the epic again.
 const gateNeedingAFix = `version = 2
 
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
 [testing.commands]
 tree = { command = "test -f README.md && ls work-*.txt >/dev/null && test -f gate-fix.txt", description = "the tree the operator has to fix" }
 `

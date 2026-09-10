@@ -3,32 +3,41 @@ package profile
 import (
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/herd/config"
 )
 
-// A narrow reader for ONE family of tables in `.tick/runners.toml`:
-// `[roles.<name>]` and `[roles.<name>.tiers.<tier>]`.
+// The `[roles.<name>]` reader, as an adapter over ticfac's execution-half
+// reader of `.tick/runners.toml` (internal/herd/config — the split, and the
+// decision behind it, are that package's doc.go).
 //
-// It is deliberately a SECOND reader rather than an extension of the
-// reconciler's gate reader (internal/reconcile/toml.go). That one parses
-// `[testing.commands]` because the integrated gate is the only thing the
-// reconciler is allowed to RUN, and it refuses every other table on purpose: a
-// reader that also understood roles would be one edit away from running
-// something a role declared. Routing is a different question — which runner and
-// model a role is dispatched with — so it gets a reader of its own that can run
-// nothing at all.
+// This file USED to be a second hand-rolled parser: a line reader that knew
+// two keys and silently passed over the rest. Two readers of one table inside
+// one repository is the drift hazard this epic's learnings name, and the split
+// made it untenable — with the execution half genuinely ticfac's, the roles
+// table is read by the validated reader or the split is a renaming. So the
+// parser is gone; what remains is the ADAPTER, and its job is narrowness of a
+// different kind:
 //
-// It is not a TOML parser either. It ignores every other table, and within a
-// roles table it reads two keys — the two a profile has anywhere to put — and
-// silently passes over the keys ticks' schema defines but ticfac does not yet
-// route on (`effort`, `args`, `harness`). A key outside that whole set is not
-// a future upgrade to tolerate: it is a malformed entry, and this reader
-// refuses it naming the line.
+//   - it exposes only the two fields a Phase 1 profile routes on (kind and
+//     model). The validated reader also parses `effort`, `args` and `harness`
+//     — a profile has nowhere to put them, and the herdr executor ticks that
+//     will consume them import the config package directly, not through here;
+//   - it keeps this package's own semantics for what a profile does with a
+//     routing: the alias candidates (implement-tick before implement), and
+//     the tier refusal — a tier an operator asked for that the config does not
+//     declare is still a refusal here, not a silent fall back to the role.
+//
+// The honesty the adapter adds: a runners.toml that fails validation anywhere
+// in the EXECUTION half now fails profile resolution. A file tk refuses is a
+// file a run must refuse too — that is what "read the way `tk herd` reads it"
+// has always meant, and it used to be true only for the two keys the old
+// parser knew. The tracker half ([signals], [sweeps]) is the other reader's
+// and is tolerated, exactly as in the config package.
 
-// Role is one `[roles.<name>]` declaration, and the tier overlays under it.
-// `kind` is ticks' word for the runner; the two keys this reader owns are the
-// two a profile has anywhere to put.
+// Role is one `[roles.<name>]` declaration as a profile routes on it: the two
+// fields a profile has anywhere to put, plus the tier overlays that can change
+// them.
 type Role struct {
 	Name  string
 	Kind  string
@@ -39,182 +48,53 @@ type Role struct {
 // ReadRoles reads `[roles.*]` from a runners.toml file. A missing file is NOT
 // an error: a repository that declares no routing has declared none, and the
 // caller decides what that means — here it means the profiles ship as written.
+// A file that exists and fails validation IS an error; see the package comment.
 func ReadRoles(path string) (map[string]Role, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return map[string]Role{}, nil
 		}
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
-	return ParseRoles(string(raw))
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, fmt.Errorf("read the runner routing: %w", err)
+	}
+	return rolesFrom(cfg), nil
 }
 
 // ParseRoles reads `[roles.*]` out of a runners.toml document.
 func ParseRoles(document string) (map[string]Role, error) {
-	roles := map[string]Role{}
-	section := ""
+	cfg, err := config.Parse([]byte(document))
+	if err != nil {
+		return nil, err
+	}
+	return rolesFrom(cfg), nil
+}
 
-	for number, line := range strings.Split(document, "\n") {
-		text := strings.TrimSpace(stripComment(line))
-		if text == "" {
+// rolesFrom adapts the validated config's roles onto the profile's two-field
+// view of them. Kind and model only: the other keys are parsed and validated
+// by the reader, and routing on them is the executor's job, not a profile's.
+func rolesFrom(cfg *config.Config) map[string]Role {
+	if cfg == nil {
+		return map[string]Role{}
+	}
+	out := make(map[string]Role, len(cfg.Roles))
+	for name, role := range cfg.Roles {
+		if role == nil {
 			continue
 		}
-		if strings.HasPrefix(text, "[") {
-			if !strings.HasSuffix(text, "]") {
-				if !strings.HasPrefix(text, "[roles") {
-					// Not this reader's table, and not this reader's business
-					// to have an opinion about: the gate reader owns the
-					// document's well-formedness where it reads it.
-					section = ""
+		entry := Role{Name: name, Kind: role.Kind, Model: role.Model}
+		if len(role.Tiers) > 0 {
+			entry.Tiers = make(map[string]Role, len(role.Tiers))
+			for tier, variant := range role.Tiers {
+				if variant == nil {
 					continue
 				}
-				return nil, fmt.Errorf("runners.toml:%d: %q is not a table header this reader understands", number+1, text)
+				entry.Tiers[tier] = Role{Name: tier, Kind: variant.Kind, Model: variant.Model}
 			}
-			section = strings.TrimSpace(strings.Trim(text, "[]"))
-			continue
 		}
-		name, tier, ok := rolePath(section)
-		if !ok {
-			continue
-		}
-		key, value, ok := splitKeyValue(text)
-		if !ok {
-			return nil, fmt.Errorf("runners.toml:%d: %q is not a key/value in [%s]", number+1, text, section)
-		}
-		if key != "kind" && key != "model" {
-			if !isIgnorableRoleKey(key, tier != "") {
-				// A key outside the pinned shape entirely: not a future
-				// upgrade to route around silently, but a malformed entry.
-				return nil, fmt.Errorf("runners.toml:%d: [%s] declares %q, which is not a key this reader recognises",
-					number+1, section, key)
-			}
-			// A key this reader does not own but the pinned shape does: ticks'
-			// schema defines it (effort, args, and at the role level harness),
-			// ticfac does not yet route on it, and ignoring it here is not the
-			// same as ignoring an unknown key — the shape it belongs to is
-			// still pinned and enforced above.
-			continue
-		}
-		text, err := parseString(value)
-		if err != nil {
-			return nil, fmt.Errorf("runners.toml:%d: %s: %w", number+1, key, err)
-		}
-		role := roles[name]
-		role.Name = name
-		if tier == "" {
-			role.assign(key, text)
-		} else {
-			if role.Tiers == nil {
-				role.Tiers = map[string]Role{}
-			}
-			overlay := role.Tiers[tier]
-			overlay.Name = tier
-			overlay.assign(key, text)
-			role.Tiers[tier] = overlay
-		}
-		roles[name] = role
+		out[name] = entry
 	}
-	return roles, nil
-}
-
-func (r *Role) assign(key, value string) {
-	switch key {
-	case "kind":
-		r.Kind = value
-	case "model":
-		r.Model = value
-	}
-}
-
-// isIgnorableRoleKey reports whether key is valid in a `[roles.<name>]` or
-// `[roles.<name>.tiers.<tier>]` table by ticks' own schema, but is not one of
-// the two keys this reader consumes. `harness` is documentary and valid only
-// at the role level, never on a tier overlay.
-func isIgnorableRoleKey(key string, inTier bool) bool {
-	switch key {
-	case "effort", "args":
-		return true
-	case "harness":
-		return !inTier
-	default:
-		return false
-	}
-}
-
-// rolePath splits a table header into the role it configures and the tier it
-// overlays, or reports that the header is not this reader's.
-func rolePath(section string) (role, tier string, ok bool) {
-	const prefix = "roles."
-	if !strings.HasPrefix(section, prefix) {
-		return "", "", false
-	}
-	rest := strings.TrimPrefix(section, prefix)
-	if rest == "" {
-		return "", "", false
-	}
-	parts := strings.Split(rest, ".")
-	switch {
-	case len(parts) == 1:
-		return parts[0], "", true
-	case len(parts) == 3 && parts[1] == "tiers":
-		return parts[0], parts[2], true
-	default:
-		// A roles sub-table this reader does not model — read nothing rather
-		// than guess what it configures.
-		return "", "", false
-	}
-}
-
-// splitKeyValue splits on the first `=` outside a string.
-func splitKeyValue(text string) (key, value string, ok bool) {
-	quoted, escaped := false, false
-	for i, r := range text {
-		switch {
-		case escaped:
-			escaped = false
-		case r == '\\' && quoted:
-			escaped = true
-		case r == '"':
-			quoted = !quoted
-		case quoted:
-		case r == '=':
-			return strings.TrimSpace(strings.Trim(text[:i], `"`)), strings.TrimSpace(text[i+1:]), true
-		}
-	}
-	return "", "", false
-}
-
-// parseString reads a basic TOML string. The two keys this reader owns are both
-// strings, so a value that is not one is a configuration error worth naming
-// rather than a value to coerce.
-func parseString(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if len(raw) < 2 || !strings.HasPrefix(raw, `"`) || !strings.HasSuffix(raw, `"`) {
-		return "", fmt.Errorf("%s is not a quoted string", raw)
-	}
-	text, err := strconv.Unquote(raw)
-	if err != nil {
-		return "", fmt.Errorf("%s is not a string this reader can unquote: %w", raw, err)
-	}
-	return text, nil
-}
-
-// stripComment removes a `#` comment that is not inside a string.
-func stripComment(line string) string {
-	quoted, escaped := false, false
-	for i, r := range line {
-		switch {
-		case escaped:
-			escaped = false
-		case r == '\\' && quoted:
-			escaped = true
-		case r == '"':
-			quoted = !quoted
-		case quoted:
-		case r == '#':
-			return line[:i]
-		}
-	}
-	return line
+	return out
 }

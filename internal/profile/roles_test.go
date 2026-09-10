@@ -7,11 +7,16 @@ import (
 	"testing"
 )
 
-// The `[roles.*]` reader. It is a SECOND narrow reader of `.tick/runners.toml`,
-// not a widening of the reconciler's gate reader: the gate reader parses
-// `[testing.commands]` because that is the only thing the reconciler is allowed
-// to RUN, and a reader that also understood roles would be one edit away from
-// running something a role declared.
+// The `[roles.*]` reader. It is a thin adapter over ticfac's execution-half
+// reader of `.tick/runners.toml` (internal/herd/config), NOT a parser of its
+// own — the hand-rolled line reader it replaced knew two keys and passed
+// silently over the rest, which is the drift hazard two readers of one table
+// always are. The narrowness that remains is deliberate and different: the
+// adapter exposes only the two fields a profile routes on (see roles.go), and
+// the reconciler's gate reader stays a separate, deliberately minimal reader
+// of `[testing.commands]` alone, because that is the only thing the reconciler
+// is allowed to RUN and a reader that also understood roles would be one edit
+// away from running something a role declared.
 
 const rolesDocument = `# worker routing
 version = 2
@@ -161,5 +166,57 @@ func TestReadRolesReadsAFile(t *testing.T) {
 	}
 	if roles["implement"].Kind != "claude" {
 		t.Errorf("%s read as %v", path, roles)
+	}
+}
+
+// The adapter is where the split gets its teeth: a runners.toml that fails
+// validation anywhere in the EXECUTION half fails profile resolution too. A
+// file tk refuses is a file a run must refuse — silently routing off a
+// malformed file is what the old parser did.
+func TestAMalformedExecutionTableFailsTheRouting(t *testing.T) {
+	for name, document := range map[string]string{
+		"a typo'd orchestration key": "[orchestration]\nmax_parallell = 3\n\n[roles.implement]\nkind = \"claude\"\n",
+		"a bad effort enum":          "[roles.implement]\nkind = \"claude\"\neffort = \"ultra\"\n",
+		"a malformed testing table":  "[roles.implement]\nkind = \"claude\"\n\n[testing.commands]\ngo = { command = \"\" }\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ParseRoles(document); err == nil {
+				t.Fatalf("%q was accepted; a file tk refuses must not route a run", document)
+			}
+		})
+	}
+}
+
+// The file format requires [roles] — with [roles.implement] as the fallback
+// every unlisted role resolves against — so a document that declares no roles
+// at all is not "no routing", it is an invalid config. A repository that wants
+// no routing deletes the file.
+func TestARunnersConfigWithoutRolesIsAStop(t *testing.T) {
+	if _, err := ParseRoles("version = 2\n\n[testing.commands]\ngo = { command = \"go test ./...\" }\n"); err == nil {
+		t.Fatal("a runners.toml with no [roles] was accepted; the format requires it and tk refuses this file")
+	}
+}
+
+// ticks' tracker tables are the other reader's half of the split: their
+// presence is tolerated here exactly as in the config package, so ticks can
+// change its half without breaking a repository's runs.
+func TestTrackerTablesDoNotFailTheRouting(t *testing.T) {
+	roles, err := ParseRoles(`[roles.implement]
+kind = "claude"
+
+[signals.sources.example]
+secret = "SIGNAL_SECRET_EXAMPLE"
+
+[sweeps.nightly]
+cron = "0 4 * * 1-5"
+filter = "type:bug unblocked"
+max_ticks = 3
+budget_usd = 25
+`)
+	if err != nil {
+		t.Fatalf("a file carrying ticks' tracker tables failed the routing: %v", err)
+	}
+	if roles["implement"].Kind != "claude" {
+		t.Errorf("[roles.implement] read as %+v", roles["implement"])
 	}
 }

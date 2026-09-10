@@ -96,6 +96,10 @@ func TestNoDurableRecordCarriesAHostPath(t *testing.T) {
 func TestAFailingGatesOutputCarriesNoHostPath(t *testing.T) {
 	const failingGateNamingItsOwnWorktree = `version = 2
 
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
 [testing.commands]
 tree = { command = "echo \"failed in $(pwd)\" >&2; exit 3", description = "refuses, naming its own worktree" }
 `

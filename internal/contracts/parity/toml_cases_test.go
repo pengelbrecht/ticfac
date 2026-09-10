@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/herd/config"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
@@ -25,21 +26,27 @@ import (
 // otherwise would be the failure contracts/README.md names: a check that reads
 // as if it asserted something while asserting nothing.
 //
-// What these readers do instead is hold the tables to the properties a case
-// table has to have to be worth executing later, and — where the fixture's
-// data crosses into another contract — follow it. The image cases' expected
-// values are checked against runners-config-contract.json's image pattern,
-// which is a real cross-file assertion: the two files disagreeing means one of
-// them is wrong today, not when a TOML reader arrives.
+// Since tick wgi this repository has an EXECUTION-half reader of the file
+// (internal/herd/config), and the split it embodies decides what these tables
+// can assert here:
 //
-// One part of them IS executable now. Every case document in all three tables
-// is a WHOLE `.tick/runners.toml`, and every one of them declares
-// `[roles.implement]` — because ticks' own validator requires it. ticfac has a
-// reader of that table since tick q4u (internal/profile), so the documents are
-// run through it below: every one of those documents is a real configuration
-// file, and each must be read the same way. It is the whole of what this repository can execute against
-// these tables today, and it is not nothing — a roles reader that choked on a
-// multi-line string, an inline table or a `__proto__` key would fail here.
+//   - `[sandbox]` is execution: ticfac's reader validates it. The image case
+//     table is therefore EXECUTABLE now — every accepted case must load
+//     through the real reader and parse out the image it pins; every refused
+//     case must be refused by it, naming sandbox.image.
+//   - `[signals]` and `[sweeps]` are ticks': foreign tables, tolerated. So
+//     every signal and sweep case document — INCLUDING the cases ticks'
+//     reader refuses — must LOAD here, roles and all. That is the split as
+//     an executable assertion: a repository's good file on ticks' side of the
+//     file can never break ticfac's runs.
+//
+// The data-driven checks that were here before stay: the case tables are held
+// to the shape a table worth executing has to have, the image cases' expected
+// values are checked against runners-config-contract.json's pattern
+// (a cross-file assertion: the two disagreeing means one of them is wrong
+// today), and the role every document declares is still read through the
+// profile adapter — a reader that choked on a multi-line string, an inline
+// table or a `__proto__` key would still fail here.
 
 type tomlCase struct {
 	Name     string   `json:"name"`
@@ -191,40 +198,101 @@ func TestSandboxImageCases(t *testing.T) {
 	}
 }
 
-// The executable half: ticfac's `[roles.*]` reader over every case document in
-// all three tables. The reader owns ONE table family and must be indifferent to
-// everything else in a real config — including the tables that carry a
-// multi-line string, an inline table, a shell fragment and a `__proto__` key.
-func TestTheRolesReaderReadsEveryCaseDocument(t *testing.T) {
-	files := []string{"sandbox-image-cases.json", "signal-source-cases.json", "sweep-policy-cases.json"}
+// The executable half, twice over: the image cases run through ticfac's REAL
+// reader (they are this repository's own table), and the tracker case
+// documents — signal sources and sweeps, including the ones ticks' reader
+// refuses — must load here as the foreign tables they are, with the roles
+// still readable through the profile adapter.
+func TestTheCaseDocumentsRunThroughTicfacsReader(t *testing.T) {
+	trackerFiles := []string{"signal-source-cases.json", "sweep-policy-cases.json"}
 	documents := 0
-	for _, file := range files {
+
+	t.Run("image cases execute against the real reader", func(t *testing.T) {
+		const file = "sandbox-image-cases.json"
 		var table tomlCaseTable
 		readContract(t, file, &table)
 		for _, c := range table.Cases {
 			documents++
-			roles, err := profile.ParseRoles(c.TOML)
-			if err != nil {
-				t.Errorf("%s/%s: the roles reader refused a whole config document: %v", file, c.Name, err)
-				continue
-			}
-			// Every document in the bundle declares exactly this role, and it
-			// is the reader's job to find it and nothing else.
-			implement, ok := roles["implement"]
-			if !ok {
-				t.Errorf("%s/%s: the reader found no [roles.implement] in a document that declares one: %v",
-					file, c.Name, roles)
-				continue
-			}
-			if implement.Kind != "claude" {
-				t.Errorf("%s/%s: [roles.implement] read as kind %q", file, c.Name, implement.Kind)
-			}
-			if len(roles) != 1 {
-				t.Errorf("%s/%s: the reader read %v; every other table in these documents is somebody else's",
-					file, c.Name, roles)
+			cfg, err := config.Parse([]byte(c.TOML))
+			switch {
+			case c.Refused:
+				if err == nil {
+					t.Errorf("%s/%s: the real reader accepted a document the contract refuses (%+v)", file, c.Name, cfg)
+					continue
+				}
+				if !strings.Contains(err.Error(), "sandbox.image") {
+					t.Errorf("%s/%s: the refusal does not name sandbox.image: %v", file, c.Name, err)
+				}
+			case err != nil:
+				t.Errorf("%s/%s: the real reader refused a document the contract accepts: %v", file, c.Name, err)
+			default:
+				want := ""
+				if c.Image != nil {
+					want = *c.Image
+				}
+				if got := cfg.SandboxImage(); got != want {
+					t.Errorf("%s/%s: image parsed as %q, want %q", file, c.Name, got, want)
+				}
 			}
 		}
+	})
+
+	for _, file := range trackerFiles {
+		t.Run(file+" is foreign, not refused", func(t *testing.T) {
+			var table tomlCaseTable
+			readContract(t, file, &table)
+			for _, c := range table.Cases {
+				documents++
+				// Every document — accepted AND refused by ticks' reader:
+				// ticks' half of the file is out of this reader's domain, so
+				// a repository declaring a malformed signal or sweep is a
+				// repository TICKS refuses, not one whose runs ticfac breaks.
+				cfg, err := config.Parse([]byte(c.TOML))
+				if err != nil {
+					t.Errorf("%s/%s: ticfac's reader refused a document whose tracker tables are foreign: %v",
+						file, c.Name, err)
+					continue
+				}
+				if role := cfg.Roles["implement"]; role == nil || role.Kind != "claude" {
+					t.Errorf("%s/%s: [roles.implement] read as %+v", file, c.Name, role)
+				}
+			}
+		})
 	}
+
+	t.Run("the roles adapter still reads every document", func(t *testing.T) {
+		files := append([]string{"sandbox-image-cases.json"}, trackerFiles...)
+		for _, file := range files {
+			var table tomlCaseTable
+			readContract(t, file, &table)
+			for _, c := range table.Cases {
+				if c.Refused {
+					// Refused image documents are real refusals through the
+					// adapter too; the role is not what they are refused for.
+					continue
+				}
+				roles, err := profile.ParseRoles(c.TOML)
+				if err != nil {
+					t.Errorf("%s/%s: the roles adapter refused a whole config document: %v", file, c.Name, err)
+					continue
+				}
+				implement, ok := roles["implement"]
+				if !ok {
+					t.Errorf("%s/%s: the adapter found no [roles.implement] in a document that declares one: %v",
+						file, c.Name, roles)
+					continue
+				}
+				if implement.Kind != "claude" {
+					t.Errorf("%s/%s: [roles.implement] read as kind %q", file, c.Name, implement.Kind)
+				}
+				if len(roles) != 1 {
+					t.Errorf("%s/%s: the adapter read %v; every other table in these documents is somebody else's",
+						file, c.Name, roles)
+				}
+			}
+		}
+	})
+
 	if documents < 30 {
 		t.Errorf("only %d case documents were read; the three tables carry many more", documents)
 	}

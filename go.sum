@@ -1,0 +1,4 @@
+github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
+github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/pengelbrecht/ticks v0.31.2 h1:1MJUEn78yw7RJ65T1jS/8HhL2XRb7bXA3GMBcPlctmc=
+github.com/pengelbrecht/ticks v0.31.2/go.mod h1:Rk1CZE1gNgOQ5T+Vzv9ZZR7iZ8zGgGWj0cPt/pyQdr0=
