@@ -7,34 +7,51 @@ substrate = "auto"
 max_parallel = 4
 
 [roles.implement]
-kind = "claude"
-model = "sonnet"
+# Operator routing for Phase 2 (2026-09-10): GLM 5.3 on cloudflare via pi is the
+# DEFAULT for complex work, GLM 5.3-flash is the `economy` tier for simple work,
+# and opus is `strong`, reserved for escalation after a failed attempt. Review
+# and closeout are opus by their own tables, which is the frontier-tier review
+# the operator made the condition of trusting GLM for implementation.
+#
+# pi needs no permission-bypass flag: verified live 2026-09-10 (tick gjk) that it
+# runs tools unprompted. `--approve` covers project-local file trust, and that is
+# the whole of its full-auto story. Evidence: .tick/logs/herd/av8/gjk.RESULT.md
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
+args = ["--approve"]
 
+# Simple work: mechanical, compiler-guided, low judgement.
 [roles.implement.tiers.economy]
-model = "haiku"
-effort = "low"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
 
+# Escalation only. Nothing STARTS here — a first attempt takes the default tier
+# and only a failed attempt escalates (epic av8 decision, encoded by tick 5eq).
 [roles.implement.tiers.strong]
+kind = "claude"
 model = "opus"
 effort = "high"
+# args are INHERITED from the base role, and `--approve` is a pi flag claude
+# would choke on. A tier that changes kind must clear them.
+args = []
 
 [roles.implement.tiers.balanced]
 kind = "codex"
 model = "gpt-5.6-luna"
 effort = "max"
+args = []
 
-# pi on cloudflare. Verified live 2026-09-10 (ticfac tick gjk): pi has no
-# permission gate to bypass — it ran a write tool unprompted with no flag — so
-# `--approve` (trust project-local files) is the whole of its full-auto story.
-# herdr's pi integration is current (v8). Resume works. pi's status line names
-# the model actually in use, which is the read-back that catches a bad id.
-# Evidence: .tick/logs/herd/av8/gjk.RESULT.md
-[roles.implement.tiers.frontier]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+# The frontier-tier review at epic completion.
+[roles.review]
+kind = "claude"
+model = "opus"
 effort = "high"
-args = ["--approve"]
+
+[roles.closeout]
+kind = "claude"
+model = "opus"
+effort = "high"
 
 [testing.commands]
 go = { command = "go test -short -count=1 ./...", description = "Go" }
