@@ -1,0 +1,17 @@
+{
+  "id": "yod",
+  "title": "Pin the herdr wire vocabulary and test it against the server's own schema",
+  "description": "Pin the herdr WIRE VOCABULARY in a contract, and prove it against the live\nserver's own schema instead of a dated comment.\n\nEvery string the client sends or switches on today is hand-written and pinned by\nnothing. The failure mode is silent: the fake and the client share the same\nhand-written strings, so they drift together and the suite stays green.\n\nThe vocabularies, with where they live in the lifted client:\n- method names (protocol.go:55-84, 15 of them)\n- result discriminators (protocol.go:87-107) — the ONE case already caught, by\n  decodeTyped (client.go:252-256)\n- error codes (protocol.go:111-137). Two drive control flow: CodeAgentPaneBusy\n  and CodeAgentPromptStalled (spawn.go:342,404,478). Rename either upstream and\n  a healthy worker is reported as a failed spawn.\n- agent status words (types.go:9-15), compared as raw strings in at least six\n  places. See the strict-decode tick for why this one is the worst.\n- event kind strings — TWO parallel vocabularies, underscored (events.go:34-61)\n  and dotted (events.go:66-77). `Event.IsOutputMatched` (events.go:270)\n  hardcodes \"pane_output_matched\", a spelling that does not exist yet.\n- subscription type names and their scoping (events.go:96-124, 161-187). herdr\n  SILENTLY IGNORES unknown fields on a subscription (events.go:136-138), so a\n  mis-scoped subscription is accepted and floods. The client's own scoping table\n  is correct today and wrong the moment herdr makes a fourth type pane-scoped.\n- agent kind values (config/kinds.go:132). Its own comment at kinds.go:251-254\n  admits this is NOT the list herdr knows.\n- metadata source id and state-label keys (methods.go:412,473-479) — a\n  client-side transcription of a server rule, unverified at runtime.\n\nDo:\n- Add a vocabulary contract file. `contracts/collect-vocabulary.json` is the\n  precedent in this repo; follow its shape.\n- Add a drift test that diffs the contract against `herdr api schema --json`.\n  It must be skippable when no herdr is present (like the live tests) but MUST\n  run in the epic gate when one is, and it must fail on: a vocabulary member the\n  contract has that the server does not, and one the server has that the\n  contract does not.\n- The fake must be generated from, or validated against, the contract — not\n  hand-written alongside the client. This is the property that stops the fake\n  and the client drifting together.\n- Also cover the plugin's `events.on` names if the plugin comes along.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "579"
+  ],
+  "parent": "av8",
+  "acceptance_criteria": "A vocabulary contract pins method names, result discriminators, error codes, agent statuses, both event-kind spellings, subscription types with their scoping, and agent kinds; a drift test diffs it against herdr api schema --json, skips cleanly with no herdr present, and fails on a member present on either side only; the fake is generated from or validated against the contract rather than hand-written beside the client; go test -short -timeout 45m ./... green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-10T08:21:45.977448Z",
+  "updated_at": "2026-09-10T08:21:45.977448Z"
+}

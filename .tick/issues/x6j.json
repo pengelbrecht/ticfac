@@ -1,0 +1,17 @@
+{
+  "id": "x6j",
+  "title": "A substrate failure is never a verdict about the work",
+  "description": "Hold the line the Phase 1 reconciler already holds: a substrate failure is an\nOPERATIONAL error and never a verdict about the work.\n\nticks gets this mostly right, and the good parts are the specification:\n- collect/collect.go:108-109 — \"an error means the check could not be performed\n  ... never 'the worker failed', which is a verdict.\" Verdicts come only from\n  git and the result file. Collect makes zero herdr calls.\n- cleanup/cleanup.go:314-322 — a failed agent.list before a destructive step is\n  a REFUSAL: \"herdr did not answer is not evidence that tearing an agent down is\n  safe.\" The re-check is taken next to the removal, not at run start.\n- cleanup/cleanup.go:259-266 — blocked or working workers are never torn down.\n- reconcile/reconcile.go:192-205 — an unreachable herdr aborts the whole report\n  rather than classifying every tick dead. Unavailable, never wrong.\n- wait/wait.go:106-128 — timeout and absent-worker are reported outcomes.\n- notify/notify.go:423-428 — a transport refusal is deliberately not persisted,\n  so it retries.\n- spawn/spawn.go:218-220 — spawn never cleans up on failure; the failed pane\n  stays as diagnostic state. No branch or workspace is deleted on a substrate\n  error.\n\nWhere it does NOT hold, and which this tick must make impossible in ticfac:\n- The gate-content failure (spawn.go:521-526) turns a rendering or truncation\n  change into \"the agent cannot work\".\n- Renaming agent_pane_busy or agent_prompt_stalled flips a tolerated condition\n  into a hard failure (spawn.go:342-351, :404).\n\nDo:\n- Audit every herdr call site in the new executor and classify each failure\n  explicitly: operational, or a verdict. Operational failures must not reject a\n  tick, must not tear an attempt down, and must never delete a branch or a\n  workspace.\n- Map protocol and capability refusals to the operational side (the version tick\n  raises them; this tick owns the tests).\n- Resume across an upgrade: an attempt whose handle a later leg cannot address\n  is HELD for a person, never redispatched.\n- The test that settles it: a fixture where EVERY herdr call fails, asserting no\n  tick is rejected, no attempt is torn down, and nothing is deleted.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "d9m"
+  ],
+  "parent": "av8",
+  "acceptance_criteria": "Every herdr call site in the executor classifies its failure as operational or verdict, and operational failures reject no tick, tear down no attempt and delete no branch or workspace; protocol and capability refusals are operational; an attempt whose handle a later leg cannot address is held for a person and never redispatched; a fixture in which every herdr call fails asserts no rejection, no teardown and no deletion; go test -short -timeout 45m ./... green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-10T08:22:45.803342Z",
+  "updated_at": "2026-09-10T08:22:45.803342Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "8ug",
+  "title": "Pin the runners-config tables ticfac actually reads",
+  "description": "Close the sharpest coupling ticfac has to ticks: two hand-rolled readers over an\nUNPINNED file, one of which feeds a shell.\n\nToday:\n- `internal/reconcile/toml.go:49` ReadGateCommands parses `[testing.commands]`\n  from the target repo's `.tick/runners.toml`. Its values are executed at\n  `internal/reconcile/gate.go:469` via `sh -c`. Nothing pins the table's shape.\n- `internal/profile/roles.go:39` ReadRoles parses `[roles.\u003cname\u003e]` and\n  `[roles.\u003cname\u003e.tiers.\u003ctier\u003e]`, two keys each. Nothing pins it either.\n- `contracts/runners-config-contract.json` pins `[sandbox].image` and\n  `[orchestration].max_parallel` — two tables NOTHING reads. Its own parity test\n  says so: `internal/contracts/parity/runners_config_test.go:11` claims \"ticfac\n  reads neither file yet\", which is no longer true.\n\nSo the contract pins what is unused and leaves unpinned the highest-privilege\ninput in the system.\n\nDo:\n- Extend the vendored contract to pin the two tables production actually reads:\n  the shape of `[testing.commands]` entries and of `[roles.*]` / tiers. Follow\n  the existing pin discipline — contracts/ is digest-pinned and NEVER hand\n  edited, so this is an upstream ticks change first, then a re-pin here. If the\n  upstream change cannot land in this tick, say so in your RESULT file as an\n  UPSTREAM ticks FINDING and pin what you can.\n- Make both readers validate against the pinned shape and REFUSE with a message\n  naming the file, the table and the offending line, rather than silently\n  reading two keys and ignoring the rest.\n- Fix the stale parity-test comment.\n- Keep the two readers separate. The gate reader must remain unable to read\n  anything but `[testing.commands]`: routing must never become a second way to\n  authorise a command line (internal/profile/roles.go:10-24 states this).",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "av8",
+  "acceptance_criteria": "The pinned contract covers [testing.commands] and [roles.*] including tiers; both readers validate against it and refuse a malformed table naming file, table and line; a test drives a malformed entry of each kind through the refusal; the gate reader still refuses every table but [testing.commands]; the stale 'ticfac reads neither file yet' comment is gone; go test -short -timeout 45m ./... green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-10T08:21:14.279972Z",
+  "updated_at": "2026-09-10T08:21:14.279972Z"
+}

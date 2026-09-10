@@ -14,7 +14,7 @@
   "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.487606Z",
-  "updated_at": "2026-09-10T08:11:36.004681Z",
-  "closed_at": "2026-09-10T08:11:36.004681Z",
-  "closed_reason": "Close-out complete. Retro at .tick/logs/herd/qeu/RETRO.md with the verification table; learnings compacted to 79 lines; Phase 2 planned as epic av8 ordered after qeu, carrying the four substrate constraints and the resume-across-upgrade hazard. Follow-ups routed: z8b, 0bz, bgr, 3fo, iqy, dtn, n0r. PR #1 merged to main as 9ebcd5a on the operator's decision, CI and gate green at b98e865."
+  "updated_at": "2026-09-10T08:11:51.64619Z",
+  "closed_at": "2026-09-10T08:11:51.64619Z",
+  "closed_reason": "Close-out complete. Retro at .tick/logs/herd/qeu/RETRO.md with the verification table; learnings compacted to 79 lines; Phase 2 planned as epic av8 ordered after qeu. Follow-ups routed: z8b, 0bz, bgr, 3fo, iqy, dtn, n0r. PR #1 merged to main as 9ebcd5a on the operator's decision, CI and gate green at b98e865."
 }

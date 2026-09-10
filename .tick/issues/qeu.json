@@ -11,7 +11,7 @@
   "base_branch": "main",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.242815Z",
-  "updated_at": "2026-09-10T08:11:36.030233Z",
-  "closed_at": "2026-09-10T08:11:36.030233Z",
-  "closed_reason": "ticfac Phase 1 complete and merged to main as 9ebcd5a. 21 child ticks across 11 waves, 20 decisions, 183 files, ~39.8k lines. Acceptance 4 MET / 1 PARTIAL / 0 NOT MET, all 13 Appendix A invariants and all 8 legacy defects MET; the PARTIAL is AC1's stale live-run attestation, merged on test evidence by operator decision and recorded in the retro."
+  "updated_at": "2026-09-10T08:11:51.682659Z",
+  "closed_at": "2026-09-10T08:11:51.682659Z",
+  "closed_reason": "ticfac Phase 1 complete and merged to main as 9ebcd5a. 21 child ticks across 11 waves, 20 decisions, 183 files, ~39.8k lines. Acceptance 4 MET / 1 PARTIAL / 0 NOT MET; all 13 Appendix A invariants and all 8 legacy defects MET. The PARTIAL is AC1's stale live-run attestation, merged on test evidence by operator decision and recorded in the retro."
 }
