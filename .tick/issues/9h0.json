@@ -2,7 +2,7 @@
   "id": "9h0",
   "title": "Close out Phase 1: retro, close ticks-tracker 4ik, flesh out Phase 2 (Herdr executor) here",
   "description": "Run the epic-close retro; then in the ticks tracker close 421 and ep3 with the gate evidence and close 4ik; then flesh out Phase 2 (Herdr executor, ticks tick jrj and its required-gate-tests note) into ticks here, including its EPIC-SKELETON.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,8 +11,10 @@
   ],
   "parent": "qeu",
   "role": "closeout",
+  "awaiting": "input",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-02T15:23:43.487606Z",
-  "updated_at": "2026-09-10T06:13:41.30097Z",
-  "started_at": "2026-09-10T06:13:41.30097Z"
+  "updated_at": "2026-09-10T08:11:36.004681Z",
+  "closed_at": "2026-09-10T08:11:36.004681Z",
+  "closed_reason": "Close-out complete. Retro at .tick/logs/herd/qeu/RETRO.md with the verification table; learnings compacted to 79 lines; Phase 2 planned as epic av8 ordered after qeu, carrying the four substrate constraints and the resume-across-upgrade hazard. Follow-ups routed: z8b, 0bz, bgr, 3fo, iqy, dtn, n0r. PR #1 merged to main as 9ebcd5a on the operator's decision, CI and gate green at b98e865."
 }
