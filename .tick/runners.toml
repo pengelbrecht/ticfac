@@ -7,11 +7,11 @@ substrate = "auto"
 max_parallel = 4
 
 [roles.implement]
-# Operator routing for Phase 2 (2026-09-10): GLM 5.3 on cloudflare via pi is the
-# DEFAULT for complex work, GLM 5.3-flash is the `economy` tier for simple work,
-# and opus is `strong`, reserved for escalation after a failed attempt. Review
-# and closeout are opus by their own tables, which is the frontier-tier review
-# the operator made the condition of trusting GLM for implementation.
+# Operator routing for Phase 2 (2026-09-10). Implementation runs entirely on
+# GLM on cloudflare through pi: GLM 5.3 for complex work (the default, and the
+# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is NOT an
+# implementation tier — it is the claude harness only, reserved for review and
+# closeout, and it is not available in pi at all.
 #
 # pi needs no permission-bypass flag: verified live 2026-09-10 (tick gjk) that it
 # runs tools unprompted. `--approve` covers project-local file trust, and that is
@@ -26,15 +26,12 @@ args = ["--approve"]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
 effort = "medium"
 
-# Escalation only. Nothing STARTS here — a first attempt takes the default tier
-# and only a failed attempt escalates (epic av8 decision, encoded by tick 5eq).
+# Complex work, named explicitly. Same model as the default: GLM 5.3 IS the
+# strong tier for this epic. opus is not an implementation tier at all — it is
+# reserved for review and closeout, and it is not available in the pi harness.
 [roles.implement.tiers.strong]
-kind = "claude"
-model = "opus"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
-# args are INHERITED from the base role, and `--approve` is a pi flag claude
-# would choke on. A tier that changes kind must clear them.
-args = []
 
 [roles.implement.tiers.balanced]
 kind = "codex"
