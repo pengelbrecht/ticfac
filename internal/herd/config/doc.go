@@ -76,6 +76,10 @@
 //  3. Which substrate orchestrates the run? — [Decide], or [DecideOverride]
 //     when whatever booted the run states the substrate explicitly (a cloud
 //     sandbox has no herdr server to probe for; see [SubstrateEnvVar]).
+//  4. What argv starts that worker under herdr? — [Compile] turns the
+//     resolved worker into the kind's native argv, enforcing the capability
+//     matrix's rules: the full-auto template, the model/effort translation,
+//     and the model validation that makes a tier mean the model it names.
 //
 // It also carries the run's command surface — [Testing], [Evidence]
 // (close-out only, with its acceptance authorization table) and
@@ -98,12 +102,16 @@
 //
 // The execution half was lifted from ticks' `internal/herd/config` at the
 // av8 base (the tracker half of that package stays in ticks, along with the
-// migrator, the spawner's kind/compile machinery, and the schema-doc tests
-// that need ticks' skill references). Adaptations are deliberate and called
-// out in comments: the tracker tables are foreign here (see above), and the
-// version gate names ticfac where ticks' named tk. Everything else is
-// byte-faithful, so the two readers of the shared half stay comparable line
-// by line.
+// migrator, until ticfac tick 4l2 retires it). The spawner's kind/compile
+// machinery — the capability matrix that turns a resolved [Worker] into
+// `herdr agent start` argv — landed here with tick sur (kinds.go, compile.go,
+// picatalog.go, and the herdr-kinds.md reference beside them), because the
+// matrix is execution config and its pi row was written from a live
+// round-trip (tick gjk) rather than re-derived. Adaptations are deliberate
+// and called out in comments: the tracker tables are foreign here (see
+// above), and the version gate names ticfac where ticks' named tk. Everything
+// else is byte-faithful, so the two readers of the shared half stay
+// comparable line by line.
 //
 // The identifiers ticks' `internal/sandbox` needs from a config package —
 // [LoadRepo], [Resolve] and [Worker], [DecideOverride], [Prober], [Tier],
