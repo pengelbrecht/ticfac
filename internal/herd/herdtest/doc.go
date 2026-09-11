@@ -26,6 +26,10 @@
 //     one, encoding its 0-based index in the error's request id
 //     ("<id>:sub:<index>:probe").
 //   - agent.start and agent.get both report `interactive_ready`.
+//   - Every agent object carries the four load-bearing keys (agent_status,
+//     interactive_ready, name, agent_session), null-valued where the agent
+//     has no name or no session — matching what the strict decoder in
+//     internal/herd/client requires (tick bcv).
 //
 // # Why it is not a _test package
 //

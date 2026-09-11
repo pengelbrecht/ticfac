@@ -239,18 +239,27 @@ func decodeResponse(method, wantID string, line []byte) (json.RawMessage, error)
 	return resp.Result, nil
 }
 
-// resultType reads the discriminator off a result payload.
-func resultType(raw json.RawMessage) string {
+// resultType reads the discriminator off a result payload. A payload that
+// is not a decodable JSON object is a failure in its own right: swallowing
+// that and returning "" would misfile malformed JSON as protocol drift (an
+// [UnexpectedResultError] with an empty Got), hiding the real problem.
+func resultType(raw json.RawMessage) (string, error) {
 	var probe struct {
 		Type string `json:"type"`
 	}
-	_ = json.Unmarshal(raw, &probe)
-	return probe.Type
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return "", fmt.Errorf("result payload is not a decodable JSON object: %w", err)
+	}
+	return probe.Type, nil
 }
 
 // decodeTyped checks the result discriminator and decodes into out.
 func decodeTyped(method, want string, raw json.RawMessage, out any) error {
-	if got := resultType(raw); got != want {
+	got, err := resultType(raw)
+	if err != nil {
+		return fmt.Errorf("herd/client: %s %s", method, err)
+	}
+	if got != want {
 		return &UnexpectedResultError{Method: method, Want: want, Got: got}
 	}
 	if out == nil {

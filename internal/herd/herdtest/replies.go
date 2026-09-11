@@ -88,8 +88,13 @@ func (s *Server) handlePing(_ *testing.T, req Request, w *ConnWriter) error {
 }
 
 // AgentJSON renders one agent exactly as herdr's agent.list and
-// session.snapshot report it — the key set of
-// internal/herd/client/testdata/agent_list.json, `interactive_ready` included.
+// session.snapshot report it. The four load-bearing keys — agent_status,
+// interactive_ready, name, agent_session — are ALWAYS carried, with a null
+// value where the agent has no name or no session: the strict decoder in
+// internal/herd/client refuses an agent object that omits one, because an
+// omitted key is indistinguishable from a renamed field (tick bcv). A fake
+// that omitted them would pass only a lenient decoder — the exact drift
+// this one-place reply shape exists to prevent.
 func AgentJSON(a Agent) map[string]any {
 	status := a.Status
 	if status == "" {
@@ -104,8 +109,12 @@ func AgentJSON(a Agent) map[string]any {
 		"pane_id":           a.PaneID,
 		"focused":           false,
 		"revision":          1,
-		"name":              a.Name,
+		"name":              nil,
 		"interactive_ready": !a.NoInteractiveReady,
+		"agent_session":     nil,
+	}
+	if a.Name != "" {
+		m["name"] = a.Name
 	}
 	if a.Session != "" {
 		m["agent_session"] = AgentSessionJSON(a.Session)
@@ -274,7 +283,7 @@ func (s *Server) handleAgentStart(_ *testing.T, req Request, w *ConnWriter) erro
 
 	agent := map[string]any{
 		"pane_id": s.cfg.Worktree.PaneID, "agent_status": "idle",
-		"name": p.Name, "interactive_ready": true,
+		"name": p.Name, "interactive_ready": true, "agent_session": nil,
 	}
 	if s.cfg.LaunchPending {
 		// The accepted-but-pending launch: herdr answers green, with no agent
@@ -295,6 +304,7 @@ func (s *Server) handleAgentPrompt(_ *testing.T, req Request, w *ConnWriter) err
 		"type": "agent_prompted",
 		"agent": map[string]any{
 			"pane_id": s.cfg.Worktree.PaneID, "agent_status": "idle",
+			"name": nil, "interactive_ready": true,
 			"agent_session": AgentSessionJSON(s.cfg.AgentSession),
 		},
 	})
@@ -354,7 +364,7 @@ func (s *Server) respondAgentInfo(req Request, w *ConnWriter, name, paneID strin
 		"type": "agent_info",
 		"agent": map[string]any{
 			"pane_id": s.cfg.Worktree.PaneID, "agent_status": "idle",
-			"name": name, "interactive_ready": true,
+			"name": name, "interactive_ready": true, "agent_session": nil,
 		},
 	})
 }

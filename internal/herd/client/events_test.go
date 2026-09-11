@@ -622,14 +622,28 @@ func TestEventStreamIgnoresUnrecognisedLine(t *testing.T) {
 	}
 }
 
-// TestEventStreamNamesMalformedLine checks the decode error is diagnosable.
-func TestEventStreamNamesMalformedLine(t *testing.T) {
+// TestEventStreamSkipsMalformedLineAndKeepsSubscription pins the tick bcv
+// rule: a line that is not a decodable event envelope is ONE LOST EVENT, not
+// a lost subscription. The stream must deliver the events around it, count
+// the skip, and stay alive. The old behaviour — ending the stream — turned
+// one corrupt line into a permanent fan-in gap.
+func TestEventStreamSkipsMalformedLineAndKeepsSubscription(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+
 	c, _ := newTestClient(t, map[string]fakeHandler{
 		MethodEventsSubscribe: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
 			if err := respond(w, req.ID, `{"type":"subscription_started"}`); err != nil {
 				return err
 			}
-			return w.WriteLine(`{"event":"pane_updated","data":`)
+			if err := w.WriteLine(`{"event":"pane_updated","data":`); err != nil { // malformed
+				return err
+			}
+			if err := w.WriteLine(`{"event":"pane_updated","data":{"type":"pane_updated"}}`); err != nil {
+				return err
+			}
+			<-release
+			return nil
 		},
 	})
 
@@ -639,13 +653,21 @@ func TestEventStreamNamesMalformedLine(t *testing.T) {
 	}
 	defer stream.Close()
 
-	waitStreamClosed(t, stream)
-	streamErr := stream.Err()
-	if streamErr == nil || !strings.Contains(streamErr.Error(), "malformed event") {
-		t.Fatalf("Err = %v, want a malformed-event error", streamErr)
+	if ev := nextEvent(t, stream); ev.Kind != EventPaneUpdated {
+		t.Fatalf("event after the malformed line = %q, want %q", ev.Kind, EventPaneUpdated)
 	}
-	if !strings.Contains(streamErr.Error(), "pane_updated") {
-		t.Errorf("Err does not name the offending line: %v", streamErr)
+	if got := stream.SkippedEvents(); got != 1 {
+		t.Errorf("SkippedEvents = %d, want 1", got)
+	}
+	last := stream.LastSkipped()
+	if !strings.Contains(last, "malformed event") {
+		t.Errorf("LastSkipped = %q, want it to say the line was malformed", last)
+	}
+	if !strings.Contains(last, "pane_updated") {
+		t.Errorf("LastSkipped does not name the offending line: %q", last)
+	}
+	if err := stream.Err(); err != nil {
+		t.Errorf("Err = %v, want nil — a malformed line must not end the stream", err)
 	}
 }
 
