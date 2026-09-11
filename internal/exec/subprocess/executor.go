@@ -104,14 +104,15 @@ func (r *Refusal) Error() string { return r.Message }
 // The reasons this executor refuses. Each is a different problem and sends the
 // next repair somewhere different.
 const (
-	RefusedStopped      = "stopped"            // a durable stop refuses to issue a credential
-	RefusedCancelled    = "cancelled"          // this handle was cancelled; reissue is refused
-	RefusedLive         = "live"               // an attempt under this identity is still running
-	RefusedUnknown      = "liveness_unknown"   // nobody can say whether it is running, which is not "nothing is"
-	RefusedSettled      = "settled"            // this attempt already settled; a retry is a new attempt number
-	RefusedNotPersisted = "not_persisted"      // disposal before the work is durable
-	RefusedCredential   = "credential_live"    // teardown before the credential died
-	RefusedBranchUnsafe = "branch_not_durable" // the branch holds commits no remote has
+	RefusedStopped       = "stopped"             // a durable stop refuses to issue a credential
+	RefusedCancelled     = "cancelled"           // this handle was cancelled; reissue is refused
+	RefusedLive          = "live"                // an attempt under this identity is still running
+	RefusedUnknown       = "liveness_unknown"    // nobody can say whether it is running, which is not "nothing is"
+	RefusedSettled       = "settled"             // this attempt already settled; a retry is a new attempt number
+	RefusedNotPersisted  = "not_persisted"       // disposal before the work is durable
+	RefusedCredential    = "credential_live"     // teardown before the credential died
+	RefusedBranchUnsafe  = "branch_not_durable"  // the branch holds commits no remote has
+	RefusedUnenforceable = "unenforceable_bound" // the spec carries a bound this executor cannot enforce; a bound nothing stops is not issued as a promise
 )
 
 func refuse(reason, format string, args ...any) *Refusal {
