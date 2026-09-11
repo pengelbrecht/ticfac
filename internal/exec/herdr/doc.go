@@ -66,6 +66,12 @@
 //     executor's git.go and collect.go.
 //   - x6j: every substrate failure classified operational-or-verdict, and
 //     resume across an upgrade held for a person.
-//   - 5hz: Dispose reclaims by identity when a recorded workspace id is
-//     stale. Here disposal uses the recorded id, tolerating "already gone".
+//   - 5hz: DONE. Disposal reclaims by identity when a recorded workspace id
+//     is stale: the workspace is attributed to the attempt by the worktree
+//     path and the branch herdr itself reports (reclaim.go), the stale id
+//     is recorded in the provenance beside the herdr protocol and server
+//     version, and `workspace_not_found` is only ever read as teardown once
+//     herdr's own answer to "what exists" corroborates it. The
+//     reclamation-at-startup report is Reclaimable — removal happens only
+//     through the authorisation Reclaim asks for.
 package herdr

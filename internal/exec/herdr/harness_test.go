@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -104,16 +105,46 @@ type harness struct {
 	state  string // the per-attempt scratch: prompt, status, interrupt files
 
 	mu         sync.Mutex
-	workspaces map[string]string // workspace id -> worktree path
-	removed    []string          // workspace ids worktree.remove accepted
+	workspaces map[string]harnessWorkspace
+	removed    []string // workspace ids worktree.remove accepted
 	last       *subprocess.JobHandle
 	spawn      bool   // agent.start launches the fake agent process
 	mode       string // the fake agent's mode
 	agentCmd   *exec.Cmd
 
+	// agentGone is set once the fake herdr has torn a workspace down: the
+	// agent lived on the pane that went with it, so every later agent.get
+	// answers pane_not_found — the positive-absence answer the real herdr
+	// gives, which teardown classifies as GONE rather than as an error
+	// (tick 5hz).
+	agentGone bool
+	// failRemoveOnce makes the NEXT worktree.remove answer an operational
+	// error before doing anything — the simulated kill between the steps
+	// of a disposal, before herdr ever accepted the removal.
+	failRemoveOnce string
+	// snapshotOmitsWorktrees makes session.snapshot report workspaces
+	// WITHOUT the worktree block, which forces disposal's attribution to
+	// fall back to the branch evidence of worktree.list.
+	snapshotOmitsWorktrees bool
+	// serverVersion and serverProtocol are what the harness's own routes
+	// echo back in session.snapshot.
+	serverVersion  string
+	serverProtocol int
+
 	promptFile    string
 	statusFile    string
 	interruptFile string
+}
+
+// harnessWorkspace is one workspace the fake herdr holds: the worktree it
+// is checked out at, the branch that worktree holds, and the label it was
+// created under — the same facts the real herdr reports on session.snapshot
+// and worktree.list, which is what disposal's identity resolution matches
+// an attempt against (tick 5hz).
+type harnessWorkspace struct {
+	path   string
+	branch string
+	label  string
 }
 
 type harnessOptions struct {
@@ -126,6 +157,10 @@ type harnessOptions struct {
 	// reply; setting them is how a test dispatches against an older herdr.
 	serverProtocol int
 	serverVersion  string
+	// snapshotOmitsWorktrees makes session.snapshot report workspaces
+	// WITHOUT the worktree block — the shape that forces disposal's
+	// attribution onto the branch evidence of worktree.list.
+	snapshotOmitsWorktrees bool
 }
 
 // newHarness wires the executor to a fake herdr whose worktree.create and
@@ -138,11 +173,19 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	state := filepath.Join(root, "agent")
 
 	h := &harness{
-		t: t, repo: repo, state: state, workspaces: map[string]string{},
+		t: t, repo: repo, state: state, workspaces: map[string]harnessWorkspace{},
 		spawn: opts.spawnAgent, mode: opts.agentMode,
-		promptFile:    filepath.Join(state, "prompt.txt"),
-		statusFile:    filepath.Join(state, "status"),
-		interruptFile: filepath.Join(state, "interrupt"),
+		snapshotOmitsWorktrees: opts.snapshotOmitsWorktrees,
+		promptFile:             filepath.Join(state, "prompt.txt"),
+		statusFile:             filepath.Join(state, "status"),
+		interruptFile:          filepath.Join(state, "interrupt"),
+	}
+	h.serverVersion, h.serverProtocol = "0.8.2", 20
+	if opts.serverVersion != "" {
+		h.serverVersion = opts.serverVersion
+	}
+	if opts.serverProtocol != 0 {
+		h.serverProtocol = opts.serverProtocol
 	}
 	if err := os.MkdirAll(state, 0o755); err != nil {
 		t.Fatal(err)
@@ -181,9 +224,13 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if out, err := runGitErr(repo.Dir, "worktree", "add", "--quiet", "-b", branch, path, base); err != nil {
 			return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "worktree.create: "+out)
 		}
+		label := branch
+		if p.Label != nil && *p.Label != "" {
+			label = *p.Label
+		}
 		h.mu.Lock()
 		ws := fmt.Sprintf("w%d", len(h.workspaces)+len(h.removed)+1)
-		h.workspaces[ws] = path
+		h.workspaces[ws] = harnessWorkspace{path: path, branch: branch, label: label}
 		h.mu.Unlock()
 		return herdtest.RespondJSON(w, req.ID, map[string]any{
 			"type": "worktree_created",
@@ -205,7 +252,15 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		h.mu.Lock()
-		path, ok := h.workspaces[p.WorkspaceID]
+		// The simulated kill lands BEFORE any effect: herdr is still holding
+		// the workspace when the caller's process dies.
+		failOnce := h.failRemoveOnce
+		h.failRemoveOnce = ""
+		if failOnce != "" {
+			h.mu.Unlock()
+			return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, failOnce)
+		}
+		info, ok := h.workspaces[p.WorkspaceID]
 		delete(h.workspaces, p.WorkspaceID)
 		h.mu.Unlock()
 		if !ok {
@@ -215,15 +270,88 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if p.Force {
 			args = append(args, "--force")
 		}
-		if out, err := runGitErr(repo.Dir, append(args, path)...); err != nil {
+		if out, err := runGitErr(repo.Dir, append(args, info.path)...); err != nil {
 			return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "worktree.remove: "+out)
 		}
 		runGitErr(repo.Dir, "worktree", "prune")
 		h.mu.Lock()
 		h.removed = append(h.removed, p.WorkspaceID)
+		h.agentGone = true // the agent lived on the pane that went with the workspace
 		h.mu.Unlock()
 		return herdtest.RespondJSON(w, req.ID, map[string]any{
-			"type": "worktree_removed", "workspace_id": p.WorkspaceID, "path": path, "forced": p.Force,
+			"type": "worktree_removed", "workspace_id": p.WorkspaceID, "path": info.path, "forced": p.Force,
+		})
+	})
+
+	// session.snapshot: what herdr has — the question disposal's identity
+	// resolution is built on (tick 5hz). Every workspace is reported with the
+	// worktree block the real herdr carries (checkout_path, repo_root),
+	// unless the harness was told to omit it, which forces the attribution
+	// onto worktree.list's branch evidence instead.
+	s.Route(herdtest.MethodSessionSnapshot, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		h.mu.Lock()
+		ids := make([]string, 0, len(h.workspaces))
+		others := make(map[string]harnessWorkspace, len(h.workspaces))
+		for id, info := range h.workspaces {
+			ids = append(ids, id)
+			others[id] = info
+		}
+		sort.Strings(ids)
+		omit := h.snapshotOmitsWorktrees
+		version, protocol := h.serverVersion, h.serverProtocol
+		h.mu.Unlock()
+		workspaces := make([]map[string]any, 0, len(ids))
+		for i, id := range ids {
+			info := others[id]
+			entry := map[string]any{
+				"workspace_id": id, "number": i + 1, "label": info.label,
+				"focused": false, "pane_count": 1, "tab_count": 1,
+				"active_tab_id": id + ":t1", "agent_status": h.currentStatus(),
+			}
+			if !omit {
+				entry["worktree"] = map[string]any{
+					"repo_key": repo.Dir + "/.git", "repo_name": "repo",
+					"repo_root": repo.Dir, "checkout_path": info.path,
+					"is_linked_worktree": true,
+				}
+			}
+			workspaces = append(workspaces, entry)
+		}
+		return herdtest.RespondJSON(w, req.ID, map[string]any{
+			"type": "session_snapshot",
+			"snapshot": map[string]any{
+				"version": version, "protocol": protocol,
+				"workspaces": workspaces,
+				"tabs":       []any{}, "panes": []any{}, "agents": []any{}, "layouts": []any{},
+			},
+		})
+	})
+
+	// worktree.list: the worktrees of the repository, each naming the
+	// workspace it is open in and the branch it holds — the branch evidence
+	// that attributes a workspace to an attempt when the snapshot alone
+	// cannot.
+	s.Route(herdtest.MethodWorktreeList, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		h.mu.Lock()
+		entries := make([]map[string]any, 0, len(h.workspaces))
+		for id, info := range h.workspaces {
+			entries = append(entries, map[string]any{
+				"path": info.path, "label": info.label, "branch": info.branch,
+				"is_bare": false, "is_detached": false, "is_prunable": false,
+				"is_linked_worktree": true, "open_workspace_id": id,
+			})
+		}
+		h.mu.Unlock()
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i]["path"].(string) < entries[j]["path"].(string)
+		})
+		return herdtest.RespondJSON(w, req.ID, map[string]any{
+			"type": "worktree_list",
+			"source": map[string]any{
+				"repo_key": repo.Dir + "/.git", "repo_name": "repo", "repo_root": repo.Dir,
+				"source_checkout_path": repo.Dir, "source_workspace_id": nil,
+			},
+			"worktrees": entries,
 		})
 	})
 
@@ -289,12 +417,19 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	})
 
 	// agent.get / agent.wait: the agent's status, from the file the fake
-	// agent writes (or the test seeds).
+	// agent writes (or the test seeds) — and, once the workspace that held
+	// the pane is gone, the positive-absence error the real herdr answers.
 	agentInfo := func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		var p struct {
 			Target string `json:"target"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
+		h.mu.Lock()
+		gone := h.agentGone
+		h.mu.Unlock()
+		if gone {
+			return herdtest.RespondErr(w, req.ID, herdtest.CodePaneNotFound, "agent "+p.Target+" is no longer there")
+		}
 		return herdtest.RespondJSON(w, req.ID, map[string]any{
 			"type": "agent_info",
 			"agent": map[string]any{
@@ -377,8 +512,8 @@ func worktreeOf(h *harness, req herdtest.Request) string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	path := ""
-	for _, p := range h.workspaces {
-		path = p
+	for _, info := range h.workspaces {
+		path = info.path
 	}
 	return path
 }
@@ -389,6 +524,51 @@ func (h *harness) removals() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]string(nil), h.removed...)
+}
+
+// restartHerdr simulates the substrate restart that strands every recorded
+// workspace id (tick 5hz): herdr comes back with the same worktrees in the
+// same places, but every workspace it holds is under a NEW id. It returns
+// the old-id → new-id mapping, and it does NOT touch the attempt record the
+// executor holds — that is the whole point: the recorded id goes stale while
+// the workspace it should still name is alive under a name nothing records.
+func (h *harness) restartHerdr(prefix string) map[string]string {
+	h.t.Helper()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	old := make([]string, 0, len(h.workspaces))
+	for id := range h.workspaces {
+		old = append(old, id)
+	}
+	sort.Strings(old)
+	mapping := map[string]string{}
+	for i, id := range old {
+		newID := fmt.Sprintf("%s%d", prefix, i+1)
+		h.workspaces[newID] = h.workspaces[id]
+		delete(h.workspaces, id)
+		mapping[id] = newID
+	}
+	return mapping
+}
+
+// foreignWorkspaceUnder re-keys what herdr holds under the given id: the
+// id now names a workspace that is NOT this attempt's — the restart hazard
+// at its worst, where the stale recorded id collides with somebody else's
+// workspace. The attempt's real worktree keeps living under another id.
+func (h *harness) foreignWorkspaceUnder(recordedID string, realID string) {
+	h.t.Helper()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	real, ok := h.workspaces[recordedID]
+	if !ok {
+		h.t.Fatalf("the harness holds no workspace under %s to re-key", recordedID)
+	}
+	h.workspaces[realID] = real
+	h.workspaces[recordedID] = harnessWorkspace{
+		path:   filepath.Join(h.repo.Root, "a-worktree-nobody-here-owns"),
+		branch: "ticfac/run-elsewhere/tick-zz9/attempt-1",
+		label:  "zz9",
+	}
 }
 
 // currentStatus is the fake agent's status, idle before it ever reported.

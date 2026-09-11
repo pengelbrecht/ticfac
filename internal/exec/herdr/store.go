@@ -99,6 +99,14 @@ type attemptRecord struct {
 	// that spans an upgrade can be diagnosed rather than guessed at.
 	ServerVersion string `json:"server_version"`
 	Protocol      uint32 `json:"protocol"`
+	// StaleWorkspaceID is the workspace id this attempt was RECORDED under
+	// until a teardown asked herdr what exists and found the workspace
+	// under another one (tick 5hz): a herdr restart moved the ids, and the
+	// record keeps BOTH so a stale id is recognised as stale rather than
+	// guessed at. It sits beside the protocol and server version because it
+	// is the same kind of provenance: a fact about the substrate this
+	// attempt ran against, not about the work.
+	StaleWorkspaceID string `json:"stale_workspace_id,omitempty"`
 
 	// LaunchConfirmed says agent.start was observed to succeed and the agent
 	// reported ready. An attempt whose launch was never confirmed is
