@@ -1,6 +1,7 @@
 {
   "id": "9t0",
   "title": "Pin the split in the contract bundle: the table enumeration and the substrate enum",
+  "notes": "2026-09-11 20:08 - Scope addition from 5eq: the derived TIER should become a field of the pinned Provenance object. It is carried durably today on the dispatch marker (dispatch.go:72,83,109) and implied by the tier-resolved profile digest, but internal/runstate/records.go Provenance has no tier field, so an over-tiered run still cannot be audited from provenance alone. That needs the same upstream bundle bump this tick already owns.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -11,5 +12,5 @@
   "parent": "av8",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T17:21:50.814772Z",
-  "updated_at": "2026-09-10T17:21:50.814772Z"
+  "updated_at": "2026-09-11T18:08:44.515223Z"
 }
