@@ -27,6 +27,7 @@ import (
 // run whose attempt numbers and evidence keys have nothing to do with the
 // records of the one it is continuing.
 func TestARunStoppedByARefusalResumesUnderTheSameRunID(t *testing.T) {
+	t.Parallel()
 	blocked := fixtureOptions{mode: "blocked-first"}
 	f := newFixture(t, blocked)
 
@@ -95,6 +96,7 @@ func TestARunStoppedByARefusalResumesUnderTheSameRunID(t *testing.T) {
 // the same permission as replaying one that finished, and the difference is
 // what keeps a replay from reclosing anything.
 func TestACompletedRunIsStillNotResumed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
 		t.Fatalf("the first run ended %v: %v", result, err)
@@ -123,6 +125,7 @@ func TestACompletedRunIsStillNotResumed(t *testing.T) {
 // between polls, not the age of the job), so before this bound the run
 // addressed a dead attempt forever at perfect cadence.
 func TestTheSettlementWaitIsBoundedByTheAttemptsOwnWallClock(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	f.wrap = func(inner Executor) Executor { return &alwaysRunningExecutor{Executor: inner} }
 
@@ -198,6 +201,7 @@ func (c *testClock) advance(d time.Duration) { c.at = c.at.Add(d) }
 // reconciler cannot tell a reused pid from the job, so every restart refused
 // the same tick forever and the only way on was a new run id.
 func TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	_, _, err := f.run(f.Repo, fixtureOptions{mode: "hang", stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
@@ -278,6 +282,7 @@ func TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne(t *testin
 // attempt the executor can still address is cancelled, never released behind
 // its back.
 func TestSettleRefusesAnAttemptTheExecutorCanStillAddress(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	_, _, err := f.run(f.Repo, fixtureOptions{mode: "hang", stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
@@ -303,6 +308,7 @@ func TestSettleRefusesAnAttemptTheExecutorCanStillAddress(t *testing.T) {
 // that declined the push all read as a conflict nobody had, and the next
 // repair went looking for the wrong thing.
 func TestAPushRefusedByPolicyIsNotReportedAsALeaseRace(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	// The hook goes in the moment the attempt is collected, so everything up
 	// to the merge happens normally and the integration push is what meets it.
@@ -364,6 +370,7 @@ func declinePushes(t *testing.T, origin string) {
 // verdict is really about — was written to no record at all, and freshness
 // could only ever notice the attempt branch moving.
 func TestTheGatesEvidenceNamesTheCommitItRanOn(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil || result.State != runstate.StateCompleted {
@@ -424,6 +431,7 @@ func TestTheGatesEvidenceNamesTheCommitItRanOn(t *testing.T) {
 // integration target that moved away from the gated commit refuses publication
 // exactly as a moved attempt head does.
 func TestFreshnessIsCheckedOnEveryFieldTheRecordStates(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, err := New(f.options(f.Repo, fixtureOptions{}))
 	if err != nil {
@@ -465,6 +473,7 @@ func TestFreshnessIsCheckedOnEveryFieldTheRecordStates(t *testing.T) {
 // run left is pruned by the next one. Every worktree this package makes is
 // removed by a defer, and a killed process runs no defer.
 func TestARunLeavesNoWorktreeRegisteredBehindIt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %v: %v", result, err)
@@ -495,6 +504,7 @@ func TestARunLeavesNoWorktreeRegisteredBehindIt(t *testing.T) {
 // removed, and one whose directory is still there is left alone — it may be
 // another run's live worktree, and two epics can be reconciled in one checkout.
 func TestPruningRemovesOnlyTheRegistrationsWhoseDirectoryIsGone(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	repo := newRepo(t, root, "prune", passingGate)
 	g := &repoGit{dir: repo.Dir, name: "ticfac", email: "ticfac@example.com", remote: "origin"}
@@ -590,6 +600,7 @@ func openRunStore(t *testing.T, repo, branch, runID string) *runstate.Store {
 // branch is kept for the person to read, and nothing reaches the integration
 // branch.
 func TestAnAttemptThatCommittedAndAnsweredBlockedIsAnEscalationAndNotAMerge(t *testing.T) {
+	t.Parallel()
 	escalating := fixtureOptions{mode: "blocked-with-work"}
 	f := newFixture(t, escalating)
 
@@ -681,6 +692,7 @@ func TestAnAttemptThatCommittedAndAnsweredBlockedIsAnEscalationAndNotAMerge(t *t
 // only place a status that is neither DONE nor the fake runner's own can come
 // from without a fake runner mode per status word.
 func TestAnAttemptThatAnsweredNeedsContextIsRefusedTheSameWay(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	f.wrap = corruptRoleResultFor("implement-tick", func(result *subprocess.RoleResult) {
 		result.Status = subprocess.StatusNeedsContext
@@ -713,6 +725,7 @@ func TestAnAttemptThatAnsweredNeedsContextIsRefusedTheSameWay(t *testing.T) {
 // is the status a worker uses to hand its concerns on with work that stands, and
 // a reconciler that stopped on it would stop on the ordinary case.
 func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	f.wrap = corruptRoleResultFor("implement-tick", func(result *subprocess.RoleResult) {
 		result.Status = subprocess.StatusDoneWithConcerns
@@ -754,6 +767,7 @@ func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
 // have taken it away silently. So it is pinned here, at the level that matters,
 // which is what a person sees rather than which function wrote it down.
 func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 
 	// Stop once the attempt is collected: its work is on its branch and
@@ -883,6 +897,7 @@ func writeAndCommit(t *testing.T, dir, file, content, message string) {
 // commit's fingerprint and closed the tick behind it. The tree that passed and
 // the tree that was closed were not the same tree.
 func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %v: %v", result, err)
@@ -1008,6 +1023,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 // would collect an attempt it had already merged, against the worktree its own
 // teardown removed, and report a missing report for it.
 func TestAnUnreadableRemoteIsNotAnAnswerAboutWhatIsIntegrated(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %v: %v", result, err)
@@ -1045,6 +1061,7 @@ func TestAnUnreadableRemoteIsNotAnAnswerAboutWhatIsIntegrated(t *testing.T) {
 // attempt from a base that already carries the work, so the worker has nothing
 // to do and its empty branch is refused. The tick loops there.
 func TestSettleRefusesToReleaseARejectedAttemptWhoseWorkIsAlreadyMerged(t *testing.T) {
+	t.Parallel()
 	failing := fixtureOptions{gate: failingGate}
 	f := newFixture(t, failing)
 

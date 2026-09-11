@@ -79,6 +79,7 @@ var beneathInvariants = map[string]string{
 // nothing in none — and every claimed guard is exactly the fixture's, so a
 // guard added upstream cannot land here as silence.
 func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
+	t.Parallel()
 	c := loadLifecycle(t)
 	if len(c.Invariants) != 13 {
 		t.Fatalf("the fixture carries %d invariants; Appendix A has 13", len(c.Invariants))
@@ -143,6 +144,7 @@ func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
 
 // The fixture's own sequences, run against the real reconciler.
 func TestTheFixturesSequencesRunAgainstTheRealReconciler(t *testing.T) {
+	t.Parallel()
 	c := loadLifecycle(t)
 	for _, inv := range c.Invariants {
 		if _, ok := replayedInvariants[inv.ID]; !ok {
@@ -150,9 +152,11 @@ func TestTheFixturesSequencesRunAgainstTheRealReconciler(t *testing.T) {
 		}
 		inv := inv
 		t.Run(inv.ID, func(t *testing.T) {
+			t.Parallel()
 			for _, seq := range inv.Sequences {
 				seq := seq
 				t.Run(seq.ID, func(t *testing.T) {
+					t.Parallel()
 					a := newAdapter(t, nil)
 					for i, step := range seq.Steps {
 						if got := a.run(step); got != step.Expect {
@@ -173,6 +177,7 @@ func TestTheFixturesSequencesRunAgainstTheRealReconciler(t *testing.T) {
 // would satisfy the whole control while the second could have stopped enforcing
 // anything.
 func TestDisablingAGuardBreaksTheInvariantItBelongsTo(t *testing.T) {
+	t.Parallel()
 	c := loadLifecycle(t)
 	for _, inv := range c.Invariants {
 		guards, ok := replayedInvariants[inv.ID]
@@ -181,9 +186,11 @@ func TestDisablingAGuardBreaksTheInvariantItBelongsTo(t *testing.T) {
 		}
 		inv, guards := inv, guards
 		t.Run(inv.ID, func(t *testing.T) {
+			t.Parallel()
 			for _, guard := range guards {
 				guard := guard
 				t.Run("without_"+guard, func(t *testing.T) {
+					t.Parallel()
 					broke := false
 					for _, seq := range inv.Sequences {
 						a := newAdapter(t, map[string]bool{guard: true})
@@ -523,6 +530,7 @@ func (a *adapter) finalMismatches(want lifecycleFinal) []string {
 // lands after the dispatch, so the marker is on origin and a job is running;
 // the restart must find it rather than start a second one.
 func TestA6ARestartAdoptsRatherThanRedispatching(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
@@ -587,6 +595,7 @@ func TestA6ARestartAdoptsRatherThanRedispatching(t *testing.T) {
 // evidence. The claimer is killed and never comes back; the next reconciler
 // reads the branch and the report and settles it.
 func TestA8ARestartSettlesAnInFlightAttemptFromDurableEvidence(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
@@ -626,6 +635,7 @@ func TestA8ARestartSettlesAnInFlightAttemptFromDurableEvidence(t *testing.T) {
 // and a boundary violation are different problems and send the next repair
 // somewhere different.
 func TestA9DistinctRefusalsDoNotShareAMessage(t *testing.T) {
+	t.Parallel()
 	messages := func(t *testing.T, guardsOff map[string]bool) (gate, boundary string) {
 		t.Helper()
 		a := newFixture(t, fixtureOptions{gate: failingGate})
@@ -668,6 +678,7 @@ func failureMessage(t *testing.T, result *Result) string {
 // REPORTED. The executor refuses the write; the reconciler is what refuses the
 // MERGE and says so where a person reading the run will find it.
 func TestA10ABoundaryViolationIsReportedAndRefusesTheMerge(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "boundary"})
 	r, result, err := f.run(f.Repo, fixtureOptions{mode: "boundary"})
 	if err != nil {
@@ -694,6 +705,7 @@ func TestA10ABoundaryViolationIsReportedAndRefusesTheMerge(t *testing.T) {
 // only then is the attempt torn down — a container torn down before its
 // credential is revoked can spend on the way out.
 func TestTheCleanUpRevokesBeforeItTearsDown(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	var order []string
 	f.wrap = func(inner Executor) Executor { return &orderingExecutor{Executor: inner, order: &order} }
@@ -819,6 +831,7 @@ func loadThresholds(t *testing.T) lifecycleThresholds {
 // Appendix A #4's relationship, pinned in ONE place: this package's defaults
 // are the fixture's numbers, not a second copy of them.
 func TestTheDefaultCadenceIsTheFixtures(t *testing.T) {
+	t.Parallel()
 	thresholds := loadThresholds(t)
 	for _, check := range []struct {
 		name string

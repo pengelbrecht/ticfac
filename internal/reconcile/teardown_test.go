@@ -41,6 +41,7 @@ tree = { command = "test -f README.md && ls work-*.txt >/dev/null && test -f gat
 // sentence about an event that never happened, and sent whoever read it at the
 // wrong problem (Appendix A #9).
 func TestARejectedAttemptThatCarriedCommitsIsNotReadAsCancelled(t *testing.T) {
+	t.Parallel()
 	silent := fixtureOptions{mode: "silent"}
 	f := newFixture(t, silent)
 
@@ -106,6 +107,7 @@ func TestARejectedAttemptThatCarriedCommitsIsNotReadAsCancelled(t *testing.T) {
 // over it and orphaned the local branch holding the only copy. The local branch
 // is one `git rev-parse` away in the checkout the run is working in.
 func TestAnAttemptWhoseWorkNeverReachedOriginIsNotDeclaredSpent(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	refuseEveryAttemptPush(t, f.Repo.Origin)
 
@@ -198,6 +200,7 @@ func TestAnAttemptWhoseWorkNeverReachedOriginIsNotDeclaredSpent(t *testing.T) {
 // either: the merge stays on the branch and a new attempt cut from the
 // integration head finds the work already there.
 func TestAGateThatFailedRunsAgainOnceTheTreeIsFixed(t *testing.T) {
+	t.Parallel()
 	failing := fixtureOptions{gate: gateNeedingAFix}
 	f := newFixture(t, failing)
 
@@ -315,6 +318,7 @@ func TestAGateThatFailedRunsAgainOnceTheTreeIsFixed(t *testing.T) {
 // asked for, and the answer is on the branch and in the run's records — not in
 // a worktree the operator's checkout keeps forever.
 func TestARoleJobsRefusalTearsItsAttemptDown(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	f.wrap = corruptRoleResult(func(result *subprocess.RoleResult) {
 		result.Status = subprocess.StatusBlocked

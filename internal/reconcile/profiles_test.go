@@ -16,6 +16,7 @@ import (
 // DISPATCHED under them, and what the durable record says they were.
 
 func TestEachRoleIsDispatchedUnderItsOwnProfileAndRecordedWithIt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -82,6 +83,7 @@ func TestEachRoleIsDispatchedUnderItsOwnProfileAndRecordedWithIt(t *testing.T) {
 // The routing an operator already keeps in `.tick/runners.toml` for `tk herd`
 // is the routing a ticfac run honours: one place, not two.
 func TestTheTargetRepositoriesRolesTableRoutesTheRun(t *testing.T) {
+	t.Parallel()
 	// passingGate carries its own [roles.implement] (the shipped default),
 	// so this fixture rewrites the routing rather than appending to it: a
 	// TOML table may be declared once.
@@ -135,6 +137,7 @@ tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description 
 // into an epic, with a tick already claimed, is not when a run should discover
 // that nothing can launch its runner.
 func TestAProfileThisBuildCannotHonourIsRefusedAtConstruction(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeProfile(t, dir, "implement-tick", `"executor": "herdr", "runner": "claude", "model": "sonnet"`)
 	writeProfile(t, dir, "review-epic", `"executor": "local-subprocess", "runner": "claude", "model": "opus"`)
@@ -206,6 +209,7 @@ func openStore(t *testing.T, f *fixture, r *Reconciler) *runstate.Store {
 // test adds is that the reconciler actually dispatches the review into that
 // sandbox.
 func TestTheReviewRunsReadOnlyAtTheControllerState(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "push-per-tick"})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -280,6 +284,7 @@ func TestTheReviewRunsReadOnlyAtTheControllerState(t *testing.T) {
 // a thing a model was paid for once, so a restart re-reads it instead of
 // re-asking.
 func TestARoleJobsValidatedAnswerIsRecordedAsADecision(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, _, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -325,6 +330,7 @@ func TestARoleJobsValidatedAnswerIsRecordedAsADecision(t *testing.T) {
 // acted on: nothing is noted, nothing is closed, and the process tick is left
 // open for whoever looks next.
 func TestAMalformedRoleResultLeavesTheTickOpen(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	f.wrap = corruptRoleResult(func(result *subprocess.RoleResult) {
 		// A status of the model's own invention: the verdict-inversion bug the
@@ -370,6 +376,7 @@ func TestAMalformedRoleResultLeavesTheTickOpen(t *testing.T) {
 // it reads differently: a role job's answer is its verdict, and this one says a
 // person is needed rather than that the answer was unreadable.
 func TestARoleAnswerThatAsksForAPersonLeavesTheTickOpen(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	f.wrap = corruptRoleResult(func(result *subprocess.RoleResult) {
 		result.Status = subprocess.StatusBlocked
@@ -464,6 +471,7 @@ func containsCommit(t *testing.T, f *fixture, commit, container string) bool {
 // of whose four fields did nothing, and a run whose provenance named a model
 // nothing was launched with would be provenance that lies.
 func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -528,6 +536,7 @@ func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
 // refused at CONSTRUCTION — before a tick is claimed, and before any record
 // says a model was applied.
 func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, role := range profile.Roles {
 		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)

@@ -13,6 +13,7 @@ import (
 // refusals that keep it from reading anything else.
 
 func TestGateCommandsReadTheInlineTableSpelling(t *testing.T) {
+	t.Parallel()
 	got, err := parseGateCommands(`
 version = 2
 
@@ -44,6 +45,7 @@ which-go = { command = "which go", description = "Go toolchain on PATH" }
 }
 
 func TestGateCommandsReadTheSubTableSpelling(t *testing.T) {
+	t.Parallel()
 	got, err := parseGateCommands(`
 [testing.commands.go]
 command = "go test ./..."
@@ -61,6 +63,7 @@ description = "Go"
 // running one of those would be the reconciler running a command nothing
 // authorised, so the reader must not see them at all.
 func TestOnlyTheTestingCommandsTableIsRead(t *testing.T) {
+	t.Parallel()
 	got, err := parseGateCommands(`
 [environment.commands]
 which-go = { command = "which go", description = "x" }
@@ -77,6 +80,7 @@ kind = "claude"
 }
 
 func TestCommentsAndQuotedHashesAreHandled(t *testing.T) {
+	t.Parallel()
 	got, err := parseGateCommands(`
 [testing.commands] # the gate
 go = { command = "go test -run 'A#B' ./...", description = "Go" } # trailing
@@ -90,6 +94,7 @@ go = { command = "go test -run 'A#B' ./...", description = "Go" } # trailing
 }
 
 func TestAGateWithNoCommandIsRefused(t *testing.T) {
+	t.Parallel()
 	_, err := parseGateCommands("[testing.commands.go]\ndescription = \"Go\"\n")
 	if err == nil || !strings.Contains(err.Error(), "declares no command") {
 		t.Fatalf("a named gate that runs nothing was accepted: %v", err)
@@ -97,6 +102,7 @@ func TestAGateWithNoCommandIsRefused(t *testing.T) {
 }
 
 func TestABareStringCommandIsRefused(t *testing.T) {
+	t.Parallel()
 	_, err := parseGateCommands("[testing.commands]\ngo = \"go test ./...\"\n")
 	if err == nil || !strings.Contains(err.Error(), "inline table") {
 		t.Fatalf("a bare string was accepted as a gate: %v", err)
@@ -108,6 +114,7 @@ func TestABareStringCommandIsRefused(t *testing.T) {
 // third key is not a future schema addition to tolerate — it is a malformed
 // entry, and the refusal must name the file and the offending line.
 func TestAThirdKeyInACommandsEntryIsRefused(t *testing.T) {
+	t.Parallel()
 	for _, document := range []string{
 		"[testing.commands]\ngo = { command = \"go test ./...\", timeout = \"30s\" }\n",
 		"[testing.commands.go]\ncommand = \"go test ./...\"\ntimeout = \"30s\"\n",
@@ -125,6 +132,7 @@ func TestAThirdKeyInACommandsEntryIsRefused(t *testing.T) {
 // This repository's own runners.toml is the one document the reader must not
 // get wrong: it is what the epic's integrated gate runs.
 func TestThisRepositorysGateIsReadable(t *testing.T) {
+	t.Parallel()
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		t.Fatal(err)
