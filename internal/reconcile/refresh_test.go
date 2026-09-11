@@ -254,6 +254,7 @@ func showOnOrigin(t *testing.T, f *fixture, branch, path string) string {
 // run. The base is read from the EPIC's own `base_branch` — this run is told
 // `--base HEAD`, which names no branch at all.
 func TestATickFiledOnTheBaseAfterTheForkIsDispatchedByTheNextRun(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	tracker, _ := newRepoTracker(t, f.Repo.Dir)
 
@@ -315,6 +316,7 @@ func TestATickFiledOnTheBaseAfterTheForkIsDispatchedByTheNextRun(t *testing.T) {
 // under test is the merge, and a fixture that also dispatched two jobs would
 // take a hundred times as long to say the same thing.
 func TestBothSidesOfTheActivityLogMergeThroughTheTrackersOwnDriver(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	tracker, driverLog := newRepoTracker(t, f.Repo.Dir)
 
@@ -386,6 +388,7 @@ func TestBothSidesOfTheActivityLogMergeThroughTheTrackersOwnDriver(t *testing.T)
 // a role job's decision (resolve-conflict, Phase 2), not a merge this
 // reconciler may invent.
 func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	tracker, _ := newRepoTracker(t, f.Repo.Dir)
 
@@ -450,6 +453,7 @@ func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 // the default, and a run cut from a commit has nothing to fold. What it must
 // not be is silent.
 func TestARunWhoseBaseIsNotABranchSaysSoAndRunsOn(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {

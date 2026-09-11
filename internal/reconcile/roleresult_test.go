@@ -23,6 +23,7 @@ func wellFormed() *subprocess.RoleResult {
 }
 
 func TestAWellFormedEnvelopeValidates(t *testing.T) {
+	t.Parallel()
 	if err := ValidateRoleResult(wellFormed(), "ticfac.job-result.review-epic.v1", "review-epic"); err != nil {
 		t.Fatalf("a well-formed envelope was refused: %v", err)
 	}
@@ -32,6 +33,7 @@ func TestAWellFormedEnvelopeValidates(t *testing.T) {
 // word: a fifth spelling of "done" makes two runs disagree about what happened
 // to one tick with nothing failing.
 func TestAStatusOfItsOwnInventionIsRefused(t *testing.T) {
+	t.Parallel()
 	result := wellFormed()
 	result.Status = "COMPLETE"
 	err := ValidateRoleResult(result, "ticfac.job-result.review-epic.v1", "review-epic")
@@ -44,6 +46,7 @@ func TestAStatusOfItsOwnInventionIsRefused(t *testing.T) {
 }
 
 func TestAnEnvelopeMissingARequiredFieldIsRefused(t *testing.T) {
+	t.Parallel()
 	result := wellFormed()
 	result.Summary = ""
 	result.Result = nil
@@ -61,6 +64,7 @@ func TestAnEnvelopeMissingARequiredFieldIsRefused(t *testing.T) {
 // Validating against what came back rather than against what was asked for is
 // how a review's answer gets read as a closeout's.
 func TestAnEnvelopeThatAnswersADifferentQuestionIsRefused(t *testing.T) {
+	t.Parallel()
 	other := wellFormed()
 	other.SchemaID = "ticfac.job-result.implement-tick.v1"
 	if err := ValidateRoleResult(other, "ticfac.job-result.review-epic.v1", "review-epic"); err == nil {
@@ -77,6 +81,7 @@ func TestAnEnvelopeThatAnswersADifferentQuestionIsRefused(t *testing.T) {
 // No envelope at all is not "nothing to check": a role job whose only
 // deliverable is its answer, with no answer, has not produced one.
 func TestNoEnvelopeIsRefused(t *testing.T) {
+	t.Parallel()
 	err := ValidateRoleResult(nil, "ticfac.job-result.review-epic.v1", "review-epic")
 	if err == nil {
 		t.Fatal("a missing envelope was accepted")

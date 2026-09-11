@@ -21,6 +21,7 @@ import (
 // directory (what `t.TempDir()` — and so `ExecStateRoot` — resolves to on
 // this machine), and the machine's hostname.
 func TestNoDurableRecordCarriesAHostPath(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -94,6 +95,7 @@ func TestNoDurableRecordCarriesAHostPath(t *testing.T) {
 // the gate worktree's own path specifically, in addition to the general
 // scan above.
 func TestAFailingGatesOutputCarriesNoHostPath(t *testing.T) {
+	t.Parallel()
 	const failingGateNamingItsOwnWorktree = `version = 2
 
 [roles.implement]

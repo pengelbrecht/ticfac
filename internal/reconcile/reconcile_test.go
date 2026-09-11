@@ -13,6 +13,7 @@ import (
 // with a fake runner.
 
 func TestAFixtureEpicCompletesEndToEnd(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -46,6 +47,7 @@ func TestAFixtureEpicCompletesEndToEnd(t *testing.T) {
 // EPIC-SKELETON: review and closeout are jobs like any other, and they go
 // LAST — after every tick they are about.
 func TestReviewAndCloseoutAreDispatchedLast(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, _, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -67,6 +69,7 @@ func TestReviewAndCloseoutAreDispatchedLast(t *testing.T) {
 // Every state change leaves a checkpoint, and every dispatch leaves an attempt
 // record. Both are on ORIGIN, because a local commit is not durable.
 func TestTheRunLeavesACheckpointAndAnAttemptRecordPerDispatch(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, _, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -148,6 +151,7 @@ func TestTheRunLeavesACheckpointAndAnAttemptRecordPerDispatch(t *testing.T) {
 // A failing gate is what stops a close. The tick stays open, the run fails, and
 // the message says which check refused — not "the run broke".
 func TestAFailingGateStopsTheCloseAndSaysWhichCheckRefused(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: failingGate})
 	r, result, err := f.run(f.Repo, fixtureOptions{gate: failingGate})
 	if err != nil {
@@ -198,6 +202,7 @@ func TestAFailingGateStopsTheCloseAndSaysWhichCheckRefused(t *testing.T) {
 // the merge: an attempt that wrote tracker state does not reach the integration
 // branch, whatever its report said.
 func TestABoundaryViolationIsReportedAndNeverMerged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "boundary"})
 	r, result, err := f.run(f.Repo, fixtureOptions{mode: "boundary"})
 	if err != nil {
@@ -227,6 +232,7 @@ func TestABoundaryViolationIsReportedAndNeverMerged(t *testing.T) {
 // A run that is already terminal is not run again. Replaying a finished run's
 // checkpoint must neither redispatch nor reclose anything.
 func TestATerminalRunIsNotRunAgain(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	if _, _, err := f.run(f.Repo, fixtureOptions{}); err != nil {
 		t.Fatal(err)

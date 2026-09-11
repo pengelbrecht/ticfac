@@ -28,6 +28,7 @@ import (
 //	                          cut: a close recorded before the tracker has it
 //	                          is a false close.
 func TestARestartFromAFreshCloneNeitherRedispatchesNorFalselyCloses(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		stage string
@@ -40,6 +41,7 @@ func TestARestartFromAFreshCloneNeitherRedispatchesNorFalselyCloses(t *testing.T
 	for _, testCase := range cases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t, fixtureOptions{})
 
 			// The cut. Nothing after it runs: no deferred cleanup, no close.
@@ -129,6 +131,7 @@ func TestARestartFromAFreshCloneNeitherRedispatchesNorFalselyCloses(t *testing.T
 // restart is only proven not to have re-run the check if that file still says
 // one run.
 func TestARestartReusesTheGateEvidenceItAlreadyPaidFor(t *testing.T) {
+	t.Parallel()
 	counter := filepath.Join(t.TempDir(), "gate-runs.count")
 	command := fmt.Sprintf("printf x >> %s && test -f README.md && ls work-*.txt >/dev/null", counter)
 	gate := fmt.Sprintf(`version = 2

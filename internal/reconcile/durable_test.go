@@ -35,6 +35,7 @@ func originHeadOf(t *testing.T, f *fixture, branch string) string {
 // criterion: after each close, ORIGIN's integration branch carries the tracker
 // record with status closed, and the reconciler's own checkout is untouched.
 func TestEveryTrackerWriteIsPushedToTheIntegrationBranch(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -73,6 +74,7 @@ func TestEveryTrackerWriteIsPushedToTheIntegrationBranch(t *testing.T) {
 // point of making it durable: a worker reads its blockers out of the `.tick/`
 // of the commit it branched from.
 func TestAWave2AttemptIsDispatchedAtABaseThatCarriesItsBlockersClosed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -111,6 +113,7 @@ func TestAWave2AttemptIsDispatchedAtABaseThatCarriesItsBlockersClosed(t *testing
 // a reconciler that died between the claim and the close leaves a tracker
 // somebody else can read, rather than a tick that looks unclaimed.
 func TestAClaimIsOnOriginBeforeTheJobIsStarted(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
@@ -133,6 +136,7 @@ func TestAClaimIsOnOriginBeforeTheJobIsStarted(t *testing.T) {
 // incarnation dispatches a NEW attempt — at the integration branch as origin
 // has it, which by then carries the blocker closed.
 func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T) {
+	t.Parallel()
 	blocked := fixtureOptions{mode: "blocked-first"}
 	f := newFixture(t, blocked)
 
@@ -212,6 +216,7 @@ func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T
 // origin, the refusal was about them, and redispatching it would throw away the
 // only copy of what a person has to look at. It is adopted, as it always was.
 func TestARejectedAttemptThatLeftCommitsIsNotRedispatched(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "silent"})
 	r, result, err := f.run(f.Repo, fixtureOptions{mode: "silent"})
 	if err != nil {

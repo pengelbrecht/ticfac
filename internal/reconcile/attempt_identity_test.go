@@ -64,6 +64,7 @@ func runGitQuiet(dir string, args ...string) string {
 // do neither, because the same failure that stranded the commit stops it being
 // pushed. So: no close, and no commit thrown away.
 func TestOriginsHeadIsNotMergedWhenItIsNotTheHeadThatWasCollected(t *testing.T) {
+	t.Parallel()
 	opts := fixtureOptions{mode: "unpushed-tail"}
 	f := newFixture(t, opts)
 	refuseAdvancing(t, f.Repo.Origin)
@@ -120,7 +121,9 @@ func TestOriginsHeadIsNotMergedWhenItIsNotTheHeadThatWasCollected(t *testing.T) 
 // its own — so a second attempt works in the same checkout whether or not the
 // first one's teardown ever ran.
 func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *testing.T) {
+	t.Parallel()
 	t.Run("the rejected attempt is disposed", func(t *testing.T) {
+		t.Parallel()
 		opts := fixtureOptions{mode: "blocked-first"}
 		f := newFixture(t, opts)
 
@@ -146,6 +149,7 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 	})
 
 	t.Run("the next attempt is dispatched in the same checkout", func(t *testing.T) {
+		t.Parallel()
 		opts := fixtureOptions{mode: "blocked-first"}
 		f := newFixture(t, opts)
 
@@ -198,6 +202,7 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 // are one rule: the ref carries (run, tick, attempt), and the grant may
 // advance nothing outside this RUN's namespace.
 func TestTheWriteRefCarriesRunTickAndAttempt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, err := New(f.options(f.Repo, fixtureOptions{}))
 	if err != nil {
@@ -232,6 +237,7 @@ func TestTheWriteRefCarriesRunTickAndAttempt(t *testing.T) {
 // in the marker — and not the one in the attempt record beside the worker's
 // own worktree, which the worker's uid can rewrite.
 func TestACollectMeasuredFromAForgedBaseIsRefused(t *testing.T) {
+	t.Parallel()
 	opts := fixtureOptions{mode: "forge-base"}
 	f := newFixture(t, opts)
 
@@ -264,6 +270,7 @@ func TestACollectMeasuredFromAForgedBaseIsRefused(t *testing.T) {
 // necessarily about the tick that was refused. Adopting it without looking
 // would give one tick another's job.
 func TestADispatchMarkerForAnotherTickIsNotAdopted(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -333,6 +340,7 @@ func TestADispatchMarkerForAnotherTickIsNotAdopted(t *testing.T) {
 // does not dispatch, so it never reaches claimDispatch's claim. Adopting
 // replays it.
 func TestAdoptClaimsATickWhoseDispatchNeverReachedItsClaim(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, err := New(f.options(f.Repo, fixtureOptions{}))
 	if err != nil {
@@ -379,6 +387,7 @@ func TestAdoptClaimsATickWhoseDispatchNeverReachedItsClaim(t *testing.T) {
 // durableAttemptHead, in its own right: what the merge is OF, in each of the
 // four states origin and the collect can be in.
 func TestTheMergeHeadIsTheCollectedHeadOrNothing(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	repo := newRepo(t, root, "heads", passingGate)
 	g := &repoGit{dir: repo.Dir, name: "ticfac", email: "ticfac@example.com", remote: "origin"}
