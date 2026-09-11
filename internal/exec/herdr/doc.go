@@ -32,14 +32,18 @@
 //     prompt, Start waits for the agent to reach `working` once. A
 //     confirmation that times out is an OBSERVATION, not a failure — a
 //     trivial tick can finish before `working` is ever rendered.
-//   - A SUBSTRATE FAILURE DECIDES NOTHING (x6j's line, held here as shape).
-//     No content gate reads the pane back: agent_prompt_stalled and herdr
-//     going quiet are recorded as operational observations and never as a
-//     verdict. Inspect answers `lost` — not terminal — when herdr cannot be
-//     asked; a settlement is recorded only when herdr POSITIVELY answers
-//     that the agent is gone. And teardown refuses to act on an unanswered
-//     liveness question: herdr not answering is not evidence that tearing an
-//     agent down is safe.
+//   - A SUBSTRATE FAILURE DECIDES NOTHING (x6j's line, held here as shape
+//     and classified in classify.go). No content gate reads the pane back:
+//     agent_prompt_stalled and herdr going quiet are recorded as operational
+//     observations and never as a verdict. Inspect answers `lost` — not
+//     terminal — when herdr cannot be asked; a settlement is recorded only
+//     when herdr POSITIVELY answers that the agent is gone, and that answer
+//     is evidence (the agent-gone marker), not a failure. Teardown refuses
+//     to act on an unanswered liveness question: herdr not answering is not
+//     evidence that tearing an agent down is safe. An attempt whose record a
+//     later leg cannot read, and an attempt with no report and no settlement
+//     at collect time, are held for a person — never redispatched, never
+//     collected into a verdict.
 //
 // # What is deliberately NOT here
 //
@@ -54,8 +58,10 @@
 //     inherited unchanged.
 //   - p6b: the artifact boundary. No exclude is written and no artifact
 //     backstop runs at collect yet.
-//   - x6j: every substrate failure classified operational-or-verdict, and
-//     resume across an upgrade held for a person.
 //   - 5hz: Dispose reclaims by identity when a recorded workspace id is
 //     stale. Here disposal uses the recorded id, tolerating "already gone".
+//
+// x6j is DONE here: the operational-or-verdict audit of every herdr call
+// site lives in classify.go, the every-call-fails fixture in
+// operational_test.go.
 package herdr

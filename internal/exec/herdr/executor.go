@@ -239,6 +239,17 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 				"attempt %d of %s already settled as %s; a retry is a new attempt number, not this one again",
 				existing.Attempt, existing.JobID, status.State)
 		}
+	} else if st.exists(fileAttempt) {
+		// Resume across an upgrade: the record EXISTS and this leg cannot
+		// read it — a schema version from another release, a half-rewritten
+		// file. That is a handle a later leg cannot address, and it is held
+		// for a person rather than redispatched: a fresh worktree created
+		// behind an unreadable record would strand whatever the record was
+		// the only address for (x6j's classification: OPERATIONAL, and the
+		// hold — never a verdict, never a redispatch).
+		return nil, refuse(subprocess.RefusedUnknown,
+			"the attempt record at %s cannot be read (%v): this attempt is held for a person, never redispatched",
+			dir, err)
 	}
 
 	base, err := resolveCommit(e.repo, spec.Source.BaseSHA)

@@ -142,6 +142,47 @@ func TestCancelOnAWorkingAgentRecordsTheFullRefusal(t *testing.T) {
 	}
 }
 
+func TestCancelOnASettledGoneAgentRecordsNoVerdictRename(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The attempt settled itself the way settle actually happens: herdr
+	// POSITIVELY answered that the agent is no longer there, and inspect
+	// recorded that answer durably.
+	h.settleGone(t, handle)
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The reconciler calls Cancel-then-Dispose on a REJECTED attempt — an
+	// agent that is provably gone. Cancel must treat the positive answer as
+	// settled (nothing is spending) and record NO cancellation record:
+	// reading not-found as silence would rename the attempt's verdict
+	// `cancelled` for every later inspect and collect.
+	ack, err := h.ex.Cancel(handle)
+	if err != nil {
+		t.Fatalf("cancelling a provably gone attempt failed: %v", err)
+	}
+	if !ack.StopRequested {
+		t.Error("the ack must say the stop was requested: there was nothing to interrupt, which is the state the stop reaches")
+	}
+	if _, err := os.Stat(local.State + "/" + fileCancel); err == nil {
+		t.Error("a settled attempt got a durable cancellation record: it would rename the finished attempt's " +
+			"verdict for everybody who ever looks at it again")
+	}
+	status, err := h.ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != subprocess.StateFailed {
+		t.Errorf("state = %s after the cancel, want failed: the substrate's positive answer must not rename the verdict",
+			status.State)
+	}
+}
+
 func TestCancelWithHerdrDownStillRevokes(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")

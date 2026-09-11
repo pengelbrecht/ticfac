@@ -161,10 +161,11 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		return subprocess.StateRunning, fmt.Sprintf(
 			"the agent %s is live in pane %s (herdr reports %s)",
 			record.AgentName, agent.PaneID, agent.AgentStatus)
-	case client.IsCode(err, client.CodeAgentNotFound), client.IsCode(err, client.CodePaneNotFound):
-		// A POSITIVE answer that nothing is there. It settles the attempt —
-		// and it is recorded durably, because it is the one settlement fact
-		// a herdr-free collect can later read (tick 2xu's seam).
+	case gone(err):
+		// A POSITIVE answer that nothing is there (classify.go): it settles
+		// the attempt — and it is recorded durably, because it is the one
+		// settlement fact a herdr-free collect can later read (tick 2xu's
+		// seam).
 		_ = st.markAgentGone(e.stamp())
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
 			Detail: fmt.Sprintf("herdr answers that the agent %s is no longer there (%s)", record.AgentName, apiCode(err))})
