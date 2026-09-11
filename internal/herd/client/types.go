@@ -70,21 +70,49 @@ func Regex(value string) OutputMatch {
 	return OutputMatch{Type: MatchRegex, Value: value}
 }
 
-// ServerInfo is the ping handshake result: what herdr is on the other end.
+// ServerInfo is what the client has most recently learned about the server.
+// It starts as the ping handshake result and is refreshed whenever a call
+// re-observes the protocol — see [Client.SessionSnapshot].
 type ServerInfo struct {
 	// Version is the herdr binary version, e.g. "0.8.2".
 	Version string `json:"version"`
 	// Protocol is the API protocol version, checked against the supported
-	// range ([MinProtocolVersion]..[ProtocolWarnVersion]) by [New].
+	// range ([MinProtocolVersion]..[ProtocolWarnVersion]) at the handshake
+	// and re-checked whenever a call re-observes it
+	// ([Client.SessionSnapshot]).
 	Protocol uint32 `json:"protocol"`
 	// Capabilities are optional server feature flags.
 	Capabilities *ServerCapabilities `json:"capabilities,omitempty"`
 }
 
-// ServerCapabilities are optional feature flags the server advertises.
+// ServerCapabilities are optional feature flags the server advertises in
+// its ping reply. Which names exist is decided by herdr; this struct keeps
+// the ones this package cares about typed, and tolerates newer ones it has
+// never heard of arriving in the map (decode of the `capabilities` object
+// is open-ended).
 type ServerCapabilities struct {
 	LiveHandoff          bool `json:"live_handoff"`
 	DetachedServerDaemon bool `json:"detached_server_daemon"`
+}
+
+// Has reports whether the server advertised the named capability, e.g.
+// [CapabilityLiveHandoff]. A nil receiver answers false — a server that sent
+// no capabilities block has, by absence, advertised nothing — and an
+// unknown name also answers false: an unadvertised feature is refused,
+// never assumed. Callers that gate a real operation on a capability use
+// [Client.RequireCapability], which turns a false here into a typed,
+// by-name refusal.
+func (sc *ServerCapabilities) Has(name string) bool {
+	if sc == nil {
+		return false
+	}
+	switch name {
+	case CapabilityLiveHandoff:
+		return sc.LiveHandoff
+	case CapabilityDetachedServerDaemon:
+		return sc.DetachedServerDaemon
+	}
+	return false
 }
 
 // AgentSessionInfo identifies the agent's own session, when the agent reports

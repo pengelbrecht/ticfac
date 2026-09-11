@@ -6,9 +6,15 @@ import (
 	"fmt"
 )
 
-// ProtocolVersion is the herdr API protocol this package is written against
-// (herdr 0.8.2). [New] accepts it and anything newer; see [MinProtocolVersion]
-// for the hard floor and [ProtocolWarnVersion] for the warning threshold.
+// ProtocolVersion is the protocol this package was written against and
+// verified against (herdr 0.8.2) — the PIN of the supported range. A server
+// newer than the pin is not a problem; see [MinProtocolVersion] for the
+// hard floor and [ProtocolWarnVersion] for the warning line.
+//
+// The pin is the middle of three distinct numbers with three distinct jobs:
+// MinProtocolVersion (19) is the oldest this package can speak, this pin (20)
+// is the newest it has been verified against, and ProtocolWarnVersion (22)
+// is the newest it has observed a live server speaking.
 //
 // Bumped 19 -> 20 for herdr 0.8.2.
 //
@@ -36,26 +42,37 @@ import (
 // one, because an omitted key is indistinguishable from a renamed field.
 const ProtocolVersion uint32 = 20
 
-// MinProtocolVersion is the lowest protocol [New] will talk to. A server below
-// it is a hard stop: its response shapes are older than anything this client
-// has ever decoded, so continuing is a guess. This is the documented minimum
-// of the supported range, not the current pin — it changes only when support
-// for an old protocol is dropped.
+// MinProtocolVersion is the OLDEST protocol this package can speak: the floor
+// of the supported range and a hard stop below it. A server under the floor
+// fails closed with [ProtocolMismatchError]: its response shapes are older
+// than anything this package has ever decoded, so a best-effort continue
+// would be a guess. The floor moves only when support for an old protocol is
+// dropped — it is not the current pin.
 //
-// Today it equals [ProtocolVersion]: the pinned protocol is also the floor of
-// the supported range.
-const MinProtocolVersion uint32 = 20
+// It is 19, not 20, because this package demonstrably SPEAKS 19: every
+// captured fixture is a 0.8.0-era protocol-19 scenario (the error codes and
+// the report_metadata result shape were verified live against herdr 0.8.0 /
+// protocol 19), and the 19 -> 20 shape diff recorded above was purely
+// ADDITIVE — a protocol-19 server sends a strict subset of the shapes this
+// client decodes.
+const MinProtocolVersion uint32 = 19
 
-// ProtocolWarnVersion is the highest protocol [New] accepts without a warning.
-// A server newer than this is assumed forward-compatible — it can only have
-// added shapes this client does not ask for — and [New] proceeds, routing the
-// warning to [Options.ProtocolWarning] when the caller supplied one. There is
-// no hard upper bound: an incompatible protocol is expected to arrive as a
-// bumped minimum, not a break announced under the same version.
+// ProtocolWarnVersion is the NEWEST protocol this package has observed a
+// live server speaking without any decoded shape surprising it. A server
+// newer than the warn line is still ACCEPTED — there is no hard upper bound:
+// a forward-compatible upgrade degrades to a warning via
+// [Options.ProtocolWarning], never a refusal and never a stopped run. A
+// genuinely incompatible protocol is expected to arrive as a bumped
+// MINIMUM, not as a break announced under the same version.
 //
-// Today it equals [ProtocolVersion] and [MinProtocolVersion]: only the pinned
-// protocol is silent, anything newer warns.
-const ProtocolWarnVersion uint32 = 20
+// It is 22, not 20, because herdr 0.9.0 / protocol 22 was observed LIVE on
+// this machine (the 2026-09-10 0.8.2 -> 0.9.0 upgrade; captured ping:
+// version "0.9.0", protocol 22, capabilities live_handoff +
+// detached_server_daemon plus three additive newer flags the stock decoder
+// already tolerates). Protocol 22 is proven, not assumed; protocol 21,
+// unobserved, falls inside the silent band between two observed-compatible
+// neighbours.
+const ProtocolWarnVersion uint32 = 22
 
 // Method names, exactly as herdr spells them.
 const (
@@ -140,6 +157,20 @@ const (
 	// documented recovery is to send it again, so this code is transient on
 	// a first prompt — see internal/herd/spawn's gate.
 	CodeAgentPromptStalled = "agent_prompt_stalled"
+)
+
+// Capability names, exactly as herdr spells them in the `capabilities` object
+// of a ping reply. A capability is never assumed: the caller requires the
+// one it needs, at the point of use, BY NAME ([Client.RequireCapability]) —
+// a missing feature is refused there, never silently worked around.
+const (
+	// CapabilityLiveHandoff: the server supports herdr's live handoff
+	// machinery (the `server.live_handoff` method, herdr's `update --handoff`
+	// path).
+	CapabilityLiveHandoff = "live_handoff"
+	// CapabilityDetachedServerDaemon: the server can run detached, as a
+	// daemon surviving the client that started it.
+	CapabilityDetachedServerDaemon = "detached_server_daemon"
 )
 
 // request is the wire request envelope.
@@ -227,6 +258,36 @@ func (e *ProtocolMismatchError) Error() string {
 	return fmt.Sprintf(
 		"herd/client: herdr protocol mismatch at %s: server reports protocol %d (herdr %s), this client requires at least protocol %d — refusing to continue",
 		e.Endpoint, e.Actual, e.ServerVersion, e.Min,
+	)
+}
+
+// CapabilityError is returned by [Client.RequireCapability] when the server
+// did not advertise the named capability. The refusal names the capability
+// BY NAME, plus the herdr version and endpoint, so it reads as "this herdr
+// is too old for this operation", never as a mystery failure.
+//
+// Like [ProtocolMismatchError], it is OPERATIONAL: the operation cannot be
+// attempted, so it is refused up front. It is never evidence that work
+// already submitted was judged failed — verdicts live in durable evidence,
+// never in the transport (the av8 contract).
+type CapabilityError struct {
+	// Capability is the required name, e.g. [CapabilityLiveHandoff].
+	Capability string
+	// Endpoint is the socket path that was dialled.
+	Endpoint string
+	// ServerVersion is the herdr version string the server reported.
+	ServerVersion string
+	// Protocol is the protocol the server reported.
+	Protocol uint32
+}
+
+// Error implements error. It names the capability, the herdr version and the
+// endpoint — everything needed to tell the user which herdr upgrade removes
+// the refusal.
+func (e *CapabilityError) Error() string {
+	return fmt.Sprintf(
+		"herd/client: herdr at %s (herdr %s, protocol %d) does not advertise capability %q — refusing to continue",
+		e.Endpoint, e.ServerVersion, e.Protocol, e.Capability,
 	)
 }
 

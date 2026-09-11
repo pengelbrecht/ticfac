@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -36,11 +37,14 @@ type Options struct {
 	// deadline never lengthens the client's own bound. Zero means
 	// [DefaultCallTimeout]; negative means no client-imposed timeout.
 	CallTimeout time.Duration
-	// ProtocolWarning, when non-nil, receives a warning line for a server
-	// newer than [ProtocolWarnVersion]. [New] still succeeds in that case: a
-	// forward-compatible upgrade degrades to a warning, never a refusal. If
-	// nil the warning is discarded. The client treats the writer as
-	// append-only and never closes it.
+	// ProtocolWarning, when non-nil, receives a warning line whenever the
+	// client observes the server speaking a protocol newer than
+	// [ProtocolWarnVersion] — at the handshake and at any later re-check
+	// (a server upgraded mid-run; see [Client.SessionSnapshot]). [New] still
+	// succeeds in that case: a forward-compatible upgrade degrades to a
+	// warning, never a refusal and never a stopped run. If nil the warning is
+	// discarded. The client treats the writer as append-only and never closes
+	// it.
 	ProtocolWarning io.Writer
 	// EventBuffer sizes the channel of an [EventStream]. Zero means
 	// [DefaultEventBuffer]; negative means unbuffered. The buffer absorbs
@@ -56,8 +60,14 @@ type Client struct {
 	socketPath  string
 	callTimeout time.Duration
 	eventBuffer int
-	server      ServerInfo
-	seq         atomic.Uint64
+
+	// mu guards server, which every call may refresh (noteServer) while
+	// concurrent readers hold ServerInfo / RequireCapability.
+	mu         sync.Mutex
+	server     ServerInfo
+	warnWriter io.Writer
+
+	seq atomic.Uint64
 }
 
 // New resolves the socket path, performs the ping handshake and checks the
@@ -69,7 +79,10 @@ type Client struct {
 // than anything this package has decoded. A server at or above the minimum is
 // accepted — a server newer than [ProtocolWarnVersion] is assumed
 // forward-compatible and continues, emitting a warning through
-// [Options.ProtocolWarning] when that writer is set.
+// [Options.ProtocolWarning] when that writer is set. The same range is
+// re-checked whenever a call re-observes the server's protocol
+// ([Client.SessionSnapshot]), so an upgrade or downgrade between calls is
+// caught mid-run, not just at connect.
 func New(ctx context.Context, opts Options) (*Client, error) {
 	transport := opts.Transport
 	socketPath := opts.SocketPath
@@ -102,25 +115,15 @@ func New(ctx context.Context, opts Options) (*Client, error) {
 		socketPath:  socketPath,
 		callTimeout: callTimeout,
 		eventBuffer: eventBuffer,
+		warnWriter:  opts.ProtocolWarning,
 	}
 
 	info, err := c.Ping(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if info.Protocol < MinProtocolVersion {
-		return nil, &ProtocolMismatchError{
-			Endpoint:      transport.Endpoint(),
-			Min:           MinProtocolVersion,
-			Actual:        info.Protocol,
-			ServerVersion: info.Version,
-		}
-	}
-	if info.Protocol > ProtocolWarnVersion && opts.ProtocolWarning != nil {
-		fmt.Fprintf(opts.ProtocolWarning,
-			"warning: herdr at %s reports protocol %d (herdr %s), newer than protocol %d this client was verified against — continuing, but update tk when convenient\n",
-			transport.Endpoint(), info.Protocol, info.Version, ProtocolVersion,
-		)
+	if err := c.checkProtocol(info.Protocol, info.Version, MethodPing); err != nil {
+		return nil, err
 	}
 	c.server = info
 	return c, nil
@@ -129,8 +132,81 @@ func New(ctx context.Context, opts Options) (*Client, error) {
 // SocketPath reports the socket path this client resolved to.
 func (c *Client) SocketPath() string { return c.socketPath }
 
-// ServerInfo reports what the handshake learned about the server.
-func (c *Client) ServerInfo() ServerInfo { return c.server }
+// ServerInfo reports what the client has most recently learned about the
+// server: the handshake result, refreshed when a call re-observes the
+// protocol (see [Client.SessionSnapshot]). The capabilities are what the
+// last successful ping advertised.
+func (c *Client) ServerInfo() ServerInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.server
+}
+
+// checkProtocol applies the supported-range policy to a protocol the server
+// just reported, wherever it was observed (observedVia names the method for
+// the warning text). Below [MinProtocolVersion] it fails closed with a
+// [ProtocolMismatchError]: those response shapes are older than anything
+// this package has decoded. Above [ProtocolWarnVersion] it proceeds with a
+// warning — a forward-compatible upgrade degrades to a warning, never a
+// refusal — and within the range it stays silent.
+func (c *Client) checkProtocol(actual uint32, serverVersion, observedVia string) error {
+	if actual < MinProtocolVersion {
+		return &ProtocolMismatchError{
+			Endpoint:      c.transport.Endpoint(),
+			Min:           MinProtocolVersion,
+			Actual:        actual,
+			ServerVersion: serverVersion,
+		}
+	}
+	if actual > ProtocolWarnVersion && c.warnWriter != nil {
+		fmt.Fprintf(c.warnWriter,
+			"warning: herdr at %s reports protocol %d (herdr %s, observed via %s), newer than protocol %d (the newest this client has observed) — continuing, but update tk when convenient\n",
+			c.transport.Endpoint(), actual, serverVersion, observedVia, ProtocolWarnVersion,
+		)
+	}
+	return nil
+}
+
+// noteServer records a protocol and version the server reported outside the
+// handshake, so ServerInfo reflects the server as it speaks NOW rather than
+// as it spoke when this client connected. A zero protocol is treated as
+// absent (herdr always sets one), so a malformed reply cannot clobber what
+// the handshake learned. Capabilities are not touched: they are a handshake
+// field, and a protocol re-report (session.snapshot carries one) says
+// nothing about them.
+func (c *Client) noteServer(protocol uint32, version string) {
+	if protocol == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.server.Protocol = protocol
+	if version != "" {
+		c.server.Version = version
+	}
+}
+
+// RequireCapability refuses BY NAME when the server has not advertised the
+// named capability, e.g. [CapabilityLiveHandoff] — the point-of-use check
+// for optional server features. Callers gate the operation that needs the
+// capability, not client construction and not the whole run, so a missing
+// feature is an operational refusal ([CapabilityError]) naming exactly what
+// was wanted, never a silent degradation and never a guess. The
+// capabilities consulted are what the last successful ping advertised.
+func (c *Client) RequireCapability(name string) error {
+	c.mu.Lock()
+	info := c.server
+	c.mu.Unlock()
+	if info.Capabilities.Has(name) {
+		return nil
+	}
+	return &CapabilityError{
+		Capability:    name,
+		Endpoint:      c.transport.Endpoint(),
+		ServerVersion: info.Version,
+		Protocol:      info.Protocol,
+	}
+}
 
 // nextID returns a fresh request id. Ids only need to be unique per
 // connection, but a monotonic client-wide counter makes logs readable.
