@@ -28,7 +28,7 @@
   },
   "methods": {
     "why": [
-      "Every method name the request schema accepts. The client speaks an 18-constant subset (client_used) and the herdtest fake mirrors 17 of those 18 \u2014 it has neither a constant nor a builtin for pane.wait_for_output \u2014 so a single list keeps the three honest against each other."
+      "Every method name the request schema accepts. The client speaks a 19-constant subset (client_used; tick 3gv added agent.send_keys, the herdr executor's Cancel surface) and the herdtest fake mirrors 18 of those 19 \u2014 it has neither a constant nor a builtin for pane.wait_for_output \u2014 so a single list keeps the three honest against each other."
     ],
     "members": [
       "agent.explain",
@@ -138,6 +138,7 @@
       "agent.get",
       "agent.list",
       "agent.prompt",
+      "agent.send_keys",
       "agent.start",
       "agent.wait",
       "events.subscribe",

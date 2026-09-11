@@ -15,7 +15,7 @@ import (
 // the pinned words — never a private dialect that happens to satisfy the
 // client tests.
 //
-// The method constants below (17) mirror the client's 18, minus
+// The method constants below (18) mirror the client's 19, minus
 // pane.wait_for_output, which the fake deliberately does not serve: the
 // client routes it, tests that need it stub it. worktree.list and
 // events.wait have constants but no built-in handler — the routing switch
@@ -29,7 +29,7 @@ func fakeMethodConstants() []string {
 		MethodPing, MethodSessionSnapshot,
 		MethodWorktreeCreate, MethodWorktreeList, MethodWorktreeRemove,
 		MethodWorkspaceFocus,
-		MethodAgentStart, MethodAgentPrompt, MethodAgentWait,
+		MethodAgentStart, MethodAgentPrompt, MethodAgentSendKeys, MethodAgentWait,
 		MethodAgentList, MethodAgentGet,
 		MethodPaneRead,
 		MethodEventsSubscribe, MethodEventsWait,
