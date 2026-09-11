@@ -133,6 +133,10 @@ func TestARestartReusesTheGateEvidenceItAlreadyPaidFor(t *testing.T) {
 	command := fmt.Sprintf("printf x >> %s && test -f README.md && ls work-*.txt >/dev/null", counter)
 	gate := fmt.Sprintf(`version = 2
 
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
 [testing.commands]
 tree = { command = %q, description = "counts every time it actually ran" }
 `, command)

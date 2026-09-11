@@ -82,7 +82,11 @@ func TestEachRoleIsDispatchedUnderItsOwnProfileAndRecordedWithIt(t *testing.T) {
 // The routing an operator already keeps in `.tick/runners.toml` for `tk herd`
 // is the routing a ticfac run honours: one place, not two.
 func TestTheTargetRepositoriesRolesTableRoutesTheRun(t *testing.T) {
-	const routed = passingGate + `
+	// passingGate carries its own [roles.implement] (the shipped default),
+	// so this fixture rewrites the routing rather than appending to it: a
+	// TOML table may be declared once.
+	const routed = `version = 2
+
 [roles.implement]
 kind = "codex"
 model = "gpt-5.6-luna"
@@ -90,6 +94,9 @@ model = "gpt-5.6-luna"
 [roles.review]
 kind = "pi"
 model = "pi-large"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
 `
 	f := newFixture(t, fixtureOptions{gate: routed})
 	_, result, err := f.run(f.Repo, fixtureOptions{})
@@ -133,7 +140,19 @@ func TestAProfileThisBuildCannotHonourIsRefusedAtConstruction(t *testing.T) {
 	writeProfile(t, dir, "review-epic", `"executor": "local-subprocess", "runner": "claude", "model": "opus"`)
 	writeProfile(t, dir, "closeout-epic", `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
 
-	f := newFixture(t, fixtureOptions{})
+	// The runner a job is dispatched with is what the ROUTING says, not only
+	// what the profile ships (tick wgi: profiles read through the validated
+	// config reader), so the unlaunchable runner has to be routed to be seen.
+	// The executor is the profile's alone — roles route nothing about it.
+	const geminiRoutedGate = `version = 2
+
+[roles.implement]
+kind = "gemini"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
+`
+	f := newFixture(t, fixtureOptions{gate: geminiRoutedGate})
 	opts := f.options(f.Repo, fixtureOptions{})
 	opts.ProfileDir = dir
 	if _, err := New(opts); err == nil {

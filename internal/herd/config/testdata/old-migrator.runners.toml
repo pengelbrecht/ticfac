@@ -1,0 +1,43 @@
+# routing the migrator must merge into, carrying ticks' tracker tables.
+version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[signals.sources.example]
+secret = "SIGNAL_SECRET_EXAMPLE"
+header = "X-Signature"
+algorithm = "hmac-sha256"
+encoding = "hex"
+external_ref = "data.issue.id"
+title = "data.issue.title"
+type = "task"
+priority = 2
+
+[sweeps.nightly]
+cron = "0 4 * * 1-5"
+filter = "type:bug priority<=2 unblocked"
+max_ticks = 3
+budget_usd = 25
+tier = "standard"
+gate_on_complete = "telegram"
+
+[testing.commands]
+go = { command = "go test -short -count=1 ./...", description = "Go" }
+vet = { command = "go vet ./...", description = "Vet" }
+
+[evidence.commands]
+herd-smoke = { command = "bash scripts/verify-herd-helper.sh --quick", description = "Herd smoke" }
+
+[environment.commands]
+go-toolchain = { command = "which go", description = "Go toolchain" }
+git-identity = { command = "git config user.email", description = "Git identity" }
+
+[evidence.acceptance]
+A1 = "herd-smoke"
+A2 = "go"

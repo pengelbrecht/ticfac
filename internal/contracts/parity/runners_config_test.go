@@ -1,22 +1,30 @@
 package parity
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/herd/config"
 )
 
 // contracts/runners-config-contract.json — EXECUTABLE.
 //
 // Two rules over `.tick/runners.toml`: what `[sandbox].image` may be, and what
-// `[orchestration].max_parallel` may be. Neither table is read by ticfac —
-// `internal/reconcile/toml.go` and `internal/profile/roles.go` read
-// `[testing.commands]` and `[roles.*]` instead, and this fixture does not (yet)
-// pin either of those. Both rules it DOES pin are pinned as data — a regexp
-// with a maximum length, and a minimum — so both are executable here from the
-// fixture alone. The accepted and refused lists are the parity: a pattern
-// relaxed on one side and not the other shows up as an accepted string this
-// reader refuses.
+// `[orchestration].max_parallel` may be. Both tables ARE read by ticfac —
+// since tick wgi, internal/herd/config is the execution-half reader that
+// validates the whole table set (the split, and the decision behind it, are
+// that package's doc.go) — so the parity here is asserted twice against this
+// repository's own side: against the data-driven re-implementation below, and
+// against the REAL reader (TestTheRealReaderAgreesWithTheContract). The
+// accepted and refused lists are the parity: a pattern relaxed on one side and
+// not the other shows up as an accepted string a reader refuses.
+//
+// The rules stay pinned as data (a pattern string with a maximum length, and a
+// minimum) because the file's second reader is TypeScript
+// (cloud/factory/src/repo-config.ts), which cannot share a Go regexp; the
+// in-repo reader adds the behavioural pin on top of the data pin.
 //
 // The image rule is the one that matters to ticfac: it is what stands between
 // a repository's configuration and a container reference, and
@@ -143,4 +151,87 @@ func TestBothRulesNameTheirPathAndRefusal(t *testing.T) {
 	if c.Image.RefusalMessage == c.MaxParallel.RefusalMessage {
 		t.Error("two distinct rules share one refusal message; a reader cannot tell which refused")
 	}
+}
+
+// TestTheRealReaderAgreesWithTheContract is the half of the parity this
+// repository could not assert before the split: ticfac's own reader, the one a
+// run actually parses the target repository's file with, answering the same
+// accept/refuse lists the fixture serves. The data-driven checks above prove
+// the fixture's rules are self-consistent; this proves ticfac's reader IS
+// that fixture's reader, through the whole Parse path — version gate, decode,
+// shape validation — not just through a re-implemented regexp.
+func TestTheRealReaderAgreesWithTheContract(t *testing.T) {
+	var c runnersConfig
+	readContract(t, runnersConfigFile, &c)
+
+	t.Run("image", func(t *testing.T) {
+		for _, value := range c.Image.Accepted {
+			if _, err := imageConfig(t, value); err != nil {
+				t.Errorf("the contract accepts %q and ticfac's reader refuses it: %v", value, err)
+			}
+		}
+		for _, value := range c.Image.Refused {
+			_, err := imageConfig(t, value)
+			if err == nil {
+				t.Errorf("the contract refuses %q and ticfac's reader accepts it", value)
+				continue
+			}
+			if !strings.Contains(err.Error(), "sandbox.image") {
+				t.Errorf("the refusal for %q does not name sandbox.image: %v", value, err)
+			}
+		}
+		// The exact-length boundary, through the reader: max_length
+		// characters is a whole document that loads, one character more is a
+		// stop.
+		atLimit := strings.Repeat(c.Image.BoundaryChar, c.Image.MaxLength)
+		if _, err := imageConfig(t, atLimit); err != nil {
+			t.Errorf("an image of exactly max_length (%d) was refused: %v", c.Image.MaxLength, err)
+		}
+		if _, err := imageConfig(t, atLimit+c.Image.BoundaryChar); err == nil {
+			t.Errorf("an image of max_length+1 (%d) was accepted", c.Image.MaxLength+1)
+		}
+	})
+
+	t.Run("max_parallel", func(t *testing.T) {
+		for _, value := range c.MaxParallel.Accepted {
+			if _, err := maxParallelConfig(t, fmt.Sprintf("%d", value)); err != nil {
+				t.Errorf("the contract accepts %d and ticfac's reader refuses it: %v", value, err)
+			}
+		}
+		for _, value := range c.MaxParallel.Refused {
+			_, err := maxParallelConfig(t, fmt.Sprintf("%d", value))
+			if err == nil {
+				t.Errorf("the contract refuses %d and ticfac's reader accepts it", value)
+				continue
+			}
+			if !strings.Contains(err.Error(), c.MaxParallel.RefusalMessage) {
+				t.Errorf("the refusal for %d does not carry the pinned message %q: %v",
+					value, c.MaxParallel.RefusalMessage, err)
+			}
+		}
+		// The typed refusals: a float, a string and a boolean are refusals,
+		// never coercions — and only the raw TOML text carries the difference.
+		for _, raw := range c.MaxParallel.RefusedTOMLValues {
+			if _, err := maxParallelConfig(t, raw); err == nil {
+				t.Errorf("max_parallel = %s is a typed value the contract refuses, and the reader coerced it", raw)
+			}
+		}
+	})
+}
+
+// imageConfig builds the smallest whole config that carries the image
+// reference and runs ticfac's real reader over it.
+func imageConfig(t *testing.T, image string) (*config.Config, error) {
+	t.Helper()
+	doc := "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[sandbox]\nimage = " +
+		fmt.Sprintf("%q", image) + "\n"
+	return config.Parse([]byte(doc))
+}
+
+// maxParallelConfig builds the smallest whole config carrying one raw
+// max_parallel TOML value.
+func maxParallelConfig(t *testing.T, raw string) (*config.Config, error) {
+	t.Helper()
+	doc := "[roles.implement]\nkind = \"claude\"\n\n[orchestration]\nmax_parallel = " + raw + "\n"
+	return config.Parse([]byte(doc))
 }
