@@ -1,11 +1,15 @@
 package config
 
-// The worked examples of skills/ticks/references/runners-config.md (ticks'
-// published authoring doc), transcribed verbatim — comments included. Each is
-// a complete, schema-valid config, asserted as a fixture document by
-// TestDocExamplesParse in load_test.go. The test in ticks' copy of this
-// package that reads the doc itself and fails when a transcription drifts
-// stayed there, beside the doc it checks.
+import (
+	"regexp"
+)
+
+// The worked examples from ticks' runners-config.md (skills/ticks/references/
+// in the ticks repository), transcribed verbatim (comments included).
+// TestDocExamplesResolveAndCompile (compile_test.go) proves each one parses,
+// resolves and compiles exactly as the doc states.
+
+var runnersConfigTomlBlock = regexp.MustCompile("(?s)```toml\\n(.*?)```")
 
 const docExample1 = `
 version = 1
@@ -318,3 +322,11 @@ setup = [
   { command = "go mod download", description = "warm the module cache" },
 ]
 `
+
+// The transcription check ticks runs against these constants
+// (TestDocExampleTranscriptionsMatch, which reads runners-config.md from the
+// ticks skill references on disk) stays in ticks: it needs the skill doc beside
+// it. Here the constants stand on their own, byte-identical to ticks' copy, so
+// the two suites remain comparable example by example; when ticks retires its
+// execution machinery (ticfac tick 4l2) the doc and the check move with the
+// rest of it.
