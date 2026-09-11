@@ -60,8 +60,10 @@
 //     already makes ZERO herdr calls — by construction, like ticks' collect
 //     package — so that tick's fixture (every herdr call errors) can be
 //     written against it.
-//   - p6b: the artifact boundary. No exclude is written and no artifact
-//     backstop runs at collect yet.
+//   - p6b: DONE. The artifact boundary is enforced in both layers — the git
+//     exclude Start writes into the worktree before the agent launches, and
+//     collect's backstop over the branch diff — mirroring the local
+//     executor's git.go and collect.go.
 //   - x6j: every substrate failure classified operational-or-verdict, and
 //     resume across an upgrade held for a person.
 //   - 5hz: Dispose reclaims by identity when a recorded workspace id is

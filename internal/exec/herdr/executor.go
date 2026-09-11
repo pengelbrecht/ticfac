@@ -322,6 +322,18 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	}
 	record.ResultRel, record.ResultPath = rel, abs
 
+	// The artifact boundary, layer one (p6b): the report the prompt points
+	// at is this executor's OWN artifact, and it must never become repository
+	// content. The exclude is written into the worktree's git here, BEFORE
+	// the agent is launched, so an ordinary `git add -A` cannot stage it —
+	// whatever the prompt says, whatever the agent's kind, and whether or
+	// not the agent cooperates. A boundary the substrate can enforce must
+	// not rest on instruction-following; the backstop that catches a
+	// `git add -f` is collect's.
+	if err := excludeFromGit(record.Worktree, spec.ArtifactPrefix); err != nil {
+		return nil, fmt.Errorf("exclude the artifact prefix from git in the attempt worktree: %w", err)
+	}
+
 	prompt := renderWorkerPrompt(record, spec)
 	if err := st.writeFile(st.path(filePrompt), []byte(prompt), 0o644); err != nil {
 		return nil, fmt.Errorf("record the worker prompt: %w", err)

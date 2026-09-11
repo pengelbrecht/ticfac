@@ -69,6 +69,19 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 			detail, record.Attempt, record.JobID)
 	}
 
+	// The exclude line comes out FIRST, while the worktree it was resolved
+	// from still exists — "no run-created worktree and no run-created branch"
+	// has to include the one edit Start made to a file this executor does
+	// not own, or every attempt this host ever ran leaves a line in the
+	// operator's info/exclude that nothing will ever remove. It also comes
+	// before the report archive below for a mechanical reason: the exclude
+	// is what keeps the attempt's own report OUT of `git status`, so with
+	// the line still in place the archive would see a clean worktree and
+	// leave the report for worktree.remove to refuse on.
+	if err := unexcludeFromGit(excludeDirFor(record), record.Spec.ArtifactPrefix); err != nil {
+		return fmt.Errorf("remove the artifact prefix from this repository's git exclude file: %w", err)
+	}
+
 	// The report archive: the one narrow exception to never-Force. A
 	// collected attempt's only dirt is typically its own untracked report —
 	// collect read it, but worktree.remove would refuse over it — so it is
@@ -195,6 +208,16 @@ func (e *Executor) archiveOwnReport(st *store, record *attemptRecord) error {
 		return fmt.Errorf("remove the archived report from the worktree: %w", err)
 	}
 	return nil
+}
+
+// excludeDirFor is the directory the exclude file is resolved from: the
+// attempt's worktree while it is still there, because that is where Start's
+// append resolved it, and the repository once it is gone.
+func excludeDirFor(record *attemptRecord) string {
+	if _, err := os.Stat(record.Worktree); err == nil {
+		return record.Worktree
+	}
+	return record.Repo
 }
 
 // onRemote answers whether the attempt's commits already exist somewhere this

@@ -156,6 +156,97 @@ func showFile(repo, ref, path string) (string, bool) {
 	return out, true
 }
 
+// excludeFromGit keeps one path prefix out of this worktree's git without
+// touching a single tracked file: it is appended to the exclude file
+// `git rev-parse --git-path info/exclude` resolves FROM THE WORKTREE, so an
+// agent that runs `git add -A` in the worktree herdr made cannot stage a
+// path this executor owns — whether the agent writes its report before or
+// after that add, and whatever kind of agent it is. (In every git this was
+// built and tested against, info/exclude is one of the files a linked
+// worktree shares with the repository's common git directory rather than
+// keeping privately — gitrepository-layout(5)'s "info" entry says so
+// explicitly — so this in fact excludes the prefix repo-wide, in every
+// worktree of this repository. That is still correct here: an artifact
+// prefix is unique per attempt, so one attempt's line never matches another
+// attempt's paths, and the alternative — writing the pattern into a tracked
+// .gitignore — is the one thing this function must not do.)
+//
+// The line is NOT permanent: unexcludeFromGit below takes it out again at
+// disposal, so an executor that has disposed of everything it created
+// leaves the operator's exclude file as it found it.
+func excludeFromGit(worktree, prefix string) error {
+	trimmed := strings.Trim(strings.TrimSpace(prefix), "/")
+	if trimmed == "" {
+		return fmt.Errorf("artifact_prefix is empty: nothing to exclude")
+	}
+	path, err := git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return fmt.Errorf("resolve this worktree's git exclude file: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	line := "/" + trimmed
+	if existing, err := os.ReadFile(path); err == nil {
+		for _, have := range strings.Split(string(existing), "\n") {
+			if strings.TrimSpace(have) == line {
+				return nil
+			}
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(line + "\n")
+	return err
+}
+
+// unexcludeFromGit removes the one line excludeFromGit appended, and is
+// what keeps that write from being a permanent edit to a file this executor
+// does not own. It is called from disposal with the ATTEMPT WORKTREE while
+// it still exists, so the exclude file it rewrites is resolved exactly the
+// way the append resolved it — and BEFORE the worktree remove, so nothing
+// is orphaned in info/exclude once the worktree is gone. `dir` may be the
+// repository instead once the worktree is already missing, which resolves
+// to the same shared file in every git this was built against.
+//
+// Absent line, absent file and absent git are all "nothing to remove"
+// rather than errors: disposal must not fail because a cleanup it already
+// did cannot be done twice.
+func unexcludeFromGit(dir, prefix string) error {
+	trimmed := strings.Trim(strings.TrimSpace(prefix), "/")
+	if trimmed == "" {
+		return nil
+	}
+	path, err := git(dir, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return nil
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	line := "/" + trimmed
+	kept := make([]string, 0, 8)
+	removed := false
+	for _, have := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(have) == line {
+			removed = true
+			continue
+		}
+		kept = append(kept, have)
+	}
+	if !removed {
+		return nil
+	}
+	return atomicWrite(path, []byte(strings.Join(kept, "\n")), 0o644)
+}
+
 // statusPorcelain is the worktree's dirt, one entry per line. It is asked by
 // disposal, and only for the one narrow question there: is the only thing
 // standing between this worktree and a clean worktree.remove the attempt's
