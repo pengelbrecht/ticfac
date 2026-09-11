@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/herd/config"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // contracts/runners-config-contract.json — EXECUTABLE.
 //
 // Two rules over `.tick/runners.toml`: what `[sandbox].image` may be, and what
 // `[orchestration].max_parallel` may be. Both tables ARE read by ticfac —
-// since tick wgi, internal/herd/config is the execution-half reader that
+// since tick wgi, internal/runconfig is the execution-half reader that
 // validates the whole table set (the split, and the decision behind it, are
 // that package's doc.go) — so the parity here is asserted twice against this
 // repository's own side: against the data-driven re-implementation below, and
@@ -23,7 +23,7 @@ import (
 //
 // The rules stay pinned as data (a pattern string with a maximum length, and a
 // minimum) because the file's second reader is TypeScript
-// (cloud/factory/src/repo-config.ts), which cannot share a Go regexp; the
+// (cloud/factory/src/repo-runconfig.ts), which cannot share a Go regexp; the
 // in-repo reader adds the behavioural pin on top of the data pin.
 //
 // The image rule is the one that matters to ticfac: it is what stands between
@@ -221,17 +221,17 @@ func TestTheRealReaderAgreesWithTheContract(t *testing.T) {
 
 // imageConfig builds the smallest whole config that carries the image
 // reference and runs ticfac's real reader over it.
-func imageConfig(t *testing.T, image string) (*config.Config, error) {
+func imageConfig(t *testing.T, image string) (*runconfig.Config, error) {
 	t.Helper()
 	doc := "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[sandbox]\nimage = " +
 		fmt.Sprintf("%q", image) + "\n"
-	return config.Parse([]byte(doc))
+	return runconfig.Parse([]byte(doc))
 }
 
 // maxParallelConfig builds the smallest whole config carrying one raw
 // max_parallel TOML value.
-func maxParallelConfig(t *testing.T, raw string) (*config.Config, error) {
+func maxParallelConfig(t *testing.T, raw string) (*runconfig.Config, error) {
 	t.Helper()
 	doc := "[roles.implement]\nkind = \"claude\"\n\n[orchestration]\nmax_parallel = " + raw + "\n"
-	return config.Parse([]byte(doc))
+	return runconfig.Parse([]byte(doc))
 }

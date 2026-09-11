@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/herd/config"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
@@ -27,7 +27,7 @@ import (
 // as if it asserted something while asserting nothing.
 //
 // Since tick wgi this repository has an EXECUTION-half reader of the file
-// (internal/herd/config), and the split it embodies decides what these tables
+// (internal/runconfig), and the split it embodies decides what these tables
 // can assert here:
 //
 //   - `[sandbox]` is execution: ticfac's reader validates it. The image case
@@ -213,7 +213,7 @@ func TestTheCaseDocumentsRunThroughTicfacsReader(t *testing.T) {
 		readContract(t, file, &table)
 		for _, c := range table.Cases {
 			documents++
-			cfg, err := config.Parse([]byte(c.TOML))
+			cfg, err := runconfig.Parse([]byte(c.TOML))
 			switch {
 			case c.Refused:
 				if err == nil {
@@ -247,7 +247,7 @@ func TestTheCaseDocumentsRunThroughTicfacsReader(t *testing.T) {
 				// ticks' half of the file is out of this reader's domain, so
 				// a repository declaring a malformed signal or sweep is a
 				// repository TICKS refuses, not one whose runs ticfac breaks.
-				cfg, err := config.Parse([]byte(c.TOML))
+				cfg, err := runconfig.Parse([]byte(c.TOML))
 				if err != nil {
 					t.Errorf("%s/%s: ticfac's reader refused a document whose tracker tables are foreign: %v",
 						file, c.Name, err)

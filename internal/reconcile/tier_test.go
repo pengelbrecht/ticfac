@@ -102,6 +102,7 @@ func journalLine(r *Reconciler, tick, stage string) (string, bool) {
 // profile the dispatch was built from, and in the run's own journal — and a
 // tick with a label overrides the default while a tick without one takes it.
 func TestEveryDispatchRecordsItsDerivedTier(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate})
 	f.retick(t, "a1", func(tick *tk.Tick) { tick.Labels = []string{"chore", "tier:economy"} })
 
@@ -171,6 +172,7 @@ func TestEveryDispatchRecordsItsDerivedTier(t *testing.T) {
 // field the tracker cannot validate is a field whose typo can only ever
 // surface here, so the refusal must not also spend an attempt on it.
 func TestAnUnrecognisedTierLabelIsRefusedLoudlyBeforeAnythingIsClaimed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate})
 	f.retick(t, "a1", func(tick *tk.Tick) { tick.Labels = []string{"tier:premium"} })
 
@@ -208,6 +210,7 @@ func TestAnUnrecognisedTierLabelIsRefusedLoudlyBeforeAnythingIsClaimed(t *testin
 // higher — recorded on the NEW attempt's marker, with the old one still
 // saying what it used.
 func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate, mode: "blocked-first"})
 	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
@@ -263,6 +266,7 @@ func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 // A repository with no policy runs exactly as it did before this tick: every
 // dispatch at the role's base values, no tier recorded, nothing starting high.
 func TestNoPolicyMeansBaseValuesEndToEnd(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, fixtureOptions{}) // the stock passingGate: no [tier_policy]
 
 	r, result, err := f.run(f.Repo, fixtureOptions{})

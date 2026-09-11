@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/herd/config"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -257,7 +257,7 @@ type Reconciler struct {
 	// operator's --tier: when set, every dispatch runs at it and the ladder
 	// does not run. hostWidth is [orchestration].max_parallel — the ONE
 	// host-wide number the per-tier bounds narrow.
-	tierPolicy   *config.TierPolicy
+	tierPolicy   *runconfig.TierPolicy
 	tierProfiles map[string]map[string]*profile.Profile
 	pinnedTier   string
 	hostWidth    int
@@ -416,7 +416,7 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	r.pinnedTier = opts.Tier
 	if opts.Tier == "" {
-		cfg, err := config.Load(opts.GateConfig)
+		cfg, err := runconfig.Load(opts.GateConfig)
 		if err != nil {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}

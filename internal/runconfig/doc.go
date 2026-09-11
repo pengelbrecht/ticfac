@@ -100,7 +100,7 @@
 //
 // # Where this came from, and what it left behind
 //
-// The execution half was lifted from ticks' `internal/herd/config` at the
+// The execution half was lifted from ticks' `internal/runconfig` at the
 // av8 base (the tracker half of that package stays in ticks, along with the
 // migrator, until ticfac tick 4l2 retires it). The spawner's kind/compile
 // machinery — the capability matrix that turns a resolved [Worker] into
@@ -131,4 +131,4 @@
 // configuration. This package is for the orchestration side; the profiles
 // (internal/profile) read roles through it, and the executor ticks of Phase 2
 // build on it. It runs nothing.
-package config
+package runconfig

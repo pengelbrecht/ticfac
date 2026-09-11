@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pengelbrecht/ticfac/internal/herd/config"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // The `[roles.<name>]` reader, as an adapter over ticfac's execution-half
-// reader of `.tick/runners.toml` (internal/herd/config — the split, and the
+// reader of `.tick/runners.toml` (internal/runconfig — the split, and the
 // decision behind it, are that package's doc.go).
 //
 // This file USED to be a second hand-rolled parser: a line reader that knew
@@ -56,7 +56,7 @@ func ReadRoles(path string) (map[string]Role, error) {
 		}
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
-	cfg, err := config.Load(path)
+	cfg, err := runconfig.Load(path)
 	if err != nil {
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
@@ -65,7 +65,7 @@ func ReadRoles(path string) (map[string]Role, error) {
 
 // ParseRoles reads `[roles.*]` out of a runners.toml document.
 func ParseRoles(document string) (map[string]Role, error) {
-	cfg, err := config.Parse([]byte(document))
+	cfg, err := runconfig.Parse([]byte(document))
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func ParseRoles(document string) (map[string]Role, error) {
 // rolesFrom adapts the validated config's roles onto the profile's two-field
 // view of them. Kind and model only: the other keys are parsed and validated
 // by the reader, and routing on them is the executor's job, not a profile's.
-func rolesFrom(cfg *config.Config) map[string]Role {
+func rolesFrom(cfg *runconfig.Config) map[string]Role {
 	if cfg == nil {
 		return map[string]Role{}
 	}

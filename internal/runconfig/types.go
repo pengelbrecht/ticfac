@@ -1,4 +1,4 @@
-package config
+package runconfig
 
 import (
 	"strconv"
@@ -377,7 +377,7 @@ type Sandbox struct {
 
 // The three tables above were followed, in ticks' copy of this package, by
 // the tracker tables [Signals] and [Sweep]. They stay in ticks
-// (internal/herd/config there) with the migrator; see this package's doc.go
+// (internal/runconfig there) with the migrator; see this package's doc.go
 // for the split, and load.go for how a file carrying them is read here.
 
 // SandboxImage reports the declared image reference, or "" for the

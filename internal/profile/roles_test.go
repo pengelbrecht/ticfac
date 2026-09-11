@@ -8,7 +8,7 @@ import (
 )
 
 // The `[roles.*]` reader. It is a thin adapter over ticfac's execution-half
-// reader of `.tick/runners.toml` (internal/herd/config), NOT a parser of its
+// reader of `.tick/runners.toml` (internal/runconfig), NOT a parser of its
 // own — the hand-rolled line reader it replaced knew two keys and passed
 // silently over the rest, which is the drift hazard two readers of one table
 // always are. The narrowness that remains is deliberate and different: the
@@ -189,7 +189,7 @@ func TestAMalformedExecutionTableFailsTheRouting(t *testing.T) {
 
 // The file format requires [roles] — with [roles.implement] as the fallback
 // every unlisted role resolves against — so a document that declares no roles
-// at all is not "no routing", it is an invalid config. A repository that wants
+// at all is not "no routing", it is an invalid runconfig. A repository that wants
 // no routing deletes the file.
 func TestARunnersConfigWithoutRolesIsAStop(t *testing.T) {
 	if _, err := ParseRoles("version = 2\n\n[testing.commands]\ngo = { command = \"go test ./...\" }\n"); err == nil {

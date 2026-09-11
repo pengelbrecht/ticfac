@@ -1,4 +1,4 @@
-package config
+package runconfig
 
 import (
 	"os"
@@ -23,7 +23,11 @@ func repoRootForTest(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller(0) failed; cannot locate the repo root")
 	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	// internal/runconfig -> repo root is TWO levels. It was three while this
+	// package lived at internal/herd/config; the package moved out from under
+	// the herdr tree so the reconciler could import it without tripping the
+	// executor's seam check (it is executor-agnostic config, not herdr's).
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
 		t.Fatalf("expected a go.mod at %s: %v", root, err)
 	}

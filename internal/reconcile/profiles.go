@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/herd/config"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -96,11 +96,11 @@ func (r *Reconciler) deriveTier(entry planEntry, number, failed int) (string, st
 		return r.pinnedTier, "the operator pinned this tier for every dispatch of the run (--tier); the ladder does not run", nil
 	}
 	outcome, err := r.tierPolicy.Derive(
-		config.TickFacts{
+		runconfig.TickFacts{
 			TickID: entry.TickID, Priority: entry.Priority, Type: entry.Type,
 			Role: entry.Role, Labels: entry.Labels, Wave: entry.Wave, Blocks: entry.Blocks,
 		},
-		config.DeriveAttempt{Number: number, Failed: failed},
+		runconfig.DeriveAttempt{Number: number, Failed: failed},
 	)
 	if err != nil {
 		return "", "", err
@@ -119,8 +119,8 @@ func (r *Reconciler) deriveTier(entry planEntry, number, failed int) (string, st
 // for a review role would demand a [roles.review.tiers.balanced] the
 // operator was never asked to declare, and refusing a run over it would be a
 // refusal nothing in the policy justified.
-func (r *Reconciler) derivableTiers(role string) (map[config.Tier]bool, error) {
-	out := map[config.Tier]bool{}
+func (r *Reconciler) derivableTiers(role string) (map[runconfig.Tier]bool, error) {
+	out := map[runconfig.Tier]bool{}
 	p := r.tierPolicy
 	if p == nil {
 		return out, nil
@@ -132,9 +132,9 @@ func (r *Reconciler) derivableTiers(role string) (map[config.Tier]bool, error) {
 	if ceilingIdx < 0 {
 		return nil, fmt.Errorf("[tier_policy] declares a ceiling this vocabulary has no tier for")
 	}
-	addLadder := func(start config.Tier) {
+	addLadder := func(start runconfig.Tier) {
 		for i := tierIndexOf(start); i >= 0 && i <= ceilingIdx; i++ {
-			out[config.TierNames[i]] = true
+			out[runconfig.TierNames[i]] = true
 		}
 	}
 	// The rungs a FAILED attempt can climb from each start a rule can give
@@ -152,7 +152,7 @@ func (r *Reconciler) derivableTiers(role string) (map[config.Tier]bool, error) {
 	// The declared route, when there is one — a route is pinned, no ladder.
 	// The lookup goes through the role's every spelling, the same aliases the
 	// derivation resolves through.
-	route, routed := config.Tier(""), false
+	route, routed := runconfig.Tier(""), false
 	for _, name := range roleAliasNames(role) {
 		if tier, ok := p.Roles[name]; ok {
 			route, routed = tier, true
@@ -172,7 +172,7 @@ func (r *Reconciler) derivableTiers(role string) (map[config.Tier]bool, error) {
 // ruleCouldMatchRole reports whether a start rule's roles dimension can
 // include this role: a rule that states no roles matches every tick, and one
 // that states roles matches the ones it names — in either spelling.
-func ruleCouldMatchRole(rule *config.TierStartRule, role string) bool {
+func ruleCouldMatchRole(rule *runconfig.TierStartRule, role string) bool {
 	if len(rule.Roles) == 0 {
 		return true
 	}
@@ -183,7 +183,7 @@ func ruleCouldMatchRole(rule *config.TierStartRule, role string) bool {
 	}
 	// The aliases: a rule naming "implement" matches implement-tick, one
 	// naming "review" matches review-epic, and so on — the same aliases the
-	// derivation itself resolves through config.roleAliases, mirrored here
+	// derivation itself resolves through runconfig.roleAliases, mirrored here
 	// because that map is the config package's own.
 	for _, alias := range roleAliasNames(role) {
 		for _, stated := range rule.Roles {
@@ -234,12 +234,12 @@ func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 	// Per-wave width: derive each wave's tiers as a first attempt would (the
 	// width is a planning number; a wave's dispatches may escalate later, and
 	// an escalated rung narrows nothing retroactively).
-	byWave := map[int][]config.Tier{}
+	byWave := map[int][]runconfig.Tier{}
 	for _, entry := range plan {
-		outcome, err := r.tierPolicy.Derive(config.TickFacts{
+		outcome, err := r.tierPolicy.Derive(runconfig.TickFacts{
 			TickID: entry.TickID, Priority: entry.Priority, Type: entry.Type,
 			Role: entry.Role, Labels: entry.Labels, Wave: entry.Wave, Blocks: entry.Blocks,
-		}, config.DeriveAttempt{Number: 1})
+		}, runconfig.DeriveAttempt{Number: 1})
 		if err != nil {
 			// A bad label is refused at the tick's own dispatch, loudly; the
 			// planning line does not pre-empt it with a partial answer.
@@ -280,8 +280,8 @@ func (r *Reconciler) profileOfMarker(marker attemptHandle) (*profile.Profile, er
 	return r.profileForTier(marker.Role, marker.Tier)
 }
 
-func tierIndexOf(tier config.Tier) int {
-	for i, known := range config.TierNames {
+func tierIndexOf(tier runconfig.Tier) int {
+	for i, known := range runconfig.TierNames {
 		if tier == known {
 			return i
 		}
@@ -290,7 +290,7 @@ func tierIndexOf(tier config.Tier) int {
 }
 
 func isKnownTier(name string) bool {
-	for _, tier := range config.TierNames {
+	for _, tier := range runconfig.TierNames {
 		if string(tier) == name {
 			return true
 		}
