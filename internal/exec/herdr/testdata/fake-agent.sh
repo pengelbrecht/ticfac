@@ -13,8 +13,12 @@
 # argv: <worktree> <prompt-file> <status-file> <interrupt-file> <mode>
 #
 # modes:
-#   implement  read the tick record, do what it says, report DONE
-#   sleep      report working, then wait to be interrupted
+#   implement           read the tick record, do what it says, report DONE
+#   sleep               report working, then wait to be interrupted
+#   report_then_addall  write the report, then `git add -A` and commit — an
+#                       ordinary add-all must not stage the excluded report
+#   force_report        force-add the excluded report past the exclude
+#                       (`git add -f`), the shape collect's backstop exists for
 set -e
 
 worktree=$1
@@ -99,5 +103,22 @@ mkdir -p "$(dirname "$out")"
 	echo ""
 	echo "STATUS: DONE"
 } > "$out"
+
+if [ "$mode" = "report_then_addall" ]; then
+	# The p6b prevention fixture: the report is written FIRST, then the
+	# worker runs an ordinary `git add -A` over the worktree — the way two of
+	# four wave-2 workers put their RESULT file on the attempt branch. The
+	# exclude Start wrote before this agent ever ran must keep it off.
+	printf 'staged by the ordinary add-all\n' > "$worktree/addall.txt"
+	git -C "$worktree" add -A
+	git -C "$worktree" commit --quiet -m "tick $id: add all"
+fi
+if [ "$mode" = "force_report" ]; then
+	# The p6b detection fixture: a worker that bypasses the exclude outright
+	# (`git add -f` on the excluded path). collect must still catch it off
+	# the branch diff and report it as a boundary violation.
+	git -C "$worktree" add -f "$out"
+	git -C "$worktree" commit --quiet -m "tick $id: the report rides the branch"
+fi
 
 report_done
