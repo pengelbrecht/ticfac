@@ -273,6 +273,60 @@ func (c *Client) AgentPrompt(ctx context.Context, params AgentPromptParams) (*Ag
 	return &out.Agent, nil
 }
 
+// AgentSendKeysParams are the parameters of agent.send_keys.
+type AgentSendKeysParams struct {
+	// Target is a pane id or agent name. Required.
+	Target string `json:"target"`
+	// Keys are herdr key-combo strings: plain printable keys, special keys
+	// like "enter" and "esc", and modifier chords like "ctrl+c".
+	Keys []string `json:"keys"`
+}
+
+// AgentSendKeys sends key presses to an agent's pane — herdr's interactive
+// interrupt surface, the same one `herdr agent send-keys` drives.
+// ["ctrl+c"] is the interrupt that stops an agent's turn.
+//
+// The result is the resolved agent when the server echoes one
+// (result discriminator `agent_info`, the shape the CLI's own guidance —
+// "read the result through the resolved agent" — points at); a bare `ok`
+// acknowledgement is tolerated and answered as a nil AgentInfo. The live
+// schema enumerates result types but does not map methods to them, so this
+// is the one typed method that accepts two discriminators, both pinned words
+// of the vocabulary. An unknown target is an [APIError] with
+// [CodeAgentNotFound].
+func (c *Client) AgentSendKeys(ctx context.Context, params AgentSendKeysParams) (*AgentInfo, error) {
+	if params.Target == "" {
+		return nil, fmt.Errorf("herd/client: agent.send_keys needs a target")
+	}
+	if len(params.Keys) == 0 {
+		return nil, fmt.Errorf("herd/client: agent.send_keys needs at least one key")
+	}
+	ctx, cancel := c.callTimeoutCtx(ctx)
+	defer cancel()
+	raw, err := c.callRaw(ctx, MethodAgentSendKeys, params)
+	if err != nil {
+		return nil, err
+	}
+	got, err := resultType(raw)
+	if err != nil {
+		return nil, fmt.Errorf("herd/client: decoding %s result: %w", MethodAgentSendKeys, err)
+	}
+	switch got {
+	case resultAgentInfo:
+		var out struct {
+			Agent AgentInfo `json:"agent"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, fmt.Errorf("herd/client: decoding %s result: %w", MethodAgentSendKeys, err)
+		}
+		return &out.Agent, nil
+	case resultOK:
+		return nil, nil
+	default:
+		return nil, &UnexpectedResultError{Method: MethodAgentSendKeys, Want: resultAgentInfo + " or " + resultOK, Got: got}
+	}
+}
+
 // AgentWaitParams are the parameters of agent.wait.
 type AgentWaitParams struct {
 	// Target is a pane id or agent name. Required.

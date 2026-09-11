@@ -84,6 +84,7 @@ const (
 	MethodWorkspaceFocus    = "workspace.focus"
 	MethodAgentStart        = "agent.start"
 	MethodAgentPrompt       = "agent.prompt"
+	MethodAgentSendKeys     = "agent.send_keys"
 	MethodAgentWait         = "agent.wait"
 	MethodAgentList         = "agent.list"
 	MethodAgentGet          = "agent.get"

@@ -299,6 +299,49 @@ func (s *Server) handleAgentStart(_ *testing.T, req Request, w *ConnWriter) erro
 	})
 }
 
+// SendKeys is one agent.send_keys call as the fake received it, decoded from
+// the wire — so a test asserting on Keys is asserting on the JSON the client
+// actually sent.
+type SendKeys struct {
+	Target string   `json:"target"`
+	Keys   []string `json:"keys"`
+}
+
+func (s *Server) handleAgentSendKeys(_ *testing.T, req Request, w *ConnWriter) error {
+	var p SendKeys
+	_ = json.Unmarshal(req.Params, &p)
+
+	s.mu.Lock()
+	s.sendKeys = append(s.sendKeys, p)
+	var found *Agent
+	for i := range s.agents {
+		if (p.Target != "" && s.agents[i].Name == p.Target) ||
+			(p.Target != "" && s.agents[i].PaneID == p.Target) {
+			found = &s.agents[i]
+			break
+		}
+	}
+	s.mu.Unlock()
+
+	// The keys landed regardless of whether the target is a modelled agent;
+	// an unknown target answered with a fresh idle agent mirrors herdr's own
+	// agent resolution, which the CLI's guidance leans on ("read the result
+	// through the resolved agent").
+	if found != nil {
+		return RespondJSON(w, req.ID, map[string]any{
+			"type":  "agent_info",
+			"agent": AgentJSON(*found),
+		})
+	}
+	return RespondJSON(w, req.ID, map[string]any{
+		"type": "agent_info",
+		"agent": map[string]any{
+			"pane_id": s.cfg.Worktree.PaneID, "agent_status": "idle",
+			"name": p.Target, "interactive_ready": true, "agent_session": nil,
+		},
+	})
+}
+
 func (s *Server) handleAgentPrompt(_ *testing.T, req Request, w *ConnWriter) error {
 	return RespondJSON(w, req.ID, map[string]any{
 		"type": "agent_prompted",

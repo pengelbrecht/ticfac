@@ -24,6 +24,7 @@ const (
 	MethodWorkspaceFocus  = "workspace.focus"
 	MethodAgentStart      = "agent.start"
 	MethodAgentPrompt     = "agent.prompt"
+	MethodAgentSendKeys   = "agent.send_keys"
 	MethodAgentWait       = "agent.wait"
 	MethodAgentList       = "agent.list"
 	MethodAgentGet        = "agent.get"
@@ -192,6 +193,9 @@ type Server struct {
 	// SECOND call on — the time-of-check/time-of-use seam: a planning
 	// snapshot sees one status, an apply-time re-check another.
 	agentsAfterFirstList []Agent
+	// sendKeys records every agent.send_keys call, decoded from the wire, so
+	// a consumer can assert on exactly what was sent.
+	sendKeys []SendKeys
 	// listErrAfterFirstList, when set, makes every agent.list after the first
 	// fail — herdr going quiet between the snapshot and the re-check.
 	listErrAfterFirstList string
@@ -364,6 +368,13 @@ func (s *Server) Lists() int { return s.CountMethod(MethodAgentList) }
 // Subscribes reports how many events.subscribe calls the fake has seen,
 // rejected ones included.
 func (s *Server) Subscribes() int { return s.CountMethod(MethodEventsSubscribe) }
+
+// SendKeysCalls returns every agent.send_keys call, in order.
+func (s *Server) SendKeysCalls() []SendKeys {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]SendKeys(nil), s.sendKeys...)
+}
 
 // SetAgents replaces the modelled session.
 func (s *Server) SetAgents(agents ...Agent) {
@@ -582,6 +593,8 @@ func (s *Server) builtin(method string) (Handler, bool) {
 		return s.handleAgentStart, true
 	case MethodAgentPrompt:
 		return s.handleAgentPrompt, true
+	case MethodAgentSendKeys:
+		return s.handleAgentSendKeys, true
 	case MethodAgentGet:
 		return s.handleAgentGet, true
 	case MethodAgentWait:
