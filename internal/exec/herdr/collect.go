@@ -70,8 +70,9 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	report, hasReport := e.readReport(record)
 	_, cancelled := st.cancelled()
 	agentGone := st.agentGone()
+	wallExceeded := st.wallExceeded()
 
-	verdict, outcome, class, reason := classify(commits, hasReport, report, violations, cancelled, agentGone)
+	verdict, outcome, class, reason := classify(commits, hasReport, report, violations, cancelled, agentGone, wallExceeded)
 
 	result := &subprocess.JobResult{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -136,8 +137,15 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // check wins. The order is the collect vocabulary's own, shared with the
 // local executor; the artifact-prefix backstop is deliberately absent here
 // (tick p6b owns it).
+//
+// The wall-clock stop carries the failure class Phase 1 already
+// distinguishes — wall_clock_exceeded, the same word the local executor's
+// collect answers — but it does not by itself decide anything: the checks
+// ahead of it (cancelled, no-commits) outrank it, and a worker that reported
+// before the stop caught it never reaches a failing check at all, because
+// the report and the branch are read the usual way.
 func classify(commits int, hasReport bool, report subprocess.Report,
-	violations []string, cancelled, agentGone bool) (verdict, outcome, class, reason string) {
+	violations []string, cancelled, agentGone, wallExceeded bool) (verdict, outcome, class, reason string) {
 
 	// The order is the LOCAL executor's own, because it is the collect
 	// vocabulary's: the same tick with the same facts must collect the same
@@ -153,7 +161,13 @@ func classify(commits int, hasReport bool, report subprocess.Report,
 		// No report. Whether that is a settled worker that failed to say
 		// so, or an attempt nothing can settle yet, is a question the
 		// SETTLEMENT evidence answers — never herdr, and never this
-		// function's caller's patience.
+		// function's caller's patience. A worker this executor stopped at
+		// its wall clock is its own failure class: stopped-at-the-bound and
+		// merely settled are different verdicts, and the durable wall
+		// marker is what keeps them apart on a herdr-free collect.
+		if wallExceeded {
+			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureWallClockExceeded, reasonWallClockStopped
+		}
 		if agentGone {
 			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonSettledNoReport
 		}
@@ -175,6 +189,10 @@ const (
 	reasonCancelled       = "cancelled"
 	reasonSettledNoReport = "settled-no-report"
 	reasonUnsettled       = "unsettled"
+	// reasonWallClockStopped is the stop at the bound: a distinct reason so
+	// the message keyed on it can say what happened without inheriting the
+	// settled or unsettled sentence.
+	reasonWallClockStopped = "stopped-at-wall-clock"
 )
 
 // collectMessage keeps two failures from sharing one sentence.

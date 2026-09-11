@@ -40,6 +40,17 @@
 //     that the agent is gone. And teardown refuses to act on an unanswered
 //     liveness question: herdr not answering is not evidence that tearing an
 //     agent down is safe.
+//   - THE WALL CLOCK IS ENFORCED, NOT NOTICED (gwc). The settlement deadline
+//     is the reconciler's, inherited unchanged; the STOP is this
+//     executor's, because herdr owns the agent's process. The enforcement
+//     runs inside observe (wall.go): past spec.Limits.WallSeconds a live
+//     agent is interrupted through herdr's own surface and recorded as
+//     STOPPED AT ITS WALL CLOCK — a distinct verdict from merely settled,
+//     in the same closed failure vocabulary the local executor collects.
+//     A herdr too old for the interrupt surface never sees a bounded
+//     dispatch at all: Start refuses it, naming the bound and the herdr
+//     version, because a limit nothing enforces is a limit the operator
+//     trusts wrongly.
 //
 // # What is deliberately NOT here
 //
@@ -49,9 +60,6 @@
 //     already makes ZERO herdr calls — by construction, like ticks' collect
 //     package — so that tick's fixture (every herdr call errors) can be
 //     written against it.
-//   - gwc: the wall clock is enforced. Nothing here stops an agent at
-//     spec.Limits.WallSeconds; the settlement deadline is the reconciler's,
-//     inherited unchanged.
 //   - p6b: the artifact boundary. No exclude is written and no artifact
 //     backstop runs at collect yet.
 //   - x6j: every substrate failure classified operational-or-verdict, and

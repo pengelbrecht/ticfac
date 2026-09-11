@@ -158,6 +158,22 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
 	case err == nil:
+		// The agent is live. Past the bound this attempt was issued, that
+		// is spending the wall clock exists to stop: the enforcement runs
+		// here, in observe, because every Inspect and every adopting Start
+		// reaches it — the reconciler's poll is the clock that reaches the
+		// bound, and the stop lands within one poll of it (wall.go).
+		if e.pastWall(record) {
+			if e.stopAtWall(st, record) {
+				return subprocess.StateFailed, fmt.Sprintf(
+					"stopped at its wall clock of %ds with no report at %s",
+					record.WallSeconds, record.ResultPath)
+			}
+			return subprocess.StateRunning, fmt.Sprintf(
+				"the wall clock of %ds passed and the agent %s was interrupted through herdr, but it has not exited: "+
+					"the stop settles the attempt only when herdr answers that the agent is gone",
+				record.WallSeconds, record.AgentName)
+		}
 		return subprocess.StateRunning, fmt.Sprintf(
 			"the agent %s is live in pane %s (herdr reports %s)",
 			record.AgentName, agent.PaneID, agent.AgentStatus)
@@ -168,6 +184,14 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		_ = st.markAgentGone(e.stamp())
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
 			Detail: fmt.Sprintf("herdr answers that the agent %s is no longer there (%s)", record.AgentName, apiCode(err))})
+		if st.wallExceeded() {
+			// The stop at the wall clock fired before this poll could confirm
+			// it; the durable marker keeps this settlement reading as a stop
+			// at the bound rather than as a merely settled attempt.
+			return subprocess.StateFailed, fmt.Sprintf(
+				"stopped at its wall clock of %ds with no report at %s",
+				record.WallSeconds, record.ResultPath)
+		}
 		return subprocess.StateFailed, fmt.Sprintf(
 			"the agent %s is gone and there is no report at %s: settled is not finished, and this is neither running nor done",
 			record.AgentName, record.ResultPath)
@@ -175,6 +199,11 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		// herdr cannot be asked NOW, but an earlier inspect durably
 		// recorded the positive answer. The durable record settles what the
 		// silent substrate cannot.
+		if st.wallExceeded() {
+			return subprocess.StateFailed, fmt.Sprintf(
+				"stopped at its wall clock of %ds with no report at %s",
+				record.WallSeconds, record.ResultPath)
+		}
 		return subprocess.StateFailed, fmt.Sprintf(
 			"the agent %s was observed gone at %s and there is no report at %s",
 			record.AgentName, e.stamp(), record.ResultPath)

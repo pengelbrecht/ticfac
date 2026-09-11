@@ -241,6 +241,18 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		}
 	}
 
+	// The wall clock this spec carries is a promise THIS executor makes at
+	// dispatch — herdr owns the agent's process, so nothing inherited stops
+	// it. A herdr too old for the interrupt surface is one the bound cannot
+	// be enforced through, and an unenforceable bound is refused here,
+	// naming the bound and the herdr version, rather than issued as a
+	// promise nothing would keep (wall.go). Adoption is exempt: an attempt
+	// being adopted was issued its bound by an incarnation that could
+	// enforce it, and refusing the adoption would strand a live worker.
+	if err := e.enforceableWall(spec); err != nil {
+		return nil, err
+	}
+
 	base, err := resolveCommit(e.repo, spec.Source.BaseSHA)
 	if err != nil {
 		return nil, fmt.Errorf("the base %q is not a commit this checkout has: %w", spec.Source.BaseSHA, err)

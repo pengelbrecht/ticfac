@@ -121,6 +121,11 @@ type harnessOptions struct {
 	agentMode  string
 	kind       string
 	args       []string
+	// serverProtocol and serverVersion are what the fake herdr advertises in
+	// its ping handshake. Zero keeps the canonical 0.8.2 / protocol 20
+	// reply; setting them is how a test dispatches against an older herdr.
+	serverProtocol int
+	serverVersion  string
 }
 
 // newHarness wires the executor to a fake herdr whose worktree.create and
@@ -147,7 +152,12 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		"Create the file hello.txt containing exactly the word hello, and commit it.")
 	repo.Base = strings.TrimSpace(mustRun(t, repo.Dir, "git", "rev-parse", "HEAD"))
 
-	s := herdtest.New(t, herdtest.Config{})
+	serverCfg := herdtest.Config{}
+	if opts.serverProtocol != 0 || opts.serverVersion != "" {
+		serverCfg.Protocol = opts.serverProtocol
+		serverCfg.Version = opts.serverVersion
+	}
+	s := herdtest.New(t, serverCfg)
 
 	// worktree.create: herdr creates the worktree AND opens a workspace.
 	s.Route(herdtest.MethodWorktreeCreate, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {

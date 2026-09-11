@@ -39,6 +39,13 @@ const (
 	// say `failed` rather than `lost` — the "exit evidence the executor
 	// itself recorded" half of the completion contract.
 	fileAgentGone = "agent-gone"
+	// fileWallExceeded is the wall-clock stop record: written once, by the
+	// enforcement that delivered the interrupt through herdr after the
+	// bound issued in spec.Limits.WallSeconds fired. It is what keeps
+	// "stopped at its wall clock" and "merely settled" distinct in the
+	// records a herdr-free collect reads — the same job the local
+	// executor's own wall marker does, at the same name.
+	fileWallExceeded = "wall_clock_exceeded"
 	// fileReportArchive is where disposal moves the attempt's own untracked
 	// report out of the worktree, so worktree.remove can proceed without
 	// Force while the report survives somewhere a person can still read it.
@@ -237,6 +244,22 @@ func (s *store) markAgentGone(at string) error {
 }
 
 func (s *store) agentGone() bool { return s.exists(fileAgentGone) }
+
+// markWallExceeded records that the bound fired and the stop was accepted,
+// durably. It is written only AFTER herdr accepted the interrupt — unlike
+// the local supervisor, which writes its marker before stopping the runner
+// because a local stopTree cannot be refused — because through herdr the
+// stop CAN fail to be delivered, and a record claiming a stop that never
+// landed is the run's own records agreeing it is over while the agent
+// keeps spending.
+func (s *store) markWallExceeded(at string) error {
+	if s.exists(fileWallExceeded) {
+		return nil
+	}
+	return s.writeFile(s.path(fileWallExceeded), []byte(at+"\n"), 0o644)
+}
+
+func (s *store) wallExceeded() bool { return s.exists(fileWallExceeded) }
 
 // observe appends one observation. Append-only and one write per record, so
 // a reader in another process sees whole lines.
