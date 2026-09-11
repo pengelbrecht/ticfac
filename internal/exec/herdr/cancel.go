@@ -163,15 +163,28 @@ func (e *Executor) hasSettled(st *store) bool {
 		return true
 	}
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
-	if err != nil {
+	switch {
+	case err == nil:
+		switch agent.AgentStatus {
+		case client.StatusWorking, client.StatusBlocked:
+			return false
+		default:
+			return true
+		}
+	case gone(err):
+		// herdr's POSITIVE answer that nobody is there (classify.go):
+		// nothing is spending. Settled — and the departure is recorded
+		// durably, so a later collect reads a verdict from it instead of
+		// finding silence. Without this, a cancel over a provably gone
+		// agent would write the cancellation record anyway and rename a
+		// finished attempt's verdict `cancelled` for everybody who ever
+		// looks at it again — a substrate answer deciding what the work's
+		// verdict was.
+		_ = st.markAgentGone(e.stamp())
+		return true
+	default:
 		// herdr would not answer. Silence is not evidence nothing is
 		// spending, so this is NOT settled: the full refusal is recorded.
 		return false
-	}
-	switch agent.AgentStatus {
-	case client.StatusWorking, client.StatusBlocked:
-		return false
-	default:
-		return true
 	}
 }
