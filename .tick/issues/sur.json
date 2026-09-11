@@ -14,5 +14,5 @@
   "acceptance_criteria": "The pi row carries the full-auto template gjk verified, with its verified flag set, and the kinds reference's pi section is written from that run rather than re-derived. A tier's model id is validated against pi's own catalog (pi --list-models) rather than a slash check, so a typo dies at compile time; what happens when pi is absent is a logged decision. A bare id naming no provider is refused. An effort level on a model whose catalog thinking column is 'no' is refused naming the tier, the model and the column. If gjk found pi can substitute silently, a read-back proves the model that ran is the model the tier named and a mismatch is a refusal. Tests cover a good pi tier, a typo'd model, a bare unqualified id, and an effort on a non-thinking model. go test -short -timeout 45m ./... green (make test-short).",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T09:22:33.29765Z",
-  "updated_at": "2026-09-10T09:37:47.637203Z"
+  "updated_at": "2026-09-11T15:16:44.671941Z"
 }

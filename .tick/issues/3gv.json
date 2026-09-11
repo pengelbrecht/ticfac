@@ -1,0 +1,14 @@
+{
+  "id": "3gv",
+  "title": "Herdr executor A: the five operations behind the existing seam",
+  "description": "The herdr executor's SHAPE: the five operations, and nothing about herdr above\nthem. This tick lands the seam and the happy path. The four hard guarantees are\nseparate ticks that build on it.\n\nImplement Executor for herdr behind the SAME interface Phase 1 defined\n(internal/reconcile/reconcile.go:57): Start, Inspect, CollectDetail, Cancel,\nDispose. All herdr-specific addressing lives inside JobHandle.handle, the one\nopen object in the contract (internal/exec/subprocess/record.go:218-223). The\nreconciler must learn nothing about panes, workspaces or protocols.\n\n- Start: create the worktree/workspace through herdr and launch the agent.\n- Inspect: agent state plus whatever durable evidence exists.\n- CollectDetail: read the report and the branch. NOTE: the verdict is derived\n  from durable evidence only \u2014 see tick 2xu, which owns that guarantee and its\n  test. Build the seam so 2xu can assert it.\n- Cancel: stop the agent.\n- Dispose: tear the workspace down.\n\nDo NOT port ticks' spawn/wait/reconcile/cleanup packages. ticfac's reconciler\nalready owns waves, adoption, disposition and cleanup. Read those four packages\nfor the hard-won details (the pane-busy retry, the readiness poll, the refusal\nto tear down on an unanswered agent.list) and carry the LESSONS, not the code.\n\nExplicitly OUT of scope, each its own tick, so this one stays reviewable:\n- 2xu  the verdict comes from durable evidence, never the substrate\n- gwc  wall-clock enforcement\n- p6b  the artifact boundary (exclude + collect backstop)\n- x6j  a substrate failure is never a verdict\n- 5hz  disposal reclaims by identity when the recorded id is stale",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "av8",
+  "acceptance_criteria": "A herdr Executor implements Start, Inspect, CollectDetail, Cancel and Dispose; the Executor interface is unchanged and internal/reconcile contains no herdr-specific code, asserted by a test or a grep in CI; every piece of herdr addressing lives inside JobHandle.handle; a real tick runs end to end through this executor \u2014 dispatched, worked, collected, disposed \u2014 and the run is shown; go test -short -timeout 45m ./... green (make test-short).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-11T15:15:55.6747Z",
+  "updated_at": "2026-09-11T15:15:55.6747Z"
+}

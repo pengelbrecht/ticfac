@@ -1,0 +1,17 @@
+{
+  "id": "2xu",
+  "title": "Herdr executor B: the verdict comes from durable evidence, never from herdr",
+  "description": "The verdict about a worker's work comes from DURABLE EVIDENCE and never from\nthe substrate. One guarantee, one test, mechanically checkable.\n\nPhase 1 established it and ticks' own collect package is the proof it holds:\ncollect.go:108-109 says \"an error means the check could not be performed ...\nnever 'the worker failed', which is a verdict\", verdicts come only from git and\nthe result file (:164-175), and the package makes ZERO herdr calls. That last\npart is what makes it true by construction rather than by discipline.\n\nThe herdr executor must inherit exactly that. Its CollectDetail decides from:\n- the report file on disk,\n- the commits on the attempt branch,\n- the exit/settlement evidence the executor itself recorded,\n\nand from nothing herdr says. herdr answers \"is the agent alive\", never \"did the\nwork succeed\".\n\nThis is also what makes a herdr upgrade survivable: a rendering change, a\nrenamed status word or a dropped connection can cost a dispatch, but it can\nnever corrupt a result.\n\nTHE TEST THAT SETTLES IT: a fixture in which every herdr call returns an error,\ndriven through a completed attempt, asserting that collect still produces the\ncorrect verdict from the report and the branch. If that test passes, the\nguarantee holds; if it cannot be written, the seam is wrong.\n\nBuilds on tick 3gv (the five operations).",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "3gv"
+  ],
+  "parent": "av8",
+  "acceptance_criteria": "CollectDetail derives its verdict only from the report file, the branch commits and the executor's own settlement record; a fixture in which EVERY herdr call returns an error still collects the correct verdict for a completed attempt, and is the test of record for this tick; no herdr response can change a verdict, shown by that test rather than argued in prose; go test -short -timeout 45m ./... green (make test-short).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-11T15:16:17.83327Z",
+  "updated_at": "2026-09-11T15:16:17.83327Z"
+}
