@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/herd/config"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -249,6 +250,17 @@ type Reconciler struct {
 	ticks    []runstate.TickState
 	journal  []Event
 	failure  *Refusal
+
+	// The tier policy half of tick 5eq: the declared mapping from tick facts
+	// to a dispatch tier, the tier-resolved profiles it can route to, and
+	// the two run-level numbers its records quote. pinnedTier is the
+	// operator's --tier: when set, every dispatch runs at it and the ladder
+	// does not run. hostWidth is [orchestration].max_parallel — the ONE
+	// host-wide number the per-tier bounds narrow.
+	tierPolicy   *config.TierPolicy
+	tierProfiles map[string]map[string]*profile.Profile
+	pinnedTier   string
+	hostWidth    int
 }
 
 // Event is one thing the run did, in order. It is what makes "the gate ran
@@ -285,6 +297,11 @@ const (
 	StageResumed      = "resumed"
 	StageSettled      = "settled"
 	StageRunFinished  = "run_finished"
+	// StageTierDerived is the record of one dispatch's tier DERIVATION —
+	// the pure function's answer and reason, written before the tick is
+	// claimed, so "why was this expensive" is a question the run's own
+	// record answers.
+	StageTierDerived = "tier_derived"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -384,31 +401,76 @@ func New(opts Options) (*Reconciler, error) {
 		}
 	}
 
+	// The tier policy (tick 5eq), read from the same runners.toml through the
+	// same validated reader — the execution half's config, which is where a
+	// policy belongs now the roles and tiers tables are ticfac's. It is
+	// loaded BEFORE anything is dispatched so that a policy naming a tier the
+	// target repo's roles table declares nothing for is a refusal HERE, at
+	// construction, and not three ticks into an epic. An operator's --tier
+	// pins the run instead: every dispatch runs at it and the ladder does
+	// not run.
+	r := &Reconciler{ // assembled early: the tier machinery below hangs off it
+		opts:   opts,
+		runID:  opts.RunID,
+		branch: opts.IntegrationBranch,
+	}
+	r.pinnedTier = opts.Tier
+	if opts.Tier == "" {
+		cfg, err := config.Load(opts.GateConfig)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile: %w", err)
+		}
+		r.tierPolicy = cfg.TierPolicy
+		r.hostWidth = cfg.MaxParallel()
+		// Per-role, because a policy is only honest when what it
+		// pre-resolves is what it can actually derive (profiles.go):
+		// pre-resolving the work default for a review role would demand an
+		// overlay the operator was never asked to declare.
+		r.tierProfiles = make(map[string]map[string]*profile.Profile, len(profile.Roles))
+		for _, role := range profile.Roles {
+			perRole := map[string]*profile.Profile{"": profiles[role]}
+			tiers, err := r.derivableTiers(role)
+			if err != nil {
+				return nil, fmt.Errorf("reconcile: %w", err)
+			}
+			for tier := range tiers {
+				resolved, err := profile.Resolve(role, profile.Options{
+					Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: string(tier),
+				})
+				if err != nil {
+					return nil, fmt.Errorf("reconcile: %w", err)
+				}
+				if err := usableProfile(resolved); err != nil {
+					return nil, fmt.Errorf("reconcile: %w", err)
+				}
+				perRole[string(tier)] = resolved
+			}
+			r.tierProfiles[role] = perRole
+		}
+	}
+
 	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote}
 	if _, err := g.run("", "rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("reconcile: %s is not a git repository: %w", opts.Repo, err)
 	}
 
-	r := &Reconciler{
-		opts:          opts,
-		git:           g,
-		runID:         opts.RunID,
-		branch:        opts.IntegrationBranch,
-		gate:          gate,
-		gateDigest:    gate.Digest(),
-		profiles:      profiles,
-		profileSet:    profileSetDigest(profiles),
-		pollInterval:  opts.PollInterval,
-		wipeThreshold: opts.WipeThreshold,
-		stepCap:       opts.StepCap,
-		now:           opts.Now,
-		sleep:         opts.Sleep,
-		guardsOff:     opts.guardsOff,
-		lastPolled:    map[string]time.Time{},
-		liveness:      map[string]string{},
-		holds:         map[string]*hold{},
-		evidence:      map[string]Fingerprint{},
-	}
+	// The reconciler was assembled above the git check (the tier machinery
+	// hangs off it); everything the git check guards joins here.
+	r.git = g
+	r.gate = gate
+	r.gateDigest = gate.Digest()
+	r.profiles = profiles
+	r.profileSet = profileSetDigest(profiles)
+	r.pollInterval = opts.PollInterval
+	r.wipeThreshold = opts.WipeThreshold
+	r.stepCap = opts.StepCap
+	r.now = opts.Now
+	r.sleep = opts.Sleep
+	r.guardsOff = opts.guardsOff
+	r.lastPolled = map[string]time.Time{}
+	r.liveness = map[string]string{}
+	r.holds = map[string]*hold{}
+	r.evidence = map[string]Fingerprint{}
 	if r.guardsOff == nil {
 		r.guardsOff = map[string]bool{}
 	}
@@ -608,6 +670,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	if r.budget.Reported > 0 {
 		r.record("", StageRunFinished, "the effective budget for this run is $%.2f", r.budget.Reported)
 	}
+	r.recordTierPolicy(plan)
 
 	var failed []string
 	for _, entry := range plan {
@@ -673,6 +736,17 @@ type planEntry struct {
 	Wave   int
 	Role   string
 	Order  int
+
+	// The tick facts the tier derivation is a function of (tick 5eq): all of
+	// them are tracker facts the graph already carries, and nothing here is
+	// added to a tick for routing's sake. They are copied at PLANNING time,
+	// from the graph, so that the derivation is a pure function of what the
+	// tracker said — never of a clock, a die or a model.
+	Priority int
+	Type     string
+	Labels   []string
+	// Blocks is how many ticks this one blocks: the graph-position fact.
+	Blocks int
 }
 
 // planFrom turns the graph into the order this run dispatches in.
@@ -692,6 +766,7 @@ func planFrom(graph tk.Graph) []planEntry {
 			seen[task.ID] = true
 			out = append(out, planEntry{
 				TickID: task.ID, Title: task.Title, Wave: wave.Wave, Role: RoleOf(task),
+				Priority: task.Priority, Type: task.Type, Labels: task.Labels, Blocks: len(task.Blocks),
 			})
 		}
 	}
@@ -893,6 +968,15 @@ const (
 	// job's answer IS its deliverable, while this one arrives beside a branch
 	// somebody now has to decide about.
 	RefusedNeedsHuman = "attempt_needs_human"
+
+	// The one the TIER derivation adds (tick 5eq): a tick carries a tier
+	// label the policy cannot honour — a tier name outside the closed
+	// vocabulary, or one the target repo's roles table declares nothing for.
+	// A label is a weakly typed field the tracker cannot validate, so this
+	// refusal is the only place a typo can ever surface, which is exactly
+	// why it names the tick AND the label and never falls back to the default
+	// tier: an override that quietly failed is an override nobody can audit.
+	RefusedTierLabel = "tier_label_unrecognised"
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9

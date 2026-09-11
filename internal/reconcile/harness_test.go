@@ -95,6 +95,10 @@ type trackerState struct {
 	Ticks map[string]tk.Tick `json:"ticks"`
 	Roles map[string]string  `json:"roles"`
 	Order []string           `json:"order"`
+	// Blocks is the graph-position fact a test sets by hand: which ticks each
+	// tick blocks. The real tk derives it from the tick files; the fake has no
+	// files to derive it from, so a test that cares states it.
+	Blocks map[string][]string `json:"blocks,omitempty"`
 }
 
 func newTracker(t *testing.T, dir string) *fakeTracker {
@@ -108,7 +112,7 @@ func newTracker(t *testing.T, dir string) *fakeTracker {
 		Order: []string{"a1", "a2", "b1", "rv", "co"},
 	}
 	for _, id := range state.Order {
-		state.Ticks[id] = tk.Tick{ID: id, Title: "tick " + id, Status: "open", Type: "task", Parent: "qeu"}
+		state.Ticks[id] = tk.Tick{ID: id, Title: "tick " + id, Status: "open", Type: "task", Parent: "qeu", Priority: 2}
 	}
 	tracker.write(t, state)
 	return tracker
@@ -186,8 +190,9 @@ func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) 
 		for _, id := range wave {
 			tick := state.Ticks[id]
 			w.Tasks = append(w.Tasks, tk.GraphTask{
-				ID: id, Title: tick.Title, Status: tick.Status, Priority: 2,
-				Role: state.Roles[id], AgentReady: tick.Status != "closed",
+				ID: id, Title: tick.Title, Status: tick.Status, Priority: tick.Priority,
+				Type: tick.Type, Labels: tick.Labels, Role: state.Roles[id],
+				Blocks: state.Blocks[id], AgentReady: tick.Status != "closed",
 			})
 		}
 		graph.Waves = append(graph.Waves, w)

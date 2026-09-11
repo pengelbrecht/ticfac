@@ -159,6 +159,15 @@ type Config struct {
 	Evidence      *Evidence        `toml:"evidence"`
 	Environment   *Environment     `toml:"environment"`
 	Sandbox       *Sandbox         `toml:"sandbox"`
+	// TierPolicy is the declared [tier_policy] table: the mapping from what a
+	// tick already says it is (priority, type, process role, labels, graph
+	// position) to which tier a dispatch of it runs at. It sits beside the
+	// [roles] and [roles.*.tiers.*] tables on purpose (tick 5eq): the tracker
+	// describes the WORK, and this table is ticfac's whole judgement about
+	// which dispatch a description earns — evaluated, never chosen per dispatch.
+	// See tierpolicy.go for the derivation and the escalation ladder.
+	TierPolicy *TierPolicy `toml:"tier_policy"`
+
 	// The tracker tables — [signals] and [sweeps] — are deliberately NOT
 	// fields of this struct. They are ticks' half of the split (see doc.go):
 	// this reader tolerates them in a file (foreign tables, below in load.go)
@@ -204,6 +213,99 @@ type TierVariant struct {
 	Model  string   `toml:"model"`
 	Effort Effort   `toml:"effort"`
 	Args   []string `toml:"args"`
+}
+
+// TierPolicy is the declared [tier_policy] table: the EVALUATED mapping from
+// tick facts to a dispatch tier (tick 5eq). Nothing in it is chosen per
+// dispatch; everything in it is a rule a host can point at after the fact.
+//
+// The fields, and what each is for:
+//
+//   - Default is the tier a FIRST attempt starts at. It is required: a
+//     policy that cannot say where a first attempt starts is a policy that
+//     cannot refuse one that starts high.
+//   - Ceiling is the named tier escalation NEVER passes. Omitted, it is the
+//     Default — a one-rung ladder whose top is also its bottom, so a second
+//     failure is a signal for a person rather than for a bigger model.
+//   - Step is the rungs one failed attempt earns (default 1).
+//   - LabelPrefix is the label namespace a tick's OVERRIDES ride in
+//     (default "tier:"). A label is an opaque string to the tracker; this
+//     table is the only thing that assigns it a meaning.
+//   - Start is an ordered list of first-attempt rules; the first that
+//     matches a tick's facts wins, and none may name a tier above Default —
+//     nothing starts high on a description. Expense is earned by failure.
+//   - Roles pins the tier for a PROCESS role (review-epic, closeout-epic…).
+//     A declared route is policy, not a hunch, so any tier may be named; a
+//     role with no entry runs at the role's own base values (no overlay).
+//   - Concurrency bounds how many dispatches may run at one tier at once.
+//     It is deliberately PER TIER rather than one host-wide number (which is
+//     [orchestration].max_parallel's axis): a tier names a model and a model
+//     names a provider, and four workers on one provider are not the same
+//     load as four on four of them — the wave-2 finding on cloudflare
+//     Workers AI (2026-09-10: one of four concurrent GLM workers hit HTTP
+//     429 with no body, pi retried three times with no backoff and gave up,
+//     and the tick sat dead until a person noticed).
+//   - RateLimit states what the run does when a provider rate-limits it.
+//     There is deliberately one vocabulary, and it is not "retry
+//     immediately": a 429 is a transient burst limit, and immediate retries
+//     convert a pause into a dead worker.
+type TierPolicy struct {
+	Default     Tier             `toml:"default"`
+	Ceiling     Tier             `toml:"ceiling"`
+	Step        int              `toml:"step"`
+	LabelPrefix string           `toml:"label_prefix"`
+	Start       []*TierStartRule `toml:"start"`
+	Roles       map[string]Tier  `toml:"roles"`
+	Concurrency map[string]int   `toml:"concurrency"`
+	RateLimit   *TierRateLimit   `toml:"rate_limit"`
+}
+
+// TierStartRule is one first-attempt rule of [[tier_policy.start]], in file
+// order: the FIRST rule whose every stated dimension matches a tick's facts
+// wins. A dimension that is not stated does not constrain. Only facts the
+// tracker already carries are dimensions — nothing new is added to a tick
+// for routing's sake.
+type TierStartRule struct {
+	// Tier is the tier a matching first attempt starts at. Required, and
+	// validated to be at or below the policy's Default.
+	Tier Tier `toml:"tier"`
+	// Types matches the tick's type (task, bug, epic…), case-insensitively.
+	Types []string `toml:"types"`
+	// Roles matches the tick's process role — job-protocol (implement-tick)
+	// or tracker (implement) spellings both match, as everywhere else.
+	Roles []string `toml:"roles"`
+	// MinPriority and MaxPriority bound the tick's priority on the axis ticks
+	// uses: 1 is the MOST urgent, so MaxPriority = 2 means "at least as
+	// urgent as 2" and MinPriority = 3 means "no more urgent than 3".
+	MinPriority *int `toml:"min_priority"`
+	MaxPriority *int `toml:"max_priority"`
+	// Wave matches the tick's wave number exactly (1 is the first wave).
+	Wave *int `toml:"wave"`
+	// MinBlocks and MaxBlocks bound how many ticks this one blocks — the
+	// graph-position fact. MaxBlocks = 0 means "blocks nobody", which is
+	// the mark of a mechanical tick.
+	MinBlocks *int `toml:"min_blocks"`
+	MaxBlocks *int `toml:"max_blocks"`
+}
+
+// TierRateLimit is the declared [tier_policy.rate_limit] stance: what a
+// run does when a provider rate-limits one of its workers.
+type TierRateLimit struct {
+	// Response is the rate-limit response. The vocabulary is closed at one
+	// value, "backoff-and-retry": it is what the 2026-09-10 wave-2 finding
+	// on cloudflare demands (a 429 with no body retried three times with no
+	// backoff was a dead worker), and a declaration this package cannot
+	// enforce is still a stance it can refuse to contradict. An operator who
+	// wants "retry immediately" wants a stall, and is told so.
+	Response string `toml:"response"`
+	// MaxAttempts is the retry budget a worker's own runner honours before
+	// the attempt becomes a refusal for a person. The 2026-09-11 pi
+	// configuration on epic av8 sets 8.
+	MaxAttempts int `toml:"max_attempts"`
+	// MaxDelayMs is the longest backoff between retries. A per-minute
+	// provider cap needs roughly a minute of patience; av8's pi settings set
+	// 90000.
+	MaxDelayMs int `toml:"max_delay_ms"`
 }
 
 // Command is one executable command. Command is run verbatim — one shell
@@ -252,8 +354,7 @@ type Environment struct {
 }
 
 // Sandbox is the per-repo sandbox definition: what a run's container is, on
-// top of the batteries-included base image.
-//
+// top of the batteries-included base image.//
 // It lives in this file, and only in this file, because of Setup. A setup
 // command is arbitrary shell executed inside a sandbox that holds the run's
 // credentials, so its only source is the tracked, PR-reviewed config at the

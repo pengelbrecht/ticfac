@@ -59,6 +59,17 @@ type attemptHandle struct {
 	// has nowhere to say that its prompt and model were actually applied.
 	Model        string `json:"model"`
 	PromptDigest string `json:"prompt_digest"`
+
+	// Tier is the tier this dispatch DERIVED (tick 5eq), "" when it runs at
+	// the role's own base values. It is recorded here for the same reason as
+	// Model and PromptDigest, and for one more: the closed provenance object
+	// ($defs.provenance in the pinned contract bundle) has no tier field, so
+	// the marker is the ONLY durable record that says which tier a dispatch
+	// used. An over-tiered run is exactly the thing nobody could audit before
+	// this existed. The tier is reconstructible from provenance only in
+	// digest form (ProfileDigest covers the tier-resolved profile), which is
+	// an answer to "is this the same profile" — not to "which tier was this".
+	Tier string `json:"tier"`
 }
 
 // asMap is the durable form of the marker: everything BUT StateRoot and Repo,
@@ -69,7 +80,7 @@ func (a attemptHandle) asMap() map[string]any {
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
 		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA,
-		"model":    a.Model, "prompt_digest": a.PromptDigest,
+		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier,
 	}
 }
 
@@ -95,7 +106,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
-		Model:   get("model"), PromptDigest: get("prompt_digest"),
+		Model:   get("model"), PromptDigest: get("prompt_digest"), Tier: get("tier"),
 	}
 }
 
@@ -220,6 +231,14 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	if err != nil {
 		return nil, nil, attemptHandle{}, err
 	}
+	// failed is how many prior attempts of THIS tick earned an escalation
+	// rung — the ladder's definition of "failed", decided and logged in
+	// tierpolicy.go: an attempt the run REJECTED that left nothing mergeable
+	// (the redispatch disposition below). Not a refusal the run made around
+	// the worker, not a gate failure (that attempt is ADOPTED and re-gated at
+	// the same tier), and not an attempt a PERSON released — the human was
+	// the actor, and no rung is earned from somebody else's decision.
+	failed := 0
 	for _, existing := range attempts {
 		if existing.TickID != tick {
 			continue
@@ -252,6 +271,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			r.record(tick, StageRedispatched,
 				"attempt %d settled with nothing on %s and was rejected; a new attempt is dispatched rather than "+
 					"the spent one adopted", existing.Attempt, branchOf(marker.WriteRef))
+			// The rung this attempt earned for the ladder: the work was
+			// dispatched, it had its chance, and it did not pass.
+			failed++
 			continue
 		case holdAttemptWork:
 			// REJECTED, and the commits are still there. Dispatching over it
@@ -293,7 +315,10 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
-		dispatch, marker := r.planDispatch(entry, number)
+		dispatch, marker, err := r.planDispatch(entry, number, failed)
+		if err != nil {
+			return nil, nil, attemptHandle{}, err
+		}
 
 		r.setTick(tick, "ready")
 		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
@@ -626,9 +651,42 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 }
 
 // planDispatch decides everything about a dispatch before the executor is
-// asked for anything — including the budget, which is clamped here so the job
-// is issued the number that will govern.
-func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemptHandle) {
+// asked for anything — the DERIVED TIER first (tick 5eq), then the budget,
+// which is clamped here so the job is issued the number that will govern.
+// It runs BEFORE the marker is written and the tick is claimed, so a refusal
+// here (a tier label the config cannot honour, say) spends nothing and
+// claims nothing.
+func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch, attemptHandle, error) {
+	// Where the orchestrator stops choosing and starts deriving: the tier is
+	// a pure function of the tick's facts, this attempt's durable state and
+	// the declared policy — never a per-dispatch judgement, never a hunch.
+	tier, reason, err := r.deriveTier(entry, number, failed)
+	if err != nil {
+		// The loud refusal: the tick AND the label, never a silent fall-back
+		// to the default — a label is a weakly typed field the tracker cannot
+		// validate, so this is the one place a typo can ever surface.
+		return Dispatch{}, attemptHandle{}, r.refuse(RefusedTierLabel, entry.TickID, "%s: the tick is neither dispatched nor claimed, and the label is the thing to fix", err.Error())
+	}
+	dispatchProfile, err := r.profileForTier(entry.Role, tier)
+	if err != nil {
+		return Dispatch{}, attemptHandle{}, r.refuse(RefusedTierLabel, entry.TickID,
+			"tick %s was routed to tier %q and no profile resolves against the target repository's runner configuration: %v. "+
+				"The tick is neither dispatched nor claimed; declare the tier in [roles.%s.tiers.%s] or remove the label that asked for it",
+			entry.TickID, tier, err, entry.Role, tier)
+	}
+
+	// WHICH WINS when the policy asks for a tier the budget clamp could
+	// refuse: neither does. The tier routes MODELS, the budget clamps DOLLARS,
+	// and the dispatch is issued the effective budget at the derived tier.
+	// The statement is made here, in the run's own record, beside the tier
+	// that explains the spend — not as a silent downgrade of either number.
+	budgetNote := ""
+	if r.budget.Effective > 0 {
+		budgetNote = fmt.Sprintf(", with the effective budget $%.2f (the clamp governs spend, the tier governs routing, and neither silently modifies the other)", r.budget.Effective)
+	}
+	r.record(entry.TickID, StageTierDerived, "attempt %d of %s runs at tier %q (%s)%s",
+		number, entry.TickID, tier, reason, budgetNote)
+
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
 	stateDir := r.execStateDir(entry.TickID, number)
 
@@ -644,7 +702,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
-		Profile: r.profileFor(entry.Role),
+		Profile: dispatchProfile,
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -654,9 +712,10 @@ func (r *Reconciler) planDispatch(entry planEntry, number int) (Dispatch, attemp
 		Executor: subprocess.ExecutorName, JobID: jobID, Attempt: number, TickID: entry.TickID,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
-		Model: dispatch.Profile.Model, PromptDigest: promptDigest(dispatch.Profile),
+		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
+		Tier: tier,
 	}
-	return dispatch, marker
+	return dispatch, marker, nil
 }
 
 // attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
@@ -741,7 +800,11 @@ func sourceCredentialFor(role, runID string) subprocess.SourceCredential {
 // private state root, the handle for it is reconstructed and INSPECTED; if
 // there is none, nothing was ever started and the job is started now.
 func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subprocess.JobHandle, Executor, error) {
-	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		return nil, nil, err
+	}
+	executor, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
 	}
@@ -753,7 +816,7 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 		// The marker landed and the dispatch did not: the previous reconciler
 		// died in the window the marker exists to make safe. Nothing is
 		// running, so this one starts it.
-		handle, err := executor.Start(r.jobSpec(r.dispatchFor(marker)))
+		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, r.startFailure(marker.TickID, err)
 		}
@@ -814,7 +877,7 @@ func (r *Reconciler) replayClaim(ctx context.Context, tick string) {
 		"claimed for %s while adopting: the dispatch that made the marker never reached its claim", r.opts.Owner)
 }
 
-func (r *Reconciler) dispatchFor(marker attemptHandle) Dispatch {
+func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
@@ -830,8 +893,17 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) Dispatch {
 	if dispatch.Role == "" {
 		dispatch.Role = "implement-tick"
 	}
-	dispatch.Profile = r.profileFor(dispatch.Role)
-	return dispatch
+	// The profile an adopted attempt re-joins is the one it was DISPATCHED
+	// under: the marker's own tier, not whatever this incarnation would
+	// derive today. A config edited between incarnations does not retro-fit a
+	// running attempt with a different model.
+	profile, err := r.profileForTier(dispatch.Role, marker.Tier)
+	if err != nil {
+		return Dispatch{}, fmt.Errorf("attempt %d of %s recorded tier %q and no profile resolves against the "+
+			"runner configuration as it stands: %w", marker.Attempt, marker.TickID, marker.Tier, err)
+	}
+	dispatch.Profile = profile
+	return dispatch, nil
 }
 
 // findAttemptState locates the executor's own state directory for a dispatch.
@@ -1154,7 +1226,12 @@ func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
 	if !found {
 		return
 	}
-	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		r.record(marker.TickID, StageCleanedUp, "the executor for the rejected attempt could not be built: %v", err)
+		return
+	}
+	executor, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the executor for the rejected attempt could not be built: %v", err)
 		return

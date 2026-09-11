@@ -395,7 +395,11 @@ func addressAttempt(t *testing.T, f *fixture, marker attemptHandle) (*subprocess
 		t.Fatal(err)
 	}
 	marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
-	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		t.Fatal(err)
 	}

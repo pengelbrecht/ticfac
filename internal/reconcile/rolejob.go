@@ -195,7 +195,10 @@ func (r *Reconciler) recordDecision(entry planEntry, marker attemptHandle, answe
 	if err != nil {
 		return fmt.Errorf("record the %s decision for %s: %w", entry.Role, marker.TickID, err)
 	}
-	dispatch := r.dispatchFor(marker)
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		return err
+	}
 	profile := dispatch.Profile
 	request := map[string]any{
 		"tick_id":       marker.TickID,
