@@ -196,7 +196,11 @@ func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by 
 // attempt the run has not rejected is still refused: the next run collects it,
 // and releasing it would throw away the report it left.
 func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
-	executor, err := r.opts.NewExecutor(r.dispatchFor(marker))
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	executor, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("reconcile: build the executor for %s: %w", marker.TickID, err)
 	}
@@ -313,7 +317,10 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string) (i
 	}
 
 	stamp := r.now().UTC().Format(time.RFC3339)
-	dispatch := r.dispatchFor(marker)
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		return 0, fmt.Errorf("record the settlement decision for %s: %w", marker.TickID, err)
+	}
 	outcome, err := r.store.PutDecision(runstate.Decision{
 		Decision: number,
 		Role:     settleRole,

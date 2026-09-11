@@ -268,6 +268,7 @@ func validate(cfg *Config, md toml.MetaData, foreign map[string]bool) Validation
 	validateOrchestration(cfg, md, add)
 	validateRoles(cfg, md, add)
 	validateCommands(cfg, md, add)
+	validateTierPolicy(cfg, md, add)
 
 	sort.SliceStable(errs, func(i, j int) bool { return errs[i].Path < errs[j].Path })
 	return errs
@@ -570,6 +571,135 @@ func validateSandbox(cfg *Config, md toml.MetaData, add addFunc, textOwner map[s
 			textOwner[cmd.Command] = path
 		}
 	}
+}
+
+// validateTierPolicy enforces [tier_policy] — the evaluated mapping from tick
+// facts to a dispatch tier (tierpolicy.go is the derivation it declares for).
+// Every refusal here is about the same thing: a policy nobody can evaluate is
+// a policy a dispatch will interpret, and an interpreted policy is the
+// per-dispatch judgement call this table exists to retire.
+func validateTierPolicy(cfg *Config, md toml.MetaData, add addFunc) {
+	p := cfg.TierPolicy
+	if p == nil {
+		return
+	}
+
+	// The start of the ladder is the one required cell: a policy that cannot
+	// say where a first attempt starts cannot refuse one that starts high.
+	if !md.IsDefined("tier_policy", "default") {
+		add("tier_policy.default", "required — the tier a first attempt starts at")
+	} else if !isKnownTier(string(p.Default)) {
+		add("tier_policy.default", fmt.Sprintf("%q is not one of %s", string(p.Default), tierList()))
+	}
+	defaultKnown := isKnownTier(string(p.Default))
+
+	if md.IsDefined("tier_policy", "ceiling") {
+		if !isKnownTier(string(p.Ceiling)) {
+			add("tier_policy.ceiling", fmt.Sprintf("%q is not one of %s", string(p.Ceiling), tierList()))
+		} else if defaultKnown && tierIndex(p.Ceiling) < tierIndex(p.Default) {
+			add("tier_policy.ceiling", fmt.Sprintf("%q is below the default %q: the ceiling bounds ESCALATION, and a ceiling under where a first attempt starts is a default that cannot be honoured",
+				string(p.Ceiling), string(p.Default)))
+		}
+	}
+
+	if md.IsDefined("tier_policy", "step") && p.Step < 1 {
+		add("tier_policy.step", fmt.Sprintf("%d rungs per failed attempt is not a ladder step (>= 1)", p.Step))
+	}
+
+	if md.IsDefined("tier_policy", "label_prefix") {
+		if p.LabelPrefix == "" {
+			add("tier_policy.label_prefix", "must not be empty — omit the key to use the tier: namespace")
+		} else if strings.ContainsAny(p.LabelPrefix, " \t") {
+			add("tier_policy.label_prefix", fmt.Sprintf("%q contains whitespace: a label namespace with spaces is a label nobody can type consistently", p.LabelPrefix))
+		}
+	}
+
+	for i, rule := range p.Start {
+		base := fmt.Sprintf("tier_policy.start[%d]", i)
+		if rule == nil {
+			add(base, "must be a table")
+			continue
+		}
+		if rule.Tier == "" {
+			add(base+".tier", "required — a rule that matches everything and routes nowhere is a typo'd rule")
+		} else if !isKnownTier(string(rule.Tier)) {
+			add(base+".tier", fmt.Sprintf("%q is not one of %s", string(rule.Tier), tierList()))
+		} else if defaultKnown && tierIndex(rule.Tier) > tierIndex(p.Default) {
+			// The one rule that makes the ladder a ladder rather than a wish:
+			// facts may make a first attempt CHEAPER, never dearer.
+			add(base+".tier", fmt.Sprintf("%q is above the default %q: nothing starts high on a description — expense is earned by a failed attempt, not asserted by a rule",
+				string(rule.Tier), string(p.Default)))
+		}
+		if rule.Types != nil && len(rule.Types) == 0 {
+			add(base+".types", "must not be empty — an empty list can never match, and a rule that cannot match is a typo'd rule")
+		}
+		if rule.Roles != nil && len(rule.Roles) == 0 {
+			add(base+".roles", "must not be empty — an empty list can never match, and a rule that cannot match is a typo'd rule")
+		}
+		for _, stated := range rule.Roles {
+			if !rolePattern.MatchString(stated) {
+				add(base+".roles", fmt.Sprintf("%q is not a role name", stated))
+			}
+		}
+		if rule.MinPriority != nil && rule.MaxPriority != nil && *rule.MinPriority > *rule.MaxPriority {
+			add(base+".min_priority", fmt.Sprintf("%d is above max_priority %d: the bound is empty and matches nothing", *rule.MinPriority, *rule.MaxPriority))
+		}
+		if rule.Wave != nil && *rule.Wave < 1 {
+			add(base+".wave", fmt.Sprintf("%d is not a wave number (waves are 1-based)", *rule.Wave))
+		}
+		if (rule.MinBlocks != nil && *rule.MinBlocks < 0) || (rule.MaxBlocks != nil && *rule.MaxBlocks < 0) {
+			add(base+".min_blocks", "a block count cannot be negative")
+		}
+		if rule.MinBlocks != nil && rule.MaxBlocks != nil && *rule.MinBlocks > *rule.MaxBlocks {
+			add(base+".min_blocks", fmt.Sprintf("%d is above max_blocks %d: the bound is empty and matches nothing", *rule.MinBlocks, *rule.MaxBlocks))
+		}
+	}
+
+	for _, name := range sortedKeys(p.Roles) {
+		path := "tier_policy.roles." + name
+		if !tierPolicyRoleNames[name] {
+			add(path, fmt.Sprintf("%q is not a role this policy can be asked about (implement-tick/implement, review-epic/review, closeout-epic/closeout, plan-epic/plan)", name))
+		}
+		// An EMPTY route is legal and means "the role's own base values, no
+		// overlay": an operator pinning closeout to base is declaring a route,
+		// and the empty tier is how the derivation spells it.
+		if p.Roles[name] != "" && !isKnownTier(string(p.Roles[name])) {
+			add(path, fmt.Sprintf("%q is not one of the tiers %s, or the empty route \"\" for the role's own base values", string(p.Roles[name]), tierList()))
+		}
+	}
+
+	for _, tier := range sortedKeys(p.Concurrency) {
+		path := "tier_policy.concurrency." + tier
+		if !isKnownTier(tier) {
+			add(path, fmt.Sprintf("%q is not one of %s", tier, tierList()))
+			continue
+		}
+		if p.Concurrency[tier] < 1 {
+			add(path, fmt.Sprintf("%d is not a width (>= 1)", p.Concurrency[tier]))
+		}
+	}
+
+	if p.RateLimit != nil {
+		if md.IsDefined("tier_policy", "rate_limit", "response") && p.RateLimit.Response != "backoff-and-retry" {
+			add("tier_policy.rate_limit.response", fmt.Sprintf("%q is not one of the answers this package will declare — backoff-and-retry is the only one: an immediate retry is how a transient 429 became a dead worker on wave 2", p.RateLimit.Response))
+		}
+		if md.IsDefined("tier_policy", "rate_limit", "max_attempts") && p.RateLimit.MaxAttempts < 1 {
+			add("tier_policy.rate_limit.max_attempts", fmt.Sprintf("%d is not a retry budget (>= 1)", p.RateLimit.MaxAttempts))
+		}
+		if md.IsDefined("tier_policy", "rate_limit", "max_delay_ms") && p.RateLimit.MaxDelayMs < 1000 {
+			add("tier_policy.rate_limit.max_delay_ms", fmt.Sprintf("%dms is not a backoff ceiling (>= 1000): a per-minute provider cap needs roughly a minute of patience, not a pause shorter than the request that earned it", p.RateLimit.MaxDelayMs))
+		}
+	}
+}
+
+// tierPolicyRoleNames are the role names [tier_policy.roles] accepts — every
+// spelling the ecosystem uses, so a policy key nobody can match is a typo
+// rather than a route to a role that does not exist.
+var tierPolicyRoleNames = map[string]bool{
+	"implement-tick": true, "implement": true,
+	"review-epic": true, "review": true,
+	"closeout-epic": true, "closeout": true, "close-out": true,
+	"plan-epic": true, "plan": true,
 }
 
 func checkNotes(add addFunc, md toml.MetaData, table, notes string) {

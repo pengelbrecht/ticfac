@@ -69,13 +69,19 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	// The profile digest is the digest of the profile THIS tick's role was
 	// dispatched under, not the run's set: a check run under a different
 	// profile evaluated something else, and that is what the fingerprint is
-	// for.
+	// for. Since tick 5eq that means the role AT THE TIER the dispatch
+	// derived — the marker's own record of it — and not the role's base
+	// profile, which a tiered dispatch never used.
+	dispatchProfile, err := r.profileOfMarker(marker)
+	if err != nil {
+		return fmt.Errorf("the gate for %s cannot say which profile dispatched it: %w", tick, err)
+	}
 	fingerprint := Fingerprint{
 		"source_sha":              merged.GateSHA,
 		"attempt_head":            merged.AttemptHead,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": r.gateDigest,
-		"profile_digest":          r.profileFor(marker.Role).Digest,
+		"profile_digest":          dispatchProfile.Digest,
 	}
 
 	passed := true
@@ -205,16 +211,19 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 			// and the merge this run made on it. A `phase: integrated` record
 			// whose source is the attempt's own branch says the check ran
 			// somewhere it did not.
-			SourceRef:             fingerprint["integration_ref"],
-			SourceSHA:             fingerprint["source_sha"],
-			IntegrationRef:        runstate.Ptr(fingerprint["integration_ref"]),
-			Phase:                 runstate.PhaseIntegrated,
-			Executor:              runstate.Ptr(subprocess.ExecutorName),
-			WorkspaceID:           nil,
-			Backend:               nil,
-			Role:                  runstate.Ptr(marker.Role),
-			ProfileDigest:         runstate.Ptr(fingerprint["profile_digest"]),
-			Model:                 runstate.Ptr(r.profileFor(marker.Role).Model),
+			SourceRef:      fingerprint["integration_ref"],
+			SourceSHA:      fingerprint["source_sha"],
+			IntegrationRef: runstate.Ptr(fingerprint["integration_ref"]),
+			Phase:          runstate.PhaseIntegrated,
+			Executor:       runstate.Ptr(subprocess.ExecutorName),
+			WorkspaceID:    nil,
+			Backend:        nil,
+			Role:           runstate.Ptr(marker.Role),
+			ProfileDigest:  runstate.Ptr(fingerprint["profile_digest"]),
+			// The model is the one the tier-resolved profile routes to — the
+			// model that DISPATCHED the attempt this gate is over, not the
+			// role's base one a tiered dispatch never used.
+			Model:                 runstate.Ptr(r.gateModel(marker)),
 			ContextManifestDigest: runstate.Ptr(fingerprint["context_manifest_digest"]),
 		},
 		Check:      runstate.Check{ID: command.Name, Kind: "command", Command: []string{"sh", "-c", command.Command}},
@@ -285,13 +294,30 @@ func (r *Reconciler) currentTarget(marker attemptHandle, merged merge) (Fingerpr
 	if err != nil {
 		return nil, err
 	}
+	dispatchProfile, err := r.profileOfMarker(marker)
+	if err != nil {
+		return nil, fmt.Errorf("the gate for %s cannot say which profile dispatched it: %w", marker.TickID, err)
+	}
 	return Fingerprint{
 		"source_sha":              gated,
 		"attempt_head":            head,
 		"integration_ref":         refFor(r.branch),
 		"context_manifest_digest": gate.Digest(),
-		"profile_digest":          r.profileFor(marker.Role).Digest,
+		"profile_digest":          dispatchProfile.Digest,
 	}, nil
+}
+
+// gateModel is the model the evidence record's provenance names: the one
+// the dispatch's own profile routed to. On a resolution failure it is the
+// role's base model, said in the run's own record — the evidence has already
+// established its fingerprint against the resolved profile, and a second
+// refusal inside a record build would lose the gate's actual result, which is
+// the one thing that cannot be re-derived.
+func (r *Reconciler) gateModel(marker attemptHandle) string {
+	if p, err := r.profileOfMarker(marker); err == nil {
+		return p.Model
+	}
+	return r.profileFor(marker.Role).Model
 }
 
 // closeTick closes the tick durably, through the tracker, and only after the

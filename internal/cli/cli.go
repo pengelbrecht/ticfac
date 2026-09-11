@@ -52,7 +52,10 @@ run-epic flags:
   --run-id <id>       the run's id (default: epic-<epic-id>)
   --owner <name>      who claims a tick in the tracker (default: ticfac)
   --runner <name>     claude | codex | pi, when a profile routes none (default: $TICFAC_RUNNER, else claude)
-  --tier <name>       a [roles.*.tiers.<name>] overlay in the target repo's runners.toml
+  --tier <name>       pin a [roles.*.tiers.<name>] overlay for EVERY dispatch of the run —
+                      an operator's explicit override; by default each dispatch DERIVES its
+                      tier from [tier_policy] in the target repo's runners.toml (tick facts,
+                      attempt number, declared ladder), or runs at the role's base values
   --profiles <dir>    resolve role profiles from this directory instead of the compiled-in ones
   --state-root <dir>  where attempt state lives, OUTSIDE the repository
   --gate <file>       the runners.toml the integrated gate is read from
@@ -122,7 +125,7 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		runID     = fs.String("run-id", "", "the run's id")
 		owner     = fs.String("owner", "ticfac", "who claims a tick in the tracker")
 		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
-		tier      = fs.String("tier", "", "a [roles.*.tiers.<name>] overlay in the target repository's runners.toml")
+		tier      = fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])")
 		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
 		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
 		gate      = fs.String("gate", "", "the runners.toml the integrated gate is read from")
@@ -238,7 +241,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		branch    = fs.String("branch", "", "the EpicRun integration branch")
 		runID     = fs.String("run-id", "", "the run's id")
 		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
-		tier      = fs.String("tier", "", "a [roles.*.tiers.<name>] overlay in the target repository's runners.toml")
+		tier      = fs.String("tier", "", "the tier the released attempt was dispatched at, as for run-epic")
 		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
 		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
 		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
