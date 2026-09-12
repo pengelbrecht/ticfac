@@ -46,3 +46,14 @@ var JobProtocolJSON []byte
 //
 //go:embed contracts/tk-json-manifest.json
 var TkJSONManifestJSON []byte
+
+// SourcePinJSON is factory.pin.json: which ticks ref the orchestrator image
+// builds its tk from (ARG TK_SOURCE_REF / ARG TK_VERSION in the staged
+// cloud/sandbox Dockerfile). Embedded for the reason every pin here is — a
+// pin read off disk at run time could disagree with the binary beside it —
+// and for the reason it is a committed file at all: which ticks built a
+// deployment's sandbox is a property of the deployment, reviewable in a
+// diff. See internal/factory/sourceref.go.
+//
+//go:embed factory.pin.json
+var SourcePinJSON []byte
