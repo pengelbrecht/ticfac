@@ -1,8 +1,8 @@
 {
   "id": "9t0",
   "title": "Pin the split in the contract bundle: the table enumeration and the substrate enum",
-  "notes": "2026-09-11 20:08 - Scope addition from 5eq: the derived TIER should become a field of the pinned Provenance object. It is carried durably today on the dispatch marker (dispatch.go:72,83,109) and implied by the tier-resolved profile digest, but internal/runstate/records.go Provenance has no tier field, so an over-tiered run still cannot be audited from provenance alone. That needs the same upstream bundle bump this tick already owns.\n2026-09-12 14:07 - Third scope addition, from 7vn: the typed findings list should become a first-class bundle-pinned field of the role-result envelope rather than riding in the open result payload. 7vn's RESULT spells out the exact upstream delta, ready to file. This tick now carries three upstream bundle items: the runners-config table enumeration and substrate enum (its own), the tier in Provenance (from 5eq), and the findings channel (from 7vn).",
-  "status": "open",
+  "notes": "2026-09-11 20:08 - Scope addition from 5eq: the derived TIER should become a field of the pinned Provenance object. It is carried durably today on the dispatch marker (dispatch.go:72,83,109) and implied by the tier-resolved profile digest, but internal/runstate/records.go Provenance has no tier field, so an over-tiered run still cannot be audited from provenance alone. That needs the same upstream bundle bump this tick already owns.\n2026-09-12 14:07 - Third scope addition, from 7vn: the typed findings list should become a first-class bundle-pinned field of the role-result envelope rather than riding in the open result payload. 7vn's RESULT spells out the exact upstream delta, ready to file. This tick now carries three upstream bundle items: the runners-config table enumeration and substrate enum (its own), the tier in Provenance (from 5eq), and the findings channel (from 7vn).\n2026-09-12 14:09 - runner-state: dispatched on pi/cloudflare GLM-5.3 from base 4da41cd",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -12,5 +12,6 @@
   "parent": "av8",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T17:21:50.814772Z",
-  "updated_at": "2026-09-12T12:07:42.650946Z"
+  "updated_at": "2026-09-12T12:09:55.34616Z",
+  "started_at": "2026-09-12T12:07:55.575937Z"
 }

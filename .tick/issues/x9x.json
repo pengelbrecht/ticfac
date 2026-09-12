@@ -2,8 +2,8 @@
   "id": "x9x",
   "title": "Readiness without scraping, and a gate that claims only what it saw",
   "description": "Kill the last screen scrape, and stop the error message asserting a cause it\nnever observed.\n\nScreen scraping is already nearly eliminated in ticks: exactly ONE pane read\nexists in the whole repo, and the rule against scraping is written into both the\nworker prompt (spawn/prompt.go:106, \"Your terminal output is not read\") and\nskills/ticks/references/herdr-runner.md. This tick closes the hole.\n\nThe hole is the first-round-trip gate (spawn/spawn.go:496-527, Classify at\n:549-561). It types a probe into the composer, reads the pane back with\nSourceRecentUnwrapped, whitespace-normalises, finds the LAST index of the probe\nstring, and looks for an answer word after it.\n\nThree defects:\n- A rendering change produces no findable echo, which classifies as a silent\n  drop, is retried maxGateAttempts times, and is then raised as a hard spawn\n  failure whose message asserts \"the agent started clean and cannot do work\n  (stale model string, auth or quota)\" (spawn.go:210). It never observed any of\n  that. THIS IS NOT HYPOTHETICAL: during the Phase 1 gate run a Claude session\n  usage limit presented as this exact message, and the orchestrator spent real\n  time diagnosing a composer that was fine.\n- PaneReadResult.Truncated (types.go:221) exists and is IGNORED at the call site\n  (spawn.go:496-505). A read that merely cut off the echo is indistinguishable\n  from a prompt that never arrived.\n- Readiness is a 250ms poll of agent.get because there is no push event\n  (spawn.go:429-453), flipping about a second after idle.\n\nDo:\n- Establish readiness over the PROTOCOL. Prefer an acknowledgement the agent\n  sends, or an event, over any rendered text. If a pane read must remain as a\n  last-resort fallback, it must honour Truncated and it must never be the sole\n  basis for a hard failure.\n- A gate failure states ONLY what was observed: \"no acknowledgement within N\" is\n  the finding; auth, quota and a stale model string are hypotheses and must be\n  offered as such if at all.\n- Distinguish \"the probe was not delivered\", \"the read was truncated\" and \"the\n  agent answered something unexpected\". Today all three are one classification.",
-  "notes": "2026-09-11 21:32 - not dispatched: wave width 4 was full (5hz, 7vn, axq, x6j). x6j holds a slot because its branch is unmerged and tick axq owns that merge; it frees when axq lands.",
-  "status": "open",
+  "notes": "2026-09-11 21:32 - not dispatched: wave width 4 was full (5hz, 7vn, axq, x6j). x6j holds a slot because its branch is unmerged and tick axq owns that merge; it frees when axq lands.\n2026-09-12 14:09 - runner-state: dispatched on pi/cloudflare GLM-5.3 from base 4da41cd",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -14,5 +14,6 @@
   "acceptance_criteria": "Readiness is established over the protocol; any remaining pane read honours Truncated and is never the sole basis for a hard failure; a gate failure message states only what was observed and offers auth, quota and stale-model as hypotheses if at all; 'not delivered', 'read truncated' and 'unexpected answer' are three distinguishable outcomes; a test drives a truncated read and asserts it is not reported as a failed agent; go test -short -timeout 45m ./... green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:22:45.75597Z",
-  "updated_at": "2026-09-11T19:32:09.038049Z"
+  "updated_at": "2026-09-12T12:09:55.323601Z",
+  "started_at": "2026-09-12T12:07:55.550855Z"
 }
