@@ -42,6 +42,8 @@ const usage = `ticfac — execution and orchestration for ticks
 usage:
   ticfac run-epic <epic-id>                     run one epic through the reconciler
   ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
+  ticfac findings <epic-id>                     list the worker findings drafted for triage
+  ticfac finding <epic-id> <key>                triage one drafted finding
   ticfac version [--json]                       report this build and the contract bundle it serves
 
 run-epic flags:
@@ -87,6 +89,29 @@ commits nothing merged. No run collects that attempt again (the teardown the
 refusal ran removed its worktree) and no run dispatches over it (that would
 orphan the only copy of the work), so a person reads the branch and then says
 here that the run may go on.
+
+findings and finding flags:
+  --repo <dir>         as for run-epic (default: cwd)
+  --remote <name>      as for run-epic (default: origin)
+  --branch <name>      as for run-epic (default: epic/<epic-id>)
+  --run-id <id>        as for run-epic (default: epic-<epic-id>)
+
+finding flags:
+  --promote-as <tick>  record the tick a promotion created — a bare tick id for a
+                       finding that belongs to this repository, <owner/name>:<tick-id>
+                       for one routed to the repository its target names
+  --discard            record that a person looked and said no
+  --by <who>           the person triaging (required): a decision nobody can
+                       attribute is one nobody can audit
+
+A worker that discovers something outside its tick reports it as a typed
+findings block in its report; the reconciler drafts each finding under
+.ticfac/runs/<run-id>/findings/ on the integration branch, stamped with the
+attempt that discovered it. A tick whose findings are untriaged is refused its
+close, which is what stops one falling on the floor. Promotion keeps the
+scope decision human: it records the tick YOU created — pass the draft's
+discovered_from to the tracker when you file it, so the attempt that found
+it is never lost again — and nothing here writes the tracker for you.
 `
 
 // Run executes one invocation and returns the process exit code. Everything is
@@ -103,6 +128,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runEpic(args[1:], stdout, stderr)
 	case "settle":
 		return settle(args[1:], stdout, stderr)
+	case "findings":
+		return findingsCommand(args[1:], stdout, stderr)
+	case "finding":
+		return findingCommand(args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "help", "-h", "--help":

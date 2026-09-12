@@ -535,8 +535,14 @@ func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
 // A model routed to a runner this executor cannot tell which model to use is
 // refused at CONSTRUCTION — before a tick is claimed, and before any record
 // says a model was applied.
+//
+// serial: this test swaps the package-level runnerAcceptsModel hook to make
+// a runner say it takes no model — the only reachable case for the guard it
+// exists to exercise. The hook is read by every parallel test's construction
+// path, so the swap must happen while those are paused, or it is a data race
+// that fails a neighbour's New (caught on tick 7vn's branch: the first run
+// whose scheduling overlapped them).
 func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	for _, role := range profile.Roles {
 		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)

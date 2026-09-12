@@ -45,12 +45,21 @@ const decorationCutset = " \t>-*#`"
 
 var statusLine = regexp.MustCompile(statusLinePattern)
 
-// Report is a parsed RESULT-<tick>.md.
+// Report is a parsed RESULT-<tick>.md: the FINAL status line, and the typed
+// findings block if the report carries one (findings.go).
 type Report struct {
 	Path   string
 	Status string
 	Detail string
 	Line   string
+
+	// Findings is the typed findings list the report's ```findings block
+	// carried, and FindingsProblem is why it could not be read when it could
+	// not. A block that does not parse is NOT dropped silently: dropping
+	// findings is the exact failure the channel exists to remove, so the
+	// problem is carried to the reconciler, which refuses the close behind it.
+	Findings        []Finding
+	FindingsProblem string
 }
 
 // NeedsHuman is the escalation set: two statuses that reach a person
@@ -59,12 +68,14 @@ func (r Report) NeedsHuman() bool {
 	return r.Status == StatusBlocked || r.Status == StatusNeedsContext
 }
 
-// ParseReport reads the FINAL status line of a report body. Everything is
-// empty when the report carries no recognisable status — which is the
-// `missing-result` verdict, so a body that stops matching here is a verdict
-// change too.
+// ParseReport reads the FINAL status line of a report body, and the FINAL
+// findings block. Everything is empty when the report carries no recognisable
+// status — which is the `missing-result` verdict, so a body that stops
+// matching here is a verdict change too.
 func ParseReport(body string) Report {
 	var out Report
+	findings, problem := ParseFindings(body)
+	out.Findings, out.FindingsProblem = findings, problem
 	for _, raw := range strings.Split(body, "\n") {
 		trimmed := strings.Trim(strings.TrimRight(raw, "\r"), decorationCutset)
 		m := statusLine.FindStringSubmatch(trimmed)

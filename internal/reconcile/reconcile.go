@@ -302,6 +302,13 @@ const (
 	// claimed, so "why was this expensive" is a question the run's own
 	// record answers.
 	StageTierDerived = "tier_derived"
+
+	// The findings channel (tick 7vn): one stage for the first draft of a
+	// finding, one for every repeat — a repeat proposes nothing new, and the
+	// journal says so rather than falling silent, because a dedup nobody
+	// can see is indistinguishable from a channel that drops findings.
+	StageFindingFiled     = "finding_filed"
+	StageFindingDuplicate = "finding_duplicate"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -977,6 +984,19 @@ const (
 	// why it names the tick AND the label and never falls back to the default
 	// tier: an override that quietly failed is an override nobody can audit.
 	RefusedTierLabel = "tier_label_unrecognised"
+
+	// The two the FINDINGS channel adds (tick 7vn). A worker's discoveries
+	// outside its tick are discovery, not deliverable: the first is a report
+	// this reconciler cannot read — a findings block that does not parse, a
+	// finding outside the vocabularies — and closing the tick behind it would
+	// be the 604 failure with one more step in it: findings read by nobody.
+	// The second is the close's other gate: a tick whose findings nobody has
+	// triaged is not closed, which is the one thing that stops a finding
+	// falling on the floor. They are distinct because they send the next
+	// repair somewhere different — the first at the worker's report block,
+	// the second at the person the draft is waiting for.
+	RefusedFindingInvalid   = "finding_report_invalid"
+	RefusedFindingUntriaged = "finding_untriaged"
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9

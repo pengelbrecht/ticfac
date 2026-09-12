@@ -65,7 +65,7 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 		return nil
 	}
 
-	collected, answer, err := r.collectRole(entry, handle, executor, marker, status)
+	collected, answer, err := r.collectRole(ctx, entry, handle, executor, marker, status)
 	if err != nil {
 		r.disposeRefused(handle, executor, marker, err)
 		return err
@@ -105,7 +105,7 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 // every review this phase runs. What it does keep is A10's boundary — a job
 // that wrote under an authority that is not its own is refused whatever it
 // answered — and then the envelope itself.
-func (r *Reconciler) collectRole(entry planEntry, handle *subprocess.JobHandle, executor Executor,
+func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *subprocess.JobHandle, executor Executor,
 	marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, *subprocess.RoleResult, error) {
 
 	tick := marker.TickID
@@ -131,6 +131,14 @@ func (r *Reconciler) collectRole(entry planEntry, handle *subprocess.JobHandle, 
 			"the %s job for %s was collected against base %s, but this run dispatched it at %s: the diff the "+
 				"boundary check read is not the diff of this attempt",
 			entry.Role, tick, short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+	}
+
+	// The findings channel (tick 7vn), before the envelope is even validated:
+	// a review's whole deliverable is an answer, and its findings are the
+	// discoveries the answer made — the 604 shape, an upstream finding that
+	// reached the tracker only because an orchestrator read that far.
+	if err := r.fileFindings(ctx, marker, collected); err != nil {
+		return nil, nil, err
 	}
 
 	if len(collected.BoundaryViolations) > 0 && r.guarded(guardSubstrateEnforcesBoundary) {
@@ -255,6 +263,17 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
+		// The close's other gate (tick 7vn), same rule as the integrated
+		// close: a role job's findings are discoveries its answer made, and a
+		// tick whose findings are untriaged is not closed — behind a validated
+		// envelope or anything else.
+		if refusal, err := r.gateOnFindings(tick); err != nil {
+			return err
+		} else if refusal != nil {
+			r.setTick(tick, "rejected")
+			r.record(tick, StageRejected, "%s: %s", refusal.Reason, firstLine(refusal.Message))
+			return refusal
+		}
 		note := fmt.Sprintf("ticfac run %s: the %s job (attempt %d) returned a validated %s envelope at %s — %s: %s",
 			r.runID, answer.Role, marker.Attempt, answer.SchemaID, short(marker.BaseSHA), answer.Status, answer.Summary)
 		if _, err := r.tracker.Note(ctx, tick, note); err != nil {

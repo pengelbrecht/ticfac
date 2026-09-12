@@ -35,7 +35,15 @@ type Collection struct {
 	// BoundaryViolations (the tracker's own .tick/.ticfac authority) because
 	// the two are different problems even though both refuse the same way.
 	ArtifactViolations []string
-	Message            string
+	// Findings is the typed findings list the worker's report carried, and
+	// FindingsProblem is why the block could not be read when it could not.
+	// They travel beside the protocol record for the same reason the boundary
+	// attempts do: `result` inside the role_result envelope carries them too,
+	// but the reconciler acts on the typed list, not on a map it re-reads.
+	Findings        []Finding
+	FindingsProblem string
+
+	Message string
 }
 
 // Collect returns the protocol record.
@@ -126,6 +134,14 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 				"report_path":         report.Path,
 				"boundary_violations": stringsOrEmpty(append(append([]string{}, violations...), artifactViolations...)),
 				"needs_human":         report.NeedsHuman(),
+				// The findings channel (tick 7vn): the typed list rides in the
+				// envelope's one open object — `result` is the role's own payload,
+				// which is exactly where a worker's findings belong. Stated even
+				// when empty, so a report that carried no findings block and one
+				// whose block did not parse cannot read identically: the second
+				// also names why.
+				"findings":         FindingsAsAny(report.Findings),
+				"findings_problem": report.FindingsProblem,
 			},
 		}
 	}
@@ -137,6 +153,8 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 		HasReport:          hasReport,
 		BoundaryViolations: violations,
 		ArtifactViolations: artifactViolations,
+		Findings:           report.Findings,
+		FindingsProblem:    report.FindingsProblem,
 		Message:            e.message(reason, class, record, append(append([]string{}, violations...), artifactViolations...)),
 	}
 

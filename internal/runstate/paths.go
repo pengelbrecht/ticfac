@@ -67,3 +67,9 @@ func checkIndex(kind string, n int) error {
 	}
 	return nil
 }
+
+// FindingPath is `.ticfac/runs/<run-id>/findings/<key>.json`, where <key> is
+// the draft's own dedup key — the external_ref half of (source, external_ref).
+func FindingPath(runID, key string) string {
+	return RunDir(runID) + "/findings/" + key + ".json"
+}

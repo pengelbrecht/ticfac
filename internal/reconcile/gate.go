@@ -338,6 +338,22 @@ func (r *Reconciler) closeTick(ctx context.Context, entry planEntry, marker atte
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
+		// The close's other gate (tick 7vn): a tick whose findings have not
+		// been triaged does not close. The gate has already passed and the
+		// merge is already on the integration branch, so the repair is not
+		// the tree and not the worker — it is the person the drafted finding is waiting for, and
+		// the refusal names exactly where they act.
+		if refusal, err := r.gateOnFindings(tick); err != nil {
+			return err
+		} else if refusal != nil {
+			r.setTick(tick, "rejected")
+			r.record(tick, StageRejected, "%s: %s", refusal.Reason, firstLine(refusal.Message))
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("%s is refused its close: a drafted finding is untriaged", tick)); err != nil {
+				return err
+			}
+			return refusal
+		}
 		note := fmt.Sprintf("ticfac run %s: attempt %d merged into %s as %s; the integrated gate (%s) passed.",
 			r.runID, marker.Attempt, r.branch, short(merged.GateSHA), r.gate)
 		if _, err := r.tracker.Note(ctx, tick, note); err != nil {

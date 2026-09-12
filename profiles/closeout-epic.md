@@ -7,7 +7,10 @@ is the record of it.
   from the integration branch and the ticks' own reports — never from memory of
   the plan.
 - Name what is left open: a deferred decision, a follow-up worth a tick of its
-  own, a concern a worker raised that nothing has answered yet.
+  own, a concern a worker raised that nothing has answered yet. A follow-up
+  you would file as a tick is a typed `findings` block in your report (see
+  the implement-tick profile for the format), not prose: the orchestrator
+  drafts it mechanically from the block and a person promotes it.
 - Compact what was LEARNED into the repository's learnings, as Problem → Cause →
   Rule, and only where the lesson would change what the next epic does. A
   learning that restates the code is noise.

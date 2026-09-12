@@ -122,6 +122,11 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 				"report_path":         report.Path,
 				"boundary_violations": violationsOrEmpty(allViolations),
 				"needs_human":         report.NeedsHuman(),
+				// The findings channel (tick 7vn), shared with the local executor
+				// through the same helper and the same vocabulary: a report block
+				// means the same thing whichever executor collected it.
+				"findings":         subprocess.FindingsAsAny(report.Findings),
+				"findings_problem": report.FindingsProblem,
 			},
 		}
 	}
@@ -133,6 +138,8 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		HasReport:          hasReport,
 		BoundaryViolations: violations,
 		ArtifactViolations: artifactViolations,
+		Findings:           report.Findings,
+		FindingsProblem:    report.FindingsProblem,
 		Message:            collectMessage(reason, class, record, allViolations),
 	}
 

@@ -30,6 +30,39 @@ report() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+findings_block() {
+	# The findings channel (tick 7vn): the typed block a worker reports its
+	# discoveries in. Two findings, deliberately different in target: one for
+	# the repository being run, one routed upstream — a worker that discovers
+	# something on ANOTHER tracker names which one, and the draft keeps it.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "A finding the fake runner proposes",'
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": ""'
+		printf '%s\n' '}, {'
+		printf '%s\n' '  "kind": "upstream-tick",'
+		printf '%s\n' '  "title": "An upstream finding routed to another repository",'
+		printf '%s\n' '  "body": "",'
+		printf '%s\n' '  "severity": "low",'
+		printf '%s\n' '  "target": "pengelbrecht/ticks"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
+report_with_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
 case "$mode" in
 report)
 	commit
@@ -41,6 +74,56 @@ silent)
 	;;
 nocommit)
 	report
+	;;
+finding)
+	# The discovery case: the work is done, the report is DONE, and the
+	# report also carries a typed findings block — one finding for this
+	# repository and one routed upstream.
+	commit
+	report_with_findings
+	;;
+review_finding)
+	# The 604 shape: only the review job reports findings — an upstream
+	# discovery made by a read-only role job whose deliverable is its answer.
+	# Everything else is the plain report mode.
+	if [ "$TICFAC_TICK" = "rv" ]; then
+		report_with_findings
+	else
+		commit
+		report
+	fi
+	;;
+finding_bad)
+	# A findings block that does not parse: collect carries the problem, and
+	# the reconciler refuses the attempt rather than closing the tick behind
+	# findings nobody could read.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{"kind": "defect", "title": "a block that never ends",'
+		printf '%s\n' '```'
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
+finding_blocked)
+	# The v3i shape: the FIRST attempt of a1 finds a blocker of its own and
+	# answers BLOCKED with nothing committed — but its report also carries a
+	# typed finding, so the discovery is drafted even though the attempt is
+	# refused. Every later attempt of a1 commits, answers DONE, and reports
+	# the SAME finding: the dedup case, a finding that recurs until it is
+	# fixed. Other ticks behave like the plain report mode.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_ATTEMPT" = "1" ]; then
+		status=BLOCKED
+		report_with_findings
+	elif [ "$TICFAC_TICK" = "a1" ]; then
+		commit
+		report_with_findings
+	else
+		commit
+		report
+	fi
 	;;
 blocked-first)
 	# Attempt 1 is a worker that found a blocker of its own still open and said

@@ -111,6 +111,19 @@
 // and lifecycle_test.go replays the fixture's own sequences against the real
 // reconciler for each of them.
 //
+// One more thing a run refuses to lose, because it lost it four times on one
+// epic (tick 7vn): the DISCOVERIES a worker makes outside its tick. A worker
+// reports them as a typed `findings` block in its report; collect lifts them
+// (executors/findings.go, both executors), and this package drafts each one
+// durably on origin under `.ticfac/runs/<run-id>/findings/`, stamped with the
+// attempt that discovered it (findings.go) — the funnel shape ticks already
+// runs for its declared sources, deduplicated on (source, external_ref), a
+// repeat proposing nothing new whatever the human did with the original. A
+// tick whose findings are untriaged is refused its close, which is the one
+// thing that stops a finding falling on the floor; a person triages with
+// `ticfac finding`, promoting into the repository the finding targets (never
+// this package: a draft is not a tick, and the scope decision stays human).
+//
 // Four of the five are kept by the shipped binary. A11's read site is
 // (MayDispatch, before every dispatch) and its release is (`ticfac settle`,
 // recorded as a decision), but its hold TABLE is written only by the fixture's
