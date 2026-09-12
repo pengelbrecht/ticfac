@@ -90,7 +90,29 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	agentGone := st.agentGone()
 	wallExceeded := st.wallExceeded()
 
-	verdict, outcome, class, reason := classify(commits, hasReport, report, violations, artifactViolations, cancelled, agentGone, wallExceeded)
+	// x6j's hold, at the one place a verdict could have been minted out of
+	// the substrate's silence. No report, no cancellation, no settlement
+	// any leg recorded — the attempt was never answered, positively or
+	// otherwise, and nobody can say whether it is still running. That is
+	// not "the worker failed", which is a verdict; it is a question only a
+	// person can settle, so the collect refuses with the liveness-unknown
+	// hold rather than answering. The reconciler stops without rejecting
+	// the tick, nothing is torn down after a refusal, and the next run's
+	// adopt holds the attempt for a person. (A launch that was never
+	// confirmed is the executor's OWN settlement record and passes; the
+	// report and the cancellation record are durable evidence and pass —
+	// and so does the wall-clock stop marker (gwc), which is this
+	// executor's own durable record that IT settled the attempt, never
+	// herdr's silence.)
+	if !hasReport && !cancelled && !agentGone && !wallExceeded && record.LaunchConfirmed {
+		return nil, refuse(subprocess.RefusedUnknown,
+			"attempt %d of %s has no report at %s and no settlement this executor recorded: nobody can say "+
+				"whether it is still running, which is not the same as nothing running — it is held for a person, "+
+				"never collected into a verdict",
+			record.Attempt, record.JobID, record.ResultPath)
+	}
+
+	verdict, outcome, class, reason := classify(commits, hasReport, report, violations, artifactViolations, cancelled, wallExceeded)
 
 	result := &subprocess.JobResult{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -163,8 +185,12 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // ahead of it (cancelled, no-commits) outrank it, and a worker that reported
 // before the stop caught it never reaches a failing check at all, because
 // the report and the branch are read the usual way.
+//
+// It is reached only for attempts that carry settlement evidence — the
+// liveness-unknown hold in CollectDetail returned first — so every branch
+// below is a verdict from durable evidence, never a guess.
 func classify(commits int, hasReport bool, report subprocess.Report,
-	violations, artifactViolations []string, cancelled, agentGone, wallExceeded bool) (verdict, outcome, class, reason string) {
+	violations, artifactViolations []string, cancelled, wallExceeded bool) (verdict, outcome, class, reason string) {
 
 	// The order is the LOCAL executor's own, because it is the collect
 	// vocabulary's: the same tick with the same facts must collect the same
@@ -177,20 +203,29 @@ func classify(commits int, hasReport bool, report subprocess.Report,
 	case commits == 0:
 		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
 	case !hasReport || report.Status == "":
-		// No report. Whether that is a settled worker that failed to say
-		// so, or an attempt nothing can settle yet, is a question the
-		// SETTLEMENT evidence answers — never herdr, and never this
-		// function's caller's patience. A worker this executor stopped at
-		// its wall clock is its own failure class: stopped-at-the-bound and
-		// merely settled are different verdicts, and the durable wall
-		// marker is what keeps them apart on a herdr-free collect.
+		// No report, or one nobody can read. Which of the two it is, the
+		// SETTLEMENT evidence has already answered — the hold in
+		// CollectDetail returned for the attempt nothing settled, so every
+		// shape left here carries durable evidence. A worker this executor
+		// stopped at its wall clock is its own failure class:
+		// stopped-at-the-bound and merely settled are different verdicts,
+		// and the durable wall marker is what keeps them apart on a
+		// herdr-free collect — the same first-failing-check order the local
+		// executor's collect answers.
 		if wallExceeded {
 			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureWallClockExceeded, reasonWallClockStopped
 		}
-		if agentGone {
+		if !hasReport {
+			// No report, on an attempt the durable layer settled: the
+			// agent-gone marker — herdr's POSITIVE answer, recorded when it
+			// was observed — or the executor's own record of a launch that
+			// never confirmed.
 			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonSettledNoReport
 		}
-		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonUnsettled
+		// A report the worker left that carries no STATUS line: the worker
+		// finished and left an answer nobody can read — its own shape, not
+		// the same sentence as a report that was never written.
+		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportNoStatus
 	case len(violations) > 0:
 		return subprocess.VerdictBoundaryViolation, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictBoundaryViolation
 	case len(artifactViolations) > 0:
@@ -216,7 +251,7 @@ func classify(commits int, hasReport bool, report subprocess.Report,
 const (
 	reasonCancelled         = "cancelled"
 	reasonSettledNoReport   = "settled-no-report"
-	reasonUnsettled         = "unsettled"
+	reasonReportNoStatus    = "report-no-status"
 	reasonArtifactCommitted = "artifact-committed"
 	// reasonWallClockStopped is the stop at the bound: a distinct reason so
 	// the message keyed on it can say what happened without inheriting the
@@ -238,9 +273,9 @@ func collectMessage(reason, class string, record *attemptRecord, violations []st
 	case reasonSettledNoReport:
 		return fmt.Sprintf("the agent settled with no report at %s: settled is not finished, and this is neither running nor done",
 			record.ResultPath)
-	case reasonUnsettled:
-		return fmt.Sprintf("there is no report at %s and no settlement this executor recorded for the attempt: "+
-			"it is not this collect's to settle", record.ResultPath)
+	case reasonReportNoStatus:
+		return fmt.Sprintf("the report at %s carries no STATUS line: the worker finished and left an answer nobody can read",
+			record.ResultPath)
 	case reasonArtifactCommitted:
 		// Not the tracker sentence: a committed report artifact is this
 		// executor's own boundary the agent bypassed, and telling a person

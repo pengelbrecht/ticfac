@@ -152,6 +152,17 @@ func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, st
 	}
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	if err != nil {
+		if gone(err) {
+			// herdr's POSITIVE answer that nobody is there (classify.go): the
+			// one answer that makes removal safe. It is recorded durably —
+			// the marker is what a herdr-free collect would read — and the
+			// removal proceeds. Treating it as a failure here would strand a
+			// settled attempt forever: every later dispose would refuse on
+			// the same positive answer, and the workspace would never go.
+			_ = e.storeAt(record.State).markAgentGone(e.stamp())
+			return teardownGone, fmt.Sprintf(
+				"herdr answers that the agent %s is no longer there", record.AgentName), nil
+		}
 		// "herdr did not answer is not evidence that tearing an agent down
 		// is safe" — the refusal as the failure, not a guess.
 		return 0, "herdr could not be asked whether the agent is still there", err

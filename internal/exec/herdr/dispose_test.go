@@ -125,6 +125,45 @@ func TestDisposeRefusesOnAnUnansweredLivenessQuestion(t *testing.T) {
 	}
 }
 
+// TestDisposeRemovesAProvablyGoneAgent is the other half of the liveness
+// classification (classify.go): agent_not_found is herdr's POSITIVE answer
+// that nobody is there — evidence, not a failure — and it is the one answer
+// that makes removal safe. Treating it as a failure would strand a settled
+// attempt forever: every later dispose would refuse on the same positive
+// answer, and the workspace would never go.
+func TestDisposeRemovesAProvablyGoneAgent(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.doWork(t, handle, "STATUS: DONE")
+	if _, err := h.ex.CollectDetail(handle); err != nil {
+		t.Fatal(err)
+	}
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustRun(t, h.repo.Dir, "git", "push", "--quiet", "origin", local.Branch)
+
+	// herdr positively answers that the agent is no longer there.
+	h.server.Route(herdtest.MethodAgentGet, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_not_found", "no such agent")
+	})
+	if err := h.ex.Dispose(handle, subprocess.DisposeOptions{Reason: "merged and closed"}); err != nil {
+		t.Fatalf("a provably gone agent refused the teardown: %v — the positive answer is the state the step exists to reach", err)
+	}
+	if removed := h.removals(); len(removed) != 1 || removed[0] != local.WorkspaceID {
+		t.Errorf("worktree.remove saw %v, want the one workspace %s", removed, local.WorkspaceID)
+	}
+	// The positive answer was recorded durably: a herdr-free collect after
+	// the disposal still reads a settlement, not silence.
+	if !h.ex.storeAt(local.State).agentGone() {
+		t.Error("the teardown did not record the positive departure it acted on")
+	}
+}
+
 func TestDisposeToleratesAnAlreadyGoneWorkspace(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")

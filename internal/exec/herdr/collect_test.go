@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 )
 
 // collect: the report and the branch, and NOTHING herdr says. These tests are
@@ -83,7 +84,10 @@ func TestCollectRefusesAMissingResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// One commit, no report: the worker did work and never said what it did.
+	// One commit, no report, and the attempt SETTLED: herdr positively
+	// answered that the agent is gone, and inspect recorded it durably.
+	// The worker did work and never said what it did — durable evidence,
+	// collectable.
 	local, err := local(handle)
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +97,7 @@ func TestCollectRefusesAMissingResult(t *testing.T) {
 	}
 	mustRun(t, local.Worktree, "git", "add", "hello.txt")
 	mustRun(t, local.Worktree, "git", "commit", "--quiet", "-m", "no report")
+	h.settleGone(t, handle)
 
 	collected, err := h.ex.CollectDetail(handle)
 	if err != nil {
@@ -104,29 +109,45 @@ func TestCollectRefusesAMissingResult(t *testing.T) {
 	if collected.Result.RoleResult != nil {
 		t.Error("a missing report must not carry a role result: there is no worker's answer to carry")
 	}
-	// The unsettled and the settled-but-incomplete shapes get DIFFERENT
-	// sentences (Appendix A #9): one is a worker that never reported, the
-	// other is one whose agent is provably gone.
+	// The settled-no-report shape gets its own sentence (Appendix A #9): a
+	// worker whose agent is provably gone is not a guess about anything.
 	if collected.Message == "" || collected.Message == "the attempt failed" {
 		t.Errorf("the message was %q: a collapsed failure sentence sends the next repair at the wrong problem",
 			collected.Message)
 	}
 }
 
+// TestCollectDistinguishesSettledFromUnsettled is x6j's line at the
+// collect: a SETTLED attempt with no report is a verdict from durable
+// evidence (the agent is provably gone); an UNSETTLED one — no report, no
+// settlement any leg recorded, herdr silent for every poll — is nobody's to
+// collect, and collect HOLDS it for a person instead of minting a verdict
+// out of the substrate's silence. The two must not share an outcome.
 func TestCollectDistinguishesSettledFromUnsettled(t *testing.T) {
-	settled := collectForState(t, true)
-	unsettled := collectForState(t, false)
-	if settled.Verdict != unsettled.Verdict || settled.Result.Outcome != unsettled.Result.Outcome {
-		t.Errorf("both shapes must collect as missing-result/failed, got %s/%s and %s/%s",
-			settled.Verdict, settled.Result.Outcome, unsettled.Verdict, unsettled.Result.Outcome)
+	settled, err := collectForState(t, true)
+	if err != nil {
+		t.Fatalf("the settled attempt did not collect: %v", err)
 	}
-	if settled.Message == unsettled.Message {
-		t.Errorf("the settled and unsettled shapes share one sentence (%q): one is a gone agent, "+
-			"the other is an attempt nothing can settle yet", settled.Message)
+	if settled.Verdict != subprocess.VerdictMissingResult ||
+		settled.Result.Outcome != subprocess.OutcomeFailed {
+		t.Errorf("the settled shape collected %s/%s, want missing-result/failed from the durable settlement",
+			settled.Verdict, settled.Result.Outcome)
+	}
+
+	_, unsettled := collectForState(t, false)
+	if unsettled == nil {
+		t.Fatal("an unsettled attempt was collected: nobody ever settled it, and the collect answered anyway")
+	}
+	if refusal, ok := subprocess.AsRefusal(unsettled); !ok || refusal.Reason != subprocess.RefusedUnknown {
+		t.Errorf("the unsettled collect was %v, want the liveness-unknown hold: it is held for a person, "+
+			"never collected into a verdict", unsettled)
 	}
 }
 
-func collectForState(t *testing.T, settled bool) *subprocess.Collection {
+// collectForState drives the no-report shape with and without the
+// settlement evidence. The settled shape returns the collection; the
+// unsettled one returns the collect error.
+func collectForState(t *testing.T, settled bool) (*subprocess.Collection, error) {
 	t.Helper()
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
@@ -134,7 +155,7 @@ func collectForState(t *testing.T, settled bool) *subprocess.Collection {
 		t.Fatal(err)
 	}
 	// Work committed, report never written: the shape both no-report
-	// sentences are about, with and without the settlement evidence.
+	// outcomes are about, with and without the settlement evidence.
 	local, err := local(handle)
 	if err != nil {
 		t.Fatal(err)
@@ -145,15 +166,26 @@ func collectForState(t *testing.T, settled bool) *subprocess.Collection {
 	mustRun(t, local.Worktree, "git", "add", "hello.txt")
 	mustRun(t, local.Worktree, "git", "commit", "--quiet", "-m", "work, no report")
 	if settled {
-		if _, err := h.ex.Inspect(handle, ""); err != nil {
-			t.Fatal(err)
-		}
+		h.settleGone(t, handle)
 	}
-	collected, err := h.ex.CollectDetail(handle)
+	return h.ex.CollectDetail(handle)
+}
+
+// settleGone settles the attempt the way a real settlement happens: herdr
+// positively answers that the agent is no longer there, and inspect records
+// that answer durably as this executor's own settlement fact.
+func (h *harness) settleGone(t *testing.T, handle *subprocess.JobHandle) {
+	t.Helper()
+	h.server.Route(herdtest.MethodAgentGet, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_not_found", "no such agent")
+	})
+	status, err := h.ex.Inspect(handle, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return collected
+	if status.State != subprocess.StateFailed {
+		t.Fatalf("the settle fixture inspecting as %s, want failed from the positive answer", status.State)
+	}
 }
 
 func TestCollectReadsTheReportFromTheBranchWhenTheWorktreeIsGone(t *testing.T) {

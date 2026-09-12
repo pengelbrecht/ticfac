@@ -32,14 +32,18 @@
 //     prompt, Start waits for the agent to reach `working` once. A
 //     confirmation that times out is an OBSERVATION, not a failure — a
 //     trivial tick can finish before `working` is ever rendered.
-//   - A SUBSTRATE FAILURE DECIDES NOTHING (x6j's line, held here as shape).
-//     No content gate reads the pane back: agent_prompt_stalled and herdr
-//     going quiet are recorded as operational observations and never as a
-//     verdict. Inspect answers `lost` — not terminal — when herdr cannot be
-//     asked; a settlement is recorded only when herdr POSITIVELY answers
-//     that the agent is gone. And teardown refuses to act on an unanswered
-//     liveness question: herdr not answering is not evidence that tearing an
-//     agent down is safe.
+//   - A SUBSTRATE FAILURE DECIDES NOTHING (x6j's line, held here as shape
+//     and classified in classify.go). No content gate reads the pane back:
+//     agent_prompt_stalled and herdr going quiet are recorded as operational
+//     observations and never as a verdict. Inspect answers `lost` — not
+//     terminal — when herdr cannot be asked; a settlement is recorded only
+//     when herdr POSITIVELY answers that the agent is gone, and that answer
+//     is evidence (the agent-gone marker), not a failure. Teardown refuses
+//     to act on an unanswered liveness question: herdr not answering is not
+//     evidence that tearing an agent down is safe. An attempt whose record a
+//     later leg cannot read, and an attempt with no report and no settlement
+//     at collect time, are held for a person — never redispatched, never
+//     collected into a verdict.
 //   - THE WALL CLOCK IS ENFORCED, NOT NOTICED (gwc). The settlement deadline
 //     is the reconciler's, inherited unchanged; the STOP is this
 //     executor's, because herdr owns the agent's process. The enforcement
@@ -56,16 +60,28 @@
 //
 // Each of these is its own tick, building on this seam:
 //
-//   - 2xu: the verdict comes from durable evidence only. CollectDetail here
-//     already makes ZERO herdr calls — by construction, like ticks' collect
-//     package — so that tick's fixture (every herdr call errors) can be
-//     written against it.
+//   - 2xu: DONE. The verdict comes from durable evidence only —
+//     CollectDetail here makes ZERO herdr calls, by construction, and the
+//     all-errors fixture (TestCollectNeedsNoHerdr) is the test of record.
+//   - gwc: DONE. The wall clock is enforced in both halves — the stop at
+//     spec.Limits.WallSeconds delivered through herdr inside observe
+//     (wall.go), and the refusal at dispatch when the pinned herdr is too
+//     old to carry the interrupt surface at all.
 //   - p6b: DONE. The artifact boundary is enforced in both layers — the git
 //     exclude Start writes into the worktree before the agent launches, and
 //     collect's backstop over the branch diff — mirroring the local
 //     executor's git.go and collect.go.
-//   - x6j: every substrate failure classified operational-or-verdict, and
-//     resume across an upgrade held for a person.
+//   - x6j: DONE. Every substrate failure is classified operational-or-
+//     verdict (the audit lives in classify.go, the every-call-fails fixture
+//     in operational_test.go), and both an unreadable attempt record and a
+//     collect with no report and no settlement are held for a person.
 //   - 5hz: Dispose reclaims by identity when a recorded workspace id is
 //     stale. Here disposal uses the recorded id, tolerating "already gone".
+//   - 7vn: findings travel mechanically. RoleResult carries no typed
+//     findings channel yet, so a worker's discovery outside its tick can
+//     still only ride in the prose of its report.
+//   - x9x: readiness is a poll of agent.get, and nothing here asserts more
+//     than it observed. Establishing readiness over the protocol — and a
+//     first-round-trip gate that claims only what it saw — is not built
+//     here.
 package herdr
