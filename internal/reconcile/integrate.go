@@ -55,6 +55,18 @@ func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Colle
 		return merge{}, r.refuse(RefusedMerge, tick, "the attempt's head %s is not a commit this checkout has: %v", head, err)
 	}
 
+	// The declaration's other half (tick 01u), on the diff this merge is
+	// about to act on and before anything merges it: an attempt that touched
+	// a file its tick's touch: declaration does not name is refused here,
+	// recorded as a rejection, never merged silently. It runs before the
+	// merge loop because the merge is the one place the full diff is already
+	// proven durable — the collected head, pushed to origin — and after the
+	// collect's own refusals because a verdict that never reached here (no
+	// commits, a BLOCKED answer) is the more specific thing to tell a person.
+	if err := r.checkDeclaredTouch(marker, head); err != nil {
+		return merge{}, err
+	}
+
 	for try := 0; try < maxMergePushes; try++ {
 		epicHead, err := r.git.remoteHead(r.branch)
 		if err != nil {
