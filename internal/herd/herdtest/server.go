@@ -170,6 +170,12 @@ type Config struct {
 	// not an error — and prompting that agent fails with agent_not_ready, so a
 	// consumer has to sample agent.get until readiness flips.
 	LaunchPending bool
+	// PaneTruncated makes every pane.read answer `truncated: true` — the
+	// shape a read whose window cut off really returns, and the one a
+	// last-resort consumer must distinguish from content that never arrived
+	// (tick x9x's gate: a truncated read is its own finding, never a failed
+	// agent).
+	PaneTruncated bool
 	// AgentSession is the agent_session id agent.prompt reports.
 	AgentSession string
 	// PaneTexts scripts pane.read, one entry per read in order; the last
@@ -208,6 +214,7 @@ type Server struct {
 	focusCalls            []string
 	paneTexts             []string
 	paneReads             int
+	paneTruncated         bool
 	paneMeta              []MetadataReport
 	workspaceMeta         []MetadataReport
 	metaErr               string
@@ -259,17 +266,18 @@ func New(t *testing.T, cfg Config) *Server {
 	}
 
 	s := &Server{
-		t:          t,
-		path:       path,
-		ln:         ln,
-		cfg:        cfg,
-		routes:     map[string]Handler{},
-		agents:     append([]Agent(nil), cfg.Agents...),
-		workspaces: append([]string(nil), cfg.Workspaces...),
-		focused:    cfg.Focused,
-		focusSteal: cfg.FocusSteal,
-		paneTexts:  append([]string(nil), cfg.PaneTexts...),
-		serverDone: make(chan struct{}),
+		t:             t,
+		path:          path,
+		ln:            ln,
+		cfg:           cfg,
+		routes:        map[string]Handler{},
+		agents:        append([]Agent(nil), cfg.Agents...),
+		workspaces:    append([]string(nil), cfg.Workspaces...),
+		focused:       cfg.Focused,
+		focusSteal:    cfg.FocusSteal,
+		paneTexts:     append([]string(nil), cfg.PaneTexts...),
+		paneTruncated: cfg.PaneTruncated,
+		serverDone:    make(chan struct{}),
 	}
 	for method, h := range cfg.Routes {
 		s.routes[method] = h
@@ -479,6 +487,16 @@ func (s *Server) SetPaneTexts(texts ...string) {
 	defer s.mu.Unlock()
 	s.paneTexts = append([]string(nil), texts...)
 	s.paneReads = 0
+}
+
+// SetPaneTruncated makes every pane.read answer truncated: true (false
+// restores the complete read). It is how a test drives the read that cut off
+// its own window — the shape herdr really returns when the scrollback cap
+// dropped the lines a matcher needed.
+func (s *Server) SetPaneTruncated(truncated bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.paneTruncated = truncated
 }
 
 // SetAfterList installs a hook that runs, unlocked and after the connection

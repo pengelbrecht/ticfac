@@ -209,9 +209,11 @@ func TestStartRetriesAPaneBusyLaunch(t *testing.T) {
 	}
 }
 
-// TestStartPollsForInteractiveReady is the second startup race: a launch that
-// answers launch_pending has typed the command but not detected the agent,
-// and readiness — not the status — is what a prompt needs.
+// TestStartPollsForInteractiveReady is the readiness FALLBACK: a launch
+// that answers launch_pending has typed the command but not detected the
+// agent, and readiness — not the status — is what a prompt needs. A herdr
+// that answers pending despite the startup wait is the one case left to
+// the poll, so the poll must still exist and still work.
 func TestStartPollsForInteractiveReady(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.server.RouteN(herdtest.MethodAgentStart, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter, n int) error {
@@ -253,6 +255,25 @@ func TestStartPollsForInteractiveReady(t *testing.T) {
 	if count := h.server.CountMethod(herdtest.MethodAgentGet); count < 3 {
 		t.Errorf("agent.get was called %d times: readiness was never polled", count)
 	}
+	// The harness's startup budget (3s) is at herdr's exclusive floor: the
+	// launch must not have asked herdr to wait, because that would round the
+	// caller's budget UP to herdr's minimum — patience the caller did not
+	// grant. The poll spends the 3s; nothing lengthens it.
+	for _, req := range h.server.Requests() {
+		if req.Method != herdtest.MethodAgentStart {
+			continue
+		}
+		var p struct {
+			TimeoutMs *uint64 `json:"timeout_ms"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.TimeoutMs != nil {
+			t.Errorf("agent.start carried timeout_ms %d: a budget at herdr's floor must be spent by the poll, not rounded up into a server-side wait", *p.TimeoutMs)
+		}
+		break
+	}
 	if _, err := local(handle); err != nil {
 		t.Fatal(err)
 	}
@@ -284,6 +305,16 @@ func TestAnUnconfirmedDispatchIsRecordedNotFailed(t *testing.T) {
 	}
 	if record.LaunchConfirmed != true {
 		t.Error("the launch itself was confirmed and the record must say so")
+	}
+	// The gate's finding for a prompt herdr accepted but that never visibly
+	// went to work: the agent's answer was not the expected work. The pane
+	// is never read to answer a question the protocol already answered —
+	// herdr accepted the prompt; delivery is not in doubt.
+	if record.DispatchGate != GateUnexpectedAnswer {
+		t.Errorf("the record's gate finding is %q, want %q", record.DispatchGate, GateUnexpectedAnswer)
+	}
+	if count := h.server.CountMethod(herdtest.MethodPaneRead); count != 0 {
+		t.Errorf("pane.read was called %d times: an accepted prompt needs no last-resort read", count)
 	}
 }
 

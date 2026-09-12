@@ -21,17 +21,29 @@
 // deliberately NOT ported — ticfac's reconciler already owns waves, adoption,
 // disposition and cleanup. What came across are the hard-won details:
 //
-//   - THE PANE-BUSY RETRY AND THE READINESS POLL (spawn). The root pane
-//     worktree.create hands back is not a usable shell for the first few
-//     hundred milliseconds of its life: agent.start fails with
-//     `agent_pane_busy` and succeeds on a retry, and a launch that answers
-//     `launch_pending` has to be sampled for `interactive_ready` because the
-//     status reaches idle before readiness does. Start absorbs both, bounded
-//     by the caller's startup budget rather than a fixed attempt count.
-//   - DISPATCH IS CONFIRMED, NOT FIRE-AND-FORGET (spawn). After submitting the
-//     prompt, Start waits for the agent to reach `working` once. A
-//     confirmation that times out is an OBSERVATION, not a failure — a
-//     trivial tick can finish before `working` is ever rendered.
+//   - THE PANE-BUSY RETRY AND THE READINESS ACKNOWLEDGEMENT (spawn, x9x).
+//     The root pane worktree.create hands back is not a usable shell for
+//     the first few hundred milliseconds of its life: agent.start fails
+//     with `agent_pane_busy` and succeeds on a retry, and a launch that
+//     answers `launch_pending` has to be sampled for `interactive_ready`
+//     because the status reaches idle before readiness does. Start absorbs
+//     both, bounded by the caller's startup budget rather than a fixed
+//     attempt count. Readiness is established over the PROTOCOL: the
+//     caller's budget is handed to herdr as agent.start's own startup
+//     wait, so the reply is herdr's acknowledgement, and the 250ms poll of
+//     agent.get is only the fallback for a herdr that answers a pending
+//     launch anyway.
+//   - DISPATCH IS GATED, NOT FIRE-AND-FORGET (spawn, x9x). After submitting
+//     the prompt, the first-round-trip gate (gate.go) waits once, over the
+//     protocol, for the agent to reach `working`. A gate finding claims
+//     ONLY what was observed — not delivered, read truncated, unexpected
+//     answer, unconfirmed, confirmed — and never a cause: auth, quota and
+//     a stale model string are hypotheses nobody observed. The one pane
+//     read is a last resort for a stalled submission, honours the read's
+//     Truncated flag, and — like every gate finding — decides nothing: no
+//     outcome fails a spawn, tears anything down, or speaks in a verdict
+//     about the work, so no rendering or truncation change can ever turn
+//     into "the agent cannot work" (that classification is tick x6j's).
 //   - A SUBSTRATE FAILURE DECIDES NOTHING (x6j's line, held here as shape
 //     and classified in classify.go). No content gate reads the pane back:
 //     agent_prompt_stalled and herdr going quiet are recorded as operational
@@ -86,8 +98,13 @@
 //   - 7vn: findings travel mechanically. RoleResult carries no typed
 //     findings channel yet, so a worker's discovery outside its tick can
 //     still only ride in the prose of its report.
-//   - x9x: readiness is a poll of agent.get, and nothing here asserts more
-//     than it observed. Establishing readiness over the protocol — and a
-//     first-round-trip gate that claims only what it saw — is not built
-//     here.
+//   - x9x: DONE. Readiness is established over the protocol — agent.start
+//     is handed the caller's startup budget as herdr's own startup wait, so
+//     the reply is herdr's acknowledgement and the readiness poll is only
+//     the fallback for a herdr that answers a pending launch anyway. The
+//     first-round-trip gate (gate.go) claims only what it saw: its findings
+//     — not delivered, read truncated, unexpected answer, unconfirmed,
+//     confirmed — are distinguishable on the attempt record, the
+//     last-resort pane read honours Truncated, and no gate outcome is ever
+//     the basis for a hard failure or a verdict about the agent.
 package herdr

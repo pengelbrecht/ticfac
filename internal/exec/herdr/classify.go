@@ -57,15 +57,25 @@ import (
 //     up, and a retry is a new attempt number, never a verdict.
 //   - waitInteractiveReady → AgentGet: any error, the budget elapsing —
 //     OPERATIONAL, same treatment as the launch.
-//   - submit → AgentPrompt: agent_prompt_stalled is the tolerated dropped
-//     prompt; every other answer — including a RENAME, or a rendering or
-//     truncation change nobody has a name for yet — is OPERATIONAL and is
-//     recorded as an observation. There is no content gate reading the pane
-//     back in this executor, so no rendering change can ever turn into "the
-//     agent cannot work".
-//   - submit → AgentWait: the timeout is a REPORTED outcome; any other
-//     error is OPERATIONAL. Either way the dispatch is recorded
-//     unconfirmed — a fact, not a failure.
+//   - submit → AgentPrompt: a refusal is recorded as the gate finding
+//     not_delivered — an observation about the dispatch, never a verdict
+//     about the agent, and no wait follows a prompt herdr refused to deliver.
+//     agent_prompt_stalled is the tolerated no-state-change answer, which a
+//     worker that answers in under a second also produces: it leaves
+//     delivery uncertain and is what the last-resort read exists to settle.
+//     Every other answer — including a RENAME, or a code this build has
+//     never heard — is OPERATIONAL and is recorded as an observation.
+//   - gate → AgentWait: the timeout is a REPORTED outcome ("no working was
+//     observed within N"); any other error is OPERATIONAL. Either way the
+//     dispatch is recorded unconfirmed — a fact, not a failure.
+//   - gate → PaneRead (the LAST RESORT, reached only when the submission
+//     stalled): any error is OPERATIONAL; a Truncated read is its own
+//     finding (read_truncated), because a read that merely cut off the echo
+//     is indistinguishable from a prompt that never arrived; a complete
+//     read's answer is recorded as the finding it is. No gate outcome — and
+//     no pane read — is ever the sole basis for a hard failure: the gate has
+//     no hard failure to hand out, so no rendering or truncation change can
+//     ever turn into "the agent cannot work".
 //   - Inspect → AgentGet (observe): nil → running. agent_not_found /
 //     pane_not_found → POSITIVE: settled, with the answer recorded durably
 //     as the agent-gone marker. Any other error — transport silence,

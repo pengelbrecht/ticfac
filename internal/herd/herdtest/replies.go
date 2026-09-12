@@ -413,13 +413,17 @@ func (s *Server) respondAgentInfo(req Request, w *ConnWriter, name, paneID strin
 }
 
 func (s *Server) handlePaneRead(_ *testing.T, req Request, w *ConnWriter) error {
+	s.mu.Lock()
+	truncated := s.paneTruncated
+	s.mu.Unlock()
 	return RespondJSON(w, req.ID, map[string]any{
 		"type": "pane_read",
 		"read": map[string]any{
-			"pane_id": s.cfg.Worktree.PaneID,
-			"source":  "recent_unwrapped",
-			"format":  "text",
-			"text":    s.nextPaneText(),
+			"pane_id":   s.cfg.Worktree.PaneID,
+			"source":    "recent_unwrapped",
+			"format":    "text",
+			"text":      s.nextPaneText(),
+			"truncated": truncated,
 		},
 	})
 }

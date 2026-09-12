@@ -119,6 +119,17 @@ type attemptRecord struct {
 	// failure: a trivial tick can finish before `working` is ever rendered.
 	DispatchConfirmed bool `json:"dispatch_confirmed"`
 
+	// DispatchGate is the first-round-trip gate's finding (tick x9x) — a
+	// closed vocabulary that records exactly what the gate observed and
+	// nothing more: not delivered, read truncated, unexpected answer,
+	// unconfirmed, confirmed. It is a finding about the DISPATCH, never a
+	// verdict about the agent or the work: no gate outcome fails a spawn,
+	// tears anything down, or is collected as a verdict, and a gate
+	// observation names what was seen — a cause (auth, quota, a stale
+	// model string) is a hypothesis nobody observed and is asserted
+	// nowhere.
+	DispatchGate string `json:"dispatch_gate,omitempty"`
+
 	IssuedAt string              `json:"issued_at"`
 	Spec     *subprocess.JobSpec `json:"spec"`
 }
