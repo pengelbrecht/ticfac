@@ -185,7 +185,7 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 			"attempt %d is already merged into %s at %s; it is not collected a second time",
 			marker.Attempt, r.branch, short(integrated))
 	} else {
-		collected, err = r.collect(handle, executor, marker, status)
+		collected, err = r.collect(ctx, handle, executor, marker, status)
 		if err != nil {
 			return err
 		}
@@ -1045,7 +1045,7 @@ func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 
 // ---------------------------------------------------------- the collect ---
 
-func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
+func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
 	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
 		return nil, err
 	}
@@ -1076,6 +1076,18 @@ func (r *Reconciler) collect(handle *subprocess.JobHandle, executor Executor, ma
 			"attempt %d of %s was collected against base %s, but this run dispatched it at %s: the diff the boundary "+
 				"check read is not the diff of this attempt, so nothing it reports about it can be believed",
 			marker.Attempt, marker.TickID, short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+	}
+
+	// The findings channel (tick 7vn), BEFORE the verdict checks: a finding is
+	// discovery, not a deliverable, and it must be drafted whether the attempt
+	// is about to pass, fail, or ask for a person — the BLOCKED answer is
+	// exactly the report that carries a proposal. The invalid-block refusal is
+	// the only outcome here, and it fails CLOSED: a findings block nobody could
+	// read is not a report with no findings.
+	if err := r.fileFindings(ctx, marker, collected); err != nil {
+		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
+			" reported a findings block that could not be read")
+		return nil, err
 	}
 
 	// Appendix A #10's reporting half: a boundary that refuses silently tells

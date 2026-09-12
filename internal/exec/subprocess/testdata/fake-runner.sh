@@ -56,6 +56,47 @@ silent)
 nocommit)
 	report
 	;;
+findings)
+	# The findings channel (tick 7vn): a worker that commits, reports DONE,
+	# and reports two discoveries outside its tick as a typed block — one for
+	# this repository and one routed upstream.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "A finding the fake runner proposes",'
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "medium",'
+		printf '%s\n' '  "target": ""'
+		printf '%s\n' '}, {'
+		printf '%s\n' '  "kind": "upstream-tick",'
+		printf '%s\n' '  "title": "An upstream finding routed to another repository",'
+		printf '%s\n' '  "body": "",'
+		printf '%s\n' '  "severity": "low",'
+		printf '%s\n' '  "target": "pengelbrecht/ticks"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
+findings_bad)
+	# A findings block that does not parse: collect must carry the problem
+	# rather than dropping the block — dropping findings is what the channel
+	# exists to prevent.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{"kind": "defect", "title": "a block that never ends",'
+		printf '%s\n' '```'
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
 report_then_addall)
 	# The shape wtd exists for: the report is written FIRST, then the worker
 	# runs `git add -A` and commits everything in the worktree, exactly the
