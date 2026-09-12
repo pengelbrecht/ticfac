@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -97,6 +97,15 @@ type Dispatch struct {
 	// BudgetUSD is the EFFECTIVE budget: already clamped, because a job is
 	// issued the number that will govern (Appendix A #12).
 	BudgetUSD *float64
+
+	// Tier is the capability tier this dispatch was DERIVED under (tick 5eq) —
+	// the rung of the [tier_policy] ladder that routed the profile, "" when
+	// no tier was derived (no policy, base values). It rides on the marker for
+	// the executor's benefit and in provenance for the audit's: a run that
+	// spent at a high tier says so in its own records, and since bundle 4.0.0
+	// that statement is a field of the closed provenance object, not just a
+	// fact implied by the tier-resolved profile digest.
+	Tier string
 
 	// Profile is the resolved role profile this dispatch is made under —
 	// executor, runner, model and prompt, and nothing else (SPEC §4.5). The

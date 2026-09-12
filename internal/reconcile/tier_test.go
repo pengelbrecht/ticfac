@@ -286,3 +286,74 @@ func TestNoPolicyMeansBaseValuesEndToEnd(t *testing.T) {
 		t.Error("even a base-values dispatch should say so in the run's record")
 	}
 }
+
+// The tier is in the CLOSED provenance object origin carries (bundle 4.1.1),
+// not only on the marker's open handle: the attempt record and the gate's
+// evidence — the two durable records an auditor reads — both state the rung
+// that routed the model, so an over-tiered run is auditable from provenance
+// alone. That is the audit gap tick 5eq left open and this bundle closed.
+func TestAnAttemptsProvenanceStatesItsDerivedTier(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: tierGate})
+	f.retick(t, "a1", func(tick *tk.Tick) { tick.Labels = []string{"tier:economy"} })
+
+	r, result, err := f.run(f.Repo, fixtureOptions{budget: 10, ceiling: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+
+	// The attempt marker's provenance — the closed object, not the open
+	// handle — states the tier the dispatch was derived under.
+	attempts, err := r.store.Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var a1, b1 *runstate.Attempt
+	for i := range attempts {
+		switch attempts[i].TickID {
+		case "a1":
+			a1 = &attempts[i]
+		case "b1":
+			b1 = &attempts[i]
+		}
+	}
+	if a1 == nil || b1 == nil {
+		t.Fatalf("no attempt markers for a1/b1 among %v", attempts)
+	}
+	if a1.Provenance.Tier == nil || *a1.Provenance.Tier != "economy" {
+		t.Errorf("a1's provenance states tier %v, want economy — the audit reads the record, not the marker's open handle", a1.Provenance.Tier)
+	}
+	if b1.Provenance.Tier == nil || *b1.Provenance.Tier != "balanced" {
+		t.Errorf("b1's provenance states tier %v, want balanced (the policy default)", b1.Provenance.Tier)
+	}
+
+	// The gate's evidence over each tick says the same thing: the tier that
+	// routed the attempt the gate is over, in the record the gate leaves
+	// behind for a person auditing the merge — per tick, because a gate is
+	// over one tick's work at the tier that tick's attempt earned.
+	wantTier := map[string]string{"a1": "economy", "a2": "balanced", "b1": "balanced"}
+	for _, key := range r.store.EvidenceKeys() {
+		evidence, ok, err := r.store.Evidence(key)
+		if err != nil || !ok {
+			t.Fatalf("evidence %s: ok=%v err=%v", key, ok, err)
+		}
+		if evidence.Provenance.Role == nil || *evidence.Provenance.Role != "implement-tick" {
+			continue // not the integrated gate over the implementer's work
+		}
+		tickID := ""
+		if evidence.Provenance.TickID != nil {
+			tickID = *evidence.Provenance.TickID
+		}
+		want, expected := wantTier[tickID]
+		if !expected {
+			t.Fatalf("gate evidence %s names tick %q, which the test does not know", key, tickID)
+		}
+		if evidence.Provenance.Tier == nil || *evidence.Provenance.Tier != want {
+			t.Errorf("the gate evidence %s over %s states tier %v, want %s — the rung that routed the attempt the gate is over",
+				key, tickID, evidence.Provenance.Tier, want)
+		}
+	}
+}

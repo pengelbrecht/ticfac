@@ -3,6 +3,7 @@ package parity
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -51,6 +52,33 @@ type runnersConfig struct {
 		Refused           []int    `json:"refused"`
 		RefusedTOMLValues []string `json:"refused_toml_values"`
 	} `json:"max_parallel"`
+	Tables struct {
+		VersionKey          string   `json:"version_key"`
+		ExecutionTables     []string `json:"execution_tables"`
+		TrackerTables       []string `json:"tracker_tables"`
+		ToleratedByConsumer []string `json:"tolerated_by_consumer"`
+		ForeignRule         string   `json:"foreign_table_rule"`
+		Accepted            []struct {
+			Name    string   `json:"name"`
+			Readers []string `json:"readers"`
+			Toml    string   `json:"toml"`
+		} `json:"accepted"`
+		Refused []struct {
+			Name                string   `json:"name"`
+			Readers             []string `json:"readers"`
+			ExpectErrorContains string   `json:"expect_error_contains"`
+			Toml                string   `json:"toml"`
+		} `json:"refused"`
+	} `json:"tables"`
+	Substrate struct {
+		Path              string   `json:"path"`
+		Values            []string `json:"values"`
+		Default           string   `json:"default"`
+		RefusalMessage    string   `json:"refusal_message"`
+		Accepted          []string `json:"accepted"`
+		Refused           []string `json:"refused"`
+		RefusedTOMLValues []string `json:"refused_toml_values"`
+	} `json:"substrate"`
 }
 
 // acceptImage is ticfac's implementation of the image rule.
@@ -234,4 +262,160 @@ func maxParallelConfig(t *testing.T, raw string) (*runconfig.Config, error) {
 	t.Helper()
 	doc := "[roles.implement]\nkind = \"claude\"\n\n[orchestration]\nmax_parallel = " + raw + "\n"
 	return runconfig.Parse([]byte(doc))
+}
+
+// The table enumeration (bundle 4.0.0): the split this repository's
+// internal/runconfig IS one half of, as data. Every accepted case whose
+// `readers` names ticfac must load through the REAL reader; every refused one
+// must be refused with the words the contract pins. The mirror-direction
+// cases (a scalar on [tier_policy], read by ticks' half) run in ticks'
+// runners_config_parity_test.go over the same fixture — both halves of the
+// split, one file.
+func TestTheTableEnumerationMatchesTheRealReader(t *testing.T) {
+	var c runnersConfig
+	readContract(t, runnersConfigFile, &c)
+
+	if c.Tables.VersionKey != "version" {
+		t.Errorf("the version key is pinned as %q, want \"version\"", c.Tables.VersionKey)
+	}
+	if c.Tables.ForeignRule == "" {
+		t.Fatal("the contract does not state its foreign-table rule")
+	}
+
+	// The mirror obligation, behaviourally: every table the contract names as
+	// the OTHER reader's half must load here as a foreign table, and a scalar
+	// squatting on its name must be refused — the tolerance is keyed on shape,
+	// not on the bare name, and that is what separates a legal file on the
+	// other side of the split from a typo'd key on this one.
+	want := append([]string{}, c.Tables.TrackerTables...)
+	sort.Strings(want)
+	if !equalSlices(c.Tables.ToleratedByConsumer, want) {
+		t.Errorf("the contract says ticfac tolerates %v, which is not its tracker half %v",
+			c.Tables.ToleratedByConsumer, want)
+	}
+	for _, name := range want {
+		t.Run("tolerates the foreign table ["+name+"]", func(t *testing.T) {
+			doc := "[roles.implement]\nkind = \"claude\"\n\n[" + name + "]\n"
+			if _, err := runconfig.Parse([]byte(doc)); err != nil {
+				t.Errorf("[%s] is the other reader's half of the split and must load here as a foreign table: %v", name, err)
+			}
+		})
+		t.Run("refuses a scalar on the foreign name "+name, func(t *testing.T) {
+			doc := "[roles.implement]\nkind = \"claude\"\n\n" + name + " = true\n"
+			_, err := runconfig.Parse([]byte(doc))
+			if err == nil {
+				t.Fatalf("%s = true is a scalar squatting on a foreign table's name, and the reader accepted it", name)
+			}
+			if !strings.Contains(err.Error(), name+": unknown key") {
+				t.Errorf("the refusal is %q, want %q — a scalar on the name is a typo'd key, not a foreign table", err.Error(), name+": unknown key")
+			}
+		})
+	}
+
+	for _, accepted := range c.Tables.Accepted {
+		if !hasReader(accepted.Readers, "ticfac") {
+			continue
+		}
+		t.Run("accepts "+accepted.Name, func(t *testing.T) {
+			if _, err := runconfig.Parse([]byte(accepted.Toml)); err != nil {
+				t.Errorf("the contract accepts this file and ticfac's reader refuses it:\n%s\n%v", accepted.Toml, err)
+			}
+		})
+	}
+	for _, refused := range c.Tables.Refused {
+		if !hasReader(refused.Readers, "ticfac") {
+			continue
+		}
+		t.Run("refuses "+refused.Name, func(t *testing.T) {
+			_, err := runconfig.Parse([]byte(refused.Toml))
+			if err == nil {
+				t.Fatalf("the contract refuses this file and ticfac's reader accepted it:\n%s", refused.Toml)
+			}
+			if !strings.Contains(err.Error(), refused.ExpectErrorContains) {
+				t.Errorf("the refusal is %q, the contract pins %q", err.Error(), refused.ExpectErrorContains)
+			}
+		})
+	}
+}
+
+// The substrate enum (bundle 4.0.0): the closed vocabulary that decides which
+// dispatch verb is correct, run through the real reader over whole documents —
+// the values, the default, the refusal words and the typed-value refusals are
+// all shared surface with ticks' reader.
+func TestTheSubstrateEnumMatchesTheRealReader(t *testing.T) {
+	var c runnersConfig
+	readContract(t, runnersConfigFile, &c)
+
+	var want []string
+	for _, s := range runconfig.Substrates {
+		want = append(want, string(s))
+	}
+	if !equalSlices(c.Substrate.Values, want) {
+		t.Errorf("the contract pins substrate values %v, this reader's vocabulary is %v", c.Substrate.Values, want)
+	}
+	if c.Substrate.Default != string(runconfig.SubstrateAuto) {
+		t.Errorf("the contract pins the default as %q, this reader defaults to %q",
+			c.Substrate.Default, runconfig.SubstrateAuto)
+	}
+	if len(c.Substrate.Accepted) == 0 || len(c.Substrate.Refused) == 0 {
+		t.Fatal("a parity guard with nothing on one side of it guards nothing")
+	}
+
+	for _, value := range c.Substrate.Accepted {
+		t.Run("accepts "+value, func(t *testing.T) {
+			doc := substrateDocument(t, fmt.Sprintf("%q", value))
+			if _, err := runconfig.Parse([]byte(doc)); err != nil {
+				t.Errorf("%s refused %q: %v", c.Substrate.Path, value, err)
+			}
+		})
+	}
+	for _, value := range c.Substrate.Refused {
+		t.Run("refuses "+value, func(t *testing.T) {
+			doc := substrateDocument(t, fmt.Sprintf("%q", value))
+			_, err := runconfig.Parse([]byte(doc))
+			if err == nil {
+				t.Fatalf("%s accepted %q, which the contract calls unusable", c.Substrate.Path, value)
+			}
+			if !strings.Contains(err.Error(), c.Substrate.RefusalMessage) {
+				t.Errorf("the refusal for %q does not carry the pinned message %q: %v",
+					value, c.Substrate.RefusalMessage, err)
+			}
+		})
+	}
+	for _, raw := range c.Substrate.RefusedTOMLValues {
+		t.Run("refuses the value "+raw, func(t *testing.T) {
+			doc := substrateDocument(t, raw)
+			if _, err := runconfig.Parse([]byte(doc)); err == nil {
+				t.Errorf("substrate = %s is a typed value the contract refuses, and the reader coerced it", raw)
+			}
+		})
+	}
+}
+
+// substrateDocument builds the smallest whole config carrying one raw
+// substrate TOML value, in the shape every other case here uses.
+func substrateDocument(t *testing.T, raw string) string {
+	t.Helper()
+	return "[roles.implement]\nkind = \"claude\"\n\n[orchestration]\nsubstrate = " + raw + "\n"
+}
+
+func hasReader(readers []string, want string) bool {
+	for _, r := range readers {
+		if r == want {
+			return true
+		}
+	}
+	return false
+}
+
+func equalSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

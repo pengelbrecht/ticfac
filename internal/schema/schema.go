@@ -1,6 +1,6 @@
 // Package schema implements the strict JSON Schema SUBSET the ticks contract
 // bundle is written in, ported from ticks' internal/tkcontract/schema.go
-// (bundle 3.0.0) so that ticfac can read the bundle without importing a ticks
+// so that ticfac can read the bundle without importing a ticks
 // Go package — SPEC §3.1: the dependency on ticks is `tk --json` and the
 // pinned bundle, never a shared library.
 //

@@ -132,7 +132,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	}
 	if hasReport && report.Status != "" {
 		result.RoleResult = &subprocess.RoleResult{
-			SchemaVersion: subprocess.SchemaVersion,
+			SchemaVersion: subprocess.SchemaVersionRoleResult,
 			SchemaID:      record.Spec.OutputSchema,
 			Role:          record.Spec.Role,
 			Status:        report.Status,
@@ -144,12 +144,14 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 				"report_path":         report.Path,
 				"boundary_violations": violationsOrEmpty(allViolations),
 				"needs_human":         report.NeedsHuman(),
-				// The findings channel (tick 7vn), shared with the local executor
-				// through the same helper and the same vocabulary: a report block
-				// means the same thing whichever executor collected it.
-				"findings":         subprocess.FindingsAsAny(report.Findings),
+				// The findings channel (tick 7vn) rides FIRST-CLASS in the
+				// envelope since bundle 4.0.0 (Findings, below) — the open payload
+				// keeps only the problem, the one thing the closed record has no
+				// field for: a block that would not parse is stated as a problem,
+				// never as an empty list, whichever executor collected it.
 				"findings_problem": report.FindingsProblem,
 			},
+			Findings: report.Findings,
 		}
 	}
 

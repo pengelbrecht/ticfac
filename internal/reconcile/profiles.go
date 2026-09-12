@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -424,26 +424,26 @@ func (r *Reconciler) controllerBase() string {
 
 // attemptProvenance is what a dispatch's records say they were produced under.
 //
-// Three fields the run-level provenance leaves null are stated here, and each
+// Four fields the run-level provenance leaves null are stated here, and each
 // is a claim the contract has a slot for precisely because a record that cannot
 // make it is not evidence: the ROLE that was dispatched, the MODEL the profile
-// routed to, and the digest of THAT role's profile rather than of the run's set.
-//
-// The TIER a dispatch was derived under (tick 5eq) has no slot in the closed
-// provenance object — $defs.provenance in the pinned contract bundle is
-// additionalProperties:false with a fixed fourteen fields, so adding one is a
-// bundle bump on the ticks side, not an edit here. Until that bump exists the
-// tier is recorded in TWO places a dispatch already controls honestly: the
-// attempt marker's open handle (attemptHandle.Tier, beside the model and the
-// prompt digest, which sit there for exactly this reason) and this record's
-// ProfileDigest — the digest is over the TIER-RESOLVED profile, so two
-// dispatches at different tiers never digest the same, which answers "is
-// this the same profile" but not "which tier was this". That question is
-// what the marker's own tier field answers.
+// routed to, the digest of THAT role's profile rather than of the run's set,
+// and — since bundle 4.0.0, closing what tick 5eq had to leave on the marker —
+// the TIER the dispatch was derived under. Until that bump the tier was
+// recordable only in the attempt marker's open handle and inferable from the
+// tier-resolved profile digest, which answers "is this the same profile" but
+// not "which tier was this"; the field answers it in the closed object every
+// committed record carries, so an over-tiered run is auditable from provenance
+// alone. Null when no tier was derived (no policy: the role's base values),
+// never omitted.
 func (r *Reconciler) attemptProvenance(d Dispatch) runstate.Provenance {
 	provenance := r.provenance(&d.TickID, &d.Attempt, phaseFor(d.Role), d.BaseSHA)
 	role := d.Role
 	provenance.Role = &role
+	if d.Tier != "" {
+		tier := d.Tier
+		provenance.Tier = &tier
+	}
 	if d.Profile != nil {
 		model, digest := d.Profile.Model, d.Profile.Digest
 		provenance.Model = &model
