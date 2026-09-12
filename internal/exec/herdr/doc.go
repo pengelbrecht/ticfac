@@ -75,8 +75,14 @@
 //     verdict (the audit lives in classify.go, the every-call-fails fixture
 //     in operational_test.go), and both an unreadable attempt record and a
 //     collect with no report and no settlement are held for a person.
-//   - 5hz: Dispose reclaims by identity when a recorded workspace id is
-//     stale. Here disposal uses the recorded id, tolerating "already gone".
+//   - 5hz: DONE. Disposal reclaims by identity when a recorded workspace id
+//     is stale: the workspace is attributed to the attempt by the worktree
+//     path and the branch herdr itself reports (reclaim.go), the stale id
+//     is recorded in the provenance beside the herdr protocol and server
+//     version, and `workspace_not_found` is only ever read as teardown once
+//     herdr's own answer to "what exists" corroborates it. The
+//     reclamation-at-startup report is Reclaimable — removal happens only
+//     through the authorisation Reclaim asks for.
 //   - 7vn: findings travel mechanically. RoleResult carries no typed
 //     findings channel yet, so a worker's discovery outside its tick can
 //     still only ride in the prose of its report.

@@ -12,6 +12,18 @@ import (
 
 // dispose: tear the workspace down, and nothing the run did not create.
 //
+// The workspace is found by IDENTITY, not by bookkeeping (tick 5hz):
+// immediately before the removal the executor asks herdr WHAT EXISTS and
+// attributes the workspace to this attempt by the worktree path and the
+// branch herdr itself reports — so a herdr restart that moved the ids
+// (the 0.8.2 → 0.9.0 upgrade that stranded seven canonify workspaces)
+// strands nothing here. The recorded id is recognised as STALE and the
+// reclaim is recorded in the provenance that carries the herdr facts, so
+// the next reader sees the drift rather than guessing at it. `workspace_
+// not_found` is no longer taken as proof of teardown on its own: "this
+// workspace is gone" and "this id is unknown" are different facts, the
+// survey tells them apart, and the second refuses.
+//
 // The worktree AND the workspace AND the agent on its pane go in one herdr
 // call — worktree.remove tears the agent down with the workspace, which is
 // why the liveness question is answered again, IMMEDIATELY before the
@@ -21,7 +33,14 @@ import (
 // a human answers, and a working worker may be mid-turn about to commit.
 // Liveness by itself is NOT a refusal: an interactive agent CLI does not
 // exit when it finishes a turn, and on a collected attempt a settled, idle
-// agent is the normal end-of-run state that worktree.remove is FOR.
+// agent on merged work is the ORDINARY end-of-run state that worktree.
+// remove is FOR.
+//
+// Disposal is IDEMPOTENT and removes no record of its own: the attempt
+// record is the durable pointer that outlives the teardown, nothing in it
+// is removed as a step of the teardown it describes, and a disposal killed
+// between any two steps is completed by the next one from that record
+// (PurgeState is the separate, explicit step that retires it).
 //
 // Never Force. Uncommitted work in the worktree means the collect step has
 // not been believed yet; the one narrow exception, carried from ticks'
@@ -92,20 +111,86 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 		return err
 	}
 
-	_, removeErr := e.client.WorktreeRemove(context.Background(), client.WorktreeRemoveParams{
-		WorkspaceID: full.WorkspaceID,
-		Force:       false,
-	})
-	if removeErr != nil && !client.IsCode(removeErr, client.CodeWorkspaceNotFound) {
-		// A workspace herdr no longer has is the state this step exists to
-		// reach, not a failure to reach it — read as an error it stranded
-		// the attempt forever, and every later dispose refused it again.
-		return fmt.Errorf("herdr worktree.remove for workspace %s: %w", full.WorkspaceID, removeErr)
+	// THE IDENTITY QUESTION, asked immediately before the removal — the
+	// same place the liveness question is asked, and for the same reason:
+	// a herdr restart between any earlier answer and this step is exactly
+	// when the recorded id goes stale (tick 5hz). The workspace is
+	// attributed to this attempt by the evidence herdr itself carries —
+	// its worktree path, its branch — never by the recorded id alone, and
+	// herdr not answering refuses: `workspace_not_found` is TWO facts
+	// ("this workspace is gone" and "this id is unknown"), and only
+	// herdr's own answer to "what exists" tells them apart.
+	att, err := e.attributeForTeardown(record, full.WorkspaceID)
+	if err != nil {
+		return err
 	}
-	if removeErr == nil {
+
+	var removalID string
+	removedWorkspace := false
+	switch {
+	case att.gone:
+		// Corroborated absence: herdr answered, and nothing it holds
+		// belongs to this attempt. This is the state the old teardown
+		// reached by believing `workspace_not_found` — indistinguishable
+		// then from a stale id, provable now.
+		if _, statErr := os.Stat(record.Worktree); statErr == nil {
+			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+				Detail: fmt.Sprintf("herdr holds no workspace for this attempt, but the worktree %s is still on "+
+					"disk: a workspace herdr lost left its worktree behind, and this teardown does not remove "+
+					"git state it cannot attribute", record.Worktree)})
+		}
+	case att.id != full.WorkspaceID:
+		// The recorded id is STALE, and the reclaim is recorded BEFORE the
+		// removal: a process that dies between the recognition and the
+		// removal leaves the CORRECTED id durable, not the stale one. The
+		// stale id sits beside the fresh one in the provenance that carries
+		// the herdr facts, so a later reader recognises the drift rather
+		// than guessing at it.
+		stale := full.WorkspaceID
+		record.StaleWorkspaceID = stale
+		record.WorkspaceID = att.id
+		if err := st.writeAttempt(record); err != nil {
+			return fmt.Errorf("record the re-identified workspace id before removing: %w", err)
+		}
 		if err := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-			Detail: fmt.Sprintf("removed the herdr workspace %s and its worktree %s", full.WorkspaceID, full.Worktree)}); err != nil {
-			return fmt.Errorf("record the disposal: %w", err)
+			Detail: fmt.Sprintf("the recorded workspace id %s was stale: herdr holds this attempt's workspace "+
+				"under %s, found by %s — the teardown reclaims by identity, not by bookkeeping",
+				stale, att.id, att.evidence)}); err != nil {
+			return fmt.Errorf("record the stale-id reclaim: %w", err)
+		}
+		if att.collides {
+			// The stale id now names SOMEBODY ELSE's workspace; it was not
+			// and will not be touched.
+			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+				Detail: fmt.Sprintf("the stale workspace id %s names another workspace now; it was not touched",
+					stale)})
+		}
+		removalID = att.id
+	default:
+		removalID = att.id
+	}
+	if removalID != "" {
+		_, removeErr := e.client.WorktreeRemove(context.Background(), client.WorktreeRemoveParams{
+			WorkspaceID: removalID,
+			Force:       false,
+		})
+		if removeErr != nil && !client.IsCode(removeErr, client.CodeWorkspaceNotFound) {
+			// A removal herdr refused is a removal that did not happen; read
+			// as an error it stranded the attempt forever, and every later
+			// dispose refused it again.
+			return fmt.Errorf("herdr worktree.remove for workspace %s: %w", removalID, removeErr)
+		}
+		// `workspace_not_found` HERE is corroborated absence: herdr answered
+		// the identity question moments ago, so the id going unknown in
+		// between is a removal (by somebody else, or a half of this one that
+		// got interrupted after herdr's half landed) — never an unverified
+		// guess that a stale id was a gone workspace.
+		if removeErr == nil {
+			if err := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+				Detail: removalNote(record, removalID, state)}); err != nil {
+				return fmt.Errorf("record the disposal: %w", err)
+			}
+			removedWorkspace = true
 		}
 	}
 
@@ -126,10 +211,29 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 		}
 	}
 	if err := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-		Detail: disposalNote(record, opts, persisted, removeErr == nil)}); err != nil {
+		Detail: disposalNote(record, opts, persisted, removedWorkspace)}); err != nil {
 		return fmt.Errorf("record the disposal: %w", err)
 	}
 	return nil
+}
+
+// removalNote is the observation the removal itself is recorded under: the
+// workspace herdr actually tore down — the id it holds it under NOW, not
+// the one the attempt was dispatched with — and the fate of the agent that
+// lived on its pane. A live, settled agent going out with its workspace is
+// the ORDINARY end-of-run case ("still live on a merged branch" is every
+// collected attempt's state, not an edge worth a note), so the observation
+// says what worktree.remove does about it: it tears the agent down with
+// the workspace.
+func removalNote(record *attemptRecord, removalID string, state teardownState) string {
+	switch state {
+	case teardownGone:
+		return fmt.Sprintf("removed the herdr workspace %s and its worktree %s; the agent %s was already gone",
+			removalID, record.Worktree, record.AgentName)
+	default:
+		return fmt.Sprintf("removed the herdr workspace %s and its worktree %s; the agent %s was live and settled — "+
+			"worktree.remove tears it down with the workspace", removalID, record.Worktree, record.AgentName)
+	}
 }
 
 // The teardown liveness classes. Herdr's positive answers are the ones that
@@ -145,7 +249,11 @@ const (
 
 // livenessForTeardown asks the ONE question removal needs, next to the
 // removal. A launch that was never confirmed settled without an agent ever
-// existing, so it is removal's normal case too.
+// existing, so it is removal's normal case too. An agent herdr positively
+// answers is GONE is the other ordinary case — it is the answer the real
+// herdr gives once a workspace (and the pane its agent lived on) has been
+// torn down, so a disposal that is resumed or re-run classifies it as
+// "nothing to kill" rather than as a refusal.
 func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, string, error) {
 	if !record.LaunchConfirmed {
 		return teardownGone, "the agent was never confirmed launched", nil
@@ -153,12 +261,13 @@ func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, st
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	if err != nil {
 		if gone(err) {
-			// herdr's POSITIVE answer that nobody is there (classify.go): the
-			// one answer that makes removal safe. It is recorded durably —
-			// the marker is what a herdr-free collect would read — and the
-			// removal proceeds. Treating it as a failure here would strand a
-			// settled attempt forever: every later dispose would refuse on
-			// the same positive answer, and the workspace would never go.
+			// herdr's POSITIVE answer that nobody is there (classify.go's
+			// gone() is exactly these two codes): the one answer that makes
+			// removal safe. It is recorded durably — the marker is what a
+			// herdr-free collect would read — and the removal proceeds.
+			// Treating it as a failure here would strand a settled attempt
+			// forever: every later dispose would refuse on the same positive
+			// answer, and the workspace would never go.
 			_ = e.storeAt(record.State).markAgentGone(e.stamp())
 			return teardownGone, fmt.Sprintf(
 				"herdr answers that the agent %s is no longer there", record.AgentName), nil
@@ -250,7 +359,7 @@ func disposalNote(record *attemptRecord, opts subprocess.DisposeOptions, persist
 		what = "workspace and worktree"
 	}
 	if !removedWorkspace {
-		what = "branch (the herdr workspace " + record.WorkspaceID + " was already gone)"
+		what = "branch (the herdr workspace " + record.WorkspaceID + " was already gone — herdr was asked, and holds nothing of this attempt)"
 	}
 	if opts.Reason != "" {
 		return fmt.Sprintf("disposed the %s of attempt %d: %s", what, record.Attempt, opts.Reason)
