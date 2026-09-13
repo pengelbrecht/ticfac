@@ -112,6 +112,15 @@ type harness struct {
 	mode       string // the fake agent's mode
 	agentCmd   *exec.Cmd
 
+	// The fake agent's process, tracked behind mu: the goroutine that
+	// reaps it (cmd.Wait, launched by the agent.start route) is the only
+	// writer of its exit facts, and a test that waits for the process to
+	// exit reads them through the agentProcess accessor rather than through
+	// os/exec's — cmd.ProcessState is written by Wait, so reading it from
+	// the test goroutine was the data race -race caught here (tick wmw).
+	agentProcDone bool
+	agentProcErr  error
+
 	// agentGone is set once the fake herdr has torn a workspace down: the
 	// agent lived on the pane that went with it, so every later agent.get
 	// answers pane_not_found — the positive-absence answer the real herdr
@@ -369,7 +378,10 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if h.spawn {
 			root, err := contracts.RepoRoot()
 			if err != nil {
-				t.Fatal(err)
+				// An error ANSWER, never t.Fatal: this route runs on the
+				// server's goroutine, and Fatal there exits the wrong
+				// goroutine.
+				return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "agent.start: "+err.Error())
 			}
 			script := filepath.Join(root, "internal", "exec", "herdr", "testdata", "fake-agent.sh")
 			cmd := exec.Command("/bin/sh", script, worktreeOf(h, req), h.promptFile, h.statusFile, h.interruptFile, h.mode)
@@ -385,7 +397,15 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 			h.mu.Lock()
 			h.agentCmd = cmd
 			h.mu.Unlock()
-			go func() { _ = cmd.Wait() }()
+			// cmd.Wait is the only writer of the process's exit facts, and it
+			// runs on its own goroutine: a test waiting on the exit reads the
+			// fields below, never cmd.ProcessState (tick wmw's race fix).
+			go func() {
+				err := cmd.Wait()
+				h.mu.Lock()
+				h.agentProcDone, h.agentProcErr = true, err
+				h.mu.Unlock()
+			}()
 		}
 		return herdtest.RespondJSON(w, req.ID, map[string]any{
 			"type": "agent_started",
@@ -527,6 +547,16 @@ func (h *harness) removals() []string {
 	return append([]string(nil), h.removed...)
 }
 
+// agentProcess answers whether the harness launched the fake agent, and
+// whether its process has been reaped yet — with cmd.Wait's error if it
+// has. Both facts are read behind mu because Wait writes them from its own
+// goroutine; reading os/exec's ProcessState directly would race with it.
+func (h *harness) agentProcess() (spawned, exited bool, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.agentCmd != nil, h.agentProcDone, h.agentProcErr
+}
+
 // restartHerdr simulates the substrate restart that strands every recorded
 // workspace id (tick 5hz): herdr comes back with the same worktrees in the
 // same places, but every workspace it holds is under a NEW id. It returns
@@ -583,6 +613,20 @@ func (h *harness) currentStatus() string {
 		return "idle"
 	}
 	return status
+}
+
+// agentDone is the fake agent's own answer that its whole turn is over:
+// the `done` it writes to its status file as its LAST act, after every
+// commit it will ever make. This is deliberately NOT the executor's
+// Inspect().Terminal: the completion contract (inspect.go, durable evidence
+// first) makes an attempt terminal as soon as its report EXISTS, which in
+// the boundary fixtures happens BEFORE the agent's final commit — the
+// window that made TestAForceAddedReportIsCaughtAtCollect flaky under a
+// loaded full-suite run while passing in isolation every time (tick wmw).
+// A test that means "the agent's turn is over" waits for the agent's own
+// done signal, never for the executor's verdict on the report.
+func (h *harness) agentDone() bool {
+	return h.currentStatus() == "done"
 }
 
 // setStatus seeds the fake agent's status, for tests that drive the agent's
