@@ -379,18 +379,18 @@ func TestARenamedPaneBusyCodeIsAnOperationalFailure(t *testing.T) {
 // TestAnyPromptFailureIsAnObservation is the other rename hazard, and the
 // gate-content one beside it: herdr renamed agent_prompt_stalled, or the
 // pane's rendering changed, or the text never landed — and none of it may
-// turn into "the agent cannot work". There is no content gate reading the
-// pane back in this executor; every prompt failure is an observation the
-// wait judges, and Start succeeds.
+// turn into "the agent cannot work". The first-round-trip gate records
+// every prompt failure as a finding about the DISPATCH — an observation
+// that names the answer herdr gave — and Start succeeds. A submission herdr
+// refused outright is not followed by a wait: the gate records not
+// delivered and stops; the agent's own state stays a question for inspect,
+// which this fixture leaves answering normally.
 func TestAnyPromptFailureIsAnObservation(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
-	// The renamed stall code, and a confirmation wait that fails with a
-	// code this build has never heard either.
+	// The renamed stall code — a code this build has never heard, so the
+	// gate must treat it as a refusal it can only record.
 	h.server.Route(herdtest.MethodAgentPrompt, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		return herdtest.RespondErr(w, req.ID, "agent_prompt_never_landed", "herdr saw no state change")
-	})
-	h.server.Route(herdtest.MethodAgentWait, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
-		return herdtest.RespondErr(w, req.ID, "wait_broken", "the wait could not run")
 	})
 	handle, err := h.start("t1")
 	if err != nil {

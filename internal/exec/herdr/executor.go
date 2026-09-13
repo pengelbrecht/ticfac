@@ -377,7 +377,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		return nil, fmt.Errorf("record the launch: %w", err)
 	}
 
-	e.submit(ctx, st, record)
+	e.gate(ctx, st, record)
 
 	return handleFor(record), nil
 }
@@ -394,10 +394,13 @@ var errNoShape = errors.New("the reply carries no usable shape")
 //     StartupTimeout — the operator's own patience budget — rather than a
 //     fixed attempt count that ignored it.
 //   - a launch that answers launch_pending (or not yet interactive_ready):
-//     herdr typed the command but has not detected the agent. Sampled by
-//     agent.get until readiness flips, because the STATUS reaches idle about
-//     a second before readiness does and waiting on lifecycle status alone
-//     does not help.
+//     herdr typed the command but has not detected the agent. Readiness is
+//     established over the protocol FIRST (tick x9x): the caller's budget
+//     is handed to herdr as agent.start's own startup wait, so herdr blocks
+//     until it has detected the agent and the reply IS the acknowledgement.
+//     The poll below is the FALLBACK, for a herdr that answers a pending
+//     launch despite that wait — and it samples agent.get, herdr's
+//     structured answer about its own detection, never a rendered text.
 //
 // Any other failure is returned: never cleaned up, never retried, because a
 // repeated substrate error is a diagnosis for a person and not something a
@@ -409,6 +412,14 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 		PaneID: record.PaneID,
 		Args:   record.AgentArgs,
 	}
+	// The readiness acknowledgement is asked for in the launch itself. The
+	// caller's StartupTimeout is the budget and is never lengthened: a
+	// budget too short for the range herdr accepts is not rounded up to
+	// fit — the launch goes out without the wait and readiness falls to
+	// the poll, which spends that same budget and no more.
+	if wait, ok := herdrStartupWait(e.opts.StartupTimeout); ok {
+		params.StartupTimeout = wait
+	}
 	deadline := e.now().Add(e.opts.StartupTimeout)
 	for {
 		started, err := e.client.AgentStart(ctx, params)
@@ -417,7 +428,9 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 				return started, nil
 			}
 			// The launch is accepted but pending: herdr has typed the
-			// command and not yet detected the agent. Poll readiness.
+			// command and not yet detected the agent — the answer of a
+			// herdr that did not take the startup wait, or one too old
+			// to offer it. Poll readiness.
 			return e.waitInteractiveReady(ctx, st, record)
 		}
 		if !client.IsCode(err, client.CodeAgentPaneBusy) {
@@ -435,8 +448,32 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 	}
 }
 
+// herdrStartupWait converts the caller's startup budget into agent.start's
+// own startup wait, when herdr accepts that value: strictly above
+// [client.MinAgentStartupTimeout] (the floor is exclusive) and at most
+// [client.MaxAgentStartupTimeout]. A budget outside the range is never
+// clamped INTO it: rounding up would spend patience the caller did not
+// grant, and herdr's floor exists because its launch wait cannot be usefully
+// bounded below it. A budget too short for the wait is spent by the
+// readiness poll instead, which answers the same question at that same
+// budget.
+func herdrStartupWait(budget time.Duration) (time.Duration, bool) {
+	switch {
+	case budget <= client.MinAgentStartupTimeout:
+		return 0, false
+	case budget > client.MaxAgentStartupTimeout:
+		return client.MaxAgentStartupTimeout, true
+	default:
+		return budget, true
+	}
+}
+
 // waitInteractiveReady samples the agent by name until herdr reports it ready
 // for input. agent_not_ready on a PROMPT is what this poll exists to outlast.
+// It is the FALLBACK (tick x9x): reached only when the launch answered
+// pending despite agent.start's own startup wait, and every sample is
+// agent.get — herdr's structured answer about its own detection. Nothing
+// here reads a pane.
 func (e *Executor) waitInteractiveReady(ctx context.Context, st *store, record *attemptRecord) (*client.AgentStarted, error) {
 	deadline := e.now().Add(e.opts.StartupTimeout)
 	for {
@@ -452,68 +489,6 @@ func (e *Executor) waitInteractiveReady(ctx context.Context, st *store, record *
 				record.AgentName, e.opts.StartupTimeout)
 		}
 		e.sleepUntil(readinessPollInterval)
-	}
-}
-
-// submit delivers the worker prompt and confirms the dispatch.
-//
-// The confirmation is the spawn lesson that is NOT fire-and-forget: returning
-// the instant the submission is accepted leaves the worker in the settled
-// state the launch left it in, and a wait moments later resolves it as
-// already settled — a wave that fans in before any work starts. So Start
-// waits once for the agent to reach `working`. A confirmation that times out
-// is reported through the observation log and DispatchConfirmed=false rather
-// than failing the spawn: a trivial tick can finish before `working` is ever
-// rendered, and an unconfirmed dispatch is a fact, not a verdict.
-//
-// agent_prompt_stalled decides nothing here. herdr saw no state change after
-// submitting — which a worker that answered in under a second also produces —
-// and there is deliberately no content gate reading the pane back: a
-// rendering or truncation change must never turn into "the agent cannot work"
-// (that classification is tick x6j's). The stall is recorded; the wait below
-// is the one thing that observes the agent's answer.
-func (e *Executor) submit(ctx context.Context, st *store, record *attemptRecord) {
-	prompt := renderWorkerPrompt(record, record.Spec)
-	_, err := e.client.AgentPrompt(ctx, client.AgentPromptParams{
-		Target: record.AgentName,
-		Text:   prompt,
-	})
-	if err != nil {
-		if client.IsCode(err, client.CodeAgentPromptStalled) {
-			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-				Detail: "herdr saw no state change after submitting the prompt (agent_prompt_stalled); " +
-					"the submission is left to the wait to judge"})
-		} else {
-			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-				Detail: "prompt submission answered " + err.Error() + "; the attempt is left for the wait to judge"})
-		}
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, e.opts.ConfirmTimeout)
-	defer cancel()
-	if _, waitErr := e.client.AgentWait(waitCtx, client.AgentWaitParams{
-		Target:  record.AgentName,
-		Until:   []client.AgentStatus{client.StatusWorking},
-		Timeout: e.opts.ConfirmTimeout,
-	}); waitErr == nil {
-		record.DispatchConfirmed = true
-		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: "the agent entered working: the dispatch is confirmed"})
-	} else if client.IsTimeout(waitErr) {
-		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: "the agent did not visibly enter working within " + e.opts.ConfirmTimeout.String() +
-				"; the dispatch is recorded unconfirmed — a trivial tick can finish before working is rendered"})
-	} else {
-		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: "the confirmation wait answered " + waitErr.Error() + "; the dispatch is recorded unconfirmed"})
-	}
-	if err := st.writeAttempt(record); err != nil {
-		// The launch is already durable; the confirmation is a recorded
-		// observation and its absence is a fact, not a failure. A write
-		// failure here is still reported: a record that did not land is a
-		// job nobody can find.
-		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-			Detail: "the dispatch confirmation could not be recorded: " + err.Error()})
 	}
 }
 
