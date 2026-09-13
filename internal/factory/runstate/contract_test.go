@@ -198,8 +198,12 @@ func referenced(c runStateContract, record string) bool {
 
 func TestContractIdentifiesItself(t *testing.T) {
 	c := load(t)
-	if c.SchemaVersion != 1 {
-		t.Errorf("schema_version = %d, want 1", c.SchemaVersion)
+	// Bundle 4.1.1 (tick 9t0) bumped ticfac.run_state to schema_version 2 for
+	// the tier field in provenance and the first-class findings channel. This
+	// test moved in from ticks (tick ek7) pinned at 1 and the two landed in
+	// the same wave, so neither saw the other.
+	if c.SchemaVersion != 2 {
+		t.Errorf("schema_version = %d, want 2", c.SchemaVersion)
 	}
 	if c.Contract != "ticfac.run_state" {
 		t.Errorf("contract = %q, want ticfac.run_state", c.Contract)

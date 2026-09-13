@@ -11,7 +11,7 @@
 // refusal changed on one side only fails the other.
 //
 // It is also where the bundle's ONE evidence record lives (SPEC §10.1,
-// ticfac.evidence.v1). contracts/ticfac-run-state.json places the file and
+// ticfac.evidence.v2). contracts/ticfac-run-state.json places the file and
 // pins how it is written, and references this schema by id;
 // evidence_cross_contract_test.go validates that contract's golden and
 // negative evidence documents against this definition, and compares the
@@ -47,8 +47,8 @@ var SchemaIDs = map[string]string{
 	"job_status": "ticfac.job-status.v1",
 	"cancel_ack": "ticfac.cancel-ack.v1",
 	"job_result": "ticfac.job-result.v1",
-	"evidence":   "ticfac.evidence.v1",
+	"evidence":   "ticfac.evidence.v2",
 	// The envelope is versioned; `result` inside it is the role-specific
 	// contract named by JobSpec.output_schema.
-	"role_result": "ticfac.role-result.v1",
+	"role_result": "ticfac.role-result.v2",
 }
