@@ -1,7 +1,8 @@
 package subprocess
 
 import (
-	"reflect"
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -179,17 +180,26 @@ func TestParseReportLiftsTheFindingsBlockBesideTheStatus(t *testing.T) {
 	}
 }
 
-func TestFindingsAsAnyCarriesTheRecordFieldForField(t *testing.T) {
-	findings := []Finding{{Kind: FindingKindContract, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "pengelbrecht/ticks"}}
-	as := FindingsAsAny(findings)
-	if len(as) != 1 {
-		t.Fatalf("as %v", as)
+// The envelope states the typed list even when empty — REQUIRED by the
+// bundle's role_result schema since 4.0.0, so `findings: []` is a fact a
+// record states rather than a key a reader misses. The marshalling is on the
+// record itself, so a hand-built envelope cannot forget it either.
+func TestTheEnvelopeStatesFindingsEvenWhenEmpty(t *testing.T) {
+	withFindings := RoleResult{Findings: []Finding{{Kind: FindingKindContract, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "pengelbrecht/ticks"}}}
+	raw, err := json.Marshal(withFindings)
+	if err != nil {
+		t.Fatal(err)
 	}
-	want := map[string]any{"kind": "contract", "title": "t", "body": "b", "severity": "high", "target": "pengelbrecht/ticks"}
-	if !reflect.DeepEqual(as[0], want) {
-		t.Fatalf("as[0] %v, want %v", as[0], want)
+	if !bytes.Contains(raw, []byte(`"target":"pengelbrecht/ticks"`)) {
+		t.Fatalf("the typed finding did not ride the envelope field for field: %s", raw)
 	}
-	if got := FindingsAsAny(nil); len(got) != 0 || got == nil {
-		t.Fatalf("an empty list is stated as [], not nil: %v", got)
+
+	empty := RoleResult{Findings: nil}
+	raw, err = json.Marshal(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"findings":[]`)) {
+		t.Fatalf("an absent list must marshal as \"findings\":[] — a missing key is a record the schema refuses: %s", raw)
 	}
 }

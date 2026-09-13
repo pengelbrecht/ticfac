@@ -4,14 +4,19 @@ import "testing"
 
 // The findings channel through a REAL collect: the block a worker wrote in its
 // report arrives in the collection the reconciler reads, and in the
-// role-result envelope — inside `result`, the one object the contract leaves
-// open to the role's own payload (tick 7vn).
+// role-result envelope's FIRST-CLASS Findings field (tick 7vn; bundle 4.0.0
+// pinned the five closed shapes as $defs.finding instead of letting them ride
+// in the open result payload).
 //
 // The two halves both have to hold, and both are pinned here:
 //   - Collection.Findings is the typed list the reconciler acts on;
-//   - RoleResult.Result["findings"] is the same list, stated in the envelope so
-//     it is durable in the collected record even when nothing acts on it —
-//     the envelope carries it whether or not this run was the one to draft it.
+//   - RoleResult.Findings is the same list, validated by the envelope's own
+//     schema, so it is durable in the collected record even when nothing acts
+//     on it — and stated ([]) even when the report carried no block at all.
+//
+// The typed list must NOT also ride in the open payload: the envelope's
+// findings are the record now, and a second spelling inside `result` is
+// exactly the two-shapes-one-record drift the bundle was cut to retire.
 
 func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "findings"})
@@ -39,15 +44,22 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	if answer == nil {
 		t.Fatal("no role-result envelope")
 	}
-	findings, ok := answer.Result["findings"].([]map[string]any)
-	if !ok || len(findings) != 2 {
-		t.Fatalf("envelope findings %v", answer.Result["findings"])
+	if answer.SchemaVersion != SchemaVersionRoleResult {
+		t.Errorf("envelope schema_version %d, want %d — the findings field is a v2 record", answer.SchemaVersion, SchemaVersionRoleResult)
 	}
-	if findings[1]["target"] != "pengelbrecht/ticks" {
-		t.Errorf("envelope findings[1] %+v", findings[1])
+	if len(answer.Findings) != 2 {
+		t.Fatalf("envelope findings %v", answer.Findings)
+	}
+	if answer.Findings[1].Kind != FindingKindUpstreamTick || answer.Findings[1].Target != "pengelbrecht/ticks" {
+		t.Errorf("envelope findings[1] %+v, want an upstream tick routed to pengelbrecht/ticks", answer.Findings[1])
 	}
 	if got := answer.Result["findings_problem"]; got != "" {
 		t.Errorf("findings_problem %v, want the empty string", got)
+	}
+	// The one spelling: the typed list is a field of the record now, and the
+	// open payload must not carry a second, unvalidated copy of it.
+	if _, still := answer.Result["findings"]; still {
+		t.Error("the envelope still carries result[\"findings\"] — the first-class field is the record now, and a second spelling is the drift the bundle was cut to retire")
 	}
 }
 
@@ -66,6 +78,12 @@ func TestCollectCarriesAnUnparseableBlockAsAProblemNotSilence(t *testing.T) {
 	if answer := collected.Result.RoleResult; answer != nil {
 		if got := answer.Result["findings_problem"]; got == "" {
 			t.Errorf("the envelope does not name the findings problem: %v", answer.Result)
+		}
+		// A block that would not parse is a problem the report carries — never
+		// an empty list wearing a clean record's clothes: the envelope states
+		// BOTH facts, the empty findings and the reason.
+		if len(answer.Findings) != 0 {
+			t.Errorf("envelope findings %v, want none — the problem is not a finding", answer.Findings)
 		}
 	}
 }

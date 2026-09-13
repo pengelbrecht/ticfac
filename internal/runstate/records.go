@@ -7,8 +7,11 @@ import (
 )
 
 // SchemaVersion is the envelope's schema_version, carried by every committed
-// record (SPEC §10.4).
-const SchemaVersion = 1
+// record (SPEC §10.4). Bundle 4.0.0 moved it from 1 to 2: every record this
+// package places carries provenance, and provenance gained the tier field —
+// a closed object's shape moved, which under the bundle's own versioning
+// rule is a new schema_version, not a compatible extension.
+const SchemaVersion = 2
 
 // The records are closed structures on purpose: the contract's schemas are
 // `additionalProperties: false`, so a field these types cannot express is a
@@ -23,17 +26,24 @@ const SchemaVersion = 1
 // contracts/ticfac-run-state.json field for field; this is the one Go
 // spelling of it, for the same reason the bundle has one JSON spelling.
 type Provenance struct {
-	RunID                 string  `json:"run_id"`
-	TickID                *string `json:"tick_id"`
-	Attempt               *int    `json:"attempt"`
-	SourceRef             string  `json:"source_ref"`
-	SourceSHA             string  `json:"source_sha"`
-	IntegrationRef        *string `json:"integration_ref"`
-	Phase                 Phase   `json:"phase"`
-	Executor              *string `json:"executor"`
-	WorkspaceID           *string `json:"workspace_id"`
-	Backend               *string `json:"backend"`
-	Role                  *string `json:"role"`
+	RunID          string  `json:"run_id"`
+	TickID         *string `json:"tick_id"`
+	Attempt        *int    `json:"attempt"`
+	SourceRef      string  `json:"source_ref"`
+	SourceSHA      string  `json:"source_sha"`
+	IntegrationRef *string `json:"integration_ref"`
+	Phase          Phase   `json:"phase"`
+	Executor       *string `json:"executor"`
+	WorkspaceID    *string `json:"workspace_id"`
+	Backend        *string `json:"backend"`
+	Role           *string `json:"role"`
+	// Tier is the capability tier this dispatch was derived under — the rung
+	// of the [tier_policy] ladder that routed the model (tick 5eq). It became a
+	// field at bundle 4.0.0 so an over-tiered run can be audited from
+	// provenance alone, not just from the dispatch marker and the
+	// tier-resolved profile digest. Required-and-null like every provenance
+	// field: null when no dispatch produced the record.
+	Tier                  *string `json:"tier"`
 	ProfileDigest         *string `json:"profile_digest"`
 	Model                 *string `json:"model"`
 	ContextManifestDigest *string `json:"context_manifest_digest"`
@@ -45,7 +55,7 @@ type Provenance struct {
 // the first rather than reading a missing field as a null one.
 var provenanceFields = []string{
 	"run_id", "tick_id", "attempt", "source_ref", "source_sha", "integration_ref",
-	"phase", "executor", "workspace_id", "backend", "role", "profile_digest",
+	"phase", "executor", "workspace_id", "backend", "role", "tier", "profile_digest",
 	"model", "context_manifest_digest",
 }
 
@@ -288,7 +298,7 @@ func (d Decision) Validate() error {
 }
 
 // Evidence is the record this contract PLACES and contracts/job-protocol.json
-// DEFINES (`ticfac.evidence.v1`). The Go type follows that definition — nested
+// DEFINES (`ticfac.evidence.v2`, since bundle 4.1.1). The Go type follows that definition — nested
 // provenance, closed, every field required — because bundle 1.2.0 shipped two
 // shapes of it and no document satisfied both.
 type Evidence struct {

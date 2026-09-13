@@ -35,8 +35,15 @@ const (
 	SchemaIDJobStatus  = "ticfac.job-status.v1"
 	SchemaIDCancelAck  = "ticfac.cancel-ack.v1"
 	SchemaIDJobResult  = "ticfac.job-result.v1"
-	SchemaIDRoleResult = "ticfac.role-result.v1"
+	SchemaIDRoleResult = "ticfac.role-result.v2"
 )
+
+// SchemaVersionRoleResult is the role-result envelope's own schema_version.
+// It left the other records behind at bundle 4.0.0, which added the findings
+// channel as a first-class field: records are closed, so a moved shape is a
+// NEW schema_version, not a compatible extension — an envelope from the
+// previous major is refused by the compiled-in schema rather than half-read.
+const SchemaVersionRoleResult = 2
 
 // ---------------------------------------------------------------- JobSpec ---
 
@@ -390,7 +397,11 @@ type ResultSource struct {
 
 // RoleResult is the envelope every LLM job returns. `result` is open because
 // its shape is the role contract named by schema_id; the envelope is what the
-// protocol freezes.
+// protocol freezes. Since bundle 4.0.0 the envelope carries the worker's typed
+// FINDINGS as a first-class field — the five closed shapes of a discovery
+// outside the tick, validated by the envelope's schema rather than trusted
+// from the open payload (tick 7vn shipped them riding in `result`; this is the
+// bundle bump that retired that state).
 type RoleResult struct {
 	SchemaVersion int            `json:"schema_version"`
 	SchemaID      string         `json:"schema_id"`
@@ -398,8 +409,22 @@ type RoleResult struct {
 	Status        string         `json:"status"`
 	Summary       string         `json:"summary"`
 	Result        map[string]any `json:"result"`
+	Findings      []Finding      `json:"findings"`
 	Evidence      []EvidenceRef  `json:"evidence,omitempty"`
 	Decisions     []Decision     `json:"decisions,omitempty"`
+}
+
+// MarshalJSON states the findings list even when empty, because the envelope
+// REQUIRES it: a report that carried no findings block and one whose block said
+// nothing are the same thing, and that is exactly what `findings: []` says —
+// the absence is a stated fact, never a missing key.
+func (r RoleResult) MarshalJSON() ([]byte, error) {
+	type roleResult RoleResult // shed this method, keep the field tags
+	out := roleResult(r)
+	if out.Findings == nil {
+		out.Findings = []Finding{}
+	}
+	return json.Marshal(out)
 }
 
 // ArtifactRef points at something the job produced.
@@ -410,7 +435,7 @@ type ArtifactRef struct {
 	Bytes         int    `json:"bytes,omitempty"`
 }
 
-// EvidenceRef cites a ticfac.evidence.v1 record by its key.
+// EvidenceRef cites a ticfac.evidence.v2 record by its key.
 type EvidenceRef struct {
 	Key            string `json:"key"`
 	PersistenceURI string `json:"persistence_uri"`

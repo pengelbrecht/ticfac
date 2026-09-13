@@ -14,7 +14,7 @@ import (
 )
 
 // maxArchiveEntry bounds one file read out of the tarball. The largest
-// contract in bundle 3.0.0 is under 100 KiB; 8 MiB is room to grow and still
+// contract in the bundle is under 100 KiB; 8 MiB is room to grow and still
 // refuses an archive that is not what it claims to be.
 const maxArchiveEntry = 8 << 20
 

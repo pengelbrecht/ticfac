@@ -10,7 +10,7 @@
 //	evidence/<key>.json    one per evidence key, create-if-absent
 //
 // The evidence record is PLACED here and DEFINED by contracts/job-protocol.json
-// (`ticfac.evidence.v1`, nested provenance, closed). This package therefore
+// (`ticfac.evidence.v2`, nested provenance, closed). This package therefore
 // owns where the file goes and how it is written, and copies no schema.
 //
 // # Durable means pushed

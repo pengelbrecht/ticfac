@@ -2,6 +2,7 @@ package parity
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -99,8 +100,8 @@ var theSevenRecords = map[string]string{
 	"job_status":  "ticfac.job-status.v1",
 	"cancel_ack":  "ticfac.cancel-ack.v1",
 	"job_result":  "ticfac.job-result.v1",
-	"role_result": "ticfac.role-result.v1",
-	"evidence":    "ticfac.evidence.v1",
+	"role_result": "ticfac.role-result.v2",
+	"evidence":    "ticfac.evidence.v2",
 }
 
 func loadJobProtocol(t *testing.T) (jobProtocol, map[string]*schema.Schema, map[string]*schema.Schema) {
@@ -123,7 +124,10 @@ func loadJobProtocol(t *testing.T) (jobProtocol, map[string]*schema.Schema, map[
 func TestJobProtocolIdentityAndRecords(t *testing.T) {
 	c, _, _ := loadJobProtocol(t)
 
-	if c.SchemaVersion != 1 || c.Contract != "ticfac.job-protocol" {
+	// Bundle 4.0.0: the records themselves moved (provenance gained tier, the
+	// role-result envelope gained findings), which under the closed-records
+	// rule is a new file version rather than an extension of the old one.
+	if c.SchemaVersion != 2 || c.Contract != "ticfac.job-protocol" {
 		t.Errorf("the contract does not identify itself: %q v%d", c.Contract, c.SchemaVersion)
 	}
 	if c.Versioning.Rule == "" || c.Versioning.AddingAField == "" {
@@ -319,6 +323,83 @@ func TestCompletionAndDisposalRules(t *testing.T) {
 	}
 	if c.Credentials.Issuer == "" || c.Credentials.OwnedBy == "" {
 		t.Error("credentials are part of the protocol; the contract must say who issues them and who owns them")
+	}
+}
+
+// The findings channel (bundle 4.0.0): a worker's typed discoveries outside
+// its tick are a first-class field of the envelope, validated by the schema
+// both repositories read, not a list riding in `result`'s open payload — the
+// state tick 7vn shipped with, waiting for this bump.
+func TestTheRoleResultCarriesTheFindingsChannel(t *testing.T) {
+	_, records, defs := loadJobProtocol(t)
+
+	// The record schema is a bare $ref into $defs; follow it, as the
+	// validators do, before asserting on its shape.
+	raw, ok := records["role_result"]
+	if !ok {
+		t.Fatal("no role_result record")
+	}
+	if raw.Ref == "" {
+		t.Fatal("the role_result record is not a $ref into $defs — the readers resolve it, this test must too")
+	}
+	role, ok := defs[strings.TrimPrefix(raw.Ref, "#/$defs/")]
+	if !ok {
+		t.Fatalf("role_result points at %q and no such $def exists", raw.Ref)
+	}
+	if !contains(role.Required, "findings") {
+		t.Errorf("role_result must require findings; required = %v", role.Required)
+	}
+	list := role.Properties["findings"]
+	if list == nil || list.Items == nil || list.Items.Ref != "#/$defs/finding" {
+		t.Errorf("role_result.findings must be an array of $defs.finding, got %+v", list)
+	}
+	// The bump is real: a v1 envelope is refused by name, which is what makes
+	// "findings riding in the open payload" a retired state rather than a
+	// tolerated one.
+	if enum := role.Properties["schema_version"].Enum; len(enum) != 1 || fmt.Sprint(enum[0]) != "2" {
+		t.Errorf("role_result.schema_version enum = %v, want [2]", enum)
+	}
+
+	finding, ok := defs["finding"]
+	if !ok {
+		t.Fatal("$defs.finding is missing")
+	}
+	for _, field := range []string{"kind", "title", "body", "severity", "target"} {
+		if !contains(finding.Required, field) {
+			t.Errorf("finding must require %q (empty included — 'no target' and 'target forgotten' must not look identical); required = %v",
+				field, finding.Required)
+		}
+	}
+	if enum := finding.Properties["kind"].Enum; len(enum) != 4 || fmt.Sprint(enum) != "[proposed-tick upstream-tick contract defect]" {
+		t.Errorf("finding.kind enum = %v, want the four kinds of the findings channel", enum)
+	}
+	if enum := finding.Properties["severity"].Enum; len(enum) != 3 || fmt.Sprint(enum) != "[low medium high]" {
+		t.Errorf("finding.severity enum = %v, want [low medium high]", enum)
+	}
+	if finding.AdditionalProperties == nil || *finding.AdditionalProperties {
+		t.Error("finding must be closed — a field the reporting side invents is a triage decision smuggled in as data")
+	}
+}
+
+// The tier field (bundle 4.0.0): the rung of the [tier_policy] ladder that
+// routed the model, required-and-null like every provenance field, so an
+// over-tiered run is auditable from provenance alone — the audit gap tick 5eq
+// had to leave on the dispatch marker.
+func TestProvenanceCarriesTheTierField(t *testing.T) {
+	_, _, defs := loadJobProtocol(t)
+
+	provenance, ok := defs["provenance"]
+	if !ok {
+		t.Fatal("$defs.provenance is missing")
+	}
+	if !contains(provenance.Required, "tier") {
+		t.Errorf("provenance must require tier; required = %v", provenance.Required)
+	}
+	if types := provenance.Properties["tier"].Type; len(types) != 2 || fmt.Sprint(types) != "[string null]" {
+		t.Errorf("provenance.tier type = %v, want string-or-null: required-and-null is how 'no tier was derived' stays a stated fact", types)
+	}
+	if provenance.AdditionalProperties == nil || *provenance.AdditionalProperties {
+		t.Error("provenance must be closed — an invented provenance field is a claim nothing validates")
 	}
 }
 

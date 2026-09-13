@@ -314,7 +314,10 @@ func TestARoleJobsValidatedAnswerIsRecordedAsADecision(t *testing.T) {
 		if decision.Request["output_schema"] != "ticfac.job-result."+role+".v1" {
 			t.Errorf("the %s decision does not record what was asked for: %v", role, decision.Request)
 		}
-		if decision.Response["role"] != role || decision.Response["schema_version"] != float64(subprocess.SchemaVersion) {
+		// The response IS the envelope, at the envelope's own schema_version:
+		// the role-result record left the other protocol records behind at
+		// bundle 4.1.1, when findings became a first-class field.
+		if decision.Response["role"] != role || decision.Response["schema_version"] != float64(subprocess.SchemaVersionRoleResult) {
 			t.Errorf("the %s decision's response is not the envelope: %v", role, decision.Response)
 		}
 		if decision.Provenance.ProfileDigest == nil || *decision.Provenance.ProfileDigest == "" {

@@ -15,11 +15,12 @@ import (
 // The channel is a machine-readable block in the report the worker already
 // writes — a fenced code block with the info string `findings` holding a
 // JSON array of typed findings — lifted by collect into the role-result
-// envelope, where `result` is the one object the contract leaves open for
-// the role's own payload. The reconciler turns each finding into a DRAFT
-// tick proposal; the worker never writes `.tick/`, which is a protected
-// prefix, and the reconciler never opens a tick on a worker's word — the
-// draft is triaged by a person, which is what keeps the scope decision human.
+// envelope's FIRST-CLASS Findings field, where the bundle's $defs.finding
+// (since 4.0.0) validates the five closed shapes rather than trusting the
+// open result payload. The reconciler turns each finding into a DRAFT tick
+// proposal; the worker never writes `.tick/`, which is a protected prefix,
+// and the reconciler never opens a tick on a worker's word — the draft is
+// triaged by a person, which is what keeps the scope decision human.
 //
 // The block is deliberately INSIDE the report rather than a second file: the
 // report is the one deliverable collect already reads durably (off the branch
@@ -200,23 +201,4 @@ func ParseFindings(body string) (findings []Finding, problem string) {
 		return nil, ""
 	}
 	return out, ""
-}
-
-// FindingsAsAny is the typed list as the open role payload carries it: a JSON
-// round trip into []map[string]any, so what the envelope says is what the
-// record is, field for field.
-func FindingsAsAny(findings []Finding) []map[string]any {
-	out := []map[string]any{}
-	for _, finding := range findings {
-		raw, err := json.Marshal(finding)
-		if err != nil {
-			continue
-		}
-		var as map[string]any
-		if err := json.Unmarshal(raw, &as); err != nil {
-			continue
-		}
-		out = append(out, as)
-	}
-	return out
 }

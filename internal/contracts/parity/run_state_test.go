@@ -159,7 +159,9 @@ func loadRunState(t *testing.T) (runState, map[string]*schema.Schema, map[string
 func TestRunStateIdentityAndLayout(t *testing.T) {
 	c, _, _ := loadRunState(t)
 
-	if c.SchemaVersion != 1 || c.Contract != "ticfac.run_state" {
+	// Bundle 4.0.0: every record this contract places carries provenance,
+	// which gained the tier field — a moved shape under the closed-records rule.
+	if c.SchemaVersion != 2 || c.Contract != "ticfac.run_state" {
 		t.Errorf("the contract does not identify itself: %q v%d", c.Contract, c.SchemaVersion)
 	}
 	if c.Layout.Root != ".ticfac" {
@@ -362,7 +364,9 @@ func jobProtocolEvidenceSchema(t *testing.T) (*schema.Schema, map[string]*schema
 	if !ok {
 		t.Fatalf("%s no longer defines the evidence record", jobProtocolFile)
 	}
-	if c.Records["evidence"].SchemaID != "ticfac.evidence.v1" {
+	// Bundle 4.0.0: provenance gained the tier field, so the closed record
+	// moved to a new schema_id rather than gaining a field in place.
+	if c.Records["evidence"].SchemaID != "ticfac.evidence.v2" {
 		t.Fatalf("the evidence record's schema_id moved to %q", c.Records["evidence"].SchemaID)
 	}
 	return s, defs

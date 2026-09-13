@@ -13,12 +13,12 @@ import (
 
 func wellFormed() *subprocess.RoleResult {
 	return &subprocess.RoleResult{
-		SchemaVersion: subprocess.SchemaVersion,
+		SchemaVersion: subprocess.SchemaVersionRoleResult,
 		SchemaID:      "ticfac.job-result.review-epic.v1",
 		Role:          "review-epic",
 		Status:        subprocess.StatusDone,
 		Summary:       "the epic does what it said it would",
-		Result:        map[string]any{"findings": []any{}},
+		Result:        map[string]any{"verdict": "proceed"},
 	}
 }
 

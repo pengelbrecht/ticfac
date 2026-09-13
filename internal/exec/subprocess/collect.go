@@ -122,7 +122,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 	}
 	if hasReport && report.Status != "" {
 		result.RoleResult = &RoleResult{
-			SchemaVersion: SchemaVersion,
+			SchemaVersion: SchemaVersionRoleResult,
 			SchemaID:      record.Spec.OutputSchema,
 			Role:          record.Spec.Role,
 			Status:        report.Status,
@@ -134,15 +134,14 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 				"report_path":         report.Path,
 				"boundary_violations": stringsOrEmpty(append(append([]string{}, violations...), artifactViolations...)),
 				"needs_human":         report.NeedsHuman(),
-				// The findings channel (tick 7vn): the typed list rides in the
-				// envelope's one open object — `result` is the role's own payload,
-				// which is exactly where a worker's findings belong. Stated even
-				// when empty, so a report that carried no findings block and one
-				// whose block did not parse cannot read identically: the second
-				// also names why.
-				"findings":         FindingsAsAny(report.Findings),
+				// The findings channel (tick 7vn) rides FIRST-CLASS in the envelope
+				// since bundle 4.0.0 (Findings, below) — the open payload keeps only the
+				// problem, the one thing the closed record has no field for: a block that
+				// would not parse is stated as a problem, never as an empty list, so a
+				// truncated report cannot read as a clean one.
 				"findings_problem": report.FindingsProblem,
 			},
+			Findings: report.Findings,
 		}
 	}
 

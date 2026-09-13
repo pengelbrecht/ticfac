@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -240,8 +241,11 @@ func TestADeletedLedgerEntryIsRefused(t *testing.T) {
 
 	var manifest map[string]any
 	readJSON(t, filepath.Join(dir, BundleFile), &manifest)
+	// The entry that must exist is the CURRENT version's — deleting an older
+	// version's entry is history-tampering, but the check on the pin path is
+	// that the version on disk still has its own ledger record.
 	ledger := manifest["version_digests"].(map[string]any)
-	delete(ledger, "3.0.0")
+	delete(ledger, fmt.Sprint(manifest["version"]))
 	writeJSON(t, filepath.Join(dir, BundleFile), manifest)
 	recutPin(t, root)
 
@@ -319,15 +323,16 @@ func TestTwoDefinitionsOfOneSchemaIDAreRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Give the run-state contract its own definition of the evidence record —
-	// the exact shape 1.2.0 shipped.
+	// the exact shape 1.2.0 shipped, under the id the bundle publishes today
+	// (v2 since 4.0.0: provenance gained tier and the closed record moved).
 	document["evidence_envelope"] = map[string]any{
-		"schema_id": "ticfac.evidence.v1",
+		"schema_id": "ticfac.evidence.v2",
 		"schema":    map[string]any{"type": "object"},
 	}
 	writeJSON(t, path, document)
 
 	if err := VerifySchemaIDs(dir); err == nil {
-		t.Fatal("two definitions of ticfac.evidence.v1 passed VerifySchemaIDs")
+		t.Fatal("two definitions of ticfac.evidence.v2 passed VerifySchemaIDs")
 	} else {
 		t.Logf("refused: %s", firstLine(err.Error()))
 	}

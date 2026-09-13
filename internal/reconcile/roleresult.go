@@ -70,7 +70,7 @@ func loadRoleResultSchema() (*schema.Schema, map[string]*schema.Schema, error) {
 }
 
 // ValidateRoleResult holds one envelope to contracts/job-protocol.json's
-// `ticfac.role-result.v1`, and to the question that was asked: the schema_id
+// `ticfac.role-result.v2`, and to the question that was asked: the schema_id
 // must be the output_schema the JobSpec named, and the role must be the role
 // that was dispatched. Validating only the shape would admit a review's answer
 // read as a closeout's.

@@ -726,7 +726,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
-		Profile: dispatchProfile,
+		Profile: dispatchProfile, Tier: tier,
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -910,6 +910,7 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
+		Tier: marker.Tier,
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective

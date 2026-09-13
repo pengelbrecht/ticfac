@@ -220,6 +220,12 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 			Backend:        nil,
 			Role:           runstate.Ptr(marker.Role),
 			ProfileDigest:  runstate.Ptr(fingerprint["profile_digest"]),
+			// The tier is the one the attempt was DERIVED under (the marker's own
+			// tier, the same value the dispatch's provenance states) — the rung
+			// that routed the model this gate is over, not the role's base one.
+			// Since bundle 4.0.0 it is a field of the closed provenance object, so
+			// an over-tiered attempt is auditable from the gate's evidence alone.
+			Tier: gateTierPtr(marker),
 			// The model is the one the tier-resolved profile routes to — the
 			// model that DISPATCHED the attempt this gate is over, not the
 			// role's base one a tiered dispatch never used.
@@ -318,6 +324,19 @@ func (r *Reconciler) gateModel(marker attemptHandle) string {
 		return p.Model
 	}
 	return r.profileFor(marker.Role).Model
+}
+
+// gateTierPtr is the gate evidence's tier: the tier the marker says the
+// attempt was dispatched under, or nil when the marker names none (an
+// untiered dispatch, or a marker older than the tier policy). It is a
+// separate helper for the same reason gateModel is: a failure here must
+// degrade to a stated null, never lose the gate's record.
+func gateTierPtr(marker attemptHandle) *string {
+	if marker.Tier == "" {
+		return nil
+	}
+	tier := marker.Tier
+	return &tier
 }
 
 // closeTick closes the tick durably, through the tracker, and only after the
