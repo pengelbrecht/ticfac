@@ -1,0 +1,7 @@
+{
+  "$comment": "Which ticks the orchestrator image's tk is built from — the pin behind ARG TK_VERSION and ARG TK_SOURCE_REF in the staged cloud/sandbox Dockerfile. This is a property of the DEPLOYMENT, so it is a committed file a reviewer sees in a diff: not a per-operator ~/.ticfacrc field, not a flag. It is deliberately NOT contracts.pin.json's ref — that one records which ticks commit the vendored contract bundle was fetched at and moves for contract reasons, while this one moves for tk reasons (a subcommand the entrypoint runs, a fix the sandbox must carry). `ref` is a full commit sha: the image resolves it through the Go module proxy, an abbreviated commit is not a module version, and a branch name pins nothing. `version` is the label the image stamps the built tk with and the entrypoint verifies on PATH — `dev` for a build from an unreleased commit. `module` is the Go module the image installs tk from. Bumping any of these is a reviewable diff; read internal/factory/sourceref.go for the full rationale.",
+  "repository": "pengelbrecht/ticks",
+  "module": "github.com/pengelbrecht/ticks/cmd/tk",
+  "version": "dev",
+  "ref": "f3be01bcc160217517df153343c81d2efb18358e"
+}
