@@ -70,6 +70,15 @@ type attemptHandle struct {
 	// digest form (ProfileDigest covers the tier-resolved profile), which is
 	// an answer to "is this the same profile" — not to "which tier was this".
 	Tier string `json:"tier"`
+
+	// Touch is the files this tick DECLARED it expects to touch (tick 01u):
+	// the tick's touch: labels, parsed and normalised at PLANNING time so the
+	// check is a pure function of what the tracker said. It rides the marker
+	// for the same reason Tier does — the merge that holds a worker to its
+	// declaration runs long after the plan this incarnation read, and an
+	// adopted attempt is held to the declaration it was DISPATCHED under, not
+	// to whatever the tracker says today.
+	Touch []string `json:"touch"`
 }
 
 // asMap is the durable form of the marker: everything BUT StateRoot and Repo,
@@ -80,7 +89,7 @@ func (a attemptHandle) asMap() map[string]any {
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
 		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA,
-		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier,
+		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier, "touch": a.Touch,
 	}
 }
 
@@ -102,11 +111,26 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	case int:
 		attempt = value
 	}
+	// Touch reaches this reader as []any — the marker is stored and read as
+	// JSON on origin — so both shapes are decoded, and anything that is not a
+	// string is skipped rather than guessed at.
+	var touch []string
+	switch value := raw["touch"].(type) {
+	case []string:
+		touch = value
+	case []any:
+		for _, one := range value {
+			if path, ok := one.(string); ok {
+				touch = append(touch, path)
+			}
+		}
+	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
 		Model:   get("model"), PromptDigest: get("prompt_digest"), Tier: get("tier"),
+		Touch: touch,
 	}
 }
 
@@ -715,6 +739,10 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
 		Tier: tier,
 	}
+	// The tick's file declaration, copied at PLANNING time (tick 01u): the
+	// malformed labels were already refused at admission, so what is left
+	// here is only the parsed list the merge holds the worker to.
+	marker.Touch, _ = parseTouchLabels(entry.TickID, entry.Labels)
 	return dispatch, marker, nil
 }
 

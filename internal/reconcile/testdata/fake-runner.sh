@@ -207,6 +207,18 @@ push-per-tick)
 	fi
 	report
 	;;
+touch-undeclared)
+	# The tick 01u shape: the worker does its DECLARED work — the same file
+	# every mode commits — and then touches a file its declaration does not
+	# name. The wave-composition check never sees it (the file was never
+	# declared); the declaration's other half does, in the diff the merge
+	# reads.
+	commit
+	printf 'a file nobody declared\n' > "$TICFAC_WORKTREE/sneaky-${TICFAC_TICK}.txt"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: undeclared ${TICFAC_TICK}" >/dev/null 2>&1
+	report
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process

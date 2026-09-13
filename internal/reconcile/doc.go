@@ -66,6 +66,31 @@
 // Two things a run decides before it dispatches anything, and records so that
 // what it decided outlives it:
 //
+//   - THE WAVE COMPOSITION (tick 01u). A tick may DECLARE the files it
+//     expects to touch, with `touch:` labels — the same weakly typed field
+//     the tier override rides, so a malformed one is refused loudly, naming
+//     the tick and the label, exactly as a tier label is. The composition is
+//     checked at DISPATCH: two ticks of one wave that declare the same file
+//     are REFUSED, before anything is claimed, started or paid for, because a
+//     wave that cannot merge is cheap to refuse here and costs every worker
+//     in it at the merge gate — epic av8's wave 4 dispatched three ticks
+//     that each rewrote the same function, and the overlap was discovered
+//     only when their merges conflicted. The refusal names both ticks and the
+//     file; the fix is at the ticks (re-wave one, or undeclare the file on
+//     one), never a silent deferral, because the tracker owns the waves and a
+//     reconciler that re-planned them on its own would make a planning
+//     decision the graph never recorded. And the declaration has a second
+//     half, AFTER the fact: it rides the dispatch marker, and the merge holds
+//     the worker to it — a file the attempt touched that the declaration
+//     does not name is refused with its own reason and recorded as a
+//     rejection, the way the artifact boundary (tick p6b) is, so a worker
+//     that crosses its own declared boundary is detectable rather than
+//     silently merged. A tick that declares nothing is checked for nothing:
+//     inference from prose is the weaker half of the idea and was not chosen
+//     (composition.go says why). Wave WIDTH is declared policy
+//     ([tier_policy.concurrency], tick 5eq); wave COMPOSITION is the same
+//     kind of decision and lives beside it.
+//
 //   - THE ROLE PROFILE. Every job is dispatched under a profile that is exactly
 //     {executor, runner, model, prompt} — SPEC §4.5's Phase 1 rule, and nothing
 //     else — resolved by internal/profile from this repository's `profiles/`

@@ -679,6 +679,21 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.recordTierPolicy(plan)
 
+	// The wave composition (tick 01u): checked at DISPATCH — here, at
+	// admission, before any tick is claimed, started or paid for. A wave that
+	// cannot merge is refused where it costs nothing, and the decision is
+	// logged whether or not it refuses anything, so the planning posture is a
+	// record the operator reads while the run can still be cancelled cheaply.
+	r.recordWaveCompositionDecision(plan)
+	if refusal := r.checkWaveComposition(plan); refusal != nil {
+		r.failure = refusal
+		if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
+			return nil, cErr
+		}
+		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, refusal.Error())
+		return r.result(runstate.StateFailed, refusal.Error()), nil
+	}
+
 	var failed []string
 	for _, entry := range plan {
 		if err := ctx.Err(); err != nil {
@@ -984,6 +999,28 @@ const (
 	// why it names the tick AND the label and never falls back to the default
 	// tier: an override that quietly failed is an override nobody can audit.
 	RefusedTierLabel = "tier_label_unrecognised"
+
+	// The three the WAVE COMPOSITION adds (tick 01u). The first is the one a RUN
+	// adds at admission, before anything is claimed or started: two ticks of
+	// one wave declare the same file — a composition that cannot merge,
+	// refused at dispatch where it costs nothing rather than discovered at the
+	// merge gate after the wave has run. It is run-level like
+	// RefusedBaseRefresh because no one tick is at fault: the overlap is a
+	// fact about the pair, and the fix is at the ticks. The second is the label
+	// itself: malformed in a way that cannot check anything (empty, absolute,
+	// leaving the repository), refused in the tier label's shape — loudly,
+	// naming the tick and the label — because a weakly typed field surfaces
+	// here or nowhere. The third is the one
+	// an ATTEMPT adds, at the merge: it touched a file its tick's touch:
+	// declaration does not name — the declaration's reporting half, so a
+	// worker that crosses its own declared boundary is detectable after the
+	// fact rather than merged silently. It is distinct from RefusedBoundary
+	// because that one is about the AUTHORITY a write is under; this one is
+	// about the tick's own declaration of its scope, and it sends the repair
+	// at the label or the tick's scope, not at the write.
+	RefusedWaveOverlap     = "wave_composition_conflict"
+	RefusedTouchLabel      = "touch_label_invalid"
+	RefusedUndeclaredTouch = "undeclared_file_touched"
 
 	// The two the FINDINGS channel adds (tick 7vn). A worker's discoveries
 	// outside its tick are discovery, not deliverable: the first is a report
