@@ -196,32 +196,28 @@ func load(t *testing.T) contract {
 // before a test asserts symbols inside those files.
 //
 // Files under cloud/** are the embedded payload (the factory Worker bundle
-// and the orchestrator image context), which is not in this repository yet:
-// it lands with ticks tick b3a ("Factory move B"), together with the trees
-// the contract points into. Until it does, the assertions that read payload
-// source SKIP — loudly, naming the pending files — rather than fail: the
-// contract does not name a deleted file, it names a pending one, and the
-// same tests assert the same symbols the moment the payload arrives.
-// Everything else the contract names (contracts/, the suite's own files)
-// exists here now and keeps failing hard when missing — a fixture the
-// contract points at that is absent with no payload window is a drift the
-// test must catch, not paper over.
+// and the orchestrator image context), which landed with ticks tick b3a
+// ("Factory move B") together with the trees the contract points into.
+// Now that it is here, a named cloud/** file that is absent IS drift: the
+// vendored contract moves by bundle bump (CONTRACTS.md), never by a payload
+// edit behind its back, so the test fails hard instead of skipping.
+//
+// Files under extensions/** are the one exception: they live in the ticks
+// repository (the local runner extension is not part of the payload), so
+// this side asserts nothing about them — ticks' own contract suite checks
+// the sites it can see. A cross-repo site in `today` is a fact about where
+// the rule lives, not a file this tree went missing.
 func requireContractSources(t *testing.T, files ...string) {
 	t.Helper()
-	var pending []string
 	seen := make(map[string]bool)
 	for _, f := range files {
-		if !strings.HasPrefix(f, "cloud/") || seen[f] {
+		if strings.HasPrefix(f, "extensions/") || seen[f] {
 			continue
 		}
 		seen[f] = true
 		if _, err := os.Stat("../../../" + f); err != nil {
-			pending = append(pending, f)
+			t.Errorf("the contract names %s, which this repository does not have: %v", f, err)
 		}
-	}
-	if len(pending) > 0 {
-		t.Skipf("the embedded payload lands with ticks tick b3a (Factory move B); the contract names %s, which is pending with it",
-			strings.Join(pending, ", "))
 	}
 }
 
@@ -410,6 +406,12 @@ func TestNamedSymbolsExistInTheFilesThatClaimThem(t *testing.T) {
 	sources := map[string]string{}
 	for _, inv := range c.Invariants {
 		for _, s := range inv.Today {
+			if strings.HasPrefix(s.File, "extensions/") {
+				// Lives in the ticks repository (the local runner extension —
+				// see requireContractSources): this side cannot read it, and
+				// ticks' own suite asserts the symbols there.
+				continue
+			}
 			body, ok := sources[s.File]
 			if !ok {
 				data, err := os.ReadFile("../../../" + s.File)

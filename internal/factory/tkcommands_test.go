@@ -9,10 +9,11 @@ import (
 
 // The scanner is the whole mechanism: a hand-written list is what went stale
 // and produced a container that boots and then dies. These are the commands
-// the REAL cloud/sandbox scripts run; the payload that carries them is not in
-// this repository yet, so the assertion skips until tick b3a lands it and
-// turns itself back on. The scanner itself is exercised against a fake payload
-// below, so tick b3a inherits a scanner that has been run, not merely kept.
+// the REAL cloud/sandbox scripts run; the payload that carries them landed
+// with tick b3a and is wired at init, so the assertion runs for real — and
+// skips loudly (requireEmbeddedPayload) rather than passing silently if the
+// seams are ever unwired. The scanner itself is exercised against a fake
+// payload below, so it is proven on bytes written for the purpose too.
 func TestEntrypointTkCommandsAreDerivedFromTheScripts(t *testing.T) {
 	requireEmbeddedPayload(t)
 	got, err := EntrypointTkCommands()

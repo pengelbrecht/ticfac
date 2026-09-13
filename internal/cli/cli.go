@@ -45,6 +45,8 @@ usage:
   ticfac findings <epic-id>                     list the worker findings drafted for triage
   ticfac finding <epic-id> <key>                triage one drafted finding
   ticfac version [--json]                       report this build and the contract bundle it serves
+  ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
+  ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
 
 run-epic flags:
   --repo <dir>        the checkout attempts branch from (default: cwd)
@@ -132,6 +134,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return findingsCommand(args[1:], stdout, stderr)
 	case "finding":
 		return findingCommand(args[1:], stdout, stderr)
+	case "factory":
+		return factoryCommand(args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "help", "-h", "--help":

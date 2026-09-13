@@ -2,12 +2,7 @@ package factory
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 )
 
@@ -28,126 +23,12 @@ import (
 // same servers it was in ticks. When setup_test.go moves, it must take or
 // unify these copies rather than ship a second set.
 
-const (
-	// testGatewayID/testGatewayNS shape a gateway URL the way the real
-	// operator's ~/.ticfacrc does: <base>/v1/<account>/<gateway>.
-	testGatewayID = "ticks"
-	// testCloudflareToken stands in for the credential the telemetry rung
-	// installs; it never leaves the test process.
-	testCloudflareToken = "cf_api_token_EXAMPLE"
-)
-
-var testGatewayNS = "/v1/00000000000000000000000000000000/" + testGatewayID
-
-// fakeGateway is the model API behind the operator's AI Gateway URL. The
-// billing check never talks to it — the gateway URL names the account and
-// gateway, and the MODE is read off the Cloudflare API — but the URL must be
-// shaped like a real one.
-type fakeGateway struct {
-	server *httptest.Server
-}
-
-func newFakeGateway(t *testing.T) *fakeGateway {
-	t.Helper()
-	gw := &fakeGateway{}
-	gw.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/compat/models") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": []any{
-				map[string]any{"id": "model-alpha"},
-				map[string]any{"id": "model-beta"},
-			},
-		})
-	}))
-	t.Cleanup(gw.server.Close)
-	return gw
-}
-
-func (gw *fakeGateway) base() string { return gw.server.URL + testGatewayNS }
-
-// fakeCloudflareAPI answers the AI Gateway read the billing assertion makes
-// with a Cloudflare API token: the gateway OBJECT, whose
-// workers_ai_billing_mode is the whole question.
-type fakeCloudflareAPI struct {
-	server *httptest.Server
-	token  string
-	// gatewayCalls counts reads of the gateway OBJECT, so a test can tell a
-	// billing assertion that ran from one that was skipped.
-	gatewayCalls atomic.Int32
-
-	mu sync.Mutex
-	// billingMode is what the gateway object reports. Empty means the object
-	// omits the field entirely, which is its own failure class.
-	billingMode string
-}
-
-func newFakeCloudflareAPI(t *testing.T, token string) *fakeCloudflareAPI {
-	t.Helper()
-	api := &fakeCloudflareAPI{token: token, billingMode: BillingModePostpaid}
-	api.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Header.Get("Authorization") != "Bearer "+api.token {
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"success": false,
-				"errors":  []any{map[string]any{"message": "Authentication error"}},
-			})
-			return
-		}
-		if id, ok := gatewayObjectPath(r.URL.Path); ok {
-			api.gatewayCalls.Add(1)
-			if id != testGatewayID {
-				w.WriteHeader(http.StatusNotFound)
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"success": false,
-					"errors":  []any{map[string]any{"message": "gateway not found"}},
-				})
-				return
-			}
-			result := map[string]any{"id": id}
-			if mode := api.mode(); mode != "" {
-				result["workers_ai_billing_mode"] = mode
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": result})
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(api.server.Close)
-	return api
-}
-
-// gatewayObjectPath reports the gateway id a GET of the gateway OBJECT names —
-// /accounts/<account>/ai-gateway/gateways/<id> with nothing after it.
-func gatewayObjectPath(path string) (string, bool) {
-	const marker = "/ai-gateway/gateways/"
-	idx := strings.Index(path, marker)
-	if idx < 0 {
-		return "", false
-	}
-	id := strings.Trim(strings.TrimPrefix(path[idx:], marker), "/")
-	if id == "" || strings.Contains(id, "/") {
-		return "", false
-	}
-	return id, true
-}
-
-func (api *fakeCloudflareAPI) mode() string {
-	api.mu.Lock()
-	defer api.mu.Unlock()
-	return api.billingMode
-}
-
-func (api *fakeCloudflareAPI) setMode(mode string) {
-	api.mu.Lock()
-	defer api.mu.Unlock()
-	api.billingMode = mode
-}
-
-func (api *fakeCloudflareAPI) base() string { return api.server.URL }
+// The billing-facing fakes (fakeGateway, fakeCloudflareAPI, the test gateway
+// URL shape and the test Cloudflare token) live in setup_test.go, which moved
+// with the deploy path in ticks tick b3a — they were ek7's copies of the
+// harness the billing assertion ran against in ticks, and this file now
+// shares them rather than shipping a second set (see the note that used to
+// stand here).
 
 type billingHarness struct {
 	gateway    *fakeGateway
@@ -157,7 +38,7 @@ type billingHarness struct {
 func newBillingHarness(t *testing.T) *billingHarness {
 	t.Helper()
 	return &billingHarness{
-		gateway:    newFakeGateway(t),
+		gateway:    newFakeGateway(t, ""),
 		cloudflare: newFakeCloudflareAPI(t, testCloudflareToken),
 	}
 }

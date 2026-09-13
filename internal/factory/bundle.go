@@ -15,19 +15,15 @@ import (
 )
 
 // The embedded payload — cloud/factory (the Worker bundle) and cloud/sandbox
-// (the orchestrator image's build context) — is NOT in this repository yet.
-// //go:embed cannot reach across modules, which is why moving the factory
-// meant moving the trees with it (ticks tick v3i); those trees land with the
-// deploy path in ticks tick b3a ("Factory move B"), together with the
-// module-root embeds that serve them. Until then the two seams below are nil.
+// (the orchestrator image's build context) — moved repository with this code
+// (ticks tick b3a, "Factory move B"), because //go:embed cannot reach across
+// modules: the payload and the deploy code that ships it live in one module.
+// payload.go wires the module-root embeds into the two seams below at init.
 //
-// They are variables rather than imported functions so tick b3a can wire
-// them with one init — assign the module-root embed.FS values — and so the
-// tests here can stage a fake payload against the same code paths today:
-// every staging mechanic (materialization, pruning, hashing, the in-place
-// config rewrites) is testable without a single real payload byte, and the
-// payload-CONTENT assertions carry an explicit guard that flips them on
-// when the real trees arrive.
+// They stay variables rather than imported calls so the tests here can stage
+// a fake payload against the same code paths and restore the real one
+// afterwards — and so an unwired seam still fails loudly rather than reading
+// a silent empty bundle.
 var (
 	// factoryFS is the embedded factory bundle tree, rooted at the
 	// repository root: its paths carry the "cloud/factory" prefix.
@@ -37,10 +33,11 @@ var (
 	sandboxFS fs.FS
 )
 
-// missingPayload is what every payload read answers while the seams are nil:
-// one unmistakable stop, never a silent empty read.
+// missingPayload is what every payload read answers while the seams are nil
+// (a test unwired them, or the init in payload.go failed to run): one
+// unmistakable stop, never a silent empty read.
 func missingPayload(which string) error {
-	return fmt.Errorf("this build of ticfac carries no embedded %s — the payload lands with ticks tick b3a (Factory move B)", which)
+	return fmt.Errorf("this build of ticfac carries no embedded %s — the payload seams are unwired, so nothing may be staged or deployed from it", which)
 }
 
 // bundleRoot is the prefix the embedded FS uses for the factory tree.
@@ -108,6 +105,23 @@ var (
 	shaOnce  sync.Once
 	shaValue string
 )
+
+// resetPayloadCaches drops everything the lazy caches above have memoized.
+// The payload seams are re-wireable (payload.go wires the real trees at
+// init; the tests stage fakes through the same seams), and a fresh sync.Once
+// alone is not a reset: the lists the completed walks appended to survive
+// it, and a later walk over a different FS would append to the residue —
+// a fake staging test that then reads a path only the real payload has.
+func resetPayloadCaches() {
+	pathsOnce = sync.Once{}
+	pathsList = nil
+	pathsErr = nil
+	sandboxPathsOnce = sync.Once{}
+	sandboxPathsList = nil
+	sandboxPathsErr = nil
+	shaOnce = sync.Once{}
+	shaValue = ""
+}
 
 // BundlePaths returns every file in the embedded bundle, as slash-separated
 // paths relative to the bundle root, sorted. Empty when this build carries no
