@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strconv"
 	"time"
 
@@ -45,6 +46,8 @@ usage:
   ticfac findings <epic-id>                     list the worker findings drafted for triage
   ticfac finding <epic-id> <key>                triage one drafted finding
   ticfac version [--json]                       report this build and the contract bundle it serves
+  ticfac factory <status|dashboard> [flags]      what the factory has configured; the read-only board
+  ticfac cloud <run|stop|status|logs|trace|supervisor>   drive a self-deployed cloud factory
 
 run-epic flags:
   --repo <dir>        the checkout attempts branch from (default: cwd)
@@ -134,6 +137,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return findingCommand(args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
+	case "factory":
+		// Signal-aware so the dashboard and a --follow shut down cleanly on
+		// Ctrl-C, the way tk's cobra contexts did.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return factoryCommand(ctx, args[1:], stdout, stderr)
+	case "cloud":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return cloudCommand(ctx, args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
