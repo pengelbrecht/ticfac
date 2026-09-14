@@ -422,6 +422,12 @@ const (
 	StageResumed      = "resumed"
 	StageSettled      = "settled"
 	StageRunFinished  = "run_finished"
+	// StageBudgetSet is the effective budget, said at ADMISSION while the run
+	// can still be cancelled cheaply. It is NOT run_finished: a subscriber to
+	// the run feed must not be told the run ended seconds after it started,
+	// which is exactly what the feed, `ticfac events --follow` and the worker
+	// guidance all exist to avoid.
+	StageBudgetSet = "budget_set"
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
 	// claimed, so "why was this expensive" is a question the run's own
@@ -888,7 +894,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	r.SetBudget(r.opts.BudgetUSD, r.opts.CeilingUSD)
 	r.ReportBudget()
 	if r.budget.Reported > 0 {
-		r.record("", StageRunFinished, "the effective budget for this run is $%.2f", r.budget.Reported)
+		r.record("", StageBudgetSet, "the effective budget for this run is $%.2f", r.budget.Reported)
 	}
 	r.recordTierPolicy(plan)
 

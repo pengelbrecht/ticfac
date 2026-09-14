@@ -135,6 +135,23 @@ func TestTheRunWritesAFeedANonParticipantCanFollow(t *testing.T) {
 	if !finished {
 		t.Error("the feed carries no run_finished line: a non-participant cannot learn the run ended")
 	}
+	// And exactly ONE, as the LAST line. The budget report used to be written
+	// as run_finished too, so every budgeted run told its subscribers it had
+	// ended within seconds of starting — and this test passed anyway, because
+	// it only asked whether SOME run_finished existed. A terminal event that
+	// is not terminal defeats the whole feed.
+	var finishedAt []int
+	for i, event := range events {
+		if event.Stage == StageRunFinished {
+			finishedAt = append(finishedAt, i)
+		}
+	}
+	if len(finishedAt) != 1 {
+		t.Errorf("the feed carries %d run_finished lines, want exactly 1: a terminal event said twice is not terminal", len(finishedAt))
+	} else if finishedAt[0] != len(events)-1 {
+		t.Errorf("run_finished is at index %d of %d: the terminal event must be the LAST line",
+			finishedAt[0], len(events))
+	}
 
 	// The journal and the feed agree on the order a tick passed through,
 	// which is what makes the feed a projection of the journal rather than a
