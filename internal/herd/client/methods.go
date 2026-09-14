@@ -212,12 +212,30 @@ func (p AgentStartParams) MarshalJSON() ([]byte, error) {
 // AgentStart launches an agent in an existing pane. The result carries the
 // argv herdr actually executed, which is worth recording: it is the ground
 // truth for what the model/effort compilation produced.
+//
+// A call carrying a startup wait is bound by that wait: the wait is the
+// budget HERDR itself enforces for the launch, so the client's generic
+// CallTimeout must accommodate it rather than truncate it — a 30s call bound
+// under a 60s startup wait aborted launches CLIENT-side between the two
+// while herdr completed them, and a caller reading that abort as a failed
+// launch killed agents that were alive and working. The effective bound is
+// the wait plus the exchange's own default budget, and the caller's context
+// deadline still wins when it is shorter. A call carrying no wait keeps the
+// generic bound, exactly as before.
 func (c *Client) AgentStart(ctx context.Context, params AgentStartParams) (*AgentStarted, error) {
 	if err := params.validate(); err != nil {
 		return nil, err
 	}
 	var out AgentStarted
-	if err := c.call(ctx, MethodAgentStart, resultAgentStarted, params, &out); err != nil {
+	var err error
+	if params.StartupTimeout > 0 {
+		waitCtx, cancel := context.WithTimeout(ctx, params.StartupTimeout+DefaultCallTimeout)
+		defer cancel()
+		err = c.callNoTimeout(waitCtx, MethodAgentStart, resultAgentStarted, params, &out)
+	} else {
+		err = c.call(ctx, MethodAgentStart, resultAgentStarted, params, &out)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &out, nil

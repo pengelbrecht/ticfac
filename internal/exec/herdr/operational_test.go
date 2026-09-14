@@ -34,6 +34,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
@@ -210,7 +211,16 @@ func TestEveryHerdrCallFailingDecidesNothing(t *testing.T) {
 		t.Errorf("state = %s, want succeeded from the report: durable evidence outranks a silent substrate", status.State)
 	}
 
-	// ---- cancel: the revocation is durable, the interrupt is the error ---
+	// ---- cancel: the report settles what silence cannot ask ----------
+	// The attempt has REPORTED and collected: it settled itself, and the
+	// durable report is the evidence. Under total substrate silence the
+	// old hasSettled called a reported attempt unsettled and wrote the
+	// cancellation over it — a succeeded, mergeable attempt collected as
+	// `cancelled` from then on, cancelled being classify's first case (the
+	// exact rename tick 1eq exists to prevent). Now silence cannot
+	// un-settle a worker that reported: no refusal is recorded, the
+	// interrupt is still attempted, and its failure is the operational
+	// error it is.
 	cancelErr := func() error {
 		_, err := h.ex.Cancel(handle)
 		return err
@@ -219,8 +229,20 @@ func TestEveryHerdrCallFailingDecidesNothing(t *testing.T) {
 		t.Fatal("a cancel that could not interrupt through a silent substrate reported success: the agent may still be spending")
 	}
 	assertNotAVerdict(t, "cancel against a silent substrate", cancelErr)
-	if _, err := os.Stat(filepath.Join(local.State, fileCancel)); err != nil {
-		t.Errorf("the revocation was not recorded: substrate silence must not leave a re-issuable dispatch (%v)", err)
+	if _, err := os.Stat(filepath.Join(local.State, fileCancel)); err == nil {
+		t.Error("a cancellation was recorded over an attempt that had already reported: it would rename the " +
+			"finished attempt's verdict for everybody who ever looks at it again")
+	}
+	// A1's intent is kept by settlement itself: the reissue is refused
+	// without any cancellation record, because a reported attempt is
+	// terminal and a retry is a new attempt number.
+	_, err = h.start("t1")
+	if err == nil {
+		t.Fatal("the reported attempt accepted a new dispatch after the cancel: a settled attempt is never re-issued")
+	}
+	if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedSettled {
+		t.Errorf("the re-Start was %v, want the settled refusal: settlement itself refuses the reissue "+
+			"when no cancellation record was written", err)
 	}
 
 	// ---- a fresh dispatch into the same silence fails operationally ------
@@ -238,6 +260,112 @@ func TestEveryHerdrCallFailingDecidesNothing(t *testing.T) {
 
 	// ---- and the earlier attempt is exactly where it was ---------------
 	h.assertNothingTornDown(t, "after every operation under total substrate failure", local)
+}
+
+// TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown is the defect in
+// the round: agent.start carries a startup wait, but the call rode the
+// client's generic call bound, so a launch between the two (30s bound, 60s
+// wait) aborted CLIENT-side while herdr completed it. The record landed
+// LaunchConfirmed=false — and every leg that read that flag as settled made
+// the client's own timeout into a fact about the work: inspect answered
+// terminal `failed`, collect minted missing-result/runner_error (its hold
+// skipped on exactly that record), and dispose tore the workspace down
+// without asking herdr — killing an agent that was alive and working. Here
+// the executor's client is bounded at 300ms and herdr completes the launch
+// at 800ms: the same shape, at a scale the suite can drive. Nothing may read
+// the unconfirmed launch as settled — an unconfirmed launch is the one case
+// liveness is UNKNOWN, which is the one case that must ASK herdr.
+func TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown(t *testing.T) {
+	h := newHarness(t, harnessOptions{spawnAgent: true})
+	h.clientBound(t, 300*time.Millisecond)
+	h.mu.Lock()
+	h.agentStartDelay = 800 * time.Millisecond
+	h.mu.Unlock()
+
+	_, err := h.start("t1")
+	assertNotAVerdict(t, "a launch that outlived the client's call bound", err)
+
+	// The failed launch left its diagnostic state — the record saying the
+	// launch was never confirmed, the worktree, the branch — and herdr
+	// completed it: the agent it launched is real.
+	spec := h.spec("run-harness/tick-t1/attempt-1", "t1")
+	dir := h.ex.stateDirFor(spec.JobID, h.ex.opts.Attempt)
+	st := h.ex.storeAt(dir)
+	record, readErr := st.readAttempt()
+	if readErr != nil {
+		t.Fatalf("the launch that outlived the bound left no record: %v", readErr)
+	}
+	if record.LaunchConfirmed {
+		t.Fatal("the record claims a confirmed launch: the client never heard the acknowledgement")
+	}
+	if spawned, _, _ := h.agentProcess(); !spawned {
+		t.Error("herdr did not complete the launch: the fixture must drive a launch herdr finishes")
+	}
+	h.setStatus("working")
+
+	// The reconciler's teardown shape: the minimal handle, resolved through
+	// the attempt record the failed launch left behind.
+	minimal := &subprocess.JobHandle{
+		SchemaVersion: subprocess.SchemaVersion,
+		JobID:         record.JobID,
+		Attempt:       record.Attempt,
+		Executor:      ExecutorName,
+		Handle:        map[string]any{"state": dir},
+	}
+	local, err := local(minimal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, _, err := local.resolved()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ---- inspect: held, not dead ----------------------------------------
+	// The dispatch never reached the agent (a Start that fails at the
+	// launch fails before the prompt is submitted), so a live agent is not
+	// a running attempt either: the attempt is held for a person, never a
+	// terminal verdict out of the client's own timeout.
+	status, err := h.ex.Inspect(minimal, "")
+	if err != nil {
+		t.Fatalf("inspect of an unconfirmed launch errored: %v", err)
+	}
+	if status.Terminal {
+		t.Errorf("state = %s (terminal): an unconfirmed launch must not become a verdict about the work", status.State)
+	}
+	if status.State != subprocess.StateLost {
+		t.Errorf("state = %s, want lost: nobody can say this attempt will do the tick's work, so a person decides",
+			status.State)
+	}
+
+	// ---- collect: the hold, never a missing-result verdict --------------
+	_, collectErr := h.ex.CollectDetail(minimal)
+	assertNotAVerdict(t, "a collect of a launch that outlived the call bound", collectErr)
+	if refusal, ok := subprocess.AsRefusal(collectErr); !ok || refusal.Reason != subprocess.RefusedUnknown {
+		t.Errorf("the collect was %v, want the liveness-unknown hold: the client's own timeout must "+
+			"never become a missing-result verdict", collectErr)
+	}
+	if _, err := os.Stat(filepath.Join(full.State, fileResult)); err == nil {
+		t.Error("the refused collect persisted a result anyway: a held attempt must not carry a collected verdict")
+	}
+
+	// ---- dispose: the question is ASKED, and herdr answers working ------
+	disposeErr := h.ex.Dispose(minimal, subprocess.DisposeOptions{Reason: "the run stopped mid-flight"})
+	assertNotAVerdict(t, "a dispose over a launch herdr completed", disposeErr)
+	if refusal, ok := subprocess.AsRefusal(disposeErr); !ok || refusal.Reason != subprocess.RefusedLive {
+		t.Errorf("the dispose was %v, want the live refusal: an unconfirmed launch is liveness UNKNOWN, "+
+			"and the working agent herdr answers for must not be torn down unasked", disposeErr)
+	}
+	h.assertNothingTornDown(t, "after the refused dispose", full)
+
+	// ---- and the identity is held: never redispatched over the agent ----
+	_, err = h.start("t1")
+	if err == nil {
+		t.Fatal("an unconfirmed live attempt started again: the agent herdr completed may still be spending")
+	}
+	if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedUnknown {
+		t.Errorf("the re-Start was %v, want the liveness-unknown hold", err)
+	}
 }
 
 // TestAProtocolRefusalIsOperational pins that the client's fail-closed
@@ -382,6 +510,16 @@ func TestARenamedPaneBusyCodeIsAnOperationalFailure(t *testing.T) {
 	if removed := h.removals(); len(removed) != 0 {
 		t.Errorf("worktree.remove accepted %v on the failed launch's behalf", removed)
 	}
+
+	// The launch never happened, so herdr's own answer about the agent is
+	// that nobody is there: the renamed code left a pane, not an agent. The
+	// re-Start below must ASK (an unconfirmed launch is liveness unknown,
+	// never assumed settled) and the POSITIVE answer settles the attempt
+	// through the durable marker — which is what makes the re-Start the
+	// settled refusal, not an assumption about the failed launch.
+	h.server.Route(herdtest.MethodAgentGet, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_not_found", "no such agent")
+	})
 
 	// And the failed attempt is never redispatched as THIS attempt: a
 	// retry is a new attempt number, refused here as settled.

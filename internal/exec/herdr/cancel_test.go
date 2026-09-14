@@ -142,6 +142,53 @@ func TestCancelOnAWorkingAgentRecordsTheFullRefusal(t *testing.T) {
 	}
 }
 
+func TestCancelAfterAReportDoesNotRenameTheVerdict(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The worker reported and the work is mergeable: the attempt has
+	// ALREADY REPORTED, which is durable evidence it settled itself.
+	h.doWork(t, handle, "STATUS: DONE")
+
+	// herdr goes silent for every method — the branch that used to call a
+	// reported attempt unsettled and write the cancellation over it. The
+	// report is durable evidence, exactly the kind silence cannot outrank.
+	h.failEveryRoute()
+
+	_, cancelErr := h.ex.Cancel(handle)
+	assertNotAVerdict(t, "a cancel that could not interrupt through a silent substrate", cancelErr)
+
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(local.State + "/" + fileCancel); err == nil {
+		t.Error("a cancellation was recorded over an attempt that had already reported: cancelled is " +
+			"classify's first case, so the succeeded attempt would collect as cancelled from then on")
+	}
+
+	// The verdict is unchanged: collect still answers from the report and
+	// the branch, and inspect still answers succeeded.
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if collected.Verdict != subprocess.VerdictReadyToMerge || collected.Result.Outcome != subprocess.OutcomeSucceeded {
+		t.Errorf("verdict = %s/%s, want ready-to-merge/succeeded: a cancel arriving after the report "+
+			"must not rename the verdict", collected.Verdict, collected.Result.Outcome)
+	}
+	status, err := h.ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != subprocess.StateSucceeded {
+		t.Errorf("state = %s, want succeeded: the durable report outranks a substrate that will not answer",
+			status.State)
+	}
+}
+
 func TestCancelOnASettledGoneAgentRecordsNoVerdictRename(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")

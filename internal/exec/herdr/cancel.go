@@ -31,7 +31,12 @@ import (
 //
 // An agent that is WORKING outranks the report here, and only here: a worker
 // writes its report and then keeps going, and a cancel that treated it as
-// settled would interrupt nothing and record no refusal.
+// settled would interrupt nothing and record no refusal. Everywhere herdr
+// cannot say the agent is spending — a provably gone agent, or a herdr that
+// will not answer at all — the durable REPORT settles the question instead,
+// exactly as the local executor's hasSettled reads it (tick 0c1): silence
+// must not un-settle a worker that reported into a cancellation that renames
+// its verdict.
 
 // Cancel records this attempt's durable refusal to reissue, then interrupts
 // the agent through herdr. It is idempotent: calling it twice returns the
@@ -100,6 +105,10 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 	case stopErr == nil:
 		stopRequested = true
 		detail := "interrupted the agent with ctrl+c after the dispatch was revoked"
+		if settled {
+			detail = "interrupted the agent with ctrl+c over an attempt that had settled itself: " +
+				"recorded as the observation it is, never as a cancellation over the verdict"
+		}
 		status := ""
 		if agent != nil {
 			status = fmt.Sprintf(" (herdr resolves it as %s)", agent.AgentStatus)
@@ -117,16 +126,22 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 		}
 		stopRequested = true
 	default:
-		// herdr would not answer. The revocation is durable and reissue is
-		// refused, so nothing can be dispatched over this attempt; the
-		// interrupt itself is reported as the operational failure it is,
-		// never folded into a verdict.
+		// herdr would not answer. When the refusal was recorded, it is
+		// durable and nothing can be dispatched over this attempt; when the
+		// attempt had settled itself, no revocation was recorded and it is
+		// settlement itself that refuses the reissue. Either way the
+		// interrupt is reported as the operational failure it is, never
+		// folded into a verdict.
 		if err := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsCancelRequested,
 			Detail: "the interrupt could not be delivered: " + stopErr.Error()}); err != nil {
 			return nil, fmt.Errorf("record the failed stop request: %w", err)
 		}
-		return nil, fmt.Errorf("the dispatch is revoked and reissue refused, but the agent could not be "+
-			"interrupted through herdr: %w", stopErr)
+		settledSentence := "the dispatch is revoked and reissue refused"
+		if settled {
+			settledSentence = "the attempt settled itself, so no cancellation was recorded over its verdict"
+		}
+		return nil, fmt.Errorf("%s, but the agent could not be "+
+			"interrupted through herdr: %w", settledSentence, stopErr)
 	}
 
 	acceptedAt := e.stamp()
@@ -150,7 +165,12 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 // settled" cannot mean one thing here and another there. A live, WORKING
 // agent outranks the report here, and only here: inspect's question is "what
 // does the durable evidence say", cancel's is "is there something spending
-// that a person is trying to stop".
+// that a person is trying to stop". Everywhere herdr cannot say that — the
+// agent is gone, or herdr will not answer at all — the DURABLE REPORT is
+// read, exactly as the local executor reads it at this same place (tick 0c1):
+// a worker that wrote its report finished the work, and a cancellation
+// recorded over it would rename the verdict for everybody who ever looks at
+// it again.
 func (e *Executor) hasSettled(st *store) bool {
 	record, err := st.readAttempt()
 	if err != nil {
@@ -159,14 +179,17 @@ func (e *Executor) hasSettled(st *store) bool {
 		// refusal for.
 		return false
 	}
-	if !record.LaunchConfirmed {
-		return true
-	}
+	// An unconfirmed launch is a liveness question, not an answer: herdr
+	// may have completed the launch after the caller stopped waiting, so
+	// the question below is asked rather than assumed — the same ask,
+	// dispose and observe make.
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
 	case err == nil:
 		switch agent.AgentStatus {
 		case client.StatusWorking, client.StatusBlocked:
+			// Spending (bgr's operator stop): the cancel exists to stop
+			// exactly this, whatever the report already says.
 			return false
 		default:
 			return true
@@ -183,8 +206,17 @@ func (e *Executor) hasSettled(st *store) bool {
 		_ = st.markAgentGone(e.stamp())
 		return true
 	default:
-		// herdr would not answer. Silence is not evidence nothing is
-		// spending, so this is NOT settled: the full refusal is recorded.
+		// herdr would not answer. The durable REPORT answers what silence
+		// cannot: a worker that wrote its report finished the work, and
+		// this attempt settled itself — a cancellation recorded over it
+		// would rename its verdict `cancelled` for everybody who ever looks
+		// again, the exact hazard this file's header names (0c1's line,
+		// held by the local executor at this same place). Without a
+		// report, silence is not evidence nothing is spending, so the full
+		// refusal is recorded.
+		if report, has := e.readReport(record); has && report.Status != "" {
+			return true
+		}
 		return false
 	}
 }

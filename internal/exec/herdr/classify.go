@@ -55,7 +55,10 @@ import (
 //     including a RENAME of agent_pane_busy, or any code this build has
 //     never heard — is OPERATIONAL: the launch is recorded unconfirmed, the
 //     pane and the worktree stay as diagnostic state, nothing is cleaned
-//     up, and a retry is a new attempt number, never a verdict.
+//     up, and the unconfirmed launch is held — never a verdict, never a
+//     redispatch. The call's own bound accommodates the startup wait it
+//     carries (the client's), so no launch within the caller's patience
+//     budget aborts client-side while herdr completes it.
 //   - waitInteractiveReady → AgentGet: any error, the budget elapsing —
 //     OPERATIONAL, same treatment as the launch.
 //   - submit → AgentPrompt: a refusal is recorded as the gate finding

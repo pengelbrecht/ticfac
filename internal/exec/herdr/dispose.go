@@ -248,16 +248,19 @@ const (
 )
 
 // livenessForTeardown asks the ONE question removal needs, next to the
-// removal. A launch that was never confirmed settled without an agent ever
-// existing, so it is removal's normal case too. An agent herdr positively
-// answers is GONE is the other ordinary case — it is the answer the real
-// herdr gives once a workspace (and the pane its agent lived on) has been
-// torn down, so a disposal that is resumed or re-run classifies it as
-// "nothing to kill" rather than as a refusal.
+// removal. An agent herdr positively answers is GONE is the ordinary case
+// — it is the answer the real herdr gives once a workspace (and the pane its
+// agent lived on) has been torn down, so a disposal that is resumed or
+// re-run classifies it as "nothing to kill" rather than as a refusal. An
+// UNCONFIRMED launch reaches this question like any other: it is the one
+// case liveness is UNKNOWN (herdr may have completed the launch after the
+// caller stopped waiting — an agent alive and working behind a record that
+// says nothing was confirmed), so the question is ASKED here rather than
+// assumed, and the same classes answer it: gone permits, working and blocked
+// refuse, and a herdr that will not answer refuses the removal — silence
+// is not evidence that tearing an agent down is safe, whether or not the
+// launch was ever confirmed.
 func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, string, error) {
-	if !record.LaunchConfirmed {
-		return teardownGone, "the agent was never confirmed launched", nil
-	}
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	if err != nil {
 		if gone(err) {
