@@ -2,7 +2,7 @@
   "id": "zus",
   "title": "Final review of the Phase 2 diff",
   "description": "Review the full Phase 2 diff against the epic acceptance and SPEC §12 Phase 2, with the two operator constraints as the checklist: (a) is orchestration config and logic TRULY extracted from ticks — no execution package left behind, no unpinned read of a ticks-owned file, no ticks Go import; and (b) is the herdr executor robust to a herdr upgrade — a supported range rather than a point, capabilities read, required fields loud, the wire vocabulary pinned and diffed against the server's schema, no verdict derived from the substrate. Resolve or route findings before close-out. Verify a claimed defect against the base commit BEFORE any repair is built on it: the Phase 1 epic lost a wave to a repair built on a defect that did not exist.",
-  "notes": "2026-09-14 08:27 - Defect pass (opus, read-only) on the Phase 2 diff: 2 blockers, 7 should-fix, 5 nits. Both blockers violate the epic's OWN x6j guarantee inside the code that claims it — a launch slower than the client call timeout becomes a verdict AND tears down a live agent (verified: DefaultStartupTimeout 60s vs DefaultCallTimeout 30s), and Cancel writes a cancellation over an attempt that already reported, renaming a succeeded verdict. Routed as ticks 1eq (blockers) and etp (the seven should-fix, all the same family: an unknown answered as a fact). CRITICAL CONTEXT, verified in code: usableProfile (internal/reconcile/profiles.go:307) refuses any profile whose executor is not local-subprocess, so nothing constructs herdr.Executor outside tests. Every finding is LATENT — they are what a first real run would hit. Two guarantees confirmed genuinely held: the executor seam (the no-herdr-code check is enforced, not asserted) and durable-evidence-only collect (no client call in that path; the all-errors fixture really drives a verdict from the report alone).",
+  "notes": "2026-09-14 08:27 - Defect pass (opus, read-only) on the Phase 2 diff: 2 blockers, 7 should-fix, 5 nits. Both blockers violate the epic's OWN x6j guarantee inside the code that claims it — a launch slower than the client call timeout becomes a verdict AND tears down a live agent (verified: DefaultStartupTimeout 60s vs DefaultCallTimeout 30s), and Cancel writes a cancellation over an attempt that already reported, renaming a succeeded verdict. Routed as ticks 1eq (blockers) and etp (the seven should-fix, all the same family: an unknown answered as a fact). CRITICAL CONTEXT, verified in code: usableProfile (internal/reconcile/profiles.go:307) refuses any profile whose executor is not local-subprocess, so nothing constructs herdr.Executor outside tests. Every finding is LATENT — they are what a first real run would hit. Two guarantees confirmed genuinely held: the executor seam (the no-herdr-code check is enforced, not asserted) and durable-evidence-only collect (no client call in that path; the all-errors fixture really drives a verdict from the report alone).\n2026-09-14 08:29 - Acceptance pass (opus, read-only): 3 MET, 1 PARTIAL, 2 NOT MET. NOT MET (1) the headline item — a real epic through ticfac run-epic on herdr — the executor is UNREACHABLE, not merely unexercised: dispatch.go:1390 hardcodes subprocess and profiles.go:311 refuses any other executor, with no --executor flag. NOT MET (4) the herdr protocol and server version are not fields of the pinned Provenance object; they live only on herdr's private attemptRecord, which contradicts the epic description and the 2026-09-11 split decision. PARTIAL (3) the version range is real and correct; the capability half is vacuous — RequireCapability has no callers outside the client and a test PINS that the refusal cannot arise. Routed as ticks to1 (wiring + provenance) and ic0 (capability clause, the discarded above-warn warning, the skippable drift test). On the operator's two requirements: (b) protocol robustness ACHIEVED and called the best work in the epic; (a) extraction HALF achieved — the seam is genuinely clean with no ticks Go dependency and every crossing pinned or version-gated, but nothing was removed from ticks, tk factory remains a full duplicate, and the sandbox loop is still tk. 'Extracted' currently means copied with a good boundary.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -25,12 +25,14 @@
     "01u",
     "wmw",
     "1eq",
-    "etp"
+    "etp",
+    "to1",
+    "ic0"
   ],
   "parent": "av8",
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:23:40.644837Z",
-  "updated_at": "2026-09-14T06:27:33.743903Z",
+  "updated_at": "2026-09-14T06:29:09.848026Z",
   "started_at": "2026-09-14T06:18:56.493037Z"
 }
