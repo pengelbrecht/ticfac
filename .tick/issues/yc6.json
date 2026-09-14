@@ -2,7 +2,7 @@
   "id": "yc6",
   "title": "Close out Phase 2: retro, and flesh out the next epic",
   "description": "Run the epic-close retro; compact .tick/learnings.md; verify the epic's acceptance item by item against the code; then pick the next feasible epic, read its rough scope, and partition it into child ticks including its own EPIC-SKELETON pair. Close the corresponding ticks-tracker items with the gate evidence.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,6 +13,7 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:23:40.694571Z",
-  "updated_at": "2026-09-14T16:14:29.886226Z",
-  "started_at": "2026-09-14T16:14:29.886225Z"
+  "updated_at": "2026-09-14T16:17:43.4188Z",
+  "closed_at": "2026-09-14T16:17:43.4188Z",
+  "closed_reason": "Close-out complete. Retro at .tick/logs/herd/av8/RETRO.md with the verification table, what worked, what went wrong and 11 residuals. Learnings compacted to 121 lines with the provider-configuration rules that cost the most time to learn. Phase 3 created as epic 9pd from those residuals — not invented — with the three deferred ticks (4l2, 1ya, hk7) and the operator-gated pin merge (3ku) re-parented into it so they keep their history and the worker's own diagnosis of why it refused. Its acceptance is the honest version: the packages actually GONE from ticks, and a PRODUCTION epic rather than a demo."
 }
