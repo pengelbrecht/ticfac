@@ -7,35 +7,33 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"testing/fstest"
 )
 
-// The embedded payload (cloud/factory, cloud/sandbox) is not in this
-// repository yet — it lands with ticks tick b3a ("Factory move B"), which is
-// also when the seams at the top of bundle.go get wired to the module-root
-// embeds. The tests here split in two, and the split is deliberate:
+// The embedded payload (cloud/factory, cloud/sandbox) landed with ticks tick
+// b3a ("Factory move B"), wired into the seams at the top of bundle.go by
+// payload.go's init. The tests here still split in two, and the split stays
+// deliberate:
 //
 //   - The MECHANICS (materialization, pruning, hashing, the in-place config
-//     rewrites) run today against a fake payload staged through the same
-//     seams, so tick b3a inherits staging code that has been executed, not
-//     merely compiled.
+//     rewrites) run against a fake payload staged through the same seams,
+//     so they exercise the staging code on bytes that were written for the
+//     purpose, not against the real payload.
 //   - The CONTENT assertions (the bundle really declares the container, the
 //     image context really ships the entrypoints, the image path really
-//     resolves) carry requireEmbeddedPayload below: they skip — loudly —
-//     until the real trees arrive, then turn themselves back on. Nothing is
-//     deleted, and the failure mode of a drifted payload returns exactly as
-//     it was.
+//     resolves) carry requireEmbeddedPayload below: it skips — loudly — if a
+//     test runs with the seams unwired, so a wiring regression surfaces as a
+//     wall of skips rather than as a silent pass.
 
-// requireEmbeddedPayload skips a content assertion while this build carries
-// no payload. It is a SKIP and not a failure because the files it names are
-// pending, not missing: the same test asserts the same things the moment
-// tick b3a lands the trees.
+// requireEmbeddedPayload skips a content assertion when this test binary
+// carries no payload through the seams. With payload.go's init wiring the
+// real trees it never fires on an ordinary run; it exists so an unwired
+// seam (or a future split build) is visible rather than invisible.
 func requireEmbeddedPayload(t *testing.T) {
 	t.Helper()
 	if factoryFS == nil || sandboxFS == nil {
-		t.Skip("the embedded payload (cloud/factory, cloud/sandbox) lands with ticks tick b3a (Factory move B); this assertion turns itself back on when it does")
+		t.Skip("the embedded payload (cloud/factory, cloud/sandbox) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
 	}
 }
 
@@ -79,12 +77,8 @@ bucket_name = "ticks-factory-artifacts"
 }
 
 // stageFakePayload wires the fake bundle into the seams for one test and
-// unwires it afterwards, so payload-guarded tests still see the honest nil.
-//
-// The lazy caches (pathsOnce, sandboxPathsOnce, shaOnce) have to be reset
-// with the seams: they memoize over whatever FS was wired when first read,
-// and a nil-seeded walk in one test would poison every later test's paths.
-// A fresh sync.Once is the zero value, which is the reset.
+// restores the real embedded payload afterwards, so payload-guarded tests
+// still see the trees this build ships.
 func stageFakePayload(t *testing.T) fstest.MapFS {
 	t.Helper()
 	fake := fakeBundle()
@@ -92,34 +86,39 @@ func stageFakePayload(t *testing.T) fstest.MapFS {
 	return fake
 }
 
-// setPayloadSeam wires the payload seams for one test and restores the honest
-// nil afterwards.
+// setPayloadSeam wires the payload seams for one test and restores the real
+// embedded payload afterwards, so the tests that follow see the trees this
+// build actually ships.
+//
+// The lazy caches are reset through resetPayloadCaches, which drops the
+// memoized lists as well as the sync.Onces: they memoize over whatever FS
+// was wired when first read, and a walk seeded by one payload would
+// otherwise poison every later test's paths.
 func setPayloadSeam(t *testing.T, factory, sandbox fs.FS) {
 	t.Helper()
 	factoryFS = factory
 	sandboxFS = sandbox
-	pathsOnce = sync.Once{}
-	sandboxPathsOnce = sync.Once{}
-	shaOnce = sync.Once{}
-	t.Cleanup(func() {
-		factoryFS = nil
-		sandboxFS = nil
-		pathsOnce = sync.Once{}
-		sandboxPathsOnce = sync.Once{}
-		shaOnce = sync.Once{}
-	})
+	resetPayloadCaches()
+	t.Cleanup(wireEmbeddedPayload)
 }
 
 // No payload, no staging: the seams fail LOUDLY, naming what is missing —
 // never a silent empty read that would let a deploy proceed on nothing.
+// The test unwires the seams by hand first, because an ordinary run carries
+// the real payload from payload.go's init; the cleanup wires it back.
 func TestMissingPayloadIsALoudStop(t *testing.T) {
+	factoryFS = nil
+	sandboxFS = nil
+	resetPayloadCaches()
+	t.Cleanup(wireEmbeddedPayload)
+
 	for name, err := range map[string]error{
 		"Materialize":        Materialize(t.TempDir()),
 		"MaterializeSandbox": MaterializeSandbox(t.TempDir()),
 		"ReadBundleFile":     func() error { _, err := ReadBundleFile("wrangler.toml"); return err }(),
 		"ReadSandboxFile":    func() error { _, err := ReadSandboxFile("Dockerfile"); return err }(),
 	} {
-		if err == nil || !strings.Contains(err.Error(), "b3a") {
+		if err == nil || !strings.Contains(err.Error(), "unwired") {
 			t.Errorf("%s with no payload: %v, want the missing-payload stop", name, err)
 		}
 	}

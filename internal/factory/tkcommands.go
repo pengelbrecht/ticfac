@@ -71,11 +71,11 @@ var commentLine = regexp.MustCompile(`(?m)^[ \t]*#.*$`)
 
 // EntrypointTkCommands returns every `tk` subcommand chain the image's run
 // scripts invoke, as space-joined paths ("sandbox environment"), sorted and
-// deduplicated.
-//
-// It reads the embedded image context, which this build does not carry yet:
-// the payload lands with ticks tick b3a (see the seam at the top of
-// bundle.go), and until it does this returns the missing-payload stop.
+// deduplicated. It reads the embedded image context through the payload
+// seams (payload.go wires them at init); an unwired seam is the
+// missing-payload stop, never a silent empty list — a scanner that read
+// nothing would tell the Dockerfile gate nothing, which is worse than an
+// error.
 func EntrypointTkCommands() ([]string, error) {
 	seen := make(map[string]bool)
 	for _, name := range entrypointScripts {
