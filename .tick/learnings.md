@@ -50,6 +50,22 @@ threshold so the poll IS the keepalive. **Rule:** Before speeding up a slow inte
 is holding open. A cadence right for a cloud substrate is wrong for a local run, so the interval
 belongs to the executor, not to one constant.
 
+## Provider and model configuration
+
+**Problem:** A max-output override of 1,000,000 made Cloudflare answer a bodyless 400, which pi read as
+"context overflow" and tried to recover from by summarising — which hit the same ceiling and killed the
+worker. **Rule:** A bodyless 4xx from a model provider is a REQUEST-SHAPE problem until proven
+otherwise. Change one variable at a time and probe the ceiling; the error text will not tell you.
+
+**Problem:** pi detects non-standard reasoning providers by provider name or baseUrl, and a GLM model
+served through `cloudflare-workers-ai` matches none of them, so its `<think>` tags leaked into content
+and the model looped. **Rule:** A model served through a provider other than its vendor's own endpoint
+loses that detection. Set `compat.thinkingFormat` explicitly for it.
+
+**Problem:** Correcting the 1,000,000 output cap to 8,192 then truncated a worker mid-answer, because
+GLM at thinking=high generates millions of reasoning tokens. **Rule:** Probe both ends. A cap that is
+too low fails as silently as one that is too high.
+
 ## Reviews and repairs
 
 **Problem:** A review called something a blocker, a repair was built on it, and the repair introduced
