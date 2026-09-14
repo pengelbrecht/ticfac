@@ -458,3 +458,88 @@ func TestAgentWaitRenameIsLoud(t *testing.T) {
 		t.Errorf("error does not name the method: %v", err)
 	}
 }
+
+// TestTeardownAttributionFieldRenamesAreLoud is etp's fifth finding: bcv's
+// presence rules covered the agent liveness fields but not the ones a
+// teardown's attribution is keyed on (tick 5hz) — workspace_id,
+// checkout_path and the worktree path. A rename there used to decode as a
+// zero value, and the attribution keyed on it silently answered "gone",
+// which is the loud-not-silent guarantee bcv exists for, missing on exactly
+// the fields that decide a teardown.
+func TestTeardownAttributionFieldRenamesAreLoud(t *testing.T) {
+	const workspace = `{"workspace_id":"w4C","number":3,"label":"ticks","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w4C:t1","agent_status":"idle","worktree":{"repo_key":"/repo/.git","repo_name":"ticks","repo_root":"/repo","checkout_path":"/repo","is_linked_worktree":false}}`
+	const listing = `{"type":"worktree_list","source":{"repo_key":"/repo/.git","repo_name":"ticks","repo_root":"/repo","source_checkout_path":"/repo"},"worktrees":[{"path":"/repo","branch":"epic/gyz","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":false,"open_workspace_id":"w4C","label":"ticks"}]}`
+
+	cases := []struct {
+		name   string
+		broken string
+		field  string
+		via    string
+	}{
+		{"workspace_id renamed in the snapshot", strings.Replace(workspace, `"workspace_id"`, `"workspaceId"`, 1), "workspace_id", MethodSessionSnapshot},
+		{"checkout_path renamed in the snapshot's worktree block", strings.Replace(workspace, `"checkout_path"`, `"checkout"`, 1), "checkout_path", MethodSessionSnapshot},
+		{"worktree path renamed in worktree.list", strings.Replace(listing, `"path"`, `"wt_path"`, 1), "path", MethodWorktreeList},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var snapshot string
+			if tc.via == MethodSessionSnapshot {
+				snapshot = `{"type":"session_snapshot","snapshot":{"version":"0.8.2","protocol":20,"workspaces":[` + tc.broken + `],"tabs":[],"panes":[],"agents":[],"layouts":[]}}`
+			} else {
+				snapshot = tc.broken
+			}
+			c, _ := newTestClient(t, map[string]fakeHandler{
+				tc.via: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+					return respond(w, req.ID, snapshot)
+				},
+			})
+
+			var err error
+			if tc.via == MethodSessionSnapshot {
+				var snap *SessionSnapshot
+				snap, err = c.SessionSnapshot(t.Context())
+				if snap != nil {
+					t.Errorf("a snapshot came back alongside the error: %+v", snap)
+				}
+			} else {
+				var listed *WorktreeListing
+				listed, err = c.WorktreeList(t.Context(), WorktreeListParams{})
+				if listed != nil {
+					t.Errorf("a listing came back alongside the error: %+v", listed)
+				}
+			}
+			if err == nil {
+				t.Fatal("a renamed teardown-attribution field decoded silently, want a loud error — a rename here answers 'gone' at a teardown")
+			}
+			var missing *RequiredFieldError
+			if !errors.As(err, &missing) || missing.Field != tc.field {
+				t.Fatalf("err = %v, want a RequiredFieldError naming %s", err, tc.field)
+			}
+			if !strings.Contains(err.Error(), tc.via) {
+				t.Errorf("error does not name the method: %v", err)
+			}
+		})
+	}
+
+	// An explicit null is refused the same way: workspace_id has no
+	// meaningful "none" a teardown could act on.
+	t.Run("workspace_id null", func(t *testing.T) {
+		annulled := strings.Replace(workspace, `"workspace_id":"w4C"`, `"workspace_id":null`, 1)
+		c, _ := newTestClient(t, map[string]fakeHandler{
+			MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+				return respond(w, req.ID, `{"type":"session_snapshot","snapshot":{"version":"0.8.2","protocol":20,"workspaces":[`+annulled+`],"tabs":[],"panes":[],"agents":[],"layouts":[]}}`)
+			},
+		})
+		snap, err := c.SessionSnapshot(t.Context())
+		if err == nil {
+			t.Fatal("a null workspace_id decoded silently, want a loud error")
+		}
+		if snap != nil {
+			t.Errorf("a snapshot came back alongside the error: %+v", snap)
+		}
+		var missing *RequiredFieldError
+		if !errors.As(err, &missing) || !missing.Null {
+			t.Fatalf("err = %v, want a RequiredFieldError reporting the null", err)
+		}
+	})
+}

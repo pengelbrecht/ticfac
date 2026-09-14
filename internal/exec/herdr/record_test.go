@@ -2,6 +2,8 @@ package herdr
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -123,5 +125,36 @@ func TestAgentNameIsALegalHerdrName(t *testing.T) {
 	}
 	if agentName("3gv", 1) == agentName("3gv", 2) {
 		t.Error("two attempts of one tick got the same agent name: a second attempt whose first is still live would collide")
+	}
+}
+
+// TestAgentNameNeverTruncatesTheAttemptDiscriminator is etp's sixth finding:
+// the 32-character budget used to be spent on the FINISHED name, after the
+// attempt suffix was appended — so a long tick id dropped the very thing
+// that keeps a second attempt of one tick from colliding with a first one
+// whose agent is still live. The TICK ID is truncated, never the
+// discriminator.
+func TestAgentNameNeverTruncatesTheAttemptDiscriminator(t *testing.T) {
+	long := "averylongtickidentifierthat-will-not-fit-inside-32-chars"
+	seen := map[string]bool{}
+	for _, attempt := range []int{1, 2, 12, 123} {
+		name := agentName(long, attempt)
+		if len(name) > 32 {
+			t.Errorf("agentName(long, %d) = %q: herdr names are at most 32 characters", attempt, name)
+		}
+		want := "-a" + fmt.Sprint(attempt)
+		if !strings.HasSuffix(name, want) {
+			t.Errorf("agentName(long, %d) = %q, want the attempt discriminator %q to survive the 32-character budget",
+				attempt, name, want)
+		}
+		if seen[name] {
+			t.Errorf("agentName(long, %d) = %q collides with an earlier attempt of the same tick", attempt, name)
+		}
+		seen[name] = true
+	}
+	// Two long tick ids that share a truncated prefix stay distinct in
+	// their discriminators, which is the part that must never be cut.
+	if agentName(long, 1) == agentName(long, 2) {
+		t.Error("two attempts of one long tick id share an agent name: a second attempt whose first is still live would collide")
 	}
 }

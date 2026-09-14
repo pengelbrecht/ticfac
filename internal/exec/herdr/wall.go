@@ -43,13 +43,23 @@ import (
 const interruptChord = "ctrl+c"
 
 // minStopProtocol is the OLDEST herdr protocol through which this executor
-// can enforce a wall clock: agent.send_keys — the interrupt the stop is made
-// with — is part of the wire vocabulary at the client's own verified pin
-// (client.ProtocolVersion, observed against herdr 0.8.2). Below that pin
-// nothing in this repository has ever observed the interrupt surface, and a
-// bound nothing is known able to enforce is not issued as a promise: dispatch
-// refuses it, naming the bound and the herdr version (see enforceableWall).
-const minStopProtocol = client.ProtocolVersion
+// can enforce a wall clock: agent.send_keys — the interrupt the stop is
+// made with — is part of the wire vocabulary across the client's whole
+// SUPPORTED range, so the floor is the line, not the pin (jv7 separated the
+// two precisely so a supported-but-older server still works): the error
+// codes this client knows were observed live against herdr 0.8.0 /
+// protocol 19, the stop surface is there, and a bound issued against a
+// protocol-19 herdr is enforceable. A server below the floor never reaches
+// a dispatch at all — the client fails closed at construction — except
+// through a downgrade observed mid-connection (session.snapshot re-reports
+// the protocol), which is the one shape the dispatch-time refusal below is
+// held for: a bound nothing is known able to enforce is not issued as a
+// promise, and dispatch refuses it, naming the bound and the herdr version
+// (see enforceableWall). The client's pin is a VERIFICATION line, never a
+// support line: refusing a bound against a herdr the client otherwise
+// supports strands every bounded dispatch on an older server as
+// unenforceable when the stop surface it needs is right there.
+const minStopProtocol = client.MinProtocolVersion
 
 // wallDeadline is the moment the bound this attempt was issued fires, derived
 // from the record's own provenance: issued + WallSeconds, the same arithmetic
@@ -97,16 +107,18 @@ func (e *Executor) enforceableWall(spec *subprocess.JobSpec) error {
 	}
 	return refuse(subprocess.RefusedUnenforceable,
 		"the wall clock of %ds cannot be enforced through herdr %s (protocol %d): this executor stops an agent "+
-			"with the agent.send_keys interrupt, which this repository has only observed from protocol %d up — "+
+			"with the agent.send_keys interrupt, which every protocol this client can speak carries (the floor is %d) — "+
 			"refusing the dispatch rather than issuing a bound nothing would stop",
 		spec.Limits.WallSeconds, info.Version, info.Protocol, minStopProtocol)
 }
 
-// stopAtWall stops the agent through herdr, and reports whether herdr then
-// POSITIVELY answered that the agent is gone — the only answer that settles
-// an attempt here. It is called from observe, on the live side of the wall
-// clock: the agent is spending past the bound, and the stop ends the
-// spending.
+// stopAtWall stops the agent through herdr, and reports what the delivery
+// observed — whether herdr took the interrupt, and whether the agent is
+// positively gone afterwards. It is called from observe, on the live side
+// of the wall clock: the agent is spending past the bound, and the stop
+// ends the spending. A true `settled` without a `delivered` is the
+// already-gone shape: herdr answered that nothing is there, which settles
+// without a stop ever being claimed.
 //
 // The order is stop-accepted-then-marker, the reverse of the local
 // supervisor's: through herdr the interrupt can be refused or undeliverable,
@@ -119,28 +131,55 @@ func (e *Executor) enforceableWall(spec *subprocess.JobSpec) error {
 // from "merely settled" in every later inspect and collect, including the
 // herdr-free ones.
 //
+// The ONE shape that writes no marker is herdr's answer that the agent is
+// ALREADY GONE: an agent that exited on its own collected as
+// wall_clock_exceeded — a sentence about an event that did not happen,
+// x9x's rule (claim only what you observed) broken in this code. The
+// positive answer settles the attempt as settled-on-its-own; no stop was
+// delivered, so none is claimed and no marker says one was.
+//
 // A stop herdr would not take is an operational failure, never a verdict:
 // no marker is written, the attempt reads as it read before (the agent is
 // live), the failure is recorded as the observation it is, and the stop is
 // re-delivered at the next poll. The reconciler's own settlement deadline —
 // issued + wall + wipe threshold — remains the backstop that refuses an
 // attempt nobody can say is running.
-func (e *Executor) stopAtWall(st *store, record *attemptRecord) bool {
+
+// wallStop is what ONE delivery of the stop observed: whether herdr took
+// the interrupt, and whether the agent is positively gone after it. A
+// settled stop without a delivered one is the already-gone shape above —
+// settlement without a stop, never a stop that did not happen.
+type wallStop struct {
+	delivered bool
+	settled   bool
+}
+
+func (e *Executor) stopAtWall(st *store, record *attemptRecord) wallStop {
 	_, err := e.client.AgentSendKeys(context.Background(), client.AgentSendKeysParams{
 		Target: record.AgentName,
 		Keys:   []string{interruptChord},
 	})
-	if err != nil && !client.IsCode(err, client.CodeAgentNotFound) && !client.IsCode(err, client.CodePaneNotFound) {
+	switch {
+	case client.IsCode(err, client.CodeAgentNotFound), client.IsCode(err, client.CodePaneNotFound):
+		// The agent exited on its own in the window between the liveness
+		// answer and the stop. That is a positive answer, and it settles —
+		// but it is NOT a stop, so no wall marker is written and no
+		// interrupt is claimed: the attempt reads as settled on its own,
+		// never renamed "stopped at its wall clock".
+		_ = st.markAgentGone(e.stamp())
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+			Detail: fmt.Sprintf("the wall clock of %ds passed and herdr answered that the agent %s is no longer "+
+				"there: the bound fired to find nothing left to stop — the agent settled on its own, and no stop is claimed",
+				record.WallSeconds, record.AgentName)})
+		return wallStop{delivered: false, settled: true}
+	case err != nil:
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
 			Detail: fmt.Sprintf("the wall clock of %ds passed but the agent %s could not be interrupted "+
 				"through herdr (%v); the stop is re-delivered at every poll", record.WallSeconds, record.AgentName, err)})
-		return false
+		return wallStop{}
 	}
-	if client.IsCode(err, client.CodeAgentNotFound) || client.IsCode(err, client.CodePaneNotFound) {
-		// The agent is already gone: the bound fired to find nothing left
-		// to stop. That is a positive answer, and it settles.
-		_ = st.markAgentGone(e.stamp())
-	}
+	// herdr accepted the interrupt: the stop landed, and the marker is a
+	// fact about THIS — written at once, before the exit is confirmed.
 	if markErr := st.markWallExceeded(e.stamp()); markErr != nil {
 		// The stop was accepted but the record of it did not land: the
 		// observation stream is the durable place left, the same fallback
@@ -152,7 +191,7 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord) bool {
 		Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt was delivered through herdr",
 			record.AgentName, record.WallSeconds)})
 	if st.agentGone() {
-		return true
+		return wallStop{delivered: true, settled: true}
 	}
 
 	// The interrupt was accepted; ask herdr once whether the agent is gone.
@@ -162,13 +201,13 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord) bool {
 	switch {
 	case client.IsCode(err, client.CodeAgentNotFound), client.IsCode(err, client.CodePaneNotFound):
 		_ = st.markAgentGone(e.stamp())
-		return true
+		return wallStop{delivered: true, settled: true}
 	case err == nil && agent != nil:
-		return false
+		return wallStop{delivered: true}
 	default:
 		// herdr would not answer. The stop is accepted and recorded; the
 		// settlement waits for a poll that can positively observe the agent
 		// gone, exactly as any settlement here does.
-		return false
+		return wallStop{delivered: true}
 	}
 }

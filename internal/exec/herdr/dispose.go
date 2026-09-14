@@ -248,18 +248,22 @@ const (
 )
 
 // livenessForTeardown asks the ONE question removal needs, next to the
-// removal. An agent herdr positively answers is GONE is the ordinary case
-// — it is the answer the real herdr gives once a workspace (and the pane its
+// removal. An agent herdr positively answers is GONE is the ordinary case —
+// it is the answer the real herdr gives once a workspace (and the pane its
 // agent lived on) has been torn down, so a disposal that is resumed or
-// re-run classifies it as "nothing to kill" rather than as a refusal. An
-// UNCONFIRMED launch reaches this question like any other: it is the one
-// case liveness is UNKNOWN (herdr may have completed the launch after the
-// caller stopped waiting — an agent alive and working behind a record that
-// says nothing was confirmed), so the question is ASKED here rather than
-// assumed, and the same classes answer it: gone permits, working and blocked
-// refuse, and a herdr that will not answer refuses the removal — silence
-// is not evidence that tearing an agent down is safe, whether or not the
-// launch was ever confirmed.
+// re-run classifies it as "nothing to kill" rather than as a refusal.
+//
+// An UNCONFIRMED launch reaches this question like any other and does not
+// short-circuit it. The record that says LaunchConfirmed=false is also the
+// record herdr may have completed the launch behind — an agent alive and
+// working after the caller stopped waiting — and the record a process death
+// between agent.start and its confirmation leaves. On exactly that path the
+// launch outcome is UNKNOWN, and "never confirmed" is not evidence that no
+// agent is there: the same unknown-answered-as-a-fact this executor refuses
+// everywhere else. So the question is ASKED here, and the same classes
+// answer it — gone permits, working and blocked refuse, and a herdr that
+// will not answer refuses the removal, because silence is not evidence that
+// tearing an agent down is safe.
 func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, string, error) {
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	if err != nil {
@@ -279,19 +283,29 @@ func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, st
 		// is safe" — the refusal as the failure, not a guess.
 		return 0, "herdr could not be asked whether the agent is still there", err
 	}
+	var state teardownState
+	var detail string
 	switch agent.AgentStatus {
 	case client.StatusWorking:
-		return teardownWorking, fmt.Sprintf("the agent %s is working and may be mid-turn about to commit", record.AgentName), nil
+		state = teardownWorking
+		detail = fmt.Sprintf("the agent %s is working and may be mid-turn about to commit", record.AgentName)
 	case client.StatusBlocked:
-		return teardownBlocked, fmt.Sprintf("the agent %s is blocked: the pane is the handoff state a human answers", record.AgentName), nil
+		state = teardownBlocked
+		detail = fmt.Sprintf("the agent %s is blocked: the pane is the handoff state a human answers", record.AgentName)
 	case client.StatusIdle, client.StatusDone, client.StatusUnknown:
-		return teardownSettled, fmt.Sprintf("the agent %s is live and settled (%s); worktree.remove tears it down with the workspace",
-			record.AgentName, agent.AgentStatus), nil
+		state = teardownSettled
+		detail = fmt.Sprintf("the agent %s is live and settled (%s); worktree.remove tears it down with the workspace",
+			record.AgentName, agent.AgentStatus)
 	default:
 		// agent_gone answers arrive as errors; a live-but-unclassifiable
 		// agent is settled by elimination here.
-		return teardownSettled, fmt.Sprintf("the agent %s answers %q", record.AgentName, agent.AgentStatus), nil
+		state = teardownSettled
+		detail = fmt.Sprintf("the agent %s answers %q", record.AgentName, agent.AgentStatus)
 	}
+	if !record.LaunchConfirmed {
+		detail += "; the launch was never confirmed — this is herdr's answer to a question the record could not settle"
+	}
+	return state, detail, nil
 }
 
 // archiveOwnReport moves the attempt's own untracked report out of the

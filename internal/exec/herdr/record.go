@@ -143,7 +143,10 @@ func handleFor(record *attemptRecord) *subprocess.JobHandle {
 // unique per attempt because attempt numbers are unique run-wide, and within
 // herdr's [a-z][a-z0-9_-]{0,31} rule. The attempt suffix is what keeps a
 // second attempt of the same tick from colliding with a first one whose
-// agent is still live.
+// agent is still live, so the 32-character budget is spent on the TICK ID
+// and NEVER on the discriminator: a name cut to size after the suffix was
+// appended drops exactly the part that makes it unique, and two attempts of
+// one long tick id then share one agent name.
 func agentName(tickID string, attempt int) string {
 	sanitize := func(s string) string {
 		var b strings.Builder
@@ -157,9 +160,12 @@ func agentName(tickID string, attempt int) string {
 		}
 		return strings.Trim(b.String(), "-")
 	}
-	name := "tick-" + sanitize(tickID) + "-a" + fmt.Sprint(attempt)
-	if len(name) > 32 {
-		name = name[:32]
+	suffix := "-a" + fmt.Sprint(attempt)
+	id := sanitize(tickID)
+	if max := 32 - len("tick-") - len(suffix); max >= 0 && len(id) > max {
+		// sanitize emits ASCII only, so the cut lands between characters,
+		// never inside one.
+		id = id[:max]
 	}
-	return name
+	return "tick-" + id + suffix
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 )
 
 // Reclamation at startup (tick 5hz): a run must be able to ask herdr what it
@@ -184,5 +185,23 @@ func TestReclaimRefusesAWorkspaceWhoseAgentIsStillWorking(t *testing.T) {
 	}
 	if removed := h.removals(); len(removed) != 0 {
 		t.Errorf("the refusal must have removed nothing; worktree.remove saw %v", removed)
+	}
+}
+
+// TestReclaimableRefusesWhenHerdrCannotSayWhichWorktreesExist is etp's first
+// finding on the report path: the survey's listing half carries the branch →
+// workspace evidence, and herdr not answering it must refuse the report, not
+// produce one from silence.
+func TestReclaimableRefusesWhenHerdrCannotSayWhichWorktreesExist(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	h.server.Route(herdtest.MethodWorktreeList, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "herdr has nothing to say")
+	})
+	_, err := h.ex.Reclaimable(context.Background(), func(tickID string) bool { return true })
+	if err == nil {
+		t.Fatal("a reclamation report that could not ask which worktrees exist answered from silence")
+	}
+	if removed := h.removals(); len(removed) != 0 {
+		t.Errorf("the refused report removed something: worktree.remove saw %v", removed)
 	}
 }

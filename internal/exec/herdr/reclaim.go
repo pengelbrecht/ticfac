@@ -47,30 +47,39 @@ const (
 )
 
 // workspaceSurvey is herdr's own answer to "what exists right now": every
-// workspace the session holds, and — when herdr will answer it — the
-// repository's worktrees, each naming the workspace it is open in and the
-// branch it holds.
+// workspace the session holds, and the repository's worktrees, each naming
+// the workspace it is open in and the branch it holds. BOTH halves are
+// required: the snapshot is the authority on what EXISTS, the list carries
+// the corroborating evidence (branch → workspace) that attribution is keyed
+// on — and herdr failing to answer EITHER half is an unanswered question,
+// never a "gone" verdict, which is the fail-closed rule this whole file is
+// held to.
 type workspaceSurvey struct {
 	snapshot *client.SessionSnapshot
-	// listing is nil when herdr answered the snapshot but not the list:
-	// the snapshot is the authority on what EXISTS, the list only carries
-	// corroborating evidence (branch → workspace), and its absence makes
-	// attribution fail closed rather than silently weaker.
-	listing *client.WorktreeListing
+	listing  *client.WorktreeListing
 }
 
 // survey asks herdr what exists. It is the ONE question whose answer can
 // distinguish a gone workspace from a stale id, so its own failure is not a
 // caller's to absorb: the error is returned and every caller of this
-// refuses on it.
+// refuses on it — on EITHER half of the question, because a survey that
+// could not ask which worktrees herdr holds is a survey that would answer
+// "gone" from silence, and an attribution built on it removes nothing
+// while the teardown records success — 5hz's orphan incident, reproduced
+// by the very code written to prevent it.
 func (e *Executor) survey(ctx context.Context) (*workspaceSurvey, error) {
 	snapshot, err := e.client.SessionSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("herdr could not be asked what exists: %w", err)
 	}
-	listing, listErr := e.client.WorktreeList(ctx, client.WorktreeListParams{Cwd: client.Ptr(e.repo)})
-	if listErr != nil {
-		listing = nil
+	listing, err := e.client.WorktreeList(ctx, client.WorktreeListParams{Cwd: client.Ptr(e.repo)})
+	if err != nil {
+		// "herdr did not answer" is not evidence that nothing is there: the
+		// listing carries the branch → workspace evidence this file's whole
+		// attribution is keyed on, and an error here is herdr not answering —
+		// the same fail-closed refusal the snapshot's own failure takes, on
+		// the other half of the same question.
+		return nil, fmt.Errorf("herdr could not be asked which worktrees it holds: %w", err)
 	}
 	return &workspaceSurvey{snapshot: snapshot, listing: listing}, nil
 }
@@ -258,8 +267,9 @@ func (e *Executor) Reclaimable(ctx context.Context, closed func(tickID string) b
 }
 
 // branchAt is the branch the survey's worktree listing says the worktree at
-// path holds, "" when herdr did not answer the listing or the path is not
-// among the repository's worktrees.
+// path holds, "" when the path is not among the repository's worktrees.
+// The listing is never nil once a survey succeeded (survey refuses when
+// herdr will not answer it); the nil guard is defensive only.
 func (sv *workspaceSurvey) branchAt(path string) string {
 	if sv.listing == nil || path == "" {
 		return ""

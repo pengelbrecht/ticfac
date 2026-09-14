@@ -17,8 +17,11 @@ import (
 //
 //   - a durable CANCEL record, first, because it is the one fact that outranks
 //     everything a settled attempt could otherwise say;
-//   - the REPORT, before herdr is asked anything: a worker that wrote its
-//     report has finished, whatever the agent is still doing;
+//   - the REPORT, before herdr is asked anything about the WORK: a worker
+//     that wrote its report has finished, whatever the agent is still
+//     doing. (The wall-clock stop is not a question about the work and is
+//     not skipped by a report: a reporting agent still spending past its
+//     bound is stopped, and the report settles the verdict only — wall.go.)
 //   - herdr, for liveness only: "is the agent there" — never "did the work
 //     succeed", which is 2xu's line, held here by construction;
 //   - this executor's OWN settlement record — the marker written by the
@@ -139,9 +142,32 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 	if report, has := e.readReport(record); has && report.Status != "" {
 		head := headOf(record.Repo, record.Branch)
 		commits, _ := commitsBeyond(record.Repo, record.BaseSHA, head)
-		return subprocess.StateSucceeded, fmt.Sprintf(
+		detail := fmt.Sprintf(
 			"the report at %s ends %s, and the branch carries %d commit(s) beyond %s",
 			record.ResultPath, report.Status, commits, short(record.BaseSHA))
+		if e.pastWall(record) {
+			// The report settles the VERDICT; it does not settle the SPENDING.
+			// An agent that reported and keeps running is still spending on
+			// the operator's substrate, past the bound this attempt was
+			// issued — and returning `succeeded` before the enforcement is
+			// the report-outranks-liveness shape the local executor's Cancel
+			// was fixed for: the stop never fires, the attempt reads finished,
+			// and dispose then refuses it as a working agent forever. The
+			// stop is delivered here, without changing the verdict the
+			// report settles.
+			stop := e.stopAtWall(st, record)
+			switch {
+			case stop.delivered:
+				detail += fmt.Sprintf("; the agent is past its wall clock of %ds and the stop was delivered through herdr — "+
+					"the report decides the verdict, the bound decides the spending", record.WallSeconds)
+			case stop.settled:
+				detail += fmt.Sprintf("; the agent was already gone when the wall clock of %ds fired", record.WallSeconds)
+			default:
+				detail += fmt.Sprintf("; the wall clock of %ds fired and the stop could not be delivered through herdr: "+
+					"it is re-delivered at every poll", record.WallSeconds)
+			}
+		}
+		return subprocess.StateSucceeded, detail
 	}
 
 	// An unconfirmed launch is the one case liveness is UNKNOWN: the launch
@@ -173,15 +199,32 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		// reaches it — the reconciler's poll is the clock that reaches the
 		// bound, and the stop lands within one poll of it (wall.go).
 		if e.pastWall(record) {
-			if e.stopAtWall(st, record) {
+			stop := e.stopAtWall(st, record)
+			switch {
+			case stop.delivered && stop.settled:
 				return subprocess.StateFailed, fmt.Sprintf(
 					"stopped at its wall clock of %ds with no report at %s",
 					record.WallSeconds, record.ResultPath)
+			case stop.settled:
+				// The agent exited on its own before the interrupt could
+				// land: a positive answer that settles, and NOT a stop — no
+				// wall marker was written, no stop is claimed, and collect
+				// reads the settlement on its own words.
+				return subprocess.StateFailed, fmt.Sprintf(
+					"the agent %s was already gone when the wall clock of %ds fired: it settled on its own — "+
+						"the bound fired to find nothing left to stop, and no stop is claimed",
+					record.AgentName, record.WallSeconds)
+			case stop.delivered:
+				return subprocess.StateRunning, fmt.Sprintf(
+					"the wall clock of %ds passed and the agent %s was interrupted through herdr, but it has not exited: "+
+						"the stop settles the attempt only when herdr answers that the agent is gone",
+					record.WallSeconds, record.AgentName)
+			default:
+				return subprocess.StateRunning, fmt.Sprintf(
+					"the wall clock of %ds passed and the agent %s could not be interrupted through herdr: "+
+						"the stop is re-delivered at every poll",
+					record.WallSeconds, record.AgentName)
 			}
-			return subprocess.StateRunning, fmt.Sprintf(
-				"the wall clock of %ds passed and the agent %s was interrupted through herdr, but it has not exited: "+
-					"the stop settles the attempt only when herdr answers that the agent is gone",
-				record.WallSeconds, record.AgentName)
 		}
 		return subprocess.StateRunning, fmt.Sprintf(
 			"the agent %s is live in pane %s (herdr reports %s)",
