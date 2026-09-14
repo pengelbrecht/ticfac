@@ -167,7 +167,7 @@ func evidenceSchema(t *testing.T) (*schema.Schema, map[string]*schema.Schema) {
 	}
 	// Bundle 4.0.0: provenance gained the tier field, so the closed record
 	// moved to a new schema_id — not a compatible extension of the old one.
-	if record.SchemaID != "ticfac.evidence.v2" {
+	if record.SchemaID != "ticfac.evidence.v3" {
 		t.Fatalf("the evidence record's schema_id moved to %q", record.SchemaID)
 	}
 	defs, err := schema.ParseDefs(jp.Defs)

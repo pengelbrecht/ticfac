@@ -403,7 +403,7 @@ func addressAttempt(t *testing.T, f *fixture, marker attemptHandle) (*subprocess
 	if err != nil {
 		t.Fatal(err)
 	}
-	executor, err := r.opts.NewExecutor(dispatch)
+	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -200,7 +200,7 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 	if err != nil {
 		return nil, nil, "", err
 	}
-	executor, err := r.opts.NewExecutor(dispatch)
+	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("reconcile: build the executor for %s: %w", marker.TickID, err)
 	}

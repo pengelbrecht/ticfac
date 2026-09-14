@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -67,7 +66,7 @@ func (r *Reconciler) profileForTier(role, tier string) (*profile.Profile, error)
 	if err != nil {
 		return nil, err
 	}
-	if err := usableProfile(p); err != nil {
+	if err := usableProfile(r.opts.Executors, p); err != nil {
 		return nil, err
 	}
 	if r.tierProfiles == nil {
@@ -300,46 +299,51 @@ func isKnownTier(name string) bool {
 
 // usableProfile refuses a profile this build cannot honour, at construction.
 //
-// Both refusals are about the same thing: a profile is only worth recording if
-// the run actually happened under it. A profile naming `herdr` that ran on the
-// local subprocess executor would be provenance that lies, and a runner nothing
-// here can launch is a dispatch that fails after the tracker has been claimed.
-func usableProfile(p *profile.Profile) error {
+// All three refusals are about the same thing: a profile is only worth recording
+// if the run actually happened under it. A profile naming an executor this build
+// cannot honour is provenance that lies (the run would have dispatched through
+// whatever it had instead), and a runner nothing here can launch is a dispatch
+// that fails after the tracker has been claimed.
+func usableProfile(executors []KnownExecutor, p *profile.Profile) error {
 	if p == nil {
 		return fmt.Errorf("no profile resolved: nothing says which executor, runner, model and prompt a job is dispatched with")
 	}
-	if p.Executor != subprocess.ExecutorName {
-		return fmt.Errorf("profile %s names executor %q and this phase has one, %s: a record naming an executor the "+
-			"run did not use is provenance that lies", p.Role, p.Executor, subprocess.ExecutorName)
+	known, ok := honoured(executors, p.Executor)
+	if !ok {
+		return fmt.Errorf("profile %s names executor %q and this build can honour %s: a record naming an executor "+
+			"the run did not use is provenance that lies", p.Role, p.Executor, executorNames(executors))
 	}
-	known := subprocess.KnownRunners()
 	found := false
-	for _, name := range known {
+	for _, name := range known.Runners {
 		if name == p.Runner {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return fmt.Errorf("profile %s names runner %q, which is not one of %s: a dispatch that discovers this after "+
-			"the tick is claimed has claimed a tick nothing will work on", p.Role, p.Runner, strings.Join(known, ", "))
+		return fmt.Errorf("profile %s names runner %q for executor %s, which launches %s: a dispatch that discovers this after "+
+			"the tick is claimed has claimed a tick nothing will work on", p.Role, p.Runner, p.Executor, strings.Join(known.Runners, ", "))
 	}
 	// The model has to be APPLICABLE, not merely recorded. A runner this
 	// executor cannot tell which model to use, handed one, would run its own
 	// default while the attempt record, the evidence and the provenance all
 	// named something else — so it is refused here, before a tick is claimed.
-	if p.Model != "" && !runnerAcceptsModel(p.Runner) {
+	if p.Model != "" && known.AcceptsModel != nil && !known.AcceptsModel(p.Runner) {
 		return fmt.Errorf("profile %s routes model %q to runner %q, which this executor cannot tell which model to "+
 			"use: a model recorded as applied and silently not applied is provenance that lies", p.Role, p.Model, p.Runner)
 	}
 	return nil
 }
 
-// runnerAcceptsModel is the executor's answer, behind a variable so the guard
-// above can be exercised. Every runner this executor knows takes a model today,
-// so that refusal has no reachable case in production — and a guard no test can
-// reach is a guard nobody knows works.
-var runnerAcceptsModel = subprocess.RunnerAcceptsModel
+// executorNames lists the honoured set the way a refusal should: the names a
+// profile may name.
+func executorNames(executors []KnownExecutor) string {
+	names := make([]string, 0, len(executors))
+	for _, known := range executors {
+		names = append(names, known.Name)
+	}
+	return strings.Join(names, ", ")
+}
 
 // promptDigest is the digest of the role prompt a dispatch was made with. It is
 // what the marker carries instead of the prompt itself: the text is in the
@@ -448,6 +452,28 @@ func (r *Reconciler) attemptProvenance(d Dispatch) runstate.Provenance {
 		model, digest := d.Profile.Model, d.Profile.Digest
 		provenance.Model = &model
 		provenance.ProfileDigest = &digest
+		// The EXECUTOR is the profile's, not a constant: the profile names the
+		// executor this dispatch runs through, and a record that named one the
+		// run did not use would be provenance that lies — the same purpose
+		// usableProfile's construction-time refusal serves, stated here at
+		// record time.
+		executor := d.Profile.Executor
+		provenance.Executor = &executor
+	}
+	// The substrate the dispatch's executor observed, stated on every record
+	// the dispatch produces (tick to1, epic av8): the protocol and server
+	// version, required-and-null in the contract, so a run that spans a
+	// substrate upgrade is diagnosable from provenance alone. The values
+	// come off the dispatch (and therefore off the marker, once written) —
+	// the substrate the attempt was DISPATCHED under, never the one a later
+	// leg would observe today.
+	if d.Substrate.Protocol > 0 {
+		protocol := d.Substrate.Protocol
+		provenance.SubstrateProtocol = &protocol
+	}
+	if d.Substrate.ServerVersion != "" {
+		serverVersion := d.Substrate.ServerVersion
+		provenance.SubstrateServerVersion = &serverVersion
 	}
 	return provenance
 }

@@ -101,7 +101,7 @@ var theSevenRecords = map[string]string{
 	"cancel_ack":  "ticfac.cancel-ack.v1",
 	"job_result":  "ticfac.job-result.v1",
 	"role_result": "ticfac.role-result.v2",
-	"evidence":    "ticfac.evidence.v2",
+	"evidence":    "ticfac.evidence.v3",
 }
 
 func loadJobProtocol(t *testing.T) (jobProtocol, map[string]*schema.Schema, map[string]*schema.Schema) {
@@ -124,10 +124,10 @@ func loadJobProtocol(t *testing.T) (jobProtocol, map[string]*schema.Schema, map[
 func TestJobProtocolIdentityAndRecords(t *testing.T) {
 	c, _, _ := loadJobProtocol(t)
 
-	// Bundle 4.0.0: the records themselves moved (provenance gained tier, the
-	// role-result envelope gained findings), which under the closed-records
-	// rule is a new file version rather than an extension of the old one.
-	if c.SchemaVersion != 2 || c.Contract != "ticfac.job-protocol" {
+	// Bundle 5.1.0: the records moved again (provenance gained the substrate —
+	// protocol and server version), which under the closed-records rule is a
+	// new file version rather than an extension of the old one.
+	if c.SchemaVersion != 3 || c.Contract != "ticfac.job-protocol" {
 		t.Errorf("the contract does not identify itself: %q v%d", c.Contract, c.SchemaVersion)
 	}
 	if c.Versioning.Rule == "" || c.Versioning.AddingAField == "" {
@@ -400,6 +400,32 @@ func TestProvenanceCarriesTheTierField(t *testing.T) {
 	}
 	if provenance.AdditionalProperties == nil || *provenance.AdditionalProperties {
 		t.Error("provenance must be closed — an invented provenance field is a claim nothing validates")
+	}
+}
+
+// The substrate fields (bundle 5.1.0, ticfac's tick to1): the protocol and
+// server version of the substrate a dispatch's executor observed at its
+// handshake, required-and-null like every provenance field, so a run that
+// spans a substrate upgrade is diagnosable from provenance alone — the gap
+// this tick existed to close, after the values had lived only on the
+// executor's private attempt record.
+func TestProvenanceCarriesTheSubstrateFields(t *testing.T) {
+	_, _, defs := loadJobProtocol(t)
+
+	provenance, ok := defs["provenance"]
+	if !ok {
+		t.Fatal("$defs.provenance is missing")
+	}
+	if !contains(provenance.Required, "substrate_protocol") || !contains(provenance.Required, "substrate_server_version") {
+		t.Errorf("provenance must require the substrate fields; required = %v", provenance.Required)
+	}
+	if types := provenance.Properties["substrate_protocol"].Type; len(types) != 2 || fmt.Sprint(types) != "[integer null]" {
+		t.Errorf("provenance.substrate_protocol type = %v, want integer-or-null: the protocol version is a number, "+
+			"and required-and-null is how 'no protocol version' stays a stated fact", types)
+	}
+	if types := provenance.Properties["substrate_server_version"].Type; len(types) != 2 || fmt.Sprint(types) != "[string null]" {
+		t.Errorf("provenance.substrate_server_version type = %v, want string-or-null: the server version names the "+
+			"substrate that spoke the protocol", types)
 	}
 }
 

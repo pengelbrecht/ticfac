@@ -539,13 +539,13 @@ func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
 // refused at CONSTRUCTION — before a tick is claimed, and before any record
 // says a model was applied.
 //
-// serial: this test swaps the package-level runnerAcceptsModel hook to make
-// a runner say it takes no model — the only reachable case for the guard it
-// exists to exercise. The hook is read by every parallel test's construction
-// path, so the swap must happen while those are paused, or it is a data race
-// that fails a neighbour's New (caught on tick 7vn's branch: the first run
-// whose scheduling overlapped them).
+// The guard is exercised through the honoured set itself: the build's
+// KnownExecutor for the local executor states whether each runner takes a
+// model, and every runner it knows today does — so the only reachable case
+// for the guard is a build whose executor says one does not, which is exactly
+// the case it exists for.
 func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, role := range profile.Roles {
 		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
@@ -554,17 +554,15 @@ func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
 	opts := f.options(f.Repo, fixtureOptions{})
 	opts.ProfileDir = dir
 
-	// Every runner this executor knows takes a model today, so the guard is
-	// exercised by making one say it does not — which is the case it exists
-	// for, and the only way to reach it.
 	if _, err := New(opts); err != nil {
 		t.Fatalf("a model routed to a runner that takes one was refused: %v", err)
 	}
 
-	restore := runnerAcceptsModel
-	t.Cleanup(func() { runnerAcceptsModel = restore })
-	runnerAcceptsModel = func(string) bool { return false }
-
+	opts.Executors = []KnownExecutor{{
+		Name:         subprocess.ExecutorName,
+		Runners:      subprocess.KnownRunners(),
+		AcceptsModel: func(string) bool { return false },
+	}}
 	_, err := New(opts)
 	if err == nil {
 		t.Fatal("a model routed to a runner that cannot be told which model to use was accepted")

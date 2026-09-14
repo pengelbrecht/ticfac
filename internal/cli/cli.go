@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"time"
 
 	"github.com/pengelbrecht/ticfac"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
@@ -69,6 +68,12 @@ run-epic flags:
   --budget <usd>      the budget an operator asks for
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
+
+Each dispatch goes through the executor its resolved profile names — a profile
+naming the herdr executor launches the attempt in a herdr workspace, and every
+record it produces states herdr's protocol and server version in its
+provenance; this build honours two executors, the local subprocess one and
+herdr, and refuses a profile naming any other before anything is claimed.
 
 The effective budget — what an operator asked for, clamped to the deployment
 ceiling — is printed before the run starts, while it can still be cancelled
@@ -227,7 +232,8 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		BaseRef:           *base,
 		Owner:             *owner,
 		Tracker:           tracker,
-		NewExecutor:       reconcile.DefaultExecutor(*runner, nil, 60*time.Second),
+		NewExecutor:       executorFactory(*runner, *gate),
+		Executors:         knownExecutors(),
 		ExecStateRoot:     *stateRoot,
 		GateConfig:        *gate,
 		ProfileDir:        *profiles,
@@ -331,7 +337,8 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		IntegrationBranch: *branch,
 		Owner:             "ticfac",
 		Tracker:           tracker,
-		NewExecutor:       reconcile.DefaultExecutor(*runner, nil, 60*time.Second),
+		NewExecutor:       executorFactory(*runner, *gate),
+		Executors:         knownExecutors(),
 		ExecStateRoot:     *stateRoot,
 		GateConfig:        *gate,
 		ProfileDir:        *profiles,

@@ -63,6 +63,54 @@ type Executor interface {
 	Dispose(handle *subprocess.JobHandle, opts subprocess.DisposeOptions) error
 }
 
+// Substrate is the versioned substrate a dispatch's executor observed at the
+// build that will run the job: its protocol version (herdr's API protocol,
+// the number between the client's hard floor and its warn line) and the
+// server version (the binary the substrate runs). It is executor-neutral on
+// purpose — the reconciler learns a VERSION, never a substrate's addressing
+// — and it rides the dispatch and the dispatch marker so a later leg, after
+// the substrate was upgraded mid-run, still records the substrate the
+// attempt was dispatched under rather than the one it would observe today.
+//
+// The zero value is a substrate with no versioned protocol — a local
+// process — and its records state null in provenance.
+type Substrate struct {
+	Protocol      int
+	ServerVersion string
+}
+
+// KnownExecutor is one executor this build can honour, as Options.Executors
+// states it: the name a profile may name, the runner names it can launch (a
+// herdr-style executor launches agent KINDS; the local one launches runner
+// binaries), and whether it can tell each runner which model to use. The
+// names are host configuration, passed in by the caller that can build the
+// executors — the reconciler only compares against them.
+type KnownExecutor struct {
+	Name         string
+	Runners      []string
+	AcceptsModel func(runner string) bool
+}
+
+// theExecutors is the honoured set, defaulting to the one executor this
+// package builds itself.
+func theExecutors(opts []KnownExecutor) []KnownExecutor {
+	if len(opts) == 0 {
+		return []KnownExecutor{{Name: subprocess.ExecutorName, Runners: subprocess.KnownRunners(), AcceptsModel: subprocess.RunnerAcceptsModel}}
+	}
+	return opts
+}
+
+// honoured answers the KnownExecutor a profile's executor name resolves to,
+// and whether this build can honour it at all.
+func honoured(opts []KnownExecutor, name string) (KnownExecutor, bool) {
+	for _, known := range theExecutors(opts) {
+		if known.Name == name {
+			return known, true
+		}
+	}
+	return KnownExecutor{}, false
+}
+
 // The two seams, asserted at COMPILE time. The tracker interface is the tk
 // client's own shape and the executor interface is the protocol's four
 // operations plus the two local ones — so a change to either that this package
@@ -112,6 +160,15 @@ type Dispatch struct {
 	// factory reads the RUNNER off it, because which agent CLI serves a role is
 	// executor configuration and not a field of the closed protocol records.
 	Profile *profile.Profile
+
+	// Substrate is the versioned substrate this dispatch's executor observed
+	// at the build that runs it — protocol and server version. The executor
+	// factory reports it when the executor is built; it rides the dispatch so
+	// every record the dispatch produces can state it in provenance, and the
+	// marker so a LATER leg (after an upgrade) records the substrate the
+	// attempt was DISPATCHED under, not the one it would observe today. The
+	// zero value is a substrate that states no protocol — a local process.
+	Substrate Substrate
 }
 
 // Options configure a reconciler. Everything it talks to is passed in rather
@@ -146,8 +203,23 @@ type Options struct {
 
 	Tracker Tracker
 
-	// NewExecutor builds the executor for one dispatch.
-	NewExecutor func(Dispatch) (Executor, error)
+	// NewExecutor builds the executor for one dispatch, and reports the
+	// SUBSTRATE it observed at the build: the protocol and server version of
+	// the thing the executor drives, stated in the dispatch's provenance so a
+	// run that spans a substrate upgrade can be diagnosed from the durable
+	// record rather than from the executor's private state (tick to1, epic
+	// av8). A substrate with no versioned protocol — a local process —
+	// reports the zero Substrate, and its records state null.
+	NewExecutor func(Dispatch) (Executor, Substrate, error)
+
+	// Executors is what this build can honour: every executor name a
+	// resolved profile may name, each with the runner names it can launch
+	// and whether it can tell each runner which model to use. A profile
+	// naming an executor outside this list is a refusal at construction —
+	// not three ticks into an epic — because a profile naming an executor
+	// the run did not use is provenance that lies. Empty is the one executor
+	// this package builds itself: the local subprocess executor.
+	Executors []KnownExecutor
 
 	// ExecStateRoot is the HOST-level directory dispatch state directories are
 	// created under. It is deliberately not inside the repository: a restart
@@ -412,7 +484,7 @@ func New(opts Options) (*Reconciler, error) {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
 	for _, role := range profile.Roles {
-		if err := usableProfile(profiles[role]); err != nil {
+		if err := usableProfile(opts.Executors, profiles[role]); err != nil {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}
 	}
@@ -456,7 +528,7 @@ func New(opts Options) (*Reconciler, error) {
 				if err != nil {
 					return nil, fmt.Errorf("reconcile: %w", err)
 				}
-				if err := usableProfile(resolved); err != nil {
+				if err := usableProfile(opts.Executors, resolved); err != nil {
 					return nil, fmt.Errorf("reconcile: %w", err)
 				}
 				perRole[string(tier)] = resolved
@@ -917,6 +989,13 @@ func (r *Reconciler) checkpoint(state runstate.State, reason string) (runstate.O
 // Every field of the contract's $defs.provenance is stated, including the ones
 // that are null here: a record that OMITS a field and one that states it as
 // null are different claims.
+//
+// This is the RUN-LEVEL builder — a checkpoint, no single dispatch behind it
+// — so executor and its substrate are null: a run may dispatch different
+// roles through different executors, and a checkpoint is a reconciler-side
+// record, not one an executor produced. The DISPATCH-level builder is
+// attemptProvenance, which states the profile's own executor and the
+// substrate it observed.
 func (r *Reconciler) provenance(tick *string, attempt *int, phase runstate.Phase, sourceSHA string) runstate.Provenance {
 	if sourceSHA == "" {
 		sourceSHA = r.base
@@ -929,7 +1008,7 @@ func (r *Reconciler) provenance(tick *string, attempt *int, phase runstate.Phase
 		SourceSHA:             sourceSHA,
 		IntegrationRef:        runstate.Ptr(refFor(r.branch)),
 		Phase:                 phase,
-		Executor:              runstate.Ptr(subprocess.ExecutorName),
+		Executor:              nil,
 		WorkspaceID:           nil,
 		Backend:               nil,
 		Role:                  nil,

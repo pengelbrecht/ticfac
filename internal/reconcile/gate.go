@@ -215,17 +215,28 @@ func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, ke
 			SourceSHA:      fingerprint["source_sha"],
 			IntegrationRef: runstate.Ptr(fingerprint["integration_ref"]),
 			Phase:          runstate.PhaseIntegrated,
-			Executor:       runstate.Ptr(subprocess.ExecutorName),
-			WorkspaceID:    nil,
-			Backend:        nil,
-			Role:           runstate.Ptr(marker.Role),
-			ProfileDigest:  runstate.Ptr(fingerprint["profile_digest"]),
+			// The executor the attempt this gate is over was DISPATCHED through
+			// (the marker's own, the same value the dispatch's provenance
+			// states) — a gate naming an executor the run did not use would be
+			// evidence that lies about the attempt it evaluated.
+			Executor:      gateExecutorPtr(marker),
+			WorkspaceID:   nil,
+			Backend:       nil,
+			Role:          runstate.Ptr(marker.Role),
+			ProfileDigest: runstate.Ptr(fingerprint["profile_digest"]),
 			// The tier is the one the attempt was DERIVED under (the marker's own
 			// tier, the same value the dispatch's provenance states) — the rung
 			// that routed the model this gate is over, not the role's base one.
 			// Since bundle 4.0.0 it is a field of the closed provenance object, so
 			// an over-tiered attempt is auditable from the gate's evidence alone.
 			Tier: gateTierPtr(marker),
+			// The substrate is the one the attempt was DISPATCHED under (the
+			// marker's own, the same values the dispatch's provenance states) —
+			// so the gate's evidence names the substrate it evaluated the work
+			// of, and a run that spans a substrate upgrade reads coherently from
+			// the gate alone too (bundle 5.1.0, tick to1).
+			SubstrateProtocol:      gateSubstrateProtocolPtr(marker),
+			SubstrateServerVersion: gateSubstrateServerVersionPtr(marker),
 			// The model is the one the tier-resolved profile routes to — the
 			// model that DISPATCHED the attempt this gate is over, not the
 			// role's base one a tiered dispatch never used.
@@ -337,6 +348,40 @@ func gateTierPtr(marker attemptHandle) *string {
 	}
 	tier := marker.Tier
 	return &tier
+}
+
+// gateExecutorPtr is the gate evidence's executor: the one the marker says the
+// attempt was dispatched through, or nil when the marker names none (a marker
+// older than the executor-naming profiles). It is a separate helper for the
+// same reason gateModel is: a failure here must degrade to a stated null, never
+// lose the gate's record.
+func gateExecutorPtr(marker attemptHandle) *string {
+	if marker.Executor == "" {
+		return nil
+	}
+	executor := marker.Executor
+	return &executor
+}
+
+// gateSubstrateProtocolPtr and gateSubstrateServerVersionPtr are the gate
+// evidence's substrate: the protocol and server version the marker says the
+// attempt was dispatched under, nil when it names none (a local process —
+// which states no protocol — or a marker older than the substrate fields).
+// Separate helpers for the same reason gateTierPtr is.
+func gateSubstrateProtocolPtr(marker attemptHandle) *int {
+	if marker.SubstrateProtocol == 0 {
+		return nil
+	}
+	protocol := marker.SubstrateProtocol
+	return &protocol
+}
+
+func gateSubstrateServerVersionPtr(marker attemptHandle) *string {
+	if marker.SubstrateServerVersion == "" {
+		return nil
+	}
+	serverVersion := marker.SubstrateServerVersion
+	return &serverVersion
 }
 
 // closeTick closes the tick durably, through the tracker, and only after the

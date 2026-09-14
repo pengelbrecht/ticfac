@@ -203,6 +203,13 @@ func DefaultStateDir() string {
 // Repo is the checkout this executor was pointed at.
 func (e *Executor) Repo() string { return e.repo }
 
+// ServerInfo is the herdr the executor is connected to, as the handshake
+// observed it: binary version, protocol, capabilities. It is how the caller
+// that BUILT the executor reports the substrate in its dispatch provenance
+// (tick to1, epic av8) — the same values Start records on the attempt, read
+// at the build instead, so the record and the provenance cannot disagree.
+func (e *Executor) ServerInfo() client.ServerInfo { return e.client.ServerInfo() }
+
 // stamp is one record timestamp.
 func (e *Executor) stamp() string { return stamp(e.now) }
 
