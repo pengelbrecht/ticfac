@@ -144,9 +144,15 @@ func (g *repoGit) pruneWorktrees() (string, error) {
 
 // fetchInto brings a remote branch's objects into this repository under a
 // local ref this reconciler owns, so everything afterwards names a commit that
-// is definitely here.
+// is definitely here. The refspec is FORCED (+): the remote is the durable
+// authority this run leases against, so its word is final — a local
+// fetched-tracking ref that has drifted ahead of the remote (an operator who
+// reset the integration branch backwards between runs, a re-run after a
+// force push) must never override what the remote says now. Without the + a
+// backwards move on the remote wedges every future fetch on a non-fast-
+// forward against a stale local ref nobody can see.
 func (g *repoGit) fetch(branch string) error {
-	_, err := g.run("", "fetch", "--quiet", g.remote, refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch))
+	_, err := g.run("", "fetch", "--quiet", g.remote, "+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch))
 	return err
 }
 

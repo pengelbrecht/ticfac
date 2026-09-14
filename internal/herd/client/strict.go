@@ -1,5 +1,7 @@
 package client
 
+import "errors"
+
 // STRICT DECODE — the policy (tick bcv).
 //
 // Stock encoding/json decodes into a fixed struct by NAME MATCH: an added
@@ -10,8 +12,7 @@ package client
 //
 //   - agent_status renamed -> "" -> non-terminal -> the wave fan-in never
 //     completes: a 30-second wait becomes a 30-minute hang.
-//   - interactive_ready renamed -> false -> readiness never observed ->
-//     every spawn fails as a startup race.
+//   - interactive_ready renamed -> false -> readiness never observed.
 //   - name renamed -> nil -> every live worker classifies as dead ->
 //     redispatch onto a tick that already has a running worker.
 //   - agent_session renamed -> nil -> recovery silently downgrades from
@@ -29,15 +30,24 @@ package client
 //
 // The rule the UnmarshalJSON methods below enforce:
 //
-//   - A field whose zero value inverts a safety property — the four AgentInfo
-//     fields above, agent_status wherever any response type carries it, the
-//     pane_id a status-change event keys on, and the identity fields a
-//     teardown's attribution is keyed on (workspace_id, checkout_path, the
-//     worktree path) — must be PRESENT on the wire. Presence means the key
-//     exists; for fields whose "none" value is real (name, agent_session) an
-//     explicit null is present and decodes to nil. For fields with no
-//     meaningful "none" (a bool readiness, the status enum, pane_id, the
-//     identity fields) a null is refused as loudly as an absent key.
+//   - A field whose zero value inverts a safety property — agent_status
+//     wherever any response type carries it, the pane_id a status-change
+//     event keys on, and the identity fields a teardown's attribution is
+//     keyed on (workspace_id, checkout_path, the worktree path) — must be
+//     PRESENT on the wire. Presence means the key exists; a null where
+//     nothing is real (the status enum, pane_id, the identity fields) is
+//     refused as loudly as an absent key.
+//   - AgentInfo's other three fields (interactive_ready, name,
+//     agent_session) are keys herdr OMITS when they carry nothing — Go's
+//     own omitempty, observed live against herdr 0.9.0 on the first
+//     dispatch ticfac ever made (tick to1's demo run): a launch answered
+//     before the agent came up carries no readiness and no session, and
+//     the strict presence rule turned x9x's designed-for readiness poll
+//     into a hard failure. Absent therefore decodes as the zero value and
+//     the launch falls to the poll (a readiness that never confirms is
+//     held for a person by the caller's budget, never a verdict);
+//     present-but-null is still refused for the boolean, which has no
+//     honest "none".
 //   - agent_status is additionally ENUM-VALIDATED wherever it decodes: a
 //     status this client does not know is an explicit error, never a
 //     silently non-terminal empty string. This alone is the difference
@@ -184,11 +194,48 @@ func (p *wireProbe) requireStatus(out *AgentStatus) error {
 	return json.Unmarshal(raw, out)
 }
 
-// UnmarshalJSON enforces the four load-bearing presence rules: agent_status,
-// interactive_ready, name and agent_session must all be carried. name and
-// agent_session may be null — "no name" and "no session" are real states —
-// but their KEYS must be there, because an absent key is indistinguishable
-// from a rename, and the rename is the hazard.
+// optional carries the honest reading of a key herdr omits when its value
+// is the zero one: absent decodes as the zero value, present-but-null is
+// refused (a null boolean or a null string where a value belongs is a shape
+// break, not an omission).
+func (p *wireProbe) optionalBool(field string, out *bool) error {
+	raw, ok := p.known[field]
+	if !ok {
+		*out = false
+		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return &RequiredFieldError{Type: p.typ, Field: field, Null: true}
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func (p *wireProbe) optionalString(field string, out **string) error {
+	raw, ok := p.known[field]
+	if !ok {
+		*out = nil
+		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		*out = nil
+		return nil
+	}
+	return json.Unmarshal(raw, out)
+}
+
+// UnmarshalJSON enforces the one load-bearing presence rule and reads the
+// other three per herdr's own serialization. agent_status must be carried:
+// it is the enum everything keys on, and its absence really is a rename.
+// interactive_ready, name and agent_session are keys herdr OMITS when they
+// carry nothing — a launch answered before the agent came up carries no
+// readiness, a fresh agent has no session — observed live against herdr
+// 0.9.0 on the first dispatch ticfac ever made (tick to1's demo run): the
+// strict presence rule turned x9x's designed-for fallback (poll readiness
+// when the launch reply does not acknowledge it) into a hard failure.
+// Absent therefore decodes as false/nil and the launch falls to the poll;
+// present-but-null is still refused, because a null boolean is a shape
+// break rather than an omission, and a readiness that never confirms is
+// held for a person by the executor's own budget, never a verdict.
 func (a *AgentInfo) UnmarshalJSON(data []byte) error {
 	type alias AgentInfo
 	var out alias
@@ -200,25 +247,26 @@ func (a *AgentInfo) UnmarshalJSON(data []byte) error {
 	if err := p.requireStatus(&out.AgentStatus); err != nil {
 		return err
 	}
-	raw, err := p.require("interactive_ready", false)
+	if err := p.optionalBool("interactive_ready", &out.InteractiveReady); err != nil {
+		return err
+	}
+	if err := p.optionalString("name", &out.Name); err != nil {
+		return err
+	}
+	raw, err := p.require("agent_session", true)
 	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(raw, &out.InteractiveReady); err != nil {
-		return err
-	}
-	raw, err = p.require("name", true)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(raw, &out.Name); err != nil {
-		return err
-	}
-	raw, err = p.require("agent_session", true)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(raw, &out.AgentSession); err != nil {
+		// A fresh agent has no session yet and herdr omits the key entirely
+		// (the same serialization choice as interactive_ready): absent is
+		// "no session", not a rename — the session id arrives on the first
+		// prompt, and the fields that key on it are the resumer's, not the
+		// launcher's.
+		var missing *RequiredFieldError
+		if errors.As(err, &missing) && !missing.Null {
+			out.AgentSession = nil
+		} else {
+			return err
+		}
+	} else if err := json.Unmarshal(raw, &out.AgentSession); err != nil {
 		return err
 	}
 	*a = AgentInfo(out)

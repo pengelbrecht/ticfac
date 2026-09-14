@@ -326,13 +326,13 @@ func TestTwoDefinitionsOfOneSchemaIDAreRefused(t *testing.T) {
 	// the exact shape 1.2.0 shipped, under the id the bundle publishes today
 	// (v2 since 4.0.0: provenance gained tier and the closed record moved).
 	document["evidence_envelope"] = map[string]any{
-		"schema_id": "ticfac.evidence.v2",
+		"schema_id": "ticfac.evidence.v3",
 		"schema":    map[string]any{"type": "object"},
 	}
 	writeJSON(t, path, document)
 
 	if err := VerifySchemaIDs(dir); err == nil {
-		t.Fatal("two definitions of ticfac.evidence.v2 passed VerifySchemaIDs")
+		t.Fatal("two definitions of ticfac.evidence.v3 passed VerifySchemaIDs")
 	} else {
 		t.Logf("refused: %s", firstLine(err.Error()))
 	}

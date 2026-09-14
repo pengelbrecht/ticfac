@@ -71,6 +71,17 @@ type attemptHandle struct {
 	// an answer to "is this the same profile" — not to "which tier was this".
 	Tier string `json:"tier"`
 
+	// SubstrateProtocol and SubstrateServerVersion are the substrate this
+	// dispatch was STARTED under — the versioned thing its executor drives,
+	// observed at the build that ran the job (tick to1, epic av8). They ride
+	// the marker for the same reason Tier does, and for one more: the
+	// attempt was dispatched under THIS substrate, and a later leg — after
+	// the substrate was upgraded mid-run — must record what the dispatch
+	// used, not what it would observe today. Zero values are a substrate
+	// that states no protocol (a local process).
+	SubstrateProtocol      int    `json:"substrate_protocol"`
+	SubstrateServerVersion string `json:"substrate_server_version"`
+
 	// Touch is the files this tick DECLARED it expects to touch (tick 01u):
 	// the tick's touch: labels, parsed and normalised at PLANNING time so the
 	// check is a pure function of what the tracker said. It rides the marker
@@ -90,6 +101,7 @@ func (a attemptHandle) asMap() map[string]any {
 		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA,
 		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier, "touch": a.Touch,
+		"substrate_protocol": a.SubstrateProtocol, "substrate_server_version": a.SubstrateServerVersion,
 	}
 }
 
@@ -125,12 +137,21 @@ func handleFromMap(raw map[string]any) attemptHandle {
 			}
 		}
 	}
+	substrateProtocol := 0
+	switch value := raw["substrate_protocol"].(type) {
+	case float64:
+		substrateProtocol = int(value)
+	case int:
+		substrateProtocol = value
+	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
 		Model:   get("model"), PromptDigest: get("prompt_digest"), Tier: get("tier"),
-		Touch: touch,
+		SubstrateProtocol:      substrateProtocol,
+		SubstrateServerVersion: get("substrate_server_version"),
+		Touch:                  touch,
 	}
 }
 
@@ -344,6 +365,19 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			return nil, nil, attemptHandle{}, err
 		}
 
+		// The executor is built BEFORE the marker, because the marker's
+		// provenance states the substrate its executor observed at the build
+		// that will run the job — and because building one starts nothing: a
+		// build failure here is a refusal before the tick is claimed and
+		// before any record says a dispatch happened, which is the honest
+		// shape for "this host cannot run this profile at all".
+		executor, substrate, err := r.opts.NewExecutor(dispatch)
+		if err != nil {
+			return nil, nil, marker, fmt.Errorf("build the executor for %s: %w", tick, err)
+		}
+		dispatch.Substrate = substrate
+		marker.SubstrateProtocol, marker.SubstrateServerVersion = substrate.Protocol, substrate.ServerVersion
+
 		r.setTick(tick, "ready")
 		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
@@ -402,10 +436,6 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
 
-		executor, err := r.opts.NewExecutor(dispatch)
-		if err != nil {
-			return nil, nil, marker, fmt.Errorf("build the executor for %s: %w", tick, err)
-		}
 		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, marker, r.startFailure(tick, err)
@@ -733,7 +763,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 		dispatch.BudgetUSD = &effective
 	}
 	marker := attemptHandle{
-		Executor: subprocess.ExecutorName, JobID: jobID, Attempt: number, TickID: entry.TickID,
+		Executor: dispatchProfile.Executor, JobID: jobID, Attempt: number, TickID: entry.TickID,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
@@ -832,7 +862,7 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	if err != nil {
 		return nil, nil, err
 	}
-	executor, err := r.opts.NewExecutor(dispatch)
+	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
 	}
@@ -855,7 +885,7 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 		SchemaVersion: subprocess.SchemaVersion,
 		JobID:         marker.JobID,
 		Attempt:       marker.Attempt,
-		Executor:      subprocess.ExecutorName,
+		Executor:      marker.Executor,
 		Handle:        map[string]any{"state": state},
 	}
 	status, err := executor.Inspect(handle, "")
@@ -911,6 +941,11 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		Tier: marker.Tier,
+		// The substrate the attempt was DISPATCHED under, off the marker: a
+		// later leg must record what the dispatch used, not what this
+		// incarnation would observe today (the substrate may have been
+		// upgraded under a run in flight).
+		Substrate: Substrate{Protocol: marker.SubstrateProtocol, ServerVersion: marker.SubstrateServerVersion},
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -1272,7 +1307,7 @@ func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
 		r.record(marker.TickID, StageCleanedUp, "the executor for the rejected attempt could not be built: %v", err)
 		return
 	}
-	executor, err := r.opts.NewExecutor(dispatch)
+	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the executor for the rejected attempt could not be built: %v", err)
 		return
@@ -1281,7 +1316,7 @@ func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
 		SchemaVersion: subprocess.SchemaVersion,
 		JobID:         marker.JobID,
 		Attempt:       marker.Attempt,
-		Executor:      subprocess.ExecutorName,
+		Executor:      marker.Executor,
 		Handle:        map[string]any{"state": state},
 	}, executor, marker, reason, true)
 }
@@ -1362,8 +1397,16 @@ func isBranchUnsafe(err error) bool {
 	return ok && refusal.Reason == subprocess.RefusedBranchUnsafe
 }
 
-// DefaultExecutor is the factory a production run uses: the local subprocess
-// executor, one per dispatch, pointed at a state directory this run owns.
+// DefaultExecutor is the local subprocess executor's factory: one executor per
+// dispatch, pointed at a state directory this run owns. A production run whose
+// profiles name OTHER executors composes this into a factory that routes on
+// the profile's executor field — the routing lives with the host that can
+// build the executors (internal/cli), not here, because a name the reconciler
+// cannot spell is a name the reconciler must not spell.
+//
+// The substrate it reports is the zero Substrate: a local process states no
+// protocol and no server version, and its dispatch records say exactly that in
+// provenance.
 //
 // Three of the profile's four fields reach the executor here, as HOST
 // configuration: the runner it launches, the model it launches it on, and the
@@ -1372,11 +1415,11 @@ func isBranchUnsafe(err error) bool {
 // one the reconciler's own contract does not have. `runner` is the fallback an
 // operator names on the command line, for a dispatch whose profile resolved
 // none.
-func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, error) {
-	return func(d Dispatch) (Executor, error) {
+func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, Substrate, error) {
+	return func(d Dispatch) (Executor, Substrate, error) {
 		supervisor, err := supervisorArgv()
 		if err != nil {
-			return nil, err
+			return nil, Substrate{}, err
 		}
 		// A local, not the captured fallback: a profile that routed one
 		// dispatch must not become the default for the next one.
@@ -1387,7 +1430,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			}
 			model, rolePrompt = d.Profile.Model, d.Profile.Prompt
 		}
-		return subprocess.New(subprocess.Options{
+		executor, err := subprocess.New(subprocess.Options{
 			Repo:           d.Repo,
 			StateDir:       d.StateDir,
 			Runner:         dispatched,
@@ -1399,6 +1442,10 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			Attempt:        d.Attempt,
 			PushInterval:   pushInterval,
 		})
+		if err != nil {
+			return nil, Substrate{}, err
+		}
+		return executor, Substrate{}, nil
 	}
 }
 

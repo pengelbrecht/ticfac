@@ -465,7 +465,7 @@ func (a *adapter) jobIdentity(job string) string {
 func (a *adapter) executorFor(job string) Executor {
 	a.t.Helper()
 	r := a.reconciler()
-	executor, err := r.opts.NewExecutor(Dispatch{
+	executor, _, err := r.opts.NewExecutor(Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: job, Attempt: 1,
 		JobID: job, Role: "implement-tick", Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(a.jobIdentity(job)), BaseSHA: r.base,

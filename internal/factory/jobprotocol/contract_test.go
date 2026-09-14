@@ -142,11 +142,12 @@ func decode(t *testing.T, raw json.RawMessage) any {
 func TestContractIdentity(t *testing.T) {
 	c := load(t)
 
-	// Bundle 4.1.1 (tick 9t0): job-protocol is at 2, and the evidence and
-	// role-result records moved to v2 with it. This test came in from ticks
-	// (tick ek7) pinned at the old numbers; the two landed in one wave.
-	if c.SchemaVersion != 2 {
-		t.Errorf("schema_version = %d, want 2", c.SchemaVersion)
+	// Bundle 5.1.0 (tick to1): job-protocol is at 3, and the evidence record
+	// moved to v3 with it — provenance gained the substrate. This test came
+	// in from ticks (tick ek7) pinned at the old numbers; the two landed in
+	// one wave.
+	if c.SchemaVersion != 3 {
+		t.Errorf("schema_version = %d, want 3", c.SchemaVersion)
 	}
 	if c.Contract != Contract {
 		t.Errorf("contract = %q, want %q", c.Contract, Contract)

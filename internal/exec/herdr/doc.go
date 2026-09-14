@@ -89,8 +89,9 @@
 // patched with a hollow guarantee): the operations place NO capability
 // demand on the server, and TestACapabilityFreeServerRunsAWholeAttempt
 // pins that decision from below — a herdr advertising nothing at all runs
-// a whole attempt. That test is the pin of the amendment, not a test of
-// the by-name refusal, which lives with the point of use. The day an
+// a whole attempt, all five operations: start, inspect, collect, cancel
+// and dispose. That test is the pin of the amendment, not a test of the
+// by-name refusal, which lives with the point of use. The day an
 // operation here comes to depend on an optional server feature — live
 // handoff, a detached daemon, anything herdr later gates — it must call
 // RequireCapability BY NAME at its point of use: never assume the

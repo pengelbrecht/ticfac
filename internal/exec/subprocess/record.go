@@ -435,7 +435,7 @@ type ArtifactRef struct {
 	Bytes         int    `json:"bytes,omitempty"`
 }
 
-// EvidenceRef cites a ticfac.evidence.v2 record by its key.
+// EvidenceRef cites a ticfac.evidence.v3 record by its key.
 type EvidenceRef struct {
 	Key            string `json:"key"`
 	PersistenceURI string `json:"persistence_uri"`

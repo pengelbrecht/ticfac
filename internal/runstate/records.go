@@ -10,8 +10,11 @@ import (
 // record (SPEC §10.4). Bundle 4.0.0 moved it from 1 to 2: every record this
 // package places carries provenance, and provenance gained the tier field —
 // a closed object's shape moved, which under the bundle's own versioning
-// rule is a new schema_version, not a compatible extension.
-const SchemaVersion = 2
+// rule is a new schema_version, not a compatible extension. Bundle 5.1.0
+// moved it from 2 to 3 for the same reason: provenance gained the substrate —
+// the protocol and server version of the substrate a dispatch ran on (tick
+// to1, epic av8: "the substrate goes in provenance").
+const SchemaVersion = 3
 
 // The records are closed structures on purpose: the contract's schemas are
 // `additionalProperties: false`, so a field these types cannot express is a
@@ -47,6 +50,20 @@ type Provenance struct {
 	ProfileDigest         *string `json:"profile_digest"`
 	Model                 *string `json:"model"`
 	ContextManifestDigest *string `json:"context_manifest_digest"`
+	// SubstrateProtocol is the protocol version of the SUBSTRATE a dispatch's
+	// executor observed at its handshake — herdr's API protocol, the number
+	// between the client's hard floor and its warn line. It became a field at
+	// bundle 5.1.0 (tick to1, epic av8) so a run that spans a substrate
+	// upgrade can be diagnosed from provenance alone, not just from the
+	// executor's private attempt state. Required-and-null like every
+	// provenance field: null when the executor's substrate states no protocol
+	// version (a local process) and for a record no dispatch produced.
+	SubstrateProtocol *int `json:"substrate_protocol"`
+	// SubstrateServerVersion is the server version of the SUBSTRATE a
+	// dispatch's executor observed at its handshake — the herdr binary
+	// version. It travels with SubstrateProtocol, so a protocol number can
+	// always be read against the server that spoke it. Null on the same terms.
+	SubstrateServerVersion *string `json:"substrate_server_version"`
 }
 
 // provenanceFields is every field of $defs.provenance, all of them required.
@@ -55,7 +72,8 @@ type Provenance struct {
 // the first rather than reading a missing field as a null one.
 var provenanceFields = []string{
 	"run_id", "tick_id", "attempt", "source_ref", "source_sha", "integration_ref",
-	"phase", "executor", "workspace_id", "backend", "role", "tier", "profile_digest",
+	"phase", "executor", "workspace_id", "backend", "substrate_protocol",
+	"substrate_server_version", "role", "tier", "profile_digest",
 	"model", "context_manifest_digest",
 }
 
@@ -298,7 +316,8 @@ func (d Decision) Validate() error {
 }
 
 // Evidence is the record this contract PLACES and contracts/job-protocol.json
-// DEFINES (`ticfac.evidence.v2`, since bundle 4.1.1). The Go type follows that definition — nested
+// DEFINES (`ticfac.evidence.v3`, since bundle 5.1.0 — 4.0.0 added provenance's
+// tier field, 5.1.0 added the substrate). The Go type follows that definition — nested
 // provenance, closed, every field required — because bundle 1.2.0 shipped two
 // shapes of it and no document satisfied both.
 type Evidence struct {

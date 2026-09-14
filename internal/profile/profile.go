@@ -63,6 +63,15 @@ var runnersConfigRoles = map[string][]string{
 	"closeout-epic":  {"closeout-epic", "closeout", "close-out"},
 }
 
+// RunnersRoleCandidates returns the roles-table names a profile role routes
+// through, first declared first — the same candidates route() walks. A caller
+// that needs the roles-table entry behind a profile (to compile spawn argv
+// from its effort and args, say) resolves it with the same order and so cannot
+// disagree with the routing that produced the profile.
+func RunnersRoleCandidates(role string) []string {
+	return runnersConfigRoles[role]
+}
+
 // Options say where a profile is resolved from.
 type Options struct {
 	// Dir is a profiles directory on disk. Empty resolves the copy compiled

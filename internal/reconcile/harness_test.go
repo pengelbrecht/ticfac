@@ -479,7 +479,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 	}
 }
 
-func (f *fixture) newExecutor(d Dispatch) (Executor, error) {
+func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 	f.mu.Lock()
 	f.dispatches[d.TickID] = d
 	f.mu.Unlock()
@@ -507,13 +507,15 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, error) {
 		PushInterval:   time.Second,
 	})
 	if err != nil {
-		return nil, err
+		return nil, Substrate{}, err
 	}
 	var wrapped Executor = &recordingExecutor{fixture: f, Executor: executor}
 	if f.wrap != nil {
 		wrapped = f.wrap(wrapped)
 	}
-	return wrapped, nil
+	// The fake's substrate: the fake runner is a local process, so the zero
+	// Substrate — the same thing the production subprocess factory reports.
+	return wrapped, Substrate{}, nil
 }
 
 // recordingExecutor remembers every handle so the fixture can stop whatever a

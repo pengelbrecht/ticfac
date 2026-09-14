@@ -425,7 +425,8 @@ func TestAProtocolRefusalIsOperational(t *testing.T) {
 // precedent (a wording-versus-repo mismatch, amended with the reasoning,
 // not a broken guarantee): the operations place NO capability demand, and
 // this test is the pin of that decision — a herdr advertising nothing at
-// all runs a whole attempt, start to dispose. It is not, and does not
+// all runs a whole attempt, all five operations: start, inspect, collect,
+// cancel and dispose. It is not, and does not
 // claim to be, a test of the by-name refusal; that test lives with the
 // point of use. The day an operation comes to depend on an optional server
 // feature, it must RequireCapability BY NAME at that point — never assume
@@ -462,6 +463,13 @@ func TestACapabilityFreeServerRunsAWholeAttempt(t *testing.T) {
 		t.Errorf("verdict = %s, want ready-to-merge: no leg of an attempt needs a capability the server lacks", collected.Verdict)
 	}
 	mustRun(t, h.repo.Dir, "git", "push", "--quiet", "origin", collected.Result.Source.WriteRef)
+	// The fifth operation, and the one the doc's claim covers: a cancel —
+	// the revoke of the credential the dispatch itself is — against a server
+	// advertising nothing (the teardown's order, revoke then dispose, so the
+	// attempt's whole life is exercised against the capability-free herdr).
+	if _, err := h.ex.Cancel(handle); err != nil {
+		t.Fatalf("a cancel against a capability-free server failed: %v", err)
+	}
 	if err := h.ex.Dispose(handle, subprocess.DisposeOptions{Reason: "merged and closed"}); err != nil {
 		t.Fatalf("a dispose against a capability-free server failed: %v", err)
 	}
