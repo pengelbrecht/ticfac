@@ -275,10 +275,28 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 	for _, tick := range result.Ticks {
 		fmt.Fprintf(stdout, "  %-8s %s\n", tick.TickID, tick.State)
 	}
+	// Not a verdict about the work, so it does not change the exit code —
+	// but never silent: the operator who would subscribe to this run has to
+	// know there is nothing to subscribe to (tick d6s).
+	if result.FeedError != nil {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, feedFailureLine(result.RunID, result.FeedError))
+	}
 	if result.State != "completed" {
 		return 1
 	}
 	return 0
+}
+
+// feedFailureLine is the one sentence a run whose feed could not be written
+// owes its operator: what failed, that it is not a verdict about the work,
+// and what cannot happen as a result — `ticfac events <run-id> --follow` has
+// nothing to follow. The run's own records and the report above remain the
+// evidence; the feed is a hint, and this is the hint channel saying it is
+// deaf (tick d6s).
+func feedFailureLine(runID string, err error) string {
+	return fmt.Sprintf("the run's event feed could not be written (%v): this is not a verdict about the work — "+
+		"the run's records and the report above are the evidence — but nothing will appear under "+
+		".ticfac/logs/%s/, so `ticfac events %s --follow` has nothing to follow", err, runID, runID)
 }
 
 // budgetLine is the one sentence A12 is about. It says the effective number
