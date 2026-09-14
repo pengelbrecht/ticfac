@@ -108,10 +108,7 @@ func TestAnOrdinaryAddAllCannotStageTheReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, func() bool {
-		s, err := h.ex.Inspect(handle, "")
-		return err == nil && s.Terminal
-	}) {
+	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
 		h.dumpAgent(t)
 		t.Fatal("the fake agent never settled")
 	}
@@ -158,10 +155,7 @@ func TestAForceAddedReportIsCaughtAtCollect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, func() bool {
-		s, err := h.ex.Inspect(handle, "")
-		return err == nil && s.Terminal
-	}) {
+	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
 		h.dumpAgent(t)
 		t.Fatal("the fake agent never settled")
 	}
@@ -213,6 +207,49 @@ func TestAForceAddedReportIsCaughtAtCollect(t *testing.T) {
 	// this one is the artifact, not a tracker record.
 	if collected.Message == "" || strings.Contains(collected.Message, "authority that is not its own") {
 		t.Errorf("the message was %q: a force-added report needs its own sentence", collected.Message)
+	}
+}
+
+// The flake that made TestAForceAddedReportIsCaughtAtCollect fail only in
+// a whole-suite run (tick wmw), made deterministic. The fake agent's
+// force_report shape writes its report BEFORE it commits it, and an
+// inspect answers TERMINAL as soon as the report exists — that is the
+// completion contract (inspect.go: durable evidence first), not a claim
+// that the agent's turn is over. A test that synchronizes on
+// Inspect().Terminal can therefore collect inside the window and read a
+// branch the forced report has not reached yet: ready-to-merge,
+// artifactViolations empty — the exact intermittent failure. The _slow
+// fixture holds that window open for two seconds, so this regression test
+// fails against the Terminal-based wait every time, not one run in
+// twenty, and keeps passing only for a wait that means "the agent's whole
+// turn is over".
+func TestASlowForceAddedReportIsStillCaughtAtCollect(t *testing.T) {
+	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "force_report_slow"})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
+		h.dumpAgent(t)
+		t.Fatal("the fake agent never settled")
+	}
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if collected.Verdict != subprocess.VerdictBoundaryViolation {
+		t.Fatalf("verdict %s (%s), want %s: the wait returned while the agent still had its forced-add commit to land, "+
+			"and the backstop read a branch the report had not reached yet",
+			collected.Verdict, collected.Message, subprocess.VerdictBoundaryViolation)
+	}
+	if len(collected.ArtifactViolations) != 1 || collected.ArtifactViolations[0] != local.ResultRel {
+		t.Fatalf("artifact violations = %v, want exactly the forced report %s",
+			collected.ArtifactViolations, local.ResultRel)
 	}
 }
 

@@ -192,15 +192,17 @@ func TestTheWallStopReachesTheAgentProcess(t *testing.T) {
 		t.Fatal("the worker ran past its wall clock and herdr was never asked to stop it")
 	}
 
-	// The process herdr owns actually exited on the interrupt.
-	h.mu.Lock()
-	cmd := h.agentCmd
-	h.mu.Unlock()
-	if cmd == nil || cmd.Process == nil {
+	// The process herdr owns actually exited on the interrupt. The exit
+	// facts are read through the harness's accessor: cmd.Wait writes them
+	// from its own goroutine, and cmd.ProcessState is not safe to poll from
+	// here (the data race -race caught, tick wmw).
+	spawned, _, _ := h.agentProcess()
+	if !spawned {
 		t.Fatal("the harness spawned no agent process")
 	}
 	if !waitForOr(t, "the interrupted agent to exit", 5*time.Second, func() bool {
-		return cmd.ProcessState != nil
+		_, exited, _ := h.agentProcess()
+		return exited
 	}) {
 		h.dumpAgent(t)
 		t.Fatal("the interrupt was delivered but the agent process is still running: the bound is not enforced")

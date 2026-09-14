@@ -19,6 +19,14 @@
 #                       ordinary add-all must not stage the excluded report
 #   force_report        force-add the excluded report past the exclude
 #                       (`git add -f`), the shape collect's backstop exists for
+#   force_report_slow   the same force-add, but with a two-second pause
+#                       between the report write and the commit — the window
+#                       tick wmw made deterministic: an inspect answered from
+#                       the report (the completion contract) is TERMINAL while
+#                       the agent still has a commit to land, so a test that
+#                       synchronizes on Inspect().Terminal collects inside the
+#                       window and sees a branch the forced report never
+#                       reached
 set -e
 
 worktree=$1
@@ -113,10 +121,16 @@ if [ "$mode" = "report_then_addall" ]; then
 	git -C "$worktree" add -A
 	git -C "$worktree" commit --quiet -m "tick $id: add all"
 fi
-if [ "$mode" = "force_report" ]; then
+if [ "$mode" = "force_report" ] || [ "$mode" = "force_report_slow" ]; then
 	# The p6b detection fixture: a worker that bypasses the exclude outright
 	# (`git add -f` on the excluded path). collect must still catch it off
-	# the branch diff and report it as a boundary violation.
+	# the branch diff and report it as a boundary violation. The _slow
+	# variant holds the window between the report write above and this
+	# commit open for two seconds, which is what makes the wmw race
+	# reproducible on demand instead of only under a loaded suite.
+	if [ "$mode" = "force_report_slow" ]; then
+		sleep 2
+	fi
 	git -C "$worktree" add -f "$out"
 	git -C "$worktree" commit --quiet -m "tick $id: the report rides the branch"
 fi

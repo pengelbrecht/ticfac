@@ -51,10 +51,7 @@ func TestARealTickRunsEndToEndThroughThisExecutor(t *testing.T) {
 	if status.State != subprocess.StateRunning {
 		t.Fatalf("the attempt inspecting as %s before the work: expected running", status.State)
 	}
-	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, func() bool {
-		s, err := h.ex.Inspect(handle, "")
-		return err == nil && s.Terminal
-	}) {
+	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
 		h.dumpAgent(t)
 	}
 	t.Logf("worked: the agent settled (%s), the report is at %s",
@@ -154,10 +151,7 @@ func TestTheRunSurvivesARestartOnTheMinimalHandle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, func() bool {
-		s, err := h.ex.Inspect(handle, "")
-		return err == nil && s.Terminal
-	}) {
+	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
 		h.dumpAgent(t)
 	}
 
