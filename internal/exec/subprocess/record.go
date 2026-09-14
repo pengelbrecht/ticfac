@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // The protocol records of contracts/job-protocol.json, as Go types.
@@ -27,6 +28,17 @@ const SchemaVersion = 1
 // ExecutorName is this executor's name on the seam. An executor NAME crosses
 // it; a concrete backend name never does.
 const ExecutorName = "local-subprocess"
+
+// PollInterval is the cadence at which a live job on this executor should be
+// addressed: seconds, because on a local substrate nothing wipes an
+// unaddressed job and an Inspect is a local read — the wait between polls is
+// latency to notice a settle, not a keepalive (tick u9l, epic av8). The
+// five-minute DefaultPollInterval belongs to a cloud substrate that takes an
+// unaddressed job AWAY, where the beat IS the point; here it is 15 minutes of
+// blind waiting for runs that may finish in seconds. The reconciler takes
+// this through KnownExecutor.PollInterval, so the interval belongs to the
+// executor rather than to one global constant.
+const PollInterval = 5 * time.Second
 
 // The schema ids each record declares, spelled as the contract spells them.
 const (

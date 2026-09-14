@@ -42,6 +42,7 @@ var readers = map[string]reader{
 	"tk-json-manifest.json":         {kind: executable, file: "tk_json_manifest_test.go"},
 	"collect-vocabulary.json":       {kind: executable, file: "collect_vocabulary_test.go"},
 	"message-context.json":          {kind: executable, file: "message_context_test.go"},
+	"run-event-feed.json":           {kind: executable, file: "run_event_feed_test.go"},
 	"runners-config-contract.json":  {kind: executable, file: "runners_config_test.go"},
 	"tracker-layout.json":           {kind: executable, file: "tracker_layout_test.go"},
 	"worker-boot-contract.json":     {kind: structural, file: "worker_boot_test.go", turnedExecutableBy: "the Herdr executor (SPEC §12 Phase 2)"},
@@ -92,8 +93,8 @@ func TestEveryBundleFileHasAReader(t *testing.T) {
 		}
 	}
 
-	if len(bundle.Files) != 14 {
-		t.Errorf("bundle %s carries %d contracts; 3.0.0 carries 14 — if that is intended, "+
+	if len(bundle.Files) != 15 {
+		t.Errorf("bundle %s carries %d contracts; 5.1.0 carries 14 — if that is intended, "+
 			"move the pin deliberately and add the reader in the same commit",
 			bundle.Version, len(bundle.Files))
 	}

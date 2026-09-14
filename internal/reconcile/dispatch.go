@@ -1012,6 +1012,11 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 	step := r.OpenStep(r.stepCap)
 	deadline := r.settlementDeadline(marker)
 	cursor := ""
+	// The cadence is the EXECUTOR's, not one global constant: the marker
+	// names the executor this attempt was dispatched under, and a local
+	// substrate wants seconds where a cloud one wants the slow keepalive
+	// beat (tick u9l, epic av8).
+	interval := r.pollIntervalFor(marker.Executor)
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1066,7 +1071,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 				marker.Attempt, marker.TickID, r.wipeThreshold)
 		}
 
-		if step.Spend(r.pollInterval) == ExceededCap {
+		if step.Spend(interval) == ExceededCap {
 			// This leg is over. The next one is a FRESH step that re-derives
 			// its state from durable facts rather than continuing this one.
 			if _, err := r.store.Fetch(); err != nil {
@@ -1078,7 +1083,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 			step = r.OpenStep(r.stepCap)
 			continue
 		}
-		r.sleep(r.pollInterval)
+		r.sleep(interval)
 	}
 }
 

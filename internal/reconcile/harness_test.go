@@ -16,6 +16,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -277,6 +278,12 @@ func newRepo(t *testing.T, root, name, gate string) *testRepo {
 	}
 	write(t, filepath.Join(dir, "README.md"), "# "+name+"\n")
 	write(t, filepath.Join(dir, ".tick", "runners.toml"), gate)
+	// The run-state contract's gitignore fragment, which every target
+	// repository carries: the reconciler writes its run event feed under
+	// .ticfac/logs/, and without the fragment that exhaust is a dirty tree
+	// a later `git add -A` sweeps up (contracts/ticfac-run-state.json,
+	// contracts/run-event-feed.json).
+	write(t, filepath.Join(dir, ".gitignore"), strings.Join(runstate.Fragment, "\n")+"\n")
 	mustRun(t, dir, "git", "add", "-A")
 	mustRun(t, dir, "git", "commit", "--quiet", "-m", "base")
 	mustRun(t, dir, "git", "remote", "add", "origin", origin)

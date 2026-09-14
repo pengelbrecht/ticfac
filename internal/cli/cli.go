@@ -44,6 +44,7 @@ usage:
   ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
   ticfac findings <epic-id>                     list the worker findings drafted for triage
   ticfac finding <epic-id> <key>                triage one drafted finding
+  ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
   ticfac version [--json]                       report this build and the contract bundle it serves
   ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
   ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
@@ -100,6 +101,18 @@ refusal ran removed its worktree) and no run dispatches over it (that would
 orphan the only copy of the work), so a person reads the branch and then says
 here that the run may go on.
 
+events flags:
+  --repo <dir>        the checkout the run works in (default: cwd)
+  --follow            keep the stream open: each event as it lands, until Ctrl-C
+
+"events" is how a NON-PARTICIPANT learns a run finished: the run writes one
+append-only JSONL stream at .ticfac/logs/<run-id>/events.jsonl, and this
+follows it — every event with its run/tick/attempt identity — instead of
+sleeping blind against the run or polling its durable records. A line is a
+hint about when to LOOK, never a verdict: completion is still decided by the
+evidence on the integration branch, the commits plus the report, so a
+subscriber that reads run_finished goes and looks rather than believing it.
+
 findings and finding flags:
   --repo <dir>         as for run-epic (default: cwd)
   --remote <name>      as for run-epic (default: origin)
@@ -142,6 +155,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return findingsCommand(args[1:], stdout, stderr)
 	case "finding":
 		return findingCommand(args[1:], stdout, stderr)
+	case "events":
+		// Signal-aware so a --follow shuts down cleanly on Ctrl-C: a
+		// subscription is a thing a person leaves open.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return eventsCommand(ctx, args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "factory":

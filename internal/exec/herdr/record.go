@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
@@ -12,6 +13,18 @@ import (
 // it; a concrete backend never does. It is what JobHandle.Executor carries and
 // what a profile's `executor` field names for a herdr dispatch.
 const ExecutorName = "herdr"
+
+// PollInterval is the cadence at which a live job on this executor should be
+// addressed: seconds, because herdr is a local substrate — nothing wipes an
+// unaddressed job, and an Inspect is one socket round trip (tick u9l, epic
+// av8). The five-minute DefaultPollInterval belongs to a cloud substrate that
+// takes an unaddressed job AWAY, where the poll IS the keepalive; here the
+// wait between polls is latency to notice a settle. herdr also has a push
+// stream, which makes a slow poll worse than useless: it would sit over a
+// signal that already arrived. The reconciler takes this through
+// KnownExecutor.PollInterval, so the interval belongs to the executor rather
+// than to one global constant.
+const PollInterval = 5 * time.Second
 
 // herdrHandle is this executor's private addressing, carried inside
 // JobHandle.Handle — the ONE open object in the contract. Every piece of
