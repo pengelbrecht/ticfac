@@ -28,6 +28,28 @@ claimer to return.
 `internal/reconcile` alone takes ~600-620s even under `-short`. **Rule:** Run tests through the
 Makefile (`make test-short` / `make test`), which pins `GOTEST_TIMEOUT := 45m` exactly for this.
 
+## Waiting
+
+**Problem:** A worker ran `sleep 300` in a loop — fifteen minutes of blind waiting for runs that had
+finished in seconds — and the orchestrator looked stalled repeatedly for the same reason. **Rule:**
+Never wait on a blind sleep. Wait on a CONDITION: an `until` loop over the durable evidence, a push
+stream where the substrate has one (`tk herd wait`), or a held PID's exit status.
+
+**Problem:** Three hand-rolled watchers were each wrong — one keyed on a log file being non-empty and
+fired on a warning line, one matched a process name the agent does not carry, one expired at its own
+timeout while the work ran on. **Rule:** A watcher must cover every terminal state, not just success:
+reported, blocked, and died-without-reporting are three different answers, and silence from a
+success-only watcher is indistinguishable from still working.
+
+**Problem:** `tk herd wait` reported three agents settled while two had no commits and no report.
+**Rule:** A settled agent means "worth looking now", never "the work is finished". Completion is the
+commits on `tick/<id>` plus `RESULT-<id>.md`, whatever any signal says.
+
+**Problem:** The reconciler's 5-minute poll looks lazy and is not — it sits under a 20-minute wipe
+threshold so the poll IS the keepalive. **Rule:** Before speeding up a slow interval, find out what it
+is holding open. A cadence right for a cloud substrate is wrong for a local run, so the interval
+belongs to the executor, not to one constant.
+
 ## Reviews and repairs
 
 **Problem:** A review called something a blocker, a repair was built on it, and the repair introduced
