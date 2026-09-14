@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // Three `.tick/runners.toml` case tables — STRUCTURAL:
