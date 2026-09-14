@@ -6,9 +6,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
-  "parent": "av8",
+  "parent": "9pd",
   "acceptance_criteria": "A tick that targets another repository is either dispatchable into a worktree of that repository, with collect and the gate defined for it, or it is refused at PLANNING time rather than at the worker's boundary; the chosen shape is a logged decision; ticks 4l2 and 1ya are handled under it; no worker is dispatched to work it cannot reach.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T05:46:45.990319Z",
-  "updated_at": "2026-09-14T05:46:45.990319Z"
+  "updated_at": "2026-09-14T16:15:45.533353Z"
 }

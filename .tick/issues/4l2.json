@@ -12,9 +12,9 @@
     "x6j",
     "jv7"
   ],
-  "parent": "av8",
+  "parent": "9pd",
   "acceptance_criteria": "ticks' internal/herd contains only relay and dashboard plus what they need; the execution packages are deleted, not duplicated; the ten direct .tick/ reads in the retired packages are gone or became callbacks; the dashboard reads run state through a supported interface rather than a lifted internal type; ticks builds and its tests pass; ticfac's gate is green; a real ticks epic still runs end to end through ticfac.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-10T08:23:15.882544Z",
-  "updated_at": "2026-09-14T05:46:45.964562Z"
+  "updated_at": "2026-09-14T16:15:45.477036Z"
 }

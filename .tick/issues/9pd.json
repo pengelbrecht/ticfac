@@ -1,0 +1,16 @@
+{
+  "id": "9pd",
+  "title": "ticfac Phase 3: finish the extraction and run it in anger",
+  "description": "SPEC §12 Phase 3. Rough scope — plan the child ticks at the START of this epic,\nnot now.\n\nPhase 2 built the herdr executor and proved it on a throwaway repository. Phase 3\nis what makes it the real thing: the removal that turns \"copied\" into\n\"extracted\", and a production run that turns \"it works on a demo\" into \"it runs\nour work\".\n\nCarried in from av8's residuals, which are the honest list of what is NOT done:\n\n- **The retirements** (av8 ticks 4l2, 1ya). Delete the execution packages and\n  the factory from ticks. Blocked on the dispatch gap below. Until they land,\n  `tk factory` is a full second implementation and the sandbox loop is still\n  `tk`.\n- **Cross-repo dispatch** (av8 tick hk7). `tk herd spawn` always creates a\n  worktree of the repo whose tracker holds the tick, so a tick whose work is in\n  another checkout cannot be dispatched — its branch is uncollectable and\n  ungated. Decide the shape: a declared target repo, or refuse at PLANNING time.\n  This is the keystone: the retirements and the upstream bundle merges both need\n  it.\n- **A PRODUCTION epic on the herdr executor.** av8's proof is a demo repo whose\n  implement ticks write one note each. Run a real epic — ideally this one.\n- **The unfinished robustness edges.** Capabilities are not refreshed on\n  reconnect; the read-only socket probe builds a client with no protocol\n  warning; `record.Protocol` is written but never read back for a decision;\n  layer 3 of the completion design (consuming herdr's push stream as a wait)\n  was deliberately not wired.\n- **The two-readers discipline has a third path.** `internal/cli/cloud.go`\n  reaches ticks data ungated, bypassing the `internal/tk` client that decision\n  rests on.\n- **The pinned contract still does not cover `[testing.commands]` or\n  `[roles.*]`** — av8 tick 8ug's core ask, filed upstream, unresolved.\n\nRead `.tick/logs/herd/av8/RETRO.md` before planning: it carries the full\nresidual list with file-level detail, and the two patterns worth keeping — a\nguarantee that a test can falsify survives review, and one resting on prose does\nnot.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "after": [
+    "av8"
+  ],
+  "acceptance_criteria": "The execution packages and the factory are GONE from the ticks repo, not duplicated, and ticks builds and passes without them. A tick whose work lives in another repository is either dispatchable there with collect and the gate defined, or refused at planning time by a logged decision. A PRODUCTION epic — real work, not a demo — completes end to end through ticfac run-epic on herdr, and the run is shown. The pinned contract covers [testing.commands] and [roles.*] including tiers. No ungated path to ticks data remains. go test -short -timeout 45m ./... green (make test-short).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-14T16:15:37.000517Z",
+  "updated_at": "2026-09-14T16:15:41.197907Z"
+}
