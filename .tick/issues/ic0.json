@@ -3,7 +3,7 @@
   "title": "Repair: a vacuous capability refusal, a discarded protocol warning, and a drift test that can skip",
   "description": "Three findings from the Phase 2 final review, all in the robustness work the\nreview otherwise called the best in the epic.\n\n## 1. The capability half of the Start refusal is vacuous\n\n`RequireCapability` has ZERO callers outside the client package, and\n`TestTheExecutorDemandsNoCapability` (internal/exec/herdr/operational_test.go:287)\nPINS that the refusal cannot arise — it asserts a herdr advertising nothing at\nall runs a whole attempt.\n\nThat test is honest about today: the five operations genuinely place no\ncapability demand on the server. But tick jv7's acceptance asked for a\ncapability the server does not advertise to be \"refused BY NAME at the point of\nuse\", and an inverted test proving the refusal can never occur is not that.\n\nDecide and log which is true, then make the code and the test agree:\n- either the executor really needs no capability, and jv7's clause is amended\n  with that reasoning (the AC5 precedent from Phase 1), or\n- some operation does depend on one — live handoff, the detached daemon — and\n  it demands it by name at the point of use.\n\nDo not leave a passing test that proves a required behaviour is unreachable.\n\n## 2. The above-warn protocol warning is discarded in production\n\nclient.New only emits the \"newer than the protocol this client was verified\nagainst\" warning through Options.ProtocolWarning, and the executor's only\nconstructor (internal/exec/herdr/executor.go:161) omits the writer. So the\nwarning goes nowhere.\n\nThis matters NOW: the local herdr is 0.9.0 on protocol 22 against a client\nverified at 20. The one signal that says so is silently dropped.\n\n## 3. The live drift test skips when herdr is absent from PATH\n\nyod's vocabulary contract is diffed against the live `herdr api schema --json`,\nwhich is the right design — but a skip on an absent binary means CI proves\nnothing about drift. Decide whether the epic gate requires a live herdr, and if\nnot, say plainly in the doc what the offline run does and does not prove.",
   "notes": "2026-09-14 08:56 - runner-state: dispatched on pi/cloudflare GLM-5.3 from base 4a89ebc",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,6 +11,7 @@
   "acceptance_criteria": "The capability clause is either implemented (some operation demands a capability by name at the point of use) or amended by a logged decision, and no test remains that proves a required refusal is unreachable; the above-warn protocol warning reaches an operator in production rather than being dropped by a constructor that omits the writer, shown against the local herdr 0.9.0 on protocol 22; what the drift test proves when herdr is absent is stated in the doc, and whether the epic gate requires a live herdr is a logged decision; make test-short green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T06:28:54.737031Z",
-  "updated_at": "2026-09-14T06:56:12.632086Z",
-  "started_at": "2026-09-14T06:54:15.099205Z"
+  "updated_at": "2026-09-14T08:13:48.355972Z",
+  "closed_at": "2026-09-14T08:13:48.355972Z",
+  "closed_reason": "The capability clause is amended by logged decision — the five operations place no capability demand on the server — and the inverted test that pinned the refusal as unreachable is replaced by one that proves the refusal works by name when something does demand a capability. The above-warn protocol warning now reaches an operator, pinned by a test. The drift test's skip says plainly that live drift is UNPROVEN offline rather than implying it passed. Gate green."
 }
