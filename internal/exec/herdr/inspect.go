@@ -144,19 +144,28 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 			record.ResultPath, report.Status, commits, short(record.BaseSHA))
 	}
 
-	if !record.LaunchConfirmed {
-		// The launch was never confirmed: this attempt was terminal the
-		// moment its Start failed, and the record that says so is the
-		// diagnostic state that failed launch deliberately left behind.
-		return subprocess.StateFailed,
-			fmt.Sprintf("the agent %s was never confirmed launched; the attempt settled without a worker",
-				record.AgentName)
-	}
-
+	// An unconfirmed launch is the one case liveness is UNKNOWN: the launch
+	// may have completed after the caller stopped waiting (a client-side
+	// timeout herdr finished anyway), so the question is ASKED here rather
+	// than assumed — and herdr's answer settles only LIVENESS, never the
+	// work. A live agent behind a launch that was never confirmed is not a
+	// running attempt either: the dispatch never reached it (a Start that
+	// fails at the launch fails before the prompt is ever submitted), so
+	// nobody can say this attempt will do the tick's work. It is held for
+	// a person — never a terminal verdict out of the caller's own timeout
+	// (x6j), never a redispatch over the identity (A6). A POSITIVE answer
+	// that nobody is there settles the attempt like any other departure,
+	// through the same durable marker.
+	//
 	// herdr answers liveness. This is the ONE question it is asked in a
 	// state decision, and its failures are the observer's, not the job's.
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
+	case err == nil && !record.LaunchConfirmed:
+		return subprocess.StateLost, fmt.Sprintf(
+			"the launch of the agent %s was never confirmed and herdr answers the agent is live (%s): "+
+				"the dispatch never reached it, so this attempt is held for a person, never a verdict",
+			record.AgentName, agent.AgentStatus)
 	case err == nil:
 		// The agent is live. Past the bound this attempt was issued, that
 		// is spending the wall clock exists to stop: the enforcement runs

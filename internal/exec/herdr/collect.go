@@ -98,13 +98,14 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	// person can settle, so the collect refuses with the liveness-unknown
 	// hold rather than answering. The reconciler stops without rejecting
 	// the tick, nothing is torn down after a refusal, and the next run's
-	// adopt holds the attempt for a person. (A launch that was never
-	// confirmed is the executor's OWN settlement record and passes; the
-	// report and the cancellation record are durable evidence and pass —
-	// and so does the wall-clock stop marker (gwc), which is this
-	// executor's own durable record that IT settled the attempt, never
-	// herdr's silence.)
-	if !hasReport && !cancelled && !agentGone && !wallExceeded && record.LaunchConfirmed {
+	// adopt holds the attempt for a person. (An UNCONFIRMED launch is not
+	// settlement: it is the one case liveness is unknown, so it settles
+	// only through herdr's POSITIVE answer — the agent-gone marker the
+	// observing leg records — or through the report or the cancellation
+	// record, which are durable evidence. The wall-clock stop marker (gwc)
+	// is this executor's own durable record that IT settled the attempt,
+	// never herdr's silence.)
+	if !hasReport && !cancelled && !agentGone && !wallExceeded {
 		return nil, refuse(subprocess.RefusedUnknown,
 			"attempt %d of %s has no report at %s and no settlement this executor recorded: nobody can say "+
 				"whether it is still running, which is not the same as nothing running — it is held for a person, "+

@@ -23,6 +23,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/herd/client"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 )
 
@@ -131,6 +132,12 @@ type harness struct {
 	// error before doing anything — the simulated kill between the steps
 	// of a disposal, before herdr ever accepted the removal.
 	failRemoveOnce string
+	// agentStartDelay makes the agent.start route answer LATER than it
+	// launches: the agent is spawned immediately and the acknowledgement
+	// arrives after it. It is how a test drives a launch herdr completes
+	// after a caller bounded shorter has stopped waiting (tick 1eq's
+	// defect, at a scale the suite can drive).
+	agentStartDelay time.Duration
 	// snapshotOmitsWorktrees makes session.snapshot report workspaces
 	// WITHOUT the worktree block, which forces disposal's attribution to
 	// fall back to the branch evidence of worktree.list.
@@ -407,6 +414,15 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 				h.mu.Unlock()
 			}()
 		}
+		h.mu.Lock()
+		delay := h.agentStartDelay
+		h.mu.Unlock()
+		if delay > 0 {
+			// herdr completes the launch and is slow to say so: the agent
+			// exists from here on, and the answer a caller bounded shorter
+			// already gave up on is still coming.
+			time.Sleep(delay)
+		}
 		return herdtest.RespondJSON(w, req.ID, map[string]any{
 			"type": "agent_started",
 			"agent": map[string]any{
@@ -525,6 +541,21 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	ex.opts.ConfirmTimeout = 1 * time.Second
 	h.ex = ex
 	return h
+}
+
+// clientBound replaces the executor's herdr client with one whose calls are
+// bounded at d — the wiring tick 1eq repaired, at a scale the suite can
+// drive: the defect was a 30s DefaultCallTimeout truncating a 60s startup
+// wait, so a launch between the two aborted client-side while herdr
+// completed it. The test replaces exactly the client and its bound,
+// nothing else.
+func (h *harness) clientBound(t *testing.T, d time.Duration) {
+	t.Helper()
+	c, err := client.New(t.Context(), client.Options{SocketPath: h.server.Path(), CallTimeout: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.ex.client = c
 }
 
 // worktreeOf resolves the worktree the agent.start pane belongs to. The

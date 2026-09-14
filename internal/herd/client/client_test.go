@@ -918,6 +918,59 @@ func TestAgentStartRejectsOutOfRangeStartupTimeout(t *testing.T) {
 	}
 }
 
+// TestAgentStartCallBoundAccommodatesTheStartupWaitItCarries pins the timeout
+// relationship of the one call that carries a wait: agent.start with a
+// startup timeout blocks on HERDR's own budget, so the client's generic call
+// bound must not truncate it. The defect: a 60s startup wait riding a 30s
+// DefaultCallTimeout — a launch between the two aborted CLIENT-side while
+// herdr completed it, and the executor recorded a launch that never happened
+// over an agent that was alive and working. A call carrying a wait is bound
+// by that wait (plus the exchange's own budget); a call carrying none keeps
+// the generic bound.
+func TestAgentStartCallBoundAccommodatesTheStartupWaitItCarries(t *testing.T) {
+	const delay = 600 * time.Millisecond // past the 200ms bound, within the wait
+	srv := newFakeServer(t, func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+		if req.Method == MethodPing && req.ID == "tk-1" {
+			return respond(w, req.ID, pongResult)
+		}
+		if req.Method == MethodAgentStart {
+			time.Sleep(delay)
+			return respond(w, req.ID, `{"type":"agent_started","agent":{"pane_id":"w1:p1",`+
+				`"agent_status":"idle","name":"w","interactive_ready":true,"agent_session":null},`+
+				`"argv":["claude"]}`)
+		}
+		return respondErr(w, req.ID, "invalid_request", "unexpected "+req.Method)
+	})
+
+	c, err := New(t.Context(), Options{SocketPath: srv.Path(), CallTimeout: 200 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// The call that carries the wait outlives the generic bound and still
+	// completes: herdr answered within the budget it was handed.
+	started, err := c.AgentStart(t.Context(), AgentStartParams{
+		Name: "w", Kind: "claude", PaneID: "w1:p1",
+		StartupTimeout: MinAgentStartupTimeout + 2*time.Second,
+	})
+	if err != nil {
+		t.Fatalf("AgentStart carrying a %s startup wait failed under a 200ms call bound: %v — the bound "+
+			"must accommodate the wait the call carries, or a launch between the two aborts client-side "+
+			"while herdr completes it", MinAgentStartupTimeout+2*time.Second, err)
+	}
+	if !started.Agent.InteractiveReady {
+		t.Error("the slow launch's acknowledgement was not decoded")
+	}
+
+	// The exemption is scoped: a call carrying NO wait keeps the generic
+	// exchange bound, and a herdr slower than it is a herdr the caller
+	// hears about.
+	if _, err := c.AgentStart(t.Context(), AgentStartParams{Name: "w", Kind: "claude", PaneID: "w1:p1"}); err == nil {
+		t.Error("a waitless AgentStart outlived the client's call bound: the generic bound must stand " +
+			"for every call that carries no wait of its own")
+	}
+}
+
 func TestEventsWaitValidatesAgentStatusMatch(t *testing.T) {
 	c, srv := newTestClient(t, nil)
 
