@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "role": "review-epic",
+  "version": "1.0.0",
+  "executor": "herdr",
+  "runner": "pi",
+  "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+  "prompt": "review-epic.md"
+}
