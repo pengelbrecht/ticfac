@@ -41,6 +41,18 @@ timeout while the work ran on. **Rule:** A watcher must cover every terminal sta
 reported, blocked, and died-without-reporting are three different answers, and silence from a
 success-only watcher is indistinguishable from still working.
 
+**Problem:** A hand-rolled watcher ran for eleven minutes and delivered nothing, because it was piped
+through `tail` to suppress a replay of history. `tail` and `head` block-buffer when stdout is a pipe,
+so the whole stream accumulated and never arrived; the run meanwhile collected, filed a finding and
+merged, all unreported. **Rule:** Never put `tail`, `head`, or any block-buffering stage in a watcher's
+pipeline. Filter inside the script and flush per line. If a watcher must not replay history, seed its
+cursor from the feed at startup rather than trimming its own output.
+
+**Problem:** A liveness check of `pgrep -f "ticfac run-epic"` reported ALIVE for ten minutes after the
+run had died, because the monitoring command's own argv contained that string. **Rule:** Never identify
+a process by a pattern the observer itself matches. Hold the PID, write it down, and check that PID —
+and verify start time too, so a recycled PID cannot read as alive.
+
 **Problem:** `tk herd wait` reported three agents settled while two had no commits and no report.
 **Rule:** A settled agent means "worth looking now", never "the work is finished". Completion is the
 commits on `tick/<id>` plus `RESULT-<id>.md`, whatever any signal says.
