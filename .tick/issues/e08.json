@@ -1,0 +1,14 @@
+{
+  "id": "e08",
+  "title": "Port the door/container auth-challenge and cold-start-budget parity checks from ticks",
+  "description": "Filed from a worker finding on ticks tick 3r2 attempt 6, during the factory deletion. The factory moved to ticfac, but two parity checks that guarded it stayed behind in ticks and would be deleted with the rest: the door/container auth-challenge check and the cold-start-budget check. They are the tests that prove the deployed factory still behaves, so they belong here now.\n\nRead ticks' epic/pwp branch for what they were before the deletion.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "The auth-challenge and cold-start-budget parity checks run in ticfac against the moved factory; what they assert is unchanged from what ticks asserted, or the difference is stated; make test-short green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-14T20:40:46.826712Z",
+  "updated_at": "2026-09-14T20:40:46.826712Z"
+}

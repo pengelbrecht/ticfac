@@ -1,0 +1,14 @@
+{
+  "id": "ix9",
+  "title": "run-epic must write its own durable run log",
+  "description": "When the epic-pwp run died mid-dispatch on 2026-09-14 there was no record of WHY. The process had been launched in the background with no stdout/stderr capture, so its last words went nowhere. The run feed showed tier_derived for gms and then silence; the attempt record for attempt 7 was written with a full job_handle (herdr had answered), but no workspace and no write ref were ever created. The cause of death is still unknown and now unrecoverable.\n\nA run that can die must leave a body. run-epic should write its own log under --state-root (rotating, one file per run id) carrying stderr and any panic, independent of how the operator redirected the process. An operator launching a run should not have to remember to capture output for the run to be diagnosable.\n\nAcceptance: a test that panics a run asserts the panic text is present in the run's own log file under the state root.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "run-epic writes stderr and any panic to a log under --state-root regardless of process redirection; a test asserts a panicking run leaves its panic text in that file",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-14T20:51:44.470726Z",
+  "updated_at": "2026-09-14T20:51:44.470726Z"
+}

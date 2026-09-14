@@ -1,0 +1,14 @@
+{
+  "id": "udp",
+  "title": "ticfac must answer 'is this run alive?' mechanically",
+  "description": "A run's liveness is currently undecidable from outside the process. On 2026-09-14 the epic-pwp run died mid-dispatch and the orchestrator did not notice for ~10 minutes because its liveness check was `pgrep -f 'ticfac run-epic'`, which matched the MONITOR'S OWN shell command line (the events invocation contains the same string). The check reported ALIVE while no ticfac binary was running at all.\n\nThis is the sixth stall of the same family: a liveness signal that is satisfied by something other than the thing it claims to observe.\n\nRequired:\n- run-epic writes a pidfile under --state-root containing pid + start time + run id.\n- The run feed carries a periodic heartbeat line so liveness is visible from the durable record, not only from process table.\n- A `ticfac status \u003crun-id\u003e` subcommand reports alive|dead|unknown from the pidfile (verifying pid AND start time, so a recycled pid cannot read as alive) plus last heartbeat age.\n\nAcceptance: a test kills a run process and asserts `ticfac status` flips to dead; a test asserts a recycled pid does not read as alive.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "ticfac status \u003crun-id\u003e reports dead within one heartbeat interval of the run process exiting, proven by a test that kills the process; pid recycling does not produce a false alive",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-14T20:51:31.23401Z",
+  "updated_at": "2026-09-14T20:51:31.23401Z"
+}

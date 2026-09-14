@@ -1,0 +1,14 @@
+{
+  "id": "wdb",
+  "title": "A run-state CAS conflict kills the run instead of continuing",
+  "description": "ROOT CAUSE of both silent run deaths in the pwp production run on 2026-09-14.\n\ninternal/reconcile/reconcile.go:1140-1150 (checkpoint). On a conflict the code does exactly the right recovery — it re-fetches, re-reads the checkpoint, and adopts the newer sequence and tick states — and then returns an error anyway. The error propagates out of the run loop and the process exits. It does all the work to recover and then quits.\n\nThe conflict is not exotic. It is produced by a NORMAL, DOCUMENTED operator action: `ticfac finding \u003cepic\u003e \u003ckey\u003e --promote-as ...` writes a decision to the run's own integration branch. Triaging a finding while the run is going is not a misuse — a tick with an untriaged finding cannot close, so the operator is REQUIRED to triage during the run. The tool's two supported activities race each other, and the run loses.\n\nEvidence, both deaths:\n- 20:40:55 operator promoted finding 6e652f26 (3r2) -\u003e run died at 20:42:16, between tier_derived for gms and its claim. No log was captured, cause unknown at the time.\n- 21:09 operator promoted finding 392e2988 (gms) -\u003e run died at 21:12:57, immediately after closing gms, before dispatching sx5. Captured: `reconcile: the run state moved under this reconciler while writing running: conflict_exists`.\n\nBoth deaths were silent to the feed: the last feed line is an ordinary success, so a feed subscriber cannot distinguish 'finished this tick' from 'died'.\n\nRequired:\n- A CAS conflict on the run state is a NORMAL condition, not a fatal one. After the re-fetch that already happens, continue the loop against the refreshed state. Bound it: fail only after N consecutive conflicts on the same write, the way integrate.go and refresh.go already bound their branch-moved retries.\n- The feed must carry a terminal line when the run dies for any reason, so silence never has to be interpreted.\n\nAcceptance: a test writes a competing decision to the run branch mid-run (the shape ticfac finding produces) and asserts the run continues and completes the epic; a second test asserts N consecutive conflicts on one write still fail, and that the failure emits a terminal feed line.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "A competing write to the run branch during a run (as ticfac finding produces) does not end the run: a test drives that race and asserts the epic still completes; repeated conflicts on one write still fail, and every run death emits a terminal feed event",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-14T21:14:12.199265Z",
+  "updated_at": "2026-09-14T21:14:12.199265Z"
+}
