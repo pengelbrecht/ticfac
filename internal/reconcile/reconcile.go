@@ -12,6 +12,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -28,8 +29,16 @@ const (
 	// is hosting it takes it away.
 	DefaultWipeThreshold = 20 * time.Minute
 
-	// DefaultPollInterval is WELL under it (`max_poll_ms`), which is what makes
-	// the poll a keepalive rather than a status check.
+	// DefaultPollInterval is the CLOUD substrate's cadence (`max_poll_ms`),
+	// WELL under DefaultWipeThreshold — which is what makes the poll a
+	// keepalive there rather than a status check: on a substrate that takes
+	// an unaddressed job away, the beat IS the point. It is NOT laziness and
+	// it is not a local number: a local substrate wipes nothing, so waiting
+	// five minutes between local Inspects is five blind minutes for a job
+	// that may have settled in seconds. The interval belongs to the EXECUTOR
+	// (KnownExecutor.PollInterval, tick u9l); this constant is the default an
+	// executor states no cadence of its own against, and the keepalive
+	// reasoning stays exactly where the cloud needs it.
 	DefaultPollInterval = 5 * time.Minute
 
 	// DefaultStepCap is the host's cap on one step of a controller
@@ -89,6 +98,19 @@ type KnownExecutor struct {
 	Name         string
 	Runners      []string
 	AcceptsModel func(runner string) bool
+
+	// PollInterval is the cadence at which a live job on THIS executor is
+	// addressed: the substrate's own truth, supplied by the executor rather
+	// than by one global constant (tick u9l, epic av8). The five-minute
+	// DefaultPollInterval is a CLOUD number — deliberately well under the
+	// wipe threshold, because there the poll IS the keepalive and the beat is
+	// the point. A local substrate wipes nothing: its interval is latency to
+	// notice a settle, and it wants seconds. Zero means the executor states
+	// no cadence of its own and the run-level PollInterval applies — the
+	// default honoured set states one, because a cadence is a decision the
+	// HOST makes when it wires the executors it can build (internal/cli), not
+	// a property of the name alone.
+	PollInterval time.Duration
 }
 
 // theExecutors is the honoured set, defaulting to the one executor this
@@ -233,8 +255,11 @@ type Options struct {
 	// GateTimeout bounds one gate command.
 	GateTimeout time.Duration
 
-	// PollInterval is how often a live job is addressed. It IS the keepalive,
-	// so it must stay well under WipeThreshold.
+	// PollInterval is how often a live job is addressed when its executor
+	// states no cadence of its own. On a substrate that wipes, it IS the
+	// keepalive, so it must stay well under WipeThreshold; on one that does
+	// not, the executor supplies seconds through KnownExecutor.PollInterval
+	// and this is only the fallback.
 	PollInterval time.Duration
 
 	// WipeThreshold is the substrate's: how long a job may go unaddressed.
@@ -312,6 +337,25 @@ type Reconciler struct {
 	pollInterval  time.Duration
 	wipeThreshold time.Duration
 	stepCap       time.Duration
+
+	// executors is the honoured set, kept past construction so a wait can
+	// resolve the cadence of the executor the dispatch's MARKER names — the
+	// interval belongs to the executor, not to one global constant (tick u9l).
+	executors []KnownExecutor
+
+	// feed is the run event stream a non-participant subscribes to, and
+	// feedErr is the first error appending to it — recorded once, never
+	// fatal: the feed is a hint about when to look, and a run that cannot be
+	// watched is still a run (contracts/run-event-feed.json).
+	//
+	// feedPrepared guards the ONE thing a run must do before it writes
+	// `.ticfac/` into a repository's working tree: install the run-state
+	// contract's gitignore fragment, idempotently, so the exhaust is exhaust
+	// and not a dirty tree a later `git add -A` sweeps up. A repository that
+	// already carries the fragment is left byte for byte alone.
+	feed         *runfeed.Feed
+	feedErr      error
+	feedPrepared bool
 
 	now   func() time.Time
 	sleep func(time.Duration)
@@ -464,6 +508,21 @@ func New(opts Options) (*Reconciler, error) {
 			opts.PollInterval, opts.WipeThreshold)
 	}
 
+	// The same reasoning, per executor that supplies a cadence of its own
+	// (tick u9l): the interval belongs to the executor now, but wherever a
+	// wipe threshold stands, an interval that leaves no margin under it is
+	// not a keepalive — the guard follows the number, not the constant. A
+	// local executor's seconds clear a 20-minute threshold trivially; a
+	// cloud executor declaring the same seconds against a short threshold
+	// is the configuration error this exists to refuse.
+	for _, known := range theExecutors(opts.Executors) {
+		if known.PollInterval > 0 && known.PollInterval*2 > opts.WipeThreshold {
+			return nil, fmt.Errorf("reconcile: executor %s declares a poll interval of %s, which leaves no margin "+
+				"under the substrate's wipe threshold of %s: polling IS the keepalive, and this cadence is not one",
+				known.Name, known.PollInterval, opts.WipeThreshold)
+		}
+	}
+
 	gate, err := ReadGateCommands(opts.GateConfig)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
@@ -552,6 +611,8 @@ func New(opts Options) (*Reconciler, error) {
 	r.pollInterval = opts.PollInterval
 	r.wipeThreshold = opts.WipeThreshold
 	r.stepCap = opts.StepCap
+	r.executors = theExecutors(opts.Executors)
+	r.feed = runfeed.Open(opts.Repo, opts.RunID)
 	r.now = opts.Now
 	r.sleep = opts.Sleep
 	r.guardsOff = opts.guardsOff
@@ -580,12 +641,83 @@ func (r *Reconciler) IntegrationBranch() string { return r.branch }
 // Journal is what the run did, in order.
 func (r *Reconciler) Journal() []Event { return append([]Event{}, r.journal...) }
 
+// FeedError is the first error the run event feed produced, if it produced
+// one. The feed is exhaust and a hint — a run whose feed cannot be written is
+// a run nobody can watch, not a run that cannot run — so the error is
+// collected here for the report rather than failing anything.
+func (r *Reconciler) FeedError() error { return r.feedErr }
+
 func (r *Reconciler) record(tick, stage, format string, args ...any) {
 	event := Event{At: r.now(), Tick: tick, Stage: stage, Detail: fmt.Sprintf(format, args...)}
 	r.journal = append(r.journal, event)
+	r.emit(event)
 	if r.opts.stopAfter != nil && r.opts.stopAfter(event) {
 		panic(stopped{At: event})
 	}
+}
+
+// emit appends one journal event to the run event feed — the append-only
+// JSONL stream at .ticfac/logs/<run-id>/events.jsonl that a non-participant
+// subscribes to instead of sleeping blind against the run or polling its
+// durable records (contracts/run-event-feed.json, tick u9l).
+//
+// The feed is a HINT, and nothing here treats it as more: the line says when
+// to LOOK, never what happened, and the verdict stays with the durable
+// evidence the collect reads. That is also why an append failure is
+// collected and not raised — a feed nobody can watch must not take the run
+// with it, and a lost line is harmless by design.
+func (r *Reconciler) emit(event Event) {
+	if r.feed == nil {
+		return
+	}
+	if !r.feedPrepared {
+		// The feed is the first thing a run writes inside the repository's
+		// own working tree, so it comes with the one obligation the run-state
+		// contract attaches to `.ticfac/`: the gitignore fragment that makes
+		// the logs exhaust rather than dirt. Idempotent — a compliant
+		// repository is left alone — and a failure is a feed failure, never
+		// a run failure, for the same reason as the append below.
+		r.feedPrepared = true
+		if _, err := runstate.EnsureGitignore(r.opts.Repo); err != nil && r.feedErr == nil {
+			r.feedErr = fmt.Errorf("prepare the run feed's repository: %w", err)
+		}
+	}
+	line := runfeed.NewEvent(event.At, r.runID, event.Tick, r.attemptOf(event.Tick), event.Stage, event.Detail)
+	if err := r.feed.Append(line); err != nil && r.feedErr == nil {
+		r.feedErr = err
+	}
+}
+
+// attemptOf answers the attempt an event about a tick belongs to, from the
+// tick state the run maintains: null before the tick's first dispatch is
+// recorded — an event that belongs to no attempt yet is honestly null, not
+// zero, because attempt 0 is an attempt that was never dispatched.
+func (r *Reconciler) attemptOf(tick string) *int {
+	if tick == "" {
+		return nil
+	}
+	for i := range r.ticks {
+		if r.ticks[i].TickID == tick && r.ticks[i].Attempt > 0 {
+			attempt := r.ticks[i].Attempt
+			return &attempt
+		}
+	}
+	return nil
+}
+
+// pollIntervalFor resolves the cadence a live job on one executor is
+// addressed at: the executor's own if it states one, else the run's. The
+// interval belongs to the executor (tick u9l) — local substrates want
+// seconds, a cloud sandbox wants the slow keepalive beat — and the executor a
+// dispatch ran under is the one its marker names, so a run that mixes
+// executors across roles keeps each cadence honestly.
+func (r *Reconciler) pollIntervalFor(executor string) time.Duration {
+	for _, known := range r.executors {
+		if known.Name == executor && known.PollInterval > 0 {
+			return known.PollInterval
+		}
+	}
+	return r.pollInterval
 }
 
 // stopped is the simulated kill. It is a panic rather than an error because a

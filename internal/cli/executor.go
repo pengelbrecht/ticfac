@@ -25,21 +25,25 @@ import (
 )
 
 // knownExecutors is what this build can honour, in the reconciler's own terms:
-// each name a profile may name, with the runner names that executor can launch
-// and whether it can tell each one which model to use. The herdr executor
-// launches agent KINDS, and every kind the config can compile takes a model —
-// the model flag is how a model reaches an agent at all.
+// each name a profile may name, with the runner names that executor can launch,
+// whether it can tell each one which model to use, and the cadence at which a
+// live job on it is addressed. The cadence is the executor's (tick u9l):
+// seconds for the local substrates — nothing wipes an unaddressed job locally,
+// and herdr has a push stream — and the reconciler's five-minute keepalive
+// only where an executor states none of its own, which is the cloud's number.
 func knownExecutors() []reconcile.KnownExecutor {
 	return []reconcile.KnownExecutor{
 		{
 			Name:         subprocess.ExecutorName,
 			Runners:      subprocess.KnownRunners(),
 			AcceptsModel: subprocess.RunnerAcceptsModel,
+			PollInterval: subprocess.PollInterval,
 		},
 		{
 			Name:         herdr.ExecutorName,
 			Runners:      runconfig.KnownKinds(),
 			AcceptsModel: func(string) bool { return true },
+			PollInterval: herdr.PollInterval,
 		},
 	}
 }
