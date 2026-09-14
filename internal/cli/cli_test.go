@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -269,5 +270,25 @@ func TestTheEffectiveBudgetIsPrintedBeforeTheRun(t *testing.T) {
 	}
 	if !strings.Contains(line, "informational") {
 		t.Errorf("the line does not say what the number does on this host: %q", line)
+	}
+}
+
+// A feed write failure is not a verdict about the work, so it must not fail
+// the run — and silence is the one thing it must not be (tick d6s): an
+// operator who runs `ticfac events <run-id> --follow` against a run whose
+// feed cannot be written waits forever on a file that will never appear. The
+// warning is the run's own report saying what happened and what it does NOT
+// mean, on the surface the operator is already reading.
+func TestTheFeedFailureWarningSaysWhatItMeans(t *testing.T) {
+	line := feedFailureLine("r-abc", errors.New("append: the path is a directory"))
+	for _, want := range []string{
+		"r-abc",
+		"not a verdict about the work",
+		"ticfac events r-abc",
+		"append: the path is a directory",
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the warning does not say %q: %q", want, line)
+		}
 	}
 }

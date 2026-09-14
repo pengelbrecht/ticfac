@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,6 +201,15 @@ func TestALostFeedSignalChangesNoVerdict(t *testing.T) {
 	if rBlind.FeedError() == nil {
 		t.Fatal("a feed that could never be written reported no error: a lost signal nobody can see is a lost watcher")
 	}
+	// And the run's own RESULT carries it too (tick d6s): a feed failure is
+	// not a verdict about the work — the run above proves the verdict is
+	// unchanged — but silence is the one thing it must not be, because the
+	// operator who runs `ticfac events --follow` against this run waits
+	// forever on a file that will never appear. The result is the surface
+	// the operator reads; the error has to be on it.
+	if resultBlind.FeedError == nil {
+		t.Fatal("the run's result hid the feed failure: a run nobody can watch said nothing about it")
+	}
 
 	rWatched, resultWatched := watched(t)
 	if resultBlind.State != resultWatched.State {
@@ -359,3 +369,100 @@ func (h *holdingInspector) Dispose(handle *subprocess.JobHandle, opts subprocess
 }
 
 var _ Executor = (*holdingInspector)(nil)
+
+// The attempt identity on the claim and the start failure (tick d6s). The feed
+// contract puts run/tick/attempt identity on every line, and the dispatch used
+// to set its attempt number only AFTER Start succeeded — so the claimed line
+// and the line a failed start leaves both carried the PREVIOUS attempt (or
+// null on a fresh run), exactly on the lines a reader needs when an attempt
+// failed. The number belongs to the dispatch the moment its marker is on
+// origin: every line from there — the claim, the start failure — is about it.
+func TestClaimAndStartFailureLinesCarryTheAttemptTheyAreAbout(t *testing.T) {
+	t.Parallel()
+
+	// claimAndFailure returns the attempt numbers on a1's LAST claimed line
+	// and its start-failure line, from the feed as a non-participant reads it.
+	// A tick-scoped line that carries a NULL attempt is reported as nil —
+	// that is the defect, and it must not read as "the line is missing".
+	claimAndFailure := func(t *testing.T, f *fixture) (claimed, failed *int) {
+		t.Helper()
+		events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sawClaim, sawFailure bool
+		for _, event := range events {
+			if event.TickID == nil || *event.TickID != "a1" {
+				continue
+			}
+			switch event.Stage {
+			case StageClaimed:
+				sawClaim = true
+				claimed = event.Attempt
+			case StageStartFailed:
+				sawFailure = true
+				failed = event.Attempt
+			}
+		}
+		if !sawClaim {
+			t.Fatal("the feed carries no claimed line for a1")
+		}
+		if !sawFailure {
+			t.Fatal("the feed carries no line for the start failure: a start that fails must not be silent — " +
+				"the feed exists precisely so a reader learns when to look, and an attempt that never started is the moment")
+		}
+		return claimed, failed
+	}
+	wantAttempt := func(t *testing.T, name string, got *int, want int) {
+		t.Helper()
+		if got == nil {
+			t.Errorf("%s carries attempt null, want %d", name, want)
+			return
+		}
+		if *got != want {
+			t.Errorf("%s carries attempt %d, want %d — the line is about attempt %d and must name it", name, *got, want, want)
+		}
+	}
+
+	t.Run("a first attempt's claim and start failure say attempt 1", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, fixtureOptions{})
+		f.wrap = func(inner Executor) Executor { return &failingStartExecutor{Executor: inner} }
+		if _, _, err := f.run(f.Repo, fixtureOptions{}); err == nil {
+			t.Fatal("a run whose every start fails reported success")
+		}
+		claimed, failed := claimAndFailure(t, f)
+		wantAttempt(t, "the claimed line", claimed, 1)
+		wantAttempt(t, "the start-failure line", failed, 1)
+	})
+
+	// The defect pass's shape: attempt 1 was rejected, attempt 2's claim and
+	// start failure used to carry attempt 1 — the number from the checkpoint
+	// the restart read, not the number of the dispatch those lines are about.
+	t.Run("a second attempt's claim and start failure say attempt 2", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t, fixtureOptions{mode: "blocked-first"})
+		killed := fixtureOptions{mode: "blocked-first", stopAfter: stopAt("a1", StageRejected)}
+		if _, _, err := f.run(f.Repo, killed); err == nil {
+			t.Fatal("the fixture's cut did not happen: attempt 1 was not spent")
+		}
+		f.wrap = func(inner Executor) Executor { return &failingStartExecutor{Executor: inner} }
+		if _, _, err := f.run(f.Repo, fixtureOptions{mode: "blocked-first"}); err == nil {
+			t.Fatal("a run whose every start fails reported success")
+		}
+		claimed, failed := claimAndFailure(t, f)
+		wantAttempt(t, "the claimed line", claimed, 2)
+		wantAttempt(t, "the start-failure line", failed, 2)
+	})
+}
+
+// failingStartExecutor refuses every Start, standing in for a host that cannot
+// start the job at all — the one moment a reader of the feed needs the lines
+// the dispatch leaves before anything runs.
+type failingStartExecutor struct{ Executor }
+
+func (e *failingStartExecutor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
+	return nil, errors.New("start " + spec.JobID + ": the fixture refuses every start")
+}
+
+var _ Executor = (*failingStartExecutor)(nil)

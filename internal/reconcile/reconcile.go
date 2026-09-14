@@ -183,6 +183,17 @@ type Dispatch struct {
 	// executor configuration and not a field of the closed protocol records.
 	Profile *profile.Profile
 
+	// Executor is the executor this dispatch RUNS through. At dispatch time
+	// it is the profile's own (the marker is built from the same value); on
+	// every later leg it is the MARKER's, and that is the difference from
+	// Profile: the profile a restart re-resolves is the one it would dispatch
+	// with TODAY, while the executor that actually runs this attempt is a
+	// fact about the attempt that the marker froze (tick d6s). Provenance
+	// reads it from here, never from Profile — Tier and Substrate below are
+	// stated off the marker for exactly this reason, and an executor a
+	// record names that the attempt never ran on is provenance that lies.
+	Executor string
+
 	// Substrate is the versioned substrate this dispatch's executor observed
 	// at the build that runs it — protocol and server version. The executor
 	// factory reports it when the executor is built; it rides the dispatch so
@@ -440,6 +451,15 @@ const (
 	// can see is indistinguishable from a channel that drops findings.
 	StageFindingFiled     = "finding_filed"
 	StageFindingDuplicate = "finding_duplicate"
+
+	// StageStartFailed is the line a failed Start leaves (tick d6s): an
+	// attempt whose marker is on origin but never started. It is recorded
+	// at TICK scope, carrying the attempt it is about, so a feed reader who
+	// has just seen the claim learns the dispatch failed rather than reading
+	// silence as a run that is still going. The verdict stays with the
+	// refusal returned to the caller — the line says when to look, never
+	// what happened.
+	StageStartFailed = "start_failed"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -650,7 +670,9 @@ func (r *Reconciler) Journal() []Event { return append([]Event{}, r.journal...) 
 // FeedError is the first error the run event feed produced, if it produced
 // one. The feed is exhaust and a hint — a run whose feed cannot be written is
 // a run nobody can watch, not a run that cannot run — so the error is
-// collected here for the report rather than failing anything.
+// collected here AND carried on the run's Result (tick d6s): collected alone,
+// nothing ever read it, and a feed failure nobody can see is
+// indistinguishable from a feed with nothing in it.
 func (r *Reconciler) FeedError() error { return r.feedErr }
 
 func (r *Reconciler) record(tick, stage, format string, args ...any) {
@@ -759,6 +781,16 @@ type Result struct {
 	// value. Reading it is how a caller tells a failing gate from a boundary
 	// violation without matching on prose.
 	Failure *Refusal
+
+	// FeedError is the run event feed's own write failure, if it had one.
+	// What it MEANS (tick d6s): not a verdict about the work — the durable
+	// records and this result are the evidence, and a run whose feed cannot
+	// be written settles exactly as a watched one does — but the run has no
+	// feed: nothing will appear under .ticfac/logs/<run-id>/, and a
+	// subscriber (`ticfac events <run-id> --follow`) would wait forever on a
+	// file that will never appear. So it is surfaced here rather than
+	// collected and never read, and the run is NOT failed over it.
+	FeedError error
 }
 
 // Run reconciles the epic until there is nothing dispatchable left, or until
@@ -956,7 +988,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 func (r *Reconciler) result(state runstate.State, reason string) *Result {
 	out := &Result{RunID: r.runID, EpicID: r.opts.EpicID, State: state, Reason: reason,
-		Ticks: r.ticks, Failure: r.failure}
+		Ticks: r.ticks, Failure: r.failure, FeedError: r.feedErr}
 	for _, ts := range r.ticks {
 		switch ts.State {
 		case "closed":

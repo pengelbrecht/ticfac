@@ -9,6 +9,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -593,4 +594,78 @@ func first(text string, n int) string {
 		return text
 	}
 	return text[:n]
+}
+
+// The executor an attempt's records name is the one the attempt RAN ON, off
+// the marker — like the tier and the substrate — never the one a profile
+// RE-RESOLVED at record time names (tick d6s). The settle, the finding draft
+// and the role decision all rebuild the dispatch from the marker long after
+// the legs that dispatched it, and a profile edited in between used to leak
+// its executor into provenance: a record naming an executor the attempt never
+// ran on, which is provenance that lies — the exact phrase usableProfile's
+// construction-time refusal uses.
+func TestProvenanceNamesTheMarkerExecutorNotTheReResolvedProfile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for _, role := range profile.Roles {
+		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
+	}
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.ProfileDir = dir
+	// The second executor is the name the EDITED profile will name. It has to
+	// be one this build can honour, or the second incarnation is refused at
+	// construction and the re-resolution this test is about never happens.
+	opts.Executors = []KnownExecutor{
+		{Name: subprocess.ExecutorName, Runners: subprocess.KnownRunners(), AcceptsModel: subprocess.RunnerAcceptsModel},
+		{Name: "herdr", Runners: runconfig.KnownKinds(), AcceptsModel: func(string) bool { return true }},
+	}
+
+	// Incarnation one: the dispatch, under the profile as it stands.
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.base = f.Repo.Base
+	dispatch, marker, err := r.planDispatch(planEntry{TickID: "rv", Role: "review-epic"}, 1, 0)
+	if err != nil {
+		t.Fatalf("plan the dispatch: %v", err)
+	}
+	if marker.Executor != subprocess.ExecutorName {
+		t.Fatalf("the marker names executor %q, want %q: the fixture dispatches through the local one", marker.Executor, subprocess.ExecutorName)
+	}
+	if provenance := r.attemptProvenance(dispatch); provenance.Executor == nil || *provenance.Executor != marker.Executor {
+		t.Fatalf("the dispatch-time provenance does not name the dispatch's own executor: %v", provenance.Executor)
+	}
+
+	// The profile is EDITED between the legs — the run's later records are
+	// written by an incarnation that resolves profiles as they stand NOW.
+	writeProfile(t, dir, "review-epic", `"executor": "herdr", "runner": "claude", "model": "sonnet"`)
+
+	// The next incarnation re-resolves it and rebuilds the dispatch from the
+	// marker, which is what the settle, the finding draft and the role
+	// decision all do.
+	second, err := New(opts)
+	if err != nil {
+		t.Fatalf("the second incarnation was refused: %v", err)
+	}
+	second.base = f.Repo.Base
+	redispatched, err := second.dispatchFor(marker)
+	if err != nil {
+		t.Fatalf("rebuild the dispatch from the marker: %v", err)
+	}
+	if redispatched.Profile == nil || redispatched.Profile.Executor != "herdr" {
+		t.Fatal("fixture bug: the re-resolved profile did not change executor; the scenario proves nothing")
+	}
+
+	provenance := second.attemptProvenance(redispatched)
+	if provenance.Executor == nil || *provenance.Executor != marker.Executor {
+		t.Errorf("provenance names executor %v, want %q — the one off the marker, like Tier and the substrate, "+
+			"never the one today's re-resolved profile names", provenance.Executor, marker.Executor)
+	}
+	// Tier and substrate come off the marker the same way: the statement this
+	// fix brings the executor in line with is already true of them.
+	if provenance.Tier != nil && *provenance.Tier != marker.Tier {
+		t.Errorf("provenance names tier %v, want the marker's %q", *provenance.Tier, marker.Tier)
+	}
 }

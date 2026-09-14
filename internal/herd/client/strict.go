@@ -7,14 +7,23 @@ import "errors"
 // Stock encoding/json decodes into a fixed struct by NAME MATCH: an added
 // field is dropped, and a RENAMED field silently becomes a zero value. For
 // most of this contract a silent zero is a degraded answer. For four
-// AgentInfo fields it INVERTS a safety property of the orchestrator built
-// on this client:
+// AgentInfo fields a silent zero inverts a safety property of the
+// orchestrator built on this client:
 //
 //   - agent_status renamed -> "" -> non-terminal -> the wave fan-in never
 //     completes: a 30-second wait becomes a 30-minute hang.
 //   - interactive_ready renamed -> false -> readiness never observed.
-//   - name renamed -> nil -> every live worker classifies as dead ->
-//     redispatch onto a tick that already has a running worker.
+//   - name renamed -> nil. Undetectable here, and DELIBERATELY so: herdr
+//     0.9.0 omits the key entirely for an agent that carries no name (ten
+//     of the seventeen agents in the live 0.9.0 session carry no name key;
+//     none carries an explicit null), so absence cannot be told from a
+//     rename and absence must decode as nil or the first unnamed agent
+//     fails the launch. The live-worker hazard the old header attributed
+//     to this field is guarded elsewhere and never was here: the executor
+//     addresses its agents by the name IT issued — its own durable attempt
+//     record — and what stops a redispatch onto a live worker is the
+//     dispatch marker (adopt, never redispatch; Appendix A #6), not the
+//     wire's name field. A renamed name costs display, not liveness.
 //   - agent_session renamed -> nil -> recovery silently downgrades from
 //     native resume to redispatch.
 //
@@ -39,10 +48,12 @@ import "errors"
 //     refused as loudly as an absent key.
 //   - AgentInfo's other three fields (interactive_ready, name,
 //     agent_session) are keys herdr OMITS when they carry nothing — Go's
-//     own omitempty, observed live against herdr 0.9.0 on the first
-//     dispatch ticfac ever made (tick to1's demo run): a launch answered
-//     before the agent came up carries no readiness and no session, and
-//     the strict presence rule turned x9x's designed-for readiness poll
+//     own omitempty, observed live against herdr 0.9.0: a launch answered
+//     before the agent came up carries no readiness, a fresh agent has no
+//     session, and an unnamed agent carries no name (the first two on tick
+//     to1's demo run — the first dispatch ticfac ever made — the last
+//     observed across the unnamed agents of a live 0.9.0 session). The
+//     strict presence rule turned x9x's designed-for readiness poll
 //     into a hard failure. Absent therefore decodes as the zero value and
 //     the launch falls to the poll (a readiness that never confirms is
 //     held for a person by the caller's budget, never a verdict);

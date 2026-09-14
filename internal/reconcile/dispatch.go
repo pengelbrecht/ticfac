@@ -347,12 +347,15 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		// Appendix A #6: an attempt under this identity has already been
 		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
-		// never redispatched.
+		// never redispatched. The attempt number is the marker's own BEFORE
+		// the adoption runs (tick d6s): the lines adoption itself leaves —
+		// the replayed claim, the start failure of an attempt whose marker
+		// landed but never started — are about that attempt.
+		r.setAttempt(tick, existing.Attempt)
 		handle, executor, err := r.adopt(ctx, marker)
 		if err != nil {
 			return nil, nil, marker, err
 		}
-		r.setAttempt(tick, existing.Attempt)
 		r.record(tick, StageAdopted, "attempt %d was already dispatched; it is adopted by identity, never redispatched",
 			existing.Attempt)
 		return handle, executor, marker, nil
@@ -430,6 +433,15 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"does not exist (%v)", tick, number, r.opts.Remote, err)
 		}
 
+		// The attempt is THIS dispatch's from the moment its marker is durable
+		// on origin (tick d6s): every line from here — the claim, the start
+		// failure, the dispatch itself — is about it, and the feed carries
+		// run/tick/attempt identity on every line. Setting it only after a
+		// successful Start made the claimed and start-failure lines carry the
+		// PREVIOUS attempt's number, exactly on the lines a reader needs when
+		// an attempt failed to start.
+		r.setAttempt(tick, number)
+
 		// The effect, now that the marker proves it has not happened.
 		if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
 			return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
@@ -441,7 +453,6 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			return nil, nil, marker, r.startFailure(tick, err)
 		}
 		r.noteAlive(dispatch.JobID)
-		r.setAttempt(tick, number)
 		r.setTick(tick, "dispatched")
 		r.record(tick, StageDispatched, "attempt %d started as %s", number, dispatch.JobID)
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
@@ -692,7 +703,15 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 // startFailure keeps the executor's typed refusals typed. "Nobody can say
 // whether it is running" is not "nothing is running", and it never becomes a
 // redispatch here either.
+//
+// The failure is RECORDED, at tick scope, before it is returned (tick d6s):
+// a start that fails is the moment a feed reader most needs a line — the
+// run's answer to "what happened to attempt 2?" must not be silence, and the
+// line carries the attempt it is about because the attempt is set before
+// the claim. Without it a subscriber saw a claim and then nothing, with no
+// way to tell a failed start from a run that is still going.
 func (r *Reconciler) startFailure(tick string, err error) error {
+	r.record(tick, StageStartFailed, "the start failed: %s", firstLine(err.Error()))
 	if refusal, ok := subprocess.AsRefusal(err); ok {
 		switch refusal.Reason {
 		case subprocess.RefusedUnknown, subprocess.RefusedLive:
@@ -756,7 +775,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
-		Profile: dispatchProfile, Tier: tier,
+		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -941,10 +960,11 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		Tier: marker.Tier,
-		// The substrate the attempt was DISPATCHED under, off the marker: a
-		// later leg must record what the dispatch used, not what this
-		// incarnation would observe today (the substrate may have been
-		// upgraded under a run in flight).
+		// The executor the attempt RAN ON, off the marker — never the one a
+		// profile re-resolved today would name (tick d6s): a later leg must
+		// record what the attempt used, exactly as it does for the tier and
+		// the substrate below.
+		Executor:  marker.Executor,
 		Substrate: Substrate{Protocol: marker.SubstrateProtocol, ServerVersion: marker.SubstrateServerVersion},
 	}
 	if r.budget.Effective > 0 {

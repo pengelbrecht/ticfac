@@ -452,12 +452,18 @@ func (r *Reconciler) attemptProvenance(d Dispatch) runstate.Provenance {
 		model, digest := d.Profile.Model, d.Profile.Digest
 		provenance.Model = &model
 		provenance.ProfileDigest = &digest
-		// The EXECUTOR is the profile's, not a constant: the profile names the
-		// executor this dispatch runs through, and a record that named one the
-		// run did not use would be provenance that lies — the same purpose
-		// usableProfile's construction-time refusal serves, stated here at
-		// record time.
-		executor := d.Profile.Executor
+	}
+	// The EXECUTOR is the dispatch's own field, not the profile's: on every
+	// later leg — the settle, the finding draft, the role decision — the
+	// dispatch is rebuilt from the marker, and the profile a restart
+	// re-resolves is the one it would dispatch with TODAY, not the one the
+	// attempt ran on. The marker is where Tier and the substrate are already
+	// read from for the same reason, and the executor is the same kind of
+	// fact: a record naming an executor the attempt never ran on would be
+	// provenance that lies — the same purpose usableProfile's construction-
+	// time refusal serves, stated here at record time.
+	if d.Executor != "" {
+		executor := d.Executor
 		provenance.Executor = &executor
 	}
 	// The substrate the dispatch's executor observed, stated on every record
