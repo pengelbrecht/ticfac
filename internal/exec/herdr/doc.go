@@ -68,6 +68,34 @@
 //     version, because a limit nothing enforces is a limit the operator
 //     trusts wrongly.
 //
+// # Capabilities: a demand no operation makes (the ic0 decision)
+//
+// jv7's clause — "a capability the server does not advertise is refused
+// BY NAME at the point of use" — is real wherever there is a POINT OF USE:
+// the client's RequireCapability is that refusal, tested by name in the
+// client package (TestRequireCapabilityRefusedByName). The five
+// operations here have no point of use for it. The two capabilities herdr
+// advertises guard optional server features nothing in this executor
+// calls: live_handoff is herdr's own live-update machinery (the
+// server.live_handoff method, `herdr update --handoff`), which an
+// OPERATOR runs when upgrading herdr, and detached_server_daemon concerns
+// how herdr was started, while this executor only ever connects to a
+// herdr that is already running — it never starts one and never hands
+// one off. Demanding either at Start would refuse herdrs that can run
+// every operation, a false demand worse than none.
+//
+// jv7's clause is therefore amended for this executor (the AC5 precedent:
+// a wording-versus-repo mismatch is amended with the reasoning, not
+// patched with a hollow guarantee): the operations place NO capability
+// demand on the server, and TestACapabilityFreeServerRunsAWholeAttempt
+// pins that decision from below — a herdr advertising nothing at all runs
+// a whole attempt. That test is the pin of the amendment, not a test of
+// the by-name refusal, which lives with the point of use. The day an
+// operation here comes to depend on an optional server feature — live
+// handoff, a detached daemon, anything herdr later gates — it must call
+// RequireCapability BY NAME at its point of use: never assume the
+// feature, never discover its absence as a late failure.
+//
 // # What is deliberately NOT here
 //
 // Each of these is its own tick, building on this seam:

@@ -12,8 +12,22 @@ import (
 // The LIVE half of the contract: diff every schema-enumerated category
 // against what herdr itself says, in both directions, so additions are as
 // loud as removals. It runs whenever a herdr binary is on PATH — including
-// under the full `make test` gate — and skips cleanly when there is none
-// (CI installs no herdr), because the binary's absence is not drift.
+// under the full `make test` gate — and skips cleanly when there is none,
+// because the binary's absence is not drift.
+//
+// WHAT THE OFFLINE RUN PROVES — stated plainly, per the logged decision of
+// tick ic0 (finding 3): THE EPIC GATE DOES NOT REQUIRE A LIVE HERDR. The
+// gate is the PR's CI run, and CI is a public-repo GitHub runner with no
+// herdr to install — herdr is the operator's host tool, not a published
+// artifact — so the gate cannot see this test do anything but skip. When
+// herdr is absent, NOTHING ABOUT DRIFT IS PROVEN: the offline run proves
+// only that the PINNED contract is internally consistent (contract_test.go)
+// and that the client's and the fake's constants match the pin
+// member-for-member (their vocabulary tests). It cannot notice the pin
+// going stale against a herdr release nobody diffed — the pin's freshness
+// rests entirely on this test RUNNING wherever a herdr exists: the
+// operator's machine and worker hosts, where `make test` and
+// `make test-short` execute it on every suite.
 //
 // `herdr api schema --json` answers with no server running, so this test
 // needs no live session and stays cheap enough for every run.
@@ -26,7 +40,8 @@ import (
 func needHerdr(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("herdr"); err != nil {
-		t.Skipf("no herdr binary on PATH — live vocabulary drift check skipped (contract_test.go still validates the pinned snapshot)")
+		t.Skipf("no herdr binary on PATH — live vocabulary drift is UNPROVEN by this run; " +
+			"contract_test.go still cross-validates the PINNED snapshot, but nothing here says it matches a live herdr")
 	}
 }
 

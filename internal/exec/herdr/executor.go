@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -85,6 +86,16 @@ type Options struct {
 
 	Now func() time.Time
 
+	// ProtocolWarning, when set, receives the client's above-warn protocol
+	// warning — the one signal that the herdr being driven speaks a
+	// protocol newer than the newest this client has observed, at the
+	// handshake and at any mid-run re-check. Nil defaults to os.Stderr:
+	// production calls the constructor without a writer, and a dropped
+	// warning there is an operator who never learns their herdr outran the
+	// client (tick ic0, finding 2). The client treats the writer as
+	// append-only and never closes it.
+	ProtocolWarning io.Writer
+
 	// writeFile is the state writer, so a test can inject a write that
 	// silently does not land — the only way to see whether the read-back
 	// after write is doing anything (Appendix A #7).
@@ -114,6 +125,7 @@ type Executor struct {
 	repoKey string
 	root    string
 	client  *client.Client
+	warn    io.Writer
 	now     func() time.Time
 }
 
@@ -122,6 +134,13 @@ type Executor struct {
 // session it talks to. The ping handshake is here and not in Start: a herdr
 // that is not running is a dispatch that fails before the tick is claimed
 // rather than a run that discovers it three ticks in.
+//
+// An above-warn herdr — one speaking a protocol newer than the newest this
+// client has observed — is ACCEPTED with a warning, and the warning goes
+// somewhere an operator reads: Options.ProtocolWarning, defaulting to
+// stderr, because production calls this constructor without a writer and a
+// silently dropped upgrade signal is an operator diagnosing a herdr they
+// did not know had moved (tick ic0, finding 2).
 func New(opts Options) (*Executor, error) {
 	if opts.Repo == "" {
 		wd, err := os.Getwd()
@@ -156,13 +175,17 @@ func New(opts Options) (*Executor, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	warn := opts.ProtocolWarning
+	if warn == nil {
+		warn = os.Stderr
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, err := client.New(ctx, client.Options{SocketPath: opts.SocketPath})
+	c, err := client.New(ctx, client.Options{SocketPath: opts.SocketPath, ProtocolWarning: warn})
 	if err != nil {
 		return nil, fmt.Errorf("herdr executor: the herdr session is not usable: %w", err)
 	}
-	return &Executor{opts: opts, repo: root, repoKey: key, root: opts.StateDir, client: c, now: opts.Now}, nil
+	return &Executor{opts: opts, repo: root, repoKey: key, root: opts.StateDir, client: c, warn: warn, now: opts.Now}, nil
 }
 
 // DefaultStateDir is where attempts are recorded when nothing says otherwise.
