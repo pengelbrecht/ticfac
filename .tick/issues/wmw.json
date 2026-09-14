@@ -2,7 +2,7 @@
   "id": "wmw",
   "title": "TestAForceAddedReportIsCaughtAtCollect is flaky under the full parallel run",
   "description": "The artifact-boundary backstop test fails intermittently in a whole-suite run and passes every time in isolation.\n\nObserved 2026-09-13 on the wave-6 integration tree:\n- Full 'go test -short ./...': FAIL — 'verdict ready-to-merge (), want boundary-violation'. artifactViolations came back EMPTY, so the backstop never fired.\n- Same test alone, -run TestAForceAddedReportIsCaughtAtCollect: PASS.\n- internal/exec/herdr alone, twice in a row: PASS, PASS (90s each).\n- Full suite re-run: PASS.\n\nSo the guarantee itself is intact — it was verified passing on p6b's own commit f710ff5 and passes in isolation now. What is unreliable is the TEST under concurrency.\n\nA flaky guarantee test is worse than a slow one: it can pass while the guarantee is broken, and it trains a reader to re-run rather than investigate. This one guards the artifact boundary, which two of four workers in wave 2 violated for real.\n\nWhere to look:\n- The herdr harness gained SHARED state in wave 5: the fake herdr's workspaces map became map[string]harnessWorkspace and an agentGone flag was added (tick 5hz), and 'sort' came in with it. If harness instances share anything package-level, parallel tests interfere.\n- 47t parallelised internal/reconcile and added a guard that every test either parallelises or says why. internal/exec/herdr was not its target, but the same question applies here and nothing enforces it.\n- The failure mode is specifically that the BRANCH DIFF came back without the force-added path, which points at git work in a shared temp area or a worktree being read while another test writes it.\n\nRun it under -race and with -count=N to reproduce before changing anything.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "bug",
   "owner": "peter@engelbrecht.dk",
@@ -10,6 +10,7 @@
   "acceptance_criteria": "The test passes 20 consecutive whole-suite runs, or the shared state that made it flaky is named and removed; go test -race on internal/exec/herdr is clean; the root cause is written down rather than the test being retried or skipped; if the herdr harness needs per-test isolation the way the reconcile fixtures have it, that isolation is added.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-13T08:06:08.711811Z",
-  "updated_at": "2026-09-13T08:06:26.949348Z",
-  "started_at": "2026-09-13T08:06:26.949347Z"
+  "updated_at": "2026-09-14T05:46:17.186715Z",
+  "closed_at": "2026-09-14T05:46:17.186715Z",
+  "closed_reason": "Merged; wave gate green (211.9s)."
 }
