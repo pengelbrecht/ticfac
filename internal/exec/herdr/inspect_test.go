@@ -3,7 +3,9 @@ package herdr
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
@@ -154,5 +156,61 @@ func TestInspectAnswersCancelledFromTheDurableRecord(t *testing.T) {
 	}
 	if status.State != subprocess.StateCancelled {
 		t.Errorf("state = %s, want cancelled from the durable record", status.State)
+	}
+}
+
+// TestAReportingAgentPastItsBoundIsStillStopped is etp's fourth finding:
+// observe answered `succeeded` from the report BEFORE the wall-clock branch,
+// so an agent that reported and kept running was never stopped — the same
+// report-outranks-liveness shape the local executor's Cancel was fixed for.
+// A report settles the VERDICT; it does not settle the SPENDING. The bound is
+// enforced even on an attempt that reported, or dispose then refuses it as a
+// working agent forever.
+func TestAReportingAgentPastItsBoundIsStillStopped(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	clock := &wallClock{t: time.Now().UTC()}
+	h.ex.now = clock.now
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The worker reports... and keeps running.
+	h.doWork(t, handle, "STATUS: DONE")
+	h.setStatus("working")
+	clock.advance(301 * time.Second)
+
+	status, err := h.ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The report still settles the verdict — the enforcement must not
+	// change it, only stop the spending.
+	if status.State != subprocess.StateSucceeded {
+		t.Errorf("state = %s, want succeeded: the report decides the verdict, whatever the agent is doing",
+			status.State)
+	}
+	// But the stop went out: the bound fired on an agent that is still
+	// live, and silence about it is how a run pays past its bound.
+	if len(h.server.SendKeysCalls()) == 0 {
+		t.Fatal("an agent spending past its wall clock was never stopped: the report outranked the enforcement")
+	}
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(local.State + "/" + fileWallExceeded); err != nil {
+		t.Error("the stop at the wall clock was not recorded durably: a later collect cannot say the bound fired")
+	}
+	if detail := lastDetail(status.Observations); !strings.Contains(detail, "wall clock of 300s") {
+		t.Errorf("the detail reads %q, want it to name the bound that fired while the agent keeps running", detail)
+	}
+
+	// The disposal can now proceed once the stop settles the agent: the
+	// enforcement reached it, so teardown is not refused as `working`
+	// forever.
+	h.setStatus("idle")
+	if err := h.ex.Dispose(handle, subprocess.DisposeOptions{
+		Reason: "attempt 1 of t1 is merged and the tick is closed", KeepBranch: true}); err != nil {
+		t.Fatalf("the reporting attempt whose agent was stopped at its bound could not be disposed: %v", err)
 	}
 }

@@ -596,3 +596,121 @@ func observationMentioning(h *harness, state, text string) ([]subprocess.Observa
 	}
 	return observations, false
 }
+
+// TestDisposeRefusesWhenHerdrCannotSayWhichWorktreesExist is etp's first
+// finding: survey used to swallow the worktree.list error, attribution then
+// answered "gone" from the silence, and dispose removed nothing while
+// recording a successful teardown — 5hz's orphan incident reproduced by the
+// very code written to prevent it. The listing carries the branch → workspace
+// half of the evidence attribution is keyed on; herdr not answering it is an
+// unanswered question, never a "nothing there" verdict.
+func TestDisposeRefusesWhenHerdrCannotSayWhichWorktreesExist(t *testing.T) {
+	// The snapshot without worktree blocks forces the attribution onto the
+	// listing's evidence; the restart strands the recorded id so nothing in
+	// the snapshot alone can attribute — and then the listing herdr refuses
+	// to answer is the one evidence left.
+	h := newHarness(t, harnessOptions{snapshotOmitsWorktrees: true})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.doWork(t, handle, "STATUS: DONE")
+	if _, err := h.ex.CollectDetail(handle); err != nil {
+		t.Fatal(err)
+	}
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustRun(t, h.repo.Dir, "git", "push", "--quiet", "origin", local.Branch)
+	h.restartHerdr("wR")
+	h.server.Route(herdtest.MethodWorktreeList, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "herdr has nothing to say")
+	})
+
+	err = h.ex.Dispose(handle, subprocess.DisposeOptions{Reason: "cleanup", KeepBranch: true})
+	if err == nil {
+		t.Fatal("a teardown that could not ask what exists answered 'gone' and recorded success: " +
+			"herdr did not answer, which is not evidence that nothing is there")
+	}
+	if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedUnknown {
+		t.Errorf("the refusal was %v, want the unknown one — the id may be stale and nobody can ask", err)
+	}
+	if removed := h.removals(); len(removed) != 0 {
+		t.Errorf("the refusal must have torn down nothing; worktree.remove saw %v", removed)
+	}
+	if _, err := os.Stat(local.Worktree); err != nil {
+		t.Error("the worktree was removed by a teardown that could not attribute it: the orphan the fail-closed rule exists for")
+	}
+}
+
+// TestDisposeAsksAboutLivenessEvenWhenTheLaunchWasNeverConfirmed is etp's
+// seventh finding: the unconfirmed-launch path short-circuited the liveness
+// question entirely — on exactly the path where the launch outcome is
+// UNKNOWN, because the record that says LaunchConfirmed=false is also the
+// record a process death between agent.start and its confirmation left
+// behind. "Never confirmed" is not evidence that no agent is there; the
+// removal asks herdr, exactly as it does for a confirmed launch.
+func TestDisposeAsksAboutLivenessEvenWhenTheLaunchWasNeverConfirmed(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	// A launch that fails after the worktree and workspace exist: the
+	// record is written LaunchConfirmed=false, and whether an agent ended
+	// up on the pane is exactly what nobody recorded.
+	h.server.Route(herdtest.MethodAgentStart, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_pane_unready", "the pane is not an interactive shell yet")
+	})
+	if _, err := h.start("t1"); err == nil {
+		t.Fatal("the launch failed and Start reported success: the fixture is not a failed launch")
+	}
+	spec := h.spec("run-harness/tick-t1/attempt-1", "t1")
+	dir := h.ex.stateDirFor(spec.JobID, h.ex.opts.Attempt)
+	handle := &subprocess.JobHandle{
+		SchemaVersion: subprocess.SchemaVersion,
+		JobID:         spec.JobID,
+		Attempt:       1,
+		Executor:      ExecutorName,
+		Handle:        map[string]any{"state": dir},
+	}
+	// The failed attempt settles on the executor's own record and collects.
+	if _, err := h.ex.CollectDetail(handle); err != nil {
+		t.Fatal(err)
+	}
+	gets := h.server.CountMethod(herdtest.MethodAgentGet)
+
+	// An agent IS there, whatever the record failed to confirm: the
+	// teardown must refuse, not assume the unconfirmed launch left nothing
+	// to stop.
+	h.setStatus("working")
+	err := h.ex.Dispose(handle, subprocess.DisposeOptions{Reason: "the launch failed; cleanup"})
+	if err == nil {
+		t.Fatal("a teardown that never asked herdr assumed no agent was there: an unconfirmed launch is an " +
+			"unknown launch, and the question must be asked")
+	}
+	if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedLive {
+		t.Errorf("the refusal was %v, want the live one: herdr answers that an agent is on the pane", err)
+	}
+	if removed := h.removals(); len(removed) != 0 {
+		t.Errorf("the refusal must have torn down nothing; worktree.remove saw %v", removed)
+	}
+	if h.server.CountMethod(herdtest.MethodAgentGet) <= gets {
+		t.Error("the teardown classified liveness without asking herdr a single time")
+	}
+
+	// And when herdr answers the agent is gone, the removal proceeds — on
+	// the answer, not on the assumption.
+	h.server.Route(herdtest.MethodAgentGet, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_not_found", "no agent on the pane")
+	})
+	if err := h.ex.Dispose(handle, subprocess.DisposeOptions{Reason: "the launch failed; cleanup"}); err != nil {
+		t.Fatalf("the teardown was refused on herdr's own positive answer: %v", err)
+	}
+	if h.server.CountMethod(herdtest.MethodAgentGet) <= gets+1 {
+		t.Error("the teardown completed without asking herdr about the unconfirmed launch")
+	}
+	if removed := h.removals(); len(removed) != 1 {
+		t.Errorf("worktree.remove saw %v, want the one workspace of the failed launch", removed)
+	}
+	if !h.ex.storeAt(dir).agentGone() {
+		t.Error("herdr's positive answer was not recorded durably")
+	}
+}

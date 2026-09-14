@@ -270,15 +270,55 @@ func TestAStopAtTheWallClockDoesNotDecideTheVerdict(t *testing.T) {
 	}
 }
 
-func TestDispatchRefusesABoundTheProtocolCannotEnforce(t *testing.T) {
-	// A herdr older than the protocol this executor's stop surface is
-	// verified against. The client can still talk to it — but a wall clock
-	// issued against it is a bound nothing would stop, and a bound nothing
-	// stops is one the operator trusts wrongly.
+// TestABoundIsEnforceableAgainstTheClientsFloorProtocol is etp's second
+// finding repaired: the dispatch-time wall check used the client's PIN
+// (the newest protocol this repository has verified) where it needed the
+// client's FLOOR (the oldest this package can speak). jv7 separated floor
+// from pin precisely so a supported-but-older server still works: a
+// protocol-19 herdr carries the agent.send_keys interrupt — the codes this
+// client knows were observed live against 0.8.0 / protocol 19 — and a
+// bounded dispatch against it is enforceable. Refusing it as unenforceable
+// stranded every bounded dispatch on an older herdr the client otherwise
+// supports, naming the wrong repair (an upgrade nobody needs).
+func TestABoundIsEnforceableAgainstTheClientsFloorProtocol(t *testing.T) {
 	h := newHarness(t, harnessOptions{serverProtocol: 19, serverVersion: "0.8.0"})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatalf("a bounded dispatch against a protocol-19 herdr the client supports was refused: %v", err)
+	}
+	if h.server.CountMethod(herdtest.MethodWorktreeCreate) == 0 {
+		t.Error("the dispatch never reached worktree.create: a bound the protocol CAN enforce was refused anyway")
+	}
+	_ = handle
+}
+
+// TestABoundIsRefusedAgainstAHerdrThatWentBelowTheFloor is the refusal half,
+// reached the only way it can be: the client fails closed at construction
+// below its floor, so the dispatch-time check meets a below-floor protocol
+// only when a server is DOWNGRADED mid-connection and session.snapshot
+// re-reports it — the observation path noteServer exists for. There the
+// bound really is unenforceable, and the refusal names the bound and the
+// herdr version it refuses.
+func TestABoundIsRefusedAgainstAHerdrThatWentBelowTheFloor(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	// The downgrade, observed by the next snapshot: the client fails the
+	// call closed (the re-check below the floor) but refreshes what the
+	// server speaks NOW — ServerInfo is what enforceableWall reads.
+	h.server.Route(herdtest.MethodSessionSnapshot, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondJSON(w, req.ID, map[string]any{
+			"type": "session_snapshot",
+			"snapshot": map[string]any{
+				"version": "0.7.0", "protocol": 18,
+				"workspaces": []any{}, "tabs": []any{}, "panes": []any{},
+				"agents": []any{}, "layouts": []any{},
+			},
+		})
+	})
+	_, _ = h.ex.Reclaimable(t.Context(), func(string) bool { return true })
+
 	_, err := h.start("t1")
 	if err == nil {
-		t.Fatal("a dispatch whose wall clock nothing can enforce was issued as a promise")
+		t.Fatal("a dispatch whose wall clock a below-floor protocol cannot enforce was issued as a promise")
 	}
 	refusal, ok := subprocess.AsRefusal(err)
 	if !ok {
@@ -287,21 +327,102 @@ func TestDispatchRefusesABoundTheProtocolCannotEnforce(t *testing.T) {
 	if refusal.Reason != subprocess.RefusedUnenforceable {
 		t.Errorf("refusal reason = %q, want %q", refusal.Reason, subprocess.RefusedUnenforceable)
 	}
-	for _, want := range []string{"300", "0.8.0", "protocol 19"} {
+	for _, want := range []string{"300", "protocol 18"} {
 		if !strings.Contains(refusal.Message, want) {
-			t.Errorf("the refusal %q does not name %q: it must name the bound and the herdr version it refuses",
+			t.Errorf("the refusal %q does not name %q: it must name the bound and the protocol it refuses",
 				refusal.Message, want)
 		}
 	}
-
 	// The refusal is at DISPATCH: nothing was created, nothing was claimed.
-	for _, m := range h.server.Methods() {
-		if m == herdtest.MethodWorktreeCreate {
-			t.Error("the refused dispatch created a worktree: a refusal is not a launch")
-		}
-		if m == herdtest.MethodAgentStart {
-			t.Error("the refused dispatch started an agent: a refusal is not a launch")
-		}
+	if h.server.CountMethod(herdtest.MethodWorktreeCreate) != 0 {
+		t.Error("the refused dispatch created a worktree: a refusal is not a launch")
+	}
+	if h.server.CountMethod(herdtest.MethodAgentStart) != 0 {
+		t.Error("the refused dispatch started an agent: a refusal is not a launch")
+	}
+}
+
+// TestAnAgentAlreadyGoneWhenTheBoundFiresIsNotAStopThatHappened is etp's
+// third finding: the agent exited on its own in the window between the
+// liveness answer and the stop, herdr answered agent_not_found, and the
+// enforcement still wrote the wall marker and claimed "the interrupt was
+// delivered through herdr" — a sentence about an event that did not happen
+// (x9x's rule, claim only what you observed), which then collected as
+// wall_clock_exceeded. The already-gone agent is recorded as what it is —
+// settled on its own — and no stop is claimed.
+func TestAnAgentAlreadyGoneWhenTheBoundFiresIsNotAStopThatHappened(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	clock := &wallClock{t: time.Now().UTC()}
+	h.ex.now = clock.now
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The worker ran long enough to have something on the branch and no
+	// report — the shape that would reach the wall-clock failure class.
+	mustRun(t, local.Worktree, "git", "commit", "--quiet", "--allow-empty", "-m", "tick t1: mid-work")
+	// The agent is live at the poll... and exits on its own in the window
+	// between the liveness answer and the stop.
+	h.server.Route(herdtest.MethodAgentGet, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondJSON(w, req.ID, map[string]any{
+			"type": "agent_info",
+			"agent": map[string]any{
+				"pane_id": "w1:p1", "agent_status": "working",
+				"name": "tick-t1-a1", "interactive_ready": true, "agent_session": nil,
+			},
+		})
+	})
+	h.server.Route(herdtest.MethodAgentSendKeys, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		return herdtest.RespondErr(w, req.ID, "agent_not_found", "the agent is no longer there")
+	})
+	clock.advance(301 * time.Second)
+
+	status, err := h.ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != subprocess.StateFailed {
+		t.Errorf("state = %s, want failed: the agent is positively gone and there is no report", status.State)
+	}
+	if detail := lastDetail(status.Observations); strings.Contains(detail, wallWording) {
+		t.Errorf("the settlement reads %q, which claims a stop that never happened: herdr answered the "+
+			"agent was already gone before the interrupt", detail)
+	}
+	if detail := lastDetail(status.Observations); !strings.Contains(detail, "already gone") {
+		t.Errorf("the settlement reads %q, want it to say the agent was already gone when the bound fired", detail)
+	}
+	// No wall marker: the marker is the durable record that a stop landed,
+	// and no stop landed.
+	if _, err := os.Stat(local.State + "/" + fileWallExceeded); err == nil {
+		t.Error("a wall-clock stop marker was written for a stop herdr answered agent_not_found on")
+	}
+	// And the positive answer WAS recorded — the durable settlement a
+	// herdr-free collect reads.
+	if !h.ex.storeAt(local.State).agentGone() {
+		t.Error("herdr's positive answer that the agent is gone was not recorded durably")
+	}
+	// No observation claims delivery of an interrupt that never was.
+	if note, ok := observationMentioning(h, local.State, "the interrupt was delivered"); ok {
+		t.Errorf("the observation stream claims an interrupt was delivered: %v", note)
+	}
+
+	// Collect reads the attempt as settled on its own — never as
+	// wall_clock_exceeded, the class only a delivered stop carries.
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if collected.Result.FailureClass == subprocess.FailureWallClockExceeded {
+		t.Errorf("failure class = %q: the agent settled on its own and no stop was delivered — "+
+			"wall_clock_exceeded is a sentence about an event that did not happen",
+			collected.Result.FailureClass)
+	}
+	if strings.Contains(collected.Message, wallWording) {
+		t.Errorf("collect message = %q, which claims a stop that never happened", collected.Message)
 	}
 }
 

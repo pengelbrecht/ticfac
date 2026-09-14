@@ -30,12 +30,14 @@ package client
 // The rule the UnmarshalJSON methods below enforce:
 //
 //   - A field whose zero value inverts a safety property — the four AgentInfo
-//     fields above, agent_status wherever any response type carries it, and
-//     the pane_id a status-change event keys on — must be PRESENT on the
-//     wire. Presence means the key exists; for fields whose "none" value is
-//     real (name, agent_session) an explicit null is present and decodes to
-//     nil. For fields with no meaningful "none" (a bool readiness, the
-//     status enum, pane_id) a null is refused as loudly as an absent key.
+//     fields above, agent_status wherever any response type carries it, the
+//     pane_id a status-change event keys on, and the identity fields a
+//     teardown's attribution is keyed on (workspace_id, checkout_path, the
+//     worktree path) — must be PRESENT on the wire. Presence means the key
+//     exists; for fields whose "none" value is real (name, agent_session) an
+//     explicit null is present and decodes to nil. For fields with no
+//     meaningful "none" (a bool readiness, the status enum, pane_id, the
+//     identity fields) a null is refused as loudly as an absent key.
 //   - agent_status is additionally ENUM-VALIDATED wherever it decodes: a
 //     status this client does not know is an explicit error, never a
 //     silently non-terminal empty string. This alone is the difference
@@ -262,18 +264,78 @@ func (p *PaneInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UnmarshalJSON requires agent_status on a workspace.
+// UnmarshalJSON requires agent_status and workspace_id on a workspace. The
+// id is what the herdr executor's teardown attribution and reclamation key
+// on (the 5hz identity work): a rename used to decode as "" — a workspace
+// that no longer names itself, so nothing in a teardown could attribute or
+// refuse it, and the removal answered "gone" on a field nobody could read.
+// That is the loud-not-silent guarantee this file exists for, extended to
+// the fields that decide a teardown.
 func (w *WorkspaceInfo) UnmarshalJSON(data []byte) error {
 	type alias WorkspaceInfo
 	var out alias
-	pd, err := probe(data, "WorkspaceInfo", []string{"agent_status"}, &out)
+	pd, err := probe(data, "WorkspaceInfo", []string{"agent_status", "workspace_id"}, &out)
 	if err != nil {
 		return err
 	}
 	if err := pd.requireStatus(&out.AgentStatus); err != nil {
 		return err
 	}
+	raw, err := pd.require("workspace_id", false)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, &out.WorkspaceID); err != nil {
+		return err
+	}
 	*w = WorkspaceInfo(out)
+	return nil
+}
+
+// UnmarshalJSON requires checkout_path on the worktree a workspace is
+// checked out at: the checkout path is the STRONGEST evidence a teardown
+// attributes a workspace by ("a workspace whose worktree is this attempt's
+// worktree is this attempt's workspace"), and a rename used to decode as ""
+// — every workspace suddenly checked out nowhere, and with it every
+// attribution that could have refused a removal.
+func (w *WorkspaceWorktreeInfo) UnmarshalJSON(data []byte) error {
+	type alias WorkspaceWorktreeInfo
+	var out alias
+	pd, err := probe(data, "WorkspaceWorktreeInfo", []string{"checkout_path"}, &out)
+	if err != nil {
+		return err
+	}
+	raw, err := pd.require("checkout_path", false)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, &out.CheckoutPath); err != nil {
+		return err
+	}
+	*w = WorkspaceWorktreeInfo(out)
+	return nil
+}
+
+// UnmarshalJSON requires path on a worktree in a listing: the path — with
+// the branch it holds and the workspace it names — is the evidence a
+// reclamation report and a stale-id teardown are both keyed on, and a
+// renamed path used to decode as "": a worktree sitting nowhere, so
+// attribution silently answered "gone" and the report named nothing.
+func (w *WorktreeInfo) UnmarshalJSON(data []byte) error {
+	type alias WorktreeInfo
+	var out alias
+	pd, err := probe(data, "WorktreeInfo", []string{"path"}, &out)
+	if err != nil {
+		return err
+	}
+	raw, err := pd.require("path", false)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, &out.Path); err != nil {
+		return err
+	}
+	*w = WorktreeInfo(out)
 	return nil
 }
 

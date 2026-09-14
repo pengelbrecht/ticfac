@@ -248,16 +248,19 @@ const (
 )
 
 // livenessForTeardown asks the ONE question removal needs, next to the
-// removal. A launch that was never confirmed settled without an agent ever
-// existing, so it is removal's normal case too. An agent herdr positively
-// answers is GONE is the other ordinary case — it is the answer the real
-// herdr gives once a workspace (and the pane its agent lived on) has been
-// torn down, so a disposal that is resumed or re-run classifies it as
-// "nothing to kill" rather than as a refusal.
+// removal. An agent herdr positively answers is GONE is the ordinary case —
+// it is the answer the real herdr gives once a workspace (and the pane its
+// agent lived on) has been torn down, so a disposal that is resumed or
+// re-run classifies it as "nothing to kill" rather than as a refusal.
+//
+// A launch that was never confirmed asks the SAME question — it does not
+// short-circuit it. The record that says LaunchConfirmed=false is also the
+// record a process death between agent.start and its confirmation left
+// behind, so on exactly that path the launch outcome is UNKNOWN, and
+// "never confirmed" is not evidence that no agent is there (the same
+// unknown-answered-as-a-fact this executor refuses everywhere else). herdr
+// answers what the record cannot.
 func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, string, error) {
-	if !record.LaunchConfirmed {
-		return teardownGone, "the agent was never confirmed launched", nil
-	}
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	if err != nil {
 		if gone(err) {
@@ -276,19 +279,29 @@ func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, st
 		// is safe" — the refusal as the failure, not a guess.
 		return 0, "herdr could not be asked whether the agent is still there", err
 	}
+	var state teardownState
+	var detail string
 	switch agent.AgentStatus {
 	case client.StatusWorking:
-		return teardownWorking, fmt.Sprintf("the agent %s is working and may be mid-turn about to commit", record.AgentName), nil
+		state = teardownWorking
+		detail = fmt.Sprintf("the agent %s is working and may be mid-turn about to commit", record.AgentName)
 	case client.StatusBlocked:
-		return teardownBlocked, fmt.Sprintf("the agent %s is blocked: the pane is the handoff state a human answers", record.AgentName), nil
+		state = teardownBlocked
+		detail = fmt.Sprintf("the agent %s is blocked: the pane is the handoff state a human answers", record.AgentName)
 	case client.StatusIdle, client.StatusDone, client.StatusUnknown:
-		return teardownSettled, fmt.Sprintf("the agent %s is live and settled (%s); worktree.remove tears it down with the workspace",
-			record.AgentName, agent.AgentStatus), nil
+		state = teardownSettled
+		detail = fmt.Sprintf("the agent %s is live and settled (%s); worktree.remove tears it down with the workspace",
+			record.AgentName, agent.AgentStatus)
 	default:
 		// agent_gone answers arrive as errors; a live-but-unclassifiable
 		// agent is settled by elimination here.
-		return teardownSettled, fmt.Sprintf("the agent %s answers %q", record.AgentName, agent.AgentStatus), nil
+		state = teardownSettled
+		detail = fmt.Sprintf("the agent %s answers %q", record.AgentName, agent.AgentStatus)
 	}
+	if !record.LaunchConfirmed {
+		detail += "; the launch was never confirmed — this is herdr's answer to a question the record could not settle"
+	}
+	return state, detail, nil
 }
 
 // archiveOwnReport moves the attempt's own untracked report out of the
