@@ -671,9 +671,15 @@ func TestDisposeAsksAboutLivenessEvenWhenTheLaunchWasNeverConfirmed(t *testing.T
 		Executor:      ExecutorName,
 		Handle:        map[string]any{"state": dir},
 	}
-	// The failed attempt settles on the executor's own record and collects.
+	// Collect is only setup here; what this test is about is Dispose. Since
+	// tick 1eq, an attempt with no report and no settlement is HELD rather
+	// than collected into a verdict, so a refusal from this call is the
+	// correct answer and not a failure of the fixture — the unconfirmed
+	// launch is exactly that shape.
 	if _, err := h.ex.CollectDetail(handle); err != nil {
-		t.Fatal(err)
+		if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedUnknown {
+			t.Fatalf("collect failed for a reason other than the liveness hold: %v", err)
+		}
 	}
 	gets := h.server.CountMethod(herdtest.MethodAgentGet)
 
