@@ -26,15 +26,21 @@ func agentInfoResult(agent string) string {
 	return `{"type":"agent_info","agent":` + agent + `}`
 }
 
-// TestAgentInfoFieldRenamesAreLoud is the heart of the tick: each of the four
-// load-bearing fields renamed must produce a typed error naming the method
-// and the field — never a decoded zero value, which is how a silent rename
-// used to invert a safety property:
+// TestAgentInfoFieldRenamesAreLoud is the heart of the tick: the one
+// load-bearing field whose zero value inverts a safety property, renamed,
+// must produce a typed error naming the method and the field — never a
+// decoded zero value:
 //
-//	agent_status      -> ""      -> the wave fan-in never completes
-//	interactive_ready -> false   -> readiness never observed, spawns race
-//	name              -> nil     -> every live worker classifies as dead
-//	agent_session     -> nil     -> recovery silently downgrades to redispatch
+//	agent_status -> "" -> the wave fan-in never completes
+//
+// The other three AgentInfo fields (interactive_ready, name, agent_session)
+// are keys herdr OMITS when they carry nothing — observed live against herdr
+// 0.9.0 on the first dispatch ticfac ever made (tick to1's demo run): a
+// launch answered before the agent came up carries no readiness and no
+// session, and a fresh agent carries no name. Absence decodes as the zero
+// value and the launch falls to x9x's readiness poll (pinned by
+// TestOmittedAgentFieldsDecodeAsZeroValues); the one field whose zero value
+// inverts a safety property stays loud.
 func TestAgentInfoFieldRenamesAreLoud(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -43,9 +49,6 @@ func TestAgentInfoFieldRenamesAreLoud(t *testing.T) {
 		field string // the field the error must name
 	}{
 		{"agent_status renamed", `"agent_status"`, `"agent_state"`, "agent_status"},
-		{"interactive_ready renamed", `"interactive_ready"`, `"ready"`, "interactive_ready"},
-		{"name renamed", `"name"`, `"agent_name"`, "name"},
-		{"agent_session renamed", `"agent_session"`, `"session"`, "agent_session"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,6 +84,44 @@ func TestAgentInfoFieldRenamesAreLoud(t *testing.T) {
 				t.Errorf("error does not name the method: %v", err)
 			}
 		})
+	}
+}
+
+// TestOmittedAgentFieldsDecodeAsZeroValues pins the live serialization the
+// first real dispatch hit (tick to1's demo run, herdr 0.9.0): agent.start
+// answered for a launch that was accepted but not yet interactive WITHOUT
+// the interactive_ready key, and a fresh agent carries no name and no
+// session — herdr omits the keys when their values are nothing. Absent
+// decodes as the zero value so the launch falls to x9x's readiness poll,
+// which is exactly what that poll exists for.
+func TestOmittedAgentFieldsDecodeAsZeroValues(t *testing.T) {
+	omitted := strings.Replace(fullAgent, `"interactive_ready":true,`, ``, 1)
+	omitted = strings.Replace(omitted, `,"name":"tick-bcv"`, ``, 1)
+	omitted = strings.Replace(omitted, `,"agent_session":{"source":"herdr:claude","agent":"claude","kind":"id","value":"sess-1"}`, ``, 1)
+	if omitted == fullAgent {
+		t.Fatal("fixture bug: nothing was omitted")
+	}
+	c, _ := newTestClient(t, map[string]fakeHandler{
+		MethodAgentGet: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respond(w, req.ID, agentInfoResult(omitted))
+		},
+	})
+
+	agent, err := c.AgentGet(t.Context(), "w9:p1")
+	if err != nil {
+		t.Fatalf("the live shape (keys omitted when they carry nothing) must decode: %v", err)
+	}
+	if agent.InteractiveReady {
+		t.Error("omitted interactive_ready decoded as true, want false: an unacknowledged launch falls to the poll")
+	}
+	if agent.Name != nil {
+		t.Errorf("omitted name decoded as %q, want nil", *agent.Name)
+	}
+	if agent.AgentSession != nil {
+		t.Errorf("omitted agent_session decoded as %+v, want nil", agent.AgentSession)
+	}
+	if agent.AgentStatus != StatusIdle {
+		t.Errorf("agent_status disturbed by the omission: %q", agent.AgentStatus)
 	}
 }
 
@@ -201,11 +242,11 @@ func TestSnapshotStatusPresenceAndEnumAreLoud(t *testing.T) {
 	}
 }
 
-// TestSnapshotAgentRenameIsLoud runs one of the four load-bearing renames
-// through session.snapshot's agents[] — the surface reconcile reads — to
-// prove the AgentInfo presence rules apply wherever the type decodes.
+// TestSnapshotAgentRenameIsLoud runs the one load-bearing rename through
+// session.snapshot's agents[] — the surface reconcile reads — to prove the
+// agent_status presence rule applies wherever the type decodes.
 func TestSnapshotAgentRenameIsLoud(t *testing.T) {
-	renamed := strings.Replace(fullAgent, `"agent_session"`, `"session"`, 1)
+	renamed := strings.Replace(fullAgent, `"agent_status"`, `"agent_state"`, 1)
 	c, _ := newTestClient(t, map[string]fakeHandler{
 		MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
 			return respond(w, req.ID, `{"type":"session_snapshot","snapshot":{"version":"0.8.2","protocol":20,"workspaces":[],"tabs":[],"panes":[],"agents":[`+renamed+`],"layouts":[]}}`)
@@ -214,14 +255,14 @@ func TestSnapshotAgentRenameIsLoud(t *testing.T) {
 
 	snap, err := c.SessionSnapshot(t.Context())
 	if err == nil {
-		t.Fatal("SessionSnapshot decoded an agent with a renamed agent_session, want a loud error")
+		t.Fatal("SessionSnapshot decoded an agent with a renamed agent_status, want a loud error")
 	}
 	if snap != nil {
 		t.Errorf("a snapshot came back alongside the error: %+v", snap)
 	}
 	var missing *RequiredFieldError
-	if !errors.As(err, &missing) || missing.Field != "agent_session" {
-		t.Fatalf("err = %v, want a RequiredFieldError naming agent_session", err)
+	if !errors.As(err, &missing) || missing.Field != "agent_status" {
+		t.Fatalf("err = %v, want a RequiredFieldError naming agent_status", err)
 	}
 	if !strings.Contains(err.Error(), MethodSessionSnapshot) {
 		t.Errorf("error does not name the method: %v", err)
@@ -432,7 +473,7 @@ func TestMalformedResultIsALoudDecodeError(t *testing.T) {
 // TestAgentWaitRenameIsLoud covers the last agent-carrying surface, the
 // blocking wait — the call the wave fan-in actually makes.
 func TestAgentWaitRenameIsLoud(t *testing.T) {
-	renamed := strings.Replace(fullAgent, `"interactive_ready"`, `"ready"`, 1)
+	renamed := strings.Replace(fullAgent, `"agent_status"`, `"agent_state"`, 1)
 	c, _ := newTestClient(t, map[string]fakeHandler{
 		MethodAgentWait: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
 			return respond(w, req.ID, agentInfoResult(renamed))
@@ -445,14 +486,14 @@ func TestAgentWaitRenameIsLoud(t *testing.T) {
 		Timeout: time.Second,
 	})
 	if err == nil {
-		t.Fatalf("AgentWait decoded a renamed interactive_ready to %+v, want a loud error", agent)
+		t.Fatalf("AgentWait decoded a renamed agent_status to %+v, want a loud error", agent)
 	}
 	if agent != nil {
 		t.Errorf("an AgentInfo came back alongside the error: %+v", agent)
 	}
 	var missing *RequiredFieldError
-	if !errors.As(err, &missing) || missing.Field != "interactive_ready" {
-		t.Fatalf("err = %v, want a RequiredFieldError naming interactive_ready", err)
+	if !errors.As(err, &missing) || missing.Field != "agent_status" {
+		t.Fatalf("err = %v, want a RequiredFieldError naming agent_status", err)
 	}
 	if !strings.Contains(err.Error(), MethodAgentWait) {
 		t.Errorf("error does not name the method: %v", err)

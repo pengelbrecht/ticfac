@@ -509,6 +509,20 @@ func (e *Executor) waitInteractiveReady(ctx context.Context, st *store, record *
 	for {
 		agent, err := e.client.AgentGet(ctx, record.AgentName)
 		if err != nil {
+			// A not-yet-registered name is the same race the pane-busy retry
+			// absorbs in the launch itself: herdr accepted agent.start, and the
+			// name it was given resolves a moment later, once the pane's agent
+			// has rendered. Within the budget that is "not ready yet", not a
+			// failure — the budget is the caller's, and spending it on a race
+			// is what it is for. Every other error is a real one.
+			if client.IsCode(err, client.CodeAgentNotFound) && e.now().Before(deadline) {
+				if obsErr := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+					Detail: "the agent is not registered under its name yet (agent_not_found); polling"}); obsErr != nil {
+					return nil, fmt.Errorf("record the readiness poll: %w", obsErr)
+				}
+				e.sleepUntil(readinessPollInterval)
+				continue
+			}
 			return nil, fmt.Errorf("herdr agent.get for %s after a pending launch: %w", record.AgentName, err)
 		}
 		if agent.InteractiveReady {
