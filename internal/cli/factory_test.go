@@ -69,8 +69,13 @@ func TestFactoryCommandSurface(t *testing.T) {
 		if code := Run(args, &stdout, &stderr); code != 2 {
 			t.Errorf("%v: exit code %d, want 2", args, code)
 		}
-		if !strings.Contains(stderr.String(), "factory deploy") || !strings.Contains(stderr.String(), "factory setup") {
-			t.Errorf("%v: the usage does not name both factory subcommands:\n%s", args, stderr.String())
+		// The unified usage (0e1's, which b3a's deploy and setup wired into)
+		// names all four subcommands in a two-column block rather than as
+		// "factory deploy" lines, so assert the vocabulary, not the layout.
+		for _, sub := range []string{"deploy", "setup", "status", "dashboard"} {
+			if !strings.Contains(stderr.String(), sub) {
+				t.Errorf("%v: the usage does not name the %q subcommand:\n%s", args, sub, stderr.String())
+			}
 		}
 	}
 }

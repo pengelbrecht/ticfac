@@ -155,18 +155,19 @@ func TestFactoryGroupHelpMentionsItsCommands(t *testing.T) {
 	}
 }
 
-// The deploy path is Factory move B (ticks tick b3a); until its wiring lands,
-// the two commands say so rather than answering "unknown subcommand" — the
-// finished surface serves them, and an operator should be told which build
-// will, not sent hunting.
-func TestFactoryDeployAndSetupNameTheMoveTheyLandWith(t *testing.T) {
+// b3a landed the deploy path in the same wave as this read path, so deploy and
+// setup are WIRED now — the placeholder that named the move they were waiting
+// for is gone. What is still worth asserting is that they reach their real
+// handlers rather than the dispatcher's unknown-subcommand arm: an unknown name
+// exits 2 with usage, and these two do not.
+func TestFactoryDeployAndSetupAreWired(t *testing.T) {
 	for _, name := range []string{"deploy", "setup"} {
 		code, _, stderr := runCloudArgs(t, []string{"factory", name})
-		if code == exitSuccess {
-			t.Fatalf("factory %s answered in a build that does not wire it", name)
+		if code == exitUsage {
+			t.Errorf("factory %s fell through to the unknown-subcommand arm: %s", name, stderr.String())
 		}
-		if !strings.Contains(stderr.String(), "Factory move B") {
-			t.Errorf("factory %s does not say where its wiring lands: %s", name, stderr.String())
+		if strings.Contains(stderr.String(), "unknown subcommand") {
+			t.Errorf("factory %s is not wired: %s", name, stderr.String())
 		}
 	}
 }
