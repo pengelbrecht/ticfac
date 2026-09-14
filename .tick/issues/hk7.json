@@ -2,7 +2,7 @@
   "id": "hk7",
   "title": "A tick whose work is in another repository cannot be dispatched",
   "description": "A tick whose work lives in ANOTHER repository cannot be dispatched.\n\n`tk herd spawn` always creates a worktree of the repo whose tracker holds the\ntick. Two ticks in this epic — 4l2 (retire the execution packages from ticks)\nand 1ya (retire the factory from ticks) — do their work in the ticks checkout.\nDispatched from ticfac's tracker they get a ticfac worktree, the branch they\nwould need to touch is not there, and anything they changed in the ticks\ncheckout would be outside the worktree boundary: uncollectable and ungated.\n\nTick 4l2's worker diagnosed this itself and refused rather than reaching outside\nits boundary, which is the correct behaviour and worth keeping.\n\nThis is not a ticfac bug today — it is a gap in what an orchestrator can\nexpress. Options, to be decided:\n\n- The tick declares its TARGET REPO, and the orchestrator creates the worktree\n  there. The tracker stays where the work is planned; the worktree follows the\n  code. Collect and the gate then have to run in that repo too, which is the\n  real design question: whose gate proves a cross-repo change?\n- Or cross-repo work is simply not dispatchable, and such a tick is marked as\n  human-only from the start rather than discovered at dispatch. Honest, cheap,\n  and it stops a worker burning a dollar to tell us what the tick already knew.\n- Or the change is expressed as a PR against the other repo rather than a\n  worktree edit — which is what a person would do anyway.\n\nWhichever: a tick that cannot be dispatched should say so when it is PLANNED,\nnot when a worker reaches its boundary. That is the same principle as tick 01u\n(a wave that cannot merge is refused at dispatch).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -10,5 +10,7 @@
   "acceptance_criteria": "A tick that targets another repository is either dispatchable into a worktree of that repository, with collect and the gate defined for it, or it is refused at PLANNING time rather than at the worker's boundary; the chosen shape is a logged decision; ticks 4l2 and 1ya are handled under it; no worker is dispatched to work it cannot reach.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T05:46:45.990319Z",
-  "updated_at": "2026-09-14T16:15:45.533353Z"
+  "updated_at": "2026-09-14T16:29:53.184127Z",
+  "closed_at": "2026-09-14T16:29:53.184127Z",
+  "closed_reason": "Dissolved rather than fixed, on the operator's read: ticfac does not need multi-repo support. run-epic takes --repo, so an epic planned in the tracker of the repository whose code it changes can be RUN by ticfac against that repository — worktrees, collect and gate all happen there. The gap was my planning error, not a tool limitation: I filed the retirement ticks in ticfac's tracker because they belonged to the extraction epic, when the code they delete lives in ticks. The rule that replaces the machinery is one line, now in learnings: a tick goes in the tracker of the repo whose code it changes. Superseded by ticks epic pwp."
 }

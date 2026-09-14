@@ -50,6 +50,15 @@ threshold so the poll IS the keepalive. **Rule:** Before speeding up a slow inte
 is holding open. A cadence right for a cloud substrate is wrong for a local run, so the interval
 belongs to the executor, not to one constant.
 
+## Where a tick lives
+
+**Problem:** Two ticks were filed in ticfac's tracker to delete code from the ticks repository, because
+they belonged to the extraction epic. Neither could be dispatched — `tk herd spawn` always creates a
+worktree of the repo whose tracker holds the tick, so their branches were uncollectable and ungated —
+and a worker burned a dollar diagnosing it. **Rule:** A tick goes in the tracker of the repo whose
+CODE it changes, never the tracker of the epic it belongs to. Cross-repo work is a second epic, planned
+there, and `ticfac run-epic --repo <dir>` runs it against that checkout.
+
 ## Provider and model configuration
 
 **Problem:** A max-output override of 1,000,000 made Cloudflare answer a bodyless 400, which pi read as
