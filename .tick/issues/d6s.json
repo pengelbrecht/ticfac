@@ -2,7 +2,7 @@
   "id": "d6s",
   "title": "Repair: provenance executor off the marker, a silent feed failure, a wrong attempt number, and a relaxed strict field",
   "description": "Four should-fix findings from the Phase 2 final defect pass. The blocker from\nthat pass (the budget report emitted as `run_finished`, telling every subscriber\nthe run had ended seconds after it started) is already fixed, along with the\nfeed test that let it through by only asking whether SOME run_finished existed.\n\n1. internal/reconcile/profiles.go:455 — the EXECUTOR written into provenance is\n   taken from today's re-resolved profile, while Tier and the new Substrate come\n   off the MARKER. Edit a profile between legs and the settle and finding\n   records name an executor the attempt never ran on. That is provenance that\n   lies, which is the exact phrase usableProfile's own refusal uses. Take it\n   from the marker like the others.\n\n2. internal/reconcile/reconcile.go:648 — the feed's own write failure is\n   collected into FeedError and nothing ever reads it. A run whose feed cannot\n   be written says nothing about it, and `ticfac events --follow` then waits\n   forever on a file that will never appear. Decide what a feed failure means —\n   it is not a verdict about the work, so it must not fail the run, but silence\n   is the one thing it must not be.\n\n3. internal/reconcile/dispatch.go:444 — the attempt number is set only AFTER\n   Start, so the `claimed` line and the start-failure line for attempt 2 both\n   carry attempt 1. The feed requires run/tick/attempt identity on every line;\n   this makes two of them wrong exactly when an attempt failed, which is when a\n   reader needs them.\n\n4. internal/herd/client/strict.go:254 — `name` was relaxed to optional during\n   to1's live-run repairs, but the policy header still lists a `name` rename as\n   the hazard that causes redispatch onto a LIVE worker. The live evidence\n   covered interactive_ready and agent_session, not name. Either the header is\n   stale or the relaxation went one field too far: check what herdr 0.9.0\n   actually omits, and make the code and the comment agree.\n\nAlso record, from the same pass: the reviewer notes the run feed has a torn-tail\nweakness on a partial write (a nit), and confirms the 1eq/etp repairs strengthen\nx6j and 5hz rather than weakening them.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -10,5 +10,6 @@
   "acceptance_criteria": "The executor in provenance comes from the marker, like Tier and Substrate, so a profile edited between legs cannot make a record name an executor the attempt never ran on; a feed write failure is surfaced rather than collected and ignored, without failing the run over it, and what it means is stated; the claimed and start-failure lines carry the attempt they are about; strict.go's name field and its policy header agree, with the decision based on what herdr 0.9.0 actually omits. Tests cover each; make test-short green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T13:37:31.270899Z",
-  "updated_at": "2026-09-14T13:37:31.270899Z"
+  "updated_at": "2026-09-14T13:37:44.442753Z",
+  "started_at": "2026-09-14T13:37:44.442752Z"
 }
