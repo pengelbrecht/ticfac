@@ -279,12 +279,30 @@ func TestAProtocolRefusalIsOperational(t *testing.T) {
 	}
 }
 
-// TestTheExecutorDemandsNoCapability pins the other refusal the version work
-// raised — a server that does not advertise a capability — to the
-// operational side, from below: the executor's five operations place NO
-// capability demand on the server, so a capability refusal can never arise
-// from them, and a herdr advertising nothing at all runs a whole attempt.
-func TestTheExecutorDemandsNoCapability(t *testing.T) {
+// TestACapabilityFreeServerRunsAWholeAttempt pins, from below, the logged
+// decision of tick ic0 (finding 1). jv7's clause — "a capability the server
+// does not advertise is refused BY NAME at the point of use" — is real
+// wherever there IS a point of use: the client's RequireCapability is that
+// refusal, tested by name in the client package
+// (TestRequireCapabilityRefusedByName). The executor's five operations
+// have no such point. The two capabilities herdr advertises guard optional
+// server features nothing here calls: live_handoff is herdr's own update
+// machinery (the server.live_handoff method, `herdr update --handoff`),
+// which an operator runs, and detached_server_daemon concerns how herdr
+// was started, while this executor only ever connects to a herdr that is
+// already running. Demanding either at Start would refuse herdrs that can
+// run every operation.
+//
+// jv7's clause is therefore AMENDED for this executor, per the AC5
+// precedent (a wording-versus-repo mismatch, amended with the reasoning,
+// not a broken guarantee): the operations place NO capability demand, and
+// this test is the pin of that decision — a herdr advertising nothing at
+// all runs a whole attempt, start to dispose. It is not, and does not
+// claim to be, a test of the by-name refusal; that test lives with the
+// point of use. The day an operation comes to depend on an optional server
+// feature, it must RequireCapability BY NAME at that point — never assume
+// the feature, never discover its absence as a late failure.
+func TestACapabilityFreeServerRunsAWholeAttempt(t *testing.T) {
 	// A non-default version makes the fake's ping answer WITHOUT a
 	// capabilities block: a server that advertises nothing.
 	h := newHarness(t, harnessOptions{serverVersion: "0.9.0", serverProtocol: int(client.ProtocolWarnVersion)})

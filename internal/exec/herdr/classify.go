@@ -38,9 +38,10 @@ import (
 //     anything is claimed, created or deleted; the run reports the error and
 //     the tick is neither rejected nor redispatched. A capability refusal
 //     (CapabilityError) is OPERATIONAL the same way — and this executor's
-//     five operations demand no capability at all, pinned by
-//     TestTheExecutorDemandsNoCapability, so the refusal can never arise
-//     from them.
+//     five operations place no capability demand on the server at all,
+//     pinned from below by TestACapabilityFreeServerRunsAWholeAttempt, so
+//     the refusal cannot arise from them (the logged decision of tick ic0;
+//     see doc.go's capability section for why).
 //   - Start → WorktreeCreate: any error, any code, a success reply with no
 //     usable shape — OPERATIONAL. Nothing is cleaned up, nothing is deleted;
 //     the next Start of the identity is refused by the branch-exists check

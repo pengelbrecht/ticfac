@@ -7,7 +7,14 @@
 //
 //   - the LIVE server: drift_test.go runs `herdr api schema --json` and
 //     compares every schema-enumerated category for set equality, both
-//     directions, whenever a herdr binary is on PATH;
+//     directions, whenever a herdr binary is on PATH. When there is none —
+//     CI, which installs no herdr and cannot — this half is UNPROVEN: the
+//     offline run pins the client and the fake against the PINNED
+//     contract, never the pinned contract against a live herdr. The
+//     epic gate does not require a live herdr (the logged decision of
+//     tick ic0); the pin's freshness rests on the drift test running
+//     wherever a herdr exists — the operator's machine and worker hosts.
+//     See drift_test.go for the plain statement of the boundary.
 //   - the CLIENT: internal/herd/client/vocabulary_contract_test.go pins the
 //     client's Go constants member-for-member against the client_used
 //     annotations, so a one-sided edit fails the build;
