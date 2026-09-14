@@ -24,54 +24,7 @@ import (
 // The read half — `ticfac factory status` and `ticfac factory dashboard`, and
 // the `ticfac cloud …` slice — moves with ticks tick 0e1 ("Factory move C").
 
-// factoryUsage is printed for `ticfac factory` with no (or an unknown)
-// subcommand.
-const factoryUsage = `usage:
-  ticfac factory deploy   put the factory in your own Cloudflare account
-  ticfac factory setup    walk the credential ladder, one verified rung at a time
-
-deploy flags:
-  --bundle-dir <dir>     stage the embedded bundle here (default: ~/.tick/factory/bundle)
-  --rotate-token         mint a new factory token instead of reusing the stored one
-  --url <url>            the factory's base endpoint, when wrangler's output does not name it
-  --skip-rollout-wait    accept an unconfirmed container rollout, deliberately
-
-setup flags:
-  --repo <owner/name>      the repository the GitHub credential must reach
-                           (default: the checkout's origin remote)
-  --github-token <token>   supply the GitHub credential by hand (bypasses the device flow)
-  --github-api <url>       GitHub's REST root (tests, GHES)
-  --github-client <id>     the GitHub App client id for the device flow
-  --github-oauth <url>     the host the device flow runs on (default: github.com)
-  --gateway-url <url>      the AI Gateway base URL
-  --provider <id>          workers-ai | anthropic | openai | openrouter
-  --provider-key <key>     the BYOK provider's key (Workers AI needs none)
-  --cloudflare-api-token <token>   add cost telemetry: read what the gateway billed
-  --workers-ai-billing-mode <mode>  postpaid | unified — the wallet the gateway bills
-  --cloudflare-api-base <url>      Cloudflare's REST root (tests)
-  --bundle-dir <dir>       stage the embedded bundle here
-
-Every answer setup asks for can also be supplied as a flag, which is what makes
-the walk scriptable. Nothing either command stores ever lands in a repository.
-`
-
 // factoryCommand dispatches the factory subcommands.
-func factoryCommand(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintf(stderr, "ticfac factory: a subcommand is required\n\n%s", factoryUsage)
-		return 2
-	}
-	switch args[0] {
-	case "deploy":
-		return factoryDeploy(args[1:], stdout, stderr)
-	case "setup":
-		return factorySetup(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "ticfac factory: unknown subcommand %q\n\n%s", args[0], factoryUsage)
-		return 2
-	}
-}
-
 // factoryDeploy installs (or upgrades) the factory in the operator's own
 // Cloudflare account, from the bundle embedded in this build.
 func factoryDeploy(args []string, stdout, stderr io.Writer) int {
