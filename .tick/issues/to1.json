@@ -2,7 +2,8 @@
   "id": "to1",
   "title": "Wire the herdr executor into dispatch, and put the substrate in provenance",
   "description": "Wire the herdr executor into dispatch, and put the substrate in provenance.\nThese are the epic's two NOT MET acceptance items, found by the final review.\n\n## 1. The executor is unreachable, not merely unexercised\n\n- internal/reconcile/dispatch.go:1390 unconditionally builds subprocess.New.\n- internal/reconcile/profiles.go:311 actively REFUSES any profile naming a\n  non-subprocess executor: \"profile %s names executor %q and this phase has\n  one\".\n- There is no --executor flag.\n\nSo the epic's headline acceptance — an operator runs a real ticks epic through\n`ticfac run-epic` on Herdr — cannot be attempted. Everything the executor builds\nis latent.\n\nDo:\n- Select the executor from the resolved profile rather than hardcoding one, and\n  lift usableProfile's refusal to admit herdr now that this phase has two. Keep\n  the refusal's PURPOSE intact: a profile naming an executor the run did not use\n  is provenance that lies, so the check becomes \"can this build honour it\",\n  not \"is it the only one\".\n- Land ticks 1eq and etp FIRST or alongside. They are the defects a first real\n  run hits, and both are in the paths this tick makes reachable.\n- Then run a real epic through it, end to end, and show the run. That is the\n  acceptance, not a test.\n\n## 2. The substrate is not in provenance\n\nrunstate.Provenance (internal/runstate/records.go:28-50) has no herdr protocol\nor server version field, and it is a CLOSED object whose decoder rejects unknown\nproperties. The values live only on herdr's private attemptRecord\n(internal/exec/herdr/store.go:97-101), so a run that spans a herdr upgrade\ncannot be diagnosed from the durable record.\n\nThis contradicts the epic description and the 2026-09-11 split decision, both of\nwhich put the substrate in provenance. It needs the same upstream bundle bump\nthat tick 9t0 carried for the tier and the findings channel — read that tick's\nRESULT for the pattern.\n\nAlso fix, from the same review: internal/exec/herdr/doc.go:93 claims more than\nits test asserts about this.",
-  "status": "open",
+  "notes": "2026-09-14 10:15 - runner-state: dispatched on pi/cloudflare GLM-5.3 from base 0528d38. This is the tick that decides the epic: it admits the herdr executor into dispatch and requires a REAL epic to run through it end to end.",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -14,5 +15,6 @@
   "acceptance_criteria": "run-epic dispatches through the executor its resolved profile names, with usableProfile admitting herdr while still refusing an executor this build cannot honour; a real ticks epic completes end to end through ticfac run-epic on herdr and the run is shown, not described; the herdr protocol and server version are fields of the pinned Provenance object rather than a private record, landed through the contract bundle the way 9t0 landed the tier and the findings channel; doc.go no longer claims more than its test asserts; make test-short green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T06:28:35.143083Z",
-  "updated_at": "2026-09-14T06:28:35.143083Z"
+  "updated_at": "2026-09-14T08:15:29.206675Z",
+  "started_at": "2026-09-14T08:13:56.655627Z"
 }
