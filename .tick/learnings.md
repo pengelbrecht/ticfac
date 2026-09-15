@@ -41,6 +41,23 @@ timeout while the work ran on. **Rule:** A watcher must cover every terminal sta
 reported, blocked, and died-without-reporting are three different answers, and silence from a
 success-only watcher is indistinguishable from still working.
 
+**Problem:** Two runs died with `conflict_exists` on a checkpoint write, and the story that a competing
+writer had advanced the run did not survive the commit timeline. The real cause: the run-state store
+resolves origin's head through `git rev-parse FETCH_HEAD`, and `FETCH_HEAD` is ONE FILE in `.git`
+shared by every process using that checkout. A watcher running `git fetch` in the run's own repository
+overwrote it with main's head; `ls-tree` of main has no `.ticfac` tree, so the store's view of its own
+state came back EMPTY, it took the create path instead of update, and the push was refused. Reproduced
+in a scratch repo in four commands. **Rule:** Never resolve a ref through `FETCH_HEAD` or any other
+process-global git state. Fetch into a private per-run ref and read that
+(`git fetch --no-write-fetch-head <remote> +<branch>:refs/ticfac/peek/<run-id>`). This tool tells
+operators to watch a live run; a watcher must not be able to corrupt the thing it watches.
+
+**Problem:** The same `FETCH_HEAD` read appears a second time in the tracker publisher, where `sync()`
+MOVES THE WORKTREE to the resolved commit. **Rule:** When a defect comes from a shape rather than a
+line — process-global state, an unbounded retry, a swallowed error — grep for the shape before calling
+it fixed, and leave a guard test that fails on the next occurrence. The crash is the benign symptom;
+the same read one layer over lands writes on the wrong base.
+
 **Problem:** A hand-rolled watcher ran for eleven minutes and delivered nothing, because it was piped
 through `tail` to suppress a replay of history. `tail` and `head` block-buffer when stdout is a pipe,
 so the whole stream accumulated and never arrived; the run meanwhile collected, filed a finding and
