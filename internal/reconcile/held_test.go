@@ -226,8 +226,8 @@ func TestAReleasedAttemptCanCarryItsWorkToTheNextAttempt(t *testing.T) {
 	if resumedFrom["tick_id"] != "a1" || resumedFrom["attempt"] != float64(1) {
 		t.Errorf("the marker's resumed_from does not name the released attempt: %v", resumedFrom)
 	}
-	if resumedFrom["released_by"] != "an operator" {
-		t.Errorf("the marker's resumed_from does not name who released it: %v", resumedFrom)
+	if resumedFrom["released_by"] != releaseHandle("an operator") {
+		t.Errorf("the marker's resumed_from does not name who released it as a stable handle: %v", resumedFrom)
 	}
 
 	// Settling the same attempt twice writes nothing, carry or no carry: a

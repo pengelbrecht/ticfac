@@ -247,8 +247,8 @@ func TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne(t *testin
 	for _, decision := range decisions {
 		if decision.Request["op"] == settleOp && decision.Request["tick_id"] == "a1" {
 			found = true
-			if decision.Response["released_by"] != "an operator" {
-				t.Errorf("the release does not name who made it: %+v", decision.Response)
+			if by, _ := decision.Response["released_by"].(string); by != releaseHandle("an operator") {
+				t.Errorf("the release does not name who made it as a stable handle: %+v", decision.Response)
 			}
 		}
 	}
