@@ -478,3 +478,4 @@
 {"ts":"2026-09-15T12:13:15.66649Z","tick":"0iz","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Make the PR + green-CI close-out rule a run precondition, not model diligence"}}
 {"ts":"2026-09-15T12:13:41.400665Z","tick":"48q","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
 {"ts":"2026-09-15T12:34:21.691611Z","tick":"48q","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"2026-09-15 14:34 - ticfac run epic-9pd: attempt 4 merged into epic/9pd as 70cd78792e3b; the integrated gate (go) passed.","title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
+{"ts":"2026-09-15T12:34:27.764524Z","tick":"48q","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
