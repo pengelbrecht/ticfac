@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-54n-6-go",
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "54n",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "7e6bf3b36a63735fbaf466046384c461733268e0",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a69f0f2efccf98fe1b102acd824dbd39",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.0"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -count=1 ./..."
+    ]
+  },
+  "started_at": "2026-09-15T13:17:13Z",
+  "finished_at": "2026-09-15T13:23:49Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t55.178s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t0.422s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.174s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t184.054s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t95.699s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t58.640s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.123s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t1.581s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.346s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.528s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.551s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.254s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.156s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.602s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.989s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.010s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.892s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t389.418s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t2.104s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.684s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t1.597s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t155.064s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t1.499s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t1.686s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:7ca8b55f632a98572bd4af38ca98c5e537374c80c35ad94e5435a48ed0c486df",
+  "persistence_uri": "git:refs/heads/epic/9pd:.ticfac/runs/epic-9pd/evidence/gate-54n-6-go.json"
+}
