@@ -1,0 +1,14 @@
+{
+  "id": "35h",
+  "title": "Archive every attempt's report; a superseded attempt's analysis is lost with its worktree",
+  "description": "From the ticks pwp run, 2026-09-15 (close-out tick 8vl, attempt 15 — reported by the worker about its own predecessors).\n\nAttempts 11-14 each wrote a closeout report at the prescribed worktree path. Only attempt 11's was captured anywhere (decisions/3.json). The reports of 12, 13 and 14 survive nowhere in the repository; their reasoning is recoverable only from the findings they happened to file.\n\nThis is why the closeout loop was expensive as well as stuck. Each re-dispatched attempt started blind, re-derived the same situation from the tick's notes, and surfaced a DIFFERENT subset of what it found — which is why five attempts produced five disjoint finding sets rather than converging. An attempt that could read its predecessors' reports would have seen the work already done.\n\nFix: when the collect channel reads an attempt's report, archive it under the run's own .ticfac/ state (alongside attempts/\u003cn\u003e.json), whatever the verdict. A rejected or superseded attempt's analysis is evidence about the epic; losing it with the worktree throws away the most expensive artifact the run produced.\n\nRelationship to 54n: 54n is why the closeout could not commit; this is why each retry was blind. Fixing 54n alone ends the loop; fixing this alone makes each retry cheaper and more convergent. They are independent.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "Every attempt's report is archived under the run's .ticfac/ state when collect reads it, whatever the verdict, and a re-dispatched attempt can read its predecessors' reports — proven by a test that rejects an attempt and asserts its report survives the worktree teardown",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T07:04:59.904351Z",
+  "updated_at": "2026-09-15T07:04:59.904351Z"
+}
