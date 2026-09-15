@@ -434,3 +434,4 @@
 {"ts":"2026-09-15T02:34:00.265228Z","tick":"w1c","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"Adoption picks the FIRST attempt of a tick, not the latest","type":"task"}}
 {"ts":"2026-09-15T03:01:56.355188Z","tick":"0iz","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"Make the PR + green-CI close-out rule a run precondition, not model diligence","type":"task"}}
 {"ts":"2026-09-15T06:13:52.646349Z","tick":"4ys","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"Never write an operator identity into a record committed to the target repo","type":"task"}}
+{"ts":"2026-09-15T06:16:59.417318Z","tick":"2jn","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"ticfac needs a skill system and a one-line install, mirroring tk","type":"epic"}}

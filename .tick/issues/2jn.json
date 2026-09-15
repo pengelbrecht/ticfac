@@ -1,0 +1,13 @@
+{
+  "id": "2jn",
+  "title": "ticfac needs a skill system and a one-line install, mirroring tk",
+  "description": "Operator request, 2026-09-15: 'ticfac needs a skill system and easy installation, mirroring tk'.\n\nToday ticfac has NONE of the distribution surface tk has. Verified in the repo:\n\n  ticks:  install.sh, .goreleaser.yaml, skills/ticks/, 'tk skills install ticks', a pi package (pi install git:github.com/pengelbrecht/ticks)\n  ticfac: no install.sh, no .goreleaser.yaml, no skills/ at all\n\nThe binary reaches a machine today only by 'go build'. That is fine for the author and impossible for anyone else, and it is the gap that makes 'extracted to ticfac' a claim a user cannot act on.\n\nScope, to be decomposed:\n- Release pipeline: .goreleaser.yaml producing platform binaries, and install.sh behind a stable URL, matching how ticks ships.\n- A ticfac skill that teaches an agent the run loop: run-epic, settle, findings/finding triage, events, the profiles directory, and the refusal vocabulary. The ticks skill is the model for depth and shape.\n- An installer for the skill itself, the counterpart of 'tk skills install ticks', so the skill arrives with the tool rather than being copied by hand.\n- Decide whether ticfac also ships a pi package, as ticks does, or whether the herdr/pi story is covered by profiles alone.\n\nDesign constraint worth stating up front: the ticks skill and the ticfac skill will both be loaded in the same session and must not contradict each other. Settle the boundary — the tracker skill owns planning and tick shape, the ticfac skill owns execution — before writing either.\n\nBlocked on the pwp deletion landing: the command surface this documents is only stable once tk stops carrying its own copy.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A user who has never built ticfac can install the binary with one command, install its skill the way they install the ticks skill, and run an epic from that skill's instructions alone; the ticks and ticfac skills state a boundary between them and do not contradict each other",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T06:16:59.41706Z",
+  "updated_at": "2026-09-15T06:16:59.41706Z"
+}
