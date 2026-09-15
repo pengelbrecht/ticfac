@@ -2,6 +2,7 @@
   "id": "48q",
   "title": "Checkpoint leaves a tick at 'integrated' after the tracker closed it",
   "description": "From the ticks pwp run, 2026-09-15 (close-out tick 8vl, attempt 13). Verified directly on origin/epic/pwp:\n\n  checkpoint.json          tracker (.tick/issues)\n    azq  closed              azq  closed\n    nkf  closed              nkf  closed\n    3r2  closed              3r2  closed\n    hvj  closed              hvj  closed\n    os6  closed              os6  closed\n    gms  INTEGRATED          gms  CLOSED\n    sx5  closed              sx5  closed\n    8vl  rejected            8vl  in_progress\n\ngms merged, its gate passed, the run published the close and the tracker records it closed — the feed shows closed at 06:12:57 and cleaned_up after. The checkpoint row never advanced past 'integrated'.\n\nEvery sibling that took the same path reads 'closed', so this is a missed transition on one tick rather than a design gap. Likely relevant: gms is the tick whose run process died mid-close earlier in the session, so the suspicion is that the close-to-checkpoint transition is not idempotent across a restart — the tracker close was already published, so the resumed run had nothing to do and never wrote the row. Prove that before repairing it.\n\nImpact is small today and real tomorrow: the checkpoint is what a resumed run reads to decide what is done, so a tick stuck at 'integrated' is a tick a future resume may try to finish again.\n\nROUTING NOTE: the finding that reported this (6a3af0d8) was promoted onto tick 54n by mistake — 54n is the closeout boundary defect from the same attempt. This tick is the real home for it; 54n carries a pointer back here.",
+  "notes": "2026-09-15 14:34 - ticfac run epic-9pd: attempt 4 merged into epic/9pd as 70cd78792e3b; the integrated gate (go) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "A run whose process dies between publishing a tick's close and writing its checkpoint row leaves both consistent on resume, proven by a test that kills the run in that window and asserts the checkpoint reads closed",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T06:30:13.440838Z",
-  "updated_at": "2026-09-15T12:13:41.40025Z",
+  "updated_at": "2026-09-15T12:34:21.691275Z",
   "started_at": "2026-09-15T12:13:41.400249Z"
 }
