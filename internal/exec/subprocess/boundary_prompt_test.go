@@ -88,3 +88,90 @@ func TestRenderedPromptNamesEveryExemption(t *testing.T) {
 		}
 	}
 }
+
+// TestTheBoundaryRefusalNamesTheRoleAndThePermittedDestination is tick 54n's
+// other half. The prompt now states the exemptions; when the boundary still
+// refuses — because the worker wrote a RECORD, not an exempt file — the
+// refusal must say WHO was refused and WHERE that output should have gone.
+// A refusal that says only "no" is what left the closeout role inventing
+// workarounds: five attempts, each told .tick/ was forbidden and nothing
+// else, none able to commit its deliverable.
+//
+// The fixture's `boundary` mode is the shape itself: the worker writes a
+// tracker record AND appends to .tick/learnings.md — the learning lands, the
+// record is the violation — so the refusal can be checked against the exact
+// paths this tick is about.
+func TestTheBoundaryRefusalNamesTheRoleAndThePermittedDestination(t *testing.T) {
+	t.Parallel()
+
+	for _, role := range []string{"implement-tick", "closeout-epic"} {
+		t.Run(role, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, fixtureOptions{mode: "boundary"})
+			spec := f.spec("run-54n/tick-54n/attempt-1", "54n")
+			spec.Role = role
+			handle := f.Start(spec)
+			f.waitSettled(handle)
+
+			collected := f.collect(handle)
+			if collected.Verdict != VerdictBoundaryViolation {
+				t.Fatalf("verdict %s (%s), want %s",
+					collected.Verdict, collected.Message, VerdictBoundaryViolation)
+			}
+			if !strings.Contains(collected.Message, role) {
+				t.Errorf("the refusal does not name the role %s, so a worker reading it cannot tell "+
+					"which job's boundary this is or which role's deliverable is in question: %q",
+					role, collected.Message)
+			}
+			for _, path := range ExemptFromBoundary() {
+				if !strings.Contains(collected.Message, path) {
+					t.Errorf("the refusal never names %s as a permitted destination, so a worker "+
+						"that hit this boundary is left inventing a workaround — the exact "+
+						"failure that cost the closeout role five attempts (tick 54n): %q",
+						path, collected.Message)
+				}
+			}
+			if prefix := spec.ArtifactPrefix; !strings.Contains(collected.Message, prefix) {
+				t.Errorf("the refusal does not say the report belongs under %s: %q", prefix, collected.Message)
+			}
+		})
+	}
+}
+
+// TestTheRefusalOffersOnlyDestinationsTheBoundaryPermits guards the drift
+// direction the whole tick is about: the refusal's permitted destinations
+// are rendered from the boundary's own exemption list, never hand-written a
+// second time, so the refusal can never send a worker at a path the check
+// would also refuse — which would be the prompt drift of this tick, moved
+// from the prompt into the refusal.
+func TestTheRefusalOffersOnlyDestinationsTheBoundaryPermits(t *testing.T) {
+	t.Parallel()
+
+	msg := BoundaryRefusal("closeout-epic", "runs/r/54n/", []string{".tick/issues/54n.json"})
+	for _, path := range ExemptFromBoundary() {
+		if OutsideBoundary(path) {
+			t.Fatalf("%s is named as permitted but the boundary refuses it: the exemption list "+
+				"and the check disagree, which is the drift this file exists to stop", path)
+		}
+		if !strings.Contains(msg, path) {
+			t.Errorf("the refusal %q does not name %s as permitted", msg, path)
+		}
+	}
+	// The learnings destination is the one the closeout role's own
+	// instructions point its output at; it must be an exempt path, never a
+	// second hard-code the boundary could disagree with.
+	if learnings := learningsPath(); learnings != "" {
+		var permitted bool
+		for _, path := range ExemptFromBoundary() {
+			permitted = permitted || path == learnings
+		}
+		if !permitted {
+			t.Errorf("learningsPath() names %s, which is not exempt: the refusal would offer "+
+				"a destination the boundary also refuses", learnings)
+		}
+		if !strings.Contains(msg, learnings) {
+			t.Errorf("the refusal %q does not name the learnings destination %s", msg, learnings)
+		}
+	}
+}

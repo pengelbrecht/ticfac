@@ -298,3 +298,34 @@ func TestDisposeRemovesTheExcludeLineWhileTheWorktreeExists(t *testing.T) {
 		t.Fatalf("the exclude line %q was orphaned in %s after disposal:\n%s", line, after, raw)
 	}
 }
+
+// Tick 54n's other half, for this executor: the boundary refusal names the
+// role and the permitted destinations, and the two executors render the SAME
+// sentence for the same tracker-record write — the collect vocabulary is
+// shared by contract, and two collects that disagree about the same tick are
+// exactly the drift the contract's closed vocabulary exists to make
+// impossible. This test reads the message composer directly because the
+// refusal is the thing under test, not the agent's conduct.
+func TestTheBoundaryRefusalMatchesTheLocalExecutors(t *testing.T) {
+	t.Parallel()
+
+	record := &attemptRecord{Spec: &subprocess.JobSpec{
+		Role:           "closeout-epic",
+		ArtifactPrefix: "runs/r/t1/",
+	}}
+	violations := []string{".tick/issues/t1.json"}
+
+	msg := collectMessage(subprocess.VerdictBoundaryViolation, subprocess.FailureRunnerError, record, violations)
+	if want := subprocess.BoundaryRefusal(record.Spec.Role, record.Spec.ArtifactPrefix, violations); msg != want {
+		t.Errorf("the herdr refusal and the local executor's disagree about the same write:\n"+
+			"  herdr:    %q\n  subprocess: %q", msg, want)
+	}
+	if !strings.Contains(msg, record.Spec.Role) {
+		t.Errorf("the refusal %q does not name the role %s", msg, record.Spec.Role)
+	}
+	for _, path := range subprocess.ExemptFromBoundary() {
+		if !strings.Contains(msg, path) {
+			t.Errorf("the refusal %q never names %s as a permitted destination (tick 54n)", msg, path)
+		}
+	}
+}

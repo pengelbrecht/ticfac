@@ -277,7 +277,11 @@ func collectMessage(reason, class string, record *attemptRecord, violations []st
 	case subprocess.VerdictNoCommits:
 		return fmt.Sprintf("the attempt branch carries no commit beyond the base it was cut from (%s)", short(record.BaseSHA))
 	case subprocess.VerdictBoundaryViolation:
-		return fmt.Sprintf("the attempt committed records under an authority that is not its own: %v", violations)
+		// Shared with the local executor (tick 54n): the refusal names the
+		// role and the permitted destinations, rendered from the boundary's
+		// own single exemption list, so the two collects cannot disagree
+		// about the same tracker-record write.
+		return subprocess.BoundaryRefusal(record.Spec.Role, record.Spec.ArtifactPrefix, violations)
 	case reasonCancelled:
 		return "the attempt was cancelled: its dispatch was revoked and then the agent was interrupted"
 	case reasonSettledNoReport:
@@ -290,8 +294,12 @@ func collectMessage(reason, class string, record *attemptRecord, violations []st
 		// Not the tracker sentence: a committed report artifact is this
 		// executor's own boundary the agent bypassed, and telling a person
 		// "records under an authority that is not its own" sends the
-		// diagnosis looking at the wrong thing (Appendix A #9).
-		return fmt.Sprintf("the attempt committed its own report or artifact into the branch, under the prefix this executor owns: %v", violations)
+		// diagnosis looking at the wrong thing (Appendix A #9). It names the
+		// role and the report's permitted destination, same as the tracker
+		// refusal (tick 54n).
+		return fmt.Sprintf("the %s attempt committed its own report or artifact into the branch, "+
+			"under the prefix this executor owns: %v. The report belongs under %s, not on the branch",
+			record.Spec.Role, violations, record.Spec.ArtifactPrefix)
 	}
 	if class == subprocess.FailureWallClockExceeded {
 		return fmt.Sprintf("it was stopped at its wall clock of %d seconds", record.WallSeconds)

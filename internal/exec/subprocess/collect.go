@@ -288,13 +288,19 @@ const reasonArtifactCommitted = "artifact-committed"
 // is not about the class field, which has six values for many more failures —
 // it is about the MESSAGE a person reads, and "the run broke" is the message
 // that sends a diagnosis looking for the wrong thing.
+//
+// The tracker-record boundary violation is not keyed here: its sentence is
+// BoundaryRefusal (report.go), shared with the herdr executor so the two
+// collects render the same words for the same write — the sentence names the
+// role and the permitted destinations (tick 54n), which is composition, not a
+// stem, and a second copy of it here is exactly how the two executors would
+// drift apart.
 var failureMessages = map[string]string{
-	VerdictNoCommits:         "the attempt branch carries no commit beyond the base it was cut from",
-	VerdictMissingResult:     "there is no report at the path this executor owns, so the attempt never said what it did",
-	VerdictBoundaryViolation: "the attempt committed records under an authority that is not its own",
-	reasonCancelled:          "the attempt was cancelled: its credential was revoked and then it was stopped",
-	reasonArtifactCommitted:  "the attempt committed its own report or artifact into the branch, under the prefix this executor owns",
-	VerdictReadyToMerge:      "",
+	VerdictNoCommits:        "the attempt branch carries no commit beyond the base it was cut from",
+	VerdictMissingResult:    "there is no report at the path this executor owns, so the attempt never said what it did",
+	reasonCancelled:         "the attempt was cancelled: its credential was revoked and then it was stopped",
+	reasonArtifactCommitted: "committed its own report or artifact into the branch, under the prefix this executor owns",
+	VerdictReadyToMerge:     "",
 }
 
 const collapsedMessage = "the attempt failed"
@@ -310,12 +316,20 @@ func (e *Executor) message(reason, class string, record *attemptRecord, violatio
 	}
 	base := failureMessages[reason]
 	switch {
+	case reason == VerdictBoundaryViolation:
+		// The tracker-record refusal names the role and the permitted
+		// destinations (tick 54n): a worker that hit this boundary — or the
+		// person reading the refusal on its behalf — is told where the
+		// output should have gone, in the same words the prompt states the
+		// exemptions in. The sentence is shared with the herdr executor.
+		return BoundaryRefusal(record.Spec.Role, record.Spec.ArtifactPrefix, violations)
 	case base == "":
 		return ""
 	case class == FailureWallClockExceeded:
 		return fmt.Sprintf("%s: it was stopped at its wall clock of %d seconds", base, record.WallSeconds)
-	case reason == VerdictBoundaryViolation, reason == reasonArtifactCommitted:
-		return fmt.Sprintf("%s: %v", base, violations)
+	case reason == reasonArtifactCommitted:
+		return fmt.Sprintf("the %s attempt %s: %v. The report belongs under %s, not on the branch",
+			record.Spec.Role, base, violations, record.Spec.ArtifactPrefix)
 	case reason == VerdictNoCommits:
 		return fmt.Sprintf("%s (%s)", base, short(record.BaseSHA))
 	default:
