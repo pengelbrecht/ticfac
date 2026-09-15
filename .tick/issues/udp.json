@@ -2,6 +2,7 @@
   "id": "udp",
   "title": "ticfac must answer 'is this run alive?' mechanically",
   "description": "A run's liveness is currently undecidable from outside the process. On 2026-09-14 the epic-pwp run died mid-dispatch and the orchestrator did not notice for ~10 minutes because its liveness check was `pgrep -f 'ticfac run-epic'`, which matched the MONITOR'S OWN shell command line (the events invocation contains the same string). The check reported ALIVE while no ticfac binary was running at all.\n\nThis is the sixth stall of the same family: a liveness signal that is satisfied by something other than the thing it claims to observe.\n\nRequired:\n- run-epic writes a pidfile under --state-root containing pid + start time + run id.\n- The run feed carries a periodic heartbeat line so liveness is visible from the durable record, not only from process table.\n- A `ticfac status \u003crun-id\u003e` subcommand reports alive|dead|unknown from the pidfile (verifying pid AND start time, so a recycled pid cannot read as alive) plus last heartbeat age.\n\nAcceptance: a test kills a run process and asserts `ticfac status` flips to dead; a test asserts a recycled pid does not read as alive.",
+  "notes": "2026-09-15 10:48 - FIXED BY HAND in internal/runlife and 'ticfac status'.\n- run.pid under .ticfac/logs/\u003crun-id\u003e/ records the pid AND the OS's own start time ('ps -o lstart='), compared verbatim. A reused pid reads dead.\n- 'ticfac status \u003crun-id\u003e [--json]' exits 0 only while alive, so a watcher is a loop over the exit code: 'while ticfac status \u003crun\u003e \u003e/dev/null; do sleep 15; done'. Nothing to match, so nothing can match itself.\n- A second run-epic for a run with a live driver is refused at the door (ErrAlreadyLive); a stale pidfile from a dead driver does not block the resume.\n- DESIGN CHANGE from this tick's text: no feed heartbeat. A timer goroutine keeps ticking when the main loop is wedged, so it detects nothing a pid+start time does not; progress is the age of the last feed event, which status reports.\nProven on the real binary, not only in unit tests: SIGTERM -\u003e exit 143, not_running, run_died in feed; SIGKILL -\u003e exit 137, DEAD with a pointer to the run log, pidfile left as evidence; resume after SIGKILL not blocked.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "ticfac status \u003crun-id\u003e reports dead within one heartbeat interval of the run process exiting, proven by a test that kills the process; pid recycling does not produce a false alive",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T20:51:31.23401Z",
-  "updated_at": "2026-09-14T20:51:31.23401Z"
+  "updated_at": "2026-09-15T08:48:15.42216Z"
 }

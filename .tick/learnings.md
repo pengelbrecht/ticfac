@@ -48,14 +48,18 @@ shared by every process using that checkout. A watcher running `git fetch` in th
 overwrote it with main's head; `ls-tree` of main has no `.ticfac` tree, so the store's view of its own
 state came back EMPTY, it took the create path instead of update, and the push was refused. Reproduced
 in a scratch repo in four commands. **Rule:** Never resolve a ref through `FETCH_HEAD` or any other
-process-global git state. Fetch into a private per-run ref and read that
-(`git fetch --no-write-fetch-head <remote> +<branch>:refs/ticfac/peek/<run-id>`). This tool tells
-operators to watch a live run; a watcher must not be able to corrupt the thing it watches.
+process-global git state. Fetch into a private per-run ref, read that, and pass BOTH
+`--no-write-fetch-head` and `--refmap=` — fetching from a named remote also rewrites
+`refs/remotes/<remote>/<branch>`, and an operator's `git fetch origin` racing it on that ref's lock
+ended a run on the first fix. A watcher must not be able to corrupt the thing it watches.
 
 **Problem:** The same `FETCH_HEAD` read appears a second time in the tracker publisher, where `sync()`
 MOVES THE WORKTREE to the resolved commit. **Rule:** When a defect comes from a shape rather than a
 line — process-global state, an unbounded retry, a swallowed error — grep for the shape before calling
-it fixed, and leave a guard test that fails on the next occurrence. The crash is the benign symptom;
+it fixed, and leave a guard test that fails on the next occurrence. Then prove the fix with a test
+that REPRODUCES the original failure on the old code: the concurrency test written to confirm the
+FETCH_HEAD fix is what found the second shared ref, and it only reproduced once it matched
+production (checkout on main, a second writer moving the ref). The crash is the benign symptom;
 the same read one layer over lands writes on the wrong base.
 
 **Problem:** A hand-rolled watcher ran for eleven minutes and delivered nothing, because it was piped

@@ -2,6 +2,7 @@
   "id": "ix9",
   "title": "run-epic must write its own durable run log",
   "description": "When the epic-pwp run died mid-dispatch on 2026-09-14 there was no record of WHY. The process had been launched in the background with no stdout/stderr capture, so its last words went nowhere. The run feed showed tier_derived for gms and then silence; the attempt record for attempt 7 was written with a full job_handle (herdr had answered), but no workspace and no write ref were ever created. The cause of death is still unknown and now unrecoverable.\n\nA run that can die must leave a body. run-epic should write its own log under --state-root (rotating, one file per run id) carrying stderr and any panic, independent of how the operator redirected the process. An operator launching a run should not have to remember to capture output for the run to be diagnosable.\n\nAcceptance: a test that panics a run asserts the panic text is present in the run's own log file under the state root.",
+  "notes": "2026-09-15 10:48 - FIXED BY HAND. run-epic tees its stdout and stderr into .ticfac/logs/\u003crun-id\u003e/run.log from the moment it claims the run, stamps a start line and an end line with the outcome, and on a panic writes the value and the stack before exiting 2. Every observable death also writes a run_died line to the feed, so a feed never just stops on an ordinary success. DESIGN CHANGE: the log lives beside the feed rather than under --state-root, because .ticfac/logs is already gitignored exhaust and already where 'ticfac events' looks; one place to look beats two. Every error path through Run was checked to confirm run_died is never a second terminal line: each path that records run_finished returns without an error.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "run-epic writes stderr and any panic to a log under --state-root regardless of process redirection; a test asserts a panicking run leaves its panic text in that file",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T20:51:44.470726Z",
-  "updated_at": "2026-09-14T20:51:44.470726Z"
+  "updated_at": "2026-09-15T08:48:15.48342Z"
 }
