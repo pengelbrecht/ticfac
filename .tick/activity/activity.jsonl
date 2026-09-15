@@ -462,3 +462,6 @@
 {"ts":"2026-09-15T08:57:34.651612Z","tick":"h0f","action":"block","actor":"claude:orchestrator","epic":"9pd","data":{"blockers":["0z0","55i","0iz","48q","4ys","54n","cwa","e08","glb","her","nvn","w1c"],"title":"Final review of the Phase 3 diff"}}
 {"ts":"2026-09-15T09:54:29.046511Z","tick":"pbb","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"A wall-clock stop throws away the attempt's uncommitted work","type":"task"}}
 {"ts":"2026-09-15T09:54:29.102045Z","tick":"7zs","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"An attempt that is alive but making no progress is invisible until the wall clock","type":"task"}}
+{"ts":"2026-09-15T11:03:30.203221Z","tick":"usx","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"ticfac watch still replays an earlier incarnation's terminal line","type":"task"}}
+{"ts":"2026-09-15T11:03:30.366796Z","tick":"bzx","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"run-epic says nothing on stdout while it runs","type":"task"}}
+{"ts":"2026-09-15T11:03:30.530123Z","tick":"fxd","action":"create","actor":"claude:orchestrator","data":{"priority":3,"title":"Decide whether feed events carry a run-incarnation id","type":"task"}}

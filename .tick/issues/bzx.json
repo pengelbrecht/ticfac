@@ -1,0 +1,14 @@
+{
+  "id": "bzx",
+  "title": "run-epic says nothing on stdout while it runs",
+  "description": "Found by tick 55i (run epic-9pd, attempt 2). A redirected run-epic output is empty until the run ends, so it is no monitoring signal. run.log and ticfac status (ticks udp, ix9) now cover most of the need; what remains is cheap: one line at startup naming the run id and the two commands that follow it (ticfac status \u003crun-id\u003e, ticfac events \u003crun-id\u003e --follow), and optionally one line per stage.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "run-epic prints the run id and the status and events commands for it before dispatching anything; a test asserts the line",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T11:03:30.36635Z",
+  "updated_at": "2026-09-15T11:03:30.36635Z"
+}
