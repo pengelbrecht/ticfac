@@ -3,6 +3,7 @@ package herdr
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -280,5 +281,57 @@ func TestCollectReportsABoundaryViolation(t *testing.T) {
 	}
 	if len(collected.BoundaryViolations) != 1 {
 		t.Errorf("boundary violations = %v, want the one tracker record", collected.BoundaryViolations)
+	}
+}
+
+// TestTheReportSurvivesTheWorktree is tick 35h for the herdr executor.
+//
+// The report is untracked and excluded from the branch, so the only copy was
+// the worktree's. Dispose archived it, but only to unblock a removal and only
+// for attempts that were disposed, and nothing read the archive back. The pwp
+// close-out attempts were rejected and superseded rather than disposed, and
+// their reports died with their worktrees.
+func TestTheReportSurvivesTheWorktree(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.doWork(t, handle, "STATUS: DONE")
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ref subprocess.ArtifactRef
+	for _, a := range first.Result.Artifacts {
+		if a.Kind == "report" {
+			ref = a
+		}
+	}
+	if ref.URI == "" {
+		t.Fatalf("the result carries no report artifact: %+v", first.Result.Artifacts)
+	}
+	if strings.HasPrefix(strings.TrimPrefix(ref.URI, "file://"), local.Worktree) {
+		t.Fatalf("the report artifact points INTO the worktree (%s): it dangles the moment teardown runs", ref.URI)
+	}
+
+	mustRun(t, h.repo.Dir, "git", "worktree", "remove", "--force", local.Worktree)
+
+	again, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.HasReport || again.Report.Status != "DONE" {
+		t.Fatalf("after teardown: has=%t status=%q — the attempt's analysis was lost with its worktree",
+			again.HasReport, again.Report.Status)
+	}
+	if again.Report.Path != local.ResultRel {
+		t.Errorf("report.Path = %q, want the repository-relative %q: an absolute host path must not ride into a record",
+			again.Report.Path, local.ResultRel)
 	}
 }

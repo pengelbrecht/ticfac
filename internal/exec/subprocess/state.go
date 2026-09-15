@@ -36,6 +36,11 @@ const (
 	fileLastPush      = "last_push"
 	filePrompt        = "prompt.md"
 	fileResult        = "result.json"
+	// fileReportArchive is the attempt's report, copied out of the worktree at
+	// collect. The worktree is removed at teardown and the report is excluded
+	// from the branch by design, so without this copy the analysis an attempt
+	// produced survives nowhere once it is disposed or superseded (tick 35h).
+	fileReportArchive = "report.md"
 	dirWorktree       = "worktree"
 )
 

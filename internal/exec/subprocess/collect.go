@@ -366,13 +366,8 @@ func stringsOrEmpty(values []string) []string {
 func (e *Executor) artifacts(st *store, record *attemptRecord, hasReport bool, report Report) []ArtifactRef {
 	out := []ArtifactRef{}
 	if hasReport {
-		if raw, err := os.ReadFile(record.ResultPath); err == nil {
-			out = append(out, ArtifactRef{
-				Kind:          "report",
-				URI:           "file://" + record.ResultPath,
-				ContentDigest: digestOf(raw),
-				Bytes:         len(raw),
-			})
+		if ref, ok := archiveReport(st, record); ok {
+			out = append(out, ref)
 		}
 	}
 	if raw, err := os.ReadFile(st.path(fileRunnerLog)); err == nil {
@@ -384,6 +379,38 @@ func (e *Executor) artifacts(st *store, record *attemptRecord, hasReport bool, r
 		})
 	}
 	return out
+}
+
+// archiveReport copies the attempt's report out of its worktree into the
+// attempt's state directory and returns the artifact reference to the COPY.
+//
+// The reference used to point into the worktree, so the result record carried a
+// digest and a file:// link to a file that teardown deletes. During the ticks
+// pwp run that lost five close-out reports and a 183-line review; each retry
+// started blind and re-derived what its predecessor had already found. The
+// structured role_result survived and the prose — where the reasoning is — did
+// not (tick 35h).
+//
+// A copy that cannot be written is an operational problem, not a verdict: the
+// reference falls back to the worktree path, where the report still is, and the
+// failure is observed rather than swallowed.
+func archiveReport(st *store, record *attemptRecord) (ArtifactRef, bool) {
+	archive := st.path(fileReportArchive)
+	raw, err := os.ReadFile(record.ResultPath)
+	if err != nil {
+		// Already torn down: the archive is the report.
+		if kept, keptErr := os.ReadFile(archive); keptErr == nil {
+			return ArtifactRef{Kind: "report", URI: "file://" + archive, ContentDigest: digestOf(kept), Bytes: len(kept)}, true
+		}
+		return ArtifactRef{}, false
+	}
+	uri := "file://" + archive
+	if err := st.writeFile(archive, raw, 0o644); err != nil {
+		uri = "file://" + record.ResultPath
+		_ = st.observe(Observation{At: time.Now().UTC().Format(time.RFC3339), Kind: ObsExited,
+			Detail: "the report could not be archived beside the attempt record, so it will not survive teardown: " + err.Error()})
+	}
+	return ArtifactRef{Kind: "report", URI: uri, ContentDigest: digestOf(raw), Bytes: len(raw)}, true
 }
 
 func digestOf(raw []byte) string {

@@ -128,7 +128,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			HeadSHA:  headOrNil(head, commits),
 			Commits:  commits,
 		},
-		Artifacts: e.artifacts(record, hasReport, report),
+		Artifacts: e.artifacts(st, record, hasReport, report),
 		Evidence:  []subprocess.EvidenceRef{},
 	}
 	if hasReport && report.Status != "" {
@@ -326,18 +326,14 @@ func violationsOrEmpty(values []string) []string {
 	return values
 }
 
-// artifacts are the report and the rendered worker prompt — the record of
-// what the agent was actually asked to do, which survives the worktree.
-func (e *Executor) artifacts(record *attemptRecord, hasReport bool, report subprocess.Report) []subprocess.ArtifactRef {
+// artifacts are the report and the rendered worker prompt — the record of what
+// the agent was asked and what it answered, BOTH kept in the attempt's state
+// directory so they survive the worktree.
+func (e *Executor) artifacts(st *store, record *attemptRecord, hasReport bool, report subprocess.Report) []subprocess.ArtifactRef {
 	out := []subprocess.ArtifactRef{}
 	if hasReport {
-		if raw, err := os.ReadFile(record.ResultPath); err == nil {
-			out = append(out, subprocess.ArtifactRef{
-				Kind:          "report",
-				URI:           "file://" + record.ResultPath,
-				ContentDigest: digestOf(raw),
-				Bytes:         len(raw),
-			})
+		if ref, ok := e.archiveReport(st, record); ok {
+			out = append(out, ref)
 		}
 	}
 	if raw, err := os.ReadFile(record.State + "/" + filePrompt); err == nil {
@@ -349,6 +345,37 @@ func (e *Executor) artifacts(record *attemptRecord, hasReport bool, report subpr
 		})
 	}
 	return out
+}
+
+// archiveReport copies the attempt's report out of its worktree into the
+// attempt's state directory, and returns the artifact reference to the COPY.
+//
+// This comment used to say the report "survives the worktree". Only the prompt
+// did: the report's reference pointed INTO the worktree, and dispose archived
+// it only as a side step to unblock removal — and only for attempts that were
+// disposed at all. The pwp close-out attempts were rejected and superseded,
+// never disposed, and five of their reports plus a 183-line review were lost
+// with their worktrees, so each retry started blind (tick 35h).
+//
+// A copy that cannot be written is an operational problem, not a verdict: the
+// reference falls back to the worktree path, where the report still is, and the
+// failure is observed rather than swallowed.
+func (e *Executor) archiveReport(st *store, record *attemptRecord) (subprocess.ArtifactRef, bool) {
+	archive := st.path(fileReportArchive)
+	raw, err := os.ReadFile(record.ResultPath)
+	if err != nil {
+		if kept, keptErr := os.ReadFile(archive); keptErr == nil {
+			return subprocess.ArtifactRef{Kind: "report", URI: "file://" + archive, ContentDigest: digestOf(kept), Bytes: len(kept)}, true
+		}
+		return subprocess.ArtifactRef{}, false
+	}
+	uri := "file://" + archive
+	if err := st.writeFile(archive, raw, 0o644); err != nil {
+		uri = "file://" + record.ResultPath
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+			Detail: "the report could not be archived beside the attempt record, so it will not survive teardown: " + err.Error()})
+	}
+	return subprocess.ArtifactRef{Kind: "report", URI: uri, ContentDigest: digestOf(raw), Bytes: len(raw)}, true
 }
 
 func digestOf(raw []byte) string {

@@ -3,6 +3,7 @@ package subprocess
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // inspect: pid liveness, worktree state, commits beyond the recorded base, and
@@ -177,6 +178,15 @@ func (e *Executor) readReport(record *attemptRecord) (Report, bool) {
 		report := ParseReport(string(raw))
 		report.Path = record.ResultRel
 		return report, true
+	}
+	// The worktree copy is gone once the attempt is torn down; collect
+	// archived it beside the attempt record first (tick 35h).
+	if record.State != "" {
+		if raw, err := os.ReadFile(filepath.Join(record.State, fileReportArchive)); err == nil {
+			report := ParseReport(string(raw))
+			report.Path = record.ResultRel
+			return report, true
+		}
 	}
 	head := headOf(record.Repo, record.Branch)
 	if head == "" {

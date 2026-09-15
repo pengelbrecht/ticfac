@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
@@ -286,6 +287,17 @@ func (e *Executor) readReport(record *attemptRecord) (subprocess.Report, bool) {
 		report := subprocess.ParseReport(string(raw))
 		report.Path = record.ResultRel
 		return report, true
+	}
+	// The worktree copy is gone once the attempt is torn down. Collect archives
+	// it beside the attempt record, and so does dispose — but nothing read the
+	// archive back, so a report dispose had saved was still unreadable to any
+	// later collect (tick 35h).
+	if record.State != "" {
+		if raw, err := os.ReadFile(filepath.Join(record.State, fileReportArchive)); err == nil {
+			report := subprocess.ParseReport(string(raw))
+			report.Path = record.ResultRel
+			return report, true
+		}
 	}
 	head := headOf(record.Repo, record.Branch)
 	if head == "" {
