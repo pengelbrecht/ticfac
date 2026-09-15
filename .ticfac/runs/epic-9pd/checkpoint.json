@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 28,
-  "state": "publishing",
-  "reason": "closing 48q behind the integrated gate on 70cd78792e3b",
-  "updated_at": "2026-09-15T12:34:13Z",
+  "sequence": 29,
+  "state": "running",
+  "reason": "48q is closed",
+  "updated_at": "2026-09-15T12:34:32Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "48q",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 4
     },
     {
