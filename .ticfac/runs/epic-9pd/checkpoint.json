@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 18,
-  "state": "collecting",
-  "reason": "collecting 0iz attempt 3",
-  "updated_at": "2026-09-15T12:06:19Z",
+  "sequence": 19,
+  "state": "integrating",
+  "reason": "integrating 0iz attempt 3 into epic/9pd",
+  "updated_at": "2026-09-15T12:06:43Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "0iz",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 3
     },
     {
