@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 13,
-  "state": "gating",
-  "reason": "running the integrated gate for 55i on d167ff38bc80",
-  "updated_at": "2026-09-15T11:02:50Z",
+  "sequence": 14,
+  "state": "publishing",
+  "reason": "closing 55i behind the integrated gate on d167ff38bc80",
+  "updated_at": "2026-09-15T11:13:52Z",
   "ticks": [
     {
       "tick_id": "0z0",
