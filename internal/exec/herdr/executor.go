@@ -311,13 +311,21 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	ctx := context.Background()
 
 	// The worktree AND the workspace come from herdr in one call; the
-	// returned root pane is where the agent goes.
+	// returned root pane is where the agent goes. The workspace LABEL
+	// identifies the ATTEMPT and not just the tick (ticfac tick 55i): the
+	// branch, the worktree path, the state directory and the agent's own
+	// name are all attempt-scoped, and a label of the bare tick id put two
+	// attempts of one tick into an operator's list under one name — the
+	// one an operator would reasonably close being the one holding the only
+	// copy of the work. The label follows the agent's own name convention
+	// ("tick-<id>-a<n>"), so the workspace and the agent in it read as one
+	// attempt.
 	info := e.client.ServerInfo()
 	created, err := e.client.WorktreeCreate(ctx, client.WorktreeCreateParams{
 		Cwd:    client.Ptr(e.repo),
 		Branch: client.Ptr(branch),
 		Base:   client.Ptr(base),
-		Label:  client.Ptr(tickOf(spec)),
+		Label:  client.Ptr(agentName(tickOf(spec), attempt)),
 		Focus:  false,
 	})
 	if err != nil {

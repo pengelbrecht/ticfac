@@ -125,6 +125,18 @@ func (f *Feed) Append(e Event) error {
 // Path is where this feed lives.
 func (f *Feed) Path() string { return f.path }
 
+// End is the feed's standing size in bytes: the cursor a subscriber that
+// wants only what lands from NOW starts from. A feed that does not exist
+// yet is the run-has-not-written case, and its cursor is zero — everything
+// the run will write is still to come (ticfac tick 55i).
+func End(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 // Read returns every event in the feed, in the order it landed. A line that
 // is not a closed `ticfac.run_event.v1` object is refused rather than
 // skipped: a feed a reader silently forgives is a feed whose drift nobody
@@ -170,8 +182,28 @@ const followTick = 25 * time.Millisecond
 // guessed. What it yields are hints, never verdicts: a subscriber that learns
 // a run is finished from a line has skipped the one step that is never the
 // feed's to take — looking at the evidence.
+//
+// Replaying the standing feed is a subscriber's CHOICE, and not always the
+// right one: the feed is append-only per RUN ID, so a resumed run appends to
+// a file an earlier, failed incarnation already ended with a terminal line,
+// and a follower from offset zero replays that line first (ticfac tick 55i).
+// A subscriber that wants only what the current incarnation writes starts
+// at [End] instead — [FollowFrom] carries the cursor.
 func Follow(ctx context.Context, path string, fn func(Event)) error {
-	var offset int64
+	return FollowFrom(ctx, path, 0, fn)
+}
+
+// FollowFrom is [Follow] starting at a byte cursor: zero replays every
+// standing line first (the contract's "follow the file from offset zero"),
+// [End] subscribes from now, and a cursor a previous session remembered
+// resumes without missing or replaying anything. The reader never names an
+// interval and never decides anything on one — the subscriber's cadence is
+// its own, and the cursor is the subscriber's, not the feed's.
+func FollowFrom(ctx context.Context, path string, cursor int64, fn func(Event)) error {
+	var offset int64 = cursor
+	if offset < 0 {
+		offset = 0
+	}
 	pending := []byte{}
 	for {
 		if err := ctx.Err(); err != nil {

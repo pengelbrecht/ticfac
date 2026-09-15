@@ -20,17 +20,27 @@ import (
 // interval or polling the durable records.
 //
 // `ticfac events <run-id>` prints the feed as it stands; `--follow` opens it
-// once and streams each event as it lands, which is the subscription. The
-// feed is append-only and carries run/tick/attempt identity on every line,
-// and the one rule this command must not bury in its help text: a line means
-// WORTH LOOKING NOW, never "the work is finished". The verdict stays with
+// once and streams each event as it lands, FROM NOW — the standing feed is
+// what the command without --follow prints, and replaying it under --follow
+// would replay the terminal events of earlier incarnations of the same run
+// id: the feed is append-only per RUN ID, so a resumed run appends to a file
+// a previous, failed run already ended, and a follower that starts at offset
+// zero sees that run_finished FIRST and stops on it, reporting a failure that
+// already happened and is no longer true (ticfac tick 55i). `--from-start`
+// opts back into the replay deliberately.
+//
+// The feed is append-only and carries run/tick/attempt identity on every
+// line, and the one rule this command must not bury in its help text: a line
+// means WORTH LOOKING NOW, never "the work is finished". The verdict stays with
 // the evidence on the integration branch; a subscriber that reads
 // run_finished goes and looks.
 func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("events", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
-	follow := fs.Bool("follow", false, "keep the stream open: each event as it lands, until Ctrl-C")
+	follow := fs.Bool("follow", false, "keep the stream open: each event as it lands, from now, until Ctrl-C")
+	fromStart := fs.Bool("from-start", false, "with --follow, replay the standing feed first — including the terminal "+
+		"events of earlier incarnations of this run id")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -59,10 +69,10 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	}
 
 	// Without --follow, the feed as it stands is the answer: print it and
-	// stop. With --follow, Follow does the whole job — the standing lines from
-	// offset zero and then each line as it lands — so they are not printed
-	// twice, and a feed that does not exist yet is a run that has not written,
-	// which is what following waits for.
+	// stop. With --follow, the subscription starts at the cursor below and
+	// prints each line ONCE — the standing feed is not printed first, because
+	// this command without --follow is how a subscriber that wants history
+	// gets it.
 	if !*follow {
 		events, err := runfeed.Read(path)
 		if err != nil {
@@ -79,10 +89,29 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return 0
 	}
 
-	// The subscription. Errors end the stream rather than being swallowed: a
-	// follower that quietly kept going after the feed became unreadable would
-	// be one more watcher that reports nothing and looks alive.
-	if err := runfeed.Follow(ctx, path, print); err != nil {
+	// The subscription, from NOW: the cursor is the feed's standing size, so
+	// the follower is shown only what the current incarnation of the run
+	// writes from here on — a resumed run appends to the same file an earlier
+	// one already ended, and replaying that ending is the defect --from-start
+	// exists to name (ticfac tick 55i). A feed that does not exist yet is the
+	// run-has-not-written case: its cursor is zero, everything is still to
+	// come. Errors end the stream rather than being swallowed: a follower that
+	// quietly kept going after the feed became unreadable would be one more
+	// watcher that reports nothing and looks alive.
+	cursor := int64(0)
+	if !*fromStart {
+		size, err := runfeed.End(path)
+		switch {
+		case errors.Is(err, iofs.ErrNotExist):
+			cursor = 0
+		case err != nil:
+			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+			return 1
+		default:
+			cursor = size
+		}
+	}
+	if err := runfeed.FollowFrom(ctx, path, cursor, print); err != nil {
 		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 		return 1
 	}

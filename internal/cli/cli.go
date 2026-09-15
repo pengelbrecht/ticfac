@@ -109,8 +109,10 @@ restart holds it rather than starting a second job over the same identity
 (Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
 the executor can still address, records the release durably as a decision
 naming who made it, and the next run dispatches a NEW attempt instead of
-adopting the released one. Whatever the released attempt committed stays on its
-own write ref.
+adopting the released one. Whatever the released attempt committed stays on
+its own write ref — and the release says where that ref lives: on the remote,
+or only as a local branch in the checkout that holds it when the push never
+landed there.
 
 It releases one other attempt: one this run REJECTED while it was holding
 commits nothing merged. No run collects that attempt again (the teardown the
@@ -525,10 +527,29 @@ func settle(args []string, stdout, stderr io.Writer) int {
 			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
 		return 0
 	}
-	fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
-		"The next run dispatches a new attempt; whatever this one committed stays on its own write ref — \n"+
-		"add --carry-work to have said otherwise.\n",
-		settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+	// Where the released work can be found, said plainly (ticfac tick 55i):
+	// "stays on its own write ref" is only true when the ref reached the
+	// remote, and a release that did not say which sent a person hunting for
+	// work that was one worktree removal away from gone.
+	switch {
+	case settled.WorkSHA == "":
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt; this one left no commit beyond its base anywhere \u2014 \n"+
+			"add --carry-work to have said otherwise.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+	case settled.WorkDurable:
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt; whatever this one committed is durable at %s on the remote \u2014 \n"+
+			"add --carry-work to have the next attempt start from it instead.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
+	default:
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt. Whatever this one committed is NOT on the remote: the commits \n"+
+			"are only the LOCAL branch %s in the checkout at %s — the worktree is gone and the teardown kept the \n"+
+			"branch, so that checkout is the only place they exist.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
+			settled.WorkRef, settled.WorkIn)
+	}
 	return 0
 }
 
