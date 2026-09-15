@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 27,
-  "state": "gating",
-  "reason": "running the integrated gate for 48q on 70cd78792e3b",
-  "updated_at": "2026-09-15T12:28:26Z",
+  "sequence": 28,
+  "state": "publishing",
+  "reason": "closing 48q behind the integrated gate on 70cd78792e3b",
+  "updated_at": "2026-09-15T12:34:13Z",
   "ticks": [
     {
       "tick_id": "0z0",
