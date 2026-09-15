@@ -1,0 +1,14 @@
+{
+  "id": "cwa",
+  "title": "The integrated gate cannot see a CI workflow that names a deleted package",
+  "description": "From the ticks pwp run, 2026-09-15.\n\n.github/workflows/ci.yml named ./internal/herd/collect/..., a package the epic deleted. The go job failed on every push and pull_request, so the epic's PR could never go green and the close-out rule that requires green CI was unsatisfiable. FIVE integrated gates passed over it.\n\nWhy the gate is blind to this: the gate runs the commands in [evidence.commands]/[testing.commands], which for this repo is 'go test -short ./...'. That pattern compiles only what EXISTS, so a stale path in a workflow file is not expressible as a failure. The workflow's own named-package step is never re-run by the gate, and nothing else reads the workflow at all.\n\nThe general shape: the gate proves the TREE is good, and says nothing about whether the repo's own CI configuration still describes that tree. Any config naming paths — a workflow, a codeowners file, a lint include list, a release manifest — can rot invisibly behind a green gate.\n\nOptions to weigh (do not assume the first):\n- Have the gate parse workflow files for package patterns and assert each resolves. Cheap, catches this exact class, no new dependency.\n- Have the gate run the repo's workflow steps directly (act, or a parsed runner). Expensive and duplicates CI.\n- Declare it out of scope and require the close-out to check CI status on the PR instead, which makes it a human gate rather than a mechanical one.\n\nWhichever is chosen, record why the others were rejected.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "A workflow file naming a path that does not exist in the tree fails the integrated gate, proven by a test that adds such a path and asserts the gate refuses; or the decision not to cover it is recorded with its consequence and the close-out check that replaces it",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T02:32:44.804088Z",
+  "updated_at": "2026-09-15T02:32:44.804088Z"
+}
