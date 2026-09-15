@@ -208,3 +208,101 @@ tree = { command = %q, description = "counts every time it actually ran" }
 			"the restart re-ran a check whose evidence it already had", len(ran), gateRuns)
 	}
 }
+
+// The close-to-checkpoint window (tick 48q): a run publishes a tick's close
+// through the tracker and only afterwards writes the checkpoint row that says
+// the tick is closed. A process that dies between the two leaves the two
+// authorities disagreeing — the tracker says closed, the checkpoint row still
+// says integrated — and the resumed run's plan DROPS the tick (planFrom skips
+// whatever the tracker has closed), so the "already closed" settlement in
+// processTick never runs for it and nothing ever writes the row: a tick stuck
+// at integrated is a tick a future resume may try to finish again.
+//
+// The cut is exactly in the window: the killed incarnation is stopped after
+// the StageClosed record — which the tracker's published close precedes and
+// the row-writing checkpoint follows — so the tracker already says closed and
+// the last durable checkpoint is the one at the head of closeTick, whose row
+// reads integrated.
+func TestARestartSettlesTheCheckpointRowOfACloseTheDeadIncarnationPublished(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+
+	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageClosed)})
+	killedAfter(t, err, "a1", StageClosed)
+
+	// The tracker is the authority on closure, and at the cut it already says
+	// closed: the close is published, so the window is entered.
+	current, err := f.Tracker.Show(context.Background(), "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Fatalf("the cut is not in the window: a1 is %s in the tracker, so the close was never published",
+			current.Status)
+	}
+
+	// And the checkpoint row does not know: the two authorities disagree at
+	// the cut, which is what makes this a window a crash can land in rather
+	// than a defect in only one of them.
+	if row := tickRowOf(t, openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture"), "a1"); row != "integrated" {
+		t.Fatalf("the cut is not in the window: the checkpoint row for a1 reads %q, want integrated",
+			row)
+	}
+
+	// A fresh clone: everything the next incarnation knows, it reads from
+	// origin.
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	restarted, result, err := f.run(clone, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the restart did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the restart ended %s: %s", result.State, result.Reason)
+	}
+
+	// The row is settled from the tracker's own answer — the same compare-
+	// and-swap processTick runs for a tick the plan still carries, applied to
+	// the tick the plan dropped because it was already closed.
+	store := openRunStore(t, clone.Dir, restarted.IntegrationBranch(), restarted.RunID())
+	if row := tickRowOf(t, store, "a1"); row != "closed" {
+		t.Errorf("the checkpoint row for a1 reads %q after the restart; a tick the tracker closed must "+
+			"read closed in the checkpoint a future resume decides from", row)
+	}
+	if !contains(result.Closed, "a1") {
+		t.Errorf("the restart's result does not count a1 closed: %v", result.Closed)
+	}
+
+	// The settlement is idempotent: nothing was closed twice, and the restart
+	// never touched the dead incarnation's attempt.
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Errorf("a1 was closed %d times across the two incarnations", got)
+	}
+	attempts, err := store.Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	forA1 := 0
+	for _, attempt := range attempts {
+		if attempt.TickID == "a1" {
+			forA1++
+		}
+	}
+	if forA1 != 1 {
+		t.Errorf("%d dispatch markers for a1; the restart dispatched the closed tick again", forA1)
+	}
+}
+
+// tickRowOf is one tick's state as the checkpoint on origin has it.
+func tickRowOf(t *testing.T, store *runstate.Store, tick string) string {
+	t.Helper()
+	checkpoint, ok, err := store.Checkpoint()
+	if err != nil || !ok {
+		t.Fatalf("no checkpoint on origin: %v", err)
+	}
+	for _, ts := range checkpoint.Ticks {
+		if ts.TickID == tick {
+			return ts.State
+		}
+	}
+	return ""
+}
