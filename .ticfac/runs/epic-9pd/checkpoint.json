@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 24,
-  "state": "running",
-  "reason": "48q is running as attempt 4",
-  "updated_at": "2026-09-15T12:13:49Z",
+  "sequence": 25,
+  "state": "collecting",
+  "reason": "collecting 48q attempt 4",
+  "updated_at": "2026-09-15T12:28:12Z",
   "ticks": [
     {
       "tick_id": "0z0",
