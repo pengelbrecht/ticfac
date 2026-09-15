@@ -10,8 +10,10 @@
   "target": "golang/go",
   "tick_id": "0z0",
   "attempt": 1,
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-15T09:54:03Z",
+  "triaged_at": "2026-09-15T09:55:00Z",
+  "triaged_by": "claude:orchestrator",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "0z0",
