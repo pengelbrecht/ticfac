@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 40,
-  "state": "integrating",
-  "reason": "integrating 54n attempt 6 into epic/9pd",
-  "updated_at": "2026-09-15T13:16:48Z",
+  "sequence": 41,
+  "state": "gating",
+  "reason": "running the integrated gate for 54n on 7e6bf3b36a63",
+  "updated_at": "2026-09-15T13:17:04Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "54n",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 6
     },
     {
