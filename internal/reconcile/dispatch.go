@@ -534,7 +534,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			r.record(tick, StageCarried,
 				"attempt %d starts from the work attempt %d left on %s (released by %s): the next worker "+
 					"continues that work rather than redoing it, and the gate still decides what merges",
-					number, marker.ResumedFrom.Attempt, branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+				number, marker.ResumedFrom.Attempt, branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
 		}
 
 		handle, err := executor.Start(r.jobSpec(dispatch))
@@ -773,6 +773,38 @@ func (r *Reconciler) tickState(tickID string) string {
 		}
 	}
 	return ""
+}
+
+// preserveAttemptWork puts the attempt's local branch on origin, when that
+// branch carries a commit beyond the base it was cut from and origin does
+// not already have it at that head.
+//
+// It is the durability half of every verdict the collect records: the push
+// happens before the rejection is recorded, so "rejected" on origin always
+// means the work the rejection was about is ALSO on origin — and a
+// ready-to-merge attempt has simply had integrate's own push done for it
+// early (durableAttemptHead then finds origin already at the collected head
+// and merges it). The push is a fast-forward onto the attempt's OWN ref, a
+// namespace no other attempt writes; a failure is not the verdict's to
+// inherit — the verdict still happens, and the honesty about where the work
+// then lives is said out loud, because a worktree the teardown removes is
+// not a place a person can be sent to look.
+func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
+	head := r.attemptWorkHead(marker)
+	if head == "" {
+		return
+	}
+	branch := branchOf(marker.WriteRef)
+	if remote, err := r.git.remoteHead(branch); err == nil && remote == head {
+		return
+	}
+	if _, stderr, err := r.git.try("", "push", r.opts.Remote, head+":"+refFor(branch)); err != nil {
+		r.record(marker.TickID, StageCollected,
+			"%s carries %s which could not be put on %s (%s): whatever this attempt left is only on the "+
+				"local branch in this checkout, which the teardown keeps — but origin does not have it",
+			branch, short(head), r.opts.Remote, firstLine(stderr))
+		return
+	}
 }
 
 // rejectDurably records that an attempt was rejected, ON ORIGIN, before the
@@ -1291,6 +1323,18 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	r.setTick(marker.TickID, "reported")
 	r.record(marker.TickID, StageCollected, "verdict %s (%s)", collected.Verdict, collected.Result.Outcome)
 
+	// The work this collect is about to rule on is made durable on origin
+	// BEFORE any verdict is recorded over it (ticfac tick 55i). The only
+	// other push lives in integrate's durableAttemptHead, so an attempt that
+	// is refused HERE never reaches it — and an attempt whose commits exist
+	// only in its worktree is one `git worktree remove --force` away from
+	// gone, which is exactly what the teardown that follows a rejection
+	// does. Making the write ref durable first is what keeps settle's
+	// promise — "whatever this one committed stays on its own write ref" —
+	// true for the attempt whose work is most at risk: the one nothing
+	// merged.
+	r.preserveAttemptWork(marker)
+
 	// Appendix A #10's premise is that compliance is not a property of the
 	// model, and a boundary measured from a base the enforced party can choose
 	// is not a boundary. The executor reads the base out of the attempt record
@@ -1557,6 +1601,23 @@ func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, m
 		return
 	}
 	if keepBranch {
+		// The branch is kept for the commits on it, and the record says WHERE
+		// those commits are (ticfac tick 55i): on the remote, or — when the
+		// push never landed — only in this checkout, said plainly, because
+		// the worktree this teardown removes is not a place a person can be
+		// sent to look and a branch nobody can place is work nobody can find.
+		branch := branchOf(marker.WriteRef)
+		if local := r.attemptWorkHead(marker); local != "" {
+			if remote, err := r.git.remoteHead(branch); err == nil && remote == local {
+				r.record(marker.TickID, StageCleanedUp,
+					"%s; the worktree is gone and the branch is kept, its commits durable on %s", reason, r.opts.Remote)
+				return
+			}
+			r.record(marker.TickID, StageCleanedUp,
+				"%s; the worktree is gone and the branch is kept — its commits are only on the local branch %s in "+
+					"this checkout, NOT on %s", reason, branch, r.opts.Remote)
+			return
+		}
 		r.record(marker.TickID, StageCleanedUp, "%s; the worktree is gone and the branch is kept for the commits on it", reason)
 		return
 	}

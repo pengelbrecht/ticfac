@@ -295,14 +295,19 @@ func tickOfFacts(branch, path, label string) (tick, evidence string) {
 	if id := tickFromSegments(path); id != "" {
 		return id, "its worktree path " + path
 	}
-	// The label: ticks' own herd machinery labelled workspaces "tick-<id>",
-	// and this executor's Start passes the bare tick id. A bare label is
-	// the weakest evidence — any word could sit in it — so it is passed to
-	// the caller's own authority on tick ids rather than trusted here.
+	// The label: this executor labels a workspace "tick-<id>-a<attempt>" —
+	// the attempt-scoped shape ticfac tick 55i gave the label, matching the
+	// agent's own name — and ticks' own herd machinery labelled workspaces
+	// "tick-<id>". Either way the label names the TICK; the attempt suffix
+	// is this executor's own discriminator and is stripped here, so the
+	// weakest evidence still reports a tick and never an attempt-suffixed
+	// string nothing calls a tick id. A bare label remains what it always
+	// was — any word could sit in it — so it is passed to the caller's own
+	// authority on tick ids rather than trusted here.
 	if label == "" {
 		return "", ""
 	}
-	if id := tickFromSegments(label); id != "" {
+	if id := tickFromSegments(stripAttemptSuffix(label)); id != "" {
 		return id, "its label " + label
 	}
 	return label, "its label " + label
@@ -317,6 +322,29 @@ func tickFromSegments(value string) string {
 		}
 	}
 	return ""
+}
+
+// stripAttemptSuffix removes the "-a<attempt>" discriminator this executor
+// puts on workspace labels (the "tick-<id>-a<n>" of agentName), so a label
+// read as evidence names the tick it is about. Tick ids can contain dashes
+// themselves, but the discriminator is always the FINAL "-a<digits>".
+func stripAttemptSuffix(label string) string {
+	if i := strings.LastIndex(label, "-a"); i > 0 && isDigits(label[i+2:]) {
+		return label[:i]
+	}
+	return label
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ------------------------------------------------------- the authorisation ---

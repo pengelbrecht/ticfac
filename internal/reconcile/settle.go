@@ -94,6 +94,19 @@ type Settlement struct {
 	// released — what the person is settling, in the executor's vocabulary.
 	State string
 
+	// WorkRef, WorkSHA, WorkDurable and WorkIn say WHERE the released
+	// attempt's commits can be found (ticfac tick 55i): "stays on its own
+	// write ref" was only ever true when the ref had reached the remote, and
+	// a settlement that did not say which was a promise a person could not
+	// act on. WorkRef is the write ref, WorkSHA its head; WorkDurable says
+	// the remote carries that head; when it does not, WorkIn names the
+	// CHECKOUT that holds the local branch — the worktree is already gone.
+	// All four are zero when the attempt left no work at all.
+	WorkRef     string
+	WorkSHA     string
+	WorkDurable bool
+	WorkIn      string
+
 	// Carried says the release carried the attempt's WORK forward (--carry-work,
 	// tick 0z0): the next attempt of the tick is dispatched at CarryRef's
 	// head, CarrySHA, so the next worker starts from the commits rather than
@@ -128,7 +141,9 @@ func attemptKey(tick string, attempt int) string { return fmt.Sprintf("%s#%d", t
 
 // Settle releases one attempt this host cannot address, on a person's word.
 // The released attempt's work stays on its own write ref, for a person to
-// take by hand.
+// take by hand — and the settlement SAYS where that ref lives: on the
+// remote, or only as a local branch in the checkout the run works in, which
+// is the case the old promise silently covered and a person had to guess at.
 //
 // It is the same reconciler a run is made with — the same repository, remote,
 // integration branch, run id and executor factory — because settling an
@@ -266,6 +281,16 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 		return nil, err
 	}
 
+	// Where the released work can be found, read BEFORE the teardown so the
+	// answer is what the release is about to leave behind: on the remote at
+	// the write ref's head, or — when the push never landed — only as a local
+	// branch, and then the settlement names the checkout that holds it, because
+	// the worktree is already going. A read that fails leaves all four zero:
+	// the message then says nothing rather than guessing, because a
+	// settlement that pointed at a place it did not check is a pointer a
+	// person walks to and finds empty.
+	workRef, workSHA, workDurable, workIn := r.workWhereabouts(marker)
+
 	// The record is on origin; only now is anything torn down. A1's order
 	// inside the teardown: revoke, then dispose, and the branch is KEPT —
 	// whatever the dead attempt committed is the only copy of it.
@@ -281,7 +306,25 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 
 	return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
 		State: state, Decision: number, Recorded: true, Disposed: disposed,
-		Carried: carry, CarryRef: carryRef, CarrySHA: carrySHA}, nil
+		Carried: carry, CarryRef: carryRef, CarrySHA: carrySHA,
+		WorkRef: workRef, WorkSHA: workSHA, WorkDurable: workDurable, WorkIn: workIn}, nil
+}
+
+// workWhereabouts says where an attempt's commits can be found: on the
+// remote at the write ref's head when the remote carries work beyond the
+// base, or — when it does not — as a local branch in this checkout, named.
+// It is the same question disposition asks of both refs, read the same way,
+// so the release and the next run's hold can never disagree about where the
+// work is. All-zero answers that the attempt left no work anywhere.
+func (r *Reconciler) workWhereabouts(marker attemptHandle) (ref, sha string, durable bool, in string) {
+	branch := branchOf(marker.WriteRef)
+	if head, err := r.remoteWork(branch, marker.BaseSHA); err == nil && head != "" {
+		return marker.WriteRef, head, true, ""
+	}
+	if local := r.attemptWorkHead(marker); local != "" {
+		return marker.WriteRef, local, false, r.opts.Repo
+	}
+	return "", "", false, ""
 }
 
 // addressForSettlement asks the executor what it can still say about the

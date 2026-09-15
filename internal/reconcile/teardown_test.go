@@ -174,6 +174,21 @@ func TestAnAttemptWhoseWorkNeverReachedOriginIsNotDeclaredSpent(t *testing.T) {
 	if !settled.Recorded {
 		t.Fatalf("the settlement recorded nothing: %+v", settled)
 	}
+	// And the settlement says WHERE the commits are, plainly (ticfac tick
+	// 55i): origin never took them, so the release must not promise a write
+	// ref on a remote that does not have it — it names the local branch and
+	// the checkout that holds it, because the worktree is long gone.
+	if settled.WorkDurable {
+		t.Errorf("the settlement claims the work is durable on a remote that never took it: %+v", settled)
+	}
+	if settled.WorkRef != marker.WriteRef || settled.WorkSHA != local {
+		t.Errorf("the settlement names the work at %s/%s; want %s at %s — the local branch is the only copy",
+			settled.WorkRef, short(settled.WorkSHA), marker.WriteRef, short(local))
+	}
+	if settled.WorkIn != f.Repo.Dir {
+		t.Errorf("the settlement does not name the checkout that holds the only copy: %q, want %q",
+			settled.WorkIn, f.Repo.Dir)
+	}
 	third, after, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatalf("the run after the release did not finish: %v", err)

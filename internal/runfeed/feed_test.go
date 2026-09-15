@@ -262,6 +262,84 @@ func TestFollowDeliversEachLineAsItLands(t *testing.T) {
 	<-done
 }
 
+// TestFollowFromDoesNotReplayAnEarlierRunsTerminalEvent is the resumed-run
+// case the from-now cursor exists for (ticfac tick 55i): the feed is
+// append-only per RUN ID, so a run that was resumed appends to the same
+// file a previous, failed incarnation already ended with run_finished. A
+// subscriber that replays history sees that terminal line first and stops
+// on it — reporting a failure that already happened and is no longer true.
+// A follower started at the standing END of the feed sees only what the
+// current incarnation writes.
+func TestFollowFromDoesNotReplayAnEarlierRunsTerminalEvent(t *testing.T) {
+	feed := Open(t.TempDir(), "r-1")
+
+	// The first incarnation: dispatched, then it failed and said so.
+	attempt := 1
+	if err := feed.Append(goldenEvent(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := feed.Append(NewEvent(time.Date(2026, 9, 14, 12, 41, 3, 0, time.UTC),
+		"r-1", "", nil, "run_finished", "failed: attempt 1 of a1 is missing-result")); err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := End(feed.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var mu sync.Mutex
+	var got []Event
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := FollowFrom(ctx, feed.Path(), cursor, func(e Event) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		}); err != nil {
+			t.Errorf("FollowFrom: %v", err)
+		}
+	}()
+
+	// The resumed run: the same run id, the same file, new events — ending
+	// in the CURRENT incarnation's terminal line.
+	if err := feed.Append(NewEvent(time.Date(2026, 9, 14, 13, 2, 0, 0, time.UTC),
+		"r-1", "a1", &attempt, "settled", "the rejected attempt was released by an operator")); err != nil {
+		t.Fatal(err)
+	}
+	if err := feed.Append(NewEvent(time.Date(2026, 9, 14, 13, 9, 41, 0, time.UTC),
+		"r-1", "", nil, "run_finished", "completed: every tick closed behind the gate")); err != nil {
+		t.Fatal(err)
+	}
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) == 2
+	}, "the follower to see the resumed run's two lines")
+	mu.Lock()
+	defer mu.Unlock()
+	terminals := 0
+	for _, event := range got {
+		if event.Stage == "run_finished" {
+			terminals++
+			if !strings.Contains(event.Detail, "completed") {
+				t.Errorf("the follower saw %q — a terminal line of an earlier incarnation, not the current run's", event.Detail)
+			}
+		}
+	}
+	if terminals != 1 {
+		t.Errorf("the follower saw %d terminal lines, want exactly the current run's one", terminals)
+	}
+	if got[0].Stage != "settled" {
+		t.Errorf("the follower's first line was %s, not the first line the resumed run wrote", got[0].Stage)
+	}
+	cancel()
+	<-done
+}
+
 func TestFollowRefusesAShrinkingFeed(t *testing.T) {
 	feed := Open(t.TempDir(), "r-1")
 	if err := feed.Append(goldenEvent(t)); err != nil {

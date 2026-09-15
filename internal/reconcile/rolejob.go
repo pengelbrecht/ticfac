@@ -120,6 +120,12 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 	r.setTick(tick, "reported")
 	r.record(tick, StageCollected, "%s answered %s (%s)", entry.Role, collected.Result.Outcome, collected.Verdict)
 
+	// collect's own durability rule (ticfac tick 55i), for the same reason:
+	// a role job's branch is kept when it carries commits, and a refusal here
+	// tears the worktree the branch lived in — the commits must be on origin
+	// before the answer they were is refused.
+	r.preserveAttemptWork(marker)
+
 	// collect's rule, for the same reason: a boundary measured from a base the
 	// enforced party can rewrite is not a boundary, and the base this run
 	// dispatched is on the marker rather than beside the worker's worktree.
