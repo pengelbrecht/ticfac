@@ -1,0 +1,14 @@
+{
+  "id": "w1c",
+  "title": "Adoption picks the FIRST attempt of a tick, not the latest",
+  "description": "Explains the oddity in the ticks pwp run, 2026-09-15: the run resumed and adopted attempt 9 of sx5 although attempt 10 existed and was newer.\n\ninternal/reconcile/dispatch.go claimDispatch() iterates every attempt of the tick in stored order and acts on the FIRST one whose disposition is neither redispatch nor hold:\n\n    for _, existing := range attempts {\n        if existing.TickID != tick { continue }\n        ...\n        switch disposition { case redispatchAttempt: continue; case holdAttemptWork: return ... }\n        r.setAttempt(tick, existing.Attempt)   // \u003c- first match wins\n        ... adopt ...\n        return\n    }\n\nAttempt 9 sorts first, so it is examined first. On the earlier resume its disposition WAS redispatchAttempt (settled with nothing and rejected), the loop continued, and attempt 10 was correctly dispatched. On this resume attempt 9's disposition had changed — its refusal was finding_untriaged, and by then the findings were triaged — so it no longer redispatched. The loop adopted attempt 9 and returned, never reaching attempt 10.\n\nWHY IT MATTERS. Attempt 10 was the better review: it found the ci.yml blocker (finding 9b346da7) that attempt 9 missed entirely. The epic closed its review on attempt 9's older answer. Nothing was lost ONLY because the operator had already triaged attempt 10's finding by hand; had that finding still been open, the run would have closed the review on a report that never saw it.\n\nThe rule 'an attempt under this identity has already been dispatched, so it is ADOPTED' (Appendix A #6) is about not running two jobs for one tick. It does not say the OLDEST attempt is the one to adopt. When several attempts of a tick survive, the adoptable one is the LATEST — the earlier ones are spent by definition, since a later attempt only exists because the run rejected them.\n\nFix: iterate the tick's attempts newest-first, or select max(attempt) among the adoptable ones, and keep the redispatch/hold dispositions evaluated in the same pass so a held attempt still stops the run.\n\nAcceptance: a test gives one tick two surviving attempts where the older one is adoptable and the newer carries a different report, and asserts the run adopts the NEWER; a held older attempt must still stop the run rather than being skipped in favour of a newer one.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "With several surviving attempts of one tick, the run adopts the highest-numbered adoptable attempt, proven by a test where the older and newer attempts carry different reports; an older attempt whose disposition is hold still stops the run",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T02:34:00.264969Z",
+  "updated_at": "2026-09-15T02:34:00.264969Z"
+}
