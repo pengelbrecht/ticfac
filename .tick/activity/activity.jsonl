@@ -466,3 +466,4 @@
 {"ts":"2026-09-15T11:03:30.366796Z","tick":"bzx","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"run-epic says nothing on stdout while it runs","type":"task"}}
 {"ts":"2026-09-15T11:03:30.530123Z","tick":"fxd","action":"create","actor":"claude:orchestrator","data":{"priority":3,"title":"Decide whether feed events carry a run-incarnation id","type":"task"}}
 {"ts":"2026-09-15T11:04:24.076453Z","tick":"fxd","action":"note","actor":"claude:orchestrator","data":{"note":"2026-09-15 13:04 - The schema half is carried in ticks as pengelbrecht/ticks:wal, which waits on this decision.","title":"Decide whether feed events carry a run-incarnation id"}}
+{"ts":"2026-09-15T12:07:33.702073Z","tick":"sqx","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"Close-out's own commits are never held for green CI","type":"task"}}
