@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 35,
-  "state": "publishing",
-  "reason": "closing 4ys behind the integrated gate on 661e2df43aba",
-  "updated_at": "2026-09-15T12:56:11Z",
+  "sequence": 36,
+  "state": "running",
+  "reason": "4ys is closed",
+  "updated_at": "2026-09-15T12:56:32Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "4ys",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 5
     },
     {
