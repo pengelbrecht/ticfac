@@ -14,10 +14,15 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/pengelbrecht/ticfac"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -44,6 +49,7 @@ usage:
   ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
   ticfac findings <epic-id>                     list the worker findings drafted for triage
   ticfac finding <epic-id> <key>                triage one drafted finding
+  ticfac status <run-id> [--json]              is the run alive, and when did it last say anything
   ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
   ticfac version [--json]                       report this build and the contract bundle it serves
   ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
@@ -155,6 +161,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return findingsCommand(args[1:], stdout, stderr)
 	case "finding":
 		return findingCommand(args[1:], stdout, stderr)
+	case "status":
+		return statusCommand(args[1:], stdout, stderr)
 	case "events":
 		// Signal-aware so a --follow shuts down cleanly on Ctrl-C: a
 		// subscription is a thing a person leaves open.
@@ -182,7 +190,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func runEpic(args []string, stdout, stderr io.Writer) int {
+func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	fs := flag.NewFlagSet("run-epic", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
@@ -266,11 +274,82 @@ func runEpic(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	result, err := reconciler.Run(context.Background())
+	// The process's own account of itself (ticks udp, ix9). run.pid makes
+	// "is this run alive?" a fact `ticfac status` answers, and run.log keeps
+	// what this process says whether or not whoever launched it captured its
+	// output. The pwp production run died once with nothing captured, and its
+	// cause was never recovered.
+	repoDir := *repo
+	if repoDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			repoDir = wd
+		}
+	}
+	liveRun := reconciler.RunID()
+	life, err := runlife.Claim(repoDir, liveRun)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		return 1
 	}
+	operatorStderr := stderr
+	stderr = io.MultiWriter(stderr, life.Log())
+	stdout = io.MultiWriter(stdout, life.Log())
+
+	// A death is a terminal feed line, never a feed that simply stops on an
+	// ordinary success. Every path through Run that writes run_finished returns
+	// without an error, so this is the only terminal line on the paths below.
+	died := func(detail string) {
+		event := runfeed.NewEvent(time.Now(), liveRun, "", nil, reconcile.StageRunDied, detail)
+		if appendErr := runfeed.Open(repoDir, liveRun).Append(event); appendErr != nil {
+			life.Logf("could not write run_died to the feed: %v", appendErr)
+		}
+	}
+
+	// Registered first so it runs last: whatever path the process leaves by,
+	// the pidfile is released and the log says how. Release is idempotent, so
+	// the specific outcomes below win.
+	defer life.Release("returned")
+	defer func() {
+		if p := recover(); p != nil {
+			detail := fmt.Sprintf("panicked: %v", p)
+			life.Logf("%s\n%s", detail, debug.Stack())
+			died(detail)
+			life.Release(detail)
+			fmt.Fprintf(operatorStderr, "ticfac run-epic %s: %s (stack in %s)\n", epicID, detail,
+				runlife.Dir(repoDir, liveRun)+"/"+runlife.LogName)
+			code = 2
+		}
+	}()
+
+	finished := make(chan struct{})
+	defer close(finished)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go func() {
+		select {
+		case <-finished:
+		case sig := <-signals:
+			detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
+			life.Logf("%s", detail)
+			died(detail)
+			life.Release(detail)
+			status := 130
+			if sig == syscall.SIGTERM {
+				status = 143
+			}
+			os.Exit(status)
+		}
+	}()
+
+	result, err := reconciler.Run(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
+		died(err.Error())
+		life.Release("died: " + err.Error())
+		return 1
+	}
+	defer life.Release(string(result.State))
 	fmt.Fprintf(stdout, "run %s of epic %s: %s\n%s\n", result.RunID, result.EpicID, result.State, result.Reason)
 	for _, tick := range result.Ticks {
 		fmt.Fprintf(stdout, "  %-8s %s\n", tick.TickID, tick.State)

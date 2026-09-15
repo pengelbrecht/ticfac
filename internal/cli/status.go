@@ -1,0 +1,68 @@
+package cli
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/runlife"
+)
+
+// `ticfac status <run-id>` answers the question every stall in the ticks pwp
+// production run came down to: is this run alive? The operator's answer that
+// day was `pgrep -f "ticfac run-epic"`, which matched the operator's own
+// watcher and reported a dead run alive for ten minutes. Liveness is a fact
+// ticfac reports now, not a pattern each watcher improvises (tick udp).
+//
+// It exits 0 only while the run is alive, so a watcher is a loop over the exit
+// code — `while ticfac status <run-id> >/dev/null; do sleep 15; done` — with
+// nothing to parse and nothing to match. --json is the same answer for a
+// program that wants the reason, the recorded process and the last feed event.
+func statusCommand(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
+	asJSON := fs.Bool("json", false, "print the full status as JSON")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) != 1 || rest[0] == "" {
+		fmt.Fprintf(stderr, "ticfac status: exactly one run id is required\n")
+		return 2
+	}
+	if *repo == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 2
+		}
+		*repo = wd
+	}
+
+	status := runlife.Probe(*repo, rest[0], time.Now())
+	if *asJSON {
+		raw, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 2
+		}
+		fmt.Fprintf(stdout, "%s\n", raw)
+	} else {
+		fmt.Fprintf(stdout, "run %s: %s — %s\n", status.RunID, status.State, status.Reason)
+		if status.LastEvent != nil {
+			tick := "-"
+			if status.LastEvent.TickID != nil {
+				tick = *status.LastEvent.TickID
+			}
+			fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n", status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
+		}
+	}
+	if status.State == runlife.Alive {
+		return 0
+	}
+	return 1
+}
