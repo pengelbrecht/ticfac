@@ -458,3 +458,5 @@
 {"ts":"2026-09-15T08:53:04.196779Z","tick":"udp","action":"close","actor":"claude:orchestrator","epic":"9pd","data":{"title":"ticfac must answer 'is this run alive?' mechanically"}}
 {"ts":"2026-09-15T08:53:04.316802Z","tick":"ix9","action":"close","actor":"claude:orchestrator","epic":"9pd","data":{"title":"run-epic must write its own durable run log"}}
 {"ts":"2026-09-15T08:53:04.346049Z","tick":"35h","action":"close","actor":"claude:orchestrator","epic":"9pd","data":{"title":"Archive every attempt's report; a superseded attempt's analysis is lost with its worktree"}}
+{"ts":"2026-09-15T08:57:34.626703Z","tick":"h0f","action":"update","actor":"claude:orchestrator","epic":"9pd","data":{"title":"Final review of the Phase 3 diff"}}
+{"ts":"2026-09-15T08:57:34.651612Z","tick":"h0f","action":"block","actor":"claude:orchestrator","epic":"9pd","data":{"blockers":["0z0","55i","0iz","48q","4ys","54n","cwa","e08","glb","her","nvn","w1c"],"title":"Final review of the Phase 3 diff"}}
