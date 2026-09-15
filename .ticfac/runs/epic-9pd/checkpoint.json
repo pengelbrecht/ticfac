@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 0z0 as attempt 1",
-  "updated_at": "2026-09-15T08:58:49Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "0z0 is running as attempt 1",
+  "updated_at": "2026-09-15T08:59:05Z",
   "ticks": [
     {
       "tick_id": "0z0",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "55i",
