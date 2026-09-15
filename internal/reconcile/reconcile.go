@@ -1042,6 +1042,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.seedTicks(plan)
 
+	// The checkpoint rows the plan does not carry because the tracker has
+	// closed their ticks: settled from the tracker's own answer before the
+	// run checkpoints anything, so the admitted checkpoint a restart would
+	// read from already carries them.
+	r.settleClosedTicks(ctx, plan)
+
 	if _, err := r.checkpoint(runstate.StateAdmitted, "the epic graph is read and the run is admitted"); err != nil {
 		return nil, err
 	}
@@ -1243,6 +1249,46 @@ func (r *Reconciler) seedTicks(plan []planEntry) {
 		if !known[entry.TickID] {
 			r.ticks = append(r.ticks, runstate.TickState{TickID: entry.TickID, State: "ready"})
 		}
+	}
+}
+
+// settleClosedTicks settles the checkpoint rows of ticks this plan no longer
+// carries because the tracker has already closed them.
+//
+// planFrom skips whatever the tracker has closed, which is right for planning
+// — and is also how the close-to-checkpoint window (tick 48q) went unnoticed:
+// a reconciler that died between PUBLISHING a tick's close through the tracker
+// and WRITING the checkpoint row that says closed left the two authorities
+// disagreeing (the tracker says closed, the row says integrated), and the
+// resumed run's plan dropped the tick, so the "already closed" settlement in
+// processTick never ran for it and nothing ever wrote the row. The checkpoint
+// is what a future resume decides what is done from, so a tick stuck at
+// integrated is a tick that resume may try to finish again. The disagreement
+// is settled here, from the tracker's OWN answer, by the first incarnation
+// that finds it — never by trusting the dead one to have written the row.
+//
+// Only rows the plan dropped are asked: a tick the plan still carries runs
+// processTick, whose already-closed settlement is this same rule. A row
+// already reading closed is left alone — the settlement is idempotent and
+// writes nothing on a resume that has nothing to settle. A tick the tracker
+// cannot answer is left as it stands rather than guessed at.
+func (r *Reconciler) settleClosedTicks(ctx context.Context, plan []planEntry) {
+	planned := map[string]bool{}
+	for _, entry := range plan {
+		planned[entry.TickID] = true
+	}
+	for _, ts := range append([]runstate.TickState{}, r.ticks...) {
+		if planned[ts.TickID] || ts.State == "closed" {
+			continue
+		}
+		current, err := r.tracker.Show(ctx, ts.TickID)
+		if err != nil || current.Status != "closed" {
+			continue
+		}
+		r.setTick(ts.TickID, "closed")
+		r.record(ts.TickID, StageSkipped,
+			"already closed in the tracker: %s; the row is settled by this run because the incarnation that "+
+				"closed it died before writing it", current.ClosedReason)
 	}
 }
 
