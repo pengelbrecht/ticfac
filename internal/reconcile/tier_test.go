@@ -165,6 +165,23 @@ func TestEveryDispatchRecordsItsDerivedTier(t *testing.T) {
 	if !narrowed {
 		t.Error("the run never said the per-tier bounds narrow its wave width")
 	}
+
+	// And those stance lines must not END the run. They were written as
+	// run_finished, so a run declaring a tier policy told its feed subscribers
+	// it had finished at admission. The feed test's exactly-one-terminal-line
+	// assertion never saw it because its fixture declares no policy; this
+	// fixture does.
+	journal := r.Journal()
+	var terminal []int
+	for i, event := range journal {
+		if event.Stage == StageRunFinished {
+			terminal = append(terminal, i)
+		}
+	}
+	if len(terminal) != 1 || terminal[0] != len(journal)-1 {
+		t.Errorf("a run with a tier policy has run_finished at %v of %d journal lines, want exactly one, last: "+
+			"a policy statement is not the run ending", terminal, len(journal))
+	}
 }
 
 // An unrecognised tier label is refused loudly — naming the tick and the

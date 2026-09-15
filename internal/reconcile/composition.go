@@ -182,7 +182,7 @@ func (r *Reconciler) recordWaveCompositionDecision(plan []planEntry) {
 	if declaring == 0 {
 		return
 	}
-	r.record("", StageRunFinished,
+	r.record("", StagePolicyStated,
 		"wave composition is checked at dispatch: %d tick(s) declare the files they expect to touch with "+
 			"touch: labels, two ticks of one wave declaring the same file are REFUSED before anything is "+
 			"dispatched, and an attempt that touches an undeclared file is refused at the merge — the rule "+

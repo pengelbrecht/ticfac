@@ -439,6 +439,20 @@ const (
 	// which is exactly what the feed, `ticfac events --follow` and the worker
 	// guidance all exist to avoid.
 	StageBudgetSet = "budget_set"
+	// StagePolicyStated is a run-level statement of how the run WILL behave,
+	// made at admission: the tier pin, the rate-limit stance, a per-tier wave
+	// width, the wave-composition rule. Like StageBudgetSet it is NOT
+	// run_finished. Four of these were written as run_finished, so a run that
+	// declared a [tier_policy] or touch: labels told every feed subscriber it
+	// had ended before it dispatched anything — the budget line's defect again,
+	// in the lines the feed test's fixture never exercised.
+	StagePolicyStated = "policy_stated"
+	// StageRunDied is the terminal line for a run that did NOT reach its own
+	// run_finished: the process returned an operational error, panicked, or
+	// was stopped by a signal. It is written by run-epic around the
+	// reconciler, so a death is never a feed that simply stops on an ordinary
+	// success line (tick wdb; Phase 3 acceptance A4).
+	StageRunDied = "run_died"
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
 	// claimed, so "why was this expensive" is a question the run's own

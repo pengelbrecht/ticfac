@@ -219,14 +219,14 @@ func roleAliasNames(role string) []string {
 // carry the wave's real parallelism.
 func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 	if r.pinnedTier != "" {
-		r.record("", StageRunFinished, "the operator pinned tier %q for every dispatch of this run (--tier): the per-tick derivation and its ladder do not run", r.pinnedTier)
+		r.record("", StagePolicyStated, "the operator pinned tier %q for every dispatch of this run (--tier): the per-tick derivation and its ladder do not run", r.pinnedTier)
 		return
 	}
 	if r.tierPolicy == nil {
 		return
 	}
 	stance := r.tierPolicy.RateLimitOrDefault()
-	r.record("", StageRunFinished,
+	r.record("", StagePolicyStated,
 		"the declared tier policy answers a provider rate limit by backing off and retrying (up to %d attempts, at most %dms apart): a 429 is a pause, not a death — an attempt that still cannot settle is a refusal for a person, never an abandoned worker",
 		stance.MaxAttempts, stance.MaxDelayMs)
 
@@ -258,11 +258,11 @@ func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 			continue // no declared bound narrows this wave
 		}
 		if r.hostWidth > 0 {
-			r.record("", StageRunFinished,
+			r.record("", StagePolicyStated,
 				"wave %d routes %d dispatch(es) across tiers the policy bounds, so the declared width of %d narrows to %d per [tier_policy.concurrency]",
 				wave, len(tiers), r.hostWidth, width)
 		} else {
-			r.record("", StageRunFinished,
+			r.record("", StagePolicyStated,
 				"wave %d routes %d dispatch(es) across tiers the policy bounds, and [orchestration].max_parallel declares no host width, so the per-tier bounds alone cap it at %d",
 				wave, len(tiers), width)
 		}
