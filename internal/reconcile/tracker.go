@@ -102,10 +102,20 @@ func (t *trackerTree) close() {
 // merely read: the value this writer leases against has to be a commit this
 // repository holds, or the worktree could not be moved to it.
 func (t *trackerTree) originHead() (string, error) {
-	if _, err := t.git.run("", "fetch", "--quiet", t.remote, refFor(t.branch)); err != nil {
+	// A PRIVATE ref, never FETCH_HEAD — and this reader matters more than the
+	// store's, because sync() MOVES THE WORKTREE to what this returns. FETCH_HEAD
+	// is one file in .git shared by every process using the checkout, so a
+	// concurrent fetch can hand this the head of another branch; the tracker
+	// would then walk its worktree onto that tree and publish claims, notes and
+	// closes against the wrong base. sync() refuses to move over UNCOMMITTED
+	// records, but a clean worktree — the normal state between publishes — moves
+	// silently. See ticfac tick wdb.
+	ref := refFor("refs/ticfac/peek/tracker/" + t.runID)
+	if _, err := t.git.run("", "fetch", "--quiet", "--no-write-fetch-head", t.remote,
+		"+"+refFor(t.branch)+":"+ref); err != nil {
 		return "", fmt.Errorf("fetch %s from %s: %w", t.branch, t.remote, err)
 	}
-	return t.git.run("", "rev-parse", "FETCH_HEAD")
+	return t.git.run("", "rev-parse", ref)
 }
 
 // sync moves the worktree to origin's head, so that what tk reads next is what

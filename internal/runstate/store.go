@@ -274,10 +274,23 @@ func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
 // here would hand a stale writer a fresh base it never fetched, which is
 // exactly the overwrite the guard exists to refuse.
 func (s *Store) peek() (head string, view map[string]string, err error) {
-	if _, err := s.git.run("fetch", s.remote, s.branch); err != nil {
+	// A PRIVATE ref, never FETCH_HEAD. FETCH_HEAD is one file in .git shared by
+	// every process using this checkout, so any concurrent `git fetch` replaces
+	// the value this store is about to read: an operator watching the run, a
+	// second ticfac command (`ticfac findings` is enough), an editor's periodic
+	// fetch. When that happens the head resolves to some other branch — usually
+	// main, which carries no .ticfac tree — and the view of this run's own state
+	// comes back EMPTY, which sends a checkpoint UPDATE down the CREATE path and
+	// ends the run on conflict_exists. A torn read of the file fails outright
+	// with "ambiguous argument 'FETCH_HEAD'". Both were observed in production
+	// (tick wdb). --no-write-fetch-head keeps ticfac from doing the same to
+	// anyone else.
+	ref := s.peekRef()
+	if _, err := s.git.run("fetch", "--no-write-fetch-head", s.remote,
+		"+"+s.branchRef()+":"+ref); err != nil {
 		return "", nil, fmt.Errorf("runstate: fetch %s %s: %w", s.remote, s.branch, err)
 	}
-	head, err = s.git.run("rev-parse", "FETCH_HEAD")
+	head, err = s.git.run("rev-parse", ref)
 	if err != nil {
 		return "", nil, err
 	}
@@ -310,6 +323,11 @@ func (s *Store) message(verb, path string) string {
 // this repository's copy have the same name and are emphatically not the same
 // thing: the guard is against the first, and CommitLocal moves the second.
 func (s *Store) branchRef() string { return refFor(s.branch) }
+
+// peekRef is the ref this store fetches origin into. It is per-run, so two
+// reconcilers in one checkout cannot read each other's value the way they both
+// read FETCH_HEAD.
+func (s *Store) peekRef() string { return "refs/ticfac/peek/" + s.runID }
 
 func (s *Store) localHead() (string, error) {
 	out, _, err := s.git.try(nil, nil, "rev-parse", "--verify", "--quiet", s.branchRef())
