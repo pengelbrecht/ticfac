@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 33,
-  "state": "integrating",
-  "reason": "integrating 4ys attempt 5 into epic/9pd",
-  "updated_at": "2026-09-15T12:50:42Z",
+  "sequence": 34,
+  "state": "gating",
+  "reason": "running the integrated gate for 4ys on 661e2df43aba",
+  "updated_at": "2026-09-15T12:50:58Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "4ys",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
