@@ -70,6 +70,8 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	fmt.Fprintf(&b, "- Do not run `tk`, and do not write under .tick/ or .ticfac/. Those are the\n")
 	fmt.Fprintf(&b, "  tracker's and the run's authorities, not yours. Every attempt is diffed against\n")
 	fmt.Fprintf(&b, "  %s and reported, so a write there is found whether or not you mention it.\n", short(record.BaseSHA))
+	fmt.Fprintf(&b, "  EXCEPT these, which you MAY write when your job calls for it: %s.\n",
+		strings.Join(subprocess.ExemptFromBoundary(), ", "))
 	fmt.Fprintf(&b, "- Work only inside this worktree. Do not touch sibling workspaces, worktrees or\n")
 	fmt.Fprintf(&b, "  other branches.\n")
 	fmt.Fprintf(&b, "- Commit source and tests only, never build output or caches.\n\n")

@@ -76,6 +76,8 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 		strings.Join(protectedPrefixes, " or "))
 	fmt.Fprintf(&b, "  run's authorities, not yours. Every attempt is diffed against %s and reported,\n", short(record.BaseSHA))
 	fmt.Fprintf(&b, "  so a write there is found whether or not you mention it.\n")
+	fmt.Fprintf(&b, "  EXCEPT these, which you MAY write when your job calls for it: %s.\n",
+		strings.Join(ExemptFromBoundary(), ", "))
 	fmt.Fprintf(&b, "- Work only inside this worktree. Do not touch sibling worktrees or other branches.\n")
 	fmt.Fprintf(&b, "- Commit source and tests only, never build output or caches.\n\n")
 

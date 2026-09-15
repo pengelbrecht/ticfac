@@ -109,6 +109,19 @@ var exemptFromBoundary = []string{
 	".tick/learnings.md",
 }
 
+// ExemptFromBoundary is the list OutsideBoundary lets through, exported so a
+// prompt can state the boundary it will actually be judged against.
+//
+// The two were allowed to drift, and it cost a whole close-out. The prompt said
+// "do not write under .tick/" flatly while this list exempted .tick/learnings.md,
+// and the closeout role — whose own instructions tell it to compact what was
+// learned into that very file — believed the prohibition and reported it could
+// not do its job. Five attempts, none able to commit anything. A worker obeys
+// what it is TOLD the boundary is, so the telling has to come from here.
+func ExemptFromBoundary() []string {
+	return append([]string{}, exemptFromBoundary...)
+}
+
 // BoundaryViolations returns, in order, the paths in a diff that a job was not
 // allowed to write. A10's reporting half matters as much as its refusal half:
 // a boundary that silently refuses tells nobody the model tried.
