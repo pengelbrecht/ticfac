@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 15,
-  "state": "running",
-  "reason": "55i is closed",
-  "updated_at": "2026-09-15T11:14:09Z",
+  "sequence": 16,
+  "state": "dispatching",
+  "reason": "dispatching 0iz as attempt 3",
+  "updated_at": "2026-09-15T11:14:21Z",
   "ticks": [
     {
       "tick_id": "0z0",
