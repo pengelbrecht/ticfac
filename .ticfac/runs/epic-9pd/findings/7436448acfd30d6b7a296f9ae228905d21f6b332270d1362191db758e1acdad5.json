@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "4ys",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-15T12:50:34Z",
+  "triaged_at": "2026-09-15T12:51:25Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "pengelbrecht/ticks:wi2",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "4ys",
