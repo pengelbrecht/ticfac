@@ -90,6 +90,33 @@ type attemptHandle struct {
 	// adopted attempt is held to the declaration it was DISPATCHED under, not
 	// to whatever the tracker says today.
 	Touch []string `json:"touch"`
+
+	// ResumedFrom states that this dispatch starts from the work of a
+	// RELEASED attempt — the person's --carry-work settlement (tick 0z0):
+	// which attempt, which ref its work is on, the commit this dispatch was
+	// cut from, and who released it. It rides the marker for the same reason
+	// Tier does: the closed provenance object has no "resumed_from" field and
+	// the bundle is not this tick's to change, so the marker's open handle is
+	// where the explicit claim lives — beside the two closed fields that
+	// already say it (provenance's source_ref and source_sha, which for a
+	// carried dispatch ARE the released attempt's ref and commit). A marker
+	// that resumed from nothing states it as null, never omits it, for the
+	// same reason every required-and-null provenance field does.
+	ResumedFrom *resumedFrom `json:"resumed_from"`
+}
+
+// resumedFrom is one dispatch's answer to "this work came from a released
+// attempt": the attempt a person released, the ref its commits live on, the
+// commit the new attempt is cut from, and the person who released it. Every
+// field survives the restart through the marker's open handle, exactly as
+// Tier and the substrate do — a later leg reads what the dispatch recorded,
+// never what it would infer today.
+type resumedFrom struct {
+	TickID     string `json:"tick_id"`
+	Attempt    int    `json:"attempt"`
+	WriteRef   string `json:"write_ref"`
+	SHA        string `json:"sha"`
+	ReleasedBy string `json:"released_by"`
 }
 
 // asMap is the durable form of the marker: everything BUT StateRoot and Repo,
@@ -102,6 +129,10 @@ func (a attemptHandle) asMap() map[string]any {
 		"base_sha": a.BaseSHA,
 		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier, "touch": a.Touch,
 		"substrate_protocol": a.SubstrateProtocol, "substrate_server_version": a.SubstrateServerVersion,
+		// Null when this dispatch resumed from no released attempt, never
+		// omitted — "no resume" is a claim, and a reader that cannot tell it
+		// from an unrecorded one is a reader guessing at provenance.
+		"resumed_from": a.ResumedFrom,
 	}
 }
 
@@ -144,6 +175,22 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	case int:
 		substrateProtocol = value
 	}
+	// ResumedFrom arrives as the nested object the marker stores it as —
+	// JSON on origin — or as nil for a dispatch that resumed from nothing.
+	var resumed *resumedFrom
+	if fields, ok := raw["resumed_from"].(map[string]any); ok {
+		resumed = &resumedFrom{}
+		resumed.TickID, _ = fields["tick_id"].(string)
+		switch value := fields["attempt"].(type) {
+		case float64:
+			resumed.Attempt = int(value)
+		case int:
+			resumed.Attempt = value
+		}
+		resumed.WriteRef, _ = fields["write_ref"].(string)
+		resumed.SHA, _ = fields["sha"].(string)
+		resumed.ReleasedBy, _ = fields["released_by"].(string)
+	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
@@ -152,6 +199,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		SubstrateProtocol:      substrateProtocol,
 		SubstrateServerVersion: get("substrate_server_version"),
 		Touch:                  touch,
+		ResumedFrom:            resumed,
 	}
 }
 
@@ -284,11 +332,36 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// the same tier), and not an attempt a PERSON released — the human was
 	// the actor, and no rung is earned from somebody else's decision.
 	failed := 0
+	// carry is the released attempt whose WORK the next dispatch of this tick
+	// starts from: a person released it with --carry-work, so the next worker
+	// begins at its commits rather than redoing them (settle.go, tick 0z0).
+	// At most one can be current — the latest released attempt that carried
+	// work — because a carried attempt either merges behind the gate or is
+	// itself rejected and settled by its own release.
+	var carry *carriedWork
 	for _, existing := range attempts {
 		if existing.TickID != tick {
 			continue
 		}
+		marker := handleFromMap(existing.JobHandle)
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
+			if was.carry {
+				// The person released the attempt AND said its work goes
+				// forward: the next attempt is cut from the released branch,
+				// not from the integration branch. The released attempt is
+				// still not adopted — nobody could address it, which is why
+				// they were asked — and it still earns the ladder no rung:
+				// the human was the actor. Carrying changes only where the
+				// next worker STARTS; the gate still decides what merges.
+				if carry == nil || existing.Attempt > carry.marker.Attempt {
+					carry = &carriedWork{marker: marker, by: was.by, at: was.at}
+				}
+				r.record(tick, StageSettled,
+					"attempt %d was released by %s at %s carrying its work; the next attempt starts from %s",
+					existing.Attempt, was.by, was.at, branchOf(marker.WriteRef))
+				continue
+			}
 			// A person settled it. It is not adopted — nobody could address it,
 			// which is why they were asked — and whatever it left on its own
 			// write ref stays there: a new attempt gets a ref of its own.
@@ -303,8 +376,6 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
-		marker := handleFromMap(existing.JobHandle)
-		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		switch disposition, where := r.disposition(existing, marker); disposition {
 		case redispatchAttempt:
 			// SETTLED, and it produced nothing. Adopting it would re-collect
@@ -326,6 +397,12 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// collecting it again would report a missing report this run
 			// deleted itself when it tore the refused attempt down. So the run
 			// stops here and says where the work is and who moves it on.
+			//
+			// The attempt number is set BEFORE these records, so the lines this
+			// branch leaves — and the run_held line the failure becomes — say
+			// WHICH attempt the run is holding, which is the whole question a
+			// person reading the feed is asking.
+			r.setAttempt(tick, existing.Attempt)
 			r.record(tick, StageRejected,
 				"attempt %d was rejected and its commits are still there (%s); it is neither adopted nor "+
 					"redispatched", existing.Attempt, where)
@@ -363,7 +440,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
-		dispatch, marker, err := r.planDispatch(entry, number, failed)
+		dispatch, marker, err := r.planDispatch(entry, number, failed, carry)
 		if err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
@@ -447,6 +524,18 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
 		}
 		r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
+
+		// A dispatch cut from a RELEASED attempt's work says so here, once,
+		// on the dispatch that is actually happening (tick 0z0) — not in the
+		// planning half, which a dispatch conflict can run twice. The worker
+		// starting from the released commits is a fact about THIS attempt, and
+		// this line is what a person reading the run reads it from.
+		if marker.ResumedFrom != nil {
+			r.record(tick, StageCarried,
+				"attempt %d starts from the work attempt %d left on %s (released by %s): the next worker "+
+					"continues that work rather than redoing it, and the gate still decides what merges",
+					number, marker.ResumedFrom.Attempt, branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+		}
 
 		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
@@ -729,7 +818,7 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 // It runs BEFORE the marker is written and the tick is claimed, so a refusal
 // here (a tier label the config cannot honour, say) spends nothing and
 // claims nothing.
-func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch, attemptHandle, error) {
+func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *carriedWork) (Dispatch, attemptHandle, error) {
 	// Where the orchestrator stops choosing and starts deriving: the tier is
 	// a pure function of the tick's facts, this attempt's durable state and
 	// the declared policy — never a per-dispatch judgement, never a hunch.
@@ -770,12 +859,35 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 	// reconciler pushed as it closed them. A worker that branched from the
 	// run's base reads `.tick/issues/<blocker>.json` as it was before the run
 	// and answers BLOCKED about a tick that is closed.
+	//
+	// The one exception is a dispatch CARRIED from a released attempt (tick
+	// 0z0): a person released the attempt saying its work goes forward, so
+	// the next worker starts from THAT — the released branch's head — and
+	// not from the integration branch. The released work contains the
+	// integration branch it was cut from, so nothing the ordinary base would
+	// give is missing; what carrying adds is the commits the interrupted
+	// worker had already made. The gate still decides what merges, exactly as
+	// for any attempt: carrying changes where the work STARTS, never what is
+	// believed without evidence.
 	base := r.controllerBase()
+	var resumed *resumedFrom
+	if carry != nil {
+		head, err := r.carryHead(carry.marker)
+		if err != nil {
+			return Dispatch{}, attemptHandle{}, err
+		}
+		base = head
+		resumed = &resumedFrom{
+			TickID: carry.marker.TickID, Attempt: carry.marker.Attempt,
+			WriteRef: carry.marker.WriteRef, SHA: head, ReleasedBy: carry.by,
+		}
+	}
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
+		ResumedFrom: resumed,
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -786,7 +898,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
-		Tier: tier,
+		Tier: tier, ResumedFrom: resumed,
 	}
 	// The tick's file declaration, copied at PLANNING time (tick 01u): the
 	// malformed labels were already refused at admission, so what is left
@@ -977,6 +1089,11 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	if dispatch.Role == "" {
 		dispatch.Role = "implement-tick"
 	}
+	// The work a dispatch CARRIED from a released attempt is read off the
+	// marker like everything else a later leg must not re-derive (tick 0z0):
+	// a later record of the same dispatch — a finding draft, a settle — says
+	// what the DISPATCH resumed from, never what this incarnation would.
+	dispatch.ResumedFrom = marker.ResumedFrom
 	// The profile an adopted attempt re-joins is the one it was DISPATCHED
 	// under: the marker's own tier, not whatever this incarnation would
 	// derive today. A config edited between incarnations does not retro-fit a
@@ -988,6 +1105,35 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	}
 	dispatch.Profile = profile
 	return dispatch, nil
+}
+
+// carryHead is the commit a dispatch CARRIED from a released attempt starts
+// from: the work the attempt left, read exactly as disposition reads it —
+// origin's branch first, the branch in this checkout when every push the
+// attempt made failed. A branch that carries nothing beyond the base the
+// attempt was cut from is an error rather than a quiet fall-back to the
+// integration branch: the person released the attempt asking for its work to
+// go forward, and answering that with a base that has none of it would
+// strand the work precisely the way the carry exists not to. The work having
+// gone is an operational fact to report, not a decision for the run to make.
+func (r *Reconciler) carryHead(marker attemptHandle) (string, error) {
+	branch := branchOf(marker.WriteRef)
+	head, err := r.remoteWork(branch, marker.BaseSHA)
+	if err != nil {
+		return "", fmt.Errorf("reconcile: read %s on %s to carry the work of attempt %d of %s: %w",
+			branch, r.opts.Remote, marker.Attempt, marker.TickID, err)
+	}
+	if head == "" {
+		head = r.attemptWorkHead(marker)
+	}
+	if head == "" {
+		return "", fmt.Errorf(
+			"reconcile: the release of attempt %d of %s carries its work, but %s carries no commit beyond the "+
+				"base it was cut from: there is nothing to start the next attempt from. The settlement stands; "+
+				"re-release without --carry-work, or put the work back on %s and run the epic again",
+			marker.Attempt, marker.TickID, branch, branch)
+	}
+	return head, nil
 }
 
 // findAttemptState locates the executor's own state directory for a dispatch.

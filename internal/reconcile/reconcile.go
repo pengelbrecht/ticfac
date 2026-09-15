@@ -202,6 +202,28 @@ type Dispatch struct {
 	// attempt was DISPATCHED under, not the one it would observe today. The
 	// zero value is a substrate that states no protocol — a local process.
 	Substrate Substrate
+
+	// ResumedFrom states that this dispatch starts from the work of a RELEASED
+	// attempt — a person's --carry-work settlement (tick 0z0): which attempt,
+	// the ref its work is on, the commit this dispatch was cut from, and who
+	// released it. It is the ANSWER to the question a resumed run's records
+	// have to survive — "this work came from a released attempt" — in two
+	// halves: the explicit claim rides the marker's open handle (the closed
+	// provenance object has no field for it), and the closed fields that
+	// already say it are stated too — a carried dispatch's source_ref and
+	// source_sha ARE the released attempt's ref and commit. Nil when this
+	// dispatch resumed from nothing.
+	ResumedFrom *resumedFrom
+}
+
+// carriedWork is a released attempt whose WORK the next dispatch of its tick
+// starts from, with the settlement that said so: the marker identifies the
+// attempt and the branch its commits are on, and by/at name the person who
+// released it and when — carried onto the dispatch's records so "who sent
+// this work forward" is not a fact the run has to re-derive.
+type carriedWork struct {
+	marker attemptHandle
+	by, at string
 }
 
 // Options configure a reconciler. Everything it talks to is passed in rather
@@ -474,6 +496,25 @@ const (
 	// refusal returned to the caller — the line says when to look, never
 	// what happened.
 	StageStartFailed = "start_failed"
+
+	// StageRunHeld is the line a run owes a person: it stopped holding one
+	// tick for a decision only a person can make (an attempt nobody can
+	// address, an attempt rejected with its work unmerged, a worker that
+	// answered BLOCKED, a struck-out unit) and cannot proceed without one
+	// (tick 0z0). A held attempt is correct and must stay; what makes it a
+	// stall is that nobody is told — so the run TELLS the feed, at TICK scope
+	// so the line carries the tick and the attempt it is about, and the
+	// refusal's own reason leads the detail so a watcher surfaces WHY without
+	// matching on a sentence. The distinct stage is the machine fact; the
+	// detail is the person's half.
+	StageRunHeld = "run_held"
+
+	// StageCarried is the line a dispatch cut from a RELEASED attempt's work
+	// leaves (tick 0z0): a person released the attempt with --carry-work, so
+	// the new attempt starts from the released commits rather than redoing
+	// them. It is recorded once, on the dispatch that actually happened — not
+	// in the planning half, which a dispatch conflict can run twice.
+	StageCarried = "carried"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -972,6 +1013,17 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			failed = append(failed, entry.TickID)
 			r.failure = refusal
 			r.setTick(entry.TickID, "rejected")
+			// A run that stops holding something for a person says so to the
+			// feed in its own vocabulary (StageRunHeld, tick 0z0): the feed is
+			// the channel a non-participant subscribes to, and a hold nobody
+			// can see is a stall by definition — the run cannot proceed without
+			// a decision, and the decision is a person's to make. The line
+			// carries the tick and the attempt (tick scope), and the refusal's
+			// reason leads the detail, so `ticfac watch` can name which tick and
+			// why without parsing prose.
+			if holdsForAPerson(refusal.Reason) {
+				r.record(entry.TickID, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+			}
 			if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
 				return nil, cErr
 			}
@@ -1325,6 +1377,33 @@ func (r *Reconciler) refuse(reason, tick, format string, args ...any) *Refusal {
 // collapsedMessage is what a refusal reads like when distinct failure classes
 // are allowed to share a sentence.
 const collapsedMessage = "the tick did not pass"
+
+// holdsForAPerson is the set of refusals whose next actor is a PERSON and not
+// another run: the run cannot proceed without a decision somebody has to
+// make, which is what makes these holds rather than failures (tick 0z0). The
+// set is closed on the refusal REASON — a value, never a sentence — and each
+// member says why it is here:
+//
+//   - RefusedHeld: a struck-out unit, released only by a person (A11);
+//   - RefusedUnaddressed and RefusedRejectedWork: the two `ticfac settle`
+//     releases — an attempt nobody can address, and one rejected with commits
+//     nothing merged;
+//   - RefusedNeedsHuman and RefusedRoleAnswer: the worker or the role job
+//     answered BLOCKED or NEEDS_CONTEXT, and the answer is its deliverable;
+//   - RefusedFindingUntriaged: a tick whose findings nobody has triaged is
+//     refused its close, and the triage is a person's.
+//
+// Every other refusal is a repair another RUN can make — a gate that runs
+// again on a fixed tree, an attempt that is redispatched once its blocker
+// closed — and those are reported as failures, not held.
+func holdsForAPerson(reason string) bool {
+	switch reason {
+	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
+		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged:
+		return true
+	}
+	return false
+}
 
 func asRefusal(err error, into **Refusal) bool {
 	if refusal, ok := err.(*Refusal); ok {
