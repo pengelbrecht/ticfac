@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 14,
-  "state": "publishing",
-  "reason": "closing 55i behind the integrated gate on d167ff38bc80",
-  "updated_at": "2026-09-15T11:13:52Z",
+  "sequence": 15,
+  "state": "running",
+  "reason": "55i is closed",
+  "updated_at": "2026-09-15T11:14:09Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "55i",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
