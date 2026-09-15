@@ -1,0 +1,13 @@
+{
+  "id": "1y7",
+  "title": "Compact both learnings files to the 150-line cap and move the factory lessons to ticfac",
+  "description": "Both .tick/learnings.md files are over their stated hard cap of 150 lines: ticks is at 157 after the pwp retro, ticfac at 159.\n\nticks still carries a 'Cloudflare (cloud/factory)' section — four entries, 18 lines — about code that tick 3r2 moved to ticfac. Those lessons are live and worth keeping, but they describe a subsystem this repository no longer contains, and ticks' own learnings header says cross-repo learnings do not belong there. Moving them brings ticks to about 139 and pushes ticfac to about 177, so ticfac needs a real compaction pass in the same change rather than an append.\n\nThis is retro editorial work, deliberately not done inline during the pwp close-out because it is a judgement call about what knowledge is still load-bearing, not a mechanical edit.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Both .tick/learnings.md files are at or under 150 lines; the cloud/factory lessons live in ticfac's file and not in ticks'; no lesson is dropped without a recorded reason",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T06:29:31.48823Z",
+  "updated_at": "2026-09-15T06:29:31.48823Z"
+}

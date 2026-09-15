@@ -1,0 +1,14 @@
+{
+  "id": "54n",
+  "title": "The close-out role cannot produce its own deliverable: the boundary forbids .tick/",
+  "description": "From the ticks pwp run, 2026-09-15. The close-out worker said it plainly in its own report:\n\n  'The closeout cannot write .tick/ (run boundary), so the two learnings below live only in this report.'\n\nThe close-out role's deliverable IS the epic retro and .tick/learnings.md. The executor's boundary check forbids a worker from writing .tick/ — correct for an implement-tick worker, because the tracker is the RUN's to write and a worker editing tick state would race the reconciler. Applied to the closeout role it makes the job impossible.\n\nConsequence observed: attempts 11, 12 and 13 each did the retro thinking, could commit none of it, and answered 'failed (no-commits)'. Each filed its conclusions as findings instead, which then blocked the tick on finding_untriaged, which stopped the run. Three dispatches, roughly 40 minutes of worker time, and the deliverable was carried out by hand by the operator in the end.\n\nThis is not a worker failure and no amount of prompt tuning fixes it. A role whose output is forbidden by the boundary it runs under is a design fault.\n\nOptions to weigh:\n- Make the boundary ROLE-AWARE: closeout may write .tick/learnings.md and the retro path, nothing else under .tick/. Narrowest change, keeps tick STATE the run's alone.\n- Have the RUN write the retro from the closeout's report, the way it already publishes notes and closes ticks from a worker's answer. Keeps the boundary absolute; moves the write to the writer that owns .tick/.\n- Give closeout a distinct write channel outside the attempt branch that the run folds in.\n\nWhichever is chosen, the boundary's refusal must name the role and say where the output should go, so a worker hitting it is not left inventing a workaround.\n\nAcceptance: a closeout attempt commits the epic's retro and its learnings entries, the run integrates them, and an implement-tick attempt writing the same paths is still refused.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "A closeout attempt can commit the epic retro and .tick/learnings.md entries and the run integrates them; an implement-tick attempt writing any .tick/ path is still refused; the refusal message names the role and the permitted destination",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T06:29:31.419273Z",
+  "updated_at": "2026-09-15T06:29:31.419273Z"
+}
