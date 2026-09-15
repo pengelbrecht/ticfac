@@ -51,6 +51,7 @@ usage:
   ticfac finding <epic-id> <key>                triage one drafted finding
   ticfac status <run-id> [--json]              is the run alive, and when did it last say anything
   ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
+  ticfac watch <run-id>                        follow a run and say, to a human, when it ends holding something for one
   ticfac version [--json]                       report this build and the contract bundle it serves
   ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
   ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
@@ -88,8 +89,18 @@ cheaply. It binds a METERED credential; the local subprocess executor issues a
 flat-rate one, so on this host the number travels with the job and is reported
 everywhere, and the wall clock is what actually stops one.
 
+A long run wants the machine awake end to end. A machine that sleeps mid-run
+kills workers without settling them, and what it leaves — a held attempt, a
+missing report, a run stopped at nothing — looks exactly like a worker defect
+when it is the host's: wrap the run in caffeinate -i on macOS, or the
+equivalent elsewhere, rather than letting the machine sleep (tick 0z0).
+
 settle flags:
   --release <who>     the person releasing the attempt (required)
+  --carry-work       base the next attempt of this tick on the released attempt's branch, so
+                      the next worker starts from its commits rather than redoing them — the
+                      gate still decides, and the new attempt's records state where its work
+                      came from
   --repo, --remote, --branch, --run-id, --state-root, --gate, --profiles,
   --tier, --runner    as for run-epic: the same run, addressed the same way
 
@@ -106,6 +117,24 @@ commits nothing merged. No run collects that attempt again (the teardown the
 refusal ran removed its worktree) and no run dispatches over it (that would
 orphan the only copy of the work), so a person reads the branch and then says
 here that the run may go on.
+
+--carry-work is the third option that situation actually needs: release the
+attempt AND base the next one on its branch, so the next worker starts from the
+work rather than redoing it. Nothing merges unproven — the gate still decides —
+but the evidence the interrupted attempt produced is not thrown away, and the
+next attempt's provenance records that its source is the released attempt's
+ref and commit (tick 0z0).
+
+watch flags:
+  --repo <dir>        the checkout the run works in (default: cwd)
+
+"watch" is the consumer the run event feed was built for: it subscribes like
+events --follow, and when the run stops holding a tick for a person it SAYS
+SO — which tick, which attempt, why, and the command that moves it on. Exit
+codes: 0 the run ended (the last line says how), 3 it ended holding something
+only a person can move, 1 the feed could not be read or the watch was
+interrupted, 2 usage. A run whose process died without a terminal line is
+ticfac status's question, not the feed's.
 
 events flags:
   --repo <dir>        the checkout the run works in (default: cwd)
@@ -169,6 +198,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		return eventsCommand(ctx, args[1:], stdout, stderr)
+	case "watch":
+		// Signal-aware for the same reason: a watch is a subscription a
+		// person leaves open until the run says it ended.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return watchCommand(ctx, args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "factory":
@@ -412,6 +447,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
 		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
 		release   = fs.String("release", "", "the person releasing the attempt")
+		carryWork = fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -465,7 +501,12 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	settled, err := reconciler.Settle(context.Background(), tickID, attempt, *release)
+	var settled *reconcile.Settlement
+	if *carryWork {
+		settled, err = reconciler.SettleCarry(context.Background(), tickID, attempt, *release)
+	} else {
+		settled, err = reconciler.Settle(context.Background(), tickID, attempt, *release)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
@@ -475,8 +516,18 @@ func settle(args []string, stdout, stderr io.Writer) int {
 			settled.Attempt, settled.TickID, settled.ReleasedBy)
 		return 0
 	}
+	if settled.Carried {
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s, "+
+			"CARRYING its work:\n"+
+			"the next run dispatches a new attempt based on the released commits at %s, so the next worker "+
+			"starts from them rather than redoing them. The gate still decides — nothing merges unproven — and "+
+			"the new attempt's records state where its work came from.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
+		return 0
+	}
 	fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
-		"The next run dispatches a new attempt; whatever this one committed stays on its own write ref.\n",
+		"The next run dispatches a new attempt; whatever this one committed stays on its own write ref — \n"+
+		"add --carry-work to have said otherwise.\n",
 		settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
 	return 0
 }

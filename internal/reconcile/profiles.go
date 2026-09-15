@@ -481,6 +481,20 @@ func (r *Reconciler) attemptProvenance(d Dispatch) runstate.Provenance {
 		serverVersion := d.Substrate.ServerVersion
 		provenance.SubstrateServerVersion = &serverVersion
 	}
+	// A dispatch RESUMED FROM A RELEASED ATTEMPT'S WORK (tick 0z0) says so in
+	// the two closed fields that are exactly this claim: the SOURCE it was cut
+	// from is the released attempt's write ref, and the commit that work stood
+	// at is the base it was given — source_sha is already d.BaseSHA below the
+	// override, so only the ref needs stating. The closed provenance object
+	// has no "resumed_from" field, and the bundle is not this tick's to
+	// change; the explicit claim — which attempt, who released it — rides the
+	// dispatch marker's open handle (attemptHandle.ResumedFrom), and the
+	// settlement decision on origin ties the ref to the person's release. So
+	// "this work came from a released attempt" is answerable from the
+	// durable records alone: fields first, the open handle beside them.
+	if d.ResumedFrom != nil {
+		provenance.SourceRef = d.ResumedFrom.WriteRef
+	}
 	return provenance
 }
 
