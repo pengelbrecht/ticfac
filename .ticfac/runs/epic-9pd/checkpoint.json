@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 6,
-  "state": "gating",
-  "reason": "running the integrated gate for 0z0 on 69ec8cc42127",
-  "updated_at": "2026-09-15T09:54:37Z",
+  "sequence": 7,
+  "state": "publishing",
+  "reason": "closing 0z0 behind the integrated gate on 69ec8cc42127",
+  "updated_at": "2026-09-15T10:00:47Z",
   "ticks": [
     {
       "tick_id": "0z0",
