@@ -104,7 +104,11 @@ and a repo declaring the rule is refused at startup until the token is set
 (tick 0iz).
 
 settle flags:
-  --release <who>     the person releasing the attempt (required)
+  --release <who>     the person releasing the attempt (required); recorded as a stable
+                      pseudonymous id in the committed decision — the value you pass here
+                      never reaches the target repository, which may forbid operator
+                      identifiers in its tracked files; it is kept in run-local state under
+                      --state-root
   --carry-work       base the next attempt of this tick on the released attempt's branch, so
                       the next worker starts from its commits rather than redoing them — the
                       gate still decides, and the new attempt's records state where its work

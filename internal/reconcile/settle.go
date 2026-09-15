@@ -2,7 +2,12 @@ package reconcile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -32,7 +37,15 @@ import (
 //   - the release is RECORDED, durably, on origin, as a decision naming who
 //     made it — the same shape a role job's answer lands in, because "a person
 //     decided this run may go on" is exactly a decision the run was made under.
-//     A release nobody can attribute is the clock release A11 refuses.
+//     A release nobody can attribute is the clock release A11 refuses. What the
+//     record names is a stable PSEUDONYMOUS handle, never the string the
+//     operator handed --release (tick 4ys): the decision is committed to the
+//     target repository's epic branch, and a public repository's rules forbid
+//     operator identifiers in tracked files. The handle is attribution — "a
+//     PERSON made this, and the same person reads as the same handle every
+//     time" — and the real value survives in run-local state outside the
+//     repository, where a person who can read the host can join a handle to a
+//     name.
 //   - the reconciler READS it. The next run does not adopt a released attempt;
 //     it dispatches a new one, at a new number, with a write ref of its own.
 //     Where the new attempt starts from is the release's DISPOSITION, and a
@@ -139,6 +152,103 @@ type settlement struct {
 
 func attemptKey(tick string, attempt int) string { return fmt.Sprintf("%s#%d", tick, attempt) }
 
+// releaseHandle is the value a settlement records for the person who released
+// the attempt: a stable PSEUDONYMOUS id, never the string itself.
+//
+// `--release "<who>"` is an operator's answer in their own words — a name, an
+// email address, whatever says "me" to them — and the decision it lands in is
+// COMMITTED to the target repository's epic branch, whose rules may forbid
+// operator identifiers in tracked files outright (a public repository's do).
+// What the run needs from released_by survives the substitution, and it is
+// all the run ever needed:
+//
+//   - that a PERSON made this decision (a person-shaped handle, not "clock"),
+//     which is what separates a release from the clock release A11 refuses;
+//   - WHICH person, when two releases are compared — the handle is a pure
+//     function of the input, so the same operator reads as the same handle
+//     every time, and the next run's carried-dispatch provenance names the
+//     same person the decision does;
+//   - which agent acted on it — the decision's own provenance, untouched.
+//
+// The real value is kept in run-local state outside the repository
+// (keepReleaseIdentity), so a person who can read the host can still join a
+// handle to a name — and nobody who can read only the repository can.
+//
+// The handle is a FULL sha256 over a domain-separated prefix and the input.
+// A truncation is how this record family went wrong once before (tick 4ys):
+// 32 hex characters are exactly the shape of a cloud account id, so every
+// run record carrying one tripped a public-repo account detector — a full
+// digest collides with nothing.
+func releaseHandle(by string) string {
+	sum := sha256.Sum256([]byte("ticfac/settle-release\x00" + by))
+	return "person-" + hex.EncodeToString(sum[:])
+}
+
+// releaseRecord is the run-local counterpart of a settlement's committed
+// decision: the REAL value behind the handle. It lives under the run's
+// ExecStateRoot — host-local, outside the repository, the same place the
+// executor keeps its own attempt state — so the repository a settlement is
+// committed to carries the handle alone.
+type releaseRecord struct {
+	RunID      string `json:"run_id"`
+	TickID     string `json:"tick_id"`
+	Attempt    int    `json:"attempt"`
+	Handle     string `json:"handle"`
+	ReleasedBy string `json:"released_by"`
+	At         string `json:"at"`
+}
+
+// releaseRecordPath is where one settlement's real identity lives. It is
+// named by the attempt key the decisions are read back by, and it sits
+// BESIDE the executor's attempt state (not inside it) because the teardown a
+// settlement runs disposes that state — the mapping outlives the attempt's
+// own records the same way the kept branch outlives its worktree.
+func (r *Reconciler) releaseRecordPath(tickID string, attempt int) string {
+	return filepath.Join(r.opts.ExecStateRoot, r.runID, "settlements", attemptKey(tickID, attempt)+".json")
+}
+
+// keepReleaseIdentity writes the real value behind a release handle to
+// run-local state, BEFORE the decision is recorded: a handle this host can
+// no longer resolve is a release nobody can attribute, and a decision whose
+// identity could not be kept is refused rather than recorded.
+func (r *Reconciler) keepReleaseIdentity(marker attemptHandle, by, at string) error {
+	raw, err := json.Marshal(releaseRecord{
+		RunID: r.runID, TickID: marker.TickID, Attempt: marker.Attempt,
+		Handle: releaseHandle(by), ReleasedBy: by, At: at,
+	})
+	if err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s: %w",
+			marker.Attempt, marker.TickID, err)
+	}
+	path := r.releaseRecordPath(marker.TickID, marker.Attempt)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
+			"repository: %w", marker.Attempt, marker.TickID, err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
+			"repository: %w", marker.Attempt, marker.TickID, err)
+	}
+	return nil
+}
+
+// releaseIdentity reads the real value back, for an operator asking who a
+// settled attempt was released by. Run-local state may be gone — a different
+// host, a cleaned state root, a release recorded before the handle existed —
+// and the answer is then false: the caller falls back to the handle the
+// committed record carries, whose claim ("a person") is untouched either way.
+func (r *Reconciler) releaseIdentity(tickID string, attempt int) (string, bool) {
+	raw, err := os.ReadFile(r.releaseRecordPath(tickID, attempt))
+	if err != nil {
+		return "", false
+	}
+	var record releaseRecord
+	if json.Unmarshal(raw, &record) != nil || record.ReleasedBy == "" {
+		return "", false
+	}
+	return record.ReleasedBy, true
+}
+
 // Settle releases one attempt this host cannot address, on a person's word.
 // The released attempt's work stays on its own write ref, for a person to
 // take by hand — and the settlement SAYS where that ref lives: on the
@@ -231,15 +341,23 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 	if existing, err := r.settlements(); err != nil {
 		return nil, err
 	} else if was, ok := existing[attemptKey(tickID, attempt)]; ok {
+		// The operator-facing name for a release already on record: the real
+		// value when this host still holds it, the handle the record carries
+		// otherwise. Both are answers to "a person"; neither is a claim the
+		// record does not make.
+		by := was.by
+		if real, found := r.releaseIdentity(tickID, attempt); found {
+			by = real
+		}
 		if carry && !was.carry {
 			return nil, fmt.Errorf(
 				"reconcile: attempt %d of %s was already released by %s without carrying its work, and a "+
 					"decision is created if absent and never rewritten: the release stands as it was made. "+
 					"The work is still on %s — a person who wants it to go forward can merge it by hand, or "+
 					"push it where the next run will branch from it",
-				attempt, tickID, was.by, was.carryRef)
+				attempt, tickID, by, was.carryRef)
 		}
-		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: was.by,
+		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
 			State: subprocess.StateLost, Recorded: false, Carried: was.carry, CarryRef: was.carryRef}, nil
 	}
 
@@ -274,6 +392,13 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 				attempt, tickID, branch)
 		}
 		carryRef, carrySHA = marker.WriteRef, head
+	}
+
+	// The real identity behind the release is kept BEFORE the decision is
+	// written, because a handle nobody can resolve is an unattributable
+	// release — the clock release A11 refuses, wearing a different string.
+	if err := r.keepReleaseIdentity(marker, by, r.now().UTC().Format(time.RFC3339)); err != nil {
+		return nil, err
 	}
 
 	number, err := r.recordSettlement(marker, by, state, carry, carryRef, carrySHA)
@@ -471,9 +596,16 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string, ca
 	// sends the next attempt of the tick to the released head, and names the
 	// ref and the commit so what is being carried is a field, never prose
 	// (tick 0z0).
+	//
+	// released_by is the stable PSEUDONYMOUS handle, never the string the
+	// operator handed --release (tick 4ys): this decision is COMMITTED to the
+	// target repository's epic branch, whose rules may forbid operator
+	// identifiers in tracked files — and attribution, not identification, is
+	// all this field ever owed the run. The real value is kept in run-local
+	// state outside the repository (keepReleaseIdentity).
 	response := map[string]any{
 		"settled":     true,
-		"released_by": by,
+		"released_by": releaseHandle(by),
 		"disposition": dispositionUnaddressable,
 		"state":       state,
 	}

@@ -396,12 +396,28 @@ func (r *Reconciler) guarded(name string) bool { return !r.guardsOff[name] }
 
 // digestOf is the config and profile digest: one stable value over the strings
 // that decide what a check evaluated.
+//
+// It is a FULL sha256 — the label and all 64 hex characters (tick 4ys). The
+// old truncation to 32 hex was wrong twice over: a string labelled sha256
+// over half of one is a false label, and 32 hex characters are exactly the
+// shape of a cloud account id, so every run record carrying one tripped a
+// public-repo account detector — 60 findings on one epic. A full digest
+// collides with nothing.
+//
+// No migration follows the change, deliberately: a changed digest reads as
+// "the thing it covers changed", which is the safe direction here. Every
+// digest COMPARISON — an evidence record's fingerprint against the current
+// target — computes both sides in one process with this one function, and
+// evidence reuse is keyed by the SOURCE tree it ran on (gate.go), never by a
+// digest. So a stored record that predates the change simply carries a value
+// this build would not mint: it is never read back as fresh, and the check it
+// evidences re-runs rather than being trusted across a change it cannot see.
 func digestOf(parts ...string) string {
 	sum := sha256.New()
 	for _, part := range parts {
 		fmt.Fprintf(sum, "%d:%s\n", len(part), part)
 	}
-	return "sha256:" + hex.EncodeToString(sum.Sum(nil))[:32]
+	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
 
 // commandDigest is the digest of the declared gate: the checks, in name order,
