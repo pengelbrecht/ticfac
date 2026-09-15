@@ -1,6 +1,7 @@
 package runstate_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,5 +81,60 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("no go.mod above the test's working directory")
 		}
 		dir = parent
+	}
+}
+
+// TestEveryProductionFetchStaysOffSharedRefs extends the guard to the second
+// shared ref, found only after the FETCH_HEAD fix shipped.
+//
+// Fetching a branch from a NAMED remote makes git also update
+// refs/remotes/<remote>/<branch> opportunistically. An operator's
+// `git fetch origin` in the same checkout updates the same ref, the two race on
+// its lock, and the loser exits 1 — which ended the run in
+// TestAnOperatorFetchingInTheRunsCheckoutEndsNothing on the code that had
+// already stopped reading FETCH_HEAD. A fetch ticfac issues must update only
+// the refspec on its own command line and write nothing else.
+func TestEveryProductionFetchStaysOffSharedRefs(t *testing.T) {
+	t.Parallel()
+
+	root := repoRoot(t)
+	var offenders []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			switch info.Name() {
+			case ".git", "testdata", "vendor", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		for i, line := range strings.Split(string(body), "\n") {
+			if !strings.Contains(line, `"fetch"`) {
+				continue
+			}
+			if !strings.Contains(line, `"--no-write-fetch-head"`) || !strings.Contains(line, `"--refmap="`) {
+				rel, _ := filepath.Rel(root, path)
+				offenders = append(offenders, fmt.Sprintf("%s:%d", rel, i+1))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if len(offenders) > 0 {
+		t.Fatalf("production fetches that can race another git process on shared refs: %v\n"+
+			"Pass both flags on the same line as \"fetch\":\n"+
+			"    \"fetch\", \"--no-write-fetch-head\", \"--refmap=\", <remote>, +<ref>:<private ref>\n"+
+			"See tick wdb.", offenders)
 	}
 }

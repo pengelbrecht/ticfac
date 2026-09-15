@@ -285,8 +285,15 @@ func (s *Store) peek() (head string, view map[string]string, err error) {
 	// with "ambiguous argument 'FETCH_HEAD'". Both were observed in production
 	// (tick wdb). --no-write-fetch-head keeps ticfac from doing the same to
 	// anyone else.
+	//
+	// --refmap= closes the second shared ref, found by
+	// TestAnOperatorFetchingInTheRunsCheckoutEndsNothing after the first fix
+	// shipped: fetching a branch from a NAMED remote also updates
+	// refs/remotes/<remote>/<branch>, which an operator's `git fetch origin`
+	// updates too. The two race on that ref's lock and the loser's fetch exits
+	// 1, ending the run. An empty refmap updates only the refspec given here.
 	ref := s.peekRef()
-	if _, err := s.git.run("fetch", "--no-write-fetch-head", s.remote,
+	if _, err := s.git.run("fetch", "--no-write-fetch-head", "--refmap=", s.remote,
 		"+"+s.branchRef()+":"+ref); err != nil {
 		return "", nil, fmt.Errorf("runstate: fetch %s %s: %w", s.remote, s.branch, err)
 	}

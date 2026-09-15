@@ -152,7 +152,15 @@ func (g *repoGit) pruneWorktrees() (string, error) {
 // backwards move on the remote wedges every future fetch on a non-fast-
 // forward against a stale local ref nobody can see.
 func (g *repoGit) fetch(branch string) error {
-	_, err := g.run("", "fetch", "--quiet", g.remote, "+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch))
+	// --no-write-fetch-head and --refmap= keep this fetch off the two pieces of
+	// state every other git process in the checkout also writes: FETCH_HEAD,
+	// and the remote-tracking ref git updates opportunistically when a branch
+	// is fetched from a NAMED remote. An operator's `git fetch origin` writes
+	// both. Sharing either is a race: FETCH_HEAD hands back another branch's
+	// head, and refs/remotes/<remote>/<branch> fails to lock and fails the
+	// fetch. Only the refspec on this command line is updated. Tick wdb.
+	_, err := g.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", g.remote,
+		"+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch))
 	return err
 }
 

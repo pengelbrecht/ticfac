@@ -111,7 +111,7 @@ func (t *trackerTree) originHead() (string, error) {
 	// records, but a clean worktree — the normal state between publishes — moves
 	// silently. See ticfac tick wdb.
 	ref := refFor("refs/ticfac/peek/tracker/" + t.runID)
-	if _, err := t.git.run("", "fetch", "--quiet", "--no-write-fetch-head", t.remote,
+	if _, err := t.git.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", t.remote,
 		"+"+refFor(t.branch)+":"+ref); err != nil {
 		return "", fmt.Errorf("fetch %s from %s: %w", t.branch, t.remote, err)
 	}
