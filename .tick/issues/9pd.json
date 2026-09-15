@@ -9,8 +9,8 @@
   "after": [
     "av8"
   ],
-  "acceptance_criteria": "The execution packages and the factory are GONE from the ticks repo, not duplicated, and ticks builds and passes without them. A tick whose work lives in another repository is either dispatchable there with collect and the gate defined, or refused at planning time by a logged decision. A PRODUCTION epic — real work, not a demo — completes end to end through ticfac run-epic on herdr, and the run is shown. The pinned contract covers [testing.commands] and [roles.*] including tiers. No ungated path to ticks data remains. go test -short -timeout 45m ./... green (make test-short).",
+  "acceptance_criteria": "[A1] A run survives an operator observing it: git fetch in the run's checkout, ticfac findings, and reading the branch do not end or corrupt the run, proven by a test that does all three mid-run.\n[A2] A run-state conflict does not end a run: the reconciler continues against the refreshed state and fails only after a bounded number of consecutive conflicts on one write.\n[A3] 'Is this run alive?' is answered by ticfac itself (pidfile with start time, feed heartbeat, status command), and a killed run reads dead within one heartbeat.\n[A4] Every run death leaves its cause in a log under the state root and a terminal line in the feed.\n[A5] Every attempt's prose report is archived in the run's records, whatever its verdict, and survives worktree teardown.\n[A6] A closeout attempt commits its own learnings and the run integrates them; no role is told a boundary stricter than the one it is judged against.\n[A7] With several surviving attempts of one tick, the run adopts the latest adoptable one.\n[A8] Every other child of this epic is closed or carries a recorded reason it was deferred.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T16:15:37.000517Z",
-  "updated_at": "2026-09-14T16:15:41.197907Z"
+  "updated_at": "2026-09-15T08:26:04.923502Z"
 }

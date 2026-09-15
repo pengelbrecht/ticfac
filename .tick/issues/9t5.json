@@ -1,0 +1,17 @@
+{
+  "id": "9t5",
+  "title": "Close out Phase 3: retro, and say whether ticfac is ready to run unattended",
+  "description": "Run the epic-close retro.\n\nThen answer the question Phase 3 exists to settle, in plain words and with evidence: can ticfac drive an epic unattended, without a person watching for stalls?\n\nThe bar is the one the pwp run failed. During that run the orchestrator died three times, could not say whether it was alive, lost every superseded attempt's reasoning, and left a role unable to write its own deliverable — and a person caught each of those, not a mechanism. Phase 3 is done when the mechanisms catch them.\n\nSay plainly what is still carried by a human, if anything. An honest residual list is worth more than a claim of completeness.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "h0f"
+  ],
+  "parent": "9pd",
+  "role": "closeout",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T07:35:44.926692Z",
+  "updated_at": "2026-09-15T07:35:44.926692Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "h0f",
+  "title": "Final review of the Phase 3 diff  --blocked-by 0iz 0z0 35h 48q 4ys 54n 55i cwa e08 glb her ix9 udp w1c wdb",
+  "description": "Review the full Phase 3 diff. The checklist is what must SURVIVE, not what changed.\n\nSpecifics this epic earns, because they are the properties its own tickets were written from:\n- The reconciler still contains no herdr code (the seam test must still pass, not merely compile).\n- The durable-evidence doctrine holds: collect makes zero substrate calls, proven by the all-errors fixture, not by reading the code.\n- A run survives an operator observing it: fetch in the run's checkout, list findings, read the branch — none of it may end the run. This is what ea1baed fixed; re-prove it end to end rather than trusting the guard test.\n- Every refusal still tears down exactly what it should and no more.\n\nVerify a claimed defect against the base commit before any repair is built on it. This epic has already cost one repair built on a defect that did not exist.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "role": "review",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T07:35:44.86674Z",
+  "updated_at": "2026-09-15T07:35:44.86674Z"
+}
