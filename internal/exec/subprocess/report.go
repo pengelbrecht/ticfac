@@ -1,6 +1,7 @@
 package subprocess
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -152,6 +153,46 @@ func OutsideBoundary(path string) bool {
 		}
 	}
 	return false
+}
+
+// learningsPath is the exempt file a retro or a learning belongs in: the one
+// destination the closeout role's own instructions point its output at. It is
+// looked up from the exemption list rather than hard-coded a second time, so
+// a refusal can never offer a destination the boundary would also refuse —
+// the drift this tick exists to close, moved from the prompt into the refusal
+// if it were ever hand-written here. Empty when the boundary exempts no
+// learnings file, in which case the refusal simply omits the clause.
+func learningsPath() string {
+	for _, path := range exemptFromBoundary {
+		if strings.HasSuffix(path, "/learnings.md") {
+			return path
+		}
+	}
+	return ""
+}
+
+// BoundaryRefusal is the sentence a tracker-record boundary violation is
+// refused in, shared by both collect implementations so they cannot disagree
+// about the same tick. It names the ROLE the attempt ran under and the
+// destinations the boundary permits, because a refusal that says only "no"
+// leaves a worker inventing a workaround — which is what the flat prohibition
+// cost the closeout role: five attempts, each refused without being told that
+// its learnings had a permitted destination all along (tick 54n).
+//
+// The destinations are rendered from ExemptFromBoundary(), the same single
+// source the prompt renders its permission line from, and the report's
+// destination is the artifact prefix the executor owns — so the refusal says
+// where the output should have gone in the same words the prompt does.
+func BoundaryRefusal(role, artifactPrefix string, violations []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "the %s attempt committed records under an authority that is not its own: %v. "+
+		"The boundary permits any role to amend %s",
+		role, violations, strings.Join(ExemptFromBoundary(), ", "))
+	if learnings := learningsPath(); learnings != "" {
+		fmt.Fprintf(&b, "; a retro or a learning belongs in %s", learnings)
+	}
+	fmt.Fprintf(&b, ", and the report belongs under %s", artifactPrefix)
+	return b.String()
 }
 
 // ArtifactPrefixViolations is the backstop behind Start's git exclude: it
