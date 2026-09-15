@@ -246,7 +246,17 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	if isRoleJob(entry.Role) {
 		// Review and closeout are jobs like any other, on the same executor —
 		// what differs is that the reconciler acts on the ANSWER they return
-		// rather than on a branch it merges.
+		// rather than on a branch it merges. Close-out additionally has an
+		// ADMISSION PRECONDITION the run itself enforces (tick 0iz): a target
+		// repo that declares the PR + CI rule in .tick/config.md has its epic
+		// PR opened by the run and its close-out held until CI is green — the
+		// rule is checked BEFORE the phase is claimed or dispatched, never
+		// left to the close-out worker's diligence.
+		if entry.Role == "closeout-epic" {
+			if err := r.admitCloseout(ctx, entry); err != nil {
+				return err
+			}
+		}
 		return r.processRoleJob(ctx, entry)
 	}
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -418,6 +419,18 @@ type fixtureOptions struct {
 	repo      *testRepo
 	budget    float64
 	ceiling   float64
+
+	// pullRequests is the code-hosting surface behind the PR + CI close-out
+	// rule (tick 0iz): the fake forge a test that declares the rule supplies.
+	// Nil is the honest default — a repo that declares no rule needs no
+	// surface, and construction refuses one that does.
+	pullRequests forge.PullRequests
+
+	// gateTimeout overrides the CI wait bound for the admission tests, the
+	// way the harness overrides every other cadence: a bound measured in
+	// minutes is testable in milliseconds without the bound being a
+	// test-only number.
+	gateTimeout time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -462,6 +475,10 @@ func fakeRunnerArgv(t *testing.T, mode string) []string {
 // checkout the reconciler works in, which a restart replaces with a fresh
 // clone while everything else stays where it was.
 func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
+	gateTimeout := 2 * time.Minute
+	if opts.gateTimeout > 0 {
+		gateTimeout = opts.gateTimeout
+	}
 	return Options{
 		Repo:          repo.Dir,
 		Remote:        "origin",
@@ -472,13 +489,14 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		Tracker:       f.Tracker,
 		ExecStateRoot: f.StateRoot,
 		GateConfig:    filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:   2 * time.Minute,
+		GateTimeout:   gateTimeout,
 		PollInterval:  20 * time.Millisecond,
 		WipeThreshold: 10 * time.Second,
 		StepCap:       60 * time.Millisecond,
 		WallSeconds:   120,
 		BudgetUSD:     opts.budget,
 		CeilingUSD:    opts.ceiling,
+		PullRequests:  opts.pullRequests,
 		Sleep:         func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		guardsOff:     opts.guardsOff,
 		stopAfter:     opts.stopAfter,

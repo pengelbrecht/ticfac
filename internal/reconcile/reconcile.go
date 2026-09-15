@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -285,6 +286,26 @@ type Options struct {
 	// is `<repo>/.tick/runners.toml`.
 	GateConfig string
 
+	// RepoConfig is the target repository's own config — `.tick/config.md` —
+	// from which the run reads the rules the repository declares for itself.
+	// Today that is one rule: the PR + CI close-out gate (tick 0iz), the
+	// precondition a close-out phase is admitted against. Empty is
+	// `<repo>/.tick/config.md`; a repository that carries no config.md
+	// declares no rule, the way runners.toml's gate reader treats a missing
+	// file as no gate rather than inventing one.
+	RepoConfig string
+
+	// PullRequests is the code-hosting surface behind the PR + CI close-out
+	// rule: find the epic PR, open one, read CI on it. It is passed in rather
+	// than reached for for the same reason every other surface is — the
+	// behaviour under test is the behaviour that ships — and nil is legal
+	// ONLY where the target repo declares no close-out rule: a repository
+	// that declares one and a build with no surface behind it is refused at
+	// construction, before anything is claimed, because a close-out whose
+	// precondition nothing can check is one a whole run of work discovers it
+	// cannot complete only at the end.
+	PullRequests forge.PullRequests
+
 	// GateTimeout bounds one gate command.
 	GateTimeout time.Duration
 
@@ -360,6 +381,11 @@ type Reconciler struct {
 
 	gate       GateCommands
 	gateDigest string
+
+	// closeoutRule is what the target repository's own .tick/config.md
+	// declares about how an epic integrates (tick 0iz). The zero value — a
+	// repo that declares no rule — admits close-out as it always did.
+	closeoutRule CloseoutRule
 
 	// profiles is the resolved role profile per role, and profileSet digests
 	// all of them together: a checkpoint is not about one role, so it names the
@@ -515,6 +541,27 @@ const (
 	// them. It is recorded once, on the dispatch that actually happened — not
 	// in the planning half, which a dispatch conflict can run twice.
 	StageCarried = "carried"
+
+	// StagePROpened is the line the run leaves when the epic PR exists — the
+	// one it opened, or the one a previous incarnation opened that this one
+	// found (tick 0iz). It is recorded at the CLOSE-OUT tick's scope, so the
+	// feed line carries the tick whose admission the PR is a precondition
+	// of, and it is the run that opens the PR, never the close-out worker's
+	// diligence.
+	StagePROpened = "pr_opened"
+
+	// StageCloseoutAdmitted is the line the close-out admission leaves when
+	// the precondition the target repo declares is met: the epic PR is open
+	// and CI is green on it, so the close-out phase is admitted (tick 0iz).
+	// The phase it admits then proceeds through the ordinary stages.
+	StageCloseoutAdmitted = "closeout_admitted"
+
+	// StageCloseoutHeld is the line the close-out admission leaves while it
+	// holds the phase: CI is pending on the epic PR. Which half of the
+	// precondition is unmet is in the detail when a refusal follows, and the
+	// typed refusal carries the verdict — the line says when to look, never
+	// what happened (tick 0iz).
+	StageCloseoutHeld = "closeout_held"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -554,6 +601,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.GateConfig == "" {
 		opts.GateConfig = filepath.Join(opts.Repo, ".tick", "runners.toml")
+	}
+	if opts.RepoConfig == "" {
+		opts.RepoConfig = repoConfigPath(opts.Repo)
 	}
 	if opts.GateTimeout <= 0 {
 		opts.GateTimeout = 30 * time.Minute
@@ -611,6 +661,26 @@ func New(opts Options) (*Reconciler, error) {
 	if len(gate) == 0 {
 		return nil, fmt.Errorf("reconcile: %s declares no [testing.commands]: there is no integrated gate to run, "+
 			"and closing a tick behind a gate that does not exist is a close nothing stands behind", opts.GateConfig)
+	}
+
+	// The close-out rule (tick 0iz), read from the repository's own config
+	// rather than hardcoded — the way the gate above is read from
+	// runners.toml. A repository that declares the rule and a build with no
+	// code-hosting surface behind it is refused HERE, at construction, for
+	// the same reason an unusable profile is: the precondition cannot be
+	// checked, and discovering that three ticks into an epic — or, worse, at
+	// the close-out the rule governs — is the failure this tick exists to
+	// remove. The refusal names the fix an operator can make before the run
+	// starts.
+	rule, err := ReadCloseoutRule(opts.RepoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+	if rule.Declared && opts.PullRequests == nil {
+		return nil, fmt.Errorf("reconcile: %s declares the PR + CI close-out rule — %q — and this build has no "+
+			"code-hosting surface configured to open or read the epic PR: set %s (the GitHub surface reads it), or "+
+			"run against a host that provides one",
+			opts.RepoConfig, rule.Stated, forge.TokenEnv)
 	}
 
 	// The role profiles, resolved BEFORE anything is dispatched. A profile that
@@ -687,6 +757,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.git = g
 	r.gate = gate
 	r.gateDigest = gate.Digest()
+	r.closeoutRule = rule
 	r.profiles = profiles
 	r.profileSet = profileSetDigest(profiles)
 	r.pollInterval = opts.PollInterval
@@ -1044,6 +1115,15 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			"that was rejected holding commits nothing merged is reported rather than dispatched over, and "+
 			"nothing that already passed is redone",
 			strings.Join(failed, ", "))
+		// The refusal that stopped the run rides the terminal reason, because a
+		// checkpoint is written on a STATE CHANGE and this one is the last: the
+		// durable record a person (and a resumed run) reads names WHAT stopped
+		// it — the failing gate's check, the failing CI's JOB on the epic PR —
+		// and not the resumption template alone, which says how to continue but
+		// not what to fix (tick 0iz).
+		if r.failure != nil {
+			reason += fmt.Sprintf(". The refusal that stopped the run: %s", r.failure.Message)
+		}
 	}
 	if _, err := r.checkpoint(state, reason); err != nil {
 		return nil, err
@@ -1358,6 +1438,24 @@ const (
 	// the second at the person the draft is waiting for.
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
+
+	// The five the CLOSE-OUT ADMISSION adds (tick 0iz). The PR + CI rule a
+	// target repository declares in .tick/config.md is a precondition the
+	// RUN enforces, and each refusal names which half of it is unmet, because
+	// the halves send the next repair somewhere different: the first at the
+	// HOST, which configured no code-hosting surface for a repo that declares
+	// the rule; the second at the FORGE, which could not open or read the
+	// PR (a credential, a permission, a network); the third at the WORKFLOW,
+	// which never ran on the PR at all — unsatisfiable by waiting, which is
+	// the failure the rule exists to surface; the fourth at the CODE, named
+	// by the failing job the message carries; the fifth at the CLOCK — the
+	// run bounded its wait, and re-running the epic re-derives the admission
+	// from the PR rather than rediscovering it.
+	RefusedCloseoutForge     = "closeout_forge_absent" // no surface behind the rule
+	RefusedCloseoutPR        = "closeout_pr_unmet"     // no PR, or one the forge could not open or read
+	RefusedCloseoutCIAbsent  = "closeout_ci_absent"    // CI never ran on the PR head
+	RefusedCloseoutCI        = "closeout_ci_failed"    // CI red; the message names the failing job
+	RefusedCloseoutCIPending = "closeout_ci_pending"   // CI still pending past the run's bound
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9

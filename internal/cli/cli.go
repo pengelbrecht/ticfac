@@ -95,6 +95,14 @@ missing report, a run stopped at nothing — looks exactly like a worker defect
 when it is the host's: wrap the run in caffeinate -i on macOS, or the
 equivalent elsewhere, rather than letting the machine sleep (tick 0z0).
 
+A target repository may declare, in .tick/config.md's Rules section, that an
+epic integrates through a PR + CI gate: the run opens the epic PR itself,
+holds the close-out until CI is green on it, and refuses typed — naming the
+failing job — when CI is red. That rule needs a code-hosting surface: the
+GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
+and a repo declaring the rule is refused at startup until the token is set
+(tick 0iz).
+
 settle flags:
   --release <who>     the person releasing the attempt (required)
   --carry-work       base the next attempt of this tick on the released attempt's branch, so
@@ -287,6 +295,24 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		return 1
 	}
 
+	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz):
+	// built from the remote and the token, handed to the reconciler, and nil
+	// — with a note, not a crash — when neither resolves. A target repo that
+	// declares no rule in .tick/config.md needs no surface; one that does is
+	// refused by the reconciler at construction, naming the credential.
+	repoDir := *repo
+	if repoDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			repoDir = wd
+		}
+	}
+	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
+	if pullsErr != nil {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: no code-hosting surface: %v. "+
+			"A repository that declares the PR + CI close-out rule in .tick/config.md will be refused "+
+			"until one is configured.\n", epicID, pullsErr)
+	}
+
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
@@ -305,6 +331,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		WallSeconds:       *wall,
 		BudgetUSD:         *budget,
 		CeilingUSD:        *ceiling,
+		PullRequests:      pulls,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
@@ -316,12 +343,6 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// what this process says whether or not whoever launched it captured its
 	// output. The pwp production run died once with nothing captured, and its
 	// cause was never recovered.
-	repoDir := *repo
-	if repoDir == "" {
-		if wd, wdErr := os.Getwd(); wdErr == nil {
-			repoDir = wd
-		}
-	}
 	liveRun := reconciler.RunID()
 	life, err := runlife.Claim(repoDir, liveRun)
 	if err != nil {
@@ -483,6 +504,23 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// The same code-hosting surface the run is handed (tick 0iz): the
+	// reconciler this command builds shares the construction refusal, so a
+	// repo declaring the close-out rule is settled by a host that can back
+	// it — and the credential is read from the same one place.
+	repoDir := *repo
+	if repoDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			repoDir = wd
+		}
+	}
+	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
+	if pullsErr != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s: no code-hosting surface: %v. "+
+			"A repository that declares the PR + CI close-out rule in .tick/config.md is refused until one is "+
+			"configured.\n", epicID, pullsErr)
+	}
+
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
@@ -497,6 +535,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		GateConfig:        *gate,
 		ProfileDir:        *profiles,
 		Tier:              *tier,
+		PullRequests:      pulls,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)
