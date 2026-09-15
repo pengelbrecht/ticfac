@@ -479,3 +479,4 @@
 {"ts":"2026-09-15T12:13:41.400665Z","tick":"48q","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
 {"ts":"2026-09-15T12:34:21.691611Z","tick":"48q","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"2026-09-15 14:34 - ticfac run epic-9pd: attempt 4 merged into epic/9pd as 70cd78792e3b; the integrated gate (go) passed.","title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
 {"ts":"2026-09-15T12:34:27.764524Z","tick":"48q","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Checkpoint leaves a tick at 'integrated' after the tracker closed it"}}
+{"ts":"2026-09-15T12:34:53.913714Z","tick":"4ys","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Never write an operator identity into a record committed to the target repo"}}
