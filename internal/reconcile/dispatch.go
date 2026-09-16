@@ -1357,6 +1357,22 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 					"which is not the same as nothing running", marker.Attempt, marker.TickID)
 		}
 
+		// The wall clock's FIRING is a feed event, not only an observation in
+		// the attempt's own store (tick emk): the stop is the executor's to
+		// make — the local supervisor kills, the herdr executor delivers
+		// herdr's interrupt on this very poll, inside the Inspect above — but
+		// whether the stop TOOK is visible only by waiting for the next poll,
+		// and a watcher reading the feed saw nothing at all while an agent
+		// ran 26 minutes past its bound (the Phase 3 incident: the feed's
+		// last line was `dispatched` 85 minutes earlier). So the run says the
+		// bound fired the moment it can see the attempt has not settled past
+		// it, once, with the executor's own last word about what the
+		// substrate was seen doing — a hint about when to look, never a
+		// verdict, and no claim the stop did or did not take.
+		if wallAt, ok := r.wallClockAt(marker); ok && r.now().After(wallAt) {
+			r.announceWall(marker, status, wallAt)
+		}
+
 		// The reconciler's OWN deadline. The job's wall clock is the
 		// supervisor's to enforce, and a supervisor that died without settling
 		// enforces nothing: `running` then rests on a pid, and a pid is a
@@ -1429,6 +1445,55 @@ func lastObservation(status *subprocess.JobStatus) string {
 	return last.Detail
 }
 
+// wallClockAt is the moment the bound THIS attempt was issued fires: issued +
+// WallSeconds, read from the durable dispatch marker on origin — the same
+// arithmetic the settlement deadline starts from, and the same bound the
+// executor enforces on its own side (the local supervisor's kill timer, the
+// herdr executor's interrupt). The reconciler announced no bound of its own
+// when the run carries none (WallSeconds zero) and claims no firing for a
+// marker whose issue stamp cannot be read: a line about a bound nobody can
+// date is a line a reader cannot act on, and the attempt falls to the
+// settlement deadline as before.
+func (r *Reconciler) wallClockAt(marker attemptHandle) (time.Time, bool) {
+	if r.opts.WallSeconds <= 0 {
+		return time.Time{}, false
+	}
+	issued, ok := r.dispatchedAt(marker)
+	if !ok {
+		return time.Time{}, false
+	}
+	return issued.Add(time.Duration(r.opts.WallSeconds) * time.Second), true
+}
+
+// announceWall writes the bound's firing to the feed — ONCE per tick, like
+// every terminal-shaped fact: the re-delivery at every poll is the
+// executor's business, and a feed that repeats one fact at poll cadence
+// teaches a watcher to ignore it. A resumed run that adopts the attempt
+// again re-announces it, which is correct in the feed's own terms: the line
+// is a hint about when to look, and a watcher joining a run that is already
+// past the bound needs the hint as much as the first watcher did.
+//
+// The detail carries the executor's last observation because the line would
+// otherwise send the reader at the shape the message assumed — the incident
+// again: "interrupted but it has not exited" and "the supervisor is gone"
+// demand different first moves, and only the executor can say which it saw.
+func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobStatus, wallAt time.Time) {
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		event := r.journal[i]
+		if event.Tick != marker.TickID {
+			continue
+		}
+		if event.Stage == StageWallClock {
+			return
+		}
+		break
+	}
+	r.record(marker.TickID, StageWallClock,
+		"the wall clock of %ds fired %s ago and attempt %d of %s has not settled: the executor is stopping it — %s",
+		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), marker.Attempt, marker.TickID,
+		lastObservation(status))
+}
+
 // settlementDeadline is the moment after which an unsettled attempt is one
 // nobody can say is running.
 //
@@ -1446,12 +1511,26 @@ func lastObservation(status *subprocess.JobStatus) string {
 // would be a worse one.
 func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 	issued := r.now()
-	if record, ok, err := r.store.Attempt(marker.Attempt); err == nil && ok && record.TickID == marker.TickID {
-		if at, parseErr := time.Parse(time.RFC3339, record.DispatchedAt); parseErr == nil {
-			issued = at
-		}
+	if at, ok := r.dispatchedAt(marker); ok {
+		issued = at
 	}
 	return issued.Add(time.Duration(r.opts.WallSeconds)*time.Second + r.wipeThreshold)
+}
+
+// dispatchedAt is when the attempt's own durable marker on origin says it was
+// issued. It is the anchor every bound this run derives — the settlement
+// deadline and the wall clock's firing — so both read the same fact, and a
+// restarted run inherits the same bounds rather than re-issuing them.
+func (r *Reconciler) dispatchedAt(marker attemptHandle) (time.Time, bool) {
+	record, ok, err := r.store.Attempt(marker.Attempt)
+	if err != nil || !ok || record.TickID != marker.TickID {
+		return time.Time{}, false
+	}
+	at, parseErr := time.Parse(time.RFC3339, record.DispatchedAt)
+	if parseErr != nil {
+		return time.Time{}, false
+	}
+	return at, true
 }
 
 // ---------------------------------------------------------- the collect ---

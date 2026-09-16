@@ -571,6 +571,21 @@ const (
 	// typed refusal carries the verdict — the line says when to look, never
 	// what happened (tick 0iz).
 	StageCloseoutHeld = "closeout_held"
+
+	// StageWallClock is the line a bound's firing owes the feed (tick emk):
+	// the wall clock fired and the attempt has NOT settled, which is the
+	// moment the run stops making progress on its own — the moment a
+	// watcher's attention is worth asking for while there is still an agent
+	// to stop. It is written by the wait, once per tick, from the reconciler's
+	// own bound (the durable marker's issue time plus WallSeconds — the same
+	// arithmetic the settlement deadline starts from), and it carries the
+	// executor's last observation so the reader is sent at what the
+	// substrate was seen doing, not at a guess. The stop itself is the
+	// executor's to make (the local supervisor kills; the herdr executor
+	// delivers herdr's interrupt); this line only says the bound fired and
+	// the attempt is still unresolved — a hint about when to look, exactly
+	// like every other feed line, never a verdict.
+	StageWallClock = "wall_clock_fired"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
