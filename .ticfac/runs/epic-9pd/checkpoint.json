@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 100,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for h0f",
-  "updated_at": "2026-09-16T13:43:16Z",
+  "sequence": 101,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-16T13:53:22Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -75,6 +75,62 @@
     {
       "tick_id": "9t5",
       "state": "ready"
+    },
+    {
+      "tick_id": "emk",
+      "state": "ready"
+    },
+    {
+      "tick_id": "rj0",
+      "state": "ready"
+    },
+    {
+      "tick_id": "0dc",
+      "state": "ready"
+    },
+    {
+      "tick_id": "19l",
+      "state": "ready"
+    },
+    {
+      "tick_id": "5bp",
+      "state": "ready"
+    },
+    {
+      "tick_id": "7zs",
+      "state": "ready"
+    },
+    {
+      "tick_id": "9wo",
+      "state": "ready"
+    },
+    {
+      "tick_id": "bzx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "pbb",
+      "state": "ready"
+    },
+    {
+      "tick_id": "sqx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "usx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "vw0",
+      "state": "ready"
+    },
+    {
+      "tick_id": "3kx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "n4h",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -82,7 +138,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "d3c948c09285bfc50927414d090ccf8bd57634d7",
+    "source_sha": "2d186356713e14926c39c3e105118464e9a6f228",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
@@ -90,9 +146,9 @@
     "backend": null,
     "role": null,
     "tier": null,
-    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9",
+    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
     "model": null,
-    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260",
+    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260d335be7664b3af33531bb0becce28b17",
     "substrate_protocol": null,
     "substrate_server_version": null
   }
