@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 96,
-  "state": "dispatching",
-  "reason": "dispatching h0f as attempt 14",
-  "updated_at": "2026-09-16T12:04:32Z",
+  "sequence": 97,
+  "state": "running",
+  "reason": "h0f is running as attempt 14",
+  "updated_at": "2026-09-16T12:04:49Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -69,7 +69,8 @@
     },
     {
       "tick_id": "h0f",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 14
     },
     {
       "tick_id": "9t5",
