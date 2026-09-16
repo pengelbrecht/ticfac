@@ -2,13 +2,14 @@
   "id": "her",
   "title": "Finding triage has no verdict for 'fixed in this epic'",
   "description": "From the ticks pwp run, 2026-09-15.\n\nticfac finding offers exactly two verdicts: --promote-as \u003ctick\u003e or --discard. A finding that was REPAIRED inside the epic fits neither. There is no tick to promote it to, so the only way to unblock the run is --discard, which the tool defines as 'record that a person looked and said no' and which prints 'The same finding reported again proposes nothing new, whatever was decided here.'\n\nThat suppression is the problem. A later review that correctly re-reports the issue — because the fix was reverted, lost in a merge, or never actually landed — is treated as proposing nothing new, on the strength of a decision that meant the opposite.\n\nThis happened for real: finding 9b346da7 (ci.yml naming a deleted package) was fixed on epic/pwp as commit 338bbf8b and then discarded, because discard was the only verdict that would let the run continue. The true meaning was recorded only in a tracker note, which is prose a future run is not obliged to read.\n\nAdd a third verdict, something like --fixed-as \u003csha\u003e, that:\n- unblocks the tick the way promote and discard do,\n- records the commit that repaired it, so the claim is checkable rather than asserted,\n- does NOT suppress a later report of the same finding: if it comes back, the fix did not hold, and that is exactly when the run must hear it.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "9pd",
   "acceptance_criteria": "A finding repaired inside the epic can be triaged as fixed, naming the commit; the run continues; and a later report of the same finding is NOT suppressed, proven by a test that re-reports it and asserts the run surfaces it again",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T02:32:44.847165Z",
-  "updated_at": "2026-09-15T02:32:44.847165Z"
+  "updated_at": "2026-09-16T09:58:52.584984Z",
+  "started_at": "2026-09-16T09:58:52.584983Z"
 }
