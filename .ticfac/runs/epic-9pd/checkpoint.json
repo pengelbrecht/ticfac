@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 80,
-  "state": "publishing",
-  "reason": "closing her behind the integrated gate on 96bbe9b48947",
-  "updated_at": "2026-09-16T10:30:23Z",
+  "sequence": 81,
+  "state": "running",
+  "reason": "her is closed",
+  "updated_at": "2026-09-16T10:30:40Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "her",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 11
     },
     {
