@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 72,
-  "state": "gating",
-  "reason": "running the integrated gate for glb on 59d1496533b9",
-  "updated_at": "2026-09-16T09:52:40Z",
+  "sequence": 73,
+  "state": "publishing",
+  "reason": "closing glb behind the integrated gate on 59d1496533b9",
+  "updated_at": "2026-09-16T09:58:16Z",
   "ticks": [
     {
       "tick_id": "0z0",
