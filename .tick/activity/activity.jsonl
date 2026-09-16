@@ -503,3 +503,4 @@
 {"ts":"2026-09-16T09:58:52.585234Z","tick":"her","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Finding triage has no verdict for 'fixed in this epic'"}}
 {"ts":"2026-09-16T10:30:30.992477Z","tick":"her","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"2026-09-16 12:30 - ticfac run epic-9pd: attempt 11 merged into epic/9pd as 96bbe9b48947; the integrated gate (go) passed.","title":"Finding triage has no verdict for 'fixed in this epic'"}}
 {"ts":"2026-09-16T10:30:36.659758Z","tick":"her","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Finding triage has no verdict for 'fixed in this epic'"}}
+{"ts":"2026-09-16T10:31:01.74027Z","tick":"nvn","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"A re-dispatched attempt is not shown what its predecessors found"}}
