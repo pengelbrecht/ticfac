@@ -10,6 +10,6 @@
   "acceptance_criteria": "A workflow file naming a path that does not exist in the tree fails the integrated gate, proven by a test that adds such a path and asserts the gate refuses; or the decision not to cover it is recorded with its consequence and the close-out check that replaces it",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T02:32:44.804088Z",
-  "updated_at": "2026-09-15T13:24:37.137276Z",
+  "updated_at": "2026-09-16T07:50:03.475868Z",
   "started_at": "2026-09-15T13:24:37.137276Z"
 }
