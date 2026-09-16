@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 146,
-  "state": "running",
-  "reason": "attempt 19 of 19l is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (847d74219566)",
-  "updated_at": "2026-09-16T22:19:35Z",
+  "sequence": 147,
+  "state": "failed",
+  "reason": "attempt 19 of 19l is no-commits: the attempt branch carries no commit beyond the base it was cut from (847d74219566)",
+  "updated_at": "2026-09-16T22:19:37Z",
   "ticks": [
     {
       "tick_id": "0z0",
