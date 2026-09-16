@@ -182,7 +182,7 @@ func (e *Executor) readReport(record *attemptRecord) (Report, bool) {
 	// The worktree copy is gone once the attempt is torn down; collect
 	// archived it beside the attempt record first (tick 35h).
 	if record.State != "" {
-		if raw, err := os.ReadFile(filepath.Join(record.State, fileReportArchive)); err == nil {
+		if raw, err := os.ReadFile(filepath.Join(record.State, FileReportArchive)); err == nil {
 			report := ParseReport(string(raw))
 			report.Path = record.ResultRel
 			return report, true

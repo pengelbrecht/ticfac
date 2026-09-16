@@ -53,6 +53,11 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 		fmt.Fprintf(&b, "own instruction file. Do not run `tk`.\n\n")
 	}
 
+	// What the tick's EARLIER attempts found (tick nvn). The same section the
+	// local executor renders, from the same facts, in the same words — the
+	// job contract is one contract however the agent is delivered.
+	b.WriteString(subprocess.PriorReportsSection(record.PriorReports))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "Write it there whatever your working directory is when you finish — the path is\n")

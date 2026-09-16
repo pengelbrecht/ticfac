@@ -36,11 +36,18 @@ const (
 	fileLastPush      = "last_push"
 	filePrompt        = "prompt.md"
 	fileResult        = "result.json"
-	// fileReportArchive is the attempt's report, copied out of the worktree at
+	// FileReportArchive is the attempt's report, copied out of the worktree at
 	// collect. The worktree is removed at teardown and the report is excluded
 	// from the branch by design, so without this copy the analysis an attempt
 	// produced survives nowhere once it is disposed or superseded (tick 35h).
-	fileReportArchive = "report.md"
+	//
+	// It is EXPORTED because the name is part of the seam the reconciler's
+	// dispatch already walks (findAttemptState reads attempt.json out of the
+	// same directory, and internal/exec/herdr names its archive the same):
+	// tick nvn's dispatch locates a PREDECESSOR's report beside the attempt
+	// record it finds there, so the name is a contract with the reconciler
+	// rather than an executor internal.
+	FileReportArchive = "report.md"
 	dirWorktree       = "worktree"
 )
 
@@ -79,6 +86,14 @@ type attemptRecord struct {
 	// rendered whole, not the role's own half.
 	Model      string `json:"model,omitempty"`
 	RolePrompt string `json:"role_prompt,omitempty"`
+
+	// PriorReports are the archived reports of this tick's EARLIER attempts,
+	// as the dispatch handed them over (tick nvn) — newest first, each with
+	// the status line its report ended with. They are recorded for the same
+	// reason the model and the role prompt are: the prompt file beside this
+	// record is the rendered whole, and an attempt that was shown what its
+	// predecessors found is an attempt whose record says so.
+	PriorReports []PriorReport `json:"prior_reports,omitempty"`
 
 	WallSeconds  int `json:"wall_seconds"`
 	PushInterval int `json:"push_interval_seconds"`

@@ -530,6 +530,9 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		Remote:         d.Remote,
 		Attempt:        d.Attempt,
 		PushInterval:   time.Second,
+		// What the tick's earlier attempts found (tick nvn), forwarded the
+		// way the production factories forward it.
+		PriorReports: d.PriorReports,
 	})
 	if err != nil {
 		return nil, Substrate{}, err

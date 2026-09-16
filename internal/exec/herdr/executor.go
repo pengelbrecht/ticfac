@@ -64,6 +64,13 @@ type Options struct {
 	Model      string
 	RolePrompt string
 
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), which the rendered worker prompt names so a re-dispatched
+	// attempt does not start blind. Host-supplied for the same reason the
+	// role prompt is: the caller — the reconciler — is the one that knows
+	// where the predecessors' state directories live.
+	PriorReports []subprocess.PriorReport
+
 	// Remote is the origin in-progress work is durable on, for disposal's
 	// branch-safety question. Empty means "origin", and a repository without
 	// that remote records no remote rather than inventing one.
@@ -357,6 +364,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		AgentArgs:     e.opts.Args,
 		Model:         e.opts.Model,
 		RolePrompt:    e.opts.RolePrompt,
+		PriorReports:  e.opts.PriorReports,
 		WallSeconds:   spec.Limits.WallSeconds,
 		Remote:        e.remoteFor(spec),
 		SourceGrade:   spec.Credentials.Source.Grade(),

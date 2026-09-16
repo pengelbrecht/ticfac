@@ -52,6 +52,14 @@ type Options struct {
 	// boundary, the status vocabulary — and never the role.
 	RolePrompt string
 
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), which the rendered worker prompt names so a re-dispatched
+	// attempt does not start blind. It is host-supplied for the same reason
+	// the role prompt is: the protocol's records are closed, and the
+	// caller — the reconciler — is the one that knows where the predecessors'
+	// state directories live.
+	PriorReports []PriorReport
+
 	// SupervisorArgv is how this executor re-invokes itself to supervise an
 	// attempt. Defaults to the running executable plus "supervise".
 	SupervisorArgv []string
@@ -333,6 +341,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		Runner:        e.opts.Runner,
 		Model:         e.opts.Model,
 		RolePrompt:    e.opts.RolePrompt,
+		PriorReports:  e.opts.PriorReports,
 		WallSeconds:   spec.Limits.WallSeconds,
 		PushInterval:  int(e.opts.PushInterval / time.Second),
 		PushOnTimer:   e.guarded("push_on_timer"),

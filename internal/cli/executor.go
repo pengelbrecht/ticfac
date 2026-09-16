@@ -112,6 +112,9 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 		RolePrompt: d.Profile.Prompt,
 		Remote:     d.Remote,
 		Attempt:    d.Attempt,
+		// What the tick's earlier attempts found (tick nvn), for the same
+		// section of the worker prompt the local executor renders.
+		PriorReports: d.PriorReports,
 	})
 	if err != nil {
 		return nil, reconcile.Substrate{}, err
