@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 62,
-  "state": "running",
-  "reason": "e08 is running as attempt 9",
-  "updated_at": "2026-09-16T08:43:03Z",
+  "sequence": 63,
+  "state": "collecting",
+  "reason": "collecting e08 attempt 9",
+  "updated_at": "2026-09-16T09:00:52Z",
   "ticks": [
     {
       "tick_id": "0z0",
