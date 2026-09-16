@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 92,
-  "state": "integrating",
-  "reason": "integrating w1c attempt 13 into epic/9pd",
-  "updated_at": "2026-09-16T11:57:06Z",
+  "sequence": 93,
+  "state": "gating",
+  "reason": "running the integrated gate for w1c on a2b91d1bcc38",
+  "updated_at": "2026-09-16T11:57:22Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "w1c",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 13
     },
     {
