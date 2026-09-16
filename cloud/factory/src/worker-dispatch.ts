@@ -57,7 +57,7 @@ import type { WorkerCollector, WorkerReport, WorkerTask } from "./worker-collect
  *
  * Not a guess: `benchmarks/sandbox-start/2026-08-21-docker-amd64.json` records
  * `modes.cold.median_total_s = 93.24`, of which 71.9s is the image pull
- * (tick `kuf`). `internal/sandbox/benchmark_test.go` pins the budgets below
+ * (tick `kuf`). `internal/factory/payload_parity_test.go` pins the budgets below
  * against that artifact so the two cannot drift apart again.
  */
 export const COLD_START_BENCHMARK_MS = 93_240;
