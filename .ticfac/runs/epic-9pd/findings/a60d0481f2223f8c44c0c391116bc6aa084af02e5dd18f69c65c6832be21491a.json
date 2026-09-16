@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "w1c",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-16T11:56:58Z",
+  "triaged_at": "2026-09-16T11:58:04Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "vw0",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "w1c",
