@@ -3,7 +3,7 @@
   "title": "A re-dispatched attempt is not shown what its predecessors found",
   "description": "Split from tick 35h, which made an attempt's prose report survive teardown (report.md beside the attempt record). That is the precondition. This is the use.\n\nA re-dispatched attempt still starts blind. Its prompt names the tick and the repository; it does not name the reports of the attempts before it, though those now exist on disk. In the ticks pwp run, close-out attempts 11 to 15 each re-derived the same impasse and each surfaced a different subset of findings, because none could see what the last had concluded.\n\nWanted: when an attempt is dispatched for a tick that has earlier attempts, the prompt lists their archived report paths, newest first, with each one's status line, and says plainly that they are prior analysis to check rather than instructions to follow.\n\nCare needed: a predecessor's report can be wrong, and an attempt that trusts it inherits the error. The prompt should frame them as evidence to verify. Keep the reports local (the executor state directory); do not move worker prose into the target repository.",
   "notes": "2026-09-16 13:15 - ticfac run epic-9pd: attempt 12 reported a finding drafted for triage — proposed-tick \"Predecessor reports are invisible across run ids: a re-run epic's first attempt still starts blind\" (key f2b9ec18e5476f6a0d4f40480d34fe0ce159523f7209d3f6115d4df804774a5f, severity low, for this repository). Triage with `ticfac finding 9pd f2b9ec18e5476f6a0d4f40480d34fe0ce159523f7209d3f6115d4df804774a5f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-16 13:16 - ticfac run epic-9pd: attempt 12 reported a finding drafted for triage — defect \"Attempts 1-11 of this very tick left no exec-state reports, so attempt 12 could not have been shown them\" (key 2f0c76d911683741d2d0dfd928b5289dc27e4530b8500f0485170a78a6fda27f, severity low, for this repository). Triage with `ticfac finding 9pd 2f0c76d911683741d2d0dfd928b5289dc27e4530b8500f0485170a78a6fda27f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-16 13:24 - ticfac run epic-9pd: attempt 12 merged into epic/9pd as bfa0e7e04b7d; the integrated gate (go) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "An attempt dispatched for a tick with earlier attempts receives, in its prompt, the archived report path and status of each predecessor, framed as prior analysis to verify; a test asserts a second attempt's rendered prompt names the first attempt's report",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T08:48:30.139085Z",
-  "updated_at": "2026-09-16T11:24:09.344071Z",
-  "started_at": "2026-09-16T10:31:01.739919Z"
+  "updated_at": "2026-09-16T11:24:14.718856Z",
+  "closed_at": "2026-09-16T11:24:14.718856Z"
 }
