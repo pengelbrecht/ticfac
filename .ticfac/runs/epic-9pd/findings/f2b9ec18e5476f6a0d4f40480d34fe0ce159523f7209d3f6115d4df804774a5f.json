@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "nvn",
   "attempt": 12,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-16T11:15:51Z",
+  "triaged_at": "2026-09-16T11:17:08Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "n4h",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "nvn",
