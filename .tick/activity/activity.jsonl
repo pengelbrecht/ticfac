@@ -477,3 +477,5 @@
 {"ts":"2026-09-16T08:44:39.095506Z","tick":"0dc","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"The same gate evidence was refused as stale and then reused five minutes later","type":"task"}}
 {"ts":"2026-09-16T09:01:59.984773Z","tick":"5bp","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"cloud/sandbox exists in both repos with nothing to stop them drifting","type":"task"}}
 {"ts":"2026-09-16T09:02:00.099846Z","tick":"gqs","action":"create","actor":"claude:orchestrator","data":{"priority":3,"title":"The sandbox-start benchmark measures the copy the factory no longer ships","type":"task"}}
+{"ts":"2026-09-16T11:17:01.471465Z","tick":"n4h","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":3,"title":"Predecessor reports are invisible across run ids","type":"task"}}
+{"ts":"2026-09-16T11:57:59.29917Z","tick":"vw0","action":"create","actor":"claude:orchestrator","epic":"9pd","data":{"priority":2,"title":"fake-runner's blocked-first mode keys on the run-wide attempt number","type":"task"}}

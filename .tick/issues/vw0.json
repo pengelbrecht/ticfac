@@ -1,0 +1,14 @@
+{
+  "id": "vw0",
+  "title": "fake-runner's blocked-first mode keys on the run-wide attempt number",
+  "description": "Found by tick w1c (run epic-9pd, attempt 13) — the third time in one day that run-wide attempt numbering was mistaken for per-tick, and the first where it is a latent bug rather than a misreading.\n\ntestdata/fake-runner.sh's blocked-first and finding_blocked modes gate on TICFAC_ATTEMPT = 1. Attempt numbers count the RUN's dispatches, not a tick's tries. Every test passes today only because the fixture dispatches sequentially and the first tick always draws number 1. A future test whose tick does not draw number 1 gets DONE where the test expects BLOCKED, and fails for a reason nobody reading it can see.\n\nKey the mode on the tick's OWN first try — a per-tick value the harness derives and passes (the reconciler now computes exactly this for its feed lines: tryOf in internal/reconcile/dispatch.go) — so the mode is independent of dispatch order.\n\nThe wider pattern is worth stating in the retro: the same numbering confused the operator, produced a false defect report from the nvn worker about its own feature, and planted this fixture bug. The feed lines were fixed in 9930fab; the test vocabulary was not.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "fake-runner's blocked-first and finding_blocked modes trigger on the tick's own first attempt regardless of the run-wide number, proven by a test that dispatches another tick first",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T11:57:59.298734Z",
+  "updated_at": "2026-09-16T11:57:59.298734Z"
+}
