@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 54,
+  "sequence": 55,
   "state": "failed",
-  "reason": "the gate's evidence for cwa is no longer about what would be published (context_manifest_digest: sha256:a69f0 was gated, sha256:109e7 is the target now): publishing it would state a verdict about something else",
-  "updated_at": "2026-09-16T08:37:09Z",
+  "reason": "cwa did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone",
+  "updated_at": "2026-09-16T08:37:13Z",
   "ticks": [
     {
       "tick_id": "0z0",
