@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 59,
-  "state": "publishing",
-  "reason": "closing cwa behind the integrated gate on 12472988d0b1",
-  "updated_at": "2026-09-16T08:42:13Z",
+  "sequence": 60,
+  "state": "running",
+  "reason": "cwa is closed",
+  "updated_at": "2026-09-16T08:42:35Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "cwa",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 8
     },
     {
