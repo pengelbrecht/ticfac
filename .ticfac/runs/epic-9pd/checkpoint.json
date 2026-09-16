@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 126,
-  "state": "publishing",
-  "reason": "closing rj0 behind the integrated gate on 3a0ce6628b10",
-  "updated_at": "2026-09-16T15:41:48Z",
+  "sequence": 127,
+  "state": "running",
+  "reason": "rj0 is closed",
+  "updated_at": "2026-09-16T15:42:05Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -83,7 +83,7 @@
     },
     {
       "tick_id": "rj0",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 16
     },
     {
