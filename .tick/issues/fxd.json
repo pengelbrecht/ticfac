@@ -1,0 +1,14 @@
+{
+  "id": "fxd",
+  "title": "Decide whether feed events carry a run-incarnation id",
+  "description": "Found by tick 55i (run epic-9pd, attempt 2), routed as a contract change to pengelbrecht/ticks. 55i fixed replayed terminal events with a from-now cursor, which is right for subscribers that join live. A subscriber that wants history AND correct terminal attribution — a long-lived dashboard following one run from offset zero across a resume — cannot tell one incarnation's run_finished from another's without re-deriving incarnations from resumed/stage orderings. The fix would be a field on ticfac.run_event.v1, which is closed (additionalProperties: false) and pinned in the contract bundle, so it is a versioned upstream change, not an edit.\n\nThis is the operator's dashboard feed idea (backlog tick n0r) meeting a real constraint. Decide it when the dashboard is designed, not before: if no consumer follows from zero, the cursor is enough and the schema stays as is.",
+  "notes": "2026-09-15 13:04 - The schema half is carried in ticks as pengelbrecht/ticks:wal, which waits on this decision.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A recorded decision: either the run event schema gains a versioned incarnation field upstream with ticfac emitting it, or the decision not to is recorded with the consumer that would have needed it",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T11:03:30.52938Z",
+  "updated_at": "2026-09-15T11:04:24.075749Z"
+}

@@ -1099,16 +1099,19 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			failed = append(failed, entry.TickID)
 			r.failure = refusal
 			r.setTick(entry.TickID, "rejected")
-			// A run that stops holding something for a person says so to the
-			// feed in its own vocabulary (StageRunHeld, tick 0z0): the feed is
-			// the channel a non-participant subscribes to, and a hold nobody
-			// can see is a stall by definition — the run cannot proceed without
-			// a decision, and the decision is a person's to make. The line
-			// carries the tick and the attempt (tick scope), and the refusal's
-			// reason leads the detail, so `ticfac watch` can name which tick and
-			// why without parsing prose.
+			// Two answers to one question, from tick 0z0 and tick emk, kept
+			// together because they are not the same claim.
+			//
+			// A refusal that HOLDS the run for a person gets its own vocabulary
+			// (StageRunHeld, 0z0): the feed is what a non-participant watches,
+			// and a hold nobody can see is a stall by definition. Every other
+			// refusal still reaches the feed in its own words (emk) — without
+			// that, the feed went from `dispatched` straight to a generic
+			// run_finished and the reason existed only in the source.
 			if holdsForAPerson(refusal.Reason) {
 				r.record(entry.TickID, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+			} else {
+				r.recordRefusal(entry.TickID, refusal)
 			}
 			if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
 				return nil, cErr
@@ -1525,6 +1528,27 @@ func (r *Reconciler) refuse(reason, tick, format string, args ...any) *Refusal {
 		return &Refusal{Reason: reason, TickID: tick, Message: collapsedMessage}
 	}
 	return &Refusal{Reason: reason, TickID: tick, Message: fmt.Sprintf(format, args...)}
+}
+
+// recordRefusal writes a refusal to the feed, unless the path that produced it
+// already did. Two paths record their own rejection line with detail this one
+// could not add (the boundary violation's paths, the role job's answer), and a
+// terminal event said twice is worse than one said plainly.
+func (r *Reconciler) recordRefusal(tick string, refusal *Refusal) {
+	if refusal == nil {
+		return
+	}
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		event := r.journal[i]
+		if event.Tick != tick {
+			continue
+		}
+		if event.Stage == StageRejected {
+			return
+		}
+		break
+	}
+	r.record(tick, StageRejected, "%s: %s", refusal.Reason, refusal.Message)
 }
 
 // collapsedMessage is what a refusal reads like when distinct failure classes

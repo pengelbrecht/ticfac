@@ -480,11 +480,22 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 				"starts it rather than holding it — there is nothing to release",
 			marker.Attempt, marker.TickID)
 	}
+	// The handle names the executor the attempt was DISPATCHED under, from its
+	// own durable marker. It used to be hardcoded to the local subprocess
+	// executor, which made `ticfac settle` unusable for every herdr attempt:
+	// the herdr executor refuses a handle naming another executor, so the
+	// release refused with "handle names executor \"local-subprocess\"; this is
+	// herdr". That is the operator's escape hatch, and the refusal that sends
+	// them here names this very command — so a herdr run that needed a person
+	// had no way for the person to act (tick emk).
+	//
+	// A marker written before the field existed leaves it empty, which both
+	// executors accept.
 	handle := &subprocess.JobHandle{
 		SchemaVersion: subprocess.SchemaVersion,
 		JobID:         marker.JobID,
 		Attempt:       marker.Attempt,
-		Executor:      subprocess.ExecutorName,
+		Executor:      marker.Executor,
 		Handle:        map[string]any{"state": state},
 	}
 	status, err := executor.Inspect(handle, "")

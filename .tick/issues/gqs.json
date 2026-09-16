@@ -1,0 +1,13 @@
+{
+  "id": "gqs",
+  "title": "The sandbox-start benchmark measures the copy the factory no longer ships",
+  "description": "Found by tick e08 (run epic-9pd, attempt 9).\n\ne08 moved only the raw dated artifact its cold-start guard reads. The re-measurement harness (scripts/bench_sandbox_start.py) and docs/sandbox-start-benchmark.md are still in ticks, so re-running the benchmark measures ticks' copy of cloud/sandbox while the container the factory embeds is built from ticfac's.\n\nDecide where re-measurement belongs now that the container ships from here, and move or repoint the harness and its doc. Depends on who ends up owning cloud/sandbox — do this after that decision, or it will be moved twice.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Re-running the sandbox-start benchmark measures the image the factory actually ships, and the harness and its doc live with whoever owns that image",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T09:02:00.0985Z",
+  "updated_at": "2026-09-16T09:02:00.0985Z"
+}

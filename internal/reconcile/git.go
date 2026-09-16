@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // git, as the reconciler needs it: resolve, merge, push, and answer whether a
@@ -19,6 +21,10 @@ type repoGit struct {
 	name   string
 	email  string
 	remote string
+	// fetchID makes this instance's fetch destinations its own: a pid is not
+	// enough, because two of these can live in one process (tick emk's third
+	// layer — see internal/runstate.newFetchID).
+	fetchID string
 }
 
 func (g *repoGit) run(dir string, args ...string) (string, error) {
@@ -160,9 +166,19 @@ func (g *repoGit) fetch(branch string) error {
 	// head, and refs/remotes/<remote>/<branch> fails to lock and fails the
 	// fetch. Only the refspec on this command line is updated. Tick wdb.
 	_, err := g.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", g.remote,
-		"+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch))
+		"+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+g.fetch1D()+"/"+branch))
 	return err
 }
+
+// fetch1D is this instance's fetch id, assigned on first use.
+func (g *repoGit) fetch1D() string {
+	if g.fetchID == "" {
+		g.fetchID = strconv.Itoa(os.Getpid()) + "-" + strconv.FormatUint(repoGitSeq.Add(1), 10)
+	}
+	return g.fetchID
+}
+
+var repoGitSeq atomic.Uint64
 
 func refFor(branch string) string {
 	if strings.HasPrefix(branch, "refs/") {

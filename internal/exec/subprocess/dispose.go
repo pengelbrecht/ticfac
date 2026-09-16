@@ -84,6 +84,20 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 		return fmt.Errorf("remove the artifact prefix from this repository's git exclude file: %w", err)
 	}
 
+	// The report is copied out BEFORE the worktree goes, because the worktree
+	// is the only place it lives.
+	//
+	// collect archives it (tick 35h), but dispose is reached without a collect:
+	// settle.go cancels and disposes a RELEASED attempt, so a report a person
+	// released was deleted unread — the analysis 35h exists to preserve, lost
+	// on the one path a person takes when they most need to read it. herdr's
+	// dispose has always done this; the local executor did not. Found by the
+	// Phase 3 review, with a reproduction.
+	if _, archived := archiveReport(st, record); !archived {
+		_ = st.observe(Observation{At: e.stamp(), Kind: ObsExited,
+			Detail: "the attempt had no readable report to archive before its worktree was removed"})
+	}
+
 	if err := worktreeRemove(record.Repo, record.Worktree); err != nil {
 		return fmt.Errorf("remove the attempt worktree: %w", err)
 	}

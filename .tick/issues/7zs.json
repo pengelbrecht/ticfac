@@ -1,0 +1,14 @@
+{
+  "id": "7zs",
+  "title": "An attempt that is alive but making no progress is invisible until the wall clock",
+  "description": "From the Phase 3 run (epic-9pd, tick 0z0 attempt 1), 2026-09-15.\n\nThe run correctly knew the worker was alive for all 55 minutes. It had no way to know the worker had produced nothing durable for 40 of them. The feed was silent because nothing happened that the run observes; ticfac status reported alive, which was true. A person caught it by reading the pane.\n\nLiveness answers 'is it running'. Nothing answers 'is it getting anywhere'.\n\nThe simplest signal that is honest about what it measures: time since the attempt branch last moved, and time since the worktree last changed. Neither is a verdict and neither may stop or reject anything — a worker thinking hard legitimately commits nothing for a while. They are a reason to look, and the right place to surface them is where a watcher already looks: a feed line when the gap crosses a threshold, and the gap in ticfac status.\n\nDo not confuse this with the wall clock, which is the bound. This is the early warning before the bound spends the attempt.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "ticfac status reports, for each in-flight attempt, how long since its branch last moved and its worktree last changed, and the run writes one feed line when that gap first crosses a configured threshold; neither signal changes any verdict, proven by a test",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-15T09:54:29.101744Z",
+  "updated_at": "2026-09-15T09:54:29.101744Z"
+}

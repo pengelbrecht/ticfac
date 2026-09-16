@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -117,5 +118,100 @@ func TestAnOperatorFetchingInTheRunsCheckoutEndsNothing(t *testing.T) {
 
 	if seq := o.files()[CheckpointPath(run)]["sequence"]; seq != float64(60) {
 		t.Errorf("the checkpoint on origin is at sequence %v, want 60", seq)
+	}
+}
+
+// TestASecondTicfacProcessDoesNotEndTheRun is the Phase 3 review's finding 1,
+// which killed the run that produced it.
+//
+// `ticfac findings`, `finding` and `settle` open a Store with the SAME run id in
+// the same checkout as the live run. Both fetched into refs/ticfac/peek/<run-id>,
+// they raced on that ref's lock, and the loser exited 1 — which the reconciler
+// treats as fatal. Listing a run's findings could therefore end it, and did,
+// while the reviewer was filing the finding that reported it:
+//
+//	runstate: fetch origin epic/9pd
+//	! e0ae7be..a2bbeed epic/9pd -> refs/ticfac/peek/epic-9pd (unable to update local ref)
+//
+// The earlier test in this file fetched with plain git, which is why a per-run
+// ref looked sufficient. This one uses a second STORE, which is what an operator
+// command actually is.
+func TestASecondTicfacProcessDoesNotEndTheRun(t *testing.T) {
+	o := newOrigin(t)
+	const run = "r-observed"
+
+	live := o.actor("run", run)
+	if _, err := live.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := live.CreateIfAbsent(CheckpointPath(run), []byte(`{"sequence":1}`)); err != nil || got != Created {
+		t.Fatalf("the first checkpoint: %v %v", got, err)
+	}
+
+	// The operator's command: same run id, same checkout as the run's store.
+	observer, err := Open(Options{Repo: live.git.dir, Remote: "origin", Branch: o.branch, RunID: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// What `ticfac findings` does: fetch, then read.
+				if _, err := observer.Fetch(); err != nil {
+					t.Errorf("the operator's own read failed: %v", err)
+					return
+				}
+			}
+		}
+	}()
+	defer func() { close(stop); wg.Wait() }()
+
+	for i := 2; i <= 30; i++ {
+		if _, err := live.Fetch(); err != nil {
+			t.Fatalf("read %d while an operator listed the run: %v\n"+
+				"A ticfac command must never end the run it is reporting on.", i, err)
+		}
+		got, err := live.UpdateIfSHA(CheckpointPath(run), []byte(`{"sequence":`+strconv.Itoa(i)+`}`))
+		if err != nil {
+			t.Fatalf("checkpoint %d while an operator listed the run: %v", i, err)
+		}
+		if got != Updated {
+			t.Fatalf("checkpoint %d was %q while an operator listed the run", i, got)
+		}
+	}
+}
+
+// TestAPrivateFetchRefLeadsWithItsInstanceID pins the ref SHAPE, because the
+// first attempt at per-instance refs could not start at all.
+//
+// With the id last — refs/ticfac/peek/<run>/<id> — git refuses to create the ref
+// while refs/ticfac/peek/<run> exists, since a path cannot be both a ref and a
+// directory. Every checkout that had run an older build therefore had to be
+// cleaned by hand, and the run died on its first fetch:
+//
+//	cannot lock ref 'refs/ticfac/peek/epic-9pd/90033-1':
+//	'refs/ticfac/peek/epic-9pd' exists
+//
+// Leading with the id keeps each instance's namespace disjoint from anything any
+// other build ever wrote.
+func TestAPrivateFetchRefLeadsWithItsInstanceID(t *testing.T) {
+	t.Parallel()
+
+	s := &Store{runID: "epic-9pd", fetchID: "4242-7"}
+	ref := s.peekRef()
+	const want = "refs/ticfac/peek/4242-7/epic-9pd"
+	if ref != want {
+		t.Errorf("peekRef() = %q, want %q: the instance id must lead, or an older build's ref blocks this one", ref, want)
+	}
+	if strings.HasPrefix(ref, "refs/ticfac/peek/"+s.runID) {
+		t.Error("the ref is nested under the run id, which is where the directory/file conflict lives")
 	}
 }

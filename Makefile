@@ -17,7 +17,7 @@ GOTEST_TIMEOUT := 45m
 # re-measure and override without editing this file.
 GOTEST_PARALLEL ?= 12
 
-.PHONY: build vet test-short test
+.PHONY: build vet test-short test gate
 
 build:
 	go build ./...
@@ -30,3 +30,17 @@ test-short:
 
 test:
 	go test -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+
+# What the integrated gate runs, kept here so a human and CI run exactly what
+# gates a tick. The authoritative copy is .tick/runners.toml — that file is what
+# says what the gate runs, and a reader must see the command there rather than
+# an indirection — so TestTheGateTargetMatchesTheDeclaredGate fails if this
+# recipe and that command ever disagree.
+#
+# The gate's copy had drifted to a bare `go test -short -count=1 ./...`, losing
+# both numbers above: the gate, the one runner that can block every tick, was
+# running internal/reconcile serially against go's 10-minute per-package limit.
+# -count=1 is the gate's own addition: a verdict served from go's test cache is
+# not evidence that this tree passes.
+gate:
+	go test -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...

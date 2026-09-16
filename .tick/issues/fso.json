@@ -1,0 +1,13 @@
+{
+  "id": "fso",
+  "title": "Other path-naming configs can rot behind a green gate",
+  "description": "Found by tick cwa (run epic-9pd, attempt 8), which implemented the check for one case and scoped the rest out deliberately.\n\ncwa's check asserts that ./x/... package wildcards named in .github/workflows resolve. The same rot is possible in any config that names paths: CODEOWNERS, lint include lists, release manifests, and bare ./x inputs in workflow run lines (test -x ./scripts/deploy.sh).\n\nEach wants its own false-positive analysis before it becomes a check — a bare path may legitimately be a build output that does not exist at gate time, and a CODEOWNERS entry may name a path that is allowed to be absent. So each is a separate check, not a widening of cwa's.\n\nLow: nothing is known to be rotted today. This is hardening, filed so the shape is not forgotten.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "For each config kind adopted, a check that fails the gate when it names a path that cannot resolve, with its false-positive rule recorded; or a recorded decision that the kind is not worth checking",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T08:28:35.29302Z",
+  "updated_at": "2026-09-16T08:28:35.29302Z"
+}

@@ -421,8 +421,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// a worker that answered BLOCKED about an open blocker worth
 			// dispatching again once that blocker is closed.
 			r.record(tick, StageRedispatched,
-				"attempt %d settled with nothing on %s and was rejected; a new attempt is dispatched rather than "+
-					"the spent one adopted", existing.Attempt, branchOf(marker.WriteRef))
+				"attempt %d (%s try %d) settled with nothing on %s and was rejected; a new attempt is dispatched "+
+					"rather than the spent one adopted",
+				existing.Attempt, tick, tryOf(attempts, tick, existing.Attempt), branchOf(marker.WriteRef))
 			// The rung this attempt earned for the ladder: the work was
 			// dispatched, it had its chance, and it did not pass.
 			failed++
@@ -480,8 +481,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		if err != nil {
 			return nil, nil, adoptableMarker, err
 		}
-		r.record(tick, StageAdopted, "attempt %d was already dispatched; it is adopted by identity, never redispatched",
-			adoptable.Attempt)
+		r.record(tick, StageAdopted, "attempt %d (%s try %d) was already dispatched; it is adopted by identity, never redispatched",
+			adoptable.Attempt, tick, tryOf(attempts, tick, adoptable.Attempt))
 		return handle, executor, adoptableMarker, nil
 	}
 
@@ -590,7 +591,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		r.noteAlive(dispatch.JobID)
 		r.setTick(tick, "dispatched")
-		r.record(tick, StageDispatched, "attempt %d started as %s", number, dispatch.JobID)
+		r.record(tick, StageDispatched, "attempt %d started as %s (%s try %d; attempt numbers count this run's dispatches)",
+			number, dispatch.JobID, tick, tryOf(attempts, tick, number))
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
 		}
@@ -608,6 +610,25 @@ const maxDispatchConflicts = 8
 
 // nextAttemptNumber is the number a new dispatch takes. Attempt numbers are
 // RUN-wide, not per tick: the run state store keys attempts by number alone.
+// tryOf is how many times THIS tick has been dispatched, counting the attempt
+// numbered `number` as the latest.
+//
+// Attempt numbers count dispatches across the whole RUN, not tries at one tick,
+// because an attempt's number is its identity: it names its branch
+// (…/tick-nvn/attempt-12), its durable marker, and the argument to
+// `ticfac settle <epic> <tick> <n>`. That is right for identity and misleading
+// in a sentence — "attempt 12 of nvn" reads as eleven failures at nvn when it
+// is nvn's first try and the run's twelfth dispatch. So the feed says both.
+func tryOf(attempts []runstate.Attempt, tick string, number int) int {
+	try := 1
+	for _, existing := range attempts {
+		if existing.TickID == tick && existing.Attempt < number {
+			try++
+		}
+	}
+	return try
+}
+
 func nextAttemptNumber(attempts []runstate.Attempt) int {
 	number := len(attempts) + 1
 	for _, existing := range attempts {
@@ -1352,12 +1373,19 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		// not `wiped`: the substrate did not take it away, and a person is the
 		// next actor (settle.go).
 		if now := r.now(); now.After(deadline) {
+			// What the executor last SAW goes in the refusal, because the two
+			// shapes need different first moves. A local subprocess whose
+			// supervisor died leaves a pid nobody can trust. A herdr agent can
+			// be alive and simply not stopping: in the Phase 3 run a pi worker
+			// ran 26 minutes past its wall clock while the interrupt was
+			// re-delivered at every poll, and a refusal about a dead supervisor
+			// sent the reader at the wrong problem (tick emk).
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued: its supervisor never "+
-					"settled it, and a pid that outlives its job is a number the host reuses. Nobody can say whether "+
-					"it is running; release it with `ticfac settle %s %s %d --release \"<who>\"` once you have looked",
+				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and its executor "+
+					"could not settle it: %s. Nobody can say it is finished; look at it, stop whatever is still "+
+					"running, then release it with `ticfac settle %s %s %d --release \"<who>\"`",
 				marker.Attempt, marker.TickID, status.State, now.Sub(deadline).Round(time.Second),
-				r.opts.WallSeconds, r.opts.EpicID, marker.TickID, marker.Attempt)
+				r.opts.WallSeconds, lastObservation(status), r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
 		// The poll IS the keepalive. Its answer is about the substrate, not
@@ -1383,6 +1411,22 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		}
 		r.sleep(interval)
 	}
+}
+
+// lastObservation is the executor's own last word about an attempt, for a
+// refusal that would otherwise have to guess at the cause. The executor is the
+// only party that can see the substrate, and its observations are how it says
+// what it saw — "the interrupt was delivered but the agent has not exited" is
+// a different first move from "the supervisor is gone".
+func lastObservation(status *subprocess.JobStatus) string {
+	if status == nil || len(status.Observations) == 0 {
+		return "the executor recorded no observation about it"
+	}
+	last := status.Observations[len(status.Observations)-1]
+	if strings.TrimSpace(last.Detail) == "" {
+		return "the executor's last observation carried no detail"
+	}
+	return last.Detail
 }
 
 // settlementDeadline is the moment after which an unsettled attempt is one

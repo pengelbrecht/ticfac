@@ -42,7 +42,9 @@ const (
 	PIDName = "run.pid"
 	LogName = "run.log"
 
-	SchemaVersion = 1
+	// SchemaVersion 2 records the process start time in a pinned TZ/LC_ALL
+	// environment; 1 recorded whatever the writer's environment rendered.
+	SchemaVersion = 2
 )
 
 // Dir is the run's log directory: the feed's, so there is one place to look.
@@ -86,7 +88,7 @@ func Claim(repo, runID string) (*Life, error) {
 		return nil, fmt.Errorf("create %s: %w", dir, err)
 	}
 	if existing, ok, err := readRecord(dir); err == nil && ok {
-		if start, alive := processStart(existing.PID); alive && start == existing.ProcessStart && existing.PID != os.Getpid() {
+		if matched, _ := startMatches(existing); matched && existing.PID != os.Getpid() {
 			return nil, fmt.Errorf("%w: pid %d, started %s (%s)", ErrAlreadyLive, existing.PID, existing.StartedAt, filepath.Join(dir, PIDName))
 		}
 	}
@@ -216,12 +218,13 @@ func Probe(repo, runID string, now time.Time) Status {
 		status.State, status.Reason = Unknown, "ps is not available, so the process table cannot be asked"
 		return status
 	}
-	start, exists := processStart(record.PID)
+	matched, start := startMatches(record)
+	exists := start != ""
 	switch {
 	case !exists:
 		status.State = Dead
 		status.Reason = fmt.Sprintf("pid %d is gone and never released the run: it died; its last words are in %s", record.PID, status.Log)
-	case start != record.ProcessStart:
+	case !matched:
 		status.State = Dead
 		status.Reason = fmt.Sprintf("pid %d now belongs to a different process (started %s, the run's started %s): the run died and its pid was reused", record.PID, start, record.ProcessStart)
 	default:
@@ -231,18 +234,60 @@ func Probe(repo, runID string, now time.Time) Status {
 	return status
 }
 
-// processStart asks the OS when pid started. Both BSD and procps ps print
-// lstart; an absent pid makes ps exit non-zero with no output.
+// processStart asks the OS when pid started, in a form that does not change
+// with the environment.
+//
+// `ps -o lstart=` renders a human date, so the SAME process prints
+// "Tue Sep 16 14:19:19 2026" locally and "Tue Sep 16 12:19:19 2026" under
+// TZ=UTC, and a different month name under another locale. Comparing that text
+// across environments — a run started from a shell, probed from cron, launchd
+// or a container — makes a live run read dead, and a dead-looking run is one a
+// second run-epic will happily claim. Found by the Phase 3 review, reproduced.
+//
+// So both the record and the comparison pin TZ and LC_ALL. The value stays
+// opaque text compared verbatim: parsing it is what the locale would break.
 func processStart(pid int) (string, bool) {
+	return processStartWith(pid, true)
+}
+
+// processStartWith reads the start time, optionally in the legacy (unpinned)
+// environment, so a pidfile written before SchemaVersion 2 can still be
+// compared against the environment it was written in.
+func processStartWith(pid int, pinned bool) (string, bool) {
 	if pid <= 0 {
 		return "", false
 	}
-	out, err := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid)).Output()
+	cmd := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
+	if pinned {
+		cmd.Env = append(os.Environ(), "TZ=UTC", "LC_ALL=C")
+	}
+	out, err := cmd.Output()
 	start := strings.TrimSpace(string(out))
 	if err != nil || start == "" {
 		return "", false
 	}
 	return start, true
+}
+
+// startMatches compares a recorded start time with the OS's answer now.
+//
+// A record written before SchemaVersion 2 holds an unpinned string, so it is
+// compared unpinned — weaker, and honest about which guarantee that record can
+// support. Anything at 2 or above is compared in the pinned environment.
+func startMatches(record Record) (bool, string) {
+	pinned, ok := processStartWith(record.PID, true)
+	if !ok {
+		return false, ""
+	}
+	if pinned == record.ProcessStart {
+		return true, pinned
+	}
+	if record.SchemaVersion < 2 {
+		if legacy, ok := processStartWith(record.PID, false); ok && legacy == record.ProcessStart {
+			return true, legacy
+		}
+	}
+	return false, pinned
 }
 
 func readRecord(dir string) (Record, bool, error) {

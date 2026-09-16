@@ -140,3 +140,37 @@ func TestADeadDriverDoesNotBlockTheResume(t *testing.T) {
 		t.Fatalf("the resumed run reads %s (%s)", got.State, got.Reason)
 	}
 }
+
+// TestLivenessDoesNotDependOnTheEnvironment is the Phase 3 review's finding 3.
+//
+// `ps -o lstart=` renders a human date: the same process prints 14:19:19 in a
+// local shell and 12:19:19 under TZ=UTC, and a different month name under
+// another locale. Comparing that text across environments made a live run read
+// dead — and a dead-looking run is one a second run-epic claims.
+func TestLivenessDoesNotDependOnTheEnvironment(t *testing.T) {
+	// serial: t.Setenv cannot be used with t.Parallel.
+	repo := t.TempDir()
+	cmd := startSleeper(t, repo, "r-tz")
+
+	if got := Probe(repo, "r-tz", time.Now()); got.State != Alive {
+		t.Fatalf("baseline reads %s (%s)", got.State, got.Reason)
+	}
+
+	// The probe under a different timezone and locale must reach the same
+	// answer about the same process.
+	t.Setenv("TZ", "Asia/Tokyo")
+	t.Setenv("LC_ALL", "C")
+	if got := Probe(repo, "r-tz", time.Now()); got.State != Alive {
+		t.Errorf("under TZ=Asia/Tokyo the same live process reads %s (%s)", got.State, got.Reason)
+	}
+	t.Setenv("TZ", "UTC")
+	if got := Probe(repo, "r-tz", time.Now()); got.State != Alive {
+		t.Errorf("under TZ=UTC the same live process reads %s (%s)", got.State, got.Reason)
+	}
+
+	// And a claim must still be refused while it is alive, in any environment.
+	if _, err := Claim(repo, "r-tz"); !errors.Is(err, ErrAlreadyLive) {
+		t.Errorf("under TZ=UTC a second claim on a live run returned %v, want ErrAlreadyLive", err)
+	}
+	_ = cmd
+}

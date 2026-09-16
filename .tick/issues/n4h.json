@@ -1,0 +1,14 @@
+{
+  "id": "n4h",
+  "title": "Predecessor reports are invisible across run ids",
+  "description": "Found by tick nvn (run epic-9pd, attempt 12), which built the feature and then reported its own boundary.\n\nnvn's discovery walks \u003cExecStateRoot\u003e/\u003crunID\u003e/\u003ctick\u003e/\u003cn\u003e, so a re-dispatched attempt sees only attempts of its OWN run. Re-running an epic under a new run id re-dispatches the same ticks, and those attempts get none of the previous run's archived reports — the starting-blind case the tick exists for, one level up.\n\nClose it with a discoverer keyed by tick (and epic) rather than by run id, or a run-start copy-forward of each tick's predecessor list. Prefer whichever keeps the reports local to the executor's state root, since worker prose must not move into the target repository.\n\nLow: within one run id — the normal case, including every resume — the feature works.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "An attempt dispatched for a tick under a NEW run id is shown the archived reports of that tick's attempts from previous runs; a test re-runs an epic under a second run id and asserts the first run's report is offered",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T11:17:01.469939Z",
+  "updated_at": "2026-09-16T11:17:01.469939Z"
+}

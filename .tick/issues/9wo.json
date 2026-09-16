@@ -1,0 +1,14 @@
+{
+  "id": "9wo",
+  "title": "A1 needs a test that observes a LIVE run three ways, not a bare store",
+  "description": "From the Phase 3 review (h0f, attempt 14), finding 2.\n\nA1 requires a test that fetches, lists findings and reads the branch while a run is going. The test that existed (TestAnOperatorFetchingInTheRunsCheckoutEndsNothing) raced a bare Store with plain git fetch and no reconciler — which is exactly why the shared-peek-ref defect shipped green and then killed the run mid-review.\n\nCommit 48f844d added a second test that races a real Store (what an operator command is) and fixed the defect, but neither test drives a RECONCILER. The reviewer left the shape it wants at runs/epic-9pd/h0f/repro/reconcile_observer_test.go.txt in the attempt's worktree — recover it from the archived attempt state if the worktree is gone.\n\nWanted: a fixture epic running under the reconciler while a loop does all three — git fetch in the run's checkout, ticfac findings, and reading the epic branch — asserting the run completes. That is the acceptance criterion as written, and nothing yet tests it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "A test runs a fixture epic to completion while a concurrent loop fetches in the run's checkout, lists its findings and reads its branch; it fails if any of the three can end the run",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T13:02:13.524505Z",
+  "updated_at": "2026-09-16T13:02:13.524505Z"
+}

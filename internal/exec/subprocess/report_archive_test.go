@@ -2,6 +2,7 @@ package subprocess
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -68,4 +69,44 @@ func reportRef(t *testing.T, c *Collection) ArtifactRef {
 	}
 	t.Fatalf("the result carries no report artifact: %+v", c.Result.Artifacts)
 	return ArtifactRef{}
+}
+
+// TestDisposeKeepsTheReportWhenNothingCollected is the Phase 3 review's
+// finding 4, and the other half of tick 35h's guarantee.
+//
+// collect archives the report, but dispose is reached without a collect:
+// settle.go cancels and disposes a RELEASED attempt. So a report a person
+// released — the case where someone most needs to read what the worker
+// concluded — was deleted with the worktree, unread. herdr's dispose archived
+// it; the local executor's did not.
+func TestDisposeKeepsTheReportWhenNothingCollected(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "report"})
+	handle := f.Start(f.spec("run-35h/tick-sss/attempt-1", "sss"))
+	f.waitSettled(handle)
+
+	local, _ := handle.Local()
+	wanted, err := os.ReadFile(local.ResultPath)
+	if err != nil {
+		t.Fatalf("the attempt wrote no report to lose: %v", err)
+	}
+
+	// No collect: cancel then dispose, exactly what settle.go does for a
+	// released attempt (the credential must die before the teardown).
+	if _, err := f.Executor.Cancel(handle); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if err := f.Executor.Dispose(handle, DisposeOptions{Reason: "released by a person", KeepBranch: true}); err != nil {
+		t.Fatalf("dispose: %v", err)
+	}
+	if _, err := os.Stat(local.Worktree); !os.IsNotExist(err) {
+		t.Fatalf("the worktree should be gone: %v", err)
+	}
+
+	archived, err := os.ReadFile(filepath.Join(local.State, fileReportArchive))
+	if err != nil {
+		t.Fatalf("the released attempt's report did not survive disposal: %v", err)
+	}
+	if string(archived) != string(wanted) {
+		t.Error("the archived report is not what the attempt wrote")
+	}
 }
