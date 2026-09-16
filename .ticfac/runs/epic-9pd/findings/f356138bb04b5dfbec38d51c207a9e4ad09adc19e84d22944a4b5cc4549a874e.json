@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "emk",
   "attempt": 15,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-09-16T14:17:20Z",
+  "triaged_at": "2026-09-16T14:38:20Z",
+  "triaged_by": "claude:orchestrator",
+  "fixed_as": "155a060",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "emk",
