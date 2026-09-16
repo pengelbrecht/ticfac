@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 103,
-  "state": "running",
-  "reason": "emk is running as attempt 15",
-  "updated_at": "2026-09-16T13:53:47Z",
+  "sequence": 104,
+  "state": "collecting",
+  "reason": "collecting emk attempt 15",
+  "updated_at": "2026-09-16T14:17:12Z",
   "ticks": [
     {
       "tick_id": "0z0",
