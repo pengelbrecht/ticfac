@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "0dc",
   "attempt": 17,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-16T16:32:09Z",
+  "triaged_at": "2026-09-16T16:33:17Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "oe0",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "0dc",
