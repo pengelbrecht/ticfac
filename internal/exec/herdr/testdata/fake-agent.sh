@@ -15,6 +15,10 @@
 # modes:
 #   implement           read the tick record, do what it says, report DONE
 #   sleep               report working, then wait to be interrupted
+#   ignore              report working and NEVER stop: the interrupt file
+#                       lands and is never honoured — the agent inside a
+#                       long shell call that never reads it (tick rj0), the
+#                       shape only closing the pane stops
 #   report_then_addall  write the report, then `git add -A` and commit — an
 #                       ordinary add-all must not stage the excluded report
 #   force_report        force-add the excluded report past the exclude
@@ -68,6 +72,18 @@ if [ "$mode" = "sleep" ]; then
 	done
 	echo "fake agent: interrupted; stopping without committing" >&2
 	exit 130
+fi
+
+if [ "$mode" = "ignore" ]; then
+	# The interrupt lands and is never read: the Phase 3 shape (tick emk),
+	# where the wall clock's ctrl+c is a courtesy the agent never sees
+	# because it is inside a shell call. Nothing but closing the pane
+	# stops this agent.
+	wait_for_prompt
+	report_working
+	while :; do
+		sleep 0.1
+	done
 fi
 
 wait_for_prompt

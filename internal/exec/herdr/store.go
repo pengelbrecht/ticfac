@@ -44,8 +44,19 @@ const (
 	// bound issued in spec.Limits.WallSeconds fired. It is what keeps
 	// "stopped at its wall clock" and "merely settled" distinct in the
 	// records a herdr-free collect reads — the same job the local
-	// executor's own wall marker does, at the same name.
+	// executor's own wall marker does, at the same name. The stamp it
+	// carries is also the anchor the close escalation's grace is measured
+	// from (tick rj0): the interrupt was accepted at that moment, and the
+	// pane close fires once the grace has elapsed with the agent still
+	// live.
 	fileWallExceeded = "wall_clock_exceeded"
+	// fileWIPSnapshot records where the attempt's uncommitted work was
+	// preserved before the wall-clock enforcement closed the pane (tick
+	// rj0, per pbb): the ref the snapshot lives on and the commit it names.
+	// The snapshot is NOT evidence of completion and is never merged — it
+	// is material a person or a later attempt can be pointed at, and the
+	// record exists so the close can proceed knowing the work survives it.
+	fileWIPSnapshot = "wip-snapshot.json"
 	// fileReportArchive is where disposal moves the attempt's own untracked
 	// report out of the worktree, so worktree.remove can proceed without
 	// Force while the report survives somewhere a person can still read it.
@@ -291,6 +302,65 @@ func (s *store) markWallExceeded(at string) error {
 }
 
 func (s *store) wallExceeded() bool { return s.exists(fileWallExceeded) }
+
+// wallStopAcceptedAt is the moment the interrupt was accepted — the stamp
+// the wall marker carries, which the close escalation's grace is measured
+// from. A marker that cannot be read as a time starts no grace; the
+// interrupt keeps being re-delivered as before, and the reconciler's own
+// settlement deadline remains the backstop.
+func (s *store) wallStopAcceptedAt() (time.Time, bool) {
+	raw, err := os.ReadFile(s.path(fileWallExceeded))
+	if err != nil {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(string(raw)))
+	if err != nil || at.IsZero() {
+		return time.Time{}, false
+	}
+	return at, true
+}
+
+// wipSnapshot is the durable record of where an attempt's uncommitted
+// work was preserved before the pane close destroyed the checkout's
+// unsaved state (tick rj0, per pbb): a ref of its own in the repository
+// the worktree belongs to, pointing at a commit whose tree is the
+// worktree as it stood. It is not evidence of completion, is never
+// merged, and rides on no boundary-excluded path.
+type wipSnapshot struct {
+	SchemaVersion int    `json:"schema_version"`
+	Ref           string `json:"ref"`
+	Commit        string `json:"commit"`
+	TakenAt       string `json:"taken_at"`
+}
+
+const wipSnapshotSchemaVersion = 1
+
+// markWIPSnapshot records where the work was preserved. It is written
+// once; a second call is a no-op, so a close that is refused and retried
+// re-snaps nothing.
+func (s *store) markWIPSnapshot(snap wipSnapshot) error {
+	if _, ok := s.wipSnapshot(); ok {
+		return nil
+	}
+	snap.SchemaVersion = wipSnapshotSchemaVersion
+	if err := s.writeJSON(fileWIPSnapshot, snap); err != nil {
+		return fmt.Errorf("write the wip-snapshot record: %w", err)
+	}
+	return nil
+}
+
+// wipSnapshot is the recorded where of a preserved worktree, if one was
+// taken.
+func (s *store) wipSnapshot() (wipSnapshot, bool) {
+	var snap wipSnapshot
+	if err := s.readJSON(fileWIPSnapshot, &snap); err != nil {
+		return wipSnapshot{}, false
+	}
+	if snap.SchemaVersion != wipSnapshotSchemaVersion {
+		return wipSnapshot{}, false
+	}
+	return snap, true
+}
 
 // observe appends one observation. Append-only and one write per record, so
 // a reader in another process sees whole lines.

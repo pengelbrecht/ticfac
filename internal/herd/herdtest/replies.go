@@ -412,6 +412,36 @@ func (s *Server) respondAgentInfo(req Request, w *ConnWriter, name, paneID strin
 	})
 }
 
+// handlePaneClose answers pane.close — the wall-clock enforcement's stop
+// (tick rj0). herdr answers a bare {"type":"ok"}, determined against the
+// live server (herdr 0.9.0): `pane_closed` is an EVENT kind, never a result
+// discriminator. The fake models panes only through the agents that live
+// on them, so a close removes the agent whose PaneID matches — the thing a
+// close is for — and a pane id nothing models closes the same way (the
+// fake has no pane registry; a test that needs herdr's pane_not_found for
+// an unknown pane routes it). A missing pane_id is invalid_request, the
+// schema's own required-field answer.
+func (s *Server) handlePaneClose(_ *testing.T, req Request, w *ConnWriter) error {
+	var p struct {
+		PaneID string `json:"pane_id"`
+	}
+	_ = json.Unmarshal(req.Params, &p)
+	if p.PaneID == "" {
+		return RespondErr(w, req.ID, CodeInvalidRequest, "pane.close needs a pane_id")
+	}
+	s.mu.Lock()
+	s.paneCloses = append(s.paneCloses, p.PaneID)
+	kept := s.agents[:0]
+	for _, a := range s.agents {
+		if a.PaneID != p.PaneID {
+			kept = append(kept, a)
+		}
+	}
+	s.agents = kept
+	s.mu.Unlock()
+	return RespondJSON(w, req.ID, map[string]any{"type": "ok"})
+}
+
 func (s *Server) handlePaneRead(_ *testing.T, req Request, w *ConnWriter) error {
 	s.mu.Lock()
 	truncated := s.paneTruncated

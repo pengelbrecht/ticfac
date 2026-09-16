@@ -1,6 +1,7 @@
 package herdr
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -35,17 +36,26 @@ func (e *gitError) Unwrap() error { return e.err }
 
 // git runs one git command and returns its trimmed stdout.
 func git(dir string, args ...string) (string, error) {
+	return gitEnv(dir, nil, args...)
+}
+
+// gitEnv is git with extra environment, which exists for one caller: the
+// wip snapshot stages into a PRIVATE index (GIT_INDEX_FILE), so it never
+// touches the worktree's own index — the agent is still alive and running
+// its own git when the snapshot is taken, and a snapshot that disturbed
+// the working state it is preserving would be worse than none.
+func gitEnv(dir string, env []string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	// A git that reads the invoking user's hooks, editors or pagers is a git
 	// that can block forever in a non-interactive executor.
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(append(os.Environ(),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
-	)
+	), env...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", &gitError{args: args, dir: dir, stderr: stderr.String(), err: err}
@@ -285,9 +295,155 @@ func hasRemote(repo, remote string) bool {
 	return false
 }
 
+// gitStdin is gitEnv with stdin, for the one call that takes a path list
+// on standard input: the wip snapshot's update-index.
+func gitStdin(dir string, env []string, stdin []byte, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	cmd.Env = append(append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_PAGER=cat",
+		"GIT_OPTIONAL_LOCKS=0",
+	), env...)
+	cmd.Stdin = bytes.NewReader(stdin)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", &gitError{args: args, dir: dir, stderr: stderr.String(), err: err}
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func short(sha string) string {
 	if len(sha) > 12 {
 		return sha[:12]
 	}
 	return sha
+}
+
+// ---------------------------------------------------------------------------
+// The wip snapshot: preserving uncommitted work before the pane close.
+// ---------------------------------------------------------------------------
+
+// wipRefFor is the ref one attempt's preserved work lives on (tick rj0, per
+// pbb): refs/ticfac/wip/<run>/<tick>/<attempt>, derived from the job id —
+// which already names the run, the tick and the attempt — with every path
+// segment sanitised, because a job id is opaque to this executor and any
+// character of it may be one a ref cannot carry. The ref is OUTSIDE
+// refs/heads, so it never presents itself as a branch the run or a person
+// could merge by accident: the snapshot is material a later attempt can be
+// POINTED at, never evidence of completion.
+func wipRefFor(record *attemptRecord) string {
+	var segments []string
+	for _, seg := range strings.Split(record.JobID, "/") {
+		var b strings.Builder
+		for _, r := range seg {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+				r == '-', r == '_', r == '.':
+				b.WriteRune(r)
+			default:
+				b.WriteRune('-')
+			}
+		}
+		clean := strings.Trim(b.String(), "-.")
+		if clean != "" {
+			segments = append(segments, clean)
+		}
+	}
+	if len(segments) == 0 {
+		segments = []string{"attempt"}
+	}
+	return "refs/ticfac/wip/" + strings.Join(segments, "/")
+}
+
+// snapshotWorktree preserves the worktree as it stands — every tracked
+// change and every untracked file — on the given ref, without touching the
+// worktree's own index, branch or HEAD (tick rj0, per pbb). It stages into a
+// PRIVATE index seeded from HEAD, writes a tree, wraps it in a commit whose
+// parent is HEAD, and points the ref at it; the worktree is left exactly as
+// it was found.
+//
+// The exclusions are the boundary's, at snapshot scale: nothing under
+// .tick/ or .ticfac/ and nothing under the attempt's own artifact prefix —
+// which is where the report lives, archived separately — may ride along as
+// NEW work. Tracked content those paths already carry in HEAD stays as
+// HEAD has it, because the snapshot never UNDOES a commit; what is excluded
+// is the agent's uncommitted writing under those paths. Build output needs
+// no rule of its own (--exclude-standard honours .gitignore), and a build
+// product the repository deliberately tracks is repository content, not a
+// snapshot exclusion.
+func snapshotWorktree(worktree, ref, artifactPrefix string) (commit string, err error) {
+	tmpDir, err := os.MkdirTemp("", "ticfac-wip")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	index := filepath.Join(tmpDir, "index")
+	indexEnv := []string{"GIT_INDEX_FILE=" + index}
+
+	if _, err := gitEnv(worktree, indexEnv, "read-tree", "HEAD"); err != nil {
+		return "", fmt.Errorf("seed the snapshot index from HEAD: %w", err)
+	}
+	// The stage is NOT `git add`: add refuses a pathspec that matches an
+	// ignored directory — and the attempt's own artifact prefix is in this
+	// worktree's info/exclude, put there by Start — so an add-based snapshot
+	// would fail on exactly the paths it exists to exclude. ls-files plus
+	// one update-index is the same walk with no advice machinery: the
+	// tracked-at-HEAD set from the seeded private index, the
+	// untracked-and-not-ignored set from the worktree, minus the boundary
+	// paths, piped into a single --add --remove. Build output needs no rule
+	// of its own (--exclude-standard honours .gitignore), and a build
+	// product the repository deliberately tracks is repository content.
+	listed, err := gitEnv(worktree, indexEnv, "ls-files", "-z", "-c", "-o", "--exclude-standard", "--", ".")
+	if err != nil {
+		return "", fmt.Errorf("list the worktree's files: %w", err)
+	}
+	prefix := strings.Trim(strings.TrimSpace(artifactPrefix), "/")
+	var kept []byte
+	for _, path := range strings.Split(listed, "\x00") {
+		if path == "" || snapshotExcluded(path, prefix) {
+			continue
+		}
+		kept = append(kept, []byte(path)...)
+		kept = append(kept, 0)
+	}
+	if len(kept) > 0 {
+		if _, err := gitStdin(worktree, indexEnv, kept, "update-index", "-z", "--add", "--remove", "--stdin"); err != nil {
+			return "", fmt.Errorf("stage the worktree's changes: %w", err)
+		}
+	}
+	tree, err := gitEnv(worktree, indexEnv, "write-tree")
+	if err != nil {
+		return "", fmt.Errorf("write the snapshot tree: %w", err)
+	}
+	commit, err = gitEnv(worktree, nil, "commit-tree", tree, "-p", "HEAD",
+		"-m", "ticfac: work-in-progress snapshot at the wall-clock stop — not evidence, never merged")
+	if err != nil {
+		return "", fmt.Errorf("commit the snapshot: %w", err)
+	}
+	if _, err := gitEnv(worktree, nil, "update-ref", ref, commit); err != nil {
+		return "", fmt.Errorf("point %s at the snapshot: %w", ref, err)
+	}
+	return commit, nil
+}
+
+// snapshotExcluded is the boundary at snapshot scale (pbb's care, rj0's
+// rule): nothing under .tick/ or .ticfac/ and nothing under the attempt's
+// own artifact prefix — where the report lives, archived separately — may
+// ride along as work. Any path SEGMENT naming those directories is
+// excluded, at any depth; tracked content those paths already carry in
+// HEAD stays as HEAD has it, because the snapshot never undoes a commit —
+// what is excluded is the agent's uncommitted writing under them.
+func snapshotExcluded(path, artifactPrefix string) bool {
+	if path == artifactPrefix || strings.HasPrefix(path, artifactPrefix+"/") {
+		return true
+	}
+	for _, seg := range strings.Split(path, "/") {
+		if seg == ".tick" || seg == ".ticfac" {
+			return true
+		}
+	}
+	return false
 }
