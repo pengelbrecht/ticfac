@@ -57,6 +57,13 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 		fmt.Fprintf(&b, "own instruction file. Do not run `tk`.\n\n")
 	}
 
+	// What the tick's EARLIER attempts found (tick nvn), before the report
+	// contract: a re-dispatched attempt that starts blind re-derives what its
+	// predecessors already concluded — the pwp close-out ran fifteen attempts
+	// that way — and one that trusts them blindly inherits their errors. The
+	// section is empty for a first attempt, which has no predecessors.
+	b.WriteString(PriorReportsSection(record.PriorReports))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "It is also in your environment as $TICFAC_RESULT_PATH. Write it there whatever your\n")

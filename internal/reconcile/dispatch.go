@@ -930,6 +930,12 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *ca
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
 		ResumedFrom: resumed,
+		// What the tick's earlier attempts found (tick nvn): the reports a
+		// re-dispatched attempt is shown in its prompt, newest first. Gathered
+		// here rather than recorded on the marker because they are re-derivable
+		// facts about the state directory — and a dispatch conflict that runs
+		// this half twice re-derives the same list.
+		PriorReports: r.priorReports(entry.TickID, number),
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -1136,6 +1142,12 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// a later record of the same dispatch — a finding draft, a settle — says
 	// what the DISPATCH resumed from, never what this incarnation would.
 	dispatch.ResumedFrom = marker.ResumedFrom
+	// The reports of the tick's earlier attempts (tick nvn) are re-derived
+	// rather than carried, because a dispatch rebuilt from the marker can
+	// still START the attempt — the marker landed, and nothing did — and the
+	// prompt that start renders is the one place the predecessors' analysis
+	// has to reach.
+	dispatch.PriorReports = r.priorReports(marker.TickID, marker.Attempt)
 	// The profile an adopted attempt re-joins is the one it was DISPATCHED
 	// under: the marker's own tier, not whatever this incarnation would
 	// derive today. A config edited between incarnations does not retro-fit a
@@ -1204,6 +1216,47 @@ func findAttemptState(root string) (string, bool) {
 		return nil
 	})
 	return found, found != ""
+}
+
+// priorReports gathers the archived reports of a tick's EARLIER attempts,
+// newest first (tick nvn).
+//
+// The reports are what tick 35h made survive teardown: report.md beside the
+// attempt record, in the executor state directory this run assigns each
+// dispatch. findAttemptState locates a predecessor's state the same way every
+// adopt and teardown already does — by walking for the attempt record rather
+// than by recomputing an executor's internal naming — and the report sits
+// under the name that executor exports as part of that seam.
+//
+// Nothing here can refuse a dispatch: a predecessor with no report (it never
+// settled, or settled without saying anything) is simply absent from the list,
+// because the prompt's job is to name the analysis that EXISTS, not to narrate
+// the attempts that produced none. A first attempt gathers nothing.
+func (r *Reconciler) priorReports(tickID string, attempt int) []subprocess.PriorReport {
+	out := []subprocess.PriorReport{}
+	if attempt <= 1 {
+		return out
+	}
+	for n := attempt - 1; n >= 1; n-- {
+		state, found := findAttemptState(r.execStateDir(tickID, n))
+		if !found {
+			// Never dispatched, or never started: no report to name.
+			continue
+		}
+		path := filepath.Join(state, subprocess.FileReportArchive)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			// Dispatched, but it left no report — settled with nothing said.
+			// The attempt is still visible to the worker through the run's own
+			// records; it has no analysis to hand over.
+			continue
+		}
+		report := subprocess.ParseReport(string(raw))
+		out = append(out, subprocess.PriorReport{
+			Attempt: n, Path: path, Status: report.Status, Detail: report.Detail,
+		})
+	}
+	return out
 }
 
 // ------------------------------------------------------------- the wait ---
@@ -1683,6 +1736,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			Remote:         d.Remote,
 			Attempt:        d.Attempt,
 			PushInterval:   pushInterval,
+			PriorReports:   d.PriorReports,
 		})
 		if err != nil {
 			return nil, Substrate{}, err

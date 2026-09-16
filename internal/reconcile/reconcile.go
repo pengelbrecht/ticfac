@@ -215,6 +215,15 @@ type Dispatch struct {
 	// source_sha ARE the released attempt's ref and commit. Nil when this
 	// dispatch resumed from nothing.
 	ResumedFrom *resumedFrom
+
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), newest first — the analysis a re-dispatched attempt is shown
+	// in its prompt instead of starting blind. The reports are re-derived
+	// from the executor state directory at every dispatch rather than carried
+	// on the marker: they are facts about the attempts the state directory
+	// already holds, and the marker — which reaches origin, a public
+	// repository — never carries host paths.
+	PriorReports []subprocess.PriorReport
 }
 
 // carriedWork is a released attempt whose WORK the next dispatch of its tick

@@ -409,7 +409,7 @@ func (e *Executor) artifacts(st *store, record *attemptRecord, hasReport bool, r
 // reference falls back to the worktree path, where the report still is, and the
 // failure is observed rather than swallowed.
 func archiveReport(st *store, record *attemptRecord) (ArtifactRef, bool) {
-	archive := st.path(fileReportArchive)
+	archive := st.path(FileReportArchive)
 	raw, err := os.ReadFile(record.ResultPath)
 	if err != nil {
 		// Already torn down: the archive is the report.

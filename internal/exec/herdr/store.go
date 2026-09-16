@@ -49,7 +49,11 @@ const (
 	// fileReportArchive is where disposal moves the attempt's own untracked
 	// report out of the worktree, so worktree.remove can proceed without
 	// Force while the report survives somewhere a person can still read it.
-	fileReportArchive = "report.md"
+	// It is the subprocess executor's own name for the same file — the one
+	// the reconciler's dispatch walks for when it names a predecessor's
+	// report in the next attempt's prompt (tick nvn) — so both executors
+	// archive at one name rather than two that can drift.
+	fileReportArchive = subprocess.FileReportArchive
 )
 
 // attemptRecord is the durable description of one attempt: the herdr
@@ -89,6 +93,14 @@ type attemptRecord struct {
 	AgentArgs  []string `json:"agent_args,omitempty"`
 	Model      string   `json:"model,omitempty"`
 	RolePrompt string   `json:"role_prompt,omitempty"`
+
+	// PriorReports are the archived reports of this tick's EARLIER attempts,
+	// as the dispatch handed them over (tick nvn) — newest first, each with
+	// the status line its report ended with. They are recorded for the same
+	// reason the role prompt is: the prompt file beside this record is the
+	// rendered whole, and an attempt that was shown what its predecessors
+	// found is an attempt whose record says so.
+	PriorReports []subprocess.PriorReport `json:"prior_reports,omitempty"`
 
 	WallSeconds int    `json:"wall_seconds"`
 	Remote      string `json:"remote"`
