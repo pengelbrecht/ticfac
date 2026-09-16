@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -185,5 +186,32 @@ func TestASecondTicfacProcessDoesNotEndTheRun(t *testing.T) {
 		if got != Updated {
 			t.Fatalf("checkpoint %d was %q while an operator listed the run", i, got)
 		}
+	}
+}
+
+// TestAPrivateFetchRefLeadsWithItsInstanceID pins the ref SHAPE, because the
+// first attempt at per-instance refs could not start at all.
+//
+// With the id last — refs/ticfac/peek/<run>/<id> — git refuses to create the ref
+// while refs/ticfac/peek/<run> exists, since a path cannot be both a ref and a
+// directory. Every checkout that had run an older build therefore had to be
+// cleaned by hand, and the run died on its first fetch:
+//
+//	cannot lock ref 'refs/ticfac/peek/epic-9pd/90033-1':
+//	'refs/ticfac/peek/epic-9pd' exists
+//
+// Leading with the id keeps each instance's namespace disjoint from anything any
+// other build ever wrote.
+func TestAPrivateFetchRefLeadsWithItsInstanceID(t *testing.T) {
+	t.Parallel()
+
+	s := &Store{runID: "epic-9pd", fetchID: "4242-7"}
+	ref := s.peekRef()
+	const want = "refs/ticfac/peek/4242-7/epic-9pd"
+	if ref != want {
+		t.Errorf("peekRef() = %q, want %q: the instance id must lead, or an older build's ref blocks this one", ref, want)
+	}
+	if strings.HasPrefix(ref, "refs/ticfac/peek/"+s.runID) {
+		t.Error("the ref is nested under the run id, which is where the directory/file conflict lives")
 	}
 }

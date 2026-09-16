@@ -166,7 +166,7 @@ func (g *repoGit) fetch(branch string) error {
 	// head, and refs/remotes/<remote>/<branch> fails to lock and fails the
 	// fetch. Only the refspec on this command line is updated. Tick wdb.
 	_, err := g.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", g.remote,
-		"+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+branch+"/"+g.fetch1D()))
+		"+"+refFor(branch)+":"+refFor("refs/ticfac/fetched/"+g.fetch1D()+"/"+branch))
 	return err
 }
 

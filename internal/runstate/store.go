@@ -340,7 +340,13 @@ func (s *Store) branchRef() string { return refFor(s.branch) }
 // reconcilers in one checkout cannot read each other's value the way they both
 // read FETCH_HEAD.
 func (s *Store) peekRef() string {
-	return "refs/ticfac/peek/" + s.runID + "/" + s.fetchID
+	// The instance id comes FIRST. With it last, refs/ticfac/peek/<run>/<id>
+	// cannot be created while a ref named refs/ticfac/peek/<run> exists — git
+	// refuses a ref and a directory at one path — so every checkout that ran an
+	// older build had to be cleaned by hand before this one would start. Leading
+	// with the id makes each instance's namespace disjoint from anything any
+	// other build ever wrote.
+	return "refs/ticfac/peek/" + s.fetchID + "/" + s.runID
 }
 
 // processRef makes a fetch destination no OTHER process can be writing.

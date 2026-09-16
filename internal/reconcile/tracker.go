@@ -110,7 +110,7 @@ func (t *trackerTree) originHead() (string, error) {
 	// closes against the wrong base. sync() refuses to move over UNCOMMITTED
 	// records, but a clean worktree — the normal state between publishes — moves
 	// silently. See ticfac tick wdb.
-	ref := refFor("refs/ticfac/peek/tracker/" + t.runID + "/" + t.git.fetch1D())
+	ref := refFor("refs/ticfac/peek/tracker/" + t.git.fetch1D() + "/" + t.runID)
 	if _, err := t.git.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", t.remote,
 		"+"+refFor(t.branch)+":"+ref); err != nil {
 		return "", fmt.Errorf("fetch %s from %s: %w", t.branch, t.remote, err)
