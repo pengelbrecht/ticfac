@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 129,
-  "state": "running",
-  "reason": "0dc is running as attempt 17",
-  "updated_at": "2026-09-16T15:42:34Z",
+  "sequence": 130,
+  "state": "collecting",
+  "reason": "collecting 0dc attempt 17",
+  "updated_at": "2026-09-16T16:32:01Z",
   "ticks": [
     {
       "tick_id": "0z0",
