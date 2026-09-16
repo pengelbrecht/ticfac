@@ -156,13 +156,16 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 			// and dispose then refuses it as a working agent forever. The
 			// stop is delivered here, without changing the verdict the
 			// report settles.
-			stop := e.stopAtWall(st, record)
+			stop := e.stopAtWall(st, record, record.PaneID)
 			switch {
 			case stop.delivered:
 				detail += fmt.Sprintf("; the agent is past its wall clock of %ds and the stop was delivered through herdr — "+
 					"the report decides the verdict, the bound decides the spending", record.WallSeconds)
 			case stop.settled:
 				detail += fmt.Sprintf("; the agent was already gone when the wall clock of %ds fired", record.WallSeconds)
+			case stop.held != "":
+				detail += fmt.Sprintf("; the wall clock of %ds fired, the interrupt went unhonoured for the grace, "+
+					"and the pane close is held this poll: it is re-attempted at every poll", record.WallSeconds)
 			default:
 				detail += fmt.Sprintf("; the wall clock of %ds fired and the stop could not be delivered through herdr: "+
 					"it is re-delivered at every poll", record.WallSeconds)
@@ -200,8 +203,12 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		// reaches it — the reconciler's poll is the clock that reaches the
 		// bound, and the stop lands within one poll of it (wall.go).
 		if e.pastWall(record) {
-			stop := e.stopAtWall(st, record)
+			stop := e.stopAtWall(st, record, agent.PaneID)
 			switch {
+			case stop.delivered && stop.settled && stop.closed:
+				return subprocess.StateFailed, fmt.Sprintf(
+					"stopped at its wall clock of %ds by closing the pane after the interrupt went unhonoured for the grace: no report at %s",
+					record.WallSeconds, record.ResultPath)
 			case stop.delivered && stop.settled:
 				return subprocess.StateFailed, fmt.Sprintf(
 					"stopped at its wall clock of %ds with no report at %s",
@@ -215,6 +222,19 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 					"the agent %s was already gone when the wall clock of %ds fired: it settled on its own — "+
 						"the bound fired to find nothing left to stop, and no stop is claimed",
 					record.AgentName, record.WallSeconds)
+			case stop.closed:
+				// The escalation landed and herdr took the close, but the agent
+				// is not confirmed gone yet: the pane herdr opened in its place
+				// is a shell, and only agent.get's positive answer settles.
+				return subprocess.StateRunning, fmt.Sprintf(
+					"the wall clock of %ds passed, the interrupt went unhonoured for the grace, and the pane was closed through herdr: "+
+						"the settlement waits for herdr to answer that the agent is gone",
+					record.WallSeconds)
+			case stop.held != "":
+				return subprocess.StateRunning, fmt.Sprintf(
+					"the wall clock of %ds passed, the interrupt went unhonoured for the grace, and the pane close is held this poll (%s): "+
+						"it is re-attempted at every poll",
+					record.WallSeconds, stop.held)
 			case stop.delivered:
 				return subprocess.StateRunning, fmt.Sprintf(
 					"the wall clock of %ds passed and the agent %s was interrupted through herdr, but it has not exited: "+

@@ -406,6 +406,37 @@ func (c *Client) AgentGet(ctx context.Context, target string) (*AgentInfo, error
 	return &out.Agent, nil
 }
 
+// PaneCloseParams are the parameters of pane.close. herdr's schema names the
+// params object PaneTarget: one required pane_id, nothing else.
+type PaneCloseParams struct {
+	// PaneID is the pane to close. Required.
+	PaneID string `json:"pane_id"`
+}
+
+// PaneClose closes a pane, taking with it the agent running in it — the
+// stop the wall-clock enforcement escalates to once the interrupt has gone
+// unhonoured for a grace period (tick rj0).
+//
+// The result discriminator is `ok`, determined against the LIVE server
+// (2026-09-16, herdr 0.9.0 / protocol 22) rather than guessed: `pane_closed`
+// is an EVENT kind — it appears in the event and subscription-event enums
+// and in EventData payloads — and ResponseResult.oneOf, the set the drift
+// test pins, carries no pane_closed member. A wrong guess here would fail
+// every call at runtime, because this client refuses a result it cannot
+// match.
+//
+// One live-observed consequence for callers: closing a pane does NOT close
+// the workspace — herdr opens a fresh shell pane in its place. The close
+// therefore settles nothing on its own: confirm the AGENT is gone through
+// [Client.AgentGet], which is the positive answer the stop settles on. An
+// unknown pane is an [APIError] with [CodePaneNotFound].
+func (c *Client) PaneClose(ctx context.Context, params PaneCloseParams) error {
+	if params.PaneID == "" {
+		return fmt.Errorf("herd/client: pane.close needs a pane id")
+	}
+	return c.call(ctx, MethodPaneClose, resultOK, params, nil)
+}
+
 // PaneReadParams are the parameters of pane.read.
 type PaneReadParams struct {
 	// PaneID is the pane to read. Required.

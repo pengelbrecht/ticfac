@@ -105,13 +105,14 @@ type harness struct {
 	ex     *Executor
 	state  string // the per-attempt scratch: prompt, status, interrupt files
 
-	mu         sync.Mutex
-	workspaces map[string]harnessWorkspace
-	removed    []string // workspace ids worktree.remove accepted
-	last       *subprocess.JobHandle
-	spawn      bool   // agent.start launches the fake agent process
-	mode       string // the fake agent's mode
-	agentCmd   *exec.Cmd
+	mu             sync.Mutex
+	workspaces     map[string]harnessWorkspace
+	removed        []string // workspace ids worktree.remove accepted
+	last           *subprocess.JobHandle
+	spawn          bool   // agent.start launches the fake agent process
+	mode           string // the fake agent's mode
+	agentCmd       *exec.Cmd
+	paneCloseCalls []string // pane ids pane.close accepted, in order (the wall-clock escalation's record)
 
 	// The fake agent's process, tracked behind mu: the goroutine that
 	// reaps it (cmd.Wait, launched by the agent.start route) is the only
@@ -128,6 +129,19 @@ type harness struct {
 	// gives, which teardown classifies as GONE rather than as an error
 	// (tick 5hz).
 	agentGone bool
+	// paneClosed is set once pane.close has taken the attempt's pane: the
+	// agent lived on that pane, so every later agent.get answers
+	// pane_not_found. It is the herdr behaviour the wall-clock escalation
+	// (tick rj0) is proven against — and, unlike agentGone, the agent
+	// PROCESS is killed with the pane, because herdr closing a pane kills
+	// the process the pane runs, which is the whole point of the stop.
+	paneClosed bool
+	// paneCloseLingers makes herdr's records LAG the close: the pane.close
+	// route accepts and records the close, but agent.get keeps answering
+	// the agent is live — the window a real herdr leaves while its session
+	// state catches up with the pane it just destroyed, which is exactly
+	// what the close's agent.get confirmation step exists for.
+	paneCloseLingers bool
 	// failRemoveOnce makes the NEXT worktree.remove answer an operational
 	// error before doing anything — the simulated kill between the steps
 	// of a disposal, before herdr ever accepted the removal.
@@ -168,6 +182,10 @@ type harnessOptions struct {
 	agentMode  string
 	kind       string
 	args       []string
+	// paneCloseLingers makes herdr's records lag a pane.close: the close is
+	// accepted but agent.get keeps answering live (see the field on
+	// harness).
+	paneCloseLingers bool
 	// serverVersion and serverProtocol, when set, are what the fake's ping
 	// handshake advertises; zero keeps the canonical 0.8.2 / protocol 20
 	// reply. A non-default pair also answers WITHOUT a capabilities block,
@@ -195,6 +213,7 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		t: t, repo: repo, state: state, workspaces: map[string]harnessWorkspace{},
 		spawn: opts.spawnAgent, mode: opts.agentMode,
 		snapshotOmitsWorktrees: opts.snapshotOmitsWorktrees,
+		paneCloseLingers:       opts.paneCloseLingers,
 		promptFile:             filepath.Join(state, "prompt.txt"),
 		statusFile:             filepath.Join(state, "status"),
 		interruptFile:          filepath.Join(state, "interrupt"),
@@ -455,14 +474,15 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 
 	// agent.get / agent.wait: the agent's status, from the file the fake
 	// agent writes (or the test seeds) — and, once the workspace that held
-	// the pane is gone, the positive-absence error the real herdr answers.
+	// the pane is gone, or the pane itself was closed, the positive-absence
+	// error the real herdr answers.
 	agentInfo := func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		var p struct {
 			Target string `json:"target"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
 		h.mu.Lock()
-		gone := h.agentGone
+		gone := h.agentGone || h.paneClosed
 		h.mu.Unlock()
 		if gone {
 			return herdtest.RespondErr(w, req.ID, herdtest.CodePaneNotFound, "agent "+p.Target+" is no longer there")
@@ -515,6 +535,35 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 			return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "agent.send_keys: "+err.Error())
 		}
 		return s.Builtin(herdtest.MethodAgentSendKeys)(t, req, w)
+	})
+
+	// pane.close: herdr closes the pane — the agent (and the process it
+	// runs) go with it, which is exactly the stop the wall-clock escalation
+	// exists to make. Every later agent.get answers pane_not_found, the
+	// positive answer the stop settles on.
+	s.Route(herdtest.MethodPaneClose, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
+		var p struct {
+			PaneID string `json:"pane_id"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		if p.PaneID == "" {
+			return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "pane.close needs a pane_id")
+		}
+		h.mu.Lock()
+		h.paneCloseCalls = append(h.paneCloseCalls, p.PaneID)
+		lingers := h.paneCloseLingers
+		if !lingers {
+			h.paneClosed = true
+		}
+		cmd := h.agentCmd
+		h.mu.Unlock()
+		if cmd != nil && cmd.Process != nil && !lingers {
+			// Closing the pane kills the process the pane runs — herdr's own
+			// behaviour, and the fact that makes the close the stop that
+			// actually stops.
+			_ = cmd.Process.Kill()
+		}
+		return herdtest.RespondJSON(w, req.ID, map[string]any{"type": "ok"})
 	})
 
 	h.server = s
@@ -576,6 +625,14 @@ func (h *harness) removals() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]string(nil), h.removed...)
+}
+
+// paneCloses lists the pane ids pane.close accepted, in order — the
+// wall-clock escalation's own record (tick rj0).
+func (h *harness) paneCloses() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.paneCloseCalls...)
 }
 
 // agentProcess answers whether the harness launched the fake agent, and

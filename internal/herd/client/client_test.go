@@ -766,6 +766,41 @@ func TestPaneReadAndWaitForOutput(t *testing.T) {
 	})
 }
 
+func TestPaneCloseSendsPaneTargetAndAcceptsOK(t *testing.T) {
+	// pane.close answers a bare {"type":"ok"} — determined against the
+	// live server (herdr 0.9.0), because `pane_closed` is an EVENT kind and
+	// ResponseResult.oneOf carries no such member. The client must accept
+	// the ok acknowledgement, send PaneTarget's single pane_id, and
+	// surface pane_not_found as the structured API error it is.
+	c, srv := newTestClient(t, map[string]fakeHandler{
+		MethodPaneClose: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respond(w, req.ID, `{"type":"ok"}`)
+		},
+	})
+
+	if err := c.PaneClose(t.Context(), PaneCloseParams{PaneID: "w1:p1"}); err != nil {
+		t.Fatalf("PaneClose: %v", err)
+	}
+	assertParams(t, srv, MethodPaneClose, map[string]any{"pane_id": "w1:p1"})
+
+	if err := c.PaneClose(t.Context(), PaneCloseParams{}); err == nil {
+		t.Error("PaneClose with no pane id succeeded: the request would fail server-side")
+	}
+}
+
+func TestPaneCloseMapsPaneNotFound(t *testing.T) {
+	c, _ := newTestClient(t, map[string]fakeHandler{
+		MethodPaneClose: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {
+			return respondErr(w, req.ID, CodePaneNotFound, "pane nope not found")
+		},
+	})
+
+	err := c.PaneClose(t.Context(), PaneCloseParams{PaneID: "nope"})
+	if !IsCode(err, CodePaneNotFound) {
+		t.Fatalf("PaneClose error = %v, want a pane_not_found APIError", err)
+	}
+}
+
 func TestSessionSnapshotDecodesCapturedFixture(t *testing.T) {
 	c, _ := newTestClient(t, map[string]fakeHandler{
 		MethodSessionSnapshot: func(t *testing.T, req fakeRequest, w *fakeConnWriter) error {

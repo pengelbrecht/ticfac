@@ -49,6 +49,7 @@ func TestMethodConstantsMatchVocabulary(t *testing.T) {
 		MethodWorkspaceFocus,
 		MethodAgentStart, MethodAgentPrompt, MethodAgentSendKeys, MethodAgentWait,
 		MethodAgentList, MethodAgentGet,
+		MethodPaneClose,
 		MethodPaneRead, MethodPaneWaitForOutput,
 		MethodPaneReportMetadata, MethodWorkspaceReportMetadata,
 		MethodEventsSubscribe, MethodEventsWait,

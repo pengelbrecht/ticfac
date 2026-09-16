@@ -76,18 +76,23 @@ const ProtocolWarnVersion uint32 = 22
 
 // Method names, exactly as herdr spells them.
 const (
-	MethodPing              = "ping"
-	MethodSessionSnapshot   = "session.snapshot"
-	MethodWorktreeCreate    = "worktree.create"
-	MethodWorktreeList      = "worktree.list"
-	MethodWorktreeRemove    = "worktree.remove"
-	MethodWorkspaceFocus    = "workspace.focus"
-	MethodAgentStart        = "agent.start"
-	MethodAgentPrompt       = "agent.prompt"
-	MethodAgentSendKeys     = "agent.send_keys"
-	MethodAgentWait         = "agent.wait"
-	MethodAgentList         = "agent.list"
-	MethodAgentGet          = "agent.get"
+	MethodPing            = "ping"
+	MethodSessionSnapshot = "session.snapshot"
+	MethodWorktreeCreate  = "worktree.create"
+	MethodWorktreeList    = "worktree.list"
+	MethodWorktreeRemove  = "worktree.remove"
+	MethodWorkspaceFocus  = "workspace.focus"
+	MethodAgentStart      = "agent.start"
+	MethodAgentPrompt     = "agent.prompt"
+	MethodAgentSendKeys   = "agent.send_keys"
+	MethodAgentWait       = "agent.wait"
+	MethodAgentList       = "agent.list"
+	MethodAgentGet        = "agent.get"
+	// MethodPaneClose closes a pane — the wall-clock enforcement's stop
+	// (tick rj0). The interrupt agent.send_keys delivers is a courtesy an
+	// agent inside a long shell call never reads; closing the pane is the
+	// stop that actually stops the agent herdr owns.
+	MethodPaneClose         = "pane.close"
 	MethodPaneRead          = "pane.read"
 	MethodPaneWaitForOutput = "pane.wait_for_output"
 	// MethodPaneReportMetadata and MethodWorkspaceReportMetadata are the
@@ -124,9 +129,10 @@ const (
 	resultSubscriptionStarted = "subscription_started"
 	resultWaitMatched         = "wait_matched"
 	resultNotificationShow    = "notification_show"
-	// resultOK is the bare acknowledgement the report_metadata methods
-	// answer with — verified live against herdr 0.8.0 / protocol 19; they
-	// echo no pane or workspace object back.
+	// resultOK is the bare acknowledgement the report_metadata methods and
+	// pane.close answer with — the metadata pair verified live against
+	// herdr 0.8.0 / protocol 19, pane.close against 0.9.0 / protocol 22
+	// (tick rj0); none of them echoes an object back.
 	resultOK = "ok"
 )
 
