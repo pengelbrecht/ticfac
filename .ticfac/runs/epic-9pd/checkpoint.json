@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 140,
+  "sequence": 141,
   "state": "failed",
-  "reason": "attempt 18 of 19l is no-commits: the attempt branch carries no commit beyond the base it was cut from (357995167958)",
-  "updated_at": "2026-09-16T20:55:36Z",
+  "reason": "19l did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 18 of 19l is no-commits: the attempt branch carries no commit beyond the base it was cut from (357995167958)",
+  "updated_at": "2026-09-16T20:55:39Z",
   "ticks": [
     {
       "tick_id": "0z0",
