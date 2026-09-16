@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 82,
-  "state": "dispatching",
-  "reason": "dispatching nvn as attempt 12",
-  "updated_at": "2026-09-16T10:30:54Z",
+  "sequence": 83,
+  "state": "running",
+  "reason": "nvn is running as attempt 12",
+  "updated_at": "2026-09-16T10:31:09Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -59,7 +59,8 @@
     },
     {
       "tick_id": "nvn",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 12
     },
     {
       "tick_id": "w1c",
