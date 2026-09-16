@@ -2,6 +2,7 @@
   "id": "glb",
   "title": "Own the operator surfaces tk dropped without replacement: factory webhook, herdr paint/notify",
   "description": "Routed upstream from the ticks pwp deletion epic (final review sx5, attempt 9), checked against ticfac's actual CLI.\n\nCovered already: factory deploy/setup/status/dashboard, the cloud run|stop|status|logs|trace|supervisor slice, and run-epic's wave loop.\n\nNOT covered, and deleted from tk with no replacement:\n- tk factory webhook (register/inspect/withdraw the factory's Telegram webhook) — no ticfac command, no setup rung.\n- herdr pane badges and blocked/settled chimes. Nothing in ticfac calls PaneReportMetadata or NotificationShow, so what tk herd paint and tk herd notify provided is gone. The still-shipped herdr-ticks plugin expects them.\n- tk herd guard and tk herd plugin have no equivalent either.\n\nThe wire methods already exist in ticfac's client (internal/herd/client/methods.go:597,734). What is missing is callers and commands, not protocol work.\n\nDecide per surface whether ticfac owns it or it is deliberately dropped, and record the dropped ones so the ticks-side plugin tick (si0) can act on a settled answer.",
+  "notes": "2026-09-16 11:52 - ticfac run epic-9pd: attempt 10 reported a finding drafted for triage — upstream-tick \"herdr-ticks plugin (si0): paint/notify hooks may now point at ticfac; guard and plugin-install are settled as dropped\" (key 18988090b4c437ab825c3dc95f6851abc218a22341f455502efb9b53dec16640, severity medium, for pengelbrecht/ticks). Triage with `ticfac finding 9pd 18988090b4c437ab825c3dc95f6851abc218a22341f455502efb9b53dec16640 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "Each dropped operator surface (factory webhook, pane paint, notification, guard, plugin) is either reachable from the ticfac CLI or recorded as deliberately dropped with its consequence stated; nothing is left implicitly missing",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T00:32:24.612624Z",
-  "updated_at": "2026-09-16T09:08:23.609997Z",
+  "updated_at": "2026-09-16T09:52:20.312591Z",
   "started_at": "2026-09-16T09:08:23.609997Z"
 }
