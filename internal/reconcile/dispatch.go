@@ -8,6 +8,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -349,10 +350,35 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// work — because a carried attempt either merges behind the gate or is
 	// itself rejected and settled by its own release.
 	var carry *carriedWork
+	// The attempts of THIS tick, NEWEST FIRST (tick w1c). Appendix A #6 says
+	// an attempt under this identity has already been dispatched, so it is
+	// ADOPTED — it does not say the OLDEST is the one, and a disposition is a
+	// function of durable state that changes between incarnations: an
+	// attempt the run skipped as spent on one resume can resurface as
+	// adoptable on the next (the blocker it answered about triaged, the tick
+	// state a later attempt's dispatch overwrote). Walking the stored order
+	// acted on the FIRST such resurfacing attempt and returned before ever
+	// reaching the newer one — whose answer was the one the run had actually
+	// paid for last. When several attempts of one tick survive, the adoptable
+	// one is the LATEST: the earlier ones are spent by definition, since a
+	// later attempt only exists because the run rejected them.
+	mine := make([]runstate.Attempt, 0, len(attempts))
 	for _, existing := range attempts {
-		if existing.TickID != tick {
-			continue
+		if existing.TickID == tick {
+			mine = append(mine, existing)
 		}
+	}
+	sort.Slice(mine, func(i, j int) bool { return mine[i].Attempt > mine[j].Attempt })
+	// adoptable is the attempt the pass will adopt once it has examined every
+	// disposition. Adoption is deferred to the end of the pass on purpose: a
+	// HELD attempt anywhere in the tick still stops the run, and a pass that
+	// returned at the first adoptable attempt would skip a held one in favour
+	// of a newer adoptable — the mirror of the bug — so redispatch and hold
+	// are evaluated in the same pass, and only a pass with no hold adopts.
+	var adoptable *runstate.Attempt
+	var adoptableMarker attemptHandle
+	for i := range mine {
+		existing := &mine[i]
 		marker := handleFromMap(existing.JobHandle)
 		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
@@ -386,7 +412,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
-		switch disposition, where := r.disposition(existing, marker); disposition {
+		switch disposition, where := r.disposition(*existing, marker); disposition {
 		case redispatchAttempt:
 			// SETTLED, and it produced nothing. Adopting it would re-collect
 			// the same refusal for as long as the run is restarted, so this is
@@ -432,20 +458,31 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt",
 				existing.Attempt, tick, where, r.opts.EpicID, tick, existing.Attempt)
 		}
-		// Appendix A #6: an attempt under this identity has already been
-		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
-		// never redispatched. The attempt number is the marker's own BEFORE
-		// the adoption runs (tick d6s): the lines adoption itself leaves —
-		// the replayed claim, the start failure of an attempt whose marker
-		// landed but never started — are about that attempt.
-		r.setAttempt(tick, existing.Attempt)
-		handle, executor, err := r.adopt(ctx, marker)
+		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
+		// the highest-numbered one, which is the one the pass remembers — the
+		// LATEST of the tick. The pass does not stop here: an older attempt
+		// below may still be held, and a hold stops the run wherever it sits.
+		if adoptable == nil {
+			adoptable = existing
+			adoptableMarker = marker
+		}
+	}
+
+	// Appendix A #6: an attempt under this identity has already been
+	// dispatched, so it is ADOPTED — never redispatched, and of several
+	// survivors the LATEST one (tick w1c). The attempt number is the marker's
+	// own BEFORE the adoption runs (tick d6s): the lines adoption itself
+	// leaves — the replayed claim, the start failure of an attempt whose
+	// marker landed but never started — are about that attempt.
+	if adoptable != nil {
+		r.setAttempt(tick, adoptable.Attempt)
+		handle, executor, err := r.adopt(ctx, adoptableMarker)
 		if err != nil {
-			return nil, nil, marker, err
+			return nil, nil, adoptableMarker, err
 		}
 		r.record(tick, StageAdopted, "attempt %d was already dispatched; it is adopted by identity, never redispatched",
-			existing.Attempt)
-		return handle, executor, marker, nil
+			adoptable.Attempt)
+		return handle, executor, adoptableMarker, nil
 	}
 
 	number := nextAttemptNumber(attempts)
