@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 119,
-  "state": "publishing",
-  "reason": "closing emk behind the integrated gate on fb74c2b9e407",
-  "updated_at": "2026-09-16T14:39:23Z",
+  "sequence": 120,
+  "state": "running",
+  "reason": "emk is closed",
+  "updated_at": "2026-09-16T14:39:40Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -78,7 +78,7 @@
     },
     {
       "tick_id": "emk",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 15
     },
     {
