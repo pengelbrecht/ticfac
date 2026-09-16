@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 91,
-  "state": "collecting",
-  "reason": "collecting w1c attempt 13",
-  "updated_at": "2026-09-16T11:56:54Z",
+  "sequence": 92,
+  "state": "integrating",
+  "reason": "integrating w1c attempt 13 into epic/9pd",
+  "updated_at": "2026-09-16T11:57:06Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "w1c",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 13
     },
     {
