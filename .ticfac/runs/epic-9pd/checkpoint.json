@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 120,
-  "state": "running",
-  "reason": "emk is closed",
-  "updated_at": "2026-09-16T14:39:40Z",
+  "sequence": 121,
+  "state": "dispatching",
+  "reason": "dispatching rj0 as attempt 16",
+  "updated_at": "2026-09-16T14:39:52Z",
   "ticks": [
     {
       "tick_id": "0z0",
