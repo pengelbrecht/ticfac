@@ -2,6 +2,7 @@
   "id": "pbb",
   "title": "A wall-clock stop throws away the attempt's uncommitted work",
   "description": "From the Phase 3 run (epic-9pd, tick 0z0 attempt 1), 2026-09-15.\n\nThe worker spent 40 minutes misdiagnosing a one-token import typo while holding real, uncommitted implementation: a new internal/cli/watch.go, held-attempt tests, and changes to dispatch.go and settle.go. It had committed nothing. Had the one-hour wall clock fired, the attempt would have settled with no commits, been rejected as no-commits, and a fresh attempt would have started from nothing — every line of that work gone. It survived only because an operator pointed the worker at the typo with 17 minutes left.\n\nThe wall clock is the only mechanical bound on a worker that is alive but lost, so what it does to the work is what the bound costs.\n\nWanted: when the wall clock stops an attempt, snapshot its working tree before teardown — tracked changes and untracked files, excluding the report and build output — onto a ref of its own (for example refs/ticfac/wip/\u003crun\u003e/\u003ctick\u003e/\u003cattempt\u003e) or into the attempt's state directory, and record where. The snapshot is NOT merged and is NOT evidence of completion; it is material the next attempt can be pointed at (see nvn).\n\nCare: the boundary exclusions still apply to a snapshot; nothing under .tick/ or .ticfac/ may ride along, and the report is archived separately (35h).",
+  "notes": "2026-09-16 17:34 - RE-PLAN AGAINST rj0 (run epic-9pd, attempt 16) BEFORE THIS DISPATCHES.\n\nrj0 needed a worktree snapshot before closing a pane at the wall clock, 'per tick pbb'. pbb was open and nothing existed to call, so rj0 implemented the minimal version itself: refs/ticfac/wip/\u003cjob-id\u003e with parent HEAD, exclusions for .tick/, .ticfac/ and the artifact prefix, staged through a private index, recorded in wip-snapshot.json beside the attempt record.\n\nSo pbb as written would re-implement the close path's own gate. Its remaining scope is the generalisation rj0 deliberately did not take:\n- pointing a LATER attempt at its predecessor's snapshot (with nvn, which does this for reports),\n- any snapshot policy outside the wall-clock close (a rejected attempt, an operator release),\n- whether the snapshot ref is pruned, and by whom.\n\nUnion the two before dispatching, and let pbb own only what rj0 left.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "An attempt stopped at its wall clock with uncommitted changes leaves them recoverable at a recorded location, never merged; a test stops an attempt holding an uncommitted file and asserts the file is recoverable after teardown and the attempt is still not ready-to-merge",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T09:54:29.046216Z",
-  "updated_at": "2026-09-15T09:54:29.046216Z"
+  "updated_at": "2026-09-16T15:34:54.365377Z"
 }
