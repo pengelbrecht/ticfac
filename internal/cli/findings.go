@@ -16,7 +16,10 @@ import (
 // `findings` lists the drafts a run has filed — with the key, the triage
 // state, the target and the attempt that discovered each. `finding` records
 // ONE decision: promote (naming the tick that was created, and the repository
-// it was routed to when the finding targeted another one) or discard. The
+// it was routed to when the finding targeted another one), discard, or FIXED
+// — repaired inside the epic, naming the commit that repaired it (tick her),
+// which is the verdict a repaired finding needs: there is no tick to promote
+// it to, and a discard would mean the opposite of what happened. The
 // reconciler's close gate reads the same records, so a tick whose findings are
 // untriaged stays open until somebody runs one of these.
 //
@@ -105,13 +108,19 @@ func findingsCommand(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "    promoted as %s by %s at %s\n", finding.PromotedAs, finding.TriagedBy, finding.TriagedAt)
 		case runstate.FindingDiscarded:
 			fmt.Fprintf(stdout, "    discarded by %s at %s\n", finding.TriagedBy, finding.TriagedAt)
+		case runstate.FindingFixed:
+			fmt.Fprintf(stdout, "    fixed as %s by %s at %s\n", finding.FixedAs, finding.TriagedBy, finding.TriagedAt)
 		default:
-			fmt.Fprintf(stdout, "    triage: ticfac finding %s %s --promote-as <tick> --by \"<who>\" | --discard --by \"<who>\"\n",
+			fmt.Fprintf(stdout, "    triage: ticfac finding %s %s --promote-as <tick> --by \"<who>\" | --discard --by \"<who>\" | --fixed-as <commit> --by \"<who>\"\n",
 				epicID, finding.Key)
 		}
 	}
-	fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; a tick with an untriaged finding cannot close.\n",
-		len(findings), untriaged)
+	if untriaged == 0 {
+		fmt.Fprintf(stdout, "%d finding(s), none waiting for a person; the triage gate is down.\n", len(findings))
+	} else {
+		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; a tick with an untriaged finding cannot close.\n",
+			len(findings), untriaged)
+	}
 	return 0
 }
 
@@ -128,6 +137,7 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 	repo, remote, branch, runID := findingRunOptions(fs)
 	promoteAs := fs.String("promote-as", "", "the tick the promotion created: a bare tick id, or <owner/name>:<tick-id> for a routed finding")
 	discard := fs.Bool("discard", false, "record that a person looked and said no")
+	fixedAs := fs.String("fixed-as", "", "record that the finding was repaired inside this epic, naming the commit that repaired it")
 	by := fs.String("by", "", "the person triaging this draft")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -143,8 +153,19 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 			"one nobody can audit\n", epicID, key)
 		return 2
 	}
-	if (*promoteAs == "") == !*discard {
-		fmt.Fprintf(stderr, "ticfac finding %s %s: say exactly one of --promote-as <tick> or --discard\n", epicID, key)
+	verdicts := 0
+	if *promoteAs != "" {
+		verdicts++
+	}
+	if *discard {
+		verdicts++
+	}
+	if *fixedAs != "" {
+		verdicts++
+	}
+	if verdicts != 1 {
+		fmt.Fprintf(stderr, "ticfac finding %s %s: say exactly one of --promote-as <tick>, --discard or --fixed-as <commit>\n",
+			epicID, key)
 		return 2
 	}
 
@@ -171,19 +192,24 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 		if finding.PromotedAs != "" {
 			fmt.Fprintf(stdout, ", as %s", finding.PromotedAs)
 		}
+		if finding.FixedAs != "" {
+			fmt.Fprintf(stdout, ", fixed as %s", finding.FixedAs)
+		}
 		fmt.Fprintf(stdout, ": a decision is never made twice, and a repeat finding proposes nothing new.\n")
 		return 0
 	}
 
-	status, promotedAs := runstate.FindingPromoted, *promoteAs
+	triage := runstate.Triage{Status: runstate.FindingPromoted, By: *by, PromotedAs: *promoteAs}
 	if *discard {
-		status, promotedAs = runstate.FindingDiscarded, ""
+		triage = runstate.Triage{Status: runstate.FindingDiscarded, By: *by}
+	} else if *fixedAs != "" {
+		triage = runstate.Triage{Status: runstate.FindingFixed, By: *by, FixedAs: *fixedAs}
 	} else if err := checkPromotedAs(finding, *promoteAs); err != nil {
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)
 		return 1
 	}
 
-	outcome, decided, err := store.TriageFinding(key, status, *by, promotedAs)
+	outcome, decided, err := store.TriageFinding(key, triage)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)
 		return 1
@@ -196,7 +222,14 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, ". Their decision stands.\n")
 		return 0
 	}
-	if status == runstate.FindingPromoted {
+	if triage.Status == runstate.FindingFixed {
+		fmt.Fprintf(stdout, "finding %s is recorded as fixed, repaired as %s, %s's decision of run %s.\n"+
+			"Ticks of the run whose findings are all triaged can now close. The same finding reported again is not suppressed: "+
+			"if it comes back, the fix did not hold, and that is exactly when the run must hear it.\n",
+			key, decided.FixedAs, *by, store.RunID())
+		return 0
+	}
+	if triage.Status == runstate.FindingPromoted {
 		fmt.Fprintf(stdout, "finding %s is promoted as %s, recorded as %s's decision of run %s.\n"+
 			"File the tick carrying `discovered_from %s` so the attempt that found it is never lost again.\n"+
 			"Ticks of the run whose findings are all triaged can now close.\n",

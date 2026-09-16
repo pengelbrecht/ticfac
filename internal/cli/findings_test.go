@@ -237,3 +237,72 @@ func TestAFindingKeyThatDoesNotExistIsAUsageFailure(t *testing.T) {
 		t.Errorf("stderr %q", stderr.String())
 	}
 }
+
+// The fixed verdict (tick her): a finding repaired inside the epic is triaged
+// as fixed, naming the commit that repaired it. It is ONE decision like the
+// other two — exactly one verdict per call, attributed — and the listing shows
+// the commit, so the claim stays checkable.
+func TestAFindingIsTriagedAsFixedNamingTheCommit(t *testing.T) {
+	repo := newFindingsRepo(t)
+	seedFinding(t, repo, testDraftFinding("d34db33f", ""))
+
+	// Exactly one verdict: fixed alongside promote, discard, or alone-with-no
+	// commit is a usage failure.
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"finding", "--repo", repo, "--fixed-as", "338bbf8b", "--promote-as", "zz9",
+		"--by", "the operator", "qeu", "d34db33f"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("fixed plus promote exit %d, want 2: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := Run([]string{"finding", "--repo", repo, "--fixed-as", "338bbf8b", "--discard",
+		"--by", "the operator", "qeu", "d34db33f"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("fixed plus discard exit %d, want 2: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := Run([]string{"finding", "--repo", repo, "--fixed-as", "338bbf8b",
+		"--by", "the operator", "qeu", "d34db33f"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("fixed exit %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "338bbf8b") {
+		t.Errorf("stdout %q does not name the commit the verdict records", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "is not suppressed") {
+		t.Errorf("stdout %q does not say a later report of the same finding is not suppressed", stdout.String())
+	}
+
+	// The record on origin carries the commit, and the listing shows the fix.
+	store, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "epic-qeu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	finding, ok, err := store.Finding("d34db33f")
+	if err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	}
+	if finding.Status != runstate.FindingFixed || finding.FixedAs != "338bbf8b" || finding.TriagedBy != "the operator" {
+		t.Fatalf("finding %+v, want fixed as 338bbf8b by the operator", finding)
+	}
+	stdout.Reset()
+	if code := Run([]string{"findings", "--repo", repo, "qeu"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("findings exit %d: %s", code, stderr.String())
+	}
+	for _, want := range []string{"fixed", "338bbf8b", "none waiting for a person"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout does not carry %q:\n%s", want, stdout.String())
+		}
+	}
+
+	// The second decision on the decided draft is not a decision either, and
+	// names the standing fix.
+	stdout.Reset()
+	if code := Run([]string{"finding", "--repo", repo, "--discard", "--by", "someone else", "qeu", "d34db33f"},
+		&stdout, &stderr); code != 0 {
+		t.Fatalf("re-triage exit %d, want 0: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "already fixed") || !strings.Contains(stdout.String(), "338bbf8b") {
+		t.Errorf("stdout %q does not report the standing fix", stdout.String())
+	}
+}

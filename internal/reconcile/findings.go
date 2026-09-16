@@ -144,7 +144,8 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		// for them, and sees where to triage it.
 		note := fmt.Sprintf("ticfac run %s: attempt %d reported a finding drafted for triage — %s %q "+
 			"(key %s, severity %s, for %s). Triage with `ticfac finding %s %s --promote-as <tick> --by "+
-			"\"<who>\"` or `--discard --by \"<who>\"`; the tick cannot close while it is untriaged.",
+			"\"<who>\"`, `--discard --by \"<who>\"`, or — when it was repaired inside this epic — "+
+			"`--fixed-as <commit> --by \"<who>\"`; the tick cannot close while it is untriaged.",
 			r.runID, marker.Attempt, finding.Kind, finding.Title, key, finding.Severity,
 			targetName(finding.Target), r.opts.EpicID, key)
 		if _, err := r.tracker.Note(ctx, marker.TickID, note); err != nil {
@@ -200,9 +201,11 @@ func (r *Reconciler) gateOnFindings(tick string) (*Refusal, error) {
 	return r.refuse(RefusedFindingUntriaged, tick,
 		"%s reported %d finding(s) nobody has triaged — %s — and the tick is NOT closed: a finding that falls "+
 			"on the floor is the failure this gate exists to stop. Triage each with `ticfac finding %s %s "+
-			"--promote-as <tick> --by \"<who>\"` (promote into the repository it targets) or `ticfac finding %s "+
-			"%s --discard --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, "+
-			"so the close is the only step left. The drafts are key %s under .ticfac/runs/%s/findings/ on %s",
+			"--promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding %s "+
+			"%s --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding %s "+
+			"%s --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already "+
+			"passed, so the close is the only step left. The drafts are key %s under .ticfac/runs/%s/findings/ on %s",
 		tick, len(untriaged), strings.Join(titles, "; "), r.opts.EpicID, strings.Join(keys, "|"), r.opts.EpicID,
-		strings.Join(keys, "|"), strings.Join(keys, ", "), r.runID, r.opts.Remote), nil
+		strings.Join(keys, "|"), r.opts.EpicID, strings.Join(keys, "|"), strings.Join(keys, ", "), r.runID,
+		r.opts.Remote), nil
 }

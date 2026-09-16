@@ -92,7 +92,7 @@ func TestARepeatedFindingProposesNothingNewWhateverHappenedToTheOriginal(t *test
 				t.Fatalf("propose: %v", err)
 			}
 			if tc.triage != "" {
-				outcome, _, err := s.TriageFinding("d34db33f", tc.triage, "the operator", tc.as)
+				outcome, _, err := s.TriageFinding("d34db33f", Triage{Status: tc.triage, By: "the operator", PromotedAs: tc.as})
 				if err != nil || outcome != Updated {
 					t.Fatalf("triage as %s: outcome %s err %v", tc.triage, outcome, err)
 				}
@@ -147,18 +147,18 @@ func TestTriageIsOneAttributedDecisionPerDraft(t *testing.T) {
 
 	// A triage names who made it: a decision nobody can attribute is one
 	// nobody can audit — the same discipline a settlement's release answers.
-	if _, _, err := s.TriageFinding("d34db33f", FindingDiscarded, "", ""); err == nil {
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingDiscarded}); err == nil {
 		t.Fatal("an unattributed triage was accepted")
 	}
 	// A promotion names the tick that was created; a discard names none.
-	if _, _, err := s.TriageFinding("d34db33f", FindingPromoted, "the operator", ""); err == nil {
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingPromoted, By: "the operator"}); err == nil {
 		t.Fatal("a promotion naming no tick was accepted")
 	}
-	if _, _, err := s.TriageFinding("d34db33f", FindingDiscarded, "the operator", "zz9"); err == nil {
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingDiscarded, By: "the operator", PromotedAs: "zz9"}); err == nil {
 		t.Fatal("a discard naming a tick was accepted")
 	}
 
-	_, decided, err := s.TriageFinding("d34db33f", FindingDiscarded, "the operator", "")
+	_, decided, err := s.TriageFinding("d34db33f", Triage{Status: FindingDiscarded, By: "the operator"})
 	if err != nil {
 		t.Fatalf("discard: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestTriageIsOneAttributedDecisionPerDraft(t *testing.T) {
 	// The decision is never made twice — and the second call is not an error,
 	// because "what the human did with it" is exactly what a redelivery must
 	// not reopen.
-	outcome, second, err := s.TriageFinding("d34db33f", FindingPromoted, "someone else", "zz9")
+	outcome, second, err := s.TriageFinding("d34db33f", Triage{Status: FindingPromoted, By: "someone else", PromotedAs: "zz9"})
 	if err != nil {
 		t.Fatalf("re-triage: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestARoutedFindingKeepsItsTargetAndNamesItAtPromotion(t *testing.T) {
 	if got, want := ok, true; got != want {
 		t.Fatal("read back")
 	}
-	_, promoted, err := s.TriageFinding("c0ffee", FindingPromoted, "the operator", "pengelbrecht/ticks:of9")
+	_, promoted, err := s.TriageFinding("c0ffee", Triage{Status: FindingPromoted, By: "the operator", PromotedAs: "pengelbrecht/ticks:of9"})
 	if err != nil {
 		t.Fatalf("promote the routed finding: %v", err)
 	}
@@ -240,5 +240,124 @@ func TestAPromotedDraftWithoutATickIsRefused(t *testing.T) {
 	finding.Status, finding.TriagedAt, finding.TriagedBy = FindingPromoted, "2026-09-11T19:00:00Z", "the operator"
 	if err := finding.Validate(); err == nil || !strings.Contains(err.Error(), "names no tick") {
 		t.Fatalf("err %v, want the promotion to name its tick", err)
+	}
+}
+
+// THE FIXED VERDICT (tick her): a finding repaired inside the epic fits
+// neither promote nor discard, and the verdict records the commit that
+// repaired it, so the claim is checkable rather than asserted.
+func TestAFixedVerdictNamesTheCommitThatRepairedIt(t *testing.T) {
+	o := newOrigin(t)
+	s := o.actor("operator", testRun)
+	if _, err := s.PutFinding(testFinding("d34db33f")); err != nil {
+		t.Fatal(err)
+	}
+
+	outcome, decided, err := s.TriageFinding("d34db33f", Triage{Status: FindingFixed, By: "the operator", FixedAs: "338bbf8b"})
+	if err != nil {
+		t.Fatalf("triage as fixed: %v", err)
+	}
+	if outcome != Updated {
+		t.Fatalf("outcome %s, want %s", outcome, Updated)
+	}
+	if decided.Status != FindingFixed {
+		t.Fatalf("status %q, want %q", decided.Status, FindingFixed)
+	}
+	if decided.FixedAs != "338bbf8b" || decided.TriagedBy != "the operator" || decided.PromotedAs != "" {
+		t.Fatalf("decided %+v: a fixed verdict names the commit and nothing else", decided)
+	}
+
+	// A fixed verdict naming no commit is refused — "fixed" without the
+	// commit is the assertion this verdict exists to make checkable.
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingFixed, By: "the operator"}); err == nil {
+		t.Fatal("a fixed verdict naming no commit was accepted")
+	}
+	// A fixed verdict that is also a promotion is refused: a triage is one
+	// decision, not two.
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingFixed, By: "the operator", PromotedAs: "zz9", FixedAs: "338bbf8b"}); err == nil {
+		t.Fatal("a fixed verdict that is also a promotion was accepted")
+	}
+	// A "commit" that is not a commit id at all is refused, on a draft still
+	// waiting: the claim must stay checkable. (The decided draft above must
+	// answer NoChange to any further call, whatever the call names.)
+	if _, err := s.PutFinding(testFinding("c0ffee11")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.TriageFinding("c0ffee11", Triage{Status: FindingFixed, By: "the operator", FixedAs: "not-a-commit"}); err == nil {
+		t.Fatal("a fixed verdict naming no commit id was accepted")
+	}
+}
+
+// THE NOT-SUPPRESSED HALF of the fixed verdict (tick her): a finding triaged
+// as fixed that is reported again is NOT deduplicated away — the fix did not
+// hold, and that is exactly when the run must hear it. The re-report
+// re-proposes the draft: status back to proposed, discovered_from naming the
+// attempt that re-found it, and the triage cleared so the person decides
+// again with the fix's failure in front of them.
+func TestARepeatedFindingAfterAFixedVerdictIsHeardAgain(t *testing.T) {
+	o := newOrigin(t)
+	s := o.actor("operator", testRun)
+	if _, err := s.PutFinding(testFinding("d34db33f")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.TriageFinding("d34db33f", Triage{Status: FindingFixed, By: "the operator", FixedAs: "338bbf8b"}); err != nil {
+		t.Fatalf("triage as fixed: %v", err)
+	}
+
+	// A later attempt of the same tick reports the same finding again: the
+	// fix did not hold, and the re-report must not be swallowed by the dedup
+	// that rightly holds for promoted and discarded originals.
+	later := o.actor("second-attempt", testRun)
+	again := testFinding("d34db33f")
+	again.Attempt = 2
+	again.DiscoveredFrom = "run-" + testRun + "/tick-a1/attempt-2"
+	again.Provenance.Attempt = Ptr(2)
+	outcome, err := later.PutFinding(again)
+	if err != nil {
+		t.Fatalf("re-report the fixed finding: %v", err)
+	}
+	if !outcome.EffectPermitted() {
+		t.Fatalf("outcome %s: a finding whose fix did not hold was suppressed — the run must hear it "+
+			"again", outcome)
+	}
+
+	reopened, ok, err := later.Finding("d34db33f")
+	if err != nil || !ok {
+		t.Fatalf("read the re-opened draft: %v %v", ok, err)
+	}
+	if reopened.Status != FindingProposed {
+		t.Errorf("status %q, want proposed: the re-report re-opens the draft for triage", reopened.Status)
+	}
+	if reopened.DiscoveredFrom != again.DiscoveredFrom {
+		t.Errorf("discovered_from %q, want %q: the re-opened draft must name the attempt that "+
+			"re-found it, which is the evidence the fix did not hold", reopened.DiscoveredFrom, again.DiscoveredFrom)
+	}
+	if reopened.FixedAs != "" || reopened.TriagedBy != "" {
+		t.Errorf("the re-opened draft kept the overturned triage: %+v", reopened)
+	}
+
+	// One record, one key: the re-report is the same finding, re-opened —
+	// not a second draft beside the first.
+	findings, err := later.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings %v, want the one re-opened draft", findings)
+	}
+
+	// And the re-opened draft is decidable again — this time as promoted,
+	// which DOES hold: the funnel's suppression belongs to the verdicts that
+	// mean decided, and fixed is the one verdict that does not.
+	outcome, decided, err := later.TriageFinding("d34db33f", Triage{Status: FindingPromoted, By: "the operator", PromotedAs: "zz9"})
+	if err != nil || outcome != Updated {
+		t.Fatalf("re-triage the re-opened draft: outcome %s err %v", outcome, err)
+	}
+	if decided.Status != FindingPromoted || decided.PromotedAs != "zz9" {
+		t.Fatalf("decided %+v", decided)
+	}
+	third := o.actor("third-attempt", testRun)
+	if outcome, err := third.PutFinding(testFinding("d34db33f")); err != nil || outcome.EffectPermitted() {
+		t.Fatalf("outcome %s err %v: after a promoting triage the funnel's dedup holds again", outcome, err)
 	}
 }

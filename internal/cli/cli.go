@@ -175,6 +175,10 @@ finding flags:
                        finding that belongs to this repository, <owner/name>:<tick-id>
                        for one routed to the repository its target names
   --discard            record that a person looked and said no
+  --fixed-as <commit>  record that the finding was repaired inside this epic, naming
+                       the commit that repaired it — the claim stays checkable, and a
+                       later report of the same finding is NOT suppressed: it means
+                       the fix did not hold, and the run hears it again
   --by <who>           the person triaging (required): a decision nobody can
                        attribute is one nobody can audit
 
