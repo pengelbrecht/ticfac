@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 93,
-  "state": "gating",
-  "reason": "running the integrated gate for w1c on a2b91d1bcc38",
-  "updated_at": "2026-09-16T11:57:22Z",
+  "sequence": 94,
+  "state": "publishing",
+  "reason": "closing w1c behind the integrated gate on a2b91d1bcc38",
+  "updated_at": "2026-09-16T12:04:02Z",
   "ticks": [
     {
       "tick_id": "0z0",
