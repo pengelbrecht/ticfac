@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 74,
-  "state": "running",
-  "reason": "glb is closed",
-  "updated_at": "2026-09-16T09:58:32Z",
+  "sequence": 75,
+  "state": "dispatching",
+  "reason": "dispatching her as attempt 11",
+  "updated_at": "2026-09-16T09:58:44Z",
   "ticks": [
     {
       "tick_id": "0z0",
