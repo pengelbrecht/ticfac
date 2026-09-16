@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 60,
-  "state": "running",
-  "reason": "cwa is closed",
-  "updated_at": "2026-09-16T08:42:35Z",
+  "sequence": 61,
+  "state": "dispatching",
+  "reason": "dispatching e08 as attempt 9",
+  "updated_at": "2026-09-16T08:42:48Z",
   "ticks": [
     {
       "tick_id": "0z0",
