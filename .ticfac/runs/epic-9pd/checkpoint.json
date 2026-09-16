@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 131,
-  "state": "integrating",
-  "reason": "integrating 0dc attempt 17 into epic/9pd",
-  "updated_at": "2026-09-16T16:32:17Z",
+  "sequence": 132,
+  "state": "gating",
+  "reason": "running the integrated gate for 0dc on eb7c66ecec18",
+  "updated_at": "2026-09-16T16:32:31Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -88,7 +88,7 @@
     },
     {
       "tick_id": "0dc",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 17
     },
     {
