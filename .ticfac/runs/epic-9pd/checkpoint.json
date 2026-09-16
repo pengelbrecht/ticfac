@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 61,
-  "state": "dispatching",
-  "reason": "dispatching e08 as attempt 9",
-  "updated_at": "2026-09-16T08:42:48Z",
+  "sequence": 62,
+  "state": "running",
+  "reason": "e08 is running as attempt 9",
+  "updated_at": "2026-09-16T08:43:03Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -44,7 +44,8 @@
     },
     {
       "tick_id": "e08",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "glb",
