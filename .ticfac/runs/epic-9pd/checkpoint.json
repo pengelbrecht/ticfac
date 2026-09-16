@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 88,
-  "state": "running",
-  "reason": "nvn is closed",
-  "updated_at": "2026-09-16T11:24:18Z",
+  "sequence": 89,
+  "state": "dispatching",
+  "reason": "dispatching w1c as attempt 13",
+  "updated_at": "2026-09-16T11:24:30Z",
   "ticks": [
     {
       "tick_id": "0z0",
