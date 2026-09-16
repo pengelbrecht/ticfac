@@ -3,7 +3,7 @@
   "title": "Port the door/container auth-challenge and cold-start-budget parity checks from ticks",
   "description": "Filed from a worker finding on ticks tick 3r2 attempt 6, during the factory deletion. The factory moved to ticfac, but two parity checks that guarded it stayed behind in ticks and would be deleted with the rest: the door/container auth-challenge check and the cold-start-budget check. They are the tests that prove the deployed factory still behaves, so they belong here now.\n\nRead ticks' epic/pwp branch for what they were before the deletion.",
   "notes": "2026-09-16 11:01 - ticfac run epic-9pd: attempt 9 reported a finding drafted for triage — proposed-tick \"cloud/sandbox is duplicated in ticks and ticfac with no drift guard between the copies\" (key 263be0218b5a103f4558869bfc0b9354abe7d9fac05dab157ce00995aa84af0f, severity medium, for this repository). Triage with `ticfac finding 9pd 263be0218b5a103f4558869bfc0b9354abe7d9fac05dab157ce00995aa84af0f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-16 11:01 - ticfac run epic-9pd: attempt 9 reported a finding drafted for triage — proposed-tick \"The sandbox-start benchmark trio is split: harness and summary in ticks, raw artifact and container here\" (key 85ceb45ff1e18e0c8e6ec3d428a6ac7ea10941c910e8e0553ce74a84c6eae2d6, severity low, for this repository). Triage with `ticfac finding 9pd 85ceb45ff1e18e0c8e6ec3d428a6ac7ea10941c910e8e0553ce74a84c6eae2d6 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-16 11:07 - ticfac run epic-9pd: attempt 9 merged into epic/9pd as 75a3eb0b9bf4; the integrated gate (go) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "The auth-challenge and cold-start-budget parity checks run in ticfac against the moved factory; what they assert is unchanged from what ticks asserted, or the difference is stated; make test-short green.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-14T20:40:46.826712Z",
-  "updated_at": "2026-09-16T09:07:52.906409Z",
-  "started_at": "2026-09-16T08:42:55.671605Z"
+  "updated_at": "2026-09-16T09:07:58.91496Z",
+  "closed_at": "2026-09-16T09:07:58.91496Z"
 }
