@@ -314,8 +314,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// a worker that answered BLOCKED about an open blocker worth
 			// dispatching again once that blocker is closed.
 			r.record(tick, StageRedispatched,
-				"attempt %d settled with nothing on %s and was rejected; a new attempt is dispatched rather than "+
-					"the spent one adopted", existing.Attempt, branchOf(marker.WriteRef))
+				"attempt %d (%s try %d) settled with nothing on %s and was rejected; a new attempt is dispatched "+
+					"rather than the spent one adopted",
+				existing.Attempt, tick, tryOf(attempts, tick, existing.Attempt), branchOf(marker.WriteRef))
 			// The rung this attempt earned for the ladder: the work was
 			// dispatched, it had its chance, and it did not pass.
 			failed++
@@ -356,8 +357,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		if err != nil {
 			return nil, nil, marker, err
 		}
-		r.record(tick, StageAdopted, "attempt %d was already dispatched; it is adopted by identity, never redispatched",
-			existing.Attempt)
+		r.record(tick, StageAdopted, "attempt %d (%s try %d) was already dispatched; it is adopted by identity, never redispatched",
+			existing.Attempt, tick, tryOf(attempts, tick, existing.Attempt))
 		return handle, executor, marker, nil
 	}
 
@@ -454,7 +455,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		r.noteAlive(dispatch.JobID)
 		r.setTick(tick, "dispatched")
-		r.record(tick, StageDispatched, "attempt %d started as %s", number, dispatch.JobID)
+		r.record(tick, StageDispatched, "attempt %d started as %s (%s try %d; attempt numbers count this run's dispatches)",
+			number, dispatch.JobID, tick, tryOf(attempts, tick, number))
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
 		}
@@ -472,6 +474,25 @@ const maxDispatchConflicts = 8
 
 // nextAttemptNumber is the number a new dispatch takes. Attempt numbers are
 // RUN-wide, not per tick: the run state store keys attempts by number alone.
+// tryOf is how many times THIS tick has been dispatched, counting the attempt
+// numbered `number` as the latest.
+//
+// Attempt numbers count dispatches across the whole RUN, not tries at one tick,
+// because an attempt's number is its identity: it names its branch
+// (…/tick-nvn/attempt-12), its durable marker, and the argument to
+// `ticfac settle <epic> <tick> <n>`. That is right for identity and misleading
+// in a sentence — "attempt 12 of nvn" reads as eleven failures at nvn when it
+// is nvn's first try and the run's twelfth dispatch. So the feed says both.
+func tryOf(attempts []runstate.Attempt, tick string, number int) int {
+	try := 1
+	for _, existing := range attempts {
+		if existing.TickID == tick && existing.Attempt < number {
+			try++
+		}
+	}
+	return try
+}
+
 func nextAttemptNumber(attempts []runstate.Attempt) int {
 	number := len(attempts) + 1
 	for _, existing := range attempts {
