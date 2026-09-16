@@ -56,6 +56,8 @@ usage:
   ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
   ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
   ticfac factory <status|dashboard>            what the factory has configured; the read-only board
+  ticfac factory webhook                        point Telegram at the factory (--status reads it, --delete withdraws it)
+  ticfac herd <paint|notify>                   badge herdr workspaces; chime when a worker blocks or a wave settles
   ticfac cloud <run|stop|status|logs|trace|supervisor>   drive a self-deployed cloud factory
 
 run-epic flags:
@@ -226,6 +228,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		return factoryCommand(ctx, args[1:], stdout, stderr)
+	case "herd":
+		// Signal-aware: a paint or notify driven from an event hook can be
+		// left alone to exit when its caller's subscription ends.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return herdCommand(ctx, args[1:], stdout, stderr)
 	case "cloud":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
