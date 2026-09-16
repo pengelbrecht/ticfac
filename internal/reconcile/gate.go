@@ -84,6 +84,29 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		"profile_digest":          dispatchProfile.Digest,
 	}
 
+	// The gate's first check is structural, and it comes first because it is
+	// nearly free and because it is about something the declared commands
+	// cannot say: the commands prove the tree, and this proves that the repo's
+	// own CI configuration still DESCRIBES that tree. A workflow naming a
+	// package the tree deleted keeps the epic's PR red on every push while
+	// every command here stays green — the blindness tick cwa closes.
+	stale, err := r.staleWorkflowPatterns(merged.GateSHA)
+	if err != nil {
+		return err
+	}
+	if len(stale) > 0 {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageGateFailed, "the repo's own CI configuration is not about this tree: %s",
+			strings.Join(stale, "; "))
+		return r.refuse(RefusedGate, tick,
+			"the integrated gate on %s did not pass for %s: the repo's own CI configuration is not about this "+
+				"tree — %s. The tick is NOT closed, and the repair is the workflow or the tree, not the check: "+
+				"fix the workflow to name what the tree carries, or restore the package it names, push it to %s, "+
+				"and run the epic again under this run id: the gate runs again because this record is keyed by the "+
+				"commit it ran on and the fixed tree is a different commit",
+			short(merged.GateSHA), tick, strings.Join(stale, "; "), r.branch)
+	}
+
 	passed := true
 	var failures []string
 	keys := make([]string, len(r.gate))
