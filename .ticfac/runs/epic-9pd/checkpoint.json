@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 98,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for h0f",
-  "updated_at": "2026-09-16T12:21:44Z",
+  "sequence": 99,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-16T13:43:07Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -82,7 +82,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "ed801d58eab55d92829e3f757b333507cbbd203c",
+    "source_sha": "d3c948c09285bfc50927414d090ccf8bd57634d7",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
