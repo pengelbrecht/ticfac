@@ -1,0 +1,14 @@
+{
+  "id": "5bp",
+  "title": "cloud/sandbox exists in both repos with nothing to stop them drifting",
+  "description": "Found by tick e08 (run epic-9pd, attempt 9), which verified the copies are identical today with diff -rq.\n\nticks kept cloud/sandbox because its internal/sandbox suite shells into those scripts; the same tree is here as the factory's embedded image context. Two copies, no guard. If they drift, ticfac's cold-start budget check bounds a container built from THIS copy while ticks' tests guard ITS copy, and both keep passing while the thing that ships diverges from the thing that is tested.\n\nThis is the epic's own premise applied to itself: 'extracted' cannot mean 'copied'. It is the same subject as ticks g69 (decide the record for cloud/sandbox, since 3r2's list and the pwp acceptance say it was deleted) and should be decided with it.\n\nDecide the authority and enforce it: one repo vendors the other's copy, or a digest of the tree is pinned in both and checked, the way the contract bundle already is. A decision recorded in prose with no check is how the copies got here.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "One repository owns cloud/sandbox and the other consumes it, or a tree digest is pinned in both and a test fails when they differ; a test proves the guard by changing one copy",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T09:01:59.984368Z",
+  "updated_at": "2026-09-16T09:01:59.984368Z"
+}
