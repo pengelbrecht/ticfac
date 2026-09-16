@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -206,6 +208,149 @@ tree = { command = %q, description = "counts every time it actually ran" }
 	if len(ran) != gateRuns {
 		t.Errorf("the gate check physically ran %d time(s) for %d recorded gate checks; "+
 			"the restart re-ran a check whose evidence it already had", len(ran), gateRuns)
+	}
+}
+
+// The close is never backed by evidence from a gate that is no longer the
+// declared one — on the resume path too (tick 0dc).
+//
+// The incident this pins: a run gated a tick under one declared command and
+// was correctly refused as stale when the operator changed .tick/runners.toml
+// mid-run; the RESUME — an incarnation that adopted the already-merged
+// attempt and re-ran nothing — then re-read the identical record, published
+// its verdict and closed the tick forty seconds later. The reuse judgement in
+// gateEvidenceKey compared only the source tree, so on that path the digest
+// was decorative: the freshness index registered the fingerprint the run
+// WOULD have used, and the publication check compared that against a target
+// built the same way. Both paths must ask the same question — and here the
+// resumed run either re-runs the check under the gate declared now, or does
+// not close the tick. The command counts its own executions into a file
+// outside any worktree, so a close on re-used evidence is a count, not an
+// impression.
+func TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand(t *testing.T) {
+	t.Parallel()
+	counter := filepath.Join(t.TempDir(), "gate-runs.count")
+	counting := fmt.Sprintf("printf x >> %s && test -f README.md && ls work-*.txt >/dev/null", counter)
+	gate := fmt.Sprintf(`version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = %q, description = "counts every time it actually ran" }
+`, counting)
+
+	f := newFixture(t, fixtureOptions{gate: gate})
+	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageGatePassed)})
+	killedAfter(t, err, "a1", StageGatePassed)
+
+	// What the dead incarnation left: a passing record under the plain key,
+	// carrying the digest of the gate that ran it.
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	key := evidenceKey("a1", 1, "tree")
+	first, ok, err := store.Evidence(key)
+	if err != nil || !ok {
+		t.Fatalf("the dead incarnation left no gate evidence for a1 under %s: %v", key, err)
+	}
+	if first.Provenance.ContextManifestDigest == nil {
+		t.Fatalf("evidence %s states no context_manifest_digest", key)
+	}
+	if first.Result != "pass" {
+		t.Fatalf("evidence %s is %s; this fixture proves nothing about reuse", key, first.Result)
+	}
+
+	// The operator changes the declared gate mid-run — the incident's edit —
+	// committed to the branch a resumed checkout reads, so the fresh clone
+	// below starts from the changed declaration.
+	changed := strings.Replace(gate, counting, counting+" && true", 1)
+	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), changed)
+	mustRun(t, f.Repo.Dir, "git", "add", ".tick/runners.toml")
+	mustRun(t, f.Repo.Dir, "git", "commit", "--quiet", "-m", "the declared gate changes mid-run", "--", ".tick/runners.toml")
+	mustRun(t, f.Repo.Dir, "git", "push", "--quiet", "origin", "main")
+
+	declared, err := ReadGateCommands(filepath.Join(f.Repo.Dir, ".tick", "runners.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if declared.Digest() == *first.Provenance.ContextManifestDigest {
+		t.Fatal("the changed gate and the recorded evidence share a digest; this proves nothing about staleness")
+	}
+
+	// The resume: a fresh clone, everything it knows read from origin.
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	restarted, result, err := f.run(clone, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the resumed run ended %s: %s", result.State, result.Reason)
+	}
+	if !contains(result.Closed, "a1") {
+		t.Fatalf("the resumed run did not close a1: %v", result.Closed)
+	}
+
+	store = openRunStore(t, clone.Dir, restarted.IntegrationBranch(), restarted.RunID())
+
+	// The record from the gate that ran still stands, unoverwritten: evidence
+	// is never rewritten, and the refusal here is about PUBLISHING it.
+	original, ok, err := store.Evidence(key)
+	if err != nil || !ok {
+		t.Fatalf("the original evidence under %s is gone: %v", key, err)
+	}
+	if original.StartedAt != first.StartedAt || original.FinishedAt != first.FinishedAt {
+		t.Errorf("the record from the gate that ran was overwritten: %s -> %s", first.StartedAt, original.StartedAt)
+	}
+
+	// The close is not backed by it. Some record of a1's check in THIS run's
+	// evidence carries the digest of the gate declared now — the resumed run
+	// re-ran the check under the changed command — and at the incident no such
+	// record existed: the tick closed on the old record alone.
+	var backed *runstate.Evidence
+	for _, k := range store.EvidenceKeys() {
+		if !strings.HasPrefix(k, key) {
+			continue
+		}
+		candidate, ok, err := store.Evidence(k)
+		if err != nil || !ok {
+			t.Fatalf("read evidence %s: %v", k, err)
+		}
+		if candidate.Provenance.ContextManifestDigest == nil {
+			continue
+		}
+		if *candidate.Provenance.ContextManifestDigest == declared.Digest() {
+			backed = candidate
+		}
+	}
+	if backed == nil {
+		t.Fatalf("a1 closed with no evidence carrying the digest of the gate declared now (%s): "+
+			"the identical record from the gate that ran (%s) was published instead",
+			short(declared.Digest()), short(*first.Provenance.ContextManifestDigest))
+	}
+
+	// And the backing evidence really is about the changed command, produced
+	// after the dead incarnation's record — not the old record re-labelled.
+	want := []string{"sh", "-c", counting + " && true"}
+	if !reflect.DeepEqual(backed.Check.Command, want) {
+		t.Errorf("the close is backed by a check that ran %q, want the changed command %q",
+			strings.Join(backed.Check.Command, " "), strings.Join(want, " "))
+	}
+	late, err := time.Parse(time.RFC3339, backed.StartedAt)
+	if err != nil {
+		t.Fatalf("the backing evidence's started_at is not a timestamp: %v", err)
+	}
+	dead, err := time.Parse(time.RFC3339, first.FinishedAt)
+	if err != nil {
+		t.Fatalf("the dead incarnation's finished_at is not a timestamp: %v", err)
+	}
+	if !late.After(dead) {
+		t.Errorf("the evidence backing the close started at %s, before the dead incarnation's gate had "+
+			"even finished at %s: the old record was published", backed.StartedAt, first.FinishedAt)
+	}
+
+	// The tick closed exactly once, behind a gate that ran.
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Errorf("a1 was closed %d times across the two incarnations", got)
 	}
 }
 
