@@ -1,0 +1,14 @@
+{
+  "id": "3kx",
+  "title": "The all-errors fixture does not cover collect after teardown",
+  "description": "From the Phase 3 review (h0f, attempt 14), finding 6.\n\nTick 35h added a read of the archived report to herdr's readReport. The reviewer mutated that branch to call e.client.AgentGet and every Herdr|Durable|Report|Teardown|Archive test in exec/herdr stayed green: the zero-substrate-calls doctrine — collect makes no herdr calls, proven by an all-errors fixture — is untested on the post-teardown path 35h introduced.\n\nExtend the all-errors fixture to collect AFTER the worktree is removed, so the doctrine covers the path that reads the archive.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "A mutation adding a substrate call to herdr's post-teardown report read fails the all-errors fixture",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T13:02:13.58721Z",
+  "updated_at": "2026-09-16T13:02:13.58721Z"
+}
