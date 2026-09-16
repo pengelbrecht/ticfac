@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 87,
-  "state": "publishing",
-  "reason": "closing nvn behind the integrated gate on bfa0e7e04b7d",
-  "updated_at": "2026-09-16T11:24:01Z",
+  "sequence": 88,
+  "state": "running",
+  "reason": "nvn is closed",
+  "updated_at": "2026-09-16T11:24:18Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -59,7 +59,7 @@
     },
     {
       "tick_id": "nvn",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 12
     },
     {
