@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 75,
-  "state": "dispatching",
-  "reason": "dispatching her as attempt 11",
-  "updated_at": "2026-09-16T09:58:44Z",
+  "sequence": 76,
+  "state": "running",
+  "reason": "her is running as attempt 11",
+  "updated_at": "2026-09-16T09:59:00Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -54,7 +54,8 @@
     },
     {
       "tick_id": "her",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 11
     },
     {
       "tick_id": "nvn",
