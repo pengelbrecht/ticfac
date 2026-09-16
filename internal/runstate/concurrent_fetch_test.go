@@ -119,3 +119,71 @@ func TestAnOperatorFetchingInTheRunsCheckoutEndsNothing(t *testing.T) {
 		t.Errorf("the checkpoint on origin is at sequence %v, want 60", seq)
 	}
 }
+
+// TestASecondTicfacProcessDoesNotEndTheRun is the Phase 3 review's finding 1,
+// which killed the run that produced it.
+//
+// `ticfac findings`, `finding` and `settle` open a Store with the SAME run id in
+// the same checkout as the live run. Both fetched into refs/ticfac/peek/<run-id>,
+// they raced on that ref's lock, and the loser exited 1 — which the reconciler
+// treats as fatal. Listing a run's findings could therefore end it, and did,
+// while the reviewer was filing the finding that reported it:
+//
+//	runstate: fetch origin epic/9pd
+//	! e0ae7be..a2bbeed epic/9pd -> refs/ticfac/peek/epic-9pd (unable to update local ref)
+//
+// The earlier test in this file fetched with plain git, which is why a per-run
+// ref looked sufficient. This one uses a second STORE, which is what an operator
+// command actually is.
+func TestASecondTicfacProcessDoesNotEndTheRun(t *testing.T) {
+	o := newOrigin(t)
+	const run = "r-observed"
+
+	live := o.actor("run", run)
+	if _, err := live.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := live.CreateIfAbsent(CheckpointPath(run), []byte(`{"sequence":1}`)); err != nil || got != Created {
+		t.Fatalf("the first checkpoint: %v %v", got, err)
+	}
+
+	// The operator's command: same run id, same checkout as the run's store.
+	observer, err := Open(Options{Repo: live.git.dir, Remote: "origin", Branch: o.branch, RunID: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// What `ticfac findings` does: fetch, then read.
+				if _, err := observer.Fetch(); err != nil {
+					t.Errorf("the operator's own read failed: %v", err)
+					return
+				}
+			}
+		}
+	}()
+	defer func() { close(stop); wg.Wait() }()
+
+	for i := 2; i <= 30; i++ {
+		if _, err := live.Fetch(); err != nil {
+			t.Fatalf("read %d while an operator listed the run: %v\n"+
+				"A ticfac command must never end the run it is reporting on.", i, err)
+		}
+		got, err := live.UpdateIfSHA(CheckpointPath(run), []byte(`{"sequence":`+strconv.Itoa(i)+`}`))
+		if err != nil {
+			t.Fatalf("checkpoint %d while an operator listed the run: %v", i, err)
+		}
+		if got != Updated {
+			t.Fatalf("checkpoint %d was %q while an operator listed the run", i, got)
+		}
+	}
+}

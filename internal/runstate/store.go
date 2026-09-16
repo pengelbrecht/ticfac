@@ -2,10 +2,12 @@ package runstate
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,6 +54,8 @@ type Store struct {
 	branch string
 	runID  string
 	now    func() time.Time
+	// fetchID makes this store's fetch destination its own. See newFetchID.
+	fetchID string
 
 	// view is this writer's fetched view of origin: path -> blob sha. Nothing
 	// refreshes it but a fetch, an observe, or this writer's own successful
@@ -86,11 +90,12 @@ func Open(o Options) (*Store, error) {
 		return nil, fmt.Errorf("runstate: git is not on the path: %w", err)
 	}
 	s := &Store{
-		remote: or(o.Remote, "origin"),
-		branch: o.Branch,
-		runID:  o.RunID,
-		now:    o.Now,
-		view:   map[string]string{},
+		remote:  or(o.Remote, "origin"),
+		branch:  o.Branch,
+		runID:   o.RunID,
+		now:     o.Now,
+		fetchID: newFetchID(),
+		view:    map[string]string{},
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -334,7 +339,33 @@ func (s *Store) branchRef() string { return refFor(s.branch) }
 // peekRef is the ref this store fetches origin into. It is per-run, so two
 // reconcilers in one checkout cannot read each other's value the way they both
 // read FETCH_HEAD.
-func (s *Store) peekRef() string { return "refs/ticfac/peek/" + s.runID }
+func (s *Store) peekRef() string {
+	return "refs/ticfac/peek/" + s.runID + "/" + s.fetchID
+}
+
+// processRef makes a fetch destination no OTHER process can be writing.
+//
+// A per-RUN ref was not enough, and the reason is the whole shape of this bug
+// repeating: `ticfac findings`, `finding` and `settle` open a store with the
+// same run id in the same checkout, so they fetched into the same ref as the
+// live run. Two fetches racing on one ref's lock make the loser exit 1, and the
+// reconciler treats a failed fetch as fatal — so listing a run's findings could
+// end it. It did, during the Phase 3 review, while the reviewer was filing the
+// finding that reported it.
+//
+// FETCH_HEAD was shared with every git process; refs/remotes/<remote>/<branch>
+// was shared with every fetch of that branch; this ref was shared with every
+// ticfac process for the run. The fix each time is the same idea carried one
+// step further: fetch somewhere only this process writes.
+func newFetchID() string {
+	return strconv.Itoa(os.Getpid()) + "-" + strconv.FormatUint(fetchSeq.Add(1), 10)
+}
+
+// fetchSeq distinguishes stores WITHIN one process. A pid alone is not enough:
+// two stores in one process — a future concurrent reader, and every test that
+// opens both a run's store and an operator's — would share the ref and race
+// exactly as two processes did.
+var fetchSeq atomic.Uint64
 
 func (s *Store) localHead() (string, error) {
 	out, _, err := s.git.try(nil, nil, "rev-parse", "--verify", "--quiet", s.branchRef())
