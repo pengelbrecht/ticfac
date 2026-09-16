@@ -143,8 +143,11 @@
 // durably on origin under `.ticfac/runs/<run-id>/findings/`, stamped with the
 // attempt that discovered it (findings.go) — the funnel shape ticks already
 // runs for its declared sources, deduplicated on (source, external_ref), a
-// repeat proposing nothing new whatever the human did with the original. A
-// tick whose findings are untriaged is refused its close, which is the one
+// repeat proposing nothing new whatever the human did with the original —
+// except a FIXED original (tick her): a finding reported again after the
+// triage that named its repairing commit is the proof the fix did not hold,
+// and the re-report re-opens the draft instead of deduplicating. A tick
+// whose findings are untriaged is refused its close, which is the one
 // thing that stops a finding falling on the floor; a person triages with
 // `ticfac finding`, promoting into the repository the finding targets (never
 // this package: a draft is not a tick, and the scope decision stays human).

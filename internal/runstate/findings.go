@@ -25,8 +25,13 @@ import (
 //     reported it;
 //   - TRIAGED by a person, and a triage is the one rewrite: promote records
 //     the tick that was created (and where, when the finding was routed to
-//     another repository), discard records that a person looked and said no.
-//     A repeat after either proposes nothing new;
+//     another repository), discard records that a person looked and said no,
+//     and FIXED records the commit that repaired it inside the epic (tick her)
+//     — the verdict a repaired finding needs, because there is no tick to
+//     promote it to and a discard would mean the opposite of what happened.
+//     A repeat after promote or discard proposes nothing new; a repeat after
+//     FIXED is the proof the fix did not hold, and it re-opens the draft —
+//     exactly when the run must hear it, never suppress it;
 //   - a BLOCKER on the close of the tick whose attempts reported it while it
 //     is still `proposed` — a finding nobody triaged is the 604 shape: real,
 //     filed only because an orchestrator read that far, and lost the moment
@@ -51,10 +56,18 @@ const (
 	// nothing new — the funnel's rule, which is what stops a chatty worker
 	// re-proposing something already declined.
 	FindingDiscarded = "discarded"
+	// FindingFixed: a person recorded that the finding was repaired inside
+	// this epic, and `FixedAs` names the commit that repaired it, so the
+	// claim is checkable rather than asserted (tick her). Unlike promote and
+	// discard, a repeat is NOT suppressed: a finding that comes back after a
+	// fixed verdict is the proof the fix did not hold — reverted, lost in a
+	// merge, or never landed — and that is exactly when the run must hear it
+	// again.
+	FindingFixed = "fixed"
 )
 
 // FindingStatuses is the closed draft vocabulary.
-var FindingStatuses = []string{FindingProposed, FindingPromoted, FindingDiscarded}
+var FindingStatuses = []string{FindingProposed, FindingPromoted, FindingDiscarded, FindingFixed}
 
 // Finding is one draft, at `.ticfac/runs/<run-id>/findings/<key>.json`, where
 // <key> is the finding's own dedup key.
@@ -95,6 +108,9 @@ type Finding struct {
 	// repository, `<owner/name>:<tick-id>` in the repository a routed
 	// finding targeted.
 	PromotedAs string `json:"promoted_as,omitempty"`
+	// FixedAs names the commit that repaired a fixed finding: the checkable
+	// half of the fixed verdict. Empty for every other status.
+	FixedAs string `json:"fixed_as,omitempty"`
 
 	Provenance Provenance `json:"provenance"`
 }
@@ -140,10 +156,10 @@ func (f Finding) Validate() error {
 	}
 	switch f.Status {
 	case FindingProposed:
-		if f.TriagedAt != "" || f.TriagedBy != "" || f.PromotedAs != "" {
+		if f.TriagedAt != "" || f.TriagedBy != "" || f.PromotedAs != "" || f.FixedAs != "" {
 			return fmt.Errorf("finding is proposed and names a triage: a draft nobody triaged cannot say who did")
 		}
-	case FindingPromoted, FindingDiscarded:
+	case FindingPromoted, FindingDiscarded, FindingFixed:
 		if f.TriagedAt == "" || f.TriagedBy == "" {
 			return fmt.Errorf("finding is %s and names neither who triaged it nor when: a decision nobody can "+
 				"attribute is one nobody can audit", f.Status)
@@ -153,10 +169,44 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding is promoted and names no tick: the promotion is the tick a person created, " +
 			"and the draft must say which")
 	}
+	if f.Status == FindingPromoted && f.FixedAs != "" {
+		return fmt.Errorf("finding is promoted and names a fixed commit: a triage is one decision, not two")
+	}
 	if f.Status == FindingDiscarded && f.PromotedAs != "" {
 		return fmt.Errorf("finding is discarded and names a promoted tick: a triage is one decision, not two")
 	}
+	if f.Status == FindingDiscarded && f.FixedAs != "" {
+		return fmt.Errorf("finding is discarded and names a fixed commit: a triage is one decision, not two")
+	}
+	if f.Status == FindingFixed && f.PromotedAs != "" {
+		return fmt.Errorf("finding is fixed and names a promoted tick: a triage is one decision, not two")
+	}
+	if f.Status == FindingFixed {
+		if f.FixedAs == "" {
+			return fmt.Errorf("finding is fixed and names no commit: the fixed verdict is the commit that " +
+				"repaired it, so the claim is checkable rather than asserted")
+		}
+		if !isCommitID(f.FixedAs) {
+			return fmt.Errorf("finding.fixed_as %q is not a commit id: the fix must be named so it can be "+
+				"checked, not asserted", f.FixedAs)
+		}
+	}
 	return f.Provenance.validate()
+}
+
+// isCommitID reports whether s is a commit id a person or a run can resolve:
+// hexadecimal, abbreviated or full length. The check is shape, not existence
+// - the commit may live on any of the repositories a finding can target.
+func isCommitID(s string) bool {
+	if len(s) < 7 || len(s) > 40 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // isTriageOf reports whether next is this record with exactly its TRIAGE
@@ -167,7 +217,7 @@ func (f Finding) Validate() error {
 // through after the fact.
 func (f Finding) isTriageOf(next Finding) bool {
 	before, after := f, next
-	before.Status, before.TriagedAt, before.TriagedBy, before.PromotedAs = "", "", "", ""
-	after.Status, after.TriagedAt, after.TriagedBy, after.PromotedAs = "", "", "", ""
+	before.Status, before.TriagedAt, before.TriagedBy, before.PromotedAs, before.FixedAs = "", "", "", "", ""
+	after.Status, after.TriagedAt, after.TriagedBy, after.PromotedAs, after.FixedAs = "", "", "", "", ""
 	return before == after
 }
