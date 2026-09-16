@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 89,
-  "state": "dispatching",
-  "reason": "dispatching w1c as attempt 13",
-  "updated_at": "2026-09-16T11:24:30Z",
+  "sequence": 90,
+  "state": "running",
+  "reason": "w1c is running as attempt 13",
+  "updated_at": "2026-09-16T11:24:47Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -64,7 +64,8 @@
     },
     {
       "tick_id": "w1c",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 13
     },
     {
       "tick_id": "h0f",
