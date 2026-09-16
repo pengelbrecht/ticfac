@@ -972,6 +972,13 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			failed = append(failed, entry.TickID)
 			r.failure = refusal
 			r.setTick(entry.TickID, "rejected")
+			// The refusal that decides the run's fate, in the feed, in its own
+			// words. Without this the feed went straight from `dispatched` to a
+			// generic run_finished, and the actual reason — unaddressed, past
+			// the wall clock, release it with `ticfac settle` — reached no
+			// surface an operator reads. In the Phase 3 run it had to be
+			// recovered by reading dispatch.go (tick emk).
+			r.recordRefusal(entry.TickID, refusal)
 			if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
 				return nil, cErr
 			}
@@ -1320,6 +1327,27 @@ func (r *Reconciler) refuse(reason, tick, format string, args ...any) *Refusal {
 		return &Refusal{Reason: reason, TickID: tick, Message: collapsedMessage}
 	}
 	return &Refusal{Reason: reason, TickID: tick, Message: fmt.Sprintf(format, args...)}
+}
+
+// recordRefusal writes a refusal to the feed, unless the path that produced it
+// already did. Two paths record their own rejection line with detail this one
+// could not add (the boundary violation's paths, the role job's answer), and a
+// terminal event said twice is worse than one said plainly.
+func (r *Reconciler) recordRefusal(tick string, refusal *Refusal) {
+	if refusal == nil {
+		return
+	}
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		event := r.journal[i]
+		if event.Tick != tick {
+			continue
+		}
+		if event.Stage == StageRejected {
+			return
+		}
+		break
+	}
+	r.record(tick, StageRejected, "%s: %s", refusal.Reason, refusal.Message)
 }
 
 // collapsedMessage is what a refusal reads like when distinct failure classes

@@ -1074,12 +1074,19 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		// not `wiped`: the substrate did not take it away, and a person is the
 		// next actor (settle.go).
 		if now := r.now(); now.After(deadline) {
+			// What the executor last SAW goes in the refusal, because the two
+			// shapes need different first moves. A local subprocess whose
+			// supervisor died leaves a pid nobody can trust. A herdr agent can
+			// be alive and simply not stopping: in the Phase 3 run a pi worker
+			// ran 26 minutes past its wall clock while the interrupt was
+			// re-delivered at every poll, and a refusal about a dead supervisor
+			// sent the reader at the wrong problem (tick emk).
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued: its supervisor never "+
-					"settled it, and a pid that outlives its job is a number the host reuses. Nobody can say whether "+
-					"it is running; release it with `ticfac settle %s %s %d --release \"<who>\"` once you have looked",
+				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and its executor "+
+					"could not settle it: %s. Nobody can say it is finished; look at it, stop whatever is still "+
+					"running, then release it with `ticfac settle %s %s %d --release \"<who>\"`",
 				marker.Attempt, marker.TickID, status.State, now.Sub(deadline).Round(time.Second),
-				r.opts.WallSeconds, r.opts.EpicID, marker.TickID, marker.Attempt)
+				r.opts.WallSeconds, lastObservation(status), r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
 		// The poll IS the keepalive. Its answer is about the substrate, not
@@ -1105,6 +1112,22 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		}
 		r.sleep(interval)
 	}
+}
+
+// lastObservation is the executor's own last word about an attempt, for a
+// refusal that would otherwise have to guess at the cause. The executor is the
+// only party that can see the substrate, and its observations are how it says
+// what it saw — "the interrupt was delivered but the agent has not exited" is
+// a different first move from "the supervisor is gone".
+func lastObservation(status *subprocess.JobStatus) string {
+	if status == nil || len(status.Observations) == 0 {
+		return "the executor recorded no observation about it"
+	}
+	last := status.Observations[len(status.Observations)-1]
+	if strings.TrimSpace(last.Detail) == "" {
+		return "the executor's last observation carried no detail"
+	}
+	return last.Detail
 }
 
 // settlementDeadline is the moment after which an unsettled attempt is one
