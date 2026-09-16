@@ -51,7 +51,13 @@ model = "opus"
 effort = "high"
 
 [testing.commands]
-go = { command = "go test -short -count=1 ./...", description = "Go" }
+# Spelled out, not `make gate`: this file is what says what the gate runs, and a
+# reader must be able to see it here. The Makefile's `gate` target carries the
+# same line for humans and CI, and a test fails if the two ever disagree — the
+# gate had drifted to a bare `go test -short -count=1 ./...`, losing the timeout
+# and the parallelism that keep internal/reconcile inside go's per-package
+# limit, and nothing noticed.
+go = { command = "go test -short -count=1 -timeout 45m -parallel 12 ./...", description = "Go" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }
