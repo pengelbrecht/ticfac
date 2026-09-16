@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 53,
-  "state": "gating",
-  "reason": "running the integrated gate for cwa on 763fc8ee1d1e",
-  "updated_at": "2026-09-16T08:29:01Z",
+  "sequence": 54,
+  "state": "failed",
+  "reason": "the gate's evidence for cwa is no longer about what would be published (context_manifest_digest: sha256:a69f0 was gated, sha256:109e7 is the target now): publishing it would state a verdict about something else",
+  "updated_at": "2026-09-16T08:37:09Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "cwa",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 8
     },
     {
