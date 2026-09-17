@@ -540,6 +540,9 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		// What the tick's earlier attempts found (tick nvn), forwarded the
 		// way the production factories forward it.
 		PriorReports: d.PriorReports,
+		// What the tick's earlier attempts left PRESERVED (tick pbb),
+		// forwarded the same way.
+		PriorSnapshots: d.PriorSnapshots,
 	})
 	if err != nil {
 		return nil, Substrate{}, err

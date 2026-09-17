@@ -51,12 +51,12 @@ const (
 	// live.
 	fileWallExceeded = "wall_clock_exceeded"
 	// fileWIPSnapshot records where the attempt's uncommitted work was
-	// preserved before the wall-clock enforcement closed the pane (tick
-	// rj0, per pbb): the ref the snapshot lives on and the commit it names.
-	// The snapshot is NOT evidence of completion and is never merged — it
-	// is material a person or a later attempt can be pointed at, and the
-	// record exists so the close can proceed knowing the work survives it.
-	fileWIPSnapshot = "wip-snapshot.json"
+	// preserved before a teardown destroyed its worktree (tick rj0, per
+	// pbb): the ref the snapshot lives on and the commit it names. The
+	// name, the shape and the reader are the seam's — the same file the
+	// local executor records at and the reconciler's dispatch walks when it
+	// points a later attempt at a predecessor's preserved work (tick pbb).
+	fileWIPSnapshot = subprocess.FileWIPSnapshot
 	// fileReportArchive is where disposal moves the attempt's own untracked
 	// report out of the worktree, so worktree.remove can proceed without
 	// Force while the report survives somewhere a person can still read it.
@@ -112,6 +112,13 @@ type attemptRecord struct {
 	// rendered whole, and an attempt that was shown what its predecessors
 	// found is an attempt whose record says so.
 	PriorReports []subprocess.PriorReport `json:"prior_reports,omitempty"`
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), as the dispatch handed them over — newest first,
+	// each naming the ref its stopped predecessor's uncommitted work is
+	// preserved on. Recorded for the same reason the prior reports are:
+	// the prompt file beside this record is the rendered whole.
+	PriorSnapshots []subprocess.PriorSnapshot `json:"prior_snapshots,omitempty"`
 
 	WallSeconds int    `json:"wall_seconds"`
 	Remote      string `json:"remote"`
@@ -320,29 +327,16 @@ func (s *store) wallStopAcceptedAt() (time.Time, bool) {
 	return at, true
 }
 
-// wipSnapshot is the durable record of where an attempt's uncommitted
-// work was preserved before the pane close destroyed the checkout's
-// unsaved state (tick rj0, per pbb): a ref of its own in the repository
-// the worktree belongs to, pointing at a commit whose tree is the
-// worktree as it stood. It is not evidence of completion, is never
-// merged, and rides on no boundary-excluded path.
-type wipSnapshot struct {
-	SchemaVersion int    `json:"schema_version"`
-	Ref           string `json:"ref"`
-	Commit        string `json:"commit"`
-	TakenAt       string `json:"taken_at"`
-}
-
-const wipSnapshotSchemaVersion = 1
-
-// markWIPSnapshot records where the work was preserved. It is written
-// once; a second call is a no-op, so a close that is refused and retried
-// re-snaps nothing.
-func (s *store) markWIPSnapshot(snap wipSnapshot) error {
+// markWIPSnapshot records where the work was preserved (tick rj0, per
+// pbb). The record's shape and name are the seam's (subprocess.WIPSnapshot,
+// subprocess.FileWIPSnapshot): a later attempt's dispatch reads this file
+// to point its worker at the work. It is written once; a second call is a
+// no-op, so a close that is refused and retried re-snaps nothing.
+func (s *store) markWIPSnapshot(snap subprocess.WIPSnapshot) error {
 	if _, ok := s.wipSnapshot(); ok {
 		return nil
 	}
-	snap.SchemaVersion = wipSnapshotSchemaVersion
+	snap.SchemaVersion = subprocess.WIPSnapshotSchemaVersion
 	if err := s.writeJSON(fileWIPSnapshot, snap); err != nil {
 		return fmt.Errorf("write the wip-snapshot record: %w", err)
 	}
@@ -351,13 +345,13 @@ func (s *store) markWIPSnapshot(snap wipSnapshot) error {
 
 // wipSnapshot is the recorded where of a preserved worktree, if one was
 // taken.
-func (s *store) wipSnapshot() (wipSnapshot, bool) {
-	var snap wipSnapshot
+func (s *store) wipSnapshot() (subprocess.WIPSnapshot, bool) {
+	var snap subprocess.WIPSnapshot
 	if err := s.readJSON(fileWIPSnapshot, &snap); err != nil {
-		return wipSnapshot{}, false
+		return subprocess.WIPSnapshot{}, false
 	}
-	if snap.SchemaVersion != wipSnapshotSchemaVersion {
-		return wipSnapshot{}, false
+	if snap.SchemaVersion != subprocess.WIPSnapshotSchemaVersion {
+		return subprocess.WIPSnapshot{}, false
 	}
 	return snap, true
 }

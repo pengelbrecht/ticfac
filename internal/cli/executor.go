@@ -115,6 +115,9 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 		// What the tick's earlier attempts found (tick nvn), for the same
 		// section of the worker prompt the local executor renders.
 		PriorReports: d.PriorReports,
+		// What the tick's earlier attempts left PRESERVED (tick pbb), for the
+		// same section of the worker prompt the local executor renders.
+		PriorSnapshots: d.PriorSnapshots,
 	})
 	if err != nil {
 		return nil, reconcile.Substrate{}, err

@@ -58,6 +58,12 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	// job contract is one contract however the agent is delivered.
 	b.WriteString(subprocess.PriorReportsSection(record.PriorReports))
 
+	// What the tick's earlier attempts left PRESERVED (tick pbb): the same
+	// section the local executor renders — the uncommitted work a stopped
+	// predecessor's teardown kept on a wip ref, pointed at as material to
+	// read, never evidence of completion and never to merge.
+	b.WriteString(subprocess.PriorSnapshotsSection(record.PriorSnapshots))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "Write it there whatever your working directory is when you finish — the path is\n")

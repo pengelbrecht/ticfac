@@ -60,6 +60,12 @@ type Options struct {
 	// state directories live.
 	PriorReports []PriorReport
 
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), which the rendered worker prompt points the
+	// worker at — the uncommitted work a stopped predecessor left behind.
+	// Host-supplied for the same reason the prior reports are.
+	PriorSnapshots []PriorSnapshot
+
 	// SupervisorArgv is how this executor re-invokes itself to supervise an
 	// attempt. Defaults to the running executable plus "supervise".
 	SupervisorArgv []string
@@ -326,29 +332,30 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	}
 
 	record := &attemptRecord{
-		SchemaVersion: stateSchemaVersion,
-		Key:           attemptKey(e.repoKey, spec.JobID, attempt),
-		RepoKey:       e.repoKey,
-		Repo:          e.repo,
-		JobID:         spec.JobID,
-		Attempt:       attempt,
-		TickID:        tickOf(spec),
-		Branch:        branch,
-		WriteRef:      spec.Source.WriteRef,
-		BaseSHA:       base,
-		Worktree:      filepath.Join(dir, dirWorktree),
-		State:         dir,
-		Runner:        e.opts.Runner,
-		Model:         e.opts.Model,
-		RolePrompt:    e.opts.RolePrompt,
-		PriorReports:  e.opts.PriorReports,
-		WallSeconds:   spec.Limits.WallSeconds,
-		PushInterval:  int(e.opts.PushInterval / time.Second),
-		PushOnTimer:   e.guarded("push_on_timer"),
-		Remote:        e.remoteFor(spec),
-		SourceGrade:   spec.Credentials.Source.Grade(),
-		IssuedAt:      e.stamp(),
-		Spec:          spec,
+		SchemaVersion:  stateSchemaVersion,
+		Key:            attemptKey(e.repoKey, spec.JobID, attempt),
+		RepoKey:        e.repoKey,
+		Repo:           e.repo,
+		JobID:          spec.JobID,
+		Attempt:        attempt,
+		TickID:         tickOf(spec),
+		Branch:         branch,
+		WriteRef:       spec.Source.WriteRef,
+		BaseSHA:        base,
+		Worktree:       filepath.Join(dir, dirWorktree),
+		State:          dir,
+		Runner:         e.opts.Runner,
+		Model:          e.opts.Model,
+		RolePrompt:     e.opts.RolePrompt,
+		PriorReports:   e.opts.PriorReports,
+		PriorSnapshots: e.opts.PriorSnapshots,
+		WallSeconds:    spec.Limits.WallSeconds,
+		PushInterval:   int(e.opts.PushInterval / time.Second),
+		PushOnTimer:    e.guarded("push_on_timer"),
+		Remote:         e.remoteFor(spec),
+		SourceGrade:    spec.Credentials.Source.Grade(),
+		IssuedAt:       e.stamp(),
+		Spec:           spec,
 	}
 	rel, abs, err := resultPath(record.Worktree, spec.ArtifactPrefix, record.TickID)
 	if err != nil {
