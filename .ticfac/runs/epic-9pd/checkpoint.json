@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 234,
-  "state": "integrating",
-  "reason": "integrating pbb attempt 26 into epic/9pd",
-  "updated_at": "2026-09-17T22:24:12Z",
+  "sequence": 235,
+  "state": "gating",
+  "reason": "running the integrated gate for pbb on f5f6bc4ac8c2",
+  "updated_at": "2026-09-17T22:24:26Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -118,7 +118,7 @@
     },
     {
       "tick_id": "pbb",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 26
     },
     {
