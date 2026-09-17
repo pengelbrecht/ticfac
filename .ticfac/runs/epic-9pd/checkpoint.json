@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 189,
-  "state": "dispatching",
-  "reason": "dispatching 9wo as attempt 23",
-  "updated_at": "2026-09-17T11:45:53Z",
+  "sequence": 190,
+  "state": "running",
+  "reason": "9wo is running as attempt 23",
+  "updated_at": "2026-09-17T11:46:10Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -108,7 +108,8 @@
     },
     {
       "tick_id": "9wo",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 23
     },
     {
       "tick_id": "bzx",
