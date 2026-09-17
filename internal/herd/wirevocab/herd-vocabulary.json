@@ -1,11 +1,11 @@
 {
   "why": [
-    "This file pins the herdr wire vocabulary \u2014 method names, result discriminators, error codes, agent status words, both event-kind spellings, subscription types and their pane scoping, agent kinds, and the metadata source id and state-label keys \u2014 as one machine-checked contract that three audiences are diffed against:",
+    "This file pins the herdr wire vocabulary — method names, result discriminators, error codes, agent status words, both event-kind spellings, subscription types and their pane scoping, agent kinds, and the metadata source id and state-label keys — as one machine-checked contract that three audiences are diffed against:",
     "the live server, via internal/herd/wirevocab's drift test that runs `herdr api schema --json` whenever a herdr binary is on PATH; the client, whose Go constants are pinned member-for-member by internal/herd/client/vocabulary_contract_test.go; and the herdtest fake, which is validated (constants, served replies, and a live dial of every builtin) by internal/herd/herdtest/vocabulary_test.go.",
     "The vocabulary drifts silently otherwise. herdr ships a schema but the client speaks hand-typed constants and the fake hand-writes its replies; a rename on either side is invisible until a run fails far from the cause. Every category that the live schema enumerates is compared for SET EQUALITY in both directions, so a server-side addition fails this test too, deliberately: extensibility means the counts grow, and the failure is the alarm that the client surface may want the new word. Bump this file consciously.",
-    "The file follows the shape of contracts/collect-vocabulary.json (why prose up top, then one object per diffable category) but lives here, not there: contracts/ is a digest-pinned vendored bundle from pengelbrecht/ticks whose file set `contracts check` freezes on every go test \u2014 adding to it breaks the build by design.",
-    "Snapshot taken against herdr 0.9.0 (advertises protocol 22) on 2026-09-10. The client still pins protocol 20 / herdr 0.8.2; the 0.8.2\u21920.9.0 vocabulary change was additive, and the client's constants are a strict subset of this contract, so a pinned-20 client runs against a 0.9.0 server unchanged.",
-    "Two spellings of the same event world exist and both are pinned: the underscored `event` schema (kind repeated in a data `type` field) and the dotted `subscription_event` schema. herdr reuses the DOTTED subscription name verbatim as the subscription_event kind, and the three dotted kinds are exactly the three pane-scoped subscription types \u2014 the loader enforces both rules.",
+    "The file follows the shape of contracts/collect-vocabulary.json (why prose up top, then one object per diffable category) but lives here, not there: contracts/ is a digest-pinned vendored bundle from pengelbrecht/ticks whose file set `contracts check` freezes on every go test — adding to it breaks the build by design.",
+    "Snapshot taken against herdr 0.9.0 (advertises protocol 22) on 2026-09-10. The client still pins protocol 20 / herdr 0.8.2; the 0.8.2→0.9.0 vocabulary change was additive, and the client's constants are a strict subset of this contract, so a pinned-20 client runs against a 0.9.0 server unchanged.",
+    "Two spellings of the same event world exist and both are pinned: the underscored `event` schema (kind repeated in a data `type` field) and the dotted `subscription_event` schema. herdr reuses the DOTTED subscription name verbatim as the subscription_event kind, and the three dotted kinds are exactly the three pane-scoped subscription types — the loader enforces both rules.",
     "Error codes are NOT enumerated by the schema (error_response's code is an open string), so that category cannot be live-diffed; its members are the observed set, each with provenance in `notes`, and the offline checks pin the client's constants and the fake's vocabulary to it.",
     "Agent kinds are not in the schema either; the 23 members are the `[possible values: ...]` list of `herdr agent start --help`, and the drift test re-reads that help text. This repo's .tick/runners.toml uses only pi, codex and claude; no Go code pins kinds as constants, so the category carries no client_used annotation.",
     "`ok` is a real result discriminator, not an absence of one: both report_metadata methods answer a bare `{\"type\":\"ok\"}` and echo no pane or workspace object.",
@@ -21,14 +21,14 @@
     "observations": [
       "2026-09-10: herdr 0.9.0 at ~/.local/bin/herdr; `herdr api schema --json` answers with no server running (verified via env -i), so the drift test needs no live session and is cheap enough for every test run.",
       "2026-09-10: schema protocol 22, schema_version 1; 102 methods, 64 result discriminators, 26 underscored + 3 dotted event kinds, 27 subscription types (3 pane-scoped), 5 agent statuses, 4 pane agent states, 23 agent kinds from the CLI help.",
-      "error_response.code is an open string in the schema \u2014 error codes can only be observed, never diffed.",
+      "error_response.code is an open string in the schema — error codes can only be observed, never diffed.",
       "state_labels keys are unrestricted in the schema, but herdr's rendering rule is one label per agent status, so the contract pins the key set to agent_statuses and the loader enforces the equality.",
-      "report_metadata tokens: propertyNames pattern ^[A-Za-z0-9_-]{1,32}$, maxProperties 16; ttl_ms bounds 1 to 86400000 \u2014 one millisecond to one day, and zero is not a value (no expiry is expressed by OMITTING ttl_ms, which a painter should not want)."
+      "report_metadata tokens: propertyNames pattern ^[A-Za-z0-9_-]{1,32}$, maxProperties 16; ttl_ms bounds 1 to 86400000 — one millisecond to one day, and zero is not a value (no expiry is expressed by OMITTING ttl_ms, which a painter should not want)."
     ]
   },
   "methods": {
     "why": [
-      "Every method name the request schema accepts. The client speaks a 19-constant subset (client_used; tick 3gv added agent.send_keys, the herdr executor's Cancel surface) and the herdtest fake mirrors 18 of those 19 \u2014 it has neither a constant nor a builtin for pane.wait_for_output \u2014 so a single list keeps the three honest against each other."
+      "Every method name the request schema accepts. The client speaks a 19-constant subset (client_used; tick 3gv added agent.send_keys, the herdr executor's Cancel surface) and the herdtest fake mirrors 18 of those 19 — it has neither a constant nor a builtin for pane.wait_for_output — so a single list keeps the three honest against each other."
     ],
     "members": [
       "agent.explain",
@@ -72,6 +72,7 @@
       "pane.input.set",
       "pane.layout",
       "pane.link.activate",
+      "pane.link.resolve",
       "pane.list",
       "pane.move",
       "pane.neighbor",
@@ -191,6 +192,7 @@
       "pane_info",
       "pane_layout",
       "pane_link_activated",
+      "pane_link_resolved",
       "pane_list",
       "pane_move",
       "pane_neighbor",
@@ -247,7 +249,7 @@
   },
   "error_codes": {
     "why": [
-      "The schema cannot enumerate error codes (the code field is an open string), so this is the observed set with per-member provenance in `notes`. The set is open-ended by design: an unrecognised code is an opaque server error, not a contract violation \u2014 the drift test therefore does not diff this category.",
+      "The schema cannot enumerate error codes (the code field is an open string), so this is the observed set with per-member provenance in `notes`. The set is open-ended by design: an unrecognised code is an opaque server error, not a contract violation — the drift test therefore does not diff this category.",
       "Two members have no Go constant yet (agent_not_ready, unsupported_event_wait_match); they are pinned here so that a future constant lands in the same vocabulary, not beside it."
     ],
     "members": [
@@ -273,12 +275,12 @@
     "notes": {
       "agent_not_found": "The agent target does not resolve. Client constant CodeAgentNotFound.",
       "agent_not_ready": "Prompting an agent whose launch is still pending (agent.start answered launch_pending). Documented in herdtest's Config.LaunchPending and internal/herd/spawn's readiness gate: sample agent.get until readiness flips. Observed against herdr 0.8.x; no Go constant yet.",
-      "agent_pane_busy": "agent.start's target pane is not at an available shell prompt \u2014 notably in the first few hundred ms of a worktree.create'd pane. Transient startup race, not a rejection. Client constant CodeAgentPaneBusy.",
+      "agent_pane_busy": "agent.start's target pane is not at an available shell prompt — notably in the first few hundred ms of a worktree.create'd pane. Transient startup race, not a rejection. Client constant CodeAgentPaneBusy.",
       "agent_prompt_stalled": "agent.prompt observed no state change after submitting: herdr's own detection of the dropped first prompt. Transient; the documented recovery is to send it again. Client constant CodeAgentPromptStalled.",
       "invalid_request": "The envelope or params failed to parse; also what herdtest answers for an unexpected method. Client constant CodeInvalidRequest.",
       "pane_not_found": "The pane id does not resolve. Client constant CodePaneNotFound.",
       "timeout": "A waiting method's (agent.wait, events.wait, pane.wait_for_output) deadline elapsed. Client constant CodeTimeout.",
-      "unsupported_event_wait_match": "events.wait with a match other than pane agent-status \u2014 herdr 0.8.0 only implements status matches. Documented in internal/herd/client/events.go; no Go constant yet.",
+      "unsupported_event_wait_match": "events.wait with a match other than pane agent-status — herdr 0.8.0 only implements status matches. Documented in internal/herd/client/events.go; no Go constant yet.",
       "workspace_not_found": "The workspace id does not resolve. Client constant CodeWorkspaceNotFound."
     }
   },
@@ -345,7 +347,7 @@
   },
   "subscription_event_kinds": {
     "why": [
-      "The dotted kinds of the `subscription_event` schema. Exactly the three pane-scoped subscription types, spelled like the subscription that asked for them \u2014 the loader and the drift test both enforce the equality with subscription_types.pane_scoped."
+      "The dotted kinds of the `subscription_event` schema. Exactly the three pane-scoped subscription types, spelled like the subscription that asked for them — the loader and the drift test both enforce the equality with subscription_types.pane_scoped."
     ],
     "members": [
       "pane.agent_status_changed",
@@ -447,7 +449,7 @@
   },
   "pane_agent_states": {
     "why": [
-      "PaneAgentState as the subscription_event schema enumerates it. NOT the same set as agent_statuses: there is no `done` pane state \u2014 a pane never reports completion, only the agent on it does."
+      "PaneAgentState as the subscription_event schema enumerates it. NOT the same set as agent_statuses: there is no `done` pane state — a pane never reports completion, only the agent on it does."
     ],
     "members": [
       "blocked",
@@ -464,7 +466,7 @@
   },
   "agent_kinds": {
     "why": [
-      "The kind values `herdr agent start --help` lists. Not in the schema, so the drift test reads the help text instead. Deliberately without client_used: no Go code pins kinds, and the manifest is expected to grow \u2014 a new kind failing the drift test is the alarm to bump this list, nothing more.",
+      "The kind values `herdr agent start --help` lists. Not in the schema, so the drift test reads the help text instead. Deliberately without client_used: no Go code pins kinds, and the manifest is expected to grow — a new kind failing the drift test is the alarm to bump this list, nothing more.",
       "This repo's .tick/runners.toml uses only pi, codex and claude."
     ],
     "members": [
@@ -483,6 +485,7 @@
       "kilo",
       "kimi",
       "kiro",
+      "letta",
       "maki",
       "mastracode",
       "muse",
@@ -570,7 +573,7 @@
   },
   "metadata": {
     "why": [
-      "The metadata channel's own vocabulary. source_id is OUR source id, not the server's \u2014 herdr keys expiry and overwrite on the source string, so it is load-bearing and pinned here and against the client's SourceHerdPaint constant.",
+      "The metadata channel's own vocabulary. source_id is OUR source id, not the server's — herdr keys expiry and overwrite on the source string, so it is load-bearing and pinned here and against the client's SourceHerdPaint constant.",
       "state_label_keys_are names the category whose members the state-label keys must equal, and state_label_keys spells them out: herdr renders one label per agent status, so the key set IS the status set. The loader enforces the equality against the named category, so a status added upstream surfaces here too.",
       "The token and ttl pins mirror the schema's PaneReportMetadataParams (see source.observations); the drift test re-checks them against the live schema."
     ],
