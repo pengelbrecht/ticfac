@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -335,6 +336,144 @@ tree = { command = %q, description = "counts every time it actually ran" }
 		t.Errorf("the close is backed by a check that ran %q, want the changed command %q",
 			strings.Join(backed.Check.Command, " "), strings.Join(want, " "))
 	}
+	late, err := time.Parse(time.RFC3339, backed.StartedAt)
+	if err != nil {
+		t.Fatalf("the backing evidence's started_at is not a timestamp: %v", err)
+	}
+	dead, err := time.Parse(time.RFC3339, first.FinishedAt)
+	if err != nil {
+		t.Fatalf("the dead incarnation's finished_at is not a timestamp: %v", err)
+	}
+	if !late.After(dead) {
+		t.Errorf("the evidence backing the close started at %s, before the dead incarnation's gate had "+
+			"even finished at %s: the old record was published", backed.StartedAt, first.FinishedAt)
+	}
+
+	// The tick closed exactly once, behind a gate that ran.
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Errorf("a1 was closed %d times across the two incarnations", got)
+	}
+}
+
+// The close is never backed by evidence whose profile the configuration no
+// longer describes — on the resume path too (tick oe0).
+//
+// The incident this pins: 0dc made the reuse judgement ask the record's
+// context_manifest_digest and stopped there, but an evidence record also
+// states profile_digest — one of Appendix A #13's four. A resumed run whose
+// operator changed the profile routing mid-run registers the would-be
+// fingerprint (the CURRENT profile) in the freshness index and then re-reads
+// the old record, which names the profile the attempt was dispatched under —
+// so the record says a verdict was produced under a profile the configuration
+// no longer describes, and the publication check cannot see it: it compares
+// the registered fingerprint against a target built the same way, and both
+// name the new profile. Here the resumed run either re-runs the check under
+// the profile resolved now, or does not close the tick.
+func TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedProfile(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageGatePassed)})
+	killedAfter(t, err, "a1", StageGatePassed)
+
+	// What the dead incarnation left: a passing record under the plain key,
+	// stating the profile that dispatched the attempt.
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	key := evidenceKey("a1", 1, "tree")
+	first, ok, err := store.Evidence(key)
+	if err != nil || !ok {
+		t.Fatalf("the dead incarnation left no gate evidence for a1 under %s: %v", key, err)
+	}
+	if first.Provenance.ProfileDigest == nil {
+		t.Fatalf("evidence %s states no profile_digest", key)
+	}
+	if first.Result != "pass" {
+		t.Fatalf("evidence %s is %s; this fixture proves nothing about reuse", key, first.Result)
+	}
+
+	// The operator changes the PROFILE mid-run — the routing's model, the one
+	// thing an operator keeps changing while a run is stopped — committed to
+	// the branch a resumed checkout reads, so the fresh clone below starts
+	// from the changed resolution.
+	changed := strings.Replace(passingGate, `model = "sonnet"`, `model = "opus-4.5"`, 1)
+	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), changed)
+	mustRun(t, f.Repo.Dir, "git", "add", ".tick/runners.toml")
+	mustRun(t, f.Repo.Dir, "git", "commit", "--quiet", "-m", "the profile routing changes mid-run", "--", ".tick/runners.toml")
+	mustRun(t, f.Repo.Dir, "git", "push", "--quiet", "origin", "main")
+
+	// The isolation this fixture is built on: the declared GATE did not
+	// change, and the resolved profile did — or the test would prove 0dc's
+	// fix again rather than this tick's.
+	declared, err := ReadGateCommands(filepath.Join(f.Repo.Dir, ".tick", "runners.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if declared.Digest() != deref(first.Provenance.ContextManifestDigest) {
+		t.Fatal("the edit changed the declared gate too; this test is about the profile alone")
+	}
+	resolved, err := profile.Resolve("implement-tick",
+		profile.Options{RunnersConfig: filepath.Join(f.Repo.Dir, ".tick", "runners.toml")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Digest == *first.Provenance.ProfileDigest {
+		t.Fatal("the changed routing resolved the same profile digest; this proves nothing about staleness")
+	}
+
+	// The resume: a fresh clone, everything it knows read from origin.
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	restarted, result, err := f.run(clone, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the resumed run ended %s: %s", result.State, result.Reason)
+	}
+	if !contains(result.Closed, "a1") {
+		t.Fatalf("the resumed run did not close a1: %v", result.Closed)
+	}
+
+	store = openRunStore(t, clone.Dir, restarted.IntegrationBranch(), restarted.RunID())
+
+	// The record from the profile that ran still stands, unoverwritten:
+	// evidence is never rewritten, and the refusal here is about PUBLISHING
+	// it.
+	original, ok, err := store.Evidence(key)
+	if err != nil || !ok {
+		t.Fatalf("the original evidence under %s is gone: %v", key, err)
+	}
+	if original.StartedAt != first.StartedAt || original.FinishedAt != first.FinishedAt {
+		t.Errorf("the record from the profile that ran was overwritten: %s -> %s", first.StartedAt, original.StartedAt)
+	}
+
+	// The close is not backed by it. Some record of a1's check in THIS run's
+	// evidence carries the profile resolved NOW — the resumed run re-ran the
+	// check under the changed profile — and at the incident no such record
+	// existed: the tick closed on the old record alone, published under a
+	// fingerprint naming a profile the record itself does not carry.
+	var backed *runstate.Evidence
+	for _, k := range store.EvidenceKeys() {
+		if !strings.HasPrefix(k, key) {
+			continue
+		}
+		candidate, ok, err := store.Evidence(k)
+		if err != nil || !ok {
+			t.Fatalf("read evidence %s: %v", k, err)
+		}
+		if candidate.Provenance.ProfileDigest == nil {
+			continue
+		}
+		if *candidate.Provenance.ProfileDigest == resolved.Digest {
+			backed = candidate
+		}
+	}
+	if backed == nil {
+		t.Fatalf("a1 closed with no evidence carrying the profile resolved now (%s): "+
+				"the identical record from the profile that ran (%s) was published instead",
+				short(resolved.Digest), short(*first.Provenance.ProfileDigest))
+	}
+
+	// And the backing evidence really is a run that happened after the dead
+	// incarnation's gate — not the old record re-labelled.
 	late, err := time.Parse(time.RFC3339, backed.StartedAt)
 	if err != nil {
 		t.Fatalf("the backing evidence's started_at is not a timestamp: %v", err)
