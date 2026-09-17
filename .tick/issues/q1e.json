@@ -1,0 +1,14 @@
+{
+  "id": "q1e",
+  "title": "The wall clock firing emits no feed event",
+  "description": "Found by tick rj0 (run epic-9pd, attempt 16), which went looking for it after being split out of emk and reported that it had been dropped.\n\nemk asked for three things. rj0 took the stop (1) and the snapshot interaction (3). Item 2 — the wall clock firing is a FEED event and appears in ticfac status, not only an observation line in the attempt's own state — landed in no open tick. The operator split emk and lost it; the worker checked rather than assuming, which is why it is here.\n\nStill wanted, and now cheaper: with rj0 the stop lands within a poll of the bound, so the attempt settles and the collected verdict says so. But at the moment the bound fires the feed says nothing, and the feed is what a watcher reads.\n\nNote the constraint that made this awkward in the first place: the observation KIND enum in contracts/job-protocol.json is closed, so a typed wall-stop observation across the executor seam would be a pinned-bundle change. The feed line itself is reconciler-side and needs no contract change — the question is how the reconciler learns the bound fired without matching prose.\n\n7zs is a different thing: that is the earlier no-progress signal, before the bound.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "The run writes a feed line when an attempt's wall clock fires, and ticfac status reports it for an in-flight attempt; neither is derived by matching observation prose",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T15:34:54.248414Z",
+  "updated_at": "2026-09-16T15:34:54.248414Z"
+}

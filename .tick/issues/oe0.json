@@ -1,0 +1,14 @@
+{
+  "id": "oe0",
+  "title": "Gate evidence reuse ignores the record's profile_digest",
+  "description": "Found by tick 0dc (run epic-9pd, attempt 17), which fixed the same shape one field over and stopped at its own scope.\n\n0dc made evidence reuse compare context_manifest_digest on every path that can close a tick. An evidence record also states profile_digest. A resumed run whose profile configuration changed registers the would-be fingerprint (the CURRENT profile) in the freshness index and then publishes an old record naming the profile the attempt was dispatched under — so the record says a verdict was produced under a profile the configuration no longer describes.\n\nSame shape, same single fix site (gateEvidenceKey). Include it in the freshness comparison, or record why the profile is deliberately not part of what makes evidence fresh — a gate command is arguably about the CHECK while the profile is about the WORKER, and if that is the reasoning it belongs in the code rather than in the gap.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "9pd",
+  "acceptance_criteria": "Evidence whose profile_digest does not match the current resolved profile is not reused; a test changes the profile between gating and closing and asserts the old record is not published — or the decision to exclude it is recorded at gateEvidenceKey with its reason",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-16T16:33:12.166106Z",
+  "updated_at": "2026-09-16T16:33:12.166106Z"
+}
