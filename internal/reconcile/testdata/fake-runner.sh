@@ -93,6 +93,20 @@ review_finding)
 		report
 	fi
 	;;
+closeout_nocommit)
+	# The pwp shape (tick 19l): the close-out answers DONE_WITH_CONCERNS over
+	# an EMPTY branch — no commits at all — while every other tick does its
+	# work and reports. The role's own status and the run's verdict are then
+	# two different answers to two different questions, and the feed line has
+	# to say both without attributing the verdict to the worker.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		status="DONE_WITH_CONCERNS"
+		report
+	else
+		commit
+		report
+	fi
+	;;
 finding_bad)
 	# A findings block that does not parse: collect carries the problem, and
 	# the reconciler refuses the attempt rather than closing the tick behind
