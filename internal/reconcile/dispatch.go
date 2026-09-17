@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -1016,7 +1017,9 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *ca
 // attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
 // §4.3's golden shape: refs/heads/ticfac/run-<run>/tick-<tick>/attempt-<n>.
 // The job id already carries that identity, so the ref is the job id under the
-// namespace the source grant bounds.
+// namespace the source grant bounds. It is runprogress.ParseAttempt's
+// vocabulary in reverse: the guard test pins the round trip, so a write ref
+// this package mints is always one the progress measurement can read back.
 //
 // Every attempt of every run gets a ref of its own, and that is the whole
 // point. One ref per TICK made the git identity coarser than the dispatch
@@ -1031,9 +1034,12 @@ func attemptWriteRef(jobID string) string {
 // attemptRefPrefix is the namespace ONE RUN's write grade may advance —
 // job-protocol.json's `write_ref_prefix`, bounded per run rather than per
 // installation so a credential issued for this run cannot advance another
-// run's attempt refs.
+// run's attempt refs. The spelling is runprogress's own, so the run's
+// measurement of its attempts — the same refs, read by the stall warning and
+// by `ticfac status` — and the refs it mints are one vocabulary by
+// construction, not by coincidence (pinned by a test).
 func attemptRefPrefix(runID string) string {
-	return "refs/heads/ticfac/run-" + runID + "/"
+	return runprogress.RefPrefix(runID)
 }
 
 func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
@@ -1373,6 +1379,13 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 			r.announceWall(marker, status, wallAt)
 		}
 
+		// The early warning before that bound (tick 7zs): the attempt is
+		// alive and liveness was never the question — the question is whether
+		// it is getting anywhere, and the two facts that answer it honestly
+		// are read out of the repo itself. The wall clock is the bound; this
+		// is the reason to look while there is still an attempt to look at.
+		r.announceStall(marker)
+
 		// The reconciler's OWN deadline. The job's wall clock is the
 		// supervisor's to enforce, and a supervisor that died without settling
 		// enforces nothing: `running` then rests on a pid, and a pid is a
@@ -1492,6 +1505,75 @@ func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobSt
 		"the wall clock of %ds fired %s ago and attempt %d of %s has not settled: the executor is stopping it — %s",
 		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), marker.Attempt, marker.TickID,
 		lastObservation(status))
+}
+
+// announceStall is the early warning before the bound (tick 7zs): the feed's
+// one line saying an attempt is alive but has produced nothing durable for
+// longer than the configured threshold. Liveness answers "is it running";
+// nothing answered "is it getting anywhere", and in the Phase 3 run the feed
+// was silent for 40 of the worker's 55 minutes precisely because nothing
+// happened that the run observes — the run was alive and true, and a person
+// caught it by reading the pane.
+//
+// The two facts are read out of the repo itself — how long since the
+// attempt's branch last moved, how long since its worktree last changed —
+// through the same executor-neutral measurement `ticfac status` reports, so
+// the feed line and the status surface cannot disagree about what they
+// measured. Both are measurements and neither is a judgement: a worker
+// thinking hard legitimately commits nothing for a while, so the line stops,
+// rejects and holds nothing, and a measurement that cannot be made (a
+// substrate whose worktree is not local, a worktree being torn down) says
+// nothing rather than guessing — the same honesty the gap itself keeps.
+//
+// It is written ONCE per tick in this incarnation, like every
+// terminal-shaped fact: the journal remembers the line, and a feed that
+// repeats one fact at poll cadence teaches a watcher to ignore it. A
+// restarted run that adopts the attempt again re-warns, which is correct in
+// the feed's own terms — a watcher joining a stalled run needs the hint as
+// much as the first watcher did.
+func (r *Reconciler) announceStall(marker attemptHandle) {
+	if r.opts.StallWarnAfter <= 0 {
+		return
+	}
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		if r.journal[i].Tick == marker.TickID && r.journal[i].Stage == StageStallWarned {
+			return
+		}
+	}
+	// Nothing the attempt has done can be older than the attempt: the gap
+	// counts from the newest worktree file, and the worktree is created at
+	// dispatch, so before issued+threshold the gap is under the threshold by
+	// construction and the measurement is skipped. On an executor whose
+	// attempts have no local worktree this gate also keeps the per-poll cost
+	// at zero for the whole first threshold of the wait.
+	if issued, ok := r.dispatchedAt(marker); ok && r.now().Before(issued.Add(r.opts.StallWarnAfter)) {
+		return
+	}
+	gap, ok, err := runprogress.AttemptOf(r.opts.Repo, marker.WriteRef, r.now())
+	if err != nil || !ok {
+		// A measurement that cannot be made is not a run event: the hint is
+		// only worth a feed line when it is a fact, and the attempt falls to
+		// the wall clock and the settlement deadline as before.
+		return
+	}
+	idle, ok := gap.Idle()
+	if !ok || idle < r.opts.StallWarnAfter {
+		return
+	}
+	r.record(marker.TickID, StageStallWarned,
+		"attempt %d of %s is alive but has produced nothing durable for %s: its branch last moved %s ago and its "+
+			"worktree last changed %s ago — a reason to look, not a verdict; the wall clock of %ds is still the bound",
+		marker.Attempt, marker.TickID, idle,
+		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), r.opts.WallSeconds)
+}
+
+// idleOf renders one measured gap for the feed line, naming the fact rather
+// than a guess when the gap could not be read.
+func idleOf(d *runprogress.Duration) string {
+	if d == nil {
+		return "?"
+	}
+	return d.Round(time.Second).String()
 }
 
 // settlementDeadline is the moment after which an unsettled attempt is one

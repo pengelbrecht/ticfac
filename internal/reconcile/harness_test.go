@@ -431,6 +431,12 @@ type fixtureOptions struct {
 	// minutes is testable in milliseconds without the bound being a
 	// test-only number.
 	gateTimeout time.Duration
+
+	// stallWarn overrides the run's stall threshold (tick 7zs), for the
+	// same reason as gateTimeout: a threshold measured in minutes is
+	// testable in milliseconds without the number being a test-only one.
+	// Zero leaves the default.
+	stallWarn time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -480,27 +486,28 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		gateTimeout = opts.gateTimeout
 	}
 	return Options{
-		Repo:          repo.Dir,
-		Remote:        "origin",
-		EpicID:        "qeu",
-		RunID:         "r-fixture",
-		BaseRef:       "HEAD",
-		Owner:         "ticfac-test",
-		Tracker:       f.Tracker,
-		ExecStateRoot: f.StateRoot,
-		GateConfig:    filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:   gateTimeout,
-		PollInterval:  20 * time.Millisecond,
-		WipeThreshold: 10 * time.Second,
-		StepCap:       60 * time.Millisecond,
-		WallSeconds:   120,
-		BudgetUSD:     opts.budget,
-		CeilingUSD:    opts.ceiling,
-		PullRequests:  opts.pullRequests,
-		Sleep:         func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:     opts.guardsOff,
-		stopAfter:     opts.stopAfter,
-		NewExecutor:   f.newExecutor,
+		Repo:           repo.Dir,
+		Remote:         "origin",
+		EpicID:         "qeu",
+		RunID:          "r-fixture",
+		BaseRef:        "HEAD",
+		Owner:          "ticfac-test",
+		Tracker:        f.Tracker,
+		ExecStateRoot:  f.StateRoot,
+		GateConfig:     filepath.Join(repo.Dir, ".tick", "runners.toml"),
+		GateTimeout:    gateTimeout,
+		PollInterval:   20 * time.Millisecond,
+		WipeThreshold:  10 * time.Second,
+		StepCap:        60 * time.Millisecond,
+		WallSeconds:    120,
+		BudgetUSD:      opts.budget,
+		CeilingUSD:     opts.ceiling,
+		PullRequests:   opts.pullRequests,
+		StallWarnAfter: opts.stallWarn,
+		Sleep:          func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:      opts.guardsOff,
+		stopAfter:      opts.stopAfter,
+		NewExecutor:    f.newExecutor,
 	}
 }
 
