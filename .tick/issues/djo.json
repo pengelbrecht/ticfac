@@ -1,0 +1,17 @@
+{
+  "id": "djo",
+  "title": "ticfac Phase 4b: subscription seats as flat-rate credentials",
+  "description": "Peter, 2026-09-02: get to subscriptions once the cloud factory is live on the new reconciler. Use Codex (ChatGPT Plus/Pro) and Claude (Pro/Max) subscription seats for cloud jobs instead of metered API keys, via omp's auth-broker / auth-gateway, which already handles these providers locally. Scope: broker reachable from the job sandbox as a host-issued credential (JobSpec.credentials, SPEC \u00a74.3); a subscription routing option beside the AI Gateway route in the image; stop = the broker refuses to issue (Appendix A #1); quota exhaustion reported as its own failure class, never as a broken route; per-role routing (e.g. review on a seat, implementation metered, or vice versa); no cost budget on the flat-rate rung \u2014 it works or it does not, wall-clock and cancellation still apply. Open decisions for Peter before this starts: seat terms of service for this use (flag once, do not relitigate), and where the broker process lives (operator laptop, a small always-on host, or a Cloudflare container).",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "noreply@anthropic.com",
+  "blocked_by": [
+    "ncv"
+  ],
+  "acceptance_criteria": "Gate: an epic completes on the cloud host with every job's model access issued through a subscription credential and no metered spend recorded; a stop mid-run is observed as the broker refusing to issue; a forced quota exhaustion surfaces as a distinct failure class in the run record.",
+  "created_by": "noreply@anthropic.com",
+  "created_at": "2026-09-02T11:35:13.436794Z",
+  "updated_at": "2026-09-02T11:35:13.436794Z",
+  "notes": "\n2026-09-17 - MOVED from the ticks tracker to ticfac's own. The ticfac phase ladder was being tracked in ticks under task hzm, which is why ticfac's roadmap showed no Cloudflare work at all. The phases now sit as top-level epics here, alongside qeu (Phase 1), av8 (Phase 2) and 9pd (Phase 3). Nothing in the family referenced anything outside it and no id collided, so the move is the files plus two re-pointings: the parent hzm is dropped, and ncv's blocker becomes 9pd."
+}
