@@ -10,6 +10,6 @@
   "acceptance_criteria": "Each role has a recorded rule for whether no commits is a failure, enforced in collect; and a feed line for a collected attempt states the role's own status and the run's verdict separately, proven by a test where they differ",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T13:17:29.363569Z",
-  "updated_at": "2026-09-16T20:56:56.141703Z",
+  "updated_at": "2026-09-17T06:58:03.007597Z",
   "started_at": "2026-09-16T16:39:54.072564Z"
 }
