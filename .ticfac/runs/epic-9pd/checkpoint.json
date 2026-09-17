@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 219,
-  "state": "dispatching",
-  "reason": "dispatching sqx as attempt 28",
-  "updated_at": "2026-09-17T21:23:02Z",
+  "sequence": 220,
+  "state": "running",
+  "reason": "sqx is running as attempt 28",
+  "updated_at": "2026-09-17T21:23:17Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -123,7 +123,8 @@
     },
     {
       "tick_id": "sqx",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 28
     },
     {
       "tick_id": "usx",
