@@ -111,7 +111,7 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	var failures []string
 	keys := make([]string, len(r.gate))
 	for i, command := range r.gate {
-		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA)
+		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA, dispatchProfile.Digest)
 		if err != nil {
 			return err
 		}
@@ -520,7 +520,23 @@ func evidenceKey(tick string, attempt int, check string) string {
 // this gate. The rekey is still a function of the thing it identifies — the
 // source's fingerprint and the declared gate's — never of the history that
 // produced it, so it does not chain either.
-func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA string) (string, error) {
+//
+// And it is the source tree TOGETHER WITH THE PROFILE THE ATTEMPT IS
+// DISPATCHED UNDER, as the run resolves it NOW (tick oe0). A gate command is
+// about the CHECK and the profile is about the WORKER, and that is the one
+// argument for leaving the profile out — but it loses here, twice over. The
+// record's own provenance NAMES the profile (profile_digest is one of Appendix
+// A #13's four), so a published record that says a verdict was produced under a
+// profile the current configuration no longer describes is exactly the claim
+// freshness exists to refuse; and the freshness index registers the fingerprint
+// the run WOULD use — the profile resolved now — while the record it re-reads
+// names the profile that dispatched the attempt, so on the reuse path the
+// publication check compares the new profile against itself and cannot see the
+// difference. The reuse path must ask the same question the fresh path is held
+// to: a record whose profile_digest is not the currently resolved profile is a
+// record from a different worker configuration, and it gets a key of its own
+// the same way a record from a different declared gate does.
+func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA, profileDigest string) (string, error) {
 	base := evidenceKey(tick, attempt, check)
 	if gateSHA == "" {
 		return base, nil
@@ -540,13 +556,14 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 	if err != nil {
 		return "", fmt.Errorf("fingerprint the source of %s for the gate's evidence key: %w", short(gateSHA), err)
 	}
-	// The suffix names the two things a record is evidence about — the declared
-	// gate's digest and the source's fingerprint, in that order, so the key
-	// still ENDS with the tree it ran on the way the rekey's own test pins —
-	// and two resumes of the same subject under the same gate name the same
-	// key, so the record minted for it stands rather than a third key being
-	// minted and the whole gate paid for again.
-	rekeyed := base + "-" + digestKeySuffix(r.gateDigest) + "-" + short(gated)
+	// The suffix names the three things a record is evidence about — the
+	// declared gate's digest, the profile the run resolves now, and the
+	// source's fingerprint, in that order, so the key still ENDS with the tree
+	// it ran on the way the rekey's own test pins — and two resumes of the
+	// same subject under the same gate and profile name the same key, so the
+	// record minted for it stands rather than a third key being minted and
+	// the whole gate paid for again.
+	rekeyed := base + "-" + digestKeySuffix(r.gateDigest) + "-" + digestKeySuffix(profileDigest) + "-" + short(gated)
 
 	// The digest is part of the reuse judgement or it is decorative (tick 0dc).
 	// A record whose context_manifest_digest is not the currently declared
@@ -564,6 +581,27 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 		r.record(tick, StageStale,
 			"the recorded %s gate ran under a different declared gate (%s was gated, %s is declared now), so the "+
 				"check runs again under the gate declared now", check, was, digestKeySuffix(r.gateDigest))
+		return rekeyed, nil
+	}
+
+	// The profile digest is part of the same reuse judgement (tick oe0). A
+	// record whose profile_digest is not the currently resolved profile was
+	// produced under a worker configuration the run no longer describes, and
+	// a verdict from a different profile is a verdict the record's own
+	// provenance contradicts: it names the profile that ran it, and publishing
+	// it under this run would state a verdict produced under something else.
+	recordedProfile := ""
+	if existing.Provenance.ProfileDigest != nil {
+		recordedProfile = *existing.Provenance.ProfileDigest
+	}
+	if recordedProfile != profileDigest {
+		was := digestKeySuffix(recordedProfile)
+		if was == "" {
+			was = "none"
+		}
+		r.record(tick, StageStale,
+			"the recorded %s gate ran under a different profile (%s dispatched it, %s is resolved now), so the "+
+				"check runs again under the profile resolved now", check, was, digestKeySuffix(profileDigest))
 		return rekeyed, nil
 	}
 
