@@ -1,0 +1,14 @@
+{
+  "id": "hml",
+  "title": "Cloud attempts have no progress signal: the stall gap claims nothing without a local worktree",
+  "description": "The stall gap deliberately refuses to claim anything for an attempt whose worktree is not local, so a cloud-substrate attempt can stall for its whole wall clock with no early warning at all.\n\nThe measurement's honesty is the right default and should not be weakened: a local gap means a real observed gap. What is missing is a second, cloud-shaped progress fact that can stand in where the worktree cannot be read - the executor's own observation stream is the obvious candidate, with its last-observation timestamp as the idle signal.\n\nFound by the 7zs worker while building the stall warning itself (run epic-9pd, tick 7zs, attempt 22).",
+  "notes": "2026-09-17 13:36 - discovered_from run-epic-9pd/tick-7zs/attempt-22",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A cloud-substrate attempt that goes idle past the stall threshold raises the same stall_warned feed event a local one does, and a test proves it without a local worktree. The local gap measurement is unchanged for local attempts.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T11:35:53.510176Z",
+  "updated_at": "2026-09-17T11:36:48.395278Z"
+}

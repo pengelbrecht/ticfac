@@ -1,0 +1,14 @@
+{
+  "id": "2hb",
+  "title": "Settle stale worktrees from durable evidence so the status census keeps meaning what it says",
+  "description": "A live smoke test of the new status census found worktrees still registered under .herdr/worktrees for tick 19l attempts 18-19, tick cwa attempt 7 and tick h0f attempt 14 - hours to days old. These are runs whose teardown never ran: the killed-writer pattern the learnings already record.\n\nThey are honest input to the gap surface, but they accumulate, and an operator reading the census cannot tell a live attempt from a months-old corpse. The settlement should come from durable evidence rather than from a timeout: is the attempt collected? is its branch merged or its marker settled? If so the worktree is a leftover and can be reported as such (and removed), whatever its age.\n\nFound by the 7zs worker (run epic-9pd, tick 7zs, attempt 22).",
+  "notes": "2026-09-17 13:36 - discovered_from run-epic-9pd/tick-7zs/attempt-22",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The census distinguishes standing worktrees whose attempt is settled from those whose attempt is live, deciding from the attempt record rather than from age, and a test covers a leftover worktree whose attempt was collected.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T11:36:01.687376Z",
+  "updated_at": "2026-09-17T11:36:48.423373Z"
+}
