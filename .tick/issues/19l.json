@@ -2,7 +2,7 @@
   "id": "19l",
   "title": "Decide how a role's own status and the run's verdict relate, and say both in the feed",
   "description": "Found by tick 54n (run epic-9pd, attempt 6), from a note on 54n.\n\nIn the ticks pwp run, closeout attempt 13's role_result said DONE_WITH_CONCERNS; collect classified the attempt as failed because it made no commits; and the feed line read 'closeout-epic answered failed (no-commits)' — as if the worker declared failure. It had not. That wording cost real diagnosis time.\n\nTwo separate questions, both needing a decided rule:\n1. For a role whose deliverable may legitimately be a report plus findings (review, some closeouts), is 'no commits' a failure? Today it is, incidentally. For review it arguably should not be; for closeout, now that 54n lets it write learnings, it arguably should.\n2. Whatever the verdict, the feed must not attribute the verdict to the worker. Say both: what the role answered, and what the run concluded and why.\n\nDecide 1 per role and record it; fix 2 unconditionally.",
-  "notes": "2026-09-17 10:09 - ticfac run epic-9pd: attempt 20 reported a finding drafted for triage — defect \"internal/herd/wirevocab tests fail on this host: the installed herdr is newer than the pinned wire vocabulary\" (key ff25047f88bfc92d27d220e388a02427deff2d253273edb795646ea2b2e872cf, severity medium, for this repository). Triage with `ticfac finding 9pd ff25047f88bfc92d27d220e388a02427deff2d253273edb795646ea2b2e872cf --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
+  "notes": "2026-09-17 10:09 - ticfac run epic-9pd: attempt 20 reported a finding drafted for triage — defect \"internal/herd/wirevocab tests fail on this host: the installed herdr is newer than the pinned wire vocabulary\" (key ff25047f88bfc92d27d220e388a02427deff2d253273edb795646ea2b2e872cf, severity medium, for this repository). Triage with `ticfac finding 9pd ff25047f88bfc92d27d220e388a02427deff2d253273edb795646ea2b2e872cf --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-17 11:50 - ticfac run epic-9pd: attempt 20 merged into epic/9pd as c98f715e2441; the integrated gate (go) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "Each role has a recorded rule for whether no commits is a failure, enforced in collect; and a feed line for a collected attempt states the role's own status and the run's verdict separately, proven by a test where they differ",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T13:17:29.363569Z",
-  "updated_at": "2026-09-17T08:09:29.348037Z",
+  "updated_at": "2026-09-17T09:50:08.787796Z",
   "started_at": "2026-09-16T16:39:54.072564Z"
 }
