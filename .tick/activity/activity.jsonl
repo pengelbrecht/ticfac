@@ -594,3 +594,4 @@
 {"ts":"2026-09-17T20:39:02.905751Z","tick":"cy2","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"A gate that runs beside live workers returns verdicts about the machine, not the tree","type":"task"}}
 {"ts":"2026-09-17T21:22:40.951674Z","tick":"bzx","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"2026-09-17 23:22 - ticfac run epic-9pd: attempt 24 merged into epic/9pd as a7d89edf55ba; the integrated gate (go) passed.","title":"run-epic says nothing on stdout while it runs"}}
 {"ts":"2026-09-17T21:22:46.393769Z","tick":"bzx","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"run-epic says nothing on stdout while it runs"}}
+{"ts":"2026-09-17T21:23:10.37999Z","tick":"sqx","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Close-out's own commits are never held for green CI"}}
