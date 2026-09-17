@@ -40,6 +40,20 @@ against GitHub at the pinned ref in CI, and every file in it has a Go reader in
 `internal/contracts/parity`. `CONTRACTS.md` says how that works and how to
 adopt a new bundle version. Never edit a file under `contracts/` here.
 
+## cloud/sandbox
+
+`cloud/sandbox` — the sandbox image's build context, the container a cloud
+run boots in either role — is **vendored and pinned**, like `contracts/`.
+ticks owns the tree: its `internal/sandbox` suite runs those scripts. This
+repository consumes it at the immutable commit recorded in `sandbox.pin.json`,
+verified offline by digest and git mode on every test run
+(`internal/sandboxpin`), and against GitHub at the pinned ref in CI
+(`go run ./cmd/sandbox check` / `verify-upstream` / `sync`). Two repositories
+carrying one tree with no check between them is how the shipped image diverges
+from the tested one. Never edit a file under `cloud/sandbox` here. Change it
+in ticks, move `ref` in `sandbox.pin.json`, and run `go run ./cmd/sandbox sync`
+— then commit `cloud/sandbox` and `sandbox.pin.json` together.
+
 ## Development
 
 ```
@@ -47,6 +61,7 @@ go build ./...                    # the ticfac binary
 make test-short                   # readers, negative controls, CLI (-timeout 45m)
 make test                         # the full suite, same timeout
 go run ./cmd/contracts check      # verify the vendored bundle, offline
+go run ./cmd/sandbox check        # verify the vendored image context, offline
 ```
 
 `make test` / `make test-short` pin `-timeout 45m`: `internal/reconcile`'s suite

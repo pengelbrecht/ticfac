@@ -1,0 +1,37 @@
+{
+  "$comment": "How ticfac gets cloud/sandbox. ticks owns the sandbox image's build context (its internal/sandbox suite runs those scripts); this tree is ticfac's vendored copy, the embedded image context the factory deploys (embedded.go's sandboxFS). It is pinned the way contracts/ is (CONTRACTS.md): `ref` is the immutable ticks commit whose cloud/sandbox tree the vendored bytes are — the last commit that changed the tree, so a later ticks commit that does not touch it moves nothing this pin claims — and `digests` plus `modes` record the whole tree, bytes and git exec bits together. `go run ./cmd/sandbox check` verifies all of it offline on every test run; CI's verify-upstream fetches ticks at `ref` and compares byte for byte. Two repositories carrying one tree with no check between them is how the shipped image diverges from the tested one. Never edit a file under cloud/sandbox here: change it in ticks, move `ref`, and run `go run ./cmd/sandbox sync`, then commit cloud/sandbox and this file together.",
+  "mode": "pinned",
+  "repository": "pengelbrecht/ticks",
+  "ref": "e1146e6da773e2b7d6ad9178faa1fd367466d5b8",
+  "directory": "cloud/sandbox",
+  "files": [
+    "Dockerfile",
+    "README.md",
+    "build.sh",
+    "common.sh",
+    "entrypoint.sh",
+    "preflight.sh",
+    "required-tk-commands",
+    "worker.sh"
+  ],
+  "digests": {
+    "Dockerfile": "d6975f3b89f994b507721b518068d1953b7985d026d62061c4e4ab6019645b45",
+    "README.md": "8827c0ac5b83d19eb32c83de6e3bff04cd4771a06f8225b38825e5b31cc14ffd",
+    "build.sh": "d02fd0103ccb7e8ea7fafab1e64a2c84c8118b0938095b5305f3254a56e424f5",
+    "common.sh": "ff889a4df0b2e717daac12d7b3c7c0df80b198a00aaa94a0efbf67b4a6d4b0c6",
+    "entrypoint.sh": "52df7b1f0eff37f90901376ccfbdda58f142c7f1184a9ba48150c3ea48a3e574",
+    "preflight.sh": "00d5663fcc5ed37120644ebbeda9a7dbb191a9604fa97a4e0a6359db27ab69d9",
+    "required-tk-commands": "a62f6567dc9646c91995bd76c64b070b494da67fa51bea0069fcf5709788c3c1",
+    "worker.sh": "2eea6f30f08340a97276330cae16dea94e795e677d556e0c68397f0024cb8b48"
+  },
+  "modes": {
+    "Dockerfile": "0644",
+    "README.md": "0644",
+    "build.sh": "0755",
+    "common.sh": "0644",
+    "entrypoint.sh": "0755",
+    "preflight.sh": "0755",
+    "required-tk-commands": "0644",
+    "worker.sh": "0755"
+  }
+}
