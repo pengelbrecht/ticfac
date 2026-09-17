@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 173,
-  "state": "integrating",
-  "reason": "integrating 5bp attempt 21 into epic/9pd",
-  "updated_at": "2026-09-17T10:39:45Z",
+  "sequence": 174,
+  "state": "gating",
+  "reason": "running the integrated gate for 5bp on 3428cfdede61",
+  "updated_at": "2026-09-17T10:39:52Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -98,7 +98,7 @@
     },
     {
       "tick_id": "5bp",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 21
     },
     {
