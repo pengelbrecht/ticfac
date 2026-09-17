@@ -234,6 +234,16 @@ type Dispatch struct {
 	// already holds, and the marker — which reaches origin, a public
 	// repository — never carries host paths.
 	PriorReports []subprocess.PriorReport
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), newest first — the uncommitted work a stopped
+	// attempt left, snapshotted before its teardown destroyed its worktree,
+	// which the re-dispatch's prompt points the worker at as material to
+	// read: never evidence of completion, never to merge. Re-derived from
+	// the executor state directory for the same reason the prior reports
+	// are — and for one more: a dispatch conflict that runs the gather twice
+	// must not carry a stale record on a marker that reaches origin.
+	PriorSnapshots []subprocess.PriorSnapshot
 }
 
 // carriedWork is a released attempt whose WORK the next dispatch of its tick

@@ -95,6 +95,15 @@ type attemptRecord struct {
 	// predecessors found is an attempt whose record says so.
 	PriorReports []PriorReport `json:"prior_reports,omitempty"`
 
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), as the dispatch handed them over — newest first,
+	// each naming the ref its stopped predecessor's uncommitted work is
+	// preserved on. Recorded for the same reason the prior reports are:
+	// the prompt file beside this record is the rendered whole, and an
+	// attempt that was pointed at a predecessor's preserved work is an
+	// attempt whose record says so.
+	PriorSnapshots []PriorSnapshot `json:"prior_snapshots,omitempty"`
+
 	WallSeconds  int `json:"wall_seconds"`
 	PushInterval int `json:"push_interval_seconds"`
 
@@ -308,6 +317,33 @@ func (s *store) observationsFrom(cursor string) ([]Observation, string) {
 // settled attempt with no report is `failed`, which is a different fact from
 // both "succeeded" and "still running".
 func (s *store) settled() bool { return s.exists(fileRunnerExit) }
+
+// markWIPSnapshot records where the attempt's uncommitted work was
+// preserved before a teardown destroyed its worktree (tick pbb). It is
+// written once; a second call is a no-op, so a teardown that is refused and
+// retried re-snaps nothing.
+func (s *store) markWIPSnapshot(snap WIPSnapshot) error {
+	if _, ok := s.wipSnapshot(); ok {
+		return nil
+	}
+	snap.SchemaVersion = WIPSnapshotSchemaVersion
+	if err := s.writeJSON(FileWIPSnapshot, snap); err != nil {
+		return fmt.Errorf("write the wip-snapshot record: %w", err)
+	}
+	return nil
+}
+
+// wipSnapshot is the recorded where of preserved work, if any was taken.
+func (s *store) wipSnapshot() (WIPSnapshot, bool) {
+	var snap WIPSnapshot
+	if err := s.readJSON(FileWIPSnapshot, &snap); err != nil {
+		return WIPSnapshot{}, false
+	}
+	if snap.SchemaVersion != WIPSnapshotSchemaVersion {
+		return WIPSnapshot{}, false
+	}
+	return snap, true
+}
 
 func (s *store) exitCode() (int, bool) {
 	raw, err := os.ReadFile(s.path(fileRunnerExit))

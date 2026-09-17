@@ -347,6 +347,11 @@ func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) 
 // the close, because the alternative is an enforcement that throws the work
 // away to save the clock.
 //
+// The mechanics and the ref naming are the seam's (subprocess.WipRefFor /
+// subprocess.SnapshotWorktree): the local executor's dispose gates its
+// force-remove on the same ones, and a record at one name and shape is what
+// a later attempt's dispatch points its worker at (tick pbb).
+//
 // The snapshot is NOT evidence of completion and is never merged; it is
 // material a person or a later attempt can be pointed at (pbb, and nvn),
 // which is why where it landed is recorded durably beside the attempt.
@@ -363,12 +368,12 @@ func (e *Executor) snapshotUncommitted(st *store, record *attemptRecord) error {
 		}
 		return fmt.Errorf("stat the worktree at %s: %w", record.Worktree, err)
 	}
-	ref := wipRefFor(record)
-	commit, err := snapshotWorktree(record.Worktree, ref, record.Spec.ArtifactPrefix)
+	ref := subprocess.WipRefFor(record.JobID)
+	commit, err := subprocess.SnapshotWorktree(record.Worktree, ref, record.Spec.ArtifactPrefix)
 	if err != nil {
 		return err
 	}
-	if err := st.markWIPSnapshot(wipSnapshot{Ref: ref, Commit: commit, TakenAt: e.stamp()}); err != nil {
+	if err := st.markWIPSnapshot(subprocess.WIPSnapshot{Ref: ref, Commit: commit, TakenAt: e.stamp()}); err != nil {
 		return err
 	}
 	_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,

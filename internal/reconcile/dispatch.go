@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -1038,6 +1039,11 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *ca
 		// facts about the state directory — and a dispatch conflict that runs
 		// this half twice re-derives the same list.
 		PriorReports: r.priorReports(entry.TickID, number),
+		// What the tick's earlier attempts left PRESERVED (tick pbb): the
+		// uncommitted work of an attempt stopped at its wall clock or rejected
+		// before it committed, kept on a wip ref the re-dispatch points the
+		// worker at — gathered here for the same reason the reports are.
+		PriorSnapshots: r.priorSnapshots(entry.TickID, number),
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -1266,6 +1272,11 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// prompt that start renders is the one place the predecessors' analysis
 	// has to reach.
 	dispatch.PriorReports = r.priorReports(marker.TickID, marker.Attempt)
+	// The preserved work of the tick's earlier attempts (tick pbb) is
+	// re-derived for the same reason: the dispatch a later leg rebuilds can
+	// still start the attempt, and the preserved work is the half of a
+	// stopped predecessor's legacy the prompt must not start blind over.
+	dispatch.PriorSnapshots = r.priorSnapshots(marker.TickID, marker.Attempt)
 	// The profile an adopted attempt re-joins is the one it was DISPATCHED
 	// under: the marker's own tier, not whatever this incarnation would
 	// derive today. A config edited between incarnations does not retro-fit a
@@ -1373,6 +1384,51 @@ func (r *Reconciler) priorReports(tickID string, attempt int) []subprocess.Prior
 		out = append(out, subprocess.PriorReport{
 			Attempt: n, Path: path, Status: report.Status, Detail: report.Detail,
 		})
+	}
+	return out
+}
+
+// priorSnapshots gathers the preserved work of a tick's EARLIER attempts,
+// newest first (tick pbb) — the nvn shape for reports, applied to work.
+//
+// The snapshot is what a stop and a rejecting teardown preserve before they
+// destroy a worktree: the attempt's uncommitted tree on a wip ref of its
+// own, recorded beside the attempt record — at a name and in a shape both
+// executors export as part of the seam — so the work survives teardown at a
+// place the dispatch can find again. A predecessor with no record preserved
+// nothing — it committed its work, or nothing destroyed its worktree — and is
+// simply absent from the list: the prompt's job is to name the material that
+// EXISTS, not to narrate the attempts that produced none. A first attempt
+// gathers nothing.
+//
+// Nothing here validates that the ref still resolves: the worktree's
+// repository is the same one the dispatch's own worktree is cut from, and a
+// record naming a ref git cannot resolve is a fact the worker reads in its
+// own git — naming it with its recorded commit is still more than starting
+// blind. The record that cannot be parsed is the same as no record.
+func (r *Reconciler) priorSnapshots(tickID string, attempt int) []subprocess.PriorSnapshot {
+	out := []subprocess.PriorSnapshot{}
+	if attempt <= 1 {
+		return out
+	}
+	for n := attempt - 1; n >= 1; n-- {
+		state, found := findAttemptState(r.execStateDir(tickID, n))
+		if !found {
+			// Never dispatched, or never started: nothing was preserved.
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(state, subprocess.FileWIPSnapshot))
+		if err != nil {
+			// Dispatched, but nothing was preserved — the attempt's worktree
+			// was clean or its teardown refused rather than destroyed.
+			continue
+		}
+		var snap subprocess.WIPSnapshot
+		if json.Unmarshal(raw, &snap) != nil || snap.SchemaVersion != subprocess.WIPSnapshotSchemaVersion ||
+			snap.Ref == "" || snap.Commit == "" {
+			continue
+		}
+		out = append(out, subprocess.PriorSnapshot{Attempt: n, Ref: snap.Ref, Commit: snap.Commit})
 	}
 	return out
 }
@@ -2094,6 +2150,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			Attempt:        d.Attempt,
 			PushInterval:   pushInterval,
 			PriorReports:   d.PriorReports,
+			PriorSnapshots: d.PriorSnapshots,
 		})
 		if err != nil {
 			return nil, Substrate{}, err

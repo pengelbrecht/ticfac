@@ -251,6 +251,20 @@ hang)
 	commit
 	exec sleep 86400
 	;;
+wallwip)
+	# pbb's shape: attempt 1 of a1 does real work in the tree, commits
+	# nothing and stays alive past the bound, so the wall clock stops it
+	# holding uncommitted work — and the teardown that follows the refusal is
+	# where that work used to die unrecorded. Every later attempt of every
+	# tick does the work cleanly.
+	if [ "$TICFAC_ATTEMPT" = "1" ] && [ "$TICFAC_TICK" = "a1" ]; then
+		printf 'uncommitted work of %s\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/wip-${TICFAC_TICK}.txt"
+		exec sleep 86400
+	else
+		commit
+		report
+	fi
+	;;
 *)
 	printf 'unknown FAKE_RUNNER_MODE %s\n' "$mode" >&2
 	exit 64
