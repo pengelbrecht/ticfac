@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 202,
-  "state": "dispatching",
-  "reason": "dispatching q1e as attempt 27",
-  "updated_at": "2026-09-17T18:41:17Z",
+  "sequence": 203,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-17T18:43:56Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -156,7 +156,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "bbdd2fc7ac0d3d57b511463f1410a54ce6455554",
+    "source_sha": "ec4ed979bef465435a85a2f624b2fbfd1e842164",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
