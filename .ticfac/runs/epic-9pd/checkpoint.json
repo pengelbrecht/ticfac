@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 175,
-  "state": "publishing",
-  "reason": "closing 5bp behind the integrated gate on 3428cfdede61",
-  "updated_at": "2026-09-17T10:40:02Z",
+  "sequence": 176,
+  "state": "running",
+  "reason": "5bp is closed",
+  "updated_at": "2026-09-17T10:40:18Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -98,7 +98,7 @@
     },
     {
       "tick_id": "5bp",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 21
     },
     {
