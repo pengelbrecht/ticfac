@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-19l-20-go",
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "19l",
+    "attempt": 20,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "6f55355d761c6c4cb755d177724ec322b3dddcc9",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260d335be7664b3af33531bb0becce28b17",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.0"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -count=1 -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-17T08:09:58Z",
+  "finished_at": "2026-09-17T08:17:36Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t68.115s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t0.748s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.078s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t210.036s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t108.666s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t69.670s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.442s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t3.077s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t1.388s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t3.437s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t3.140s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t3.063s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t3.199s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.949s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t2.081s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.497s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t2.303s\n--- FAIL: TestLiveVocabularyMatchesContract (0.01s)\n    drift_test.go:167: wire vocabulary drift in methods — bump internal/herd/wirevocab/herd-vocabulary.json deliberately: only in contract: []; only in live herdr: [pane.link.resolve]\n    drift_test.go:172: wire vocabulary drift in result_discriminators — bump internal/herd/wirevocab/herd-vocabulary.json deliberately: only in contract: []; only in live herdr: [pane_link_resolved]\n--- FAIL: TestLiveAgentKindsMatchContract (0.00s)\n    drift_test.go:273: wire vocabulary drift in agent_kinds — bump internal/herd/wirevocab/herd-vocabulary.json deliberately: only in contract: []; only in live herdr: [letta]\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.280s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t2.173s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t449.274s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t2.236s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.810s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t1.982s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t194.080s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t2.182s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t1.352s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:aaa505033bb374c5808eebfd45b40fd2daf9eec51cbe2bff30007263ebf17eb8",
+  "persistence_uri": "git:refs/heads/epic/9pd:.ticfac/runs/epic-9pd/evidence/gate-19l-20-go.json"
+}
