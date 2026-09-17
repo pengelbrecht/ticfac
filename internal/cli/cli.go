@@ -373,6 +373,13 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	stderr = io.MultiWriter(stderr, life.Log())
 	stdout = io.MultiWriter(stdout, life.Log())
 
+	// A redirected run-epic was silent until the run ended (tick bzx), so a
+	// redirected output was no monitoring signal. The run's id and the two
+	// commands that follow it, said HERE — before anything is dispatched —
+	// and on the wrapped stdout, so the same line lands in run.log whether
+	// or not whoever launched the run captured its output.
+	fmt.Fprintf(stdout, "%s\n", startupLine(liveRun))
+
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
 	// without an error, so this is the only terminal line on the paths below.
@@ -442,6 +449,17 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		return 1
 	}
 	return 0
+}
+
+// startupLine is the one line a redirected run-epic now says while the run
+// is still starting (tick bzx): the run's id, and the two commands that
+// follow the run — `ticfac status` for is-it-alive, `ticfac events --follow`
+// for what it is doing — printed before anything is dispatched, so a
+// redirected invocation is a monitoring signal from its first line instead of
+// an empty file until the run ends.
+func startupLine(runID string) string {
+	return fmt.Sprintf("run %s starting — follow it: ticfac status %s (is it alive), "+
+		"ticfac events %s --follow (what it is doing, as it does it)", runID, runID, runID)
 }
 
 // feedFailureLine is the one sentence a run whose feed could not be written
