@@ -1,0 +1,13 @@
+{
+  "id": "6fa",
+  "title": "checkpoint.json carries one run-level state, which a dispatch window makes narrower than the truth",
+  "description": "r.checkpoint writes a single run-level State and Reason. With the dispatch window (tick 5fx) several ticks are in flight at once, so finishTick(a1) writes StateCollecting / 'collecting a1 attempt 5' while a2 is still dispatching: the run-level state names whichever tick moved most recently rather than what the run is doing.\n\nThis is not a correctness bug - the per-tick rows in the checkpoint carry the truth, and nothing decides anything from the run-level string. It is a reporting narrowness, and it matters because checkpoint.json is what an operator (and a resumed run) reads to answer 'what is this run doing'. At width 1 the answer was complete; at width N it is one Nth of the answer.\n\nFound by the concurrency audit of 5fx, alongside the r.ticks reversion that audit also caught (fixed in 5fx by adoptTicks).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The durable run state distinguishes the run's own state from the per-tick states, so an operator reading checkpoint.json while a window is open can see every tick in flight and what each is doing, rather than only the one that moved last. A test covers a checkpoint written while more than one tick is in flight.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T12:17:26.822885Z",
+  "updated_at": "2026-09-17T12:17:26.822885Z"
+}

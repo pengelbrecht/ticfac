@@ -1,0 +1,13 @@
+{
+  "id": "me1",
+  "title": "The width is enforced in two places that count differently, and a claim refusal kills the run",
+  "description": "Found live on the first widened run of epic-9pd (2026-09-17). Two defects, one incident.\n\n1. Two counters. [orchestration].max_parallel is declared once but enforced twice: ticfac's own dispatch window counts the attempts IT is holding, and tk's claim counts every in_progress child of the epic. They disagree whenever a tick is in_progress without the current run holding it - which is exactly what a died run leaves behind. Here h0f had been in_progress since attempt 14 died on 2026-09-16, so tk saw 4 in flight (bzx, h0f, oe0, pbb) and refused q1e while the window was holding 3. A dead claim cost a live dispatch slot, and the run could not make progress at its declared width.\n\n2. The refusal killed the run. tk's claim refusal surfaced as an error, not a Refusal, so the run recorded run_died rather than stopping cleanly on a refusal the operator can act on. The message itself was excellent ('wave width 4 is full: 4 implementer(s) already in flight under 9pd (bzx, h0f, oe0, pbb). Claiming q1e would make 5'), which makes the death gratuitous: everything needed to refuse well was already in hand.\n\nThe honest fix for (1) is probably that the run reconciles the tracker's in-flight set against its own on resume - a tick the tracker thinks is in flight that no attempt of this run holds, and whose attempt is settled or whose worktree has no agent, is a stale claim to release - which is the same durable-evidence settlement tick 2hb wants for worktrees.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run resuming after a death does not lose dispatch slots to claims its own dead attempts left behind: either it releases them from durable evidence or it counts them as its own. A tk claim refusal stops the run as a refusal, naming the repair, and never as run_died. Tests cover a resume with a stale in_progress tick and a claim refused at the width.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T18:43:27.173548Z",
+  "updated_at": "2026-09-17T18:43:27.173548Z"
+}
