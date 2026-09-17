@@ -48,6 +48,16 @@ const (
 
 	// DefaultWallSeconds bounds one job. An unbounded job is one nothing stops.
 	DefaultWallSeconds = 3600
+
+	// DefaultStallWarnAfter is how long an in-flight attempt may produce
+	// nothing durable — its branch unmoved, its worktree unchanged — before
+	// the run says so in the feed (tick 7zs). It is an EARLY WARNING, not a
+	// bound: the wall clock still spends the attempt, and a worker thinking
+	// hard legitimately commits nothing for a while. The Phase 3 run's
+	// worker produced nothing for 40 of its 55 minutes; fifteen is early
+	// enough that a person reading the line still has most of the attempt's
+	// budget to spend.
+	DefaultStallWarnAfter = 15 * time.Minute
 )
 
 // Tracker is the tracker surface the reconciler uses. It is exactly the tk
@@ -334,6 +344,15 @@ type Options struct {
 	// WallSeconds bounds one job.
 	WallSeconds int
 
+	// StallWarnAfter is how long an in-flight attempt may produce nothing
+	// durable — its branch unmoved, its worktree unchanged — before the run
+	// writes one feed line about it (tick 7zs). Zero is the default
+	// (DefaultStallWarnAfter); negative disables the warning. It is a hint
+	// about when to look, never a verdict: it stops, rejects and holds
+	// nothing, and the wall clock — not this — is the bound that spends the
+	// attempt.
+	StallWarnAfter time.Duration
+
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
 	// reported.
@@ -586,6 +605,20 @@ const (
 	// the attempt is still unresolved — a hint about when to look, exactly
 	// like every other feed line, never a verdict.
 	StageWallClock = "wall_clock_fired"
+
+	// StageStallWarned is the early warning before the bound (tick 7zs): the
+	// attempt is alive — liveness was never in question — and it has produced
+	// nothing durable for longer than the run's stall threshold: its branch
+	// has not moved and its worktree has not changed. It is written by the
+	// wait, once per tick, from facts read out of the repo itself (the branch
+	// tip's committer date, the newest file mtime under the worktree), and it
+	// is a reason to LOOK, never a verdict: a worker thinking hard
+	// legitimately commits nothing for a while, the line stops and rejects
+	// nothing, and the wall clock — not this — is the bound that spends the
+	// attempt. The Phase 3 run knew its worker was alive for 55 minutes and
+	// had no way to know it had produced nothing for 40 of them; a person
+	// caught it by reading the pane.
+	StageStallWarned = "stall_warned"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -643,6 +676,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.WallSeconds <= 0 {
 		opts.WallSeconds = DefaultWallSeconds
+	}
+	if opts.StallWarnAfter == 0 {
+		opts.StallWarnAfter = DefaultStallWarnAfter
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now

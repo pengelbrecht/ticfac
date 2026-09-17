@@ -269,6 +269,9 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
 		ceiling   = fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to")
 		wall      = fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by")
+		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
+			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
+				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -345,6 +348,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		ProfileDir:        *profiles,
 		Tier:              *tier,
 		WallSeconds:       *wall,
+		StallWarnAfter:    time.Duration(*stallWarn) * time.Second,
 		BudgetUSD:         *budget,
 		CeilingUSD:        *ceiling,
 		PullRequests:      pulls,

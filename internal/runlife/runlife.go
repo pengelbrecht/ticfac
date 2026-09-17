@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -187,13 +188,36 @@ type Status struct {
 	LastEvent *runfeed.Event `json:"last_event,omitempty"`
 	EventAge  string         `json:"last_event_age,omitempty"`
 	Log       string         `json:"log"`
+
+	// Attempts are the run's in-flight attempts with their own gaps (tick
+	// 7zs): how long since each one's branch last moved and its worktree
+	// last changed — the honest measurement of "is it getting anywhere",
+	// which liveness never answered. An attempt is in flight here when its
+	// worktree still stands in the repo the run works in: the run's own
+	// teardown is what removes one, so a worktree that stands is an attempt
+	// nobody has collected, whether the run is driving it or died beside
+	// it. Null when the census could not be read; empty when no attempt
+	// stands — different claims, kept apart. Neither gap is a verdict and
+	// neither changes any: a worker thinking hard legitimately commits
+	// nothing for a while, and the exit code stays liveness's answer alone.
+	Attempts []runprogress.Attempt `json:"attempts"`
 }
 
-// Probe answers whether the run is alive, from run.pid and the OS, and how long
-// ago it last said anything, from the feed.
+// Probe answers whether the run is alive, from run.pid and the OS, how long
+// ago it last said anything, from the feed, and — for every attempt whose
+// worktree still stands — how long since it last produced anything durable
+// (tick 7zs): the gaps are a reason to look and never a verdict.
 func Probe(repo, runID string, now time.Time) Status {
 	dir := Dir(repo, runID)
 	status := Status{RunID: runID, Log: filepath.Join(dir, LogName)}
+
+	// The attempts' gaps are a measurement, never a gate: a census that
+	// cannot be read leaves the field null and the liveness answer alone,
+	// because a watcher's question deserves "not measured", not a guess
+	// and not a silence that could be an empty run (tick 7zs).
+	if attempts, err := runprogress.Standing(repo, runID, now); err == nil {
+		status.Attempts = attempts
+	}
 
 	if events, err := runfeed.Read(runfeed.Path(repo, runID)); err == nil && len(events) > 0 {
 		last := events[len(events)-1]

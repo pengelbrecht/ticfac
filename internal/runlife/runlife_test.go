@@ -174,3 +174,58 @@ func TestLivenessDoesNotDependOnTheEnvironment(t *testing.T) {
 	}
 	_ = cmd
 }
+
+// Probe answers the question liveness never did (tick 7zs): for every
+// attempt whose worktree still stands in the repo, how long since its branch
+// last moved and its worktree last changed. The gaps are a measurement beside
+// the liveness answer — never part of it — and a repo the census cannot read
+// leaves them null rather than guessed at.
+func TestProbeReportsTheStandingAttemptsGaps(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC().Truncate(time.Second)
+	repo := t.TempDir()
+	startSleeper(t, repo, "r-gaps")
+
+	// A repository the census CAN read, with no attempt standing in it.
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	git("init", "--quiet", "-b", "main")
+	git("config", "user.email", "runlife@example.com")
+	git("config", "user.name", "runlife test")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "--quiet", "-m", "base")
+
+	// No attempt stands: an empty census, which is a claim ("nothing is in
+	// flight here"), not a failure to look.
+	status := Probe(repo, "r-gaps", now)
+	if status.State != Alive {
+		t.Fatalf("a live process reads %s (%s)", status.State, status.Reason)
+	}
+	if status.Attempts == nil || len(status.Attempts) != 0 {
+		t.Fatalf("a run with no standing attempts reports %+v, want an empty census", status.Attempts)
+	}
+}
+
+// A repo the census cannot read — not a repository at all — leaves the gaps
+// null and the liveness answer untouched: the measurement is a hint, and a
+// hint that cannot be made must not turn into either a guess or a failure.
+func TestProbeLeavesTheGapsNullWhenTheCensusCannotBeRead(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	startSleeper(t, repo, "r-norepo")
+
+	status := Probe(filepath.Join(repo, "not-a-repo"), "r-norepo", time.Now())
+	if status.Attempts != nil {
+		t.Fatalf("a census that could not be read reported %+v, want null", status.Attempts)
+	}
+}

@@ -68,6 +68,16 @@ report)
 	commit
 	report
 	;;
+stall-then-report)
+	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
+	# produces nothing — no commit, no file, no report — for long enough that
+	# the run's stall warning must fire, and then does its work and settles
+	# DONE. The stall warning must not change what the run concludes about an
+	# attempt that was merely slow to start.
+	sleep 1
+	commit
+	report
+	;;
 silent)
 	# Settled and incomplete: work committed, nothing said.
 	commit
