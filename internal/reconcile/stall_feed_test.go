@@ -105,17 +105,26 @@ func TestTheStallWarningChangesNoVerdict(t *testing.T) {
 		}
 	}
 
-	// The warning DID fire — a test that never saw the line would prove the
-	// run ignored it, not that the run was not judged by it. Once per tick,
-	// and only for ticks that stalled.
+	// At most once per tick. NOT "exactly once": whether the warning is
+	// OBSERVED here depends on where a poll lands inside the fixture's 1s
+	// stall, and under the gate's twelve-way parallelism the poll can fall
+	// after the worker has already committed and reported — which failed this
+	// test on the integrated gate while it passed for its author.
+	//
+	// That the warning fires at all is proven deterministically by
+	// TestTheStallWarningReachesTheFeed above, which waits for the event
+	// instead of racing it. What this test is for is the acceptance in its
+	// name: the warning changes no verdict. The assertions above carry that,
+	// and this one keeps the other half — a fact said once, never repeated at
+	// poll cadence.
 	warned := map[string]int{}
 	for _, event := range r.Journal() {
 		if event.Stage == StageStallWarned {
 			warned[event.Tick]++
 		}
 	}
-	if warned["a1"] != 1 {
-		t.Errorf("a1 was warned %d times, want exactly 1: the feed must not repeat one fact at poll cadence", warned["a1"])
+	if warned["a1"] > 1 {
+		t.Errorf("a1 was warned %d times, want at most 1: the feed must not repeat one fact at poll cadence", warned["a1"])
 	}
 	for tick, n := range warned {
 		if n != 1 {
