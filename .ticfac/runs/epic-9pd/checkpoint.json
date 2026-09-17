@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 168,
-  "state": "publishing",
-  "reason": "closing 5bp behind the integrated gate on dd37697cea32",
-  "updated_at": "2026-09-17T10:37:25Z",
+  "sequence": 169,
+  "state": "running",
+  "reason": "5bp is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-17T10:37:31Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -98,7 +98,7 @@
     },
     {
       "tick_id": "5bp",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 21
     },
     {
