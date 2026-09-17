@@ -2,11 +2,13 @@ package factory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // The operator-side tools `ticfac factory deploy` shells out to besides wrangler:
@@ -35,6 +37,11 @@ func dockerBinary() string {
 	return "docker"
 }
 
+// dockerProbeTimeout bounds the "is the daemon alive" question. It is short on
+// purpose: the answer is a local socket round-trip, so a healthy daemon returns
+// in milliseconds and anything near this bound is already a fault.
+const dockerProbeTimeout = 10 * time.Second
+
 // requireDocker proves a container engine is installed AND that its daemon
 // answers, because those are different failures with different remedies and
 // collapsing them is how a diagnosis goes to the wrong place.
@@ -56,9 +63,35 @@ func requireDocker(ctx context.Context) (string, error) {
 		}
 	}
 
+	// The probe gets its OWN deadline, because the failure it exists to catch
+	// is a daemon that does not answer — and a daemon that does not answer
+	// does not answer `docker version` either. Without a bound the command
+	// simply never returns, so the careful error below, written for precisely
+	// this case, can never be reached.
+	//
+	// That is not hypothetical. A wedged OrbStack left `docker version`
+	// running for over an hour on the operator's machine, and because
+	// TestFactoryDeployAndSetupAreWired invokes the real deploy path, the
+	// whole gate hung on it until go's own 45-minute timeout fired and refused
+	// tick oe0 — a tick that had nothing to do with Docker.
+	//
+	// A daemon with nothing to say in ten seconds has said it.
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, resolved, "version", "--format", "{{.Server.Version}}")
 	out, err := cmd.CombinedOutput()
 	version := strings.TrimSpace(lastNonEmptyLine(string(out)))
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "", &PrerequisiteError{
+			Missing: "a running Docker daemon",
+			Detail: "`" + bin + "` is installed but its daemon did not answer within " + dockerProbeTimeout.String() + " —\n" +
+				"it is reachable but wedged, which looks like nothing happening at all. Restart it\n" +
+				"(Docker Desktop, OrbStack, `colima restart`, …) and run `ticfac factory deploy`\n" +
+				"again.\n" +
+				strings.TrimSpace(string(out)),
+			Err: ctx.Err(),
+		}
+	}
 	if err != nil || version == "" {
 		return "", &PrerequisiteError{
 			Missing: "a running Docker daemon",
