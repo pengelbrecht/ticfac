@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 196,
-  "state": "dispatching",
-  "reason": "dispatching bzx as attempt 24",
-  "updated_at": "2026-09-17T18:39:53Z",
+  "sequence": 197,
+  "state": "running",
+  "reason": "bzx is running as attempt 24",
+  "updated_at": "2026-09-17T18:40:08Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -113,7 +113,8 @@
     },
     {
       "tick_id": "bzx",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 24
     },
     {
       "tick_id": "pbb",
