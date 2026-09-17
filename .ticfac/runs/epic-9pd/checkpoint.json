@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 157,
-  "state": "failed",
-  "reason": "c58d58ced8cc of main does not fold into epic/9pd: internal/herd/wirevocab/herd-vocabulary.json. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
-  "updated_at": "2026-09-17T09:42:08Z",
+  "sequence": 158,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-17T09:43:31Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -135,6 +135,14 @@
     {
       "tick_id": "n4h",
       "state": "ready"
+    },
+    {
+      "tick_id": "oe0",
+      "state": "ready"
+    },
+    {
+      "tick_id": "q1e",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -142,7 +150,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "dba98be0b201b0dd6cf49b609ea740e7f082240b",
+    "source_sha": "cda02618b65060902306ba08c6374cdedb1df8eb",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
