@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 156,
+  "sequence": 157,
   "state": "failed",
-  "reason": "19l did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the integrated gate on 6f55355d761c did not pass for 19l: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/9pd, so the repair is to fix the check or the tree, push it to epic/9pd, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
-  "updated_at": "2026-09-17T08:17:47Z",
+  "reason": "c58d58ced8cc of main does not fold into epic/9pd: internal/herd/wirevocab/herd-vocabulary.json. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
+  "updated_at": "2026-09-17T09:42:08Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -142,7 +142,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "27021ef03cc91fbed9897c825d4039f0665944c1",
+    "source_sha": "dba98be0b201b0dd6cf49b609ea740e7f082240b",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
