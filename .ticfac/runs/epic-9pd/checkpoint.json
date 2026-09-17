@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 201,
-  "state": "running",
-  "reason": "pbb is running as attempt 26",
-  "updated_at": "2026-09-17T18:41:04Z",
+  "sequence": 202,
+  "state": "dispatching",
+  "reason": "dispatching q1e as attempt 27",
+  "updated_at": "2026-09-17T18:41:17Z",
   "ticks": [
     {
       "tick_id": "0z0",
