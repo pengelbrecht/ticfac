@@ -1,0 +1,13 @@
+{
+  "id": "cy2",
+  "title": "A gate that runs beside live workers returns verdicts about the machine, not the tree",
+  "description": "First widened run of epic-9pd, 2026-09-17. bzx's integrated gate ran while three workers (oe0, pbb, q1e) were still thinking in their own worktrees. Every package took two to four times its usual wall clock - internal/reconcile 848s against 388s on a quiet machine, internal/runstate 601s against 164s - and one timing-sensitive test failed: TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown in internal/exec/herdr.\n\nbzx's own change touched internal/cli and nothing else. It was refused for a test in a package it never went near, because the run's own concurrency had saturated the machine. That is a verdict about the machine wearing a verdict's clothes.\n\nTwo fixes, one done: the specific test sampled a race it had set up itself (herdr completes the launch at 800ms, the client gives up at 300ms) and won it only while the machine was idle; it now waits for the spawn with a deadline. The systemic half is open. The gate declares -parallel 12, which assumes an idle host; at width N it is competing with N-1 agents and whatever they compile and test. Candidate shapes: derive the gate's parallelism from the width, quiesce dispatch while a gate runs, or give the gate a machine of its own (which is what Phase 4's cloud host would do for free).\n\nAlso worth a sweep: this is unlikely to be the only load-sensitive test, and each one is a tick refused at random until it is found.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A gate's verdict does not change with the number of workers running beside it: the same tree gates the same way at width 1 and width 4. Either the gate's resource envelope accounts for the run's width, or the run does not gate while it holds live attempts. The repository's timing-sensitive tests are identified and made to wait for conditions rather than sample them.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T20:39:02.905507Z",
+  "updated_at": "2026-09-17T20:39:02.905507Z"
+}
