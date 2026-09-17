@@ -25,6 +25,14 @@ import (
 // never a verdict. The gap does not change the exit code — that stays
 // liveness's answer alone, so a watcher loops over it exactly as before.
 //
+// Since tick q1e it also reports, for an in-flight attempt, the fact the run
+// has already said on its feed: this attempt's wall clock FIRED, and it has
+// not settled — the moment the run stops making progress on its own. The
+// fact is the feed line's typed stage and attempt identity, never its
+// prose, and never its position: the firing joins the attempt's own line
+// even when later events follow, because a watcher reading status while the
+// run polls on cannot be expected to have seen the line when it was last.
+//
 // It exits 0 only while the run is alive, so a watcher is a loop over the exit
 // code — `while ticfac status <run-id> >/dev/null; do sleep 15; done` — with
 // nothing to parse and nothing to match. --json is the same answer for a
@@ -74,8 +82,24 @@ func statusCommand(args []string, stdout, stderr io.Writer) int {
 		// cannot disagree about what was measured. "?" is the honest answer
 		// for a fact this attempt cannot show (tick 7zs).
 		for _, a := range status.Attempts {
-			fmt.Fprintf(stdout, "attempt %d of %s: branch %s last moved %s ago; worktree %s last changed %s ago\n",
+			line := fmt.Sprintf("attempt %d of %s: branch %s last moved %s ago; worktree %s last changed %s ago",
 				a.Attempt, a.TickID, a.Branch, gapOf(a.BranchIdle), a.Worktree, gapOf(a.WorktreeIdle))
+			// The attempt's own wall clock firing joins the line by the identity
+			// both carry (tick q1e): the run said the bound passed and the
+			// attempt is still in flight, so a watcher reading status — not
+			// only one watching the feed — is told, with the executor's last
+			// word the run put on the line.
+			if w := wallClockOf(status.WallClocks, a); w != nil {
+				fired := "?"
+				if w.FiredAgo != nil {
+					fired = gapOf(w.FiredAgo)
+				}
+				line += fmt.Sprintf("; wall clock fired %s ago", fired)
+				if w.Detail != "" {
+					line += " — " + w.Detail
+				}
+			}
+			fmt.Fprintf(stdout, "%s\n", line)
 		}
 	}
 	if status.State == runlife.Alive {
@@ -93,4 +117,17 @@ func gapOf(d *runprogress.Duration) string {
 		return "?"
 	}
 	return d.Round(time.Second).String()
+}
+
+// wallClockOf finds the one firing that belongs to an attempt, by the tick
+// and attempt identity both carry — never by prose, and never by order: a
+// firing the run reported for another attempt, or a line that merely names
+// the wall clock in its detail, does not join this attempt's line (tick q1e).
+func wallClockOf(wall []runlife.WallClock, a runprogress.Attempt) *runlife.WallClock {
+	for i := range wall {
+		if wall[i].TickID == a.TickID && wall[i].Attempt == a.Attempt {
+			return &wall[i]
+		}
+	}
+	return nil
 }

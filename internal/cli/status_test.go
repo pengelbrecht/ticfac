@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 )
 
@@ -133,5 +135,110 @@ func TestTheGapChangesNoVerdict(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "attempt 1 of a1") {
 		t.Errorf("a dead run's standing attempt is not reported — the leftover worktree is exactly the case the gaps exist for:\n%s", out.String())
+	}
+}
+
+// The wall clock FIRING is on the status surface for an in-flight attempt
+// (tick q1e): the run writes one typed feed line when a bound fires
+// (wall_feed_test.go, in reconcile), and `ticfac status` — the surface a
+// watcher reads while the run polls on — reports it beside the attempt's
+// gaps, from the line's own stage and identity, never from its prose, and
+// never from being the last thing the feed said.
+func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
+	t.Parallel()
+	repo := statusFixture(t, time.Now())
+	runID := "r-status"
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The run's own firing line, four minutes old, through the same writer
+	// the reconciler feeds with — then a LATER run-level line, so the firing
+	// is not the last event a status read could lean on.
+	firedAt := time.Now().UTC().Add(-4 * time.Minute).Truncate(time.Second)
+	detail := "the wall clock of 3600s fired 4m0s ago and attempt 1 of a1 has not settled: " +
+		"the executor is stopping it — the interrupt was delivered but the agent has not exited"
+	one := 1
+	feed := runfeed.Open(repo, runID)
+	if err := feed.Append(runfeed.NewEvent(firedAt, runID, "a1", &one,
+		reconcile.StageWallClock, detail)); err != nil {
+		t.Fatalf("append the firing line: %v", err)
+	}
+	if err := feed.Append(runfeed.NewEvent(firedAt.Add(3*time.Minute), runID, "", nil,
+		reconcile.StageBudgetSet, "the effective budget for this run is $1.00")); err != nil {
+		t.Fatalf("append the later line: %v", err)
+	}
+
+	var out bytes.Buffer
+	if code := statusCommand([]string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live run exited %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "wall clock fired 4m") {
+		t.Errorf("the attempt line does not report the firing:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), detail) {
+		t.Errorf("the attempt line does not carry the run's own words about what the executor saw:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := statusCommand([]string{"--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
+	}
+	var status runlife.Status
+	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
+		t.Fatalf("the JSON status does not decode: %v\n%s", err, out.String())
+	}
+	if len(status.Attempts) != 1 {
+		t.Fatalf("the JSON reports %d in-flight attempts, want 1", len(status.Attempts))
+	}
+	if len(status.WallClocks) != 1 {
+		t.Fatalf("the JSON reports no firing for an attempt whose wall clock fired:\n%s", out.String())
+	}
+	w := status.WallClocks[0]
+	if w.TickID != "a1" || w.Attempt != 1 {
+		t.Errorf("the JSON's firing reads as %s#%d, want a1#1", w.TickID, w.Attempt)
+	}
+	if w.FiredAt == nil || !w.FiredAt.Equal(firedAt) {
+		t.Errorf("the JSON's firing reads %s, want %s", w.FiredAt, firedAt)
+	}
+	if w.FiredAgo == nil || !strings.Contains(w.FiredAgo.String(), "4m") {
+		t.Errorf("the JSON's firing age is %+v, want ~4m", w.FiredAgo)
+	}
+	if w.Detail != detail {
+		t.Errorf("the JSON's firing detail does not carry the run's own line:\n got %q", w.Detail)
+	}
+}
+
+// The stall warning's prose NAMES the wall clock — "the wall clock of 3600s
+// is still the bound" — and none of that is a firing. The status surface
+// reports the typed fact alone: a watcher who reads a firing where the run
+// said only "still the bound" is sent at a stop that has not happened, and
+// the acceptance for this tick says neither surface is derived by matching
+// observation prose.
+func TestStatusReportsNoFiringFromProseAlone(t *testing.T) {
+	t.Parallel()
+	repo := statusFixture(t, time.Now())
+	runID := "r-status"
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+	one := 1
+	if err := runfeed.Open(repo, runID).Append(runfeed.NewEvent(
+		time.Now().UTC(), runID, "a1", &one, reconcile.StageStallWarned,
+		"attempt 1 of a1 is alive but has produced nothing durable for 15m0s: ... — "+
+			"the wall clock of 3600s is still the bound")); err != nil {
+		t.Fatalf("append the stall line: %v", err)
+	}
+
+	var out bytes.Buffer
+	if code := statusCommand([]string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live run exited %d: %s", code, out.String())
+	}
+	if strings.Contains(out.String(), "wall clock fired") {
+		t.Errorf("prose that names the wall clock reported a firing:\n%s", out.String())
 	}
 }

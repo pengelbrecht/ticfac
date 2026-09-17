@@ -8,6 +8,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -68,6 +69,38 @@ func TestTheWallClockFiringIsAFeedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The second half of this tick's acceptance is the join `ticfac status`
+	// makes: the typed firing line on the feed, and the attempt's STANDING
+	// worktree, present at the same moment — the two facts a probe joins by
+	// tick and attempt identity to report the firing for an in-flight
+	// attempt. The watcher below waits on the observable, the line appearing
+	// in the feed — never on a guessed interval — and snapshots the census
+	// the moment it lands, mid-run, while the attempt is still in flight.
+	standingWhenFired := make(chan []runprogress.Attempt, 1)
+	go func() {
+		deadline := time.Now().Add(60 * time.Second)
+		for time.Now().Before(deadline) {
+			events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
+			if err == nil {
+				fired := false
+				for _, line := range events {
+					if line.Stage == StageWallClock && line.TickID != nil && *line.TickID == "a1" {
+						fired = true
+					}
+				}
+				if fired {
+					if standing, err := runprogress.Standing(f.Repo.Dir, "r-fixture", time.Now()); err == nil {
+						select {
+						case standingWhenFired <- standing:
+						default:
+						}
+					}
+					return
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
 	done := make(chan struct{})
 	var result *Result
 	var runErr error
@@ -124,6 +157,27 @@ func TestTheWallClockFiringIsAFeedEvent(t *testing.T) {
 	}
 	if finished >= 0 && wallAt > finished {
 		t.Errorf("the firing landed after run_finished: the run was over before it said the bound had fired")
+	}
+
+	// And the join the status half makes was live: when the line landed, the
+	// attempt it named was standing in the repo — an in-flight attempt whose
+	// firing a watcher could be told about, not a line about an attempt that
+	// was already gone.
+	select {
+	case standing := <-standingWhenFired:
+		found := false
+		for _, a := range standing {
+			if a.TickID == "a1" && a.Attempt == 1 {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("when the firing line landed, the standing attempts were %+v: "+
+				"attempt 1 of a1 was not there for a status to report", standing)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watcher never saw the firing line land on the feed, though the journal " +
+			"says it did: the line this test asserts must be the line a non-participant reads")
 	}
 
 	// And it reached the FEED — the surface a non-participant subscribes to
