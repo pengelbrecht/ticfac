@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 180,
-  "state": "integrating",
-  "reason": "integrating 7zs attempt 22 into epic/9pd",
-  "updated_at": "2026-09-17T11:21:51Z",
+  "sequence": 181,
+  "state": "gating",
+  "reason": "running the integrated gate for 7zs on 476fb533adf7",
+  "updated_at": "2026-09-17T11:22:07Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -103,7 +103,7 @@
     },
     {
       "tick_id": "7zs",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 22
     },
     {
