@@ -1137,41 +1137,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return r.result(runstate.StateFailed, refusal.Error()), nil
 	}
 
-	var failed []string
-	for _, entry := range plan {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if err := r.processTick(ctx, entry); err != nil {
-			var refusal *Refusal
-			if !asRefusal(err, &refusal) {
-				return nil, err
-			}
-			failed = append(failed, entry.TickID)
-			r.failure = refusal
-			r.setTick(entry.TickID, "rejected")
-			// Two answers to one question, from tick 0z0 and tick emk, kept
-			// together because they are not the same claim.
-			//
-			// A refusal that HOLDS the run for a person gets its own vocabulary
-			// (StageRunHeld, 0z0): the feed is what a non-participant watches,
-			// and a hold nobody can see is a stall by definition. Every other
-			// refusal still reaches the feed in its own words (emk) — without
-			// that, the feed went from `dispatched` straight to a generic
-			// run_finished and the reason existed only in the source.
-			if holdsForAPerson(refusal.Reason) {
-				r.record(entry.TickID, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
-			} else {
-				r.recordRefusal(entry.TickID, refusal)
-			}
-			if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
-				return nil, cErr
-			}
-			// One epic at concurrency one: a tick that did not pass its gate
-			// blocks whatever came after it, and the run stops rather than
-			// integrating over an unproven change.
-			break
-		}
+	failed, err := r.runPlan(ctx, plan)
+	if err != nil {
+		return nil, err
 	}
 
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)

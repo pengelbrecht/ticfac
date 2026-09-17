@@ -217,6 +217,32 @@ func (r *Reconciler) execStateDir(tickID string, attempt int) string {
 
 // processTick takes one tick from wherever it already is to closed.
 func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
+	done, err := r.settleBeforeDispatch(ctx, entry)
+	if err != nil || done {
+		return err
+	}
+
+	fl, err := r.beginTick(ctx, entry)
+	if err != nil {
+		return err
+	}
+
+	status, err := r.awaitInflight(ctx, fl)
+	if err != nil {
+		return err
+	}
+
+	return r.finishTick(ctx, fl, status)
+}
+
+// settleBeforeDispatch is everything the run decides about a tick BEFORE it
+// dispatches anything: whether the tracker already closed it, whether a person
+// struck it out, and whether it is a role job — which is dispatched and acted
+// on in one piece rather than merged like a branch.
+//
+// It reports whether the entry is finished with; a true means nothing is in
+// flight for it and the run moves on.
+func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) (bool, error) {
 	tick := entry.TickID
 
 	// The tracker is the authority on whether a tick is closed. Reading it
@@ -225,15 +251,15 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	// run must not do it again.
 	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
-		return fmt.Errorf("read tick %s: %w", tick, err)
+		return false, fmt.Errorf("read tick %s: %w", tick, err)
 	}
 	if current.Status == "closed" {
 		r.setTick(tick, "closed")
 		r.record(tick, StageSkipped, "already closed in the tracker: %s", current.ClosedReason)
 		if _, err := r.checkpoint(runstate.StateRunning, "tick "+tick+" was already closed"); err != nil {
-			return err
+			return true, err
 		}
-		return nil
+		return true, nil
 	}
 
 	// Appendix A #11's read site. A struck-out unit is held until a PERSON
@@ -241,7 +267,7 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	unit := r.opts.EpicID + "/" + tick
 	if r.MayDispatch(unit) == Held {
 		r.record(tick, StageHeld, "%s is struck out and only a person releases it", unit)
-		return r.refuse(RefusedHeld, tick, "%s is struck out: a rolling window bounds the window, not the subject, "+
+		return true, r.refuse(RefusedHeld, tick, "%s is struck out: a rolling window bounds the window, not the subject, "+
 			"so this dispatch waits for a person and not for the clock", unit)
 	}
 
@@ -256,21 +282,38 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 		// left to the close-out worker's diligence.
 		if entry.Role == "closeout-epic" {
 			if err := r.admitCloseout(ctx, entry); err != nil {
-				return err
+				return true, err
 			}
 		}
-		return r.processRoleJob(ctx, entry)
+		return true, r.processRoleJob(ctx, entry)
 	}
 
+	return false, nil
+}
+
+// beginTick claims the tick and starts its attempt, and stops there.
+//
+// It is the half of a tick's processing that must happen before anybody can
+// wait for it, and the half a dispatch window runs up to `width` times before
+// waiting for any of them.
+func (r *Reconciler) beginTick(ctx context.Context, entry planEntry) (*inflightAttempt, error) {
 	handle, executor, marker, err := r.claimDispatch(ctx, entry)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return r.newInflight(entry, handle, executor, marker), nil
+}
 
-	status, err := r.waitForSettlement(ctx, handle, executor, marker)
-	if err != nil {
-		return err
-	}
+// finishTick is everything a settled attempt still owes: collect, integrate,
+// gate, close, clean up.
+//
+// This half is deliberately NOT concurrent, whatever the window's width. There
+// is one integration branch, and a gate that ran on a tree other than the one
+// being closed proves nothing about it — so attempts queue here and go through
+// one at a time, in the order they settled.
+func (r *Reconciler) finishTick(ctx context.Context, fl *inflightAttempt, status *subprocess.JobStatus) error {
+	entry, handle, executor, marker := fl.entry, fl.handle, fl.executor, fl.marker
+	tick := marker.TickID
 
 	// A resumed run does not collect an attempt it has already MERGED. The
 	// refusal that stopped the previous incarnation — the gate, or the
@@ -1052,9 +1095,20 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 			BaseSHA:    d.BaseSHA,
 			WriteRef:   d.WriteRef,
 		},
-		Capabilities:   subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
-		Inputs:         []subprocess.Input{{Kind: "tick", ID: d.TickID}, {Kind: "epic", ID: d.EpicID}},
-		OutputSchema:   outputSchemaFor(d.Role),
+		Capabilities: subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
+		Inputs:       []subprocess.Input{{Kind: "tick", ID: d.TickID}, {Kind: "epic", ID: d.EpicID}},
+		OutputSchema: outputSchemaFor(d.Role),
+		// The one key here that is NOT scoped to an attempt: run and tick, no
+		// attempt number. It is safe, but not locally — so, since the run now
+		// dispatches a window of attempts at once, the reason is written down.
+		//
+		// The prefix feeds excludeFromGit, which appends a line to
+		// info/exclude, and info/exclude is shared by every linked worktree of
+		// the repository. Two attempts sharing one line would mean disposing
+		// the first removes it while the second still needs it. That cannot
+		// happen: the plan carries one entry per tick and the window admits one
+		// entry at a time, so two attempts of the SAME tick are never live
+		// together, and two different ticks have two different prefixes.
 		ArtifactPrefix: "runs/" + d.RunID + "/" + d.TickID + "/",
 		Credentials: subprocess.Credentials{
 			Model:  subprocess.ModelCredential{Shorthand: "issued-by-host"},
@@ -1334,29 +1388,86 @@ func (r *Reconciler) priorReports(tickID string, attempt int) []subprocess.Prior
 // addressed is the keepalive, and it stays well under the substrate's wipe
 // threshold.
 func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) (*subprocess.JobStatus, error) {
-	step := r.OpenStep(r.stepCap)
-	deadline := r.settlementDeadline(marker)
-	cursor := ""
-	// The cadence is the EXECUTOR's, not one global constant: the marker
-	// names the executor this attempt was dispatched under, and a local
-	// substrate wants seconds where a cloud one wants the slow keepalive
-	// beat (tick u9l, epic av8).
-	interval := r.pollIntervalFor(marker.Executor)
+	return r.awaitInflight(ctx, r.newInflight(planEntry{TickID: marker.TickID}, handle, executor, marker))
+}
+
+// awaitInflight addresses ONE attempt until it settles — the sequential wait,
+// expressed as a window of one.
+func (r *Reconciler) awaitInflight(ctx context.Context, fl *inflightAttempt) (*subprocess.JobStatus, error) {
 	for {
-		if err := ctx.Err(); err != nil {
+		status, err := r.addressOnce(ctx, fl)
+		if err != nil {
 			return nil, err
 		}
-		status, err := executor.Inspect(handle, cursor)
-		if err != nil {
-			return nil, fmt.Errorf("inspect %s: %w", marker.TickID, err)
-		}
-		if status.Cursor != nil {
-			cursor = *status.Cursor
-		}
-		if status.Terminal {
-			r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
+		if status != nil {
 			return status, nil
 		}
+		if err := r.restBetweenPolls(fl); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// inflightAttempt is one dispatched attempt the run is addressing, and the
+// per-attempt state the addressing carries between polls.
+//
+// It exists so that the wait can be MULTIPLEXED: one goroutine addresses
+// several attempts by taking one poll of each in turn, rather than blocking on
+// the first until it settles. Every field here used to be a local variable of
+// waitForSettlement, which is exactly why only one attempt could ever be
+// waited on at a time.
+type inflightAttempt struct {
+	entry    planEntry
+	handle   *subprocess.JobHandle
+	executor Executor
+	marker   attemptHandle
+
+	step     *Step
+	deadline time.Time
+	cursor   string
+	// interval is the cadence this attempt is addressed at. It is the
+	// EXECUTOR's, not one global constant (tick u9l, epic av8), so a window
+	// holding a local and a cloud attempt addresses each at its own beat.
+	interval time.Duration
+}
+
+func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
+	return &inflightAttempt{
+		entry: entry, handle: handle, executor: executor, marker: marker,
+		step:     r.OpenStep(r.stepCap),
+		deadline: r.settlementDeadline(marker),
+		interval: r.pollIntervalFor(marker.Executor),
+	}
+}
+
+// addressOnce takes exactly ONE poll of one in-flight attempt.
+//
+// It returns the settled status when the attempt is terminal, a refusal when
+// the attempt cannot be addressed or has outlived its bounds, and (nil, nil)
+// when the honest answer is "still running, ask again later". The caller owns
+// the waiting, which is what lets one caller own SEVERAL attempts.
+//
+// Everything this touches — the feed, the store, the run's own counters — is
+// touched from the caller's goroutine. That is deliberate: this run's three
+// worst defects were all process-global git state written by two parties at
+// once, and a window that polls in one goroutine cannot reproduce them.
+func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*subprocess.JobStatus, error) {
+	marker := fl.marker
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	status, err := fl.executor.Inspect(fl.handle, fl.cursor)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", marker.TickID, err)
+	}
+	if status.Cursor != nil {
+		fl.cursor = *status.Cursor
+	}
+	if status.Terminal {
+		r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
+		return status, nil
+	}
+	{
 		if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
 				"attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, "+
@@ -1401,7 +1512,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		// `running` is one nobody can say is running. That is `unaddressed`,
 		// not `wiped`: the substrate did not take it away, and a person is the
 		// next actor (settle.go).
-		if now := r.now(); now.After(deadline) {
+		if now := r.now(); now.After(fl.deadline) {
 			// What the executor last SAW goes in the refusal, because the two
 			// shapes need different first moves. A local subprocess whose
 			// supervisor died leaves a pid nobody can trust. A herdr agent can
@@ -1413,7 +1524,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and its executor "+
 					"could not settle it: %s. Nobody can say it is finished; look at it, stop whatever is still "+
 					"running, then release it with `ticfac settle %s %s %d --release \"<who>\"`",
-				marker.Attempt, marker.TickID, status.State, now.Sub(deadline).Round(time.Second),
+				marker.Attempt, marker.TickID, status.State, now.Sub(fl.deadline).Round(time.Second),
 				r.opts.WallSeconds, lastObservation(status), r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
@@ -1426,20 +1537,21 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 				marker.Attempt, marker.TickID, r.wipeThreshold)
 		}
 
-		if step.Spend(interval) == ExceededCap {
-			// This leg is over. The next one is a FRESH step that re-derives
-			// its state from durable facts rather than continuing this one.
-			if _, err := r.store.Fetch(); err != nil {
-				return nil, err
-			}
-			if checkpoint, ok, err := r.store.Checkpoint(); err == nil && ok {
-				r.sequence, r.ticks = checkpoint.Sequence, checkpoint.Ticks
-			}
-			step = r.OpenStep(r.stepCap)
-			continue
-		}
-		r.sleep(interval)
 	}
+	return nil, nil
+}
+
+// restBetweenPolls is the pause between one attempt's polls, and the place the
+// step cap is spent.
+//
+// Appendix A #3: no step outlives the host's cap, so a long wait is spread
+// across bounded legs and each leg RE-DERIVES what it knows from durable facts
+// rather than carrying the previous leg's memory. The re-derivation is the
+// run's, not the attempt's — a window of attempts shares one store and one set
+// of counters — so a leg that ends re-reads once and every attempt in the
+// window continues against what it read.
+func (r *Reconciler) restBetweenPolls(fl *inflightAttempt) error {
+	return r.restWindow([]*inflightAttempt{fl})
 }
 
 // lastObservation is the executor's own last word about an attempt, for a
