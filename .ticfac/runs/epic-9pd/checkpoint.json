@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 211,
-  "state": "gating",
-  "reason": "running the integrated gate for bzx on 6665b9a32629",
-  "updated_at": "2026-09-17T19:39:56Z",
+  "sequence": 212,
+  "state": "failed",
+  "reason": "the integrated gate on 6665b9a32629 did not pass for bzx: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/9pd, so the repair is to fix the check or the tree, push it to epic/9pd, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+  "updated_at": "2026-09-17T20:36:20Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -113,7 +113,7 @@
     },
     {
       "tick_id": "bzx",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 24
     },
     {
