@@ -102,7 +102,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 	report, hasReport := e.readReport(record)
 	_, cancelled := st.cancelled()
 
-	verdict, outcome, class, reason := e.classify(st, commits, hasReport, report, violations, artifactViolations, cancelled)
+	verdict, outcome, class, reason := e.classify(st, record.Spec.Role, commits, hasReport, report, violations, artifactViolations, cancelled)
 
 	result := &JobResult{
 		SchemaVersion: SchemaVersion,
@@ -179,16 +179,25 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 // check wins. The order is the collect vocabulary's own, and it is why a
 // worker that reports DONE over a branch with no commits is `no-commits`
 // rather than ready to merge.
+//
+// The no-commits check carries the role's own RECORDED rule (tick 19l,
+// NoCommitsIsFailure): for a role whose deliverable is its answer rather
+// than a change — the review, dispatched read-only — an empty branch is what
+// a correct attempt looks like, so the check does not fail and the next one
+// decides. For every other role the branch IS the deliverable and the check
+// fails as it always did. A verdict minted here is therefore already the
+// role's rule, which is what lets the reconciler act on it without asking
+// the role's question a second time.
 // `reason` is what the MESSAGE is keyed on, and it is not always the verdict:
 // a cancellation and a worker that never reported both leave no report, and
 // telling a person the same sentence about both is Appendix A #9's failure.
-func (e *Executor) classify(st *store, commits int, hasReport bool,
+func (e *Executor) classify(st *store, role string, commits int, hasReport bool,
 	report Report, violations, artifactViolations []string, cancelled bool) (verdict, outcome, class, reason string) {
 
 	switch {
 	case cancelled:
 		return VerdictMissingResult, OutcomeCancelled, "", reasonCancelled
-	case commits == 0:
+	case commits == 0 && NoCommitsIsFailure(role):
 		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case !hasReport || report.Status == "":
 		if st.wallClockExceeded() {

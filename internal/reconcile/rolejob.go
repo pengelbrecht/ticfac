@@ -100,11 +100,14 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 
 // collectRole collects a role job and holds its answer to the contract.
 //
-// It does not apply the collect vocabulary's merge verdict: `no-commits` is
-// what a correct read-only review looks like, and refusing it would refuse
-// every review this phase runs. What it does keep is A10's boundary — a job
-// that wrote under an authority that is not its own is refused whatever it
-// answered — and then the envelope itself.
+// What it does not do is apply the merge verdict a plain tick's collect would:
+// the recorded no-commits rule (tick 19l, subprocess.NoCommitsIsFailure) is
+// already carried by the verdict the executor minted — a review's empty
+// branch collects as ready-to-merge — so the one verdict this path still
+// refuses is the one the role's own recorded rule says IS a failure. What it
+// keeps regardless is A10's boundary — a job that wrote under an authority
+// that is not its own is refused whatever it answered — and then the envelope
+// itself.
 func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *subprocess.JobHandle, executor Executor,
 	marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, *subprocess.RoleResult, error) {
 
@@ -118,7 +121,10 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 		return nil, nil, fmt.Errorf("collect %s: %w", tick, err)
 	}
 	r.setTick(tick, "reported")
-	r.record(tick, StageCollected, "%s answered %s (%s)", entry.Role, collected.Result.Outcome, collected.Verdict)
+	// Tick 19l: what the role answered and what the run concluded are two
+	// claims by two parties, stated separately — never one sentence that reads
+	// as the worker declaring the run's verdict.
+	r.record(tick, StageCollected, "%s", collectedLine("the "+entry.Role+" job", collected))
 
 	// collect's own durability rule (ticfac tick 55i), for the same reason:
 	// a role job's branch is kept when it carries commits, and a refusal here
@@ -153,6 +159,27 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 		return nil, nil, r.refuse(RefusedBoundary, tick,
 			"the %s job for %s wrote under an authority that is not its own (%s): %s",
 			entry.Role, tick, strings.Join(collected.BoundaryViolations, ", "), collected.Message)
+	}
+
+	// The recorded no-commits rule (tick 19l), enforced. The executor's
+	// classify mints `no-commits` only for a role whose recorded rule says an
+	// empty branch IS a failure — a review's empty branch collects as
+	// ready-to-merge, because its deliverable is the answer the validation
+	// below reads — so a role job arriving here with that verdict is one whose
+	// rule was decided against it and whose attempt did not meet it: the
+	// close-out, whose retro and learnings are its write deliverable. The tick
+	// is NOT closed behind the answer: for such a role an empty branch is an
+	// undelivered deliverable, and closing over it would make the recorded
+	// rule a word nobody acts on. The findings channel ran already, so what a
+	// refused attempt discovered is still drafted.
+	if collected.Verdict == subprocess.VerdictNoCommits {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageRejected, "the %s job made no commits: the role answered %s, and the run's verdict is %s",
+			entry.Role, roleAnswerOf(collected), collected.Verdict)
+		return nil, nil, r.refuse(RefusedCollect, tick,
+			"the %s job for %s answered %s, and the run's verdict is %s (%s): %s. The tick is NOT closed: for this role an "+
+				"empty branch is an undelivered deliverable, whatever the answer says",
+			entry.Role, tick, roleAnswerOf(collected), collected.Verdict, collected.Result.Outcome, collected.Message)
 	}
 
 	answer := collected.Result.RoleResult
@@ -311,4 +338,34 @@ func asRecordMap(record any) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// roleAnswerOf is the role's OWN answer, as its report stated it — for a feed
+// line that must never attribute the run's verdict to the worker (tick 19l).
+// The pwp run's close-out answered DONE_WITH_CONCERNS, the run concluded
+// failed (no-commits), and one line that read "closeout-epic answered
+// failed (no-commits)" sent the diagnosis looking for a worker that had
+// declared failure — it had not. When no report was readable the answer is
+// stated as that fact, not invented: this run does not put a status in a
+// mouth that never said one.
+func roleAnswerOf(collected *subprocess.Collection) string {
+	if collected.Result != nil && collected.Result.RoleResult != nil && collected.Result.RoleResult.Status != "" {
+		return collected.Result.RoleResult.Status
+	}
+	return "with no report the run could read"
+}
+
+// collectedLine is the feed line for a collected attempt (tick 19l): what the
+// role answered, what the run concluded, and why — stated separately, so the
+// verdict is never attributed to the worker that never said it. `who` names
+// the job ("the review-epic job"); the two answers are the report's own
+// STATUS line and the run's verdict/outcome pair, and the why is the
+// collected message the refusal or the merge would carry anyway.
+func collectedLine(who string, collected *subprocess.Collection) string {
+	line := fmt.Sprintf("%s answered %s; the run's verdict is %s (%s)",
+		who, roleAnswerOf(collected), collected.Verdict, collected.Result.Outcome)
+	if collected.Message != "" {
+		line += ": " + collected.Message
+	}
+	return line
 }

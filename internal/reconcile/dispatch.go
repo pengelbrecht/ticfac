@@ -1544,7 +1544,10 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
 	}
 	r.setTick(marker.TickID, "reported")
-	r.record(marker.TickID, StageCollected, "verdict %s (%s)", collected.Verdict, collected.Result.Outcome)
+	// Tick 19l: what the worker answered and what the run concluded are two
+	// claims by two parties, stated separately — never one sentence that reads
+	// as the worker declaring the run's verdict.
+	r.record(marker.TickID, StageCollected, "%s", collectedLine("the "+marker.Role+" job", collected))
 
 	// The work this collect is about to rule on is made durable on origin
 	// BEFORE any verdict is recorded over it (ticfac tick 55i). The only

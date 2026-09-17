@@ -113,7 +113,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			record.Attempt, record.JobID, record.ResultPath)
 	}
 
-	verdict, outcome, class, reason := classify(commits, hasReport, report, violations, artifactViolations, cancelled, wallExceeded)
+	verdict, outcome, class, reason := classify(record.Spec.Role, commits, hasReport, report, violations, artifactViolations, cancelled, wallExceeded)
 
 	result := &subprocess.JobResult{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -189,6 +189,13 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // local executor — including the artifact-prefix backstop, which sits where
 // the local executor puts it, after the tracker-record boundary.
 //
+// The no-commits check carries the role's own RECORDED rule (tick 19l,
+// subprocess.NoCommitsIsFailure) — the same one the local executor's
+// classify applies, for the same reason: a review's deliverable is its
+// answer, so its empty branch is what a correct attempt looks like, while
+// every other role's branch is its deliverable. A verdict minted here is
+// therefore already the role's rule.
+//
 // The wall-clock stop carries the failure class Phase 1 already
 // distinguishes — wall_clock_exceeded, the same word the local executor's
 // collect answers — but it does not by itself decide anything: the checks
@@ -199,7 +206,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // It is reached only for attempts that carry settlement evidence — the
 // liveness-unknown hold in CollectDetail returned first — so every branch
 // below is a verdict from durable evidence, never a guess.
-func classify(commits int, hasReport bool, report subprocess.Report,
+func classify(role string, commits int, hasReport bool, report subprocess.Report,
 	violations, artifactViolations []string, cancelled, wallExceeded bool) (verdict, outcome, class, reason string) {
 
 	// The order is the LOCAL executor's own, because it is the collect
@@ -210,7 +217,7 @@ func classify(commits int, hasReport bool, report subprocess.Report,
 	switch {
 	case cancelled:
 		return subprocess.VerdictMissingResult, subprocess.OutcomeCancelled, "", reasonCancelled
-	case commits == 0:
+	case commits == 0 && subprocess.NoCommitsIsFailure(role):
 		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
 	case !hasReport || report.Status == "":
 		// No report, or one nobody can read. Which of the two it is, the
