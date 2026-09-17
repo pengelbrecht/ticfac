@@ -49,6 +49,27 @@ const (
 	// DefaultWallSeconds bounds one job. An unbounded job is one nothing stops.
 	DefaultWallSeconds = 3600
 
+	// DefaultGateTimeout bounds one gate command, and it is deliberately
+	// LONGER than the timeouts a gate command declares for itself.
+	//
+	// A gate that names its own bound — `go test -timeout 45m` — has said what
+	// it considers too long, and that bound is the useful one: go's timeout
+	// prints the stack of every running goroutine, so the answer is "this test
+	// hung, here is where". A harness bound underneath it pre-empts that and
+	// substitutes `signal: killed`, exit -1, which names nothing.
+	//
+	// This was 30 minutes against a declared 45, and the two disagreed from the
+	// day they were written. Nothing noticed while the run worked one tick at a
+	// time and a gate finished in ten minutes. The first widened run hit it
+	// immediately: bzx's gate ran against three live workers competing for the
+	// machine, crossed 30 minutes, and was killed with no diagnosis at all —
+	// the tick was refused for the run's own scheduling rather than for
+	// anything about its work.
+	//
+	// So the harness bound is the outer one: the backstop for a command that
+	// declares no timeout of its own, or whose own timeout failed to fire.
+	DefaultGateTimeout = 60 * time.Minute
+
 	// DefaultStallWarnAfter is how long an in-flight attempt may produce
 	// nothing durable — its branch unmoved, its worktree unchanged — before
 	// the run says so in the feed (tick 7zs). It is an EARLY WARNING, not a
@@ -663,7 +684,7 @@ func New(opts Options) (*Reconciler, error) {
 		opts.RepoConfig = repoConfigPath(opts.Repo)
 	}
 	if opts.GateTimeout <= 0 {
-		opts.GateTimeout = 30 * time.Minute
+		opts.GateTimeout = DefaultGateTimeout
 	}
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = DefaultPollInterval
