@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 233,
-  "state": "collecting",
-  "reason": "collecting pbb attempt 26",
-  "updated_at": "2026-09-17T22:23:56Z",
+  "sequence": 234,
+  "state": "integrating",
+  "reason": "integrating pbb attempt 26 into epic/9pd",
+  "updated_at": "2026-09-17T22:24:12Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -118,7 +118,7 @@
     },
     {
       "tick_id": "pbb",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 26
     },
     {
