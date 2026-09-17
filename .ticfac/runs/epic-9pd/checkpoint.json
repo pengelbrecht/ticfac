@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 228,
-  "state": "gating",
-  "reason": "running the integrated gate for oe0 on 84110f735602",
-  "updated_at": "2026-09-17T22:16:48Z",
+  "sequence": 229,
+  "state": "publishing",
+  "reason": "closing oe0 behind the integrated gate on 84110f735602",
+  "updated_at": "2026-09-17T22:23:05Z",
   "ticks": [
     {
       "tick_id": "0z0",
