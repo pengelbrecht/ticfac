@@ -579,3 +579,4 @@
 {"ts":"2026-09-17T18:38:58.633263Z","tick":"9wo","action":"close","actor":"claude:orchestrator","epic":"9pd","data":{"reason":"The A1 observer test is on epic/9pd as 8d38bf4 and the full declared gate passed on the tree carrying it. The work is attempt 23's, recovered from its worktree after the orchestrator's own machine contention starved it of a verification run.","title":"A1 needs a test that observes a LIVE run three ways, not a bare store"}}
 {"ts":"2026-09-17T18:40:00.604513Z","tick":"bzx","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"run-epic says nothing on stdout while it runs"}}
 {"ts":"2026-09-17T18:40:27.85266Z","tick":"oe0","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Gate evidence reuse ignores the record's profile_digest"}}
+{"ts":"2026-09-17T18:40:56.337376Z","tick":"pbb","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"A wall-clock stop throws away the attempt's uncommitted work"}}
