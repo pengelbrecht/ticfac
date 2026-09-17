@@ -2,13 +2,14 @@
   "id": "usx",
   "title": "ticfac watch still replays an earlier incarnation's terminal line",
   "description": "Found by tick 55i (run epic-9pd, attempt 2). 55i fixed events --follow with a from-now cursor. ticfac watch, added by tick 0z0 in the same run, still calls runfeed.Follow from offset zero: a watch started on a resumed run reads the previous incarnation's run_finished first, exits at once, and reports a failure that already happened. It is the defect 55i describes, in the command built to be alerted by it. Same fix shape (follow from the end), and its run_held semantics need deciding: whether a watch started while a run is already holding should report the hold it joined.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "9pd",
   "acceptance_criteria": "A watch started on a resumed run does not exit on a previous incarnation's terminal line, and a watch started while the run holds an attempt reports that hold; both proven by tests",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T11:03:30.202753Z",
-  "updated_at": "2026-09-15T11:03:30.202753Z"
+  "updated_at": "2026-09-17T22:23:41.630884Z",
+  "started_at": "2026-09-17T22:23:41.630884Z"
 }
