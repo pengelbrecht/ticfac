@@ -1,0 +1,13 @@
+{
+  "id": "w9k",
+  "title": "At width N every live job is issued the whole run budget",
+  "description": "dispatch.go:1042-1045 puts r.budget.Effective on each dispatch and dispatch.go:1120 puts it on the job spec as Limits.MaxCostUSD. With the dispatch window (tick 5fx) N jobs are live at once, and each carries the run's entire budget: the run can authorise N x effective while ReportBudget told the operator one number.\n\nHarmless on today's substrate - dispatch.go:1110-1119 records that the number is informational because the credential is flat-rate and unmetered - but Appendix A #12 promises that the number REPORTED is the number that will govern, and on a metered executor that promise would be false by a factor of the width. The width is the missing divisor.\n\nFound by the concurrency audit of 5fx.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The budget a dispatch carries accounts for the run's width, so the sum authorised across every live job cannot exceed the reported effective budget. A test covers a run at width \u003e 1. What the operator is told at submission is what governs.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-17T12:19:50.74343Z",
+  "updated_at": "2026-09-17T12:19:50.74343Z"
+}
