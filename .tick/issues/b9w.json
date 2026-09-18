@@ -2,12 +2,14 @@
   "id": "b9w",
   "title": "The TypeScript control plane is pinned to contract bundle 3.0.0 and the bundle is 5.2.0",
   "description": "cloud/factory/contracts.pin.json says bundleVersion 3.0.0; contracts/bundle.json is 5.2.0. The gap contains a MAJOR bump.\n\n4.1.0's own changelog entry: 'Three closed records moved shape and a fixture gained the two pins it was missing - an unchanged consumer of any of the three is now WRONG, and under the closed-records rule that means new schema_ids, not new fields on the old ones.' 5.2.0 on top is MINOR and additive (the run event feed), so an unchanged consumer is still correct but no longer complete.\n\nSo the TypeScript half of the product is not merely stale: it is wrong about three record shapes, against the contract the Go half ships today. Nothing caught it because nothing runs cloud/factory's tests - which is tick odc, and which is why this was found only when odc went looking.\n\nThe repair is the one the failure message itself prescribes, and the order matters: read contracts/CHANGELOG.md, make the TypeScript side follow what each entry says changed, and move the pin LAST. Moving the pin first is adopting a contract change without reading it.\n\nThis blocks odc (a gate cannot be added while it is red) and therefore blocks Phase 4, which moves this code and then has it host the reconciler. Building a Workflow-hosted reconciler on a consumer that is wrong about three record shapes is not a foundation.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "cloud/factory's tests pass against bundle 5.2.0 with the pin moved to 5.2.0, and the three records 4.1.0 changed are handled under their new schema_ids rather than patched onto the old ones. The CHANGELOG entries between 3.0.0 and 5.2.0 are each accounted for in the diff or explicitly recorded as needing nothing.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T12:13:21.827228Z",
-  "updated_at": "2026-09-18T12:13:21.827228Z"
+  "updated_at": "2026-09-18T13:48:30.688318Z",
+  "closed_at": "2026-09-18T13:48:30.688318Z",
+  "closed_reason": "Merged to main (PR #5, CI green). cloud/factory adopts contract bundle 5.2.0: provenance's real 17 fields (it asserted 14, missing substrate_protocol, substrate_server_version and tier), evidence v1-\u003ev3, role-result v1-\u003ev2, schema_version 1-\u003e3, plus test/run-event-feed.test.ts as the second reader the pin refused to accept the contract without. 53 files, 1421 tests green."
 }
