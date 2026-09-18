@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 45,
-  "state": "collecting",
-  "reason": "collecting vyg attempt 3",
-  "updated_at": "2026-09-18T17:02:51Z",
+  "sequence": 46,
+  "state": "integrating",
+  "reason": "integrating vyg attempt 3 into epic/ncv",
+  "updated_at": "2026-09-18T17:03:09Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -33,7 +33,7 @@
     },
     {
       "tick_id": "vyg",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 3
     },
     {
