@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 304,
-  "state": "publishing",
-  "reason": "closing vw0 behind the integrated gate on 55c15f8ed7f2",
-  "updated_at": "2026-09-18T07:18:32Z",
+  "sequence": 305,
+  "state": "running",
+  "reason": "vw0 is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T07:18:38Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -133,7 +133,7 @@
     },
     {
       "tick_id": "vw0",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 30
     },
     {
