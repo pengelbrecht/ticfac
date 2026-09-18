@@ -52,6 +52,20 @@ type Options struct {
 	// boundary, the status vocabulary — and never the role.
 	RolePrompt string
 
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), which the rendered worker prompt names so a re-dispatched
+	// attempt does not start blind. It is host-supplied for the same reason
+	// the role prompt is: the protocol's records are closed, and the
+	// caller — the reconciler — is the one that knows where the predecessors'
+	// state directories live.
+	PriorReports []PriorReport
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), which the rendered worker prompt points the
+	// worker at — the uncommitted work a stopped predecessor left behind.
+	// Host-supplied for the same reason the prior reports are.
+	PriorSnapshots []PriorSnapshot
+
 	// SupervisorArgv is how this executor re-invokes itself to supervise an
 	// attempt. Defaults to the running executable plus "supervise".
 	SupervisorArgv []string
@@ -66,6 +80,16 @@ type Options struct {
 	// reconciler owns its shape, so parsing an attempt out of it would be this
 	// side deciding what the other side's identifier means.
 	Attempt int
+
+	// Try is which try of its OWN tick this attempt is: 1 for the tick's
+	// first dispatch, 2 for the redispatch after a spent one — whatever the
+	// run-wide number is (tick vw0). Host-supplied for the same reason
+	// Attempt is, and reaching the runner as $TICFAC_TRY for the reason the
+	// two numbers differ: Attempt counts every dispatch the RUN made and is
+	// the attempt's identity, while a worker asking "is this my tick's first
+	// try?" must not have to infer the answer from a number that moved
+	// because another tick was dispatched first.
+	Try int
 
 	PushInterval  time.Duration
 	SalvageWindow time.Duration
@@ -318,28 +342,31 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	}
 
 	record := &attemptRecord{
-		SchemaVersion: stateSchemaVersion,
-		Key:           attemptKey(e.repoKey, spec.JobID, attempt),
-		RepoKey:       e.repoKey,
-		Repo:          e.repo,
-		JobID:         spec.JobID,
-		Attempt:       attempt,
-		TickID:        tickOf(spec),
-		Branch:        branch,
-		WriteRef:      spec.Source.WriteRef,
-		BaseSHA:       base,
-		Worktree:      filepath.Join(dir, dirWorktree),
-		State:         dir,
-		Runner:        e.opts.Runner,
-		Model:         e.opts.Model,
-		RolePrompt:    e.opts.RolePrompt,
-		WallSeconds:   spec.Limits.WallSeconds,
-		PushInterval:  int(e.opts.PushInterval / time.Second),
-		PushOnTimer:   e.guarded("push_on_timer"),
-		Remote:        e.remoteFor(spec),
-		SourceGrade:   spec.Credentials.Source.Grade(),
-		IssuedAt:      e.stamp(),
-		Spec:          spec,
+		SchemaVersion:  stateSchemaVersion,
+		Key:            attemptKey(e.repoKey, spec.JobID, attempt),
+		RepoKey:        e.repoKey,
+		Repo:           e.repo,
+		JobID:          spec.JobID,
+		Attempt:        attempt,
+		Try:            e.opts.Try,
+		TickID:         tickOf(spec),
+		Branch:         branch,
+		WriteRef:       spec.Source.WriteRef,
+		BaseSHA:        base,
+		Worktree:       filepath.Join(dir, dirWorktree),
+		State:          dir,
+		Runner:         e.opts.Runner,
+		Model:          e.opts.Model,
+		RolePrompt:     e.opts.RolePrompt,
+		PriorReports:   e.opts.PriorReports,
+		PriorSnapshots: e.opts.PriorSnapshots,
+		WallSeconds:    spec.Limits.WallSeconds,
+		PushInterval:   int(e.opts.PushInterval / time.Second),
+		PushOnTimer:    e.guarded("push_on_timer"),
+		Remote:         e.remoteFor(spec),
+		SourceGrade:    spec.Credentials.Source.Grade(),
+		IssuedAt:       e.stamp(),
+		Spec:           spec,
 	}
 	rel, abs, err := resultPath(record.Worktree, spec.ArtifactPrefix, record.TickID)
 	if err != nil {

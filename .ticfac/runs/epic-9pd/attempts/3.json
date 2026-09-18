@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "attempt": 3,
+  "tick_id": "0iz",
+  "dispatched_at": "2026-09-15T11:14:23Z",
+  "job_handle": {
+    "attempt": 3,
+    "base_sha": "ffe8c089abd750e462b046a36fbc3cb501857b9c",
+    "executor": "herdr",
+    "job_id": "run-epic-9pd/tick-0iz/attempt-3",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:3d229556d593db5060d6a8d6bfb1599b",
+    "remote": "origin",
+    "role": "implement-tick",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.0",
+    "tick_id": "0iz",
+    "tier": "",
+    "touch": null,
+    "write_ref": "refs/heads/ticfac/run-epic-9pd/tick-0iz/attempt-3"
+  },
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "0iz",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "ffe8c089abd750e462b046a36fbc3cb501857b9c",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a69f0f2efccf98fe1b102acd824dbd39",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.0"
+  }
+}

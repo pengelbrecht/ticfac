@@ -169,13 +169,22 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 				branchOf(first.Source.WriteRef))
 		}
 
-		// The SAME checkout, not a fresh clone.
+		// The SAME checkout, not a fresh clone. Under blocked-first keyed on the
+		// tick's OWN try (tick vw0), the restart settles a1's redispatch — the
+		// half under test — and then dispatches a2 for the first time, whose
+		// own first try blocks exactly as a1's did and refuses the run again:
+		// a2 drew the run-wide number 3, and the mode no longer reads that as
+		// "not a first try".
 		restarted, result, err := f.run(f.Repo, opts)
 		if err != nil {
 			t.Fatalf("the restart did not finish: %v", err)
 		}
-		if result.State != runstate.StateCompleted {
-			t.Fatalf("the restart ended %s: %s", result.State, result.Reason)
+		if result.State != runstate.StateFailed {
+			t.Fatalf("the restart ended %s; a2's own first try should have refused it after a1's redispatch settled",
+				result.State)
+		}
+		if result.Failure == nil || result.Failure.TickID != "a2" {
+			t.Fatalf("the restart's refusal is %+v, want a2's first try", result.Failure)
 		}
 		if got := restarted.Stages("a1"); !contains(got, StageRedispatched) {
 			t.Errorf("the restart did not redispatch the spent attempt: %v", got)
@@ -195,6 +204,18 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 		if current.Status != "closed" {
 			t.Errorf("a1 is %s after the restart", current.Status)
 		}
+
+		// a2's refused first try left nothing, so a plain report run settles
+		// it — and proves nothing a1's redispatch left in the checkout is in
+		// the way of a later attempt working in the same place.
+		f.Runner = fakeRunnerArgv(t, "report")
+		_, done, err := f.run(f.Repo, fixtureOptions{})
+		if err != nil {
+			t.Fatalf("the settling run did not finish: %v", err)
+		}
+		if done.State != runstate.StateCompleted {
+			t.Fatalf("the settling run ended %s: %s", done.State, done.Reason)
+		}
 	})
 }
 
@@ -210,7 +231,7 @@ func TestTheWriteRefCarriesRunTickAndAttempt(t *testing.T) {
 	}
 	r.base = f.Repo.Base
 
-	dispatch, marker, err := r.planDispatch(planEntry{TickID: "a1", Role: "implement-tick"}, 2, 0)
+	dispatch, marker, err := r.planDispatch(planEntry{TickID: "a1", Role: "implement-tick"}, 2, 1, 0, nil)
 	if err != nil {
 		t.Fatalf("plan the dispatch: %v", err)
 	}

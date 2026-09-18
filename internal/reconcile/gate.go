@@ -84,11 +84,34 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		"profile_digest":          dispatchProfile.Digest,
 	}
 
+	// The gate's first check is structural, and it comes first because it is
+	// nearly free and because it is about something the declared commands
+	// cannot say: the commands prove the tree, and this proves that the repo's
+	// own CI configuration still DESCRIBES that tree. A workflow naming a
+	// package the tree deleted keeps the epic's PR red on every push while
+	// every command here stays green — the blindness tick cwa closes.
+	stale, err := r.staleWorkflowPatterns(merged.GateSHA)
+	if err != nil {
+		return err
+	}
+	if len(stale) > 0 {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageGateFailed, "the repo's own CI configuration is not about this tree: %s",
+			strings.Join(stale, "; "))
+		return r.refuse(RefusedGate, tick,
+			"the integrated gate on %s did not pass for %s: the repo's own CI configuration is not about this "+
+				"tree — %s. The tick is NOT closed, and the repair is the workflow or the tree, not the check: "+
+				"fix the workflow to name what the tree carries, or restore the package it names, push it to %s, "+
+				"and run the epic again under this run id: the gate runs again because this record is keyed by the "+
+				"commit it ran on and the fixed tree is a different commit",
+			short(merged.GateSHA), tick, strings.Join(stale, "; "), r.branch)
+	}
+
 	passed := true
 	var failures []string
 	keys := make([]string, len(r.gate))
 	for i, command := range r.gate {
-		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA)
+		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA, dispatchProfile.Digest)
 		if err != nil {
 			return err
 		}
@@ -138,6 +161,22 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 			return r.refuse(RefusedStale, tick,
 				"the gate's evidence for %s is no longer about what would be published (%s): publishing it would "+
 					"state a verdict about something else", tick, strings.Join(moved, "; "))
+		}
+	}
+
+	// The close-out's own commits are the one thing the admission's green CI
+	// is not evidence about (tick sqx): they are already merged onto the
+	// integration branch — the PR's head — and CI runs again on that head.
+	// The close-out's CLOSE is gated on green CI for IT, re-derived from the
+	// PR rather than trusted from the admission, for the same reason CI
+	// state is re-derived there: CI's answer changes with every push, and
+	// this push was the close-out's own. Other roles integrate onto the same
+	// branch and move the same head — but the rule a repository declares is
+	// a gate on the epic's CLOSE-OUT, the phase whose own writes are its
+	// deliverable, and their closes stand on the integrated gate above.
+	if entry.Role == "closeout-epic" {
+		if err := r.gateCloseoutClose(ctx, marker, merged); err != nil {
+			return err
 		}
 	}
 
@@ -457,30 +496,63 @@ func evidenceKey(tick string, attempt int, check string) string {
 // restarted; a new run id does not help, because the merge is still there and a
 // new attempt cut from the integration head finds the work already done.
 //
-// So a record is keyed to the commit it ran on, whatever it says. When the
-// previous record for this check was made at a DIFFERENT commit — a person
+// So a record is keyed to what it is evidence ABOUT, whatever it says. When
+// the previous record for this check was made over something else — a person
 // fixed the check or the tree and pushed it, which moves the integration
 // branch — this run asks for a record of its own and the check runs again.
-// When the commit is the same, the key is the same and the recorded verdict
-// stands: re-running a check on a commit nothing changed about would spend the
-// same minutes to reach the same answer, and evidence is never overwritten.
+// When nothing about the record's subject changed, the key is the same and
+// the recorded verdict stands: re-running a check on a commit nothing changed
+// about would spend the same minutes to reach the same answer, and evidence
+// is never overwritten.
 //
-// A PASS is keyed the same way, and that is the point rather than an oversight.
-// The gate is a list of commands and each one carries its own record, so a
-// verdict that reused a pass from an earlier commit would close the tick under
-// this commit's fingerprint on the strength of a check no run ever performed
-// here: the tree that passed and the tree being closed are not the same tree.
-// A pass says something about the commit it ran on and about no other.
-//
-// What "a different commit" means is the SOURCE tree, not the commit id. The
+// What a record is evidence about is the SOURCE tree, not the commit id. The
 // run writes its own records to `.ticfac/` on the branch it gates, so the
 // integration head moves whenever the run checkpoints — every resume, with no
 // change to anything a gate command reads. Keying on the raw commit is wrong in
-// both directions at once: too loose across a real change (the pass above) and
-// too tight across the run's own bookkeeping, where it re-pays for the whole
-// gate on every restart. sourceFingerprint is the key that is right in both:
-// the gated commit's top-level tree with the run's own entry dropped.
-func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA string) (string, error) {
+// both directions at once: too loose across a real change (a pass from another
+// tree would close this tick) and too tight across the run's own bookkeeping,
+// where it re-pays for the whole gate on every restart. sourceFingerprint is
+// the key that is right in both: the gated commit's top-level tree with the
+// run's own entry dropped.
+//
+// A PASS is keyed the same way, and that is the point rather than an oversight.
+// The gate is a list of commands and each one carries its own record, so a
+// verdict that reused a pass from an earlier tree would close the tick under
+// this tree's fingerprint on the strength of a check no run ever performed
+// here: the tree that passed and the tree being closed are not the same tree.
+// A pass says something about the tree it ran on and about no other.
+//
+// And it is the source tree TOGETHER WITH THE DECLARED GATE (tick 0dc). A
+// record stands for the gate that ran it, so the reuse judgement asks the
+// recorded context_manifest_digest before it re-reads a record as evidence —
+// without that comparison the digest was decorative on exactly one path. A
+// resumed run that adopts an already-merged attempt re-reads the old record
+// without running anything, and the freshness check it publishes through
+// compares the fingerprint the run WOULD have used against a target built the
+// same way, so a record the fresh path had just refused as stale — the gate
+// command changed mid-run — closed the tick five minutes later. A record from
+// a different declared gate now gets a key of its own, so the check re-runs
+// under the gate declared now and the close stands on evidence that is about
+// this gate. The rekey is still a function of the thing it identifies — the
+// source's fingerprint and the declared gate's — never of the history that
+// produced it, so it does not chain either.
+//
+// And it is the source tree TOGETHER WITH THE PROFILE THE ATTEMPT IS
+// DISPATCHED UNDER, as the run resolves it NOW (tick oe0). A gate command is
+// about the CHECK and the profile is about the WORKER, and that is the one
+// argument for leaving the profile out — but it loses here, twice over. The
+// record's own provenance NAMES the profile (profile_digest is one of Appendix
+// A #13's four), so a published record that says a verdict was produced under a
+// profile the current configuration no longer describes is exactly the claim
+// freshness exists to refuse; and the freshness index registers the fingerprint
+// the run WOULD use — the profile resolved now — while the record it re-reads
+// names the profile that dispatched the attempt, so on the reuse path the
+// publication check compares the new profile against itself and cannot see the
+// difference. The reuse path must ask the same question the fresh path is held
+// to: a record whose profile_digest is not the currently resolved profile is a
+// record from a different worker configuration, and it gets a key of its own
+// the same way a record from a different declared gate does.
+func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA, profileDigest string) (string, error) {
 	base := evidenceKey(tick, attempt, check)
 	if gateSHA == "" {
 		return base, nil
@@ -492,7 +564,64 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 	if err != nil {
 		return "", err
 	}
-	if !ok || existing.Provenance.SourceSHA == gateSHA {
+	if !ok {
+		return base, nil
+	}
+
+	gated, err := r.sourceFingerprint(gateSHA)
+	if err != nil {
+		return "", fmt.Errorf("fingerprint the source of %s for the gate's evidence key: %w", short(gateSHA), err)
+	}
+	// The suffix names the three things a record is evidence about — the
+	// declared gate's digest, the profile the run resolves now, and the
+	// source's fingerprint, in that order, so the key still ENDS with the tree
+	// it ran on the way the rekey's own test pins — and two resumes of the
+	// same subject under the same gate and profile name the same key, so the
+	// record minted for it stands rather than a third key being minted and
+	// the whole gate paid for again.
+	rekeyed := base + "-" + digestKeySuffix(r.gateDigest) + "-" + digestKeySuffix(profileDigest) + "-" + short(gated)
+
+	// The digest is part of the reuse judgement or it is decorative (tick 0dc).
+	// A record whose context_manifest_digest is not the currently declared
+	// gate's was produced by a different check, whatever tree it ran on, and a
+	// verdict from a different check is not a verdict about this gate.
+	recordedDigest := ""
+	if existing.Provenance.ContextManifestDigest != nil {
+		recordedDigest = *existing.Provenance.ContextManifestDigest
+	}
+	if recordedDigest != r.gateDigest {
+		was := digestKeySuffix(recordedDigest)
+		if was == "" {
+			was = "none"
+		}
+		r.record(tick, StageStale,
+			"the recorded %s gate ran under a different declared gate (%s was gated, %s is declared now), so the "+
+				"check runs again under the gate declared now", check, was, digestKeySuffix(r.gateDigest))
+		return rekeyed, nil
+	}
+
+	// The profile digest is part of the same reuse judgement (tick oe0). A
+	// record whose profile_digest is not the currently resolved profile was
+	// produced under a worker configuration the run no longer describes, and
+	// a verdict from a different profile is a verdict the record's own
+	// provenance contradicts: it names the profile that ran it, and publishing
+	// it under this run would state a verdict produced under something else.
+	recordedProfile := ""
+	if existing.Provenance.ProfileDigest != nil {
+		recordedProfile = *existing.Provenance.ProfileDigest
+	}
+	if recordedProfile != profileDigest {
+		was := digestKeySuffix(recordedProfile)
+		if was == "" {
+			was = "none"
+		}
+		r.record(tick, StageStale,
+			"the recorded %s gate ran under a different profile (%s dispatched it, %s is resolved now), so the "+
+				"check runs again under the profile resolved now", check, was, digestKeySuffix(profileDigest))
+		return rekeyed, nil
+	}
+
+	if existing.Provenance.SourceSHA == gateSHA {
 		return base, nil
 	}
 
@@ -504,10 +633,6 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 	// the whole gate again — the outcome the fingerprint exists to prevent. Two
 	// resumes of the same tree now name the same key, and the record already
 	// under it stands.
-	gated, err := r.sourceFingerprint(gateSHA)
-	if err != nil {
-		return "", fmt.Errorf("fingerprint the source of %s for the gate's evidence key: %w", short(gateSHA), err)
-	}
 	recorded, err := r.sourceFingerprint(existing.Provenance.SourceSHA)
 	if err != nil {
 		// Nobody can say whether the two commits carry the same source. The
@@ -518,12 +643,24 @@ func (r *Reconciler) gateEvidenceKey(tick string, attempt int, check, gateSHA st
 		r.record(tick, StageStale,
 			"the source of the recorded %s could not be read, so %s is gated under a key of its own: %v",
 			short(existing.Provenance.SourceSHA), short(gateSHA), err)
-		return base + "-" + short(gated), nil
+		return rekeyed, nil
 	}
 	if gated == recorded {
 		return base, nil
 	}
-	return base + "-" + short(gated), nil
+	return rekeyed, nil
+}
+
+// digestKeySuffix is the digest's spelling inside an evidence KEY. A key is a
+// filename (runstate.EvidencePath) and a citation, so the sha256 label and its
+// colon stay in the messages for people and the key carries the digest's own
+// hex, spelled as short spells the source fingerprint beside it.
+func digestKeySuffix(digest string) string {
+	digits := strings.TrimPrefix(digest, "sha256:")
+	if len(digits) > 12 {
+		digits = digits[:12]
+	}
+	return digits
 }
 
 func (r *Reconciler) sourceFingerprint(commit string) (string, error) {

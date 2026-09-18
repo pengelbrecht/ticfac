@@ -95,6 +95,17 @@ import (
 //     to interrupt. Any other error → OPERATIONAL: the revocation is
 //     already durable, the interrupt is reported as the error it is, and no
 //     teardown follows from it.
+//   - closeAtWall → PaneClose (the wall-clock stop's escalation, tick rj0):
+//     nil → the close was accepted, and the settlement waits for the
+//     confirm AgentGet's POSITIVE answer — the close settles nothing on its
+//     own, because herdr opens a fresh shell pane in the closed pane's
+//     place. gone → POSITIVE, the agent (and its pane) already went. Any
+//     other error → OPERATIONAL: the close is HELD, reported as the
+//     observation it is, and re-attempted at every poll; the worktree
+//     snapshot that gates the close carries the same rule one step earlier
+//     — a snapshot that cannot land holds the close, because a stop that
+//     destroys the work it was sent to bound is a worse failure than the
+//     spending it ends.
 //   - Dispose → livenessForTeardown's AgentGet: gone → POSITIVE — the one
 //     answer that makes removal safe, recorded durably. Working / blocked →
 //     the removal is REFUSED (a live worker is never torn down). Any other

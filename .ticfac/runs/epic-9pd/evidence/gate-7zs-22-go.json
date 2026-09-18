@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-7zs-22-go",
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "7zs",
+    "attempt": 22,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "476fb533adf7f77cfc4454c82f979be4eba2ea34",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260d335be7664b3af33531bb0becce28b17",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -count=1 -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-17T11:22:16Z",
+  "finished_at": "2026-09-17T11:28:27Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t56.332s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.675s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t2.443s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t190.088s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t87.277s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t54.444s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t0.803s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.345s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t0.594s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.541s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.541s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.588s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.670s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t4.092s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.982s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.098s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t2.037s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.083s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t2.005s\n--- FAIL: TestTheStallWarningChangesNoVerdict (65.33s)\n    stall_feed_test.go:118: a1 was warned 0 times, want exactly 1: the feed must not repeat one fact at poll cadence\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t364.576s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t2.215s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.740s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t2.088s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t2.431s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t160.366s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.755s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t1.625s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t1.453s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:2020620cf3da212aa57d05f3b3faea2d2b2c124ab306b0c4abad6a98c0ecf75b",
+  "persistence_uri": "git:refs/heads/epic/9pd:.ticfac/runs/epic-9pd/evidence/gate-7zs-22-go.json"
+}

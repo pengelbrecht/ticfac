@@ -3,6 +3,7 @@ package herdr
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -29,8 +30,12 @@ import (
 // attempt — because the reconciler's poll IS the clock that reaches the
 // bound: at the poll cadence the stop lands within one poll of the deadline,
 // well inside the reconciler's own settlement deadline. And it is the stop the
-// local supervisor would have made, made through the only surface herdr
-// offers: agent.send_keys with the interrupt chord, the same one Cancel uses.
+// local supervisor would have made, made through the surfaces herdr offers:
+// the agent.send_keys interrupt chord the local Cancel uses — and, once that
+// courtesy has gone unhonoured for a grace, pane.close, the stop that takes
+// the agent herdr owns with it (tick rj0: an agent inside a long shell call
+// never reads the interrupt, and a bound only the reconciler's own deadline
+// notices is not a bound).
 //
 // A stop at the wall clock says nothing about the WORK. It settles the
 // attempt; the branch and the report are still read the usual way — a worker
@@ -41,6 +46,21 @@ import (
 // interruptChord is herdr's own interrupt, the surface `herdr agent send-keys`
 // offers a human stopping an agent by hand. cancel.go sends the same chord.
 const interruptChord = "ctrl+c"
+
+// stopGrace is the courtesy the interrupt is given before the enforcement
+// escalates to closing the pane (tick rj0). An agent that DOES honour the
+// interrupt — the tick 55i shape — needs the window to cancel its turn,
+// return to its prompt and write its report; the close must never beat that
+// exit. Two minutes bounds the window from the other side: the Phase 3 run
+// (tick emk) watched an agent run TWENTY-SIX minutes past its bound while the
+// interrupt was re-delivered at every poll and nothing else would ever stop
+// it — the grace is the difference between a stop that lands and a bound
+// only the reconciler's own settlement deadline notices. The grace is
+// measured from the interrupt's ACCEPTANCE (the wall marker's stamp), it
+// lands well inside the reconciler's settlement deadline, and it is a named
+// constant rather than a multiple of the poll interval because what it
+// bounds — an agent finishing its exit — is not cadenced by the poll at all.
+const stopGrace = 2 * time.Minute
 
 // minStopProtocol is the OLDEST herdr protocol through which this executor
 // can enforce a wall clock: agent.send_keys — the interrupt the stop is
@@ -107,8 +127,9 @@ func (e *Executor) enforceableWall(spec *subprocess.JobSpec) error {
 	}
 	return refuse(subprocess.RefusedUnenforceable,
 		"the wall clock of %ds cannot be enforced through herdr %s (protocol %d): this executor stops an agent "+
-			"with the agent.send_keys interrupt, which every protocol this client can speak carries (the floor is %d) — "+
-			"refusing the dispatch rather than issuing a bound nothing would stop",
+			"with the agent.send_keys interrupt and, when it goes unhonoured, pane.close — surfaces every protocol this "+
+			"client can speak carries (the floor is %d) — refusing the dispatch rather than issuing a bound nothing "+
+			"would stop",
 		spec.Limits.WallSeconds, info.Version, info.Protocol, minStopProtocol)
 }
 
@@ -143,18 +164,38 @@ func (e *Executor) enforceableWall(spec *subprocess.JobSpec) error {
 // live), the failure is recorded as the observation it is, and the stop is
 // re-delivered at the next poll. The reconciler's own settlement deadline —
 // issued + wall + wipe threshold — remains the backstop that refuses an
-// attempt nobody can say is running.
+// attempt nobody can say is running. The escalation is the same: a close
+// herdr refuses, or a snapshot that cannot precede it, HOLDS this poll
+// (wallStop.held) and is re-attempted at the next, never settling anything.
 
-// wallStop is what ONE delivery of the stop observed: whether herdr took
-// the interrupt, and whether the agent is positively gone after it. A
-// settled stop without a delivered one is the already-gone shape above —
-// settlement without a stop, never a stop that did not happen.
+// wallStop is what ONE delivery of the stop observed: whether herdr took a
+// stop (the interrupt, or the close it escalates to), and whether the agent
+// is positively gone after it. A settled stop without a delivered one is
+// the already-gone shape — settlement without a stop, never a stop that did
+// not happen. `closed` marks the escalation's landing: the stop that settled
+// (or was accepted and awaits confirmation) was pane.close, not the
+// interrupt. `held` is the escalation's operational hold: this poll could
+// not proceed toward the close, and why — the close is re-attempted at the
+// next poll, and the observation stream carries the sentence.
 type wallStop struct {
 	delivered bool
 	settled   bool
+	closed    bool
+	held      string
 }
 
-func (e *Executor) stopAtWall(st *store, record *attemptRecord) wallStop {
+func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string) wallStop {
+	// The escalation (tick rj0). A PREVIOUS poll's interrupt was accepted
+	// (the wall marker carries its stamp), the grace has elapsed, and
+	// herdr still answers that the agent is live — this stopAtWall call is
+	// reached from observe only with a live agent (or a reporting one the
+	// bound is still owed). The interrupt is a courtesy an agent inside a
+	// long shell call never reads; the close is the stop that actually
+	// stops the agent herdr owns. While the grace runs, the interrupt is
+	// re-delivered below exactly as before.
+	if accepted, ok := st.wallStopAcceptedAt(); ok && e.now().After(accepted.Add(stopGrace)) {
+		return e.closeAtWall(st, record, paneID)
+	}
 	_, err := e.client.AgentSendKeys(context.Background(), client.AgentSendKeysParams{
 		Target: record.AgentName,
 		Keys:   []string{interruptChord},
@@ -196,7 +237,8 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord) wallStop {
 
 	// The interrupt was accepted; ask herdr once whether the agent is gone.
 	// An agent that is still exiting settles at the next poll, from the
-	// durable marker already written above.
+	// durable marker already written above — or, once the grace elapses,
+	// from the close.
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
 	case client.IsCode(err, client.CodeAgentNotFound), client.IsCode(err, client.CodePaneNotFound):
@@ -210,4 +252,132 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord) wallStop {
 		// gone, exactly as any settlement here does.
 		return wallStop{delivered: true}
 	}
+}
+
+// closeAtWall is the escalation the grace ran out on: the interrupt went
+// unhonoured, and the stop is now pane.close — the surface that takes the
+// agent herdr owns with it, whatever the agent is in the middle of.
+//
+// The close is the one destructive step in the wall clock's enforcement,
+// so it is gated on the work being PRESERVED first (tick pbb): the snapshot
+// below puts the worktree's uncommitted state on a ref of its own before
+// anything destroys it, and a snapshot that cannot land holds the close —
+// the enforcement re-attempts at every poll, and the reconciler's own
+// settlement deadline remains the backstop, but an enforcement that
+// destroyed the work to save the clock would be a worse failure than the
+// stall it replaced.
+//
+// The close settles nothing on its own, and that is a live-observed fact,
+// not a guess: herdr answers ok and opens a FRESH SHELL PANE in the
+// workspace the closed pane lived in, so the settlement this step settles
+// on is herdr's positive answer about the AGENT — agent.get after the
+// close, exactly the confirmation the tick's acceptance names. A
+// pane_not_found on the close itself is the same positive answer one poll
+// earlier: the agent (and its pane) were already gone.
+func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) wallStop {
+	if paneID == "" {
+		// Nothing addresses the pane. Defensive — the record carries the
+		// pane worktree.create handed back — but a close into the void is
+		// not a stop, and the hold says so.
+		what := "the agent's pane is in none of the records this attempt holds"
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane close is held: %s",
+				record.WallSeconds, what)})
+		return wallStop{held: what}
+	}
+	if err := e.snapshotUncommitted(st, record); err != nil {
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane close is held: "+
+				"the worktree could not be snapshotted first (%v) — the close never destroys work it has not preserved",
+				record.WallSeconds, err)})
+		return wallStop{held: "the worktree snapshot failed: " + err.Error()}
+	}
+	err := e.client.PaneClose(context.Background(), client.PaneCloseParams{PaneID: paneID})
+	switch {
+	case gone(err):
+		// The pane was already gone — the agent exited (or was torn down) in
+		// the window between the liveness answer and the close. A positive
+		// answer, recorded as one; the wall marker written at the accepted
+		// interrupt keeps the settlement reading as a stop at the bound.
+		_ = st.markAgentGone(e.stamp())
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt went unhonoured for the grace, and herdr answered the pane %s was already gone when the close fired",
+				record.AgentName, record.WallSeconds, paneID)})
+		return wallStop{delivered: true, settled: true, closed: true}
+	case err != nil:
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane %s could not be closed through herdr (%v): the close is re-attempted at every poll",
+				record.WallSeconds, paneID, err)})
+		return wallStop{held: "herdr would not take the close: " + err.Error()}
+	}
+	// The close was accepted. Confirm the AGENT is gone — the positive
+	// answer the stop settles on; the pane herdr opened in its place is a
+	// shell, and nothing about it is this attempt's agent.
+	_, gerr := e.client.AgentGet(context.Background(), record.AgentName)
+	switch {
+	case gone(gerr):
+		_ = st.markAgentGone(e.stamp())
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt went unhonoured for the grace, so the pane %s was closed through herdr and herdr answers the agent is gone",
+				record.AgentName, record.WallSeconds, paneID)})
+		return wallStop{delivered: true, settled: true, closed: true}
+	case gerr == nil:
+		// herdr still resolves the agent — the close was accepted but the
+		// agent outlives it in herdr's records. Not settled; the next poll
+		// re-attempts the close (a second close answers pane_not_found and
+		// settles), exactly as an operational hold does.
+		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+			Detail: fmt.Sprintf("the pane %s was closed through herdr but herdr still answers the agent %s is live: the settlement waits for a positive answer that the agent is gone",
+				paneID, record.AgentName)})
+		return wallStop{delivered: true, closed: true}
+	default:
+		// herdr would not answer. The close is accepted and recorded; the
+		// settlement waits for a poll that can positively observe the agent
+		// gone, exactly as any settlement here does.
+		return wallStop{delivered: true, closed: true}
+	}
+}
+
+// snapshotUncommitted preserves the attempt's worktree — every uncommitted
+// change, tracked or untracked — on a ref of its own, ONCE, recording where
+// (tick rj0, per pbb). It is the precondition of the pane close: the close
+// destroys the checkout's unsaved state, and the snapshot is what keeps the
+// stop from destroying the work. A worktree that no longer exists has
+// nothing left to destroy — the close proceeds; a snapshot that fails holds
+// the close, because the alternative is an enforcement that throws the work
+// away to save the clock.
+//
+// The mechanics and the ref naming are the seam's (subprocess.WipRefFor /
+// subprocess.SnapshotWorktree): the local executor's dispose gates its
+// force-remove on the same ones, and a record at one name and shape is what
+// a later attempt's dispatch points its worker at (tick pbb).
+//
+// The snapshot is NOT evidence of completion and is never merged; it is
+// material a person or a later attempt can be pointed at (pbb, and nvn),
+// which is why where it landed is recorded durably beside the attempt.
+func (e *Executor) snapshotUncommitted(st *store, record *attemptRecord) error {
+	if _, ok := st.wipSnapshot(); ok {
+		return nil // already preserved; the close may proceed
+	}
+	if record.Worktree == "" {
+		return nil // no worktree was ever recorded: there is nothing to destroy
+	}
+	if _, err := os.Stat(record.Worktree); err != nil {
+		if os.IsNotExist(err) {
+			return nil // the worktree is already gone: nothing left to destroy
+		}
+		return fmt.Errorf("stat the worktree at %s: %w", record.Worktree, err)
+	}
+	ref := subprocess.WipRefFor(record.JobID)
+	commit, err := subprocess.SnapshotWorktree(record.Worktree, ref, record.Spec.ArtifactPrefix)
+	if err != nil {
+		return err
+	}
+	if err := st.markWIPSnapshot(subprocess.WIPSnapshot{Ref: ref, Commit: commit, TakenAt: e.stamp()}); err != nil {
+		return err
+	}
+	_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+		Detail: fmt.Sprintf("preserved the uncommitted work of attempt %d of %s on %s before the pane close: the snapshot is material a later attempt can be pointed at, never evidence of completion",
+			record.Attempt, record.JobID, ref)})
+	return nil
 }

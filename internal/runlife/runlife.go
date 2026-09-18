@@ -29,12 +29,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -187,20 +190,144 @@ type Status struct {
 	LastEvent *runfeed.Event `json:"last_event,omitempty"`
 	EventAge  string         `json:"last_event_age,omitempty"`
 	Log       string         `json:"log"`
+
+	// Attempts are the run's in-flight attempts with their own gaps (tick
+	// 7zs): how long since each one's branch last moved and its worktree
+	// last changed — the honest measurement of "is it getting anywhere",
+	// which liveness never answered. An attempt is in flight here when its
+	// worktree still stands in the repo the run works in: the run's own
+	// teardown is what removes one, so a worktree that stands is an attempt
+	// nobody has collected, whether the run is driving it or died beside
+	// it. Null when the census could not be read; empty when no attempt
+	// stands — different claims, kept apart. Neither gap is a verdict and
+	// neither changes any: a worker thinking hard legitimately commits
+	// nothing for a while, and the exit code stays liveness's answer alone.
+	Attempts []runprogress.Attempt `json:"attempts"`
+
+	// WallClocks are the run's own typed statements that an IN-FLIGHT
+	// attempt's wall clock has fired (tick q1e) — one entry per standing
+	// attempt whose bound the run said passed, joined to Attempts by the
+	// tick and attempt identity on both. The fact is the feed's
+	// `wall_clock_fired` line and only its typed half: the stage and the
+	// identity it carries. The line's detail rides along VERBATIM for the
+	// person reading the text surface — the executor's last word, which the
+	// run already put on the line — but no part of it is ever matched: a
+	// line whose prose merely NAMES the wall clock (the stall warning's
+	// "the wall clock of 3600s is still the bound") reports nothing, which
+	// is exactly the acceptance's "neither is derived by matching observation
+	// prose". The run's own half of that derives the line from the durable
+	// marker's issue time plus WallSeconds, never from an observation; this
+	// half derives its report from the typed line those facts produced.
+	// Null when the census that would say which attempts are in flight
+	// cannot be read; empty when it read and no standing attempt's bound
+	// has fired — different claims, kept apart, the same as Attempts.
+	WallClocks []WallClock `json:"wall_clocks"`
 }
 
-// Probe answers whether the run is alive, from run.pid and the OS, and how long
-// ago it last said anything, from the feed.
+// WallClock is one in-flight attempt's wall clock firing, as the run said it.
+type WallClock struct {
+	TickID  string `json:"tick_id"`
+	Attempt int    `json:"attempt"`
+	// FiredAt is when the run said the bound fired; FiredAgo is the same
+	// fact measured against the `now` the probe was stamped with, so a
+	// reader never does clock arithmetic. FiredAt stays null rather than
+	// guessed when the line's own stamp cannot be read.
+	FiredAt  *time.Time            `json:"fired_at,omitempty"`
+	FiredAgo *runprogress.Duration `json:"fired_ago,omitempty"`
+	// Detail is the run's own firing line, verbatim: what the executor was
+	// last seen doing belongs to the watcher deciding what to do about an
+	// attempt that is past its bound. It is carried, never matched — prose
+	// is the person's half, not the machine's.
+	Detail string `json:"detail,omitempty"`
+}
+
+// attemptKey is a feed line's attempt identity: the tick and the 1-based
+// attempt number the line carries. A firing is a fact about ONE attempt, so
+// a line for tick b1 or for attempt 2 is not a fact about attempt 1 of a1.
+type attemptKey struct {
+	tick    string
+	attempt int
+}
+
+// wallFiredAt answers the moment the run said each attempt's wall clock
+// fired, from the feed's typed lines: the latest `wall_clock_fired` line
+// per (tick, attempt) — the reconciler announces once per incarnation and a
+// resumed run re-announces, so the last line is the current fact. Nothing
+// else on a line is examined: the stage and the identity are the machine's
+// half, and the detail never enters the decision.
+func wallFiredAt(events []runfeed.Event) map[attemptKey]runfeed.Event {
+	fired := map[attemptKey]runfeed.Event{}
+	for _, event := range events {
+		if event.Stage != reconcile.StageWallClock || event.TickID == nil || event.Attempt == nil {
+			continue
+		}
+		fired[attemptKey{tick: *event.TickID, attempt: *event.Attempt}] = event
+	}
+	return fired
+}
+
+// wallClocksOf joins the standing attempts to the run's firing lines: one
+// WallClock per IN-FLIGHT attempt the run said the bound passed, sorted by
+// tick and attempt so a watcher's two reads differ only in the numbers. A
+// firing for an attempt that no longer stands is not a fact about an
+// in-flight attempt and stays on the feed, where it was written; a line
+// whose own stamp cannot be read carries no FiredAt rather than a guess —
+// the same honesty the gaps keep.
+func wallClocksOf(standing []runprogress.Attempt, fired map[attemptKey]runfeed.Event, now time.Time) []WallClock {
+	out := []WallClock{}
+	for _, a := range standing {
+		line, ok := fired[attemptKey{tick: a.TickID, attempt: a.Attempt}]
+		if !ok {
+			continue
+		}
+		w := WallClock{TickID: a.TickID, Attempt: a.Attempt, Detail: line.Detail}
+		if at, err := time.Parse(time.RFC3339, line.At); err == nil {
+			firedAt := at
+			ago := runprogress.Duration(now.Sub(at))
+			w.FiredAt, w.FiredAgo = &firedAt, &ago
+		}
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].TickID != out[j].TickID {
+			return out[i].TickID < out[j].TickID
+		}
+		return out[i].Attempt < out[j].Attempt
+	})
+	return out
+}
+
+// Probe answers whether the run is alive, from run.pid and the OS, how long
+// ago it last said anything, from the feed, and — for every attempt whose
+// worktree still stands — how long since it last produced anything durable
+// (tick 7zs) and whether the run has said its wall clock fired (tick q1e):
+// the gaps are a reason to look and never a verdict, and the firing is a
+// fact the run already wrote, reported where a watcher reads.
 func Probe(repo, runID string, now time.Time) Status {
 	dir := Dir(repo, runID)
 	status := Status{RunID: runID, Log: filepath.Join(dir, LogName)}
 
+	// The feed is read before the census so the wall-clock facts the lines
+	// carry can ride the attempts the census finds — one read of the file,
+	// one pass over the lines, and the same `now` stamps every gap the
+	// status reports.
+	fired := map[attemptKey]runfeed.Event{}
 	if events, err := runfeed.Read(runfeed.Path(repo, runID)); err == nil && len(events) > 0 {
 		last := events[len(events)-1]
 		status.LastEvent = &last
 		if at, err := time.Parse(time.RFC3339, last.At); err == nil {
 			status.EventAge = now.Sub(at).Round(time.Second).String()
 		}
+		fired = wallFiredAt(events)
+	}
+
+	// The attempts' gaps are a measurement, never a gate: a census that
+	// cannot be read leaves the field null and the liveness answer alone,
+	// because a watcher's question deserves "not measured", not a guess
+	// and not a silence that could be an empty run (tick 7zs).
+	if standing, err := runprogress.Standing(repo, runID, now); err == nil {
+		status.Attempts = standing
+		status.WallClocks = wallClocksOf(standing, fired, now)
 	}
 
 	record, ok, err := readRecord(dir)

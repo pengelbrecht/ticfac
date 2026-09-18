@@ -16,6 +16,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -418,6 +419,29 @@ type fixtureOptions struct {
 	repo      *testRepo
 	budget    float64
 	ceiling   float64
+
+	// pullRequests is the code-hosting surface behind the PR + CI close-out
+	// rule (tick 0iz): the fake forge a test that declares the rule supplies.
+	// Nil is the honest default — a repo that declares no rule needs no
+	// surface, and construction refuses one that does.
+	pullRequests forge.PullRequests
+
+	// runID overrides the run id the fixture's runs run under — the fact tick
+	// n4h is about: a second run id is a re-run of the epic whose attempt
+	// numbers begin again at 1 out of a run-state store of its own.
+	runID string
+
+	// gateTimeout overrides the CI wait bound for the admission tests, the
+	// way the harness overrides every other cadence: a bound measured in
+	// minutes is testable in milliseconds without the bound being a
+	// test-only number.
+	gateTimeout time.Duration
+
+	// stallWarn overrides the run's stall threshold (tick 7zs), for the
+	// same reason as gateTimeout: a threshold measured in minutes is
+	// testable in milliseconds without the number being a test-only one.
+	// Zero leaves the default.
+	stallWarn time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -462,27 +486,37 @@ func fakeRunnerArgv(t *testing.T, mode string) []string {
 // checkout the reconciler works in, which a restart replaces with a fresh
 // clone while everything else stays where it was.
 func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
+	gateTimeout := 2 * time.Minute
+	if opts.gateTimeout > 0 {
+		gateTimeout = opts.gateTimeout
+	}
+	runID := opts.runID
+	if runID == "" {
+		runID = "r-fixture"
+	}
 	return Options{
-		Repo:          repo.Dir,
-		Remote:        "origin",
-		EpicID:        "qeu",
-		RunID:         "r-fixture",
-		BaseRef:       "HEAD",
-		Owner:         "ticfac-test",
-		Tracker:       f.Tracker,
-		ExecStateRoot: f.StateRoot,
-		GateConfig:    filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:   2 * time.Minute,
-		PollInterval:  20 * time.Millisecond,
-		WipeThreshold: 10 * time.Second,
-		StepCap:       60 * time.Millisecond,
-		WallSeconds:   120,
-		BudgetUSD:     opts.budget,
-		CeilingUSD:    opts.ceiling,
-		Sleep:         func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:     opts.guardsOff,
-		stopAfter:     opts.stopAfter,
-		NewExecutor:   f.newExecutor,
+		Repo:           repo.Dir,
+		Remote:         "origin",
+		EpicID:         "qeu",
+		RunID:          runID,
+		BaseRef:        "HEAD",
+		Owner:          "ticfac-test",
+		Tracker:        f.Tracker,
+		ExecStateRoot:  f.StateRoot,
+		GateConfig:     filepath.Join(repo.Dir, ".tick", "runners.toml"),
+		GateTimeout:    gateTimeout,
+		PollInterval:   20 * time.Millisecond,
+		WipeThreshold:  10 * time.Second,
+		StepCap:        60 * time.Millisecond,
+		WallSeconds:    120,
+		BudgetUSD:      opts.budget,
+		CeilingUSD:     opts.ceiling,
+		PullRequests:   opts.pullRequests,
+		StallWarnAfter: opts.stallWarn,
+		Sleep:          func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:      opts.guardsOff,
+		stopAfter:      opts.stopAfter,
+		NewExecutor:    f.newExecutor,
 	}
 }
 
@@ -511,7 +545,14 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		SupervisorArgv: []string{executorBin, "supervise"},
 		Remote:         d.Remote,
 		Attempt:        d.Attempt,
+		Try:            d.Try,
 		PushInterval:   time.Second,
+		// What the tick's earlier attempts found (tick nvn), forwarded the
+		// way the production factories forward it.
+		PriorReports: d.PriorReports,
+		// What the tick's earlier attempts left PRESERVED (tick pbb),
+		// forwarded the same way.
+		PriorSnapshots: d.PriorSnapshots,
 	})
 	if err != nil {
 		return nil, Substrate{}, err

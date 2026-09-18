@@ -68,6 +68,16 @@ report)
 	commit
 	report
 	;;
+stall-then-report)
+	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
+	# produces nothing — no commit, no file, no report — for long enough that
+	# the run's stall warning must fire, and then does its work and settles
+	# DONE. The stall warning must not change what the run concludes about an
+	# attempt that was merely slow to start.
+	sleep 1
+	commit
+	report
+	;;
 silent)
 	# Settled and incomplete: work committed, nothing said.
 	commit
@@ -93,6 +103,20 @@ review_finding)
 		report
 	fi
 	;;
+closeout_nocommit)
+	# The pwp shape (tick 19l): the close-out answers DONE_WITH_CONCERNS over
+	# an EMPTY branch — no commits at all — while every other tick does its
+	# work and reports. The role's own status and the run's verdict are then
+	# two different answers to two different questions, and the feed line has
+	# to say both without attributing the verdict to the worker.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		status="DONE_WITH_CONCERNS"
+		report
+	else
+		commit
+		report
+	fi
+	;;
 finding_bad)
 	# A findings block that does not parse: collect carries the problem, and
 	# the reconciler refuses the attempt rather than closing the tick behind
@@ -108,13 +132,19 @@ finding_bad)
 	} > "$TICFAC_RESULT_PATH"
 	;;
 finding_blocked)
-	# The v3i shape: the FIRST attempt of a1 finds a blocker of its own and
+	# The v3i shape: the FIRST TRY of a1 finds a blocker of its own and
 	# answers BLOCKED with nothing committed — but its report also carries a
 	# typed finding, so the discovery is drafted even though the attempt is
-	# refused. Every later attempt of a1 commits, answers DONE, and reports
-	# the SAME finding: the dedup case, a finding that recurs until it is
-	# fixed. Other ticks behave like the plain report mode.
-	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_ATTEMPT" = "1" ]; then
+	# refused. Every later try of a1 commits, answers DONE, and reports the
+	# SAME finding: the dedup case, a finding that recurs until it is fixed.
+	# Other ticks behave like the plain report mode.
+	#
+	# The gate is $TICFAC_TRY — the tick's OWN try count — never
+	# $TICFAC_ATTEMPT (tick vw0): attempt numbers count the RUN's dispatches,
+	# so a test that dispatches another tick first moves a1's first try off
+	# the run-wide number 1, and a mode keyed on that number would hand a1
+	# DONE where the fixture means BLOCKED.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
 		status=BLOCKED
 		report_with_findings
 	elif [ "$TICFAC_TICK" = "a1" ]; then
@@ -126,10 +156,16 @@ finding_blocked)
 	fi
 	;;
 blocked-first)
-	# Attempt 1 is a worker that found a blocker of its own still open and said
-	# so: a report with STATUS: BLOCKED, and no commit at all. Every later
-	# attempt is the same worker dispatched again after that blocker closed.
-	if [ "$TICFAC_ATTEMPT" = "1" ]; then
+	# A tick's FIRST TRY is a worker that found a blocker of its own still open
+	# and said so: a report with STATUS: BLOCKED, and no commit at all. Every
+	# later try is the same worker dispatched again after that blocker closed.
+	#
+	# The gate is $TICFAC_TRY — the tick's OWN try count — never
+	# $TICFAC_ATTEMPT (tick vw0): attempt numbers count the RUN's dispatches,
+	# so the tick dispatched second blocks on the run-wide number 2, not 1,
+	# and a mode keyed on the run-wide number would let its first try quietly
+	# answer DONE.
+	if [ "$TICFAC_TRY" = "1" ]; then
 		status=BLOCKED
 		report
 	else
@@ -226,6 +262,20 @@ hang)
 	# transient window with a forked child a group signal could miss.
 	commit
 	exec sleep 86400
+	;;
+wallwip)
+	# pbb's shape: attempt 1 of a1 does real work in the tree, commits
+	# nothing and stays alive past the bound, so the wall clock stops it
+	# holding uncommitted work — and the teardown that follows the refusal is
+	# where that work used to die unrecorded. Every later attempt of every
+	# tick does the work cleanly.
+	if [ "$TICFAC_ATTEMPT" = "1" ] && [ "$TICFAC_TICK" = "a1" ]; then
+		printf 'uncommitted work of %s\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/wip-${TICFAC_TICK}.txt"
+		exec sleep 86400
+	else
+		commit
+		report
+	fi
 	;;
 *)
 	printf 'unknown FAKE_RUNNER_MODE %s\n' "$mode" >&2

@@ -99,8 +99,17 @@ func FactoryFS() embed.FS {
 // own registry, so the image a deployment runs is the one that shipped with
 // this ticfac build.
 //
+// The tree is VENDORED, not authored here: ticks owns cloud/sandbox (its
+// internal/sandbox suite runs those scripts), and sandbox.pin.json pins the
+// immutable ticks commit these bytes came from. internal/sandboxpin verifies
+// every embedded file against that pin on every test run, so the tree below
+// is never edited in this repository — change it in ticks, move the pin's
+// `ref`, and run `go run ./cmd/sandbox sync`.
+//
 // Enumerated, not wildcarded, matching the factory bundle above: the build
-// context is exactly the Dockerfile and what it copies.
+// context is exactly the Dockerfile and what it copies. A file added to the
+// tree must be listed here too, and TestThePinnedTreeIsWhatTheBinaryShips
+// fails until it is.
 //
 //go:embed cloud/sandbox/Dockerfile cloud/sandbox/entrypoint.sh cloud/sandbox/preflight.sh
 //go:embed cloud/sandbox/worker.sh cloud/sandbox/common.sh

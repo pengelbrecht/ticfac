@@ -102,7 +102,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 	report, hasReport := e.readReport(record)
 	_, cancelled := st.cancelled()
 
-	verdict, outcome, class, reason := e.classify(st, commits, hasReport, report, violations, artifactViolations, cancelled)
+	verdict, outcome, class, reason := e.classify(st, record.Spec.Role, commits, hasReport, report, violations, artifactViolations, cancelled)
 
 	result := &JobResult{
 		SchemaVersion: SchemaVersion,
@@ -179,16 +179,25 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 // check wins. The order is the collect vocabulary's own, and it is why a
 // worker that reports DONE over a branch with no commits is `no-commits`
 // rather than ready to merge.
+//
+// The no-commits check carries the role's own RECORDED rule (tick 19l,
+// NoCommitsIsFailure): for a role whose deliverable is its answer rather
+// than a change — the review, dispatched read-only — an empty branch is what
+// a correct attempt looks like, so the check does not fail and the next one
+// decides. For every other role the branch IS the deliverable and the check
+// fails as it always did. A verdict minted here is therefore already the
+// role's rule, which is what lets the reconciler act on it without asking
+// the role's question a second time.
 // `reason` is what the MESSAGE is keyed on, and it is not always the verdict:
 // a cancellation and a worker that never reported both leave no report, and
 // telling a person the same sentence about both is Appendix A #9's failure.
-func (e *Executor) classify(st *store, commits int, hasReport bool,
+func (e *Executor) classify(st *store, role string, commits int, hasReport bool,
 	report Report, violations, artifactViolations []string, cancelled bool) (verdict, outcome, class, reason string) {
 
 	switch {
 	case cancelled:
 		return VerdictMissingResult, OutcomeCancelled, "", reasonCancelled
-	case commits == 0:
+	case commits == 0 && NoCommitsIsFailure(role):
 		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case !hasReport || report.Status == "":
 		if st.wallClockExceeded() {
@@ -288,13 +297,19 @@ const reasonArtifactCommitted = "artifact-committed"
 // is not about the class field, which has six values for many more failures —
 // it is about the MESSAGE a person reads, and "the run broke" is the message
 // that sends a diagnosis looking for the wrong thing.
+//
+// The tracker-record boundary violation is not keyed here: its sentence is
+// BoundaryRefusal (report.go), shared with the herdr executor so the two
+// collects render the same words for the same write — the sentence names the
+// role and the permitted destinations (tick 54n), which is composition, not a
+// stem, and a second copy of it here is exactly how the two executors would
+// drift apart.
 var failureMessages = map[string]string{
-	VerdictNoCommits:         "the attempt branch carries no commit beyond the base it was cut from",
-	VerdictMissingResult:     "there is no report at the path this executor owns, so the attempt never said what it did",
-	VerdictBoundaryViolation: "the attempt committed records under an authority that is not its own",
-	reasonCancelled:          "the attempt was cancelled: its credential was revoked and then it was stopped",
-	reasonArtifactCommitted:  "the attempt committed its own report or artifact into the branch, under the prefix this executor owns",
-	VerdictReadyToMerge:      "",
+	VerdictNoCommits:        "the attempt branch carries no commit beyond the base it was cut from",
+	VerdictMissingResult:    "there is no report at the path this executor owns, so the attempt never said what it did",
+	reasonCancelled:         "the attempt was cancelled: its credential was revoked and then it was stopped",
+	reasonArtifactCommitted: "committed its own report or artifact into the branch, under the prefix this executor owns",
+	VerdictReadyToMerge:     "",
 }
 
 const collapsedMessage = "the attempt failed"
@@ -310,12 +325,20 @@ func (e *Executor) message(reason, class string, record *attemptRecord, violatio
 	}
 	base := failureMessages[reason]
 	switch {
+	case reason == VerdictBoundaryViolation:
+		// The tracker-record refusal names the role and the permitted
+		// destinations (tick 54n): a worker that hit this boundary — or the
+		// person reading the refusal on its behalf — is told where the
+		// output should have gone, in the same words the prompt states the
+		// exemptions in. The sentence is shared with the herdr executor.
+		return BoundaryRefusal(record.Spec.Role, record.Spec.ArtifactPrefix, violations)
 	case base == "":
 		return ""
 	case class == FailureWallClockExceeded:
 		return fmt.Sprintf("%s: it was stopped at its wall clock of %d seconds", base, record.WallSeconds)
-	case reason == VerdictBoundaryViolation, reason == reasonArtifactCommitted:
-		return fmt.Sprintf("%s: %v", base, violations)
+	case reason == reasonArtifactCommitted:
+		return fmt.Sprintf("the %s attempt %s: %v. The report belongs under %s, not on the branch",
+			record.Spec.Role, base, violations, record.Spec.ArtifactPrefix)
 	case reason == VerdictNoCommits:
 		return fmt.Sprintf("%s (%s)", base, short(record.BaseSHA))
 	default:
@@ -395,7 +418,7 @@ func (e *Executor) artifacts(st *store, record *attemptRecord, hasReport bool, r
 // reference falls back to the worktree path, where the report still is, and the
 // failure is observed rather than swallowed.
 func archiveReport(st *store, record *attemptRecord) (ArtifactRef, bool) {
-	archive := st.path(fileReportArchive)
+	archive := st.path(FileReportArchive)
 	raw, err := os.ReadFile(record.ResultPath)
 	if err != nil {
 		// Already torn down: the archive is the report.

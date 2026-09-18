@@ -2,13 +2,15 @@
   "id": "4ys",
   "title": "Never write an operator identity into a record committed to the target repo",
   "description": "From the ticks pwp run, 2026-09-15.\n\n`ticfac settle --release \"\u003cwho\u003e\"` records the string verbatim as released_by in .ticfac/runs/\u003crun\u003e/decisions/\u003cn\u003e.json, which ticfac COMMITS to the target repository's epic branch. In ticks — a public repository whose rules forbid operator identifiers in tracked files — that failed the public-repo guard and blocked the epic's PR.\n\nTwo things to fix:\n\n1. An operator identity handed to a ticfac command must not land verbatim in a committed record. Either take a non-identifying handle, or record a stable pseudonymous id and keep the real value in run-local state outside the repository. The provenance that matters is 'a PERSON decided this, and which agent acted on it', not which person.\n\n2. digestOf (internal/reconcile/guards.go:404) returns \"sha256:\" + hex[:32]. That is a sha256 TRUNCATED to 128 bits, still labelled sha256. Two problems: the label is false, and 32 hex characters is exactly the shape of a Cloudflare account id, so every ticfac run record tripped the ticks account detector — 60 findings on one epic. A full digest is 64 hex characters and collides with nothing. Dropping the truncation changes recorded digest values, so decide whether existing evidence keyed by a digest needs a migration or whether a changed digest correctly reads as 'the thing it covers changed'.\n\nBoth were worked around on the ticks side for this epic (a narrow guard exemption for sha256-prefixed digest fields, and a placeholder in the decision record). Neither workaround belongs there permanently.",
-  "status": "open",
+  "notes": "2026-09-15 14:50 - ticfac run epic-9pd: attempt 5 reported a finding drafted for triage — upstream-tick \"Retire the ticks-side workarounds the ticfac settle fix makes obsolete\" (key 7436448acfd30d6b7a296f9ae228905d21f6b332270d1362191db758e1acdad5, severity low, for pengelbrecht/ticks). Triage with `ticfac finding 9pd 7436448acfd30d6b7a296f9ae228905d21f6b332270d1362191db758e1acdad5 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` or `--discard --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-15 14:56 - ticfac run epic-9pd: attempt 5 merged into epic/9pd as 661e2df43aba; the integrated gate (go) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "9pd",
   "acceptance_criteria": "No record ticfac commits to a target repository contains an operator identity handed to a ticfac command; digest fields carry full sha256 values; a test asserts a released_by value does not reproduce the string passed to --release",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T06:13:52.646042Z",
-  "updated_at": "2026-09-15T06:13:52.646042Z"
+  "updated_at": "2026-09-15T12:56:27.991106Z",
+  "closed_at": "2026-09-15T12:56:27.991106Z"
 }

@@ -36,11 +36,18 @@ const (
 	fileLastPush      = "last_push"
 	filePrompt        = "prompt.md"
 	fileResult        = "result.json"
-	// fileReportArchive is the attempt's report, copied out of the worktree at
+	// FileReportArchive is the attempt's report, copied out of the worktree at
 	// collect. The worktree is removed at teardown and the report is excluded
 	// from the branch by design, so without this copy the analysis an attempt
 	// produced survives nowhere once it is disposed or superseded (tick 35h).
-	fileReportArchive = "report.md"
+	//
+	// It is EXPORTED because the name is part of the seam the reconciler's
+	// dispatch already walks (findAttemptState reads attempt.json out of the
+	// same directory, and internal/exec/herdr names its archive the same):
+	// tick nvn's dispatch locates a PREDECESSOR's report beside the attempt
+	// record it finds there, so the name is a contract with the reconciler
+	// rather than an executor internal.
+	FileReportArchive = "report.md"
 	dirWorktree       = "worktree"
 )
 
@@ -55,6 +62,13 @@ type attemptRecord struct {
 	JobID         string `json:"job_id"`
 	Attempt       int    `json:"attempt"`
 	TickID        string `json:"tick_id"`
+
+	// Try is which try of its own tick this attempt is (tick vw0): 1 for the
+	// first, whatever the run-wide number is. Recorded for the same reason
+	// the runner env is: the two numbers answer different questions, and an
+	// attempt read back after the fact must not have its "first try" inferred
+	// from a number that counts the whole run's dispatches.
+	Try int `json:"try"`
 
 	Branch   string `json:"branch"`
 	WriteRef string `json:"write_ref"`
@@ -79,6 +93,23 @@ type attemptRecord struct {
 	// rendered whole, not the role's own half.
 	Model      string `json:"model,omitempty"`
 	RolePrompt string `json:"role_prompt,omitempty"`
+
+	// PriorReports are the archived reports of this tick's EARLIER attempts,
+	// as the dispatch handed them over (tick nvn) — newest first, each with
+	// the status line its report ended with. They are recorded for the same
+	// reason the model and the role prompt are: the prompt file beside this
+	// record is the rendered whole, and an attempt that was shown what its
+	// predecessors found is an attempt whose record says so.
+	PriorReports []PriorReport `json:"prior_reports,omitempty"`
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), as the dispatch handed them over — newest first,
+	// each naming the ref its stopped predecessor's uncommitted work is
+	// preserved on. Recorded for the same reason the prior reports are:
+	// the prompt file beside this record is the rendered whole, and an
+	// attempt that was pointed at a predecessor's preserved work is an
+	// attempt whose record says so.
+	PriorSnapshots []PriorSnapshot `json:"prior_snapshots,omitempty"`
 
 	WallSeconds  int `json:"wall_seconds"`
 	PushInterval int `json:"push_interval_seconds"`
@@ -293,6 +324,33 @@ func (s *store) observationsFrom(cursor string) ([]Observation, string) {
 // settled attempt with no report is `failed`, which is a different fact from
 // both "succeeded" and "still running".
 func (s *store) settled() bool { return s.exists(fileRunnerExit) }
+
+// markWIPSnapshot records where the attempt's uncommitted work was
+// preserved before a teardown destroyed its worktree (tick pbb). It is
+// written once; a second call is a no-op, so a teardown that is refused and
+// retried re-snaps nothing.
+func (s *store) markWIPSnapshot(snap WIPSnapshot) error {
+	if _, ok := s.wipSnapshot(); ok {
+		return nil
+	}
+	snap.SchemaVersion = WIPSnapshotSchemaVersion
+	if err := s.writeJSON(FileWIPSnapshot, snap); err != nil {
+		return fmt.Errorf("write the wip-snapshot record: %w", err)
+	}
+	return nil
+}
+
+// wipSnapshot is the recorded where of preserved work, if any was taken.
+func (s *store) wipSnapshot() (WIPSnapshot, bool) {
+	var snap WIPSnapshot
+	if err := s.readJSON(FileWIPSnapshot, &snap); err != nil {
+		return WIPSnapshot{}, false
+	}
+	if snap.SchemaVersion != WIPSnapshotSchemaVersion {
+		return WIPSnapshot{}, false
+	}
+	return snap, true
+}
 
 func (s *store) exitCode() (int, bool) {
 	raw, err := os.ReadFile(s.path(fileRunnerExit))

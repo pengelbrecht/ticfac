@@ -20,7 +20,10 @@ import (
 //     against the original proposal and proposes nothing new, including when
 //     the original was discarded;
 //  3. a malformed findings block refuses the attempt rather than closing the
-//     tick behind findings nobody could read.
+//     tick behind findings nobody could read;
+//  4. a finding triaged as FIXED — repaired inside this epic, the commit named
+//     — unblocks the tick, and a later report of the same finding is NOT
+//     suppressed: the fix did not hold, and the run hears it again.
 
 // draftsStore is the run's finding drafts, read and triaged the way the CLI
 // does it: a store over the same repo, remote, branch and run the reconciler
@@ -125,12 +128,12 @@ func TestAFindingBecomesADraftAndRefusesTheClose(t *testing.T) {
 	var promoted, routedKey string
 	for _, finding := range findings {
 		if finding.Target == "" {
-			if _, _, err := s.TriageFinding(finding.Key, runstate.FindingPromoted, "the operator", "zz9"); err != nil {
+			if _, _, err := s.TriageFinding(finding.Key, runstate.Triage{Status: runstate.FindingPromoted, By: "the operator", PromotedAs: "zz9"}); err != nil {
 				t.Fatalf("promote the local finding: %v", err)
 			}
 			promoted = finding.Key
 		} else {
-			if _, _, err := s.TriageFinding(finding.Key, runstate.FindingPromoted, "the operator", "pengelbrecht/ticks:of9"); err != nil {
+			if _, _, err := s.TriageFinding(finding.Key, runstate.Triage{Status: runstate.FindingPromoted, By: "the operator", PromotedAs: "pengelbrecht/ticks:of9"}); err != nil {
 				t.Fatalf("promote the routed finding: %v", err)
 			}
 			routedKey = finding.Key
@@ -201,7 +204,7 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 	// The person DISCARDS them both — the hard case: whatever the human did
 	// with the original, a redelivery proposes nothing new.
 	for _, finding := range findings {
-		if _, _, err := s.TriageFinding(finding.Key, runstate.FindingDiscarded, "the operator", ""); err != nil {
+		if _, _, err := s.TriageFinding(finding.Key, runstate.Triage{Status: runstate.FindingDiscarded, By: "the operator"}); err != nil {
 			t.Fatalf("discard %s: %v", finding.Key, err)
 		}
 	}
@@ -281,6 +284,133 @@ func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 	}
 	if findings, err := draftsStore(t, f.Repo).Findings(); err != nil || len(findings) != 0 {
 		t.Fatalf("findings %v (err %v): an unreadable block drafts nothing", findings, err)
+	}
+}
+
+// 4. THE FIXED VERDICT (tick her): a finding repaired inside the epic is
+// triaged as fixed, naming the commit — the verdict unblocks the tick the way
+// promote and discard do, and a later report of the same finding is NOT
+// suppressed: the re-report re-opens the draft, discovered by the attempt that
+// re-found it, and the run refuses the close again. The proof the verdict
+// unblocked anything is the run getting as far as dispatching a1's second
+// attempt — a gate that had not lifted would have failed the run before the
+// attempt, with the draft still discovered by attempt 1.
+func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "finding_blocked"})
+	repo := f.Repo
+	opts := fixtureOptions{mode: "finding_blocked"}
+
+	// Attempt 1 of a1 answers BLOCKED with nothing committed, and its report
+	// carries the two findings: the attempt is refused, the discoveries are
+	// drafted.
+	_, result, err := f.run(repo, opts)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Failure == nil {
+		t.Fatalf("run state %s, want the refused attempt", result.State)
+	}
+	s := draftsStore(t, repo)
+	findings, err := s.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("findings %v, want the two the blocked report carried", findings)
+	}
+
+	// The person triages both as FIXED, naming the commit that repaired them —
+	// a real commit of the run's own integration branch, so the claim is
+	// checkable rather than asserted.
+	fixedAs := s.Head()
+	if fixedAs == "" {
+		t.Fatal("the fixture's integration branch has no head to name as the repair")
+	}
+	for _, finding := range findings {
+		outcome, decided, err := s.TriageFinding(finding.Key, runstate.Triage{
+			Status: runstate.FindingFixed, By: "the operator", FixedAs: fixedAs,
+		})
+		if err != nil || outcome != runstate.Updated {
+			t.Fatalf("triage %s as fixed: outcome %s err %v", finding.Key, outcome, err)
+		}
+		if decided.FixedAs != fixedAs {
+			t.Fatalf("finding %s records fixed_as %q, want %q", finding.Key, decided.FixedAs, fixedAs)
+		}
+	}
+	if proposedCount(t, s) != 0 {
+		t.Fatal("a fixed verdict must lift the close gate the way promote and discard do")
+	}
+
+	// The resume run: attempt 2 of a1 commits, answers DONE, and reports the
+	// SAME two findings — and because the standing verdict was FIXED, the
+	// re-report is not a duplicate: the drafts are re-proposed and a1 is
+	// refused its close again. THE ACCEPTANCE CASE of tick her.
+	reconciler, result, err := f.run(repo, opts)
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("run state %s, want failed: the re-reported finding must stop the run before the close", result.State)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
+		t.Fatalf("failure %+v, want %s: the re-report must surface, not dedup", result.Failure, RefusedFindingUntriaged)
+	}
+	if result.Failure.TickID != "a1" {
+		t.Fatalf("failure tick %s, want a1", result.Failure.TickID)
+	}
+	if got := f.Tracker.count("close:a1"); got != 0 {
+		t.Fatalf("a1 was closed %d times behind a finding whose fix did not hold", got)
+	}
+	// The run got as far as dispatching attempt 2 — the fixed verdict had
+	// unblocked the tick — and the draft is re-proposed with attempt 2 as the
+	// discoverer.
+	if got := f.startCount("run-r-fixture/tick-a1/attempt-2"); got != 1 {
+		t.Fatalf("a1's second attempt started %d times, want 1: the fixed verdict must unblock "+
+			"the tick the way promote and discard do", got)
+	}
+	s2 := draftsStore(t, repo)
+	reopened, err := s2.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reopened) != 2 {
+		t.Fatalf("findings %v, want the two re-opened drafts", reopened)
+	}
+	for _, finding := range reopened {
+		if finding.Status != runstate.FindingProposed {
+			t.Errorf("finding %s is %s, want proposed: the re-report re-opens the draft", finding.Key, finding.Status)
+		}
+		if finding.DiscoveredFrom != "run-r-fixture/tick-a1/attempt-2" {
+			t.Errorf("discovered_from %q, want attempt 2: the re-opened draft must name the "+
+				"attempt that re-found it — the evidence the fix did not hold", finding.DiscoveredFrom)
+		}
+	}
+
+	// The run's own record says the findings were FILED again — never that they
+	// were duplicates — and the tick's tracker record names the re-opened
+	// draft, so a person reading the tracker hears it too.
+	var filed int
+	for _, event := range reconciler.Journal() {
+		if event.Stage == StageFindingDuplicate && event.Tick == "a1" {
+			t.Errorf("the re-report of a fixed finding was recorded as a duplicate: %q — a fix that "+
+				"did not hold is exactly what the dedup must not swallow", event.Detail)
+		}
+		if event.Stage == StageFindingFiled && event.Tick == "a1" {
+			filed++
+		}
+	}
+	if filed != 2 {
+		t.Fatalf("%d findings filed on the resume run, want 2: the re-report must surface as a "+
+			"draft waiting for a person", filed)
+	}
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(state.Ticks["a1"].Notes, "drafted for triage") {
+		t.Errorf("a1's notes do not name the re-opened finding: %q", state.Ticks["a1"].Notes)
 	}
 }
 

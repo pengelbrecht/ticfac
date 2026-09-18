@@ -23,12 +23,13 @@
       "2026-09-10: schema protocol 22, schema_version 1; 102 methods, 64 result discriminators, 26 underscored + 3 dotted event kinds, 27 subscription types (3 pane-scoped), 5 agent statuses, 4 pane agent states, 23 agent kinds from the CLI help.",
       "error_response.code is an open string in the schema — error codes can only be observed, never diffed.",
       "state_labels keys are unrestricted in the schema, but herdr's rendering rule is one label per agent status, so the contract pins the key set to agent_statuses and the loader enforces the equality.",
-      "report_metadata tokens: propertyNames pattern ^[A-Za-z0-9_-]{1,32}$, maxProperties 16; ttl_ms bounds 1 to 86400000 — one millisecond to one day, and zero is not a value (no expiry is expressed by OMITTING ttl_ms, which a painter should not want)."
+      "report_metadata tokens: propertyNames pattern ^[A-Za-z0-9_-]{1,32}$, maxProperties 16; ttl_ms bounds 1 to 86400000 — one millisecond to one day, and zero is not a value (no expiry is expressed by OMITTING ttl_ms, which a painter should not want).",
+      "2026-09-16: pane.close result discriminator determined against the LIVE server (herdr 0.9.0, protocol 22), because pane_closed appears in the schema as an EVENT kind — the event and subscription-event enums and their EventData payloads — and NOT in ResponseResult.oneOf, the set this contract pins: pane.close answers a bare ok acknowledgement. Verified by closing a scratch pane through the socket; the workspace survived with a fresh shell pane in its place, so a close settles nothing by itself — the wall-clock enforcement confirms the agent is gone through agent.get, the positive answer it settles on."
     ]
   },
   "methods": {
     "why": [
-      "Every method name the request schema accepts. The client speaks a 19-constant subset (client_used; tick 3gv added agent.send_keys, the herdr executor's Cancel surface) and the herdtest fake mirrors 18 of those 19 — it has neither a constant nor a builtin for pane.wait_for_output — so a single list keeps the three honest against each other."
+      "Every method name the request schema accepts. The client speaks a 20-constant subset (client_used; tick 3gv added agent.send_keys, the herdr executor's Cancel surface; tick rj0 added pane.close, the wall-clock enforcement's stop once the interrupt has gone unhonoured) and the herdtest fake mirrors 19 of those 20 — it has neither a constant nor a builtin for pane.wait_for_output — so a single list keeps the three honest against each other."
     ],
     "members": [
       "agent.explain",
@@ -145,6 +146,7 @@
       "events.subscribe",
       "events.wait",
       "notification.show",
+      "pane.close",
       "pane.read",
       "pane.report_metadata",
       "pane.wait_for_output",

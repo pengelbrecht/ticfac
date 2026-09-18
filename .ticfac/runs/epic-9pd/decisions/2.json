@@ -1,0 +1,119 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "9pd",
+    "job_id": "run-epic-9pd/tick-h0f/attempt-14",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "b60f2d371bdb9c7204521bdf67378e0d7187eace",
+    "tick_id": "h0f"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "runstate.Store fetches into refs/ticfac/peek/<run-id> (store.go:295,337), and `ticfac findings`, `finding` and `settle` open a store with the same run id in the same checkout. Two fetches racing on that ref's lock make the loser exit 1 ('cannot lock ref'), and the reconciler's store.Fetch error ends Run. Reproduced end to end: the fixture epic with a concurrent findings loop failed 2/4 and 2/3 runs; git fetch and git log alone passed 4/4. Violates 9pd A1. Fix: a per-process peek ref, or a lock failure treated as retryable, applied to the tracker's and git.go's private refs too.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "ticfac findings in the run's checkout ends the run: the per-run peek ref is shared across processes"
+      },
+      {
+        "body": "A1 requires a test that fetches, lists findings and reads the branch mid-run. The only test, TestAnOperatorFetchingInTheRunsCheckoutEndsNothing, runs git fetch against a bare Store with no reconciler, which is why the findings race above shipped green. The repro in runs/epic-9pd/h0f/repro/reconcile_observer_test.go.txt is the shape of that test.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "A1 has no test that observes a live run three ways; add the run-level observer regression test"
+      },
+      {
+        "body": "runlife.go:236-245 records and compares the output of ps lstart as a string. Under a different TZ or LANG (cron, launchd, a container) the same process prints a different string, so Probe says dead and Claim returns nil instead of ErrAlreadyLive. Confirmed: the same pid prints 14:19:19 locally and 12:19:19 with TZ=UTC. Read the start time in an environment-independent form (sysctl kern.proc, /proc/<pid>/stat), or pin TZ=UTC LC_ALL=C.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "runlife compares `ps -o lstart` text, which depends on TZ and locale: a live run reads dead and a second run-epic can claim it"
+      },
+      {
+        "body": "subprocess archives report.md only in CollectDetail (collect.go:383); Dispose runs worktree remove --force without archiving, unlike herdr's dispose.go:110. settle.go:424-428 calls Cancel then Dispose with no collect, so a released attempt's report is lost. Reproduced by runs/epic-9pd/h0f/repro/subprocess_dispose_archive_test.go.txt.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Local executor's Dispose deletes an uncollected attempt's report: ticfac settle loses it (A5)"
+      },
+      {
+        "body": "A2 says a run-state conflict does not end the run and fails only after a bounded number of consecutive conflicts. reconcile.go:1341-1352 ends the run on the first checkpoint conflict, by the decision recorded in wdb's close note, and A2 was never amended the way A3 and A4 were. Either amend A2 or implement the bounded continue, before 9t5 certifies it.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Reconcile 9pd A2 with the checkpoint-conflict decision taken in wdb"
+      },
+      {
+        "body": "Tick 35h added a read of the archived report in herdr readReport. A mutation adding e.client.AgentGet in that branch left every Herdr|Durable|Report|Teardown|Archive test in exec/herdr green, so the zero-substrate-calls doctrine is untested on the post-teardown path. Extend the all-errors fixture to collect after the worktree is removed.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "All-errors fixture does not cover herdr collect after teardown (archived-report read path)"
+      },
+      {
+        "body": "From reading the code, not reproduced: the recover at cli.go:386-397 covers only the main goroutine, so other goroutines' panics and fatal errors leave no cause and no run_died. io.MultiWriter(stderr, log) at cli.go:367 stops writing run.log when stderr is broken. Claim (runlife.go:88-105) is check-then-rename with no exclusion, and Release removes the pidfile without checking ownership. No test drives a real run-epic through signal, panic or error and asserts on run_died.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A4 gaps: non-main-goroutine panics, MultiWriter stderr failure, and a racy pidfile Claim/Release"
+      },
+      {
+        "body": "rolejob.go:246-254 returns nil when the decision create is not permitted. Decision numbers are run-wide and also taken by settle releases (settle.go:617), so a collision on number N may silently discard this role's decision before closeRoleTick runs. Found by reading the code, not reproduced; verify before building a repair.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Role decision create refused on conflict returns nil: a role answer can be dropped while its tick closes"
+      },
+      {
+        "body": "go list -deps ./internal/reconcile includes internal/herd/client through internal/runconfig/substrate.go:11. This predates Phase 3 (present at 4d14be6), but TestReconcileContainsNoHerdrCode only greps reconcile's own files and cannot see it. Consider a go list based dependency assertion, or moving the socket helpers out of runconfig.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Seam test is a file grep; reconcile links internal/herd/client through runconfig"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-9pd/tick-h0f/attempt-14",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-9pd/h0f/RESULT-h0f.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the epic is not ready. A1 fails end to end (`ticfac findings` racing on the shared peek ref ends the run, reproduced). A5 fails for the local executor's dispose (reproduced). A3's lstart comparison depends on TZ and locale (reproduced). A2 contradicts the checkpoint code and was never amended. Refusal teardown was spot-checked, not fully re-proven."
+  },
+  "validated": true,
+  "requested_at": "2026-09-18T08:52:11Z",
+  "answered_at": "2026-09-18T08:52:11Z",
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "h0f",
+    "attempt": 14,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "b60f2d371bdb9c7204521bdf67378e0d7187eace",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:ce17a87f5eb09521e51e2225573ebb66181e172b1228190e91c75effe244f2c0",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.0"
+  }
+}

@@ -298,7 +298,22 @@ func TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown(t *testing.T) {
 	if record.LaunchConfirmed {
 		t.Fatal("the record claims a confirmed launch: the client never heard the acknowledgement")
 	}
-	if spawned, _, _ := h.agentProcess(); !spawned {
+	// WAITED for, not sampled. The fixture deliberately makes herdr finish the
+	// launch after the client has given up (800ms against a 300ms bound), so
+	// at the instant `start` returns the spawn has by construction not
+	// happened yet — the test was reading a race it set up itself and winning
+	// it only because the machine was idle.
+	//
+	// It lost that race for the first time on the first widened run: the gate
+	// ran while three workers were still thinking, every package took two to
+	// four times its usual wall clock, and this assertion failed 4.5 seconds
+	// in. That refused a tick whose own change touched nothing but
+	// internal/cli. A gate's verdict has to be about the tree; one that moves
+	// with the machine's load is a coin flip wearing a verdict's clothes.
+	if !waitForOr(t, "herdr to complete the launch", 10*time.Second, func() bool {
+		spawned, _, _ := h.agentProcess()
+		return spawned
+	}) {
 		t.Error("herdr did not complete the launch: the fixture must drive a launch herdr finishes")
 	}
 	h.setStatus("working")

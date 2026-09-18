@@ -57,6 +57,19 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 		fmt.Fprintf(&b, "own instruction file. Do not run `tk`.\n\n")
 	}
 
+	// What the tick's EARLIER attempts found (tick nvn), before the report
+	// contract: a re-dispatched attempt that starts blind re-derives what its
+	// predecessors already concluded — the pwp close-out ran fifteen attempts
+	// that way — and one that trusts them blindly inherits their errors. The
+	// section is empty for a first attempt, which has no predecessors.
+	b.WriteString(PriorReportsSection(record.PriorReports))
+
+	// What the tick's earlier attempts left PRESERVED (tick pbb): the
+	// uncommitted work a stopped predecessor's teardown kept on a wip ref,
+	// pointed at as material to read — never evidence of completion, never
+	// to merge. Empty for a first attempt, like the reports section.
+	b.WriteString(PriorSnapshotsSection(record.PriorSnapshots))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "It is also in your environment as $TICFAC_RESULT_PATH. Write it there whatever your\n")
@@ -98,6 +111,10 @@ func runnerEnv(record *attemptRecord, spec *JobSpec) []string {
 		"TICFAC_BASE_SHA=" + record.BaseSHA,
 		"TICFAC_JOB_ID=" + spec.JobID,
 		"TICFAC_ATTEMPT=" + fmt.Sprint(record.Attempt),
+		// The tick's own try (tick vw0): the number a worker means by "this
+		// tick's first attempt", independent of where the run's dispatch
+		// counter happens to stand.
+		"TICFAC_TRY=" + fmt.Sprint(record.Try),
 		"TICFAC_TICK=" + record.TickID,
 		"TICFAC_ROLE=" + spec.Role,
 		"TICFAC_MODEL=" + record.Model,

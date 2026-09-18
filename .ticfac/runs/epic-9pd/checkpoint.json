@@ -1,0 +1,179 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-9pd",
+  "epic_id": "9pd",
+  "sequence": 367,
+  "state": "failed",
+  "reason": "9t5 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: no CI has run on the epic PR #3 (https://github.com/pengelbrecht/ticfac/pull/3): .github/workflows/ci.yml has produced no check runs on its head, so the close-out's precondition is unsatisfiable by waiting — the workflow may not trigger on pull_request at all. The rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch.",
+  "updated_at": "2026-09-18T11:08:02Z",
+  "ticks": [
+    {
+      "tick_id": "0z0",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "55i",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "0iz",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "48q",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "4ys",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "54n",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "cwa",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "e08",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "glb",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "her",
+      "state": "closed",
+      "attempt": 11
+    },
+    {
+      "tick_id": "nvn",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "w1c",
+      "state": "closed",
+      "attempt": 13
+    },
+    {
+      "tick_id": "h0f",
+      "state": "closed",
+      "attempt": 33
+    },
+    {
+      "tick_id": "9t5",
+      "state": "rejected"
+    },
+    {
+      "tick_id": "emk",
+      "state": "closed",
+      "attempt": 15
+    },
+    {
+      "tick_id": "rj0",
+      "state": "closed",
+      "attempt": 16
+    },
+    {
+      "tick_id": "0dc",
+      "state": "closed",
+      "attempt": 17
+    },
+    {
+      "tick_id": "19l",
+      "state": "closed",
+      "attempt": 20
+    },
+    {
+      "tick_id": "5bp",
+      "state": "closed",
+      "attempt": 21
+    },
+    {
+      "tick_id": "7zs",
+      "state": "closed",
+      "attempt": 22
+    },
+    {
+      "tick_id": "9wo",
+      "state": "closed",
+      "attempt": 23
+    },
+    {
+      "tick_id": "bzx",
+      "state": "closed",
+      "attempt": 24
+    },
+    {
+      "tick_id": "pbb",
+      "state": "closed",
+      "attempt": 26
+    },
+    {
+      "tick_id": "sqx",
+      "state": "closed",
+      "attempt": 28
+    },
+    {
+      "tick_id": "usx",
+      "state": "closed",
+      "attempt": 29
+    },
+    {
+      "tick_id": "vw0",
+      "state": "closed",
+      "attempt": 30
+    },
+    {
+      "tick_id": "3kx",
+      "state": "closed",
+      "attempt": 31
+    },
+    {
+      "tick_id": "n4h",
+      "state": "closed",
+      "attempt": 32
+    },
+    {
+      "tick_id": "oe0",
+      "state": "closed",
+      "attempt": 25
+    },
+    {
+      "tick_id": "q1e",
+      "state": "closed",
+      "attempt": 27
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "73fdbb59829f61681cfabd9f5b8b46c319cf0764",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
+    "model": null,
+    "context_manifest_digest": "sha256:ce17a87f5eb09521e51e2225573ebb66181e172b1228190e91c75effe244f2c0",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

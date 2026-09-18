@@ -273,6 +273,26 @@ func TestTheEffectiveBudgetIsPrintedBeforeTheRun(t *testing.T) {
 	}
 }
 
+// A redirected `ticfac run-epic` is empty until the run ends (tick bzx): it
+// is no monitoring signal. run.log and `ticfac status` now cover most of the
+// need; this is the cheap remainder — the ONE line at startup naming the run
+// id and the two commands that follow it, said before anything is dispatched,
+// so a redirected invocation says what to watch from its first line. The line
+// also lands in run.log, which keeps what this process said whether or not
+// whoever launched it captured the output.
+func TestTheStartupLineNamesTheRunAndItsCommands(t *testing.T) {
+	line := startupLine("epic-9pd")
+	for _, want := range []string{
+		"epic-9pd",
+		"ticfac status epic-9pd",
+		"ticfac events epic-9pd --follow",
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the startup line does not say %q: %q", want, line)
+		}
+	}
+}
+
 // A feed write failure is not a verdict about the work, so it must not fail
 // the run — and silence is the one thing it must not be (tick d6s): an
 // operator who runs `ticfac events <run-id> --follow` against a run whose

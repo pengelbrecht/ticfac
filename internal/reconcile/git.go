@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // git, as the reconciler needs it: resolve, merge, push, and answer whether a
@@ -52,7 +53,9 @@ func (g *repoGit) tryEnv(dir string, extraEnv []string, args ...string) (stdout,
 		"-c", "commit.gpgsign=false",
 	}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), extraEnv...)
+	// GIT_TERMINAL_PROMPT=0 bounds the prompt; runstate.TransportEnv bounds the
+	// network, which is the one that stopped a run for two and a half hours.
+	cmd.Env = append(append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), runstate.TransportEnv()...), extraEnv...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
 	err = cmd.Run()

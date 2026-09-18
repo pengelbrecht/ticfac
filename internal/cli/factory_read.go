@@ -48,6 +48,10 @@ func factoryCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return runFactoryStatus(ctx, rest, stdout, stderr)
 	case "dashboard":
 		return runFactoryDashboard(ctx, rest, stdout, stderr)
+	case "webhook":
+		// Signal-aware for consistency with the rest of the group's
+		// context-taking commands.
+		return factoryWebhook(ctx, rest, stdout, stderr)
 	case "deploy":
 		return factoryDeploy(rest, stdout, stderr)
 	case "setup":
@@ -71,6 +75,7 @@ account, on your compute, with your model keys. See ticks' docs/design/cloud-fac
 
   deploy  put it in your account   |  status     what is configured, and works
   setup   walk the credentials     |  dashboard  watch it run, read-only
+  webhook point Telegram at it     |  (register by default; --status reads, --delete withdraws)
 
 'ticfac factory dashboard' is observation, like 'ticfac cloud status/logs/trace':
 it watches a deployed factory from a local terminal and cannot steer one, so

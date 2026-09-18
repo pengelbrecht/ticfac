@@ -28,6 +28,7 @@ const (
 	MethodAgentWait       = "agent.wait"
 	MethodAgentList       = "agent.list"
 	MethodAgentGet        = "agent.get"
+	MethodPaneClose       = "pane.close"
 	MethodPaneRead        = "pane.read"
 	MethodEventsSubscribe = "events.subscribe"
 	MethodEventsWait      = "events.wait"
@@ -202,6 +203,8 @@ type Server struct {
 	// sendKeys records every agent.send_keys call, decoded from the wire, so
 	// a consumer can assert on exactly what was sent.
 	sendKeys []SendKeys
+	// paneCloses records every pane.close call's pane id, in order.
+	paneCloses []string
 	// listErrAfterFirstList, when set, makes every agent.list after the first
 	// fail — herdr going quiet between the snapshot and the re-check.
 	listErrAfterFirstList string
@@ -382,6 +385,14 @@ func (s *Server) SendKeysCalls() []SendKeys {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]SendKeys(nil), s.sendKeys...)
+}
+
+// PaneCloseCalls returns every pane.close call's pane id, in order — the
+// record the wall-clock enforcement's escalation is asserted on (tick rj0).
+func (s *Server) PaneCloseCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.paneCloses...)
 }
 
 // SetAgents replaces the modelled session.
@@ -617,6 +628,8 @@ func (s *Server) builtin(method string) (Handler, bool) {
 		return s.handleAgentGet, true
 	case MethodAgentWait:
 		return s.handleAgentWait, true
+	case MethodPaneClose:
+		return s.handlePaneClose, true
 	case MethodPaneRead:
 		return s.handlePaneRead, true
 	case MethodEventsSubscribe:

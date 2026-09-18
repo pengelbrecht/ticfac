@@ -2,13 +2,15 @@
   "id": "sqx",
   "title": "Close-out's own commits are never held for green CI",
   "description": "Found by tick 0iz (run epic-9pd, attempt 3).\n\n0iz admits the close-out phase only when CI is green on the epic PR's head as it stands when close-out STARTS. The close-out job then commits the retro and learnings, those integrate onto the epic branch, CI re-runs on the PR — and nothing holds the close for that final result. The rule covers everything except the last phase's own writes.\n\nThe pwp run showed why the gap is not theoretical: a close-out commit can break CI (a learnings file over a checked cap, a malformed tracker record, a public-repo guard hit — the guard failed on that run's own records). Gate the close-out's CLOSE on green CI for the head that includes its own commits.",
-  "status": "open",
+  "notes": "2026-09-18 06:21 - ticfac run epic-9pd: attempt 28 reported a finding drafted for triage — proposed-tick \"Close-out CI read errors are typed as PR refusals (closeout_pr_unmet) in both gates\" (key 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35, severity low, for this repository). Triage with `ticfac finding 9pd 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-18 08:29 - ticfac run epic-9pd: attempt 28 merged into epic/9pd as 8d70029ca6ce; the integrated gate (go) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "9pd",
   "acceptance_criteria": "A close-out whose own commits turn the PR's CI red is not closed, and the refusal names the failing job; a test drives a close-out commit that fails CI and asserts the close is held",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T12:07:33.699303Z",
-  "updated_at": "2026-09-15T12:07:33.699303Z"
+  "updated_at": "2026-09-18T06:29:30.288288Z",
+  "closed_at": "2026-09-18T06:29:30.288288Z"
 }

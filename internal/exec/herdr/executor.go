@@ -64,6 +64,19 @@ type Options struct {
 	Model      string
 	RolePrompt string
 
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), which the rendered worker prompt names so a re-dispatched
+	// attempt does not start blind. Host-supplied for the same reason the
+	// role prompt is: the caller — the reconciler — is the one that knows
+	// where the predecessors' state directories live.
+	PriorReports []subprocess.PriorReport
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), which the rendered worker prompt points the
+	// worker at — the uncommitted work a stopped predecessor left behind.
+	// Host-supplied for the same reason the prior reports are.
+	PriorSnapshots []subprocess.PriorSnapshot
+
 	// Remote is the origin in-progress work is durable on, for disposal's
 	// branch-safety question. Empty means "origin", and a repository without
 	// that remote records no remote rather than inventing one.
@@ -311,13 +324,21 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	ctx := context.Background()
 
 	// The worktree AND the workspace come from herdr in one call; the
-	// returned root pane is where the agent goes.
+	// returned root pane is where the agent goes. The workspace LABEL
+	// identifies the ATTEMPT and not just the tick (ticfac tick 55i): the
+	// branch, the worktree path, the state directory and the agent's own
+	// name are all attempt-scoped, and a label of the bare tick id put two
+	// attempts of one tick into an operator's list under one name — the
+	// one an operator would reasonably close being the one holding the only
+	// copy of the work. The label follows the agent's own name convention
+	// ("tick-<id>-a<n>"), so the workspace and the agent in it read as one
+	// attempt.
 	info := e.client.ServerInfo()
 	created, err := e.client.WorktreeCreate(ctx, client.WorktreeCreateParams{
 		Cwd:    client.Ptr(e.repo),
 		Branch: client.Ptr(branch),
 		Base:   client.Ptr(base),
-		Label:  client.Ptr(tickOf(spec)),
+		Label:  client.Ptr(agentName(tickOf(spec), attempt)),
 		Focus:  false,
 	})
 	if err != nil {
@@ -330,32 +351,34 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	}
 
 	record := &attemptRecord{
-		SchemaVersion: stateSchemaVersion,
-		Key:           attemptKey(e.repoKey, spec.JobID, attempt),
-		RepoKey:       e.repoKey,
-		Repo:          e.repo,
-		JobID:         spec.JobID,
-		Attempt:       attempt,
-		TickID:        tickOf(spec),
-		Branch:        branch,
-		WriteRef:      spec.Source.WriteRef,
-		BaseSHA:       base,
-		WorkspaceID:   created.Workspace.WorkspaceID,
-		PaneID:        created.RootPane.PaneID,
-		AgentName:     agentName(tickOf(spec), attempt),
-		Worktree:      worktree,
-		State:         dir,
-		Kind:          e.opts.Kind,
-		AgentArgs:     e.opts.Args,
-		Model:         e.opts.Model,
-		RolePrompt:    e.opts.RolePrompt,
-		WallSeconds:   spec.Limits.WallSeconds,
-		Remote:        e.remoteFor(spec),
-		SourceGrade:   spec.Credentials.Source.Grade(),
-		ServerVersion: info.Version,
-		Protocol:      info.Protocol,
-		IssuedAt:      e.stamp(),
-		Spec:          spec,
+		SchemaVersion:  stateSchemaVersion,
+		Key:            attemptKey(e.repoKey, spec.JobID, attempt),
+		RepoKey:        e.repoKey,
+		Repo:           e.repo,
+		JobID:          spec.JobID,
+		Attempt:        attempt,
+		TickID:         tickOf(spec),
+		Branch:         branch,
+		WriteRef:       spec.Source.WriteRef,
+		BaseSHA:        base,
+		WorkspaceID:    created.Workspace.WorkspaceID,
+		PaneID:         created.RootPane.PaneID,
+		AgentName:      agentName(tickOf(spec), attempt),
+		Worktree:       worktree,
+		State:          dir,
+		Kind:           e.opts.Kind,
+		AgentArgs:      e.opts.Args,
+		Model:          e.opts.Model,
+		RolePrompt:     e.opts.RolePrompt,
+		PriorReports:   e.opts.PriorReports,
+		PriorSnapshots: e.opts.PriorSnapshots,
+		WallSeconds:    spec.Limits.WallSeconds,
+		Remote:         e.remoteFor(spec),
+		SourceGrade:    spec.Credentials.Source.Grade(),
+		ServerVersion:  info.Version,
+		Protocol:       info.Protocol,
+		IssuedAt:       e.stamp(),
+		Spec:           spec,
 	}
 	rel, abs, err := resultPath(record.Worktree, spec.ArtifactPrefix, record.TickID)
 	if err != nil {

@@ -46,11 +46,14 @@ import (
 // not been believed yet; the one narrow exception, carried from ticks'
 // cleanup, is the attempt's OWN untracked report, which is archived beside
 // the attempt record first so the report survives the worktree and the
-// remove can proceed without Force. The branch, when deletion is permitted,
-// is this executor's to delete — against the safety check that refuses a
-// branch whose commits no remote has, exactly as the local executor's does,
-// in the same refusal vocabulary the reconciler already retries with
-// KeepBranch on.
+// remove can proceed without Force. That refusal IS this executor's wip
+// policy (tick pbb): herdr's teardown destroys no uncommitted work — the
+// only destruction here is the wall-clock pane close, which rj0 gates on
+// its own snapshot — so disposal takes none. The branch, when deletion is
+// permitted, is this executor's to delete — against the safety check that
+// refuses a branch whose commits no remote has, exactly as the local
+// executor's does, in the same refusal vocabulary the reconciler already
+// retries with KeepBranch on.
 
 // Dispose removes the herdr workspace, the worktree it opened and — unless
 // asked not to — the branch the attempt created.
@@ -385,14 +388,25 @@ func disposalNote(record *attemptRecord, opts subprocess.DisposeOptions, persist
 	return fmt.Sprintf("disposed the %s of attempt %d after its result was persisted", what, record.Attempt)
 }
 
-// PurgeState removes the attempt's state directory. It is separate from
-// disposal on purpose: the state directory holds the collected result, the
-// observation log and the archived report, which are the run's record of the
-// attempt and outlive the git objects.
+// PurgeState removes the attempt's state directory — and the wip ref its
+// record names, if the attempt's work was preserved before a teardown
+// destroyed it (tick pbb). The ref and the record retire TOGETHER: the
+// record beside the attempt is the only thing that says where the preserved
+// work lives, and a ref with no record is litter nobody can place. The ref
+// goes FIRST, so a purge interrupted between the two is completed by the
+// next one from the record that is still there; an unreadable record or a
+// missing ref is nothing to prune rather than a failure.
 func (e *Executor) PurgeState(h *subprocess.JobHandle) error {
 	local, err := local(h)
 	if err != nil {
 		return err
+	}
+	if _, record, rerr := local.resolved(); rerr == nil {
+		if snap, ok := e.storeAt(record.State).wipSnapshot(); ok && snap.Ref != "" {
+			if _, derr := git(record.Repo, "update-ref", "-d", snap.Ref); derr != nil {
+				return fmt.Errorf("delete the preserved-work ref %s: %w", snap.Ref, derr)
+			}
+		}
 	}
 	return os.RemoveAll(local.State)
 }

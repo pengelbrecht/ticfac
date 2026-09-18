@@ -98,6 +98,19 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 			Detail: "the attempt had no readable report to archive before its worktree was removed"})
 	}
 
+	// The uncommitted work is preserved BEFORE the worktree goes (tick pbb).
+	// This executor's removal is --force: the one unconditional destruction
+	// of a worktree this run owns besides the herdr wall-clock pane close, and
+	// the path a rejected attempt and a person's release both take. A
+	// snapshot that cannot land fails the disposal — the caller retries it,
+	// and the alternative is a teardown that throws work away to tidy up.
+	// A worktree with nothing uncommitted to preserve takes no snapshot: one
+	// wip ref per ordinarily-disposed attempt would bury the stopped ones in
+	// noise.
+	if err := e.preserveUncommittedWork(st, record); err != nil {
+		return fmt.Errorf("preserve the uncommitted work before the worktree goes: %w", err)
+	}
+
 	if err := worktreeRemove(record.Repo, record.Worktree); err != nil {
 		return fmt.Errorf("remove the attempt worktree: %w", err)
 	}
@@ -108,6 +121,46 @@ func (e *Executor) Dispose(h *JobHandle, opts DisposeOptions) error {
 	}
 	_ = st.observe(Observation{At: e.stamp(), Kind: ObsExited,
 		Detail: disposalNote(record, opts, persisted)})
+	return nil
+}
+
+// preserveUncommittedWork snapshots the worktree's uncommitted state onto a
+// wip ref of its own, ONCE, before the force-remove destroys it (tick pbb;
+// the mechanics and the ref naming are the seam's — the same ones the herdr
+// wall-clock close gates its pane close on). The ref sits outside refs/heads,
+// so the work is recoverable after teardown without ever presenting itself
+// as a branch to merge, and where it landed is recorded beside the attempt
+// record — the name a later attempt's dispatch walks, exactly as it walks
+// the archived report.
+func (e *Executor) preserveUncommittedWork(st *store, record *attemptRecord) error {
+	if _, ok := st.wipSnapshot(); ok {
+		return nil // already preserved; the removal may proceed
+	}
+	if _, err := os.Stat(record.Worktree); err != nil {
+		if os.IsNotExist(err) {
+			return nil // the worktree is already gone: nothing left to preserve
+		}
+		return fmt.Errorf("stat the worktree at %s: %w", record.Worktree, err)
+	}
+	dirty, err := UncommittedWork(record.Worktree, record.Spec.ArtifactPrefix)
+	if err != nil {
+		return fmt.Errorf("read the worktree's uncommitted work: %w", err)
+	}
+	if !dirty {
+		return nil
+	}
+	ref := WipRefFor(record.JobID)
+	commit, err := SnapshotWorktree(record.Worktree, ref, record.Spec.ArtifactPrefix)
+	if err != nil {
+		return err
+	}
+	if err := st.markWIPSnapshot(WIPSnapshot{Ref: ref, Commit: commit, TakenAt: e.stamp()}); err != nil {
+		return err
+	}
+	_ = st.observe(Observation{At: e.stamp(), Kind: ObsExited,
+		Detail: fmt.Sprintf("preserved the uncommitted work of attempt %d of %s on %s before the worktree was removed: "+
+			"the snapshot is material a later attempt can be pointed at, never evidence of completion",
+			record.Attempt, record.JobID, ref)})
 	return nil
 }
 
@@ -151,14 +204,27 @@ func disposalNote(record *attemptRecord, opts DisposeOptions, persisted bool) st
 	return fmt.Sprintf("disposed the %s of attempt %d after its result was persisted", what, record.Attempt)
 }
 
-// PurgeState removes the attempt's state directory. It is separate from
-// disposal on purpose: the state directory holds the collected result, the
-// observation log and the transcript, which are the run's record of the
-// attempt and outlive the git objects.
+// PurgeState removes the attempt's state directory — and the wip ref its
+// record names, if the attempt's work was preserved (tick pbb). The ref and
+// the record retire TOGETHER: the record beside the attempt is the only
+// thing that says where the preserved work lives, and a ref with no record
+// is litter nobody can place, so outliving each other helps nobody. The ref
+// goes FIRST, so a purge interrupted between the two is completed by the
+// next one from the record that is still there; an unreadable record or a
+// missing ref is nothing to prune rather than a failure, exactly as a state
+// directory that is already gone is.
 func (e *Executor) PurgeState(h *JobHandle) error {
 	local, err := h.Local()
 	if err != nil {
 		return err
+	}
+	st := e.storeAt(local.State)
+	if record, rerr := st.readAttempt(); rerr == nil {
+		if snap, ok := st.wipSnapshot(); ok && snap.Ref != "" {
+			if _, derr := git(record.Repo, "update-ref", "-d", snap.Ref); derr != nil {
+				return fmt.Errorf("delete the preserved-work ref %s: %w", snap.Ref, derr)
+			}
+		}
 	}
 	return os.RemoveAll(local.State)
 }

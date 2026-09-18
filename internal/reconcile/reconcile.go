@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -47,6 +48,37 @@ const (
 
 	// DefaultWallSeconds bounds one job. An unbounded job is one nothing stops.
 	DefaultWallSeconds = 3600
+
+	// DefaultGateTimeout bounds one gate command, and it is deliberately
+	// LONGER than the timeouts a gate command declares for itself.
+	//
+	// A gate that names its own bound — `go test -timeout 45m` — has said what
+	// it considers too long, and that bound is the useful one: go's timeout
+	// prints the stack of every running goroutine, so the answer is "this test
+	// hung, here is where". A harness bound underneath it pre-empts that and
+	// substitutes `signal: killed`, exit -1, which names nothing.
+	//
+	// This was 30 minutes against a declared 45, and the two disagreed from the
+	// day they were written. Nothing noticed while the run worked one tick at a
+	// time and a gate finished in ten minutes. The first widened run hit it
+	// immediately: bzx's gate ran against three live workers competing for the
+	// machine, crossed 30 minutes, and was killed with no diagnosis at all —
+	// the tick was refused for the run's own scheduling rather than for
+	// anything about its work.
+	//
+	// So the harness bound is the outer one: the backstop for a command that
+	// declares no timeout of its own, or whose own timeout failed to fire.
+	DefaultGateTimeout = 60 * time.Minute
+
+	// DefaultStallWarnAfter is how long an in-flight attempt may produce
+	// nothing durable — its branch unmoved, its worktree unchanged — before
+	// the run says so in the feed (tick 7zs). It is an EARLY WARNING, not a
+	// bound: the wall clock still spends the attempt, and a worker thinking
+	// hard legitimately commits nothing for a while. The Phase 3 run's
+	// worker produced nothing for 40 of its 55 minutes; fifteen is early
+	// enough that a person reading the line still has most of the attempt's
+	// budget to spend.
+	DefaultStallWarnAfter = 15 * time.Minute
 )
 
 // Tracker is the tracker surface the reconciler uses. It is exactly the tk
@@ -158,6 +190,17 @@ type Dispatch struct {
 	WriteRef string
 	BaseSHA  string
 
+	// Try is which try of its OWN tick this dispatch is (tick vw0): 1 for the
+	// tick's first dispatch, 2 for the redispatch after a spent attempt —
+	// the number tryOf computes for the feed lines, whatever number the
+	// run-wide counter handed the dispatch. It rides the dispatch because the
+	// two numbers answer different questions and both reach a worker:
+	// Attempt is the identity (its branch, its marker, the argument to
+	// `ticfac settle`), Try is the ordinal a worker means by "this tick's
+	// first attempt" — and anything keyed on Attempt = 1 was keyed on dispatch
+	// order, which no fixture and no worker should depend on.
+	Try int
+
 	// StateDir is a directory private to THIS dispatch. The reconciler assigns
 	// it so that a restarted run — on a fresh clone, holding nothing but the
 	// dispatch marker it reads from origin — can find the attempt the previous
@@ -202,6 +245,47 @@ type Dispatch struct {
 	// attempt was DISPATCHED under, not the one it would observe today. The
 	// zero value is a substrate that states no protocol — a local process.
 	Substrate Substrate
+
+	// ResumedFrom states that this dispatch starts from the work of a RELEASED
+	// attempt — a person's --carry-work settlement (tick 0z0): which attempt,
+	// the ref its work is on, the commit this dispatch was cut from, and who
+	// released it. It is the ANSWER to the question a resumed run's records
+	// have to survive — "this work came from a released attempt" — in two
+	// halves: the explicit claim rides the marker's open handle (the closed
+	// provenance object has no field for it), and the closed fields that
+	// already say it are stated too — a carried dispatch's source_ref and
+	// source_sha ARE the released attempt's ref and commit. Nil when this
+	// dispatch resumed from nothing.
+	ResumedFrom *resumedFrom
+
+	// PriorReports are the archived reports of this tick's EARLIER attempts
+	// (tick nvn), newest first — the analysis a re-dispatched attempt is shown
+	// in its prompt instead of starting blind. The reports are re-derived
+	// from the executor state directory at every dispatch rather than carried
+	// on the marker: they are facts about the attempts the state directory
+	// already holds, and the marker — which reaches origin, a public
+	// repository — never carries host paths.
+	PriorReports []subprocess.PriorReport
+
+	// PriorSnapshots are the preserved-work records of this tick's EARLIER
+	// attempts (tick pbb), newest first — the uncommitted work a stopped
+	// attempt left, snapshotted before its teardown destroyed its worktree,
+	// which the re-dispatch's prompt points the worker at as material to
+	// read: never evidence of completion, never to merge. Re-derived from
+	// the executor state directory for the same reason the prior reports
+	// are — and for one more: a dispatch conflict that runs the gather twice
+	// must not carry a stale record on a marker that reaches origin.
+	PriorSnapshots []subprocess.PriorSnapshot
+}
+
+// carriedWork is a released attempt whose WORK the next dispatch of its tick
+// starts from, with the settlement that said so: the marker identifies the
+// attempt and the branch its commits are on, and by/at name the person who
+// released it and when — carried onto the dispatch's records so "who sent
+// this work forward" is not a fact the run has to re-derive.
+type carriedWork struct {
+	marker attemptHandle
+	by, at string
 }
 
 // Options configure a reconciler. Everything it talks to is passed in rather
@@ -263,6 +347,26 @@ type Options struct {
 	// is `<repo>/.tick/runners.toml`.
 	GateConfig string
 
+	// RepoConfig is the target repository's own config — `.tick/config.md` —
+	// from which the run reads the rules the repository declares for itself.
+	// Today that is one rule: the PR + CI close-out gate (tick 0iz), the
+	// precondition a close-out phase is admitted against. Empty is
+	// `<repo>/.tick/config.md`; a repository that carries no config.md
+	// declares no rule, the way runners.toml's gate reader treats a missing
+	// file as no gate rather than inventing one.
+	RepoConfig string
+
+	// PullRequests is the code-hosting surface behind the PR + CI close-out
+	// rule: find the epic PR, open one, read CI on it. It is passed in rather
+	// than reached for for the same reason every other surface is — the
+	// behaviour under test is the behaviour that ships — and nil is legal
+	// ONLY where the target repo declares no close-out rule: a repository
+	// that declares one and a build with no surface behind it is refused at
+	// construction, before anything is claimed, because a close-out whose
+	// precondition nothing can check is one a whole run of work discovers it
+	// cannot complete only at the end.
+	PullRequests forge.PullRequests
+
 	// GateTimeout bounds one gate command.
 	GateTimeout time.Duration
 
@@ -281,6 +385,15 @@ type Options struct {
 
 	// WallSeconds bounds one job.
 	WallSeconds int
+
+	// StallWarnAfter is how long an in-flight attempt may produce nothing
+	// durable — its branch unmoved, its worktree unchanged — before the run
+	// writes one feed line about it (tick 7zs). Zero is the default
+	// (DefaultStallWarnAfter); negative disables the warning. It is a hint
+	// about when to look, never a verdict: it stops, rejects and holds
+	// nothing, and the wall clock — not this — is the bound that spends the
+	// attempt.
+	StallWarnAfter time.Duration
 
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
@@ -338,6 +451,11 @@ type Reconciler struct {
 
 	gate       GateCommands
 	gateDigest string
+
+	// closeoutRule is what the target repository's own .tick/config.md
+	// declares about how an epic integrates (tick 0iz). The zero value — a
+	// repo that declares no rule — admits close-out as it always did.
+	closeoutRule CloseoutRule
 
 	// profiles is the resolved role profile per role, and profileSet digests
 	// all of them together: a checkpoint is not about one role, so it names the
@@ -474,6 +592,84 @@ const (
 	// refusal returned to the caller — the line says when to look, never
 	// what happened.
 	StageStartFailed = "start_failed"
+
+	// StageRunHeld is the line a run owes a person: it stopped holding one
+	// tick for a decision only a person can make (an attempt nobody can
+	// address, an attempt rejected with its work unmerged, a worker that
+	// answered BLOCKED, a struck-out unit) and cannot proceed without one
+	// (tick 0z0). A held attempt is correct and must stay; what makes it a
+	// stall is that nobody is told — so the run TELLS the feed, at TICK scope
+	// so the line carries the tick and the attempt it is about, and the
+	// refusal's own reason leads the detail so a watcher surfaces WHY without
+	// matching on a sentence. The distinct stage is the machine fact; the
+	// detail is the person's half.
+	StageRunHeld = "run_held"
+
+	// StageCarried is the line a dispatch cut from a RELEASED attempt's work
+	// leaves (tick 0z0): a person released the attempt with --carry-work, so
+	// the new attempt starts from the released commits rather than redoing
+	// them. It is recorded once, on the dispatch that actually happened — not
+	// in the planning half, which a dispatch conflict can run twice.
+	StageCarried = "carried"
+
+	// StagePROpened is the line the run leaves when the epic PR exists — the
+	// one it opened, or the one a previous incarnation opened that this one
+	// found (tick 0iz). It is recorded at the CLOSE-OUT tick's scope, so the
+	// feed line carries the tick whose admission the PR is a precondition
+	// of, and it is the run that opens the PR, never the close-out worker's
+	// diligence.
+	StagePROpened = "pr_opened"
+
+	// StageCloseoutAdmitted is the line the close-out admission leaves when
+	// the precondition the target repo declares is met: the epic PR is open
+	// and CI is green on it, so the close-out phase is admitted (tick 0iz).
+	// The phase it admits then proceeds through the ordinary stages.
+	StageCloseoutAdmitted = "closeout_admitted"
+
+	// StageCloseoutHeld is the line the close-out's CI gates leave while they
+	// hold it: CI is pending on the epic PR, at the admission (tick 0iz) or
+	// on the head that includes the close-out's own commits at the close
+	// (tick sqx). Which half of the precondition is unmet is in the detail
+	// when a refusal follows, and the typed refusal carries the verdict —
+	// the line says when to look, never what happened.
+	StageCloseoutHeld = "closeout_held"
+
+	// StageCloseoutCloseGated is the line the close-out's CLOSE gate leaves
+	// when CI is green on the epic PR's head as it stands AFTER the
+	// close-out's own commits have integrated onto it (tick sqx): the head
+	// the admission's green CI is not evidence about, re-derived at the
+	// close rather than trusted from anywhere — because CI's answer changes
+	// with every push, and this push was the close-out's own.
+	StageCloseoutCloseGated = "closeout_close_gated"
+
+	// StageWallClock is the line a bound's firing owes the feed (tick emk):
+	// the wall clock fired and the attempt has NOT settled, which is the
+	// moment the run stops making progress on its own — the moment a
+	// watcher's attention is worth asking for while there is still an agent
+	// to stop. It is written by the wait, once per tick, from the reconciler's
+	// own bound (the durable marker's issue time plus WallSeconds — the same
+	// arithmetic the settlement deadline starts from), and it carries the
+	// executor's last observation so the reader is sent at what the
+	// substrate was seen doing, not at a guess. The stop itself is the
+	// executor's to make (the local supervisor kills; the herdr executor
+	// delivers herdr's interrupt); this line only says the bound fired and
+	// the attempt is still unresolved — a hint about when to look, exactly
+	// like every other feed line, never a verdict.
+	StageWallClock = "wall_clock_fired"
+
+	// StageStallWarned is the early warning before the bound (tick 7zs): the
+	// attempt is alive — liveness was never in question — and it has produced
+	// nothing durable for longer than the run's stall threshold: its branch
+	// has not moved and its worktree has not changed. It is written by the
+	// wait, once per tick, from facts read out of the repo itself (the branch
+	// tip's committer date, the newest file mtime under the worktree), and it
+	// is a reason to LOOK, never a verdict: a worker thinking hard
+	// legitimately commits nothing for a while, the line stops and rejects
+	// nothing, and the wall clock — not this — is the bound that spends the
+	// attempt. The Phase 3 run knew its worker was alive for 55 minutes and
+	// had no way to know it had produced nothing for 40 of them; a person
+	// caught it by reading the pane.
+	StageStallWarned = "stall_warned"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -514,8 +710,11 @@ func New(opts Options) (*Reconciler, error) {
 	if opts.GateConfig == "" {
 		opts.GateConfig = filepath.Join(opts.Repo, ".tick", "runners.toml")
 	}
+	if opts.RepoConfig == "" {
+		opts.RepoConfig = repoConfigPath(opts.Repo)
+	}
 	if opts.GateTimeout <= 0 {
-		opts.GateTimeout = 30 * time.Minute
+		opts.GateTimeout = DefaultGateTimeout
 	}
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = DefaultPollInterval
@@ -528,6 +727,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.WallSeconds <= 0 {
 		opts.WallSeconds = DefaultWallSeconds
+	}
+	if opts.StallWarnAfter == 0 {
+		opts.StallWarnAfter = DefaultStallWarnAfter
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -570,6 +772,26 @@ func New(opts Options) (*Reconciler, error) {
 	if len(gate) == 0 {
 		return nil, fmt.Errorf("reconcile: %s declares no [testing.commands]: there is no integrated gate to run, "+
 			"and closing a tick behind a gate that does not exist is a close nothing stands behind", opts.GateConfig)
+	}
+
+	// The close-out rule (tick 0iz), read from the repository's own config
+	// rather than hardcoded — the way the gate above is read from
+	// runners.toml. A repository that declares the rule and a build with no
+	// code-hosting surface behind it is refused HERE, at construction, for
+	// the same reason an unusable profile is: the precondition cannot be
+	// checked, and discovering that three ticks into an epic — or, worse, at
+	// the close-out the rule governs — is the failure this tick exists to
+	// remove. The refusal names the fix an operator can make before the run
+	// starts.
+	rule, err := ReadCloseoutRule(opts.RepoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+	if rule.Declared && opts.PullRequests == nil {
+		return nil, fmt.Errorf("reconcile: %s declares the PR + CI close-out rule — %q — and this build has no "+
+			"code-hosting surface configured to open or read the epic PR: set %s (the GitHub surface reads it), or "+
+			"run against a host that provides one",
+			opts.RepoConfig, rule.Stated, forge.TokenEnv)
 	}
 
 	// The role profiles, resolved BEFORE anything is dispatched. A profile that
@@ -646,6 +868,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.git = g
 	r.gate = gate
 	r.gateDigest = gate.Digest()
+	r.closeoutRule = rule
 	r.profiles = profiles
 	r.profileSet = profileSetDigest(profiles)
 	r.pollInterval = opts.PollInterval
@@ -930,6 +1153,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.seedTicks(plan)
 
+	// The checkpoint rows the plan does not carry because the tracker has
+	// closed their ticks: settled from the tracker's own answer before the
+	// run checkpoints anything, so the admitted checkpoint a restart would
+	// read from already carries them.
+	r.settleClosedTicks(ctx, plan)
+
 	if _, err := r.checkpoint(runstate.StateAdmitted, "the epic graph is read and the run is admitted"); err != nil {
 		return nil, err
 	}
@@ -959,34 +1188,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return r.result(runstate.StateFailed, refusal.Error()), nil
 	}
 
-	var failed []string
-	for _, entry := range plan {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if err := r.processTick(ctx, entry); err != nil {
-			var refusal *Refusal
-			if !asRefusal(err, &refusal) {
-				return nil, err
-			}
-			failed = append(failed, entry.TickID)
-			r.failure = refusal
-			r.setTick(entry.TickID, "rejected")
-			// The refusal that decides the run's fate, in the feed, in its own
-			// words. Without this the feed went straight from `dispatched` to a
-			// generic run_finished, and the actual reason — unaddressed, past
-			// the wall clock, release it with `ticfac settle` — reached no
-			// surface an operator reads. In the Phase 3 run it had to be
-			// recovered by reading dispatch.go (tick emk).
-			r.recordRefusal(entry.TickID, refusal)
-			if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
-				return nil, cErr
-			}
-			// One epic at concurrency one: a tick that did not pass its gate
-			// blocks whatever came after it, and the run stops rather than
-			// integrating over an unproven change.
-			break
-		}
+	failed, err := r.runPlan(ctx, plan)
+	if err != nil {
+		return nil, err
 	}
 
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)
@@ -999,6 +1203,15 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			"that was rejected holding commits nothing merged is reported rather than dispatched over, and "+
 			"nothing that already passed is redone",
 			strings.Join(failed, ", "))
+		// The refusal that stopped the run rides the terminal reason, because a
+		// checkpoint is written on a STATE CHANGE and this one is the last: the
+		// durable record a person (and a resumed run) reads names WHAT stopped
+		// it — the failing gate's check, the failing CI's JOB on the epic PR —
+		// and not the resumption template alone, which says how to continue but
+		// not what to fix (tick 0iz).
+		if r.failure != nil {
+			reason += fmt.Sprintf(". The refusal that stopped the run: %s", r.failure.Message)
+		}
 	}
 	if _, err := r.checkpoint(state, reason); err != nil {
 		return nil, err
@@ -1118,6 +1331,46 @@ func (r *Reconciler) seedTicks(plan []planEntry) {
 		if !known[entry.TickID] {
 			r.ticks = append(r.ticks, runstate.TickState{TickID: entry.TickID, State: "ready"})
 		}
+	}
+}
+
+// settleClosedTicks settles the checkpoint rows of ticks this plan no longer
+// carries because the tracker has already closed them.
+//
+// planFrom skips whatever the tracker has closed, which is right for planning
+// — and is also how the close-to-checkpoint window (tick 48q) went unnoticed:
+// a reconciler that died between PUBLISHING a tick's close through the tracker
+// and WRITING the checkpoint row that says closed left the two authorities
+// disagreeing (the tracker says closed, the row says integrated), and the
+// resumed run's plan dropped the tick, so the "already closed" settlement in
+// processTick never ran for it and nothing ever wrote the row. The checkpoint
+// is what a future resume decides what is done from, so a tick stuck at
+// integrated is a tick that resume may try to finish again. The disagreement
+// is settled here, from the tracker's OWN answer, by the first incarnation
+// that finds it — never by trusting the dead one to have written the row.
+//
+// Only rows the plan dropped are asked: a tick the plan still carries runs
+// processTick, whose already-closed settlement is this same rule. A row
+// already reading closed is left alone — the settlement is idempotent and
+// writes nothing on a resume that has nothing to settle. A tick the tracker
+// cannot answer is left as it stands rather than guessed at.
+func (r *Reconciler) settleClosedTicks(ctx context.Context, plan []planEntry) {
+	planned := map[string]bool{}
+	for _, entry := range plan {
+		planned[entry.TickID] = true
+	}
+	for _, ts := range append([]runstate.TickState{}, r.ticks...) {
+		if planned[ts.TickID] || ts.State == "closed" {
+			continue
+		}
+		current, err := r.tracker.Show(ctx, ts.TickID)
+		if err != nil || current.Status != "closed" {
+			continue
+		}
+		r.setTick(ts.TickID, "closed")
+		r.record(ts.TickID, StageSkipped,
+			"already closed in the tracker: %s; the row is settled by this run because the incarnation that "+
+				"closed it died before writing it", current.ClosedReason)
 	}
 }
 
@@ -1313,6 +1566,35 @@ const (
 	// the second at the person the draft is waiting for.
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
+
+	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), and the sixth its
+	// own CLOSE gate adds (tick sqx). The PR + CI rule a target repository
+	// declares in .tick/config.md is a precondition the RUN enforces, and
+	// each refusal names which half of it is unmet, because the halves send
+	// the next repair somewhere different: the first at the HOST, which
+	// configured no code-hosting surface for a repo that declares the rule;
+	// the second at the FORGE, which could not open or read the PR (a
+	// credential, a permission, a network); the third at the WORKFLOW, which
+	// never ran on the PR at all — unsatisfiable by waiting, which is the
+	// failure the rule exists to surface; the fourth at the CODE, named by
+	// the failing job the message carries; the fifth at the CLOCK — the run
+	// bounded its wait, and re-running the epic re-derives the admission from
+	// the PR rather than rediscovering it. The sixth is the fourth again, one
+	// head later: CI red on the PR head the close-out's OWN commits made —
+	// the head its admission's green CI is not evidence about — with the
+	// repair aimed at the close-out's writes rather than at the epic's tree.
+	RefusedCloseoutForge     = "closeout_forge_absent" // no surface behind the rule
+	RefusedCloseoutPR        = "closeout_pr_unmet"     // no PR, or one the forge could not open or read
+	RefusedCloseoutCIAbsent  = "closeout_ci_absent"    // CI never ran on the PR head
+	RefusedCloseoutCI        = "closeout_ci_failed"    // CI red; the message names the failing job
+	RefusedCloseoutCIPending = "closeout_ci_pending"   // CI still pending past the run's bound
+
+	// RefusedCloseoutCIOnClose is CI red on the PR head that includes the
+	// close-out's OWN commits (tick sqx): the head the admission's green CI
+	// never saw, because the close-out had not written it yet. The message
+	// names the failing job, and the repair is the close-out's own writes —
+	// the retro, the learnings, the records — rather than the epic's tree.
+	RefusedCloseoutCIOnClose = "closeout_ci_failed_on_close" // the close-out's own commits turned CI red
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9
@@ -1353,6 +1635,33 @@ func (r *Reconciler) recordRefusal(tick string, refusal *Refusal) {
 // collapsedMessage is what a refusal reads like when distinct failure classes
 // are allowed to share a sentence.
 const collapsedMessage = "the tick did not pass"
+
+// holdsForAPerson is the set of refusals whose next actor is a PERSON and not
+// another run: the run cannot proceed without a decision somebody has to
+// make, which is what makes these holds rather than failures (tick 0z0). The
+// set is closed on the refusal REASON — a value, never a sentence — and each
+// member says why it is here:
+//
+//   - RefusedHeld: a struck-out unit, released only by a person (A11);
+//   - RefusedUnaddressed and RefusedRejectedWork: the two `ticfac settle`
+//     releases — an attempt nobody can address, and one rejected with commits
+//     nothing merged;
+//   - RefusedNeedsHuman and RefusedRoleAnswer: the worker or the role job
+//     answered BLOCKED or NEEDS_CONTEXT, and the answer is its deliverable;
+//   - RefusedFindingUntriaged: a tick whose findings nobody has triaged is
+//     refused its close, and the triage is a person's.
+//
+// Every other refusal is a repair another RUN can make — a gate that runs
+// again on a fixed tree, an attempt that is redispatched once its blocker
+// closed — and those are reported as failures, not held.
+func holdsForAPerson(reason string) bool {
+	switch reason {
+	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
+		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged:
+		return true
+	}
+	return false
+}
 
 func asRefusal(err error, into **Refusal) bool {
 	if refusal, ok := err.(*Refusal); ok {

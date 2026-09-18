@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,33 +123,84 @@ func (f *Feed) Append(e Event) error {
 // Path is where this feed lives.
 func (f *Feed) Path() string { return f.path }
 
+// End is the feed's standing size in bytes: the cursor a subscriber that
+// wants only what lands from NOW starts from. A feed that does not exist
+// yet is the run-has-not-written case, and its cursor is zero — everything
+// the run will write is still to come (ticfac tick 55i).
+func End(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+// Located is one event and the byte range its line occupies in the feed:
+// Start is the line's first byte, End the offset just past its newline. The
+// ranges tile the file, so a follower started at End receives that event
+// exactly once — which is how a subscriber that wants only PART of the
+// standing feed names where the rest begins (ticfac tick usx).
+type Located struct {
+	Event
+	Start int64
+	End   int64
+}
+
 // Read returns every event in the feed, in the order it landed. A line that
 // is not a closed `ticfac.run_event.v1` object is refused rather than
 // skipped: a feed a reader silently forgives is a feed whose drift nobody
 // can see.
 func Read(path string) ([]Event, error) {
+	located, err := ReadLocated(path)
+	if err != nil {
+		return nil, err
+	}
+	events := make([]Event, len(located))
+	for i, line := range located {
+		events[i] = line.Event
+	}
+	return events, nil
+}
+
+// ReadLocated is [Read] with each event's byte range: the same strict
+// whole-line parsing — a line that is not a closed `ticfac.run_event.v1`
+// object is refused rather than skipped — plus the offsets a follower needs
+// to resume from any line's boundary rather than only the file's end.
+func ReadLocated(path string) ([]Located, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read the run feed at %s: %w", path, err)
 	}
-	events := []Event{}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	for {
-		var line Event
-		err := decoder.Decode(&line)
-		if errors.Is(err, io.EOF) {
-			break
+	located := []Located{}
+	var start, offset int64
+	for offset < int64(len(raw)) {
+		index := bytes.IndexByte(raw[offset:], '\n')
+		var line []byte
+		if index < 0 {
+			// A last line the writer has not newline-terminated yet still
+			// parses as a whole object; its End is where the next line's
+			// bytes will land, which is the resumption cursor either way.
+			line = raw[offset:]
+			offset = int64(len(raw))
+		} else {
+			line = raw[offset : offset+int64(index)]
+			offset += int64(index) + 1
 		}
-		if err != nil {
+		if len(strings.TrimSpace(string(line))) == 0 {
+			start = offset
+			continue
+		}
+		var event Event
+		if err := unmarshalStrict(line, &event); err != nil {
 			return nil, fmt.Errorf("%s is not a run event feed: %w", path, err)
 		}
-		if err := line.Validate(); err != nil {
+		if err := event.Validate(); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		events = append(events, line)
+		located = append(located, Located{Event: event, Start: start, End: offset})
+		start = offset
 	}
-	return events, nil
+	return located, nil
 }
 
 // followTick is the follower's own read cadence. It is an implementation
@@ -170,8 +219,28 @@ const followTick = 25 * time.Millisecond
 // guessed. What it yields are hints, never verdicts: a subscriber that learns
 // a run is finished from a line has skipped the one step that is never the
 // feed's to take — looking at the evidence.
+//
+// Replaying the standing feed is a subscriber's CHOICE, and not always the
+// right one: the feed is append-only per RUN ID, so a resumed run appends to
+// a file an earlier, failed incarnation already ended with a terminal line,
+// and a follower from offset zero replays that line first (ticfac tick 55i).
+// A subscriber that wants only what the current incarnation writes starts
+// at [End] instead — [FollowFrom] carries the cursor.
 func Follow(ctx context.Context, path string, fn func(Event)) error {
-	var offset int64
+	return FollowFrom(ctx, path, 0, fn)
+}
+
+// FollowFrom is [Follow] starting at a byte cursor: zero replays every
+// standing line first (the contract's "follow the file from offset zero"),
+// [End] subscribes from now, and a cursor a previous session remembered
+// resumes without missing or replaying anything. The reader never names an
+// interval and never decides anything on one — the subscriber's cadence is
+// its own, and the cursor is the subscriber's, not the feed's.
+func FollowFrom(ctx context.Context, path string, cursor int64, fn func(Event)) error {
+	var offset int64 = cursor
+	if offset < 0 {
+		offset = 0
+	}
 	pending := []byte{}
 	for {
 		if err := ctx.Err(); err != nil {

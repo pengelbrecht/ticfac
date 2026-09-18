@@ -2,13 +2,16 @@
   "id": "9wo",
   "title": "A1 needs a test that observes a LIVE run three ways, not a bare store",
   "description": "From the Phase 3 review (h0f, attempt 14), finding 2.\n\nA1 requires a test that fetches, lists findings and reads the branch while a run is going. The test that existed (TestAnOperatorFetchingInTheRunsCheckoutEndsNothing) raced a bare Store with plain git fetch and no reconciler — which is exactly why the shared-peek-ref defect shipped green and then killed the run mid-review.\n\nCommit 48f844d added a second test that races a real Store (what an operator command is) and fixed the defect, but neither test drives a RECONCILER. The reviewer left the shape it wants at runs/epic-9pd/h0f/repro/reconcile_observer_test.go.txt in the attempt's worktree — recover it from the archived attempt state if the worktree is gone.\n\nWanted: a fixture epic running under the reconciler while a loop does all three — git fetch in the run's checkout, ticfac findings, and reading the epic branch — asserting the run completes. That is the acceptance criterion as written, and nothing yet tests it.",
-  "status": "open",
+  "notes": "2026-09-17 20:38 - Attempt 23 was rejected as no-commits, and the cause was the orchestrator, not the worker.\n\nThe worker wrote internal/reconcile/reconcile_observer_test.go - the A1 acceptance as written, recovering the reviewer's shape from the h0f repro and deliberately dropping that repro's OBS_* gates because 'a gate that defaults off is a test that gates skip'. It finished the file at 14:13Z and then spent the rest of its wall clock trying to VERIFY it on a machine the orchestrator had driven to load 218 with five concurrent full test suites of its own. Its runstate run timed out at 650s, so it never saw a green result, so it never committed, so the run correctly refused an attempt whose branch carried nothing.\n\nOn a quiet machine that same test passes in 16 seconds.\n\nThe file was lifted unchanged from the attempt's worktree and committed as 8d38bf4, and the full declared gate (go test -short -count=1 -timeout 45m -parallel 12 ./...) passed on the tree containing it: 30 packages, zero failures. This close therefore stands behind the same gate every other tick's does - what differs is that an operator carried the work the last step, because an operator is why it did not get there itself.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "9pd",
   "acceptance_criteria": "A test runs a fixture epic to completion while a concurrent loop fetches in the run's checkout, lists its findings and reads its branch; it fails if any of the three can end the run",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-16T13:02:13.524505Z",
-  "updated_at": "2026-09-16T13:02:13.524505Z"
+  "updated_at": "2026-09-17T18:38:58.633005Z",
+  "closed_at": "2026-09-17T18:38:58.633005Z",
+  "closed_reason": "The A1 observer test is on epic/9pd as 8d38bf4 and the full declared gate passed on the tree carrying it. The work is attempt 23's, recovered from its worktree after the orchestrator's own machine contention starved it of a verification run."
 }

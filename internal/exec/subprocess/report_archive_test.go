@@ -102,7 +102,7 @@ func TestDisposeKeepsTheReportWhenNothingCollected(t *testing.T) {
 		t.Fatalf("the worktree should be gone: %v", err)
 	}
 
-	archived, err := os.ReadFile(filepath.Join(local.State, fileReportArchive))
+	archived, err := os.ReadFile(filepath.Join(local.State, FileReportArchive))
 	if err != nil {
 		t.Fatalf("the released attempt's report did not survive disposal: %v", err)
 	}

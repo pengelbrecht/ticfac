@@ -2,16 +2,20 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -40,10 +44,19 @@ import (
 // is created BEFORE the dispatch, because a marker written afterwards guards
 // nothing.
 type attemptHandle struct {
-	Executor  string `json:"executor"`
-	JobID     string `json:"job_id"`
-	Attempt   int    `json:"attempt"`
-	TickID    string `json:"tick_id"`
+	Executor string `json:"executor"`
+	JobID    string `json:"job_id"`
+	Attempt  int    `json:"attempt"`
+	TickID   string `json:"tick_id"`
+
+	// Try is which try of its own tick this dispatch is (tick vw0). It rides
+	// the marker for the same reason Tier and Touch do: a later leg — an
+	// adopt that finds the marker landed but nothing started — rebuilds the
+	// dispatch and can still START the attempt, and the try it was dispatched
+	// as is a fact about the dispatch, not something the next incarnation
+	// should re-derive from a run-wide counter that has since moved. Zero on
+	// markers written before the field existed.
+	Try       int    `json:"try"`
 	Role      string `json:"role"`
 	Repo      string `json:"-"`
 	Remote    string `json:"remote"`
@@ -90,6 +103,33 @@ type attemptHandle struct {
 	// adopted attempt is held to the declaration it was DISPATCHED under, not
 	// to whatever the tracker says today.
 	Touch []string `json:"touch"`
+
+	// ResumedFrom states that this dispatch starts from the work of a
+	// RELEASED attempt — the person's --carry-work settlement (tick 0z0):
+	// which attempt, which ref its work is on, the commit this dispatch was
+	// cut from, and who released it. It rides the marker for the same reason
+	// Tier does: the closed provenance object has no "resumed_from" field and
+	// the bundle is not this tick's to change, so the marker's open handle is
+	// where the explicit claim lives — beside the two closed fields that
+	// already say it (provenance's source_ref and source_sha, which for a
+	// carried dispatch ARE the released attempt's ref and commit). A marker
+	// that resumed from nothing states it as null, never omits it, for the
+	// same reason every required-and-null provenance field does.
+	ResumedFrom *resumedFrom `json:"resumed_from"`
+}
+
+// resumedFrom is one dispatch's answer to "this work came from a released
+// attempt": the attempt a person released, the ref its commits live on, the
+// commit the new attempt is cut from, and the person who released it. Every
+// field survives the restart through the marker's open handle, exactly as
+// Tier and the substrate do — a later leg reads what the dispatch recorded,
+// never what it would infer today.
+type resumedFrom struct {
+	TickID     string `json:"tick_id"`
+	Attempt    int    `json:"attempt"`
+	WriteRef   string `json:"write_ref"`
+	SHA        string `json:"sha"`
+	ReleasedBy string `json:"released_by"`
 }
 
 // asMap is the durable form of the marker: everything BUT StateRoot and Repo,
@@ -98,10 +138,15 @@ type attemptHandle struct {
 func (a attemptHandle) asMap() map[string]any {
 	return map[string]any{
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
+		"try":  a.Try,
 		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA,
 		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier, "touch": a.Touch,
 		"substrate_protocol": a.SubstrateProtocol, "substrate_server_version": a.SubstrateServerVersion,
+		// Null when this dispatch resumed from no released attempt, never
+		// omitted — "no resume" is a claim, and a reader that cannot tell it
+		// from an unrecorded one is a reader guessing at provenance.
+		"resumed_from": a.ResumedFrom,
 	}
 }
 
@@ -144,14 +189,42 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	case int:
 		substrateProtocol = value
 	}
+	// Try rides the marker like Attempt does, so it arrives the same way — as
+	// a JSON number — and is absent on markers written before the field
+	// existed, which read as the zero value.
+	try := 0
+	switch value := raw["try"].(type) {
+	case float64:
+		try = int(value)
+	case int:
+		try = value
+	}
+	// ResumedFrom arrives as the nested object the marker stores it as —
+	// JSON on origin — or as nil for a dispatch that resumed from nothing.
+	var resumed *resumedFrom
+	if fields, ok := raw["resumed_from"].(map[string]any); ok {
+		resumed = &resumedFrom{}
+		resumed.TickID, _ = fields["tick_id"].(string)
+		switch value := fields["attempt"].(type) {
+		case float64:
+			resumed.Attempt = int(value)
+		case int:
+			resumed.Attempt = value
+		}
+		resumed.WriteRef, _ = fields["write_ref"].(string)
+		resumed.SHA, _ = fields["sha"].(string)
+		resumed.ReleasedBy, _ = fields["released_by"].(string)
+	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
+		Try:  try,
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
 		Model:   get("model"), PromptDigest: get("prompt_digest"), Tier: get("tier"),
 		SubstrateProtocol:      substrateProtocol,
 		SubstrateServerVersion: get("substrate_server_version"),
 		Touch:                  touch,
+		ResumedFrom:            resumed,
 	}
 }
 
@@ -167,6 +240,32 @@ func (r *Reconciler) execStateDir(tickID string, attempt int) string {
 
 // processTick takes one tick from wherever it already is to closed.
 func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
+	done, err := r.settleBeforeDispatch(ctx, entry)
+	if err != nil || done {
+		return err
+	}
+
+	fl, err := r.beginTick(ctx, entry)
+	if err != nil {
+		return err
+	}
+
+	status, err := r.awaitInflight(ctx, fl)
+	if err != nil {
+		return err
+	}
+
+	return r.finishTick(ctx, fl, status)
+}
+
+// settleBeforeDispatch is everything the run decides about a tick BEFORE it
+// dispatches anything: whether the tracker already closed it, whether a person
+// struck it out, and whether it is a role job — which is dispatched and acted
+// on in one piece rather than merged like a branch.
+//
+// It reports whether the entry is finished with; a true means nothing is in
+// flight for it and the run moves on.
+func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) (bool, error) {
 	tick := entry.TickID
 
 	// The tracker is the authority on whether a tick is closed. Reading it
@@ -175,15 +274,15 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	// run must not do it again.
 	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
-		return fmt.Errorf("read tick %s: %w", tick, err)
+		return false, fmt.Errorf("read tick %s: %w", tick, err)
 	}
 	if current.Status == "closed" {
 		r.setTick(tick, "closed")
 		r.record(tick, StageSkipped, "already closed in the tracker: %s", current.ClosedReason)
 		if _, err := r.checkpoint(runstate.StateRunning, "tick "+tick+" was already closed"); err != nil {
-			return err
+			return true, err
 		}
-		return nil
+		return true, nil
 	}
 
 	// Appendix A #11's read site. A struck-out unit is held until a PERSON
@@ -191,26 +290,53 @@ func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
 	unit := r.opts.EpicID + "/" + tick
 	if r.MayDispatch(unit) == Held {
 		r.record(tick, StageHeld, "%s is struck out and only a person releases it", unit)
-		return r.refuse(RefusedHeld, tick, "%s is struck out: a rolling window bounds the window, not the subject, "+
+		return true, r.refuse(RefusedHeld, tick, "%s is struck out: a rolling window bounds the window, not the subject, "+
 			"so this dispatch waits for a person and not for the clock", unit)
 	}
 
 	if isRoleJob(entry.Role) {
 		// Review and closeout are jobs like any other, on the same executor —
 		// what differs is that the reconciler acts on the ANSWER they return
-		// rather than on a branch it merges.
-		return r.processRoleJob(ctx, entry)
+		// rather than on a branch it merges. Close-out additionally has an
+		// ADMISSION PRECONDITION the run itself enforces (tick 0iz): a target
+		// repo that declares the PR + CI rule in .tick/config.md has its epic
+		// PR opened by the run and its close-out held until CI is green — the
+		// rule is checked BEFORE the phase is claimed or dispatched, never
+		// left to the close-out worker's diligence.
+		if entry.Role == "closeout-epic" {
+			if err := r.admitCloseout(ctx, entry); err != nil {
+				return true, err
+			}
+		}
+		return true, r.processRoleJob(ctx, entry)
 	}
 
+	return false, nil
+}
+
+// beginTick claims the tick and starts its attempt, and stops there.
+//
+// It is the half of a tick's processing that must happen before anybody can
+// wait for it, and the half a dispatch window runs up to `width` times before
+// waiting for any of them.
+func (r *Reconciler) beginTick(ctx context.Context, entry planEntry) (*inflightAttempt, error) {
 	handle, executor, marker, err := r.claimDispatch(ctx, entry)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return r.newInflight(entry, handle, executor, marker), nil
+}
 
-	status, err := r.waitForSettlement(ctx, handle, executor, marker)
-	if err != nil {
-		return err
-	}
+// finishTick is everything a settled attempt still owes: collect, integrate,
+// gate, close, clean up.
+//
+// This half is deliberately NOT concurrent, whatever the window's width. There
+// is one integration branch, and a gate that ran on a tree other than the one
+// being closed proves nothing about it — so attempts queue here and go through
+// one at a time, in the order they settled.
+func (r *Reconciler) finishTick(ctx context.Context, fl *inflightAttempt, status *subprocess.JobStatus) error {
+	entry, handle, executor, marker := fl.entry, fl.handle, fl.executor, fl.marker
+	tick := marker.TickID
 
 	// A resumed run does not collect an attempt it has already MERGED. The
 	// refusal that stopped the previous incarnation — the gate, or the
@@ -284,11 +410,61 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// the same tier), and not an attempt a PERSON released — the human was
 	// the actor, and no rung is earned from somebody else's decision.
 	failed := 0
+	// carry is the released attempt whose WORK the next dispatch of this tick
+	// starts from: a person released it with --carry-work, so the next worker
+	// begins at its commits rather than redoing them (settle.go, tick 0z0).
+	// At most one can be current — the latest released attempt that carried
+	// work — because a carried attempt either merges behind the gate or is
+	// itself rejected and settled by its own release.
+	var carry *carriedWork
+	// The attempts of THIS tick, NEWEST FIRST (tick w1c). Appendix A #6 says
+	// an attempt under this identity has already been dispatched, so it is
+	// ADOPTED — it does not say the OLDEST is the one, and a disposition is a
+	// function of durable state that changes between incarnations: an
+	// attempt the run skipped as spent on one resume can resurface as
+	// adoptable on the next (the blocker it answered about triaged, the tick
+	// state a later attempt's dispatch overwrote). Walking the stored order
+	// acted on the FIRST such resurfacing attempt and returned before ever
+	// reaching the newer one — whose answer was the one the run had actually
+	// paid for last. When several attempts of one tick survive, the adoptable
+	// one is the LATEST: the earlier ones are spent by definition, since a
+	// later attempt only exists because the run rejected them.
+	mine := make([]runstate.Attempt, 0, len(attempts))
 	for _, existing := range attempts {
-		if existing.TickID != tick {
-			continue
+		if existing.TickID == tick {
+			mine = append(mine, existing)
 		}
+	}
+	sort.Slice(mine, func(i, j int) bool { return mine[i].Attempt > mine[j].Attempt })
+	// adoptable is the attempt the pass will adopt once it has examined every
+	// disposition. Adoption is deferred to the end of the pass on purpose: a
+	// HELD attempt anywhere in the tick still stops the run, and a pass that
+	// returned at the first adoptable attempt would skip a held one in favour
+	// of a newer adoptable — the mirror of the bug — so redispatch and hold
+	// are evaluated in the same pass, and only a pass with no hold adopts.
+	var adoptable *runstate.Attempt
+	var adoptableMarker attemptHandle
+	for i := range mine {
+		existing := &mine[i]
+		marker := handleFromMap(existing.JobHandle)
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
+			if was.carry {
+				// The person released the attempt AND said its work goes
+				// forward: the next attempt is cut from the released branch,
+				// not from the integration branch. The released attempt is
+				// still not adopted — nobody could address it, which is why
+				// they were asked — and it still earns the ladder no rung:
+				// the human was the actor. Carrying changes only where the
+				// next worker STARTS; the gate still decides what merges.
+				if carry == nil || existing.Attempt > carry.marker.Attempt {
+					carry = &carriedWork{marker: marker, by: was.by, at: was.at}
+				}
+				r.record(tick, StageSettled,
+					"attempt %d was released by %s at %s carrying its work; the next attempt starts from %s",
+					existing.Attempt, was.by, was.at, branchOf(marker.WriteRef))
+				continue
+			}
 			// A person settled it. It is not adopted — nobody could address it,
 			// which is why they were asked — and whatever it left on its own
 			// write ref stays there: a new attempt gets a ref of its own.
@@ -303,9 +479,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
-		marker := handleFromMap(existing.JobHandle)
-		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
-		switch disposition, where := r.disposition(existing, marker); disposition {
+		switch disposition, where := r.disposition(*existing, marker); disposition {
 		case redispatchAttempt:
 			// SETTLED, and it produced nothing. Adopting it would re-collect
 			// the same refusal for as long as the run is restarted, so this is
@@ -327,6 +501,12 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// collecting it again would report a missing report this run
 			// deleted itself when it tore the refused attempt down. So the run
 			// stops here and says where the work is and who moves it on.
+			//
+			// The attempt number is set BEFORE these records, so the lines this
+			// branch leaves — and the run_held line the failure becomes — say
+			// WHICH attempt the run is holding, which is the whole question a
+			// person reading the feed is asking.
+			r.setAttempt(tick, existing.Attempt)
 			r.record(tick, StageRejected,
 				"attempt %d was rejected and its commits are still there (%s); it is neither adopted nor "+
 					"redispatched", existing.Attempt, where)
@@ -346,25 +526,42 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt",
 				existing.Attempt, tick, where, r.opts.EpicID, tick, existing.Attempt)
 		}
-		// Appendix A #6: an attempt under this identity has already been
-		// dispatched, so it is ADOPTED. Nothing is started, and a live one is
-		// never redispatched. The attempt number is the marker's own BEFORE
-		// the adoption runs (tick d6s): the lines adoption itself leaves —
-		// the replayed claim, the start failure of an attempt whose marker
-		// landed but never started — are about that attempt.
-		r.setAttempt(tick, existing.Attempt)
-		handle, executor, err := r.adopt(ctx, marker)
+		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
+		// the highest-numbered one, which is the one the pass remembers — the
+		// LATEST of the tick. The pass does not stop here: an older attempt
+		// below may still be held, and a hold stops the run wherever it sits.
+		if adoptable == nil {
+			adoptable = existing
+			adoptableMarker = marker
+		}
+	}
+
+	// Appendix A #6: an attempt under this identity has already been
+	// dispatched, so it is ADOPTED — never redispatched, and of several
+	// survivors the LATEST one (tick w1c). The attempt number is the marker's
+	// own BEFORE the adoption runs (tick d6s): the lines adoption itself
+	// leaves — the replayed claim, the start failure of an attempt whose
+	// marker landed but never started — are about that attempt.
+	if adoptable != nil {
+		r.setAttempt(tick, adoptable.Attempt)
+		handle, executor, err := r.adopt(ctx, adoptableMarker)
 		if err != nil {
-			return nil, nil, marker, err
+			return nil, nil, adoptableMarker, err
 		}
 		r.record(tick, StageAdopted, "attempt %d (%s try %d) was already dispatched; it is adopted by identity, never redispatched",
-			existing.Attempt, tick, tryOf(attempts, tick, existing.Attempt))
-		return handle, executor, marker, nil
+			adoptable.Attempt, tick, tryOf(attempts, tick, adoptable.Attempt))
+		return handle, executor, adoptableMarker, nil
 	}
 
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
-		dispatch, marker, err := r.planDispatch(entry, number, failed)
+		// The tick's own try for this dispatch (tick vw0): the same number the
+		// feed lines say, computed once here so the dispatch, the marker and
+		// the record all name one number. The run-wide `number` above is the
+		// attempt's identity; this one is its ordinal among the tick's own
+		// tries, and the two only coincide when nothing was dispatched first.
+		try := tryOf(attempts, tick, number)
+		dispatch, marker, err := r.planDispatch(entry, number, try, failed, carry)
 		if err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
@@ -449,6 +646,18 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)
 
+		// A dispatch cut from a RELEASED attempt's work says so here, once,
+		// on the dispatch that is actually happening (tick 0z0) — not in the
+		// planning half, which a dispatch conflict can run twice. The worker
+		// starting from the released commits is a fact about THIS attempt, and
+		// this line is what a person reading the run reads it from.
+		if marker.ResumedFrom != nil {
+			r.record(tick, StageCarried,
+				"attempt %d starts from the work attempt %d left on %s (released by %s): the next worker "+
+					"continues that work rather than redoing it, and the gate still decides what merges",
+				number, marker.ResumedFrom.Attempt, branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+		}
+
 		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, marker, r.startFailure(tick, err)
@@ -456,7 +665,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		r.noteAlive(dispatch.JobID)
 		r.setTick(tick, "dispatched")
 		r.record(tick, StageDispatched, "attempt %d started as %s (%s try %d; attempt numbers count this run's dispatches)",
-			number, dispatch.JobID, tick, tryOf(attempts, tick, number))
+			number, dispatch.JobID, tick, try)
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
 		}
@@ -707,6 +916,38 @@ func (r *Reconciler) tickState(tickID string) string {
 	return ""
 }
 
+// preserveAttemptWork puts the attempt's local branch on origin, when that
+// branch carries a commit beyond the base it was cut from and origin does
+// not already have it at that head.
+//
+// It is the durability half of every verdict the collect records: the push
+// happens before the rejection is recorded, so "rejected" on origin always
+// means the work the rejection was about is ALSO on origin — and a
+// ready-to-merge attempt has simply had integrate's own push done for it
+// early (durableAttemptHead then finds origin already at the collected head
+// and merges it). The push is a fast-forward onto the attempt's OWN ref, a
+// namespace no other attempt writes; a failure is not the verdict's to
+// inherit — the verdict still happens, and the honesty about where the work
+// then lives is said out loud, because a worktree the teardown removes is
+// not a place a person can be sent to look.
+func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
+	head := r.attemptWorkHead(marker)
+	if head == "" {
+		return
+	}
+	branch := branchOf(marker.WriteRef)
+	if remote, err := r.git.remoteHead(branch); err == nil && remote == head {
+		return
+	}
+	if _, stderr, err := r.git.try("", "push", r.opts.Remote, head+":"+refFor(branch)); err != nil {
+		r.record(marker.TickID, StageCollected,
+			"%s carries %s which could not be put on %s (%s): whatever this attempt left is only on the "+
+				"local branch in this checkout, which the teardown keeps — but origin does not have it",
+			branch, short(head), r.opts.Remote, firstLine(stderr))
+		return
+	}
+}
+
 // rejectDurably records that an attempt was rejected, ON ORIGIN, before the
 // refusal is returned.
 //
@@ -750,7 +991,7 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 // It runs BEFORE the marker is written and the tick is claimed, so a refusal
 // here (a tier label the config cannot honour, say) spends nothing and
 // claims nothing.
-func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch, attemptHandle, error) {
+func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carry *carriedWork) (Dispatch, attemptHandle, error) {
 	// Where the orchestrator stops choosing and starts deriving: the tier is
 	// a pure function of the tick's facts, this attempt's durable state and
 	// the declared policy — never a per-dispatch judgement, never a hunch.
@@ -791,12 +1032,46 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 	// reconciler pushed as it closed them. A worker that branched from the
 	// run's base reads `.tick/issues/<blocker>.json` as it was before the run
 	// and answers BLOCKED about a tick that is closed.
+	//
+	// The one exception is a dispatch CARRIED from a released attempt (tick
+	// 0z0): a person released the attempt saying its work goes forward, so
+	// the next worker starts from THAT — the released branch's head — and
+	// not from the integration branch. The released work contains the
+	// integration branch it was cut from, so nothing the ordinary base would
+	// give is missing; what carrying adds is the commits the interrupted
+	// worker had already made. The gate still decides what merges, exactly as
+	// for any attempt: carrying changes where the work STARTS, never what is
+	// believed without evidence.
 	base := r.controllerBase()
+	var resumed *resumedFrom
+	if carry != nil {
+		head, err := r.carryHead(carry.marker)
+		if err != nil {
+			return Dispatch{}, attemptHandle{}, err
+		}
+		base = head
+		resumed = &resumedFrom{
+			TickID: carry.marker.TickID, Attempt: carry.marker.Attempt,
+			WriteRef: carry.marker.WriteRef, SHA: head, ReleasedBy: carry.by,
+		}
+	}
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
-		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
+		Try: try, JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
+		ResumedFrom: resumed,
+		// What the tick's earlier attempts found (tick nvn): the reports a
+		// re-dispatched attempt is shown in its prompt, newest first. Gathered
+		// here rather than recorded on the marker because they are re-derivable
+		// facts about the state directory — and a dispatch conflict that runs
+		// this half twice re-derives the same list.
+		PriorReports: r.priorReports(entry.TickID, number),
+		// What the tick's earlier attempts left PRESERVED (tick pbb): the
+		// uncommitted work of an attempt stopped at its wall clock or rejected
+		// before it committed, kept on a wip ref the re-dispatch points the
+		// worker at — gathered here for the same reason the reports are.
+		PriorSnapshots: r.priorSnapshots(entry.TickID, number),
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -804,10 +1079,11 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 	}
 	marker := attemptHandle{
 		Executor: dispatchProfile.Executor, JobID: jobID, Attempt: number, TickID: entry.TickID,
+		Try:  try,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
-		Tier: tier,
+		Tier: tier, ResumedFrom: resumed,
 	}
 	// The tick's file declaration, copied at PLANNING time (tick 01u): the
 	// malformed labels were already refused at admission, so what is left
@@ -819,7 +1095,9 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int) (Dispatch
 // attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
 // §4.3's golden shape: refs/heads/ticfac/run-<run>/tick-<tick>/attempt-<n>.
 // The job id already carries that identity, so the ref is the job id under the
-// namespace the source grant bounds.
+// namespace the source grant bounds. It is runprogress.ParseAttempt's
+// vocabulary in reverse: the guard test pins the round trip, so a write ref
+// this package mints is always one the progress measurement can read back.
 //
 // Every attempt of every run gets a ref of its own, and that is the whole
 // point. One ref per TICK made the git identity coarser than the dispatch
@@ -834,9 +1112,12 @@ func attemptWriteRef(jobID string) string {
 // attemptRefPrefix is the namespace ONE RUN's write grade may advance —
 // job-protocol.json's `write_ref_prefix`, bounded per run rather than per
 // installation so a credential issued for this run cannot advance another
-// run's attempt refs.
+// run's attempt refs. The spelling is runprogress's own, so the run's
+// measurement of its attempts — the same refs, read by the stall warning and
+// by `ticfac status` — and the refs it mints are one vocabulary by
+// construction, not by coincidence (pinned by a test).
 func attemptRefPrefix(runID string) string {
-	return "refs/heads/ticfac/run-" + runID + "/"
+	return runprogress.RefPrefix(runID)
 }
 
 func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
@@ -849,9 +1130,20 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 			BaseSHA:    d.BaseSHA,
 			WriteRef:   d.WriteRef,
 		},
-		Capabilities:   subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
-		Inputs:         []subprocess.Input{{Kind: "tick", ID: d.TickID}, {Kind: "epic", ID: d.EpicID}},
-		OutputSchema:   outputSchemaFor(d.Role),
+		Capabilities: subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
+		Inputs:       []subprocess.Input{{Kind: "tick", ID: d.TickID}, {Kind: "epic", ID: d.EpicID}},
+		OutputSchema: outputSchemaFor(d.Role),
+		// The one key here that is NOT scoped to an attempt: run and tick, no
+		// attempt number. It is safe, but not locally — so, since the run now
+		// dispatches a window of attempts at once, the reason is written down.
+		//
+		// The prefix feeds excludeFromGit, which appends a line to
+		// info/exclude, and info/exclude is shared by every linked worktree of
+		// the repository. Two attempts sharing one line would mean disposing
+		// the first removes it while the second still needs it. That cannot
+		// happen: the plan carries one entry per tick and the window admits one
+		// entry at a time, so two attempts of the SAME tick are never live
+		// together, and two different ticks have two different prefixes.
 		ArtifactPrefix: "runs/" + d.RunID + "/" + d.TickID + "/",
 		Credentials: subprocess.Credentials{
 			Model:  subprocess.ModelCredential{Shorthand: "issued-by-host"},
@@ -978,6 +1270,7 @@ func (r *Reconciler) replayClaim(ctx context.Context, tick string) {
 func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
+		Try:   marker.Try,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		Tier: marker.Tier,
@@ -998,6 +1291,22 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	if dispatch.Role == "" {
 		dispatch.Role = "implement-tick"
 	}
+	// The work a dispatch CARRIED from a released attempt is read off the
+	// marker like everything else a later leg must not re-derive (tick 0z0):
+	// a later record of the same dispatch — a finding draft, a settle — says
+	// what the DISPATCH resumed from, never what this incarnation would.
+	dispatch.ResumedFrom = marker.ResumedFrom
+	// The reports of the tick's earlier attempts (tick nvn) are re-derived
+	// rather than carried, because a dispatch rebuilt from the marker can
+	// still START the attempt — the marker landed, and nothing did — and the
+	// prompt that start renders is the one place the predecessors' analysis
+	// has to reach.
+	dispatch.PriorReports = r.priorReports(marker.TickID, marker.Attempt)
+	// The preserved work of the tick's earlier attempts (tick pbb) is
+	// re-derived for the same reason: the dispatch a later leg rebuilds can
+	// still start the attempt, and the preserved work is the half of a
+	// stopped predecessor's legacy the prompt must not start blind over.
+	dispatch.PriorSnapshots = r.priorSnapshots(marker.TickID, marker.Attempt)
 	// The profile an adopted attempt re-joins is the one it was DISPATCHED
 	// under: the marker's own tier, not whatever this incarnation would
 	// derive today. A config edited between incarnations does not retro-fit a
@@ -1009,6 +1318,35 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	}
 	dispatch.Profile = profile
 	return dispatch, nil
+}
+
+// carryHead is the commit a dispatch CARRIED from a released attempt starts
+// from: the work the attempt left, read exactly as disposition reads it —
+// origin's branch first, the branch in this checkout when every push the
+// attempt made failed. A branch that carries nothing beyond the base the
+// attempt was cut from is an error rather than a quiet fall-back to the
+// integration branch: the person released the attempt asking for its work to
+// go forward, and answering that with a base that has none of it would
+// strand the work precisely the way the carry exists not to. The work having
+// gone is an operational fact to report, not a decision for the run to make.
+func (r *Reconciler) carryHead(marker attemptHandle) (string, error) {
+	branch := branchOf(marker.WriteRef)
+	head, err := r.remoteWork(branch, marker.BaseSHA)
+	if err != nil {
+		return "", fmt.Errorf("reconcile: read %s on %s to carry the work of attempt %d of %s: %w",
+			branch, r.opts.Remote, marker.Attempt, marker.TickID, err)
+	}
+	if head == "" {
+		head = r.attemptWorkHead(marker)
+	}
+	if head == "" {
+		return "", fmt.Errorf(
+			"reconcile: the release of attempt %d of %s carries its work, but %s carries no commit beyond the "+
+				"base it was cut from: there is nothing to start the next attempt from. The settlement stands; "+
+				"re-release without --carry-work, or put the work back on %s and run the epic again",
+			marker.Attempt, marker.TickID, branch, branch)
+	}
+	return head, nil
 }
 
 // findAttemptState locates the executor's own state directory for a dispatch.
@@ -1039,6 +1377,203 @@ func findAttemptState(root string) (string, bool) {
 	return found, found != ""
 }
 
+// priorReports gathers the archived reports of a tick's EARLIER attempts,
+// newest first (tick nvn) — this run's own AND every previous run's (tick
+// n4h).
+//
+// The reports are what tick 35h made survive teardown: report.md beside the
+// attempt record, in the executor state directory a dispatch was assigned.
+// findAttemptState locates a predecessor's state the same way every adopt
+// and teardown already does — by walking for the attempt record rather than
+// by recomputing an executor's internal naming — and the report sits under
+// the name that executor exports as part of that seam.
+//
+// nvn's discovery walked <ExecStateRoot>/<runID>/<tick>/<n> and nothing
+// else, so a re-run of the epic under a NEW run id — a fresh run-state
+// store, attempt numbers that begin again at 1 — saw none of the previous
+// run's reports: the starting-blind case the feature exists for, one level
+// up. The discovery here is therefore keyed by the TICK: every OTHER run id
+// under the executor state root that holds the tick's attempts is walked
+// too, and an attempt whose own record names a different tick is not
+// offered, because a state root shared by several runs can hold the
+// same-named directory of an attempt that was genuinely another tick's.
+// The reports stay local to the executor's state root, which is where the
+// executor put them; no worker prose moves into the target repository.
+//
+// Nothing here can refuse a dispatch: a predecessor with no report (it never
+// settled, or settled without saying anything) is simply absent from the list,
+// because the prompt's job is to name the analysis that EXISTS, not to narrate
+// the attempts that produced none. A first attempt of a first run gathers
+// nothing.
+func (r *Reconciler) priorReports(tickID string, attempt int) []subprocess.PriorReport {
+	out := []subprocess.PriorReport{}
+	for n := attempt - 1; n >= 1; n-- {
+		if prior, ok := priorReportAt(r.execStateDir(tickID, n), n, tickID, ""); ok {
+			out = append(out, prior)
+		}
+	}
+	for _, run := range r.priorRuns(tickID) {
+		tickDir := filepath.Join(r.opts.ExecStateRoot, run, tickID)
+		for _, n := range attemptNumbers(tickDir) {
+			if prior, ok := priorReportAt(filepath.Join(tickDir, strconv.Itoa(n)), n, tickID, run); ok {
+				out = append(out, prior)
+			}
+		}
+	}
+	return out
+}
+
+// priorReportAt reads one predecessor's archived report out of the state
+// directory a dispatch was given (tick nvn). run is the run the predecessor
+// was dispatched under — empty when it was this run's own attempt, the run's
+// id when it was another run's (tick n4h), so a worker handed a cross-run
+// report can tell it from this run's numbering — and tickID is the tick the
+// attempt's own record must name, the key the cross-run discovery is keyed by.
+func priorReportAt(stateDir string, attempt int, tickID, run string) (subprocess.PriorReport, bool) {
+	state, found := findAttemptState(stateDir)
+	if !found {
+		// Never dispatched, or never started: no report to name.
+		return subprocess.PriorReport{}, false
+	}
+	issuedAt, ok := attemptFacts(state, tickID)
+	if !ok {
+		// An attempt record that does not read, or that names another tick:
+		// the record that cannot be parsed is the same as no record.
+		return subprocess.PriorReport{}, false
+	}
+	path := filepath.Join(state, subprocess.FileReportArchive)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		// Dispatched, but it left no report — settled with nothing said.
+		// The attempt is still visible to the worker through the run's own
+		// records; it has no analysis to hand over.
+		return subprocess.PriorReport{}, false
+	}
+	report := subprocess.ParseReport(string(raw))
+	return subprocess.PriorReport{
+		Attempt: attempt, Run: run, Path: path,
+		Status: report.Status, Detail: report.Detail, Dispatched: issuedAt,
+	}, true
+}
+
+// attemptFacts reads the two facts a predecessor's attempt record carries
+// that its directory names cannot (tick n4h): when the attempt was dispatched
+// — the one fact that orders a list spanning runs, since attempt numbers
+// are a run's own count — and WHICH TICK the attempt was for, so a state
+// root shared by several runs never hands one tick the same-named attempt
+// of another. The record is read loosely, the way the marker reader reads
+// it: both executors write it, and this is the reconciler walking their
+// seam, not importing their shape.
+func attemptFacts(state, tickID string) (issuedAt string, ok bool) {
+	raw, err := os.ReadFile(filepath.Join(state, "attempt.json"))
+	if err != nil {
+		return "", false
+	}
+	var record struct {
+		TickID   string `json:"tick_id"`
+		IssuedAt string `json:"issued_at"`
+	}
+	if json.Unmarshal(raw, &record) != nil || record.TickID != tickID {
+		return "", false
+	}
+	return record.IssuedAt, true
+}
+
+// priorRuns lists, deterministically, every OTHER run id under the executor
+// state root that holds attempts of this tick (tick n4h). The order is
+// alphabetical because it is only a gathering order — the prompt owns the
+// order the worker reads — and a deterministic one keeps a dispatch that is
+// re-derived half-made identical to itself.
+func (r *Reconciler) priorRuns(tickID string) []string {
+	entries, err := os.ReadDir(r.opts.ExecStateRoot)
+	if err != nil {
+		// No state root, or nothing under it: no previous run to read.
+		return nil
+	}
+	var runs []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == r.runID {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(r.opts.ExecStateRoot, entry.Name(), tickID)); err == nil && info.IsDir() {
+			runs = append(runs, entry.Name())
+		}
+	}
+	sort.Strings(runs)
+	return runs
+}
+
+// attemptNumbers lists the attempt numbers one run's tick directory holds,
+// descending. The names are the reconciler's own layout — one numeric
+// directory per dispatch, named for the run's own attempt number — so
+// reading them back is not recomputing an executor's naming, and every
+// number the tick's earlier attempts landed on is visited whatever the
+// numbering of the run that used it.
+func attemptNumbers(tickDir string) []int {
+	entries, err := os.ReadDir(tickDir)
+	if err != nil {
+		return nil
+	}
+	var numbers []int
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		n, err := strconv.Atoi(entry.Name())
+		if err != nil || n < 1 {
+			continue
+		}
+		numbers = append(numbers, n)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(numbers)))
+	return numbers
+}
+
+// priorSnapshots gathers the preserved work of a tick's EARLIER attempts,
+// newest first (tick pbb) — the nvn shape for reports, applied to work.
+//
+// The snapshot is what a stop and a rejecting teardown preserve before they
+// destroy a worktree: the attempt's uncommitted tree on a wip ref of its
+// own, recorded beside the attempt record — at a name and in a shape both
+// executors export as part of the seam — so the work survives teardown at a
+// place the dispatch can find again. A predecessor with no record preserved
+// nothing — it committed its work, or nothing destroyed its worktree — and is
+// simply absent from the list: the prompt's job is to name the material that
+// EXISTS, not to narrate the attempts that produced none. A first attempt
+// gathers nothing.
+//
+// Nothing here validates that the ref still resolves: the worktree's
+// repository is the same one the dispatch's own worktree is cut from, and a
+// record naming a ref git cannot resolve is a fact the worker reads in its
+// own git — naming it with its recorded commit is still more than starting
+// blind. The record that cannot be parsed is the same as no record.
+func (r *Reconciler) priorSnapshots(tickID string, attempt int) []subprocess.PriorSnapshot {
+	out := []subprocess.PriorSnapshot{}
+	if attempt <= 1 {
+		return out
+	}
+	for n := attempt - 1; n >= 1; n-- {
+		state, found := findAttemptState(r.execStateDir(tickID, n))
+		if !found {
+			// Never dispatched, or never started: nothing was preserved.
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(state, subprocess.FileWIPSnapshot))
+		if err != nil {
+			// Dispatched, but nothing was preserved — the attempt's worktree
+			// was clean or its teardown refused rather than destroyed.
+			continue
+		}
+		var snap subprocess.WIPSnapshot
+		if json.Unmarshal(raw, &snap) != nil || snap.SchemaVersion != subprocess.WIPSnapshotSchemaVersion ||
+			snap.Ref == "" || snap.Commit == "" {
+			continue
+		}
+		out = append(out, subprocess.PriorSnapshot{Attempt: n, Ref: snap.Ref, Commit: snap.Commit})
+	}
+	return out
+}
+
 // ------------------------------------------------------------- the wait ---
 
 // waitForSettlement addresses the job until it settles.
@@ -1050,34 +1585,114 @@ func findAttemptState(root string) (string, bool) {
 // addressed is the keepalive, and it stays well under the substrate's wipe
 // threshold.
 func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) (*subprocess.JobStatus, error) {
-	step := r.OpenStep(r.stepCap)
-	deadline := r.settlementDeadline(marker)
-	cursor := ""
-	// The cadence is the EXECUTOR's, not one global constant: the marker
-	// names the executor this attempt was dispatched under, and a local
-	// substrate wants seconds where a cloud one wants the slow keepalive
-	// beat (tick u9l, epic av8).
-	interval := r.pollIntervalFor(marker.Executor)
+	return r.awaitInflight(ctx, r.newInflight(planEntry{TickID: marker.TickID}, handle, executor, marker))
+}
+
+// awaitInflight addresses ONE attempt until it settles — the sequential wait,
+// expressed as a window of one.
+func (r *Reconciler) awaitInflight(ctx context.Context, fl *inflightAttempt) (*subprocess.JobStatus, error) {
 	for {
-		if err := ctx.Err(); err != nil {
+		status, err := r.addressOnce(ctx, fl)
+		if err != nil {
 			return nil, err
 		}
-		status, err := executor.Inspect(handle, cursor)
-		if err != nil {
-			return nil, fmt.Errorf("inspect %s: %w", marker.TickID, err)
-		}
-		if status.Cursor != nil {
-			cursor = *status.Cursor
-		}
-		if status.Terminal {
-			r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
+		if status != nil {
 			return status, nil
 		}
+		if err := r.restBetweenPolls(fl); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// inflightAttempt is one dispatched attempt the run is addressing, and the
+// per-attempt state the addressing carries between polls.
+//
+// It exists so that the wait can be MULTIPLEXED: one goroutine addresses
+// several attempts by taking one poll of each in turn, rather than blocking on
+// the first until it settles. Every field here used to be a local variable of
+// waitForSettlement, which is exactly why only one attempt could ever be
+// waited on at a time.
+type inflightAttempt struct {
+	entry    planEntry
+	handle   *subprocess.JobHandle
+	executor Executor
+	marker   attemptHandle
+
+	step     *Step
+	deadline time.Time
+	cursor   string
+	// interval is the cadence this attempt is addressed at. It is the
+	// EXECUTOR's, not one global constant (tick u9l, epic av8), so a window
+	// holding a local and a cloud attempt addresses each at its own beat.
+	interval time.Duration
+}
+
+func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
+	return &inflightAttempt{
+		entry: entry, handle: handle, executor: executor, marker: marker,
+		step:     r.OpenStep(r.stepCap),
+		deadline: r.settlementDeadline(marker),
+		interval: r.pollIntervalFor(marker.Executor),
+	}
+}
+
+// addressOnce takes exactly ONE poll of one in-flight attempt.
+//
+// It returns the settled status when the attempt is terminal, a refusal when
+// the attempt cannot be addressed or has outlived its bounds, and (nil, nil)
+// when the honest answer is "still running, ask again later". The caller owns
+// the waiting, which is what lets one caller own SEVERAL attempts.
+//
+// Everything this touches — the feed, the store, the run's own counters — is
+// touched from the caller's goroutine. That is deliberate: this run's three
+// worst defects were all process-global git state written by two parties at
+// once, and a window that polls in one goroutine cannot reproduce them.
+func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*subprocess.JobStatus, error) {
+	marker := fl.marker
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	status, err := fl.executor.Inspect(fl.handle, fl.cursor)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", marker.TickID, err)
+	}
+	if status.Cursor != nil {
+		fl.cursor = *status.Cursor
+	}
+	if status.Terminal {
+		r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
+		return status, nil
+	}
+	{
 		if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
 				"attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, "+
 					"which is not the same as nothing running", marker.Attempt, marker.TickID)
 		}
+
+		// The wall clock's FIRING is a feed event, not only an observation in
+		// the attempt's own store (tick emk): the stop is the executor's to
+		// make — the local supervisor kills, the herdr executor delivers
+		// herdr's interrupt on this very poll, inside the Inspect above — but
+		// whether the stop TOOK is visible only by waiting for the next poll,
+		// and a watcher reading the feed saw nothing at all while an agent
+		// ran 26 minutes past its bound (the Phase 3 incident: the feed's
+		// last line was `dispatched` 85 minutes earlier). So the run says the
+		// bound fired the moment it can see the attempt has not settled past
+		// it, once, with the executor's own last word about what the
+		// substrate was seen doing — a hint about when to look, never a
+		// verdict, and no claim the stop did or did not take.
+		if wallAt, ok := r.wallClockAt(marker); ok && r.now().After(wallAt) {
+			r.announceWall(marker, status, wallAt)
+		}
+
+		// The early warning before that bound (tick 7zs): the attempt is
+		// alive and liveness was never the question — the question is whether
+		// it is getting anywhere, and the two facts that answer it honestly
+		// are read out of the repo itself. The wall clock is the bound; this
+		// is the reason to look while there is still an attempt to look at.
+		r.announceStall(marker)
 
 		// The reconciler's OWN deadline. The job's wall clock is the
 		// supervisor's to enforce, and a supervisor that died without settling
@@ -1094,7 +1709,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 		// `running` is one nobody can say is running. That is `unaddressed`,
 		// not `wiped`: the substrate did not take it away, and a person is the
 		// next actor (settle.go).
-		if now := r.now(); now.After(deadline) {
+		if now := r.now(); now.After(fl.deadline) {
 			// What the executor last SAW goes in the refusal, because the two
 			// shapes need different first moves. A local subprocess whose
 			// supervisor died leaves a pid nobody can trust. A herdr agent can
@@ -1106,7 +1721,7 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and its executor "+
 					"could not settle it: %s. Nobody can say it is finished; look at it, stop whatever is still "+
 					"running, then release it with `ticfac settle %s %s %d --release \"<who>\"`",
-				marker.Attempt, marker.TickID, status.State, now.Sub(deadline).Round(time.Second),
+				marker.Attempt, marker.TickID, status.State, now.Sub(fl.deadline).Round(time.Second),
 				r.opts.WallSeconds, lastObservation(status), r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
@@ -1119,20 +1734,21 @@ func (r *Reconciler) waitForSettlement(ctx context.Context, handle *subprocess.J
 				marker.Attempt, marker.TickID, r.wipeThreshold)
 		}
 
-		if step.Spend(interval) == ExceededCap {
-			// This leg is over. The next one is a FRESH step that re-derives
-			// its state from durable facts rather than continuing this one.
-			if _, err := r.store.Fetch(); err != nil {
-				return nil, err
-			}
-			if checkpoint, ok, err := r.store.Checkpoint(); err == nil && ok {
-				r.sequence, r.ticks = checkpoint.Sequence, checkpoint.Ticks
-			}
-			step = r.OpenStep(r.stepCap)
-			continue
-		}
-		r.sleep(interval)
 	}
+	return nil, nil
+}
+
+// restBetweenPolls is the pause between one attempt's polls, and the place the
+// step cap is spent.
+//
+// Appendix A #3: no step outlives the host's cap, so a long wait is spread
+// across bounded legs and each leg RE-DERIVES what it knows from durable facts
+// rather than carrying the previous leg's memory. The re-derivation is the
+// run's, not the attempt's — a window of attempts shares one store and one set
+// of counters — so a leg that ends re-reads once and every attempt in the
+// window continues against what it read.
+func (r *Reconciler) restBetweenPolls(fl *inflightAttempt) error {
+	return r.restWindow([]*inflightAttempt{fl})
 }
 
 // lastObservation is the executor's own last word about an attempt, for a
@@ -1149,6 +1765,124 @@ func lastObservation(status *subprocess.JobStatus) string {
 		return "the executor's last observation carried no detail"
 	}
 	return last.Detail
+}
+
+// wallClockAt is the moment the bound THIS attempt was issued fires: issued +
+// WallSeconds, read from the durable dispatch marker on origin — the same
+// arithmetic the settlement deadline starts from, and the same bound the
+// executor enforces on its own side (the local supervisor's kill timer, the
+// herdr executor's interrupt). The reconciler announced no bound of its own
+// when the run carries none (WallSeconds zero) and claims no firing for a
+// marker whose issue stamp cannot be read: a line about a bound nobody can
+// date is a line a reader cannot act on, and the attempt falls to the
+// settlement deadline as before.
+func (r *Reconciler) wallClockAt(marker attemptHandle) (time.Time, bool) {
+	if r.opts.WallSeconds <= 0 {
+		return time.Time{}, false
+	}
+	issued, ok := r.dispatchedAt(marker)
+	if !ok {
+		return time.Time{}, false
+	}
+	return issued.Add(time.Duration(r.opts.WallSeconds) * time.Second), true
+}
+
+// announceWall writes the bound's firing to the feed — ONCE per tick, like
+// every terminal-shaped fact: the re-delivery at every poll is the
+// executor's business, and a feed that repeats one fact at poll cadence
+// teaches a watcher to ignore it. A resumed run that adopts the attempt
+// again re-announces it, which is correct in the feed's own terms: the line
+// is a hint about when to look, and a watcher joining a run that is already
+// past the bound needs the hint as much as the first watcher did.
+//
+// The detail carries the executor's last observation because the line would
+// otherwise send the reader at the shape the message assumed — the incident
+// again: "interrupted but it has not exited" and "the supervisor is gone"
+// demand different first moves, and only the executor can say which it saw.
+func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobStatus, wallAt time.Time) {
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		event := r.journal[i]
+		if event.Tick != marker.TickID {
+			continue
+		}
+		if event.Stage == StageWallClock {
+			return
+		}
+		break
+	}
+	r.record(marker.TickID, StageWallClock,
+		"the wall clock of %ds fired %s ago and attempt %d of %s has not settled: the executor is stopping it — %s",
+		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), marker.Attempt, marker.TickID,
+		lastObservation(status))
+}
+
+// announceStall is the early warning before the bound (tick 7zs): the feed's
+// one line saying an attempt is alive but has produced nothing durable for
+// longer than the configured threshold. Liveness answers "is it running";
+// nothing answered "is it getting anywhere", and in the Phase 3 run the feed
+// was silent for 40 of the worker's 55 minutes precisely because nothing
+// happened that the run observes — the run was alive and true, and a person
+// caught it by reading the pane.
+//
+// The two facts are read out of the repo itself — how long since the
+// attempt's branch last moved, how long since its worktree last changed —
+// through the same executor-neutral measurement `ticfac status` reports, so
+// the feed line and the status surface cannot disagree about what they
+// measured. Both are measurements and neither is a judgement: a worker
+// thinking hard legitimately commits nothing for a while, so the line stops,
+// rejects and holds nothing, and a measurement that cannot be made (a
+// substrate whose worktree is not local, a worktree being torn down) says
+// nothing rather than guessing — the same honesty the gap itself keeps.
+//
+// It is written ONCE per tick in this incarnation, like every
+// terminal-shaped fact: the journal remembers the line, and a feed that
+// repeats one fact at poll cadence teaches a watcher to ignore it. A
+// restarted run that adopts the attempt again re-warns, which is correct in
+// the feed's own terms — a watcher joining a stalled run needs the hint as
+// much as the first watcher did.
+func (r *Reconciler) announceStall(marker attemptHandle) {
+	if r.opts.StallWarnAfter <= 0 {
+		return
+	}
+	for i := len(r.journal) - 1; i >= 0; i-- {
+		if r.journal[i].Tick == marker.TickID && r.journal[i].Stage == StageStallWarned {
+			return
+		}
+	}
+	// Nothing the attempt has done can be older than the attempt: the gap
+	// counts from the newest worktree file, and the worktree is created at
+	// dispatch, so before issued+threshold the gap is under the threshold by
+	// construction and the measurement is skipped. On an executor whose
+	// attempts have no local worktree this gate also keeps the per-poll cost
+	// at zero for the whole first threshold of the wait.
+	if issued, ok := r.dispatchedAt(marker); ok && r.now().Before(issued.Add(r.opts.StallWarnAfter)) {
+		return
+	}
+	gap, ok, err := runprogress.AttemptOf(r.opts.Repo, marker.WriteRef, r.now())
+	if err != nil || !ok {
+		// A measurement that cannot be made is not a run event: the hint is
+		// only worth a feed line when it is a fact, and the attempt falls to
+		// the wall clock and the settlement deadline as before.
+		return
+	}
+	idle, ok := gap.Idle()
+	if !ok || idle < r.opts.StallWarnAfter {
+		return
+	}
+	r.record(marker.TickID, StageStallWarned,
+		"attempt %d of %s is alive but has produced nothing durable for %s: its branch last moved %s ago and its "+
+			"worktree last changed %s ago — a reason to look, not a verdict; the wall clock of %ds is still the bound",
+		marker.Attempt, marker.TickID, idle,
+		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), r.opts.WallSeconds)
+}
+
+// idleOf renders one measured gap for the feed line, naming the fact rather
+// than a guess when the gap could not be read.
+func idleOf(d *runprogress.Duration) string {
+	if d == nil {
+		return "?"
+	}
+	return d.Round(time.Second).String()
 }
 
 // settlementDeadline is the moment after which an unsettled attempt is one
@@ -1168,12 +1902,26 @@ func lastObservation(status *subprocess.JobStatus) string {
 // would be a worse one.
 func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 	issued := r.now()
-	if record, ok, err := r.store.Attempt(marker.Attempt); err == nil && ok && record.TickID == marker.TickID {
-		if at, parseErr := time.Parse(time.RFC3339, record.DispatchedAt); parseErr == nil {
-			issued = at
-		}
+	if at, ok := r.dispatchedAt(marker); ok {
+		issued = at
 	}
 	return issued.Add(time.Duration(r.opts.WallSeconds)*time.Second + r.wipeThreshold)
+}
+
+// dispatchedAt is when the attempt's own durable marker on origin says it was
+// issued. It is the anchor every bound this run derives — the settlement
+// deadline and the wall clock's firing — so both read the same fact, and a
+// restarted run inherits the same bounds rather than re-issuing them.
+func (r *Reconciler) dispatchedAt(marker attemptHandle) (time.Time, bool) {
+	record, ok, err := r.store.Attempt(marker.Attempt)
+	if err != nil || !ok || record.TickID != marker.TickID {
+		return time.Time{}, false
+	}
+	at, parseErr := time.Parse(time.RFC3339, record.DispatchedAt)
+	if parseErr != nil {
+		return time.Time{}, false
+	}
+	return at, true
 }
 
 // ---------------------------------------------------------- the collect ---
@@ -1187,7 +1935,22 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
 	}
 	r.setTick(marker.TickID, "reported")
-	r.record(marker.TickID, StageCollected, "verdict %s (%s)", collected.Verdict, collected.Result.Outcome)
+	// Tick 19l: what the worker answered and what the run concluded are two
+	// claims by two parties, stated separately — never one sentence that reads
+	// as the worker declaring the run's verdict.
+	r.record(marker.TickID, StageCollected, "%s", collectedLine("the "+marker.Role+" job", collected))
+
+	// The work this collect is about to rule on is made durable on origin
+	// BEFORE any verdict is recorded over it (ticfac tick 55i). The only
+	// other push lives in integrate's durableAttemptHead, so an attempt that
+	// is refused HERE never reaches it — and an attempt whose commits exist
+	// only in its worktree is one `git worktree remove --force` away from
+	// gone, which is exactly what the teardown that follows a rejection
+	// does. Making the write ref durable first is what keeps settle's
+	// promise — "whatever this one committed stays on its own write ref" —
+	// true for the attempt whose work is most at risk: the one nothing
+	// merged.
+	r.preserveAttemptWork(marker)
 
 	// Appendix A #10's premise is that compliance is not a property of the
 	// model, and a boundary measured from a base the enforced party can choose
@@ -1455,6 +2218,23 @@ func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, m
 		return
 	}
 	if keepBranch {
+		// The branch is kept for the commits on it, and the record says WHERE
+		// those commits are (ticfac tick 55i): on the remote, or — when the
+		// push never landed — only in this checkout, said plainly, because
+		// the worktree this teardown removes is not a place a person can be
+		// sent to look and a branch nobody can place is work nobody can find.
+		branch := branchOf(marker.WriteRef)
+		if local := r.attemptWorkHead(marker); local != "" {
+			if remote, err := r.git.remoteHead(branch); err == nil && remote == local {
+				r.record(marker.TickID, StageCleanedUp,
+					"%s; the worktree is gone and the branch is kept, its commits durable on %s", reason, r.opts.Remote)
+				return
+			}
+			r.record(marker.TickID, StageCleanedUp,
+				"%s; the worktree is gone and the branch is kept — its commits are only on the local branch %s in "+
+					"this checkout, NOT on %s", reason, branch, r.opts.Remote)
+			return
+		}
 		r.record(marker.TickID, StageCleanedUp, "%s; the worktree is gone and the branch is kept for the commits on it", reason)
 		return
 	}
@@ -1509,7 +2289,10 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			SupervisorArgv: supervisor,
 			Remote:         d.Remote,
 			Attempt:        d.Attempt,
+			Try:            d.Try,
 			PushInterval:   pushInterval,
+			PriorReports:   d.PriorReports,
+			PriorSnapshots: d.PriorSnapshots,
 		})
 		if err != nil {
 			return nil, Substrate{}, err

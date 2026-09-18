@@ -627,7 +627,7 @@ func TestProvenanceNamesTheMarkerExecutorNotTheReResolvedProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.base = f.Repo.Base
-	dispatch, marker, err := r.planDispatch(planEntry{TickID: "rv", Role: "review-epic"}, 1, 0)
+	dispatch, marker, err := r.planDispatch(planEntry{TickID: "rv", Role: "review-epic"}, 1, 1, 0, nil)
 	if err != nil {
 		t.Fatalf("plan the dispatch: %v", err)
 	}

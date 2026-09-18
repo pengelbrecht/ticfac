@@ -138,6 +138,13 @@ of the history that produced it — or it chains.
 they differed; inside one second git gave them one SHA. **Rule:** Make fixture commits differ by
 something intentional (the message) and assert the property you rely on (same tree, different commit).
 
+**Problem:** fake-runner's blocked-first modes gated on TICFAC_ATTEMPT = 1 — the RUN's dispatch
+counter, not the tick's — so every test passed only because the first tick always drew number 1;
+the false defect report from the nvn worker about its own feature was the same numbering read
+wrong (tick vw0). **Rule:** A fixture that means "the tick's first try" keys on $TICFAC_TRY, the
+per-tick number the harness derives and passes — attempt numbers are identity (branch, marker,
+`ticfac settle`), never an ordinal.
+
 ## Verification ticks
 
 **Problem:** Workers finishing a verification tick left a clean tree and did NOT commit

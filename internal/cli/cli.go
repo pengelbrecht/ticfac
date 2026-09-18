@@ -51,10 +51,13 @@ usage:
   ticfac finding <epic-id> <key>                triage one drafted finding
   ticfac status <run-id> [--json]              is the run alive, and when did it last say anything
   ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
+  ticfac watch <run-id>                        follow a run and say, to a human, when it ends holding something for one
   ticfac version [--json]                       report this build and the contract bundle it serves
   ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
   ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
   ticfac factory <status|dashboard>            what the factory has configured; the read-only board
+  ticfac factory webhook                        point Telegram at the factory (--status reads it, --delete withdraws it)
+  ticfac herd <paint|notify>                   badge herdr workspaces; chime when a worker blocks or a wave settles
   ticfac cloud <run|stop|status|logs|trace|supervisor>   drive a self-deployed cloud factory
 
 run-epic flags:
@@ -88,8 +91,30 @@ cheaply. It binds a METERED credential; the local subprocess executor issues a
 flat-rate one, so on this host the number travels with the job and is reported
 everywhere, and the wall clock is what actually stops one.
 
+A long run wants the machine awake end to end. A machine that sleeps mid-run
+kills workers without settling them, and what it leaves — a held attempt, a
+missing report, a run stopped at nothing — looks exactly like a worker defect
+when it is the host's: wrap the run in caffeinate -i on macOS, or the
+equivalent elsewhere, rather than letting the machine sleep (tick 0z0).
+
+A target repository may declare, in .tick/config.md's Rules section, that an
+epic integrates through a PR + CI gate: the run opens the epic PR itself,
+holds the close-out until CI is green on it, and refuses typed — naming the
+failing job — when CI is red. That rule needs a code-hosting surface: the
+GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
+and a repo declaring the rule is refused at startup until the token is set
+(tick 0iz).
+
 settle flags:
-  --release <who>     the person releasing the attempt (required)
+  --release <who>     the person releasing the attempt (required); recorded as a stable
+                      pseudonymous id in the committed decision — the value you pass here
+                      never reaches the target repository, which may forbid operator
+                      identifiers in its tracked files; it is kept in run-local state under
+                      --state-root
+  --carry-work       base the next attempt of this tick on the released attempt's branch, so
+                      the next worker starts from its commits rather than redoing them — the
+                      gate still decides, and the new attempt's records state where its work
+                      came from
   --repo, --remote, --branch, --run-id, --state-root, --gate, --profiles,
   --tier, --runner    as for run-epic: the same run, addressed the same way
 
@@ -98,14 +123,37 @@ restart holds it rather than starting a second job over the same identity
 (Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
 the executor can still address, records the release durably as a decision
 naming who made it, and the next run dispatches a NEW attempt instead of
-adopting the released one. Whatever the released attempt committed stays on its
-own write ref.
+adopting the released one. Whatever the released attempt committed stays on
+its own write ref — and the release says where that ref lives: on the remote,
+or only as a local branch in the checkout that holds it when the push never
+landed there.
 
 It releases one other attempt: one this run REJECTED while it was holding
 commits nothing merged. No run collects that attempt again (the teardown the
 refusal ran removed its worktree) and no run dispatches over it (that would
 orphan the only copy of the work), so a person reads the branch and then says
 here that the run may go on.
+
+--carry-work is the third option that situation actually needs: release the
+attempt AND base the next one on its branch, so the next worker starts from the
+work rather than redoing it. Nothing merges unproven — the gate still decides —
+but the evidence the interrupted attempt produced is not thrown away, and the
+next attempt's provenance records that its source is the released attempt's
+ref and commit (tick 0z0).
+
+watch flags:
+  --repo <dir>        the checkout the run works in (default: cwd)
+
+"watch" is the consumer the run event feed was built for: it subscribes like
+events --follow, and when the run stops holding a tick for a person it SAYS
+SO — which tick, which attempt, why, and the command that moves it on. With a
+live run it joins the CURRENT incarnation: the ending of a previous
+incarnation is not replayed, and a hold already standing when the watch
+starts is reported as the hold it joined. Exit codes: 0 the run ended (the
+last line says how), 3 it ended holding something only a person can move,
+1 the feed could not be read or the watch was interrupted, 2 usage. A run
+whose process died without a terminal line is
+ticfac status's question, not the feed's.
 
 events flags:
   --repo <dir>        the checkout the run works in (default: cwd)
@@ -130,6 +178,10 @@ finding flags:
                        finding that belongs to this repository, <owner/name>:<tick-id>
                        for one routed to the repository its target names
   --discard            record that a person looked and said no
+  --fixed-as <commit>  record that the finding was repaired inside this epic, naming
+                       the commit that repaired it — the claim stays checkable, and a
+                       later report of the same finding is NOT suppressed: it means
+                       the fix did not hold, and the run hears it again
   --by <who>           the person triaging (required): a decision nobody can
                        attribute is one nobody can audit
 
@@ -169,6 +221,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		return eventsCommand(ctx, args[1:], stdout, stderr)
+	case "watch":
+		// Signal-aware for the same reason: a watch is a subscription a
+		// person leaves open until the run says it ended.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return watchCommand(ctx, args[1:], stdout, stderr)
 	case "version":
 		return version(args[1:], stdout, stderr)
 	case "factory":
@@ -177,6 +235,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
 		return factoryCommand(ctx, args[1:], stdout, stderr)
+	case "herd":
+		// Signal-aware: a paint or notify driven from an event hook can be
+		// left alone to exit when its caller's subscription ends.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return herdCommand(ctx, args[1:], stdout, stderr)
 	case "cloud":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
@@ -208,6 +272,9 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
 		ceiling   = fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to")
 		wall      = fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by")
+		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
+			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
+				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -250,6 +317,24 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		return 1
 	}
 
+	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz):
+	// built from the remote and the token, handed to the reconciler, and nil
+	// — with a note, not a crash — when neither resolves. A target repo that
+	// declares no rule in .tick/config.md needs no surface; one that does is
+	// refused by the reconciler at construction, naming the credential.
+	repoDir := *repo
+	if repoDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			repoDir = wd
+		}
+	}
+	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
+	if pullsErr != nil {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: no code-hosting surface: %v. "+
+			"A repository that declares the PR + CI close-out rule in .tick/config.md will be refused "+
+			"until one is configured.\n", epicID, pullsErr)
+	}
+
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
@@ -266,8 +351,10 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		ProfileDir:        *profiles,
 		Tier:              *tier,
 		WallSeconds:       *wall,
+		StallWarnAfter:    time.Duration(*stallWarn) * time.Second,
 		BudgetUSD:         *budget,
 		CeilingUSD:        *ceiling,
+		PullRequests:      pulls,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
@@ -279,12 +366,6 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// what this process says whether or not whoever launched it captured its
 	// output. The pwp production run died once with nothing captured, and its
 	// cause was never recovered.
-	repoDir := *repo
-	if repoDir == "" {
-		if wd, wdErr := os.Getwd(); wdErr == nil {
-			repoDir = wd
-		}
-	}
 	liveRun := reconciler.RunID()
 	life, err := runlife.Claim(repoDir, liveRun)
 	if err != nil {
@@ -294,6 +375,13 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	operatorStderr := stderr
 	stderr = io.MultiWriter(stderr, life.Log())
 	stdout = io.MultiWriter(stdout, life.Log())
+
+	// A redirected run-epic was silent until the run ended (tick bzx), so a
+	// redirected output was no monitoring signal. The run's id and the two
+	// commands that follow it, said HERE — before anything is dispatched —
+	// and on the wrapped stdout, so the same line lands in run.log whether
+	// or not whoever launched the run captured its output.
+	fmt.Fprintf(stdout, "%s\n", startupLine(liveRun))
 
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
@@ -366,6 +454,17 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	return 0
 }
 
+// startupLine is the one line a redirected run-epic now says while the run
+// is still starting (tick bzx): the run's id, and the two commands that
+// follow the run — `ticfac status` for is-it-alive, `ticfac events --follow`
+// for what it is doing — printed before anything is dispatched, so a
+// redirected invocation is a monitoring signal from its first line instead of
+// an empty file until the run ends.
+func startupLine(runID string) string {
+	return fmt.Sprintf("run %s starting — follow it: ticfac status %s (is it alive), "+
+		"ticfac events %s --follow (what it is doing, as it does it)", runID, runID, runID)
+}
+
 // feedFailureLine is the one sentence a run whose feed could not be written
 // owes its operator: what failed, that it is not a verdict about the work,
 // and what cannot happen as a result — `ticfac events <run-id> --follow` has
@@ -412,6 +511,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
 		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
 		release   = fs.String("release", "", "the person releasing the attempt")
+		carryWork = fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -445,6 +545,23 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	// The same code-hosting surface the run is handed (tick 0iz): the
+	// reconciler this command builds shares the construction refusal, so a
+	// repo declaring the close-out rule is settled by a host that can back
+	// it — and the credential is read from the same one place.
+	repoDir := *repo
+	if repoDir == "" {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			repoDir = wd
+		}
+	}
+	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
+	if pullsErr != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s: no code-hosting surface: %v. "+
+			"A repository that declares the PR + CI close-out rule in .tick/config.md is refused until one is "+
+			"configured.\n", epicID, pullsErr)
+	}
+
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
@@ -459,13 +576,19 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		GateConfig:        *gate,
 		ProfileDir:        *profiles,
 		Tier:              *tier,
+		PullRequests:      pulls,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)
 		return 1
 	}
 
-	settled, err := reconciler.Settle(context.Background(), tickID, attempt, *release)
+	var settled *reconcile.Settlement
+	if *carryWork {
+		settled, err = reconciler.SettleCarry(context.Background(), tickID, attempt, *release)
+	} else {
+		settled, err = reconciler.Settle(context.Background(), tickID, attempt, *release)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
@@ -475,9 +598,38 @@ func settle(args []string, stdout, stderr io.Writer) int {
 			settled.Attempt, settled.TickID, settled.ReleasedBy)
 		return 0
 	}
-	fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
-		"The next run dispatches a new attempt; whatever this one committed stays on its own write ref.\n",
-		settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+	if settled.Carried {
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s, "+
+			"CARRYING its work:\n"+
+			"the next run dispatches a new attempt based on the released commits at %s, so the next worker "+
+			"starts from them rather than redoing them. The gate still decides — nothing merges unproven — and "+
+			"the new attempt's records state where its work came from.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
+		return 0
+	}
+	// Where the released work can be found, said plainly (ticfac tick 55i):
+	// "stays on its own write ref" is only true when the ref reached the
+	// remote, and a release that did not say which sent a person hunting for
+	// work that was one worktree removal away from gone.
+	switch {
+	case settled.WorkSHA == "":
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt; this one left no commit beyond its base anywhere \u2014 \n"+
+			"add --carry-work to have said otherwise.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+	case settled.WorkDurable:
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt; whatever this one committed is durable at %s on the remote \u2014 \n"+
+			"add --carry-work to have the next attempt start from it instead.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
+	default:
+		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+			"The next run dispatches a new attempt. Whatever this one committed is NOT on the remote: the commits \n"+
+			"are only the LOCAL branch %s in the checkout at %s — the worktree is gone and the teardown kept the \n"+
+			"branch, so that checkout is the only place they exist.\n",
+			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
+			settled.WorkRef, settled.WorkIn)
+	}
 	return 0
 }
 

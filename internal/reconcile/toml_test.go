@@ -3,8 +3,10 @@ package reconcile
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 )
@@ -151,6 +153,53 @@ func TestThisRepositorysGateIsReadable(t *testing.T) {
 	for _, command := range got {
 		if !strings.Contains(command.Command, "go test") {
 			t.Errorf("gate %q is %q", command.Name, command.Command)
+		}
+	}
+}
+
+// TestTheHarnessBoundOutlivesEveryDeclaredGateBound.
+//
+// A gate command that names its own timeout has said what it considers too
+// long, and that bound is the useful one: `go test -timeout` prints the stack
+// of every running goroutine, so the answer is "this test hung, here is where".
+// The harness bound underneath it answers `signal: killed`, exit -1, which
+// names nothing and points at nothing.
+//
+// The two disagreed for as long as they both existed — a 30 minute harness
+// bound under a declared 45 — and nothing noticed while the run worked one
+// tick at a time and the gate finished in ten minutes. The first widened run
+// hit it on its first gate: bzx's ran against three live workers competing for
+// the machine, crossed 30 minutes, and was killed undiagnosed. The tick was
+// refused for the run's own scheduling rather than for anything about its work.
+func TestTheHarnessBoundOutlivesEveryDeclaredGateBound(t *testing.T) {
+	t.Parallel()
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".tick", "runners.toml")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("no %s in this checkout", path)
+	}
+	commands, err := ReadGateCommands(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := regexp.MustCompile(`-timeout[= ]([0-9]+[smh])`)
+	for _, command := range commands {
+		match := declared.FindStringSubmatch(command.Command)
+		if match == nil {
+			continue // a command that declares no bound of its own is what the harness bound is FOR
+		}
+		own, err := time.ParseDuration(match[1])
+		if err != nil {
+			t.Fatalf("gate %q declares an unparseable timeout %q: %v", command.Name, match[1], err)
+		}
+		if DefaultGateTimeout <= own {
+			t.Errorf("gate %q declares -timeout %s and the harness kills it at %s: the harness would "+
+				"pre-empt the command's own bound, replacing a report that names the hung test with "+
+				"`signal: killed`. The harness bound is the OUTER one.",
+				command.Name, own, DefaultGateTimeout)
 		}
 	}
 }

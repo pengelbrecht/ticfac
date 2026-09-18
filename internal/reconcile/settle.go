@@ -2,7 +2,12 @@ package reconcile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -32,10 +37,29 @@ import (
 //   - the release is RECORDED, durably, on origin, as a decision naming who
 //     made it — the same shape a role job's answer lands in, because "a person
 //     decided this run may go on" is exactly a decision the run was made under.
-//     A release nobody can attribute is the clock release A11 refuses.
+//     A release nobody can attribute is the clock release A11 refuses. What the
+//     record names is a stable PSEUDONYMOUS handle, never the string the
+//     operator handed --release (tick 4ys): the decision is committed to the
+//     target repository's epic branch, and a public repository's rules forbid
+//     operator identifiers in tracked files. The handle is attribution — "a
+//     PERSON made this, and the same person reads as the same handle every
+//     time" — and the real value survives in run-local state outside the
+//     repository, where a person who can read the host can join a handle to a
+//     name.
 //   - the reconciler READS it. The next run does not adopt a released attempt;
-//     it dispatches a new one, at a new number, with a write ref of its own, so
-//     whatever the dead attempt left on its branch stays there for a person.
+//     it dispatches a new one, at a new number, with a write ref of its own.
+//     Where the new attempt starts from is the release's DISPOSITION, and a
+//     person chooses it (tick 0z0):
+//
+//       - unaddressable (the default): whatever the dead attempt left on its
+//         branch stays there, for a person to take by hand. That is the
+//         operator's old choice, and it strands work the moment it is made.
+//       - carry-work (--carry-work): the next attempt is cut from the RELEASED
+//         attempt's head, so the next worker starts from the work rather than
+//         redoing it. Nothing merges unproven — the gate still decides — and
+//         the carried attempt's provenance states its source as the released
+//         attempt's ref and commit, so "this work came from a released attempt"
+//         survives as fields (settle.go, dispatch.go, profiles.go).
 //
 // The second attempt a person has to be able to release is the one this run
 // REJECTED while it was holding commits: nothing merged them, so the next run
@@ -51,6 +75,20 @@ import (
 // a FIELD rather than matched in prose: a run that recovers a decision by
 // matching on a sentence is the failure Appendix A #9 is about.
 const settleOp = "settle_attempt"
+
+// The dispositions a release gives the released attempt's WORK — what the
+// next run does with the commits the released attempt left. Read as FIELDS
+// of the decision, never from its prose (tick 0z0).
+const (
+	// dispositionUnaddressable is the default: the released attempt's commits
+	// stay on their own write ref, stranded for a person to take by hand.
+	dispositionUnaddressable = "unaddressable"
+	// dispositionCarryWork is --carry-work: the next attempt of the tick is
+	// dispatched at the released attempt's head, so the work goes forward
+	// through the gate rather than being redone — and the decision names the
+	// ref and the commit it is carrying.
+	dispositionCarryWork = "carry-work"
+)
 
 // settleRole is the role a settlement is recorded under, from the contract's
 // closed role vocabulary ($defs.role). A failure somebody looked at and ruled
@@ -69,6 +107,27 @@ type Settlement struct {
 	// released — what the person is settling, in the executor's vocabulary.
 	State string
 
+	// WorkRef, WorkSHA, WorkDurable and WorkIn say WHERE the released
+	// attempt's commits can be found (ticfac tick 55i): "stays on its own
+	// write ref" was only ever true when the ref had reached the remote, and
+	// a settlement that did not say which was a promise a person could not
+	// act on. WorkRef is the write ref, WorkSHA its head; WorkDurable says
+	// the remote carries that head; when it does not, WorkIn names the
+	// CHECKOUT that holds the local branch — the worktree is already gone.
+	// All four are zero when the attempt left no work at all.
+	WorkRef     string
+	WorkSHA     string
+	WorkDurable bool
+	WorkIn      string
+
+	// Carried says the release carried the attempt's WORK forward (--carry-work,
+	// tick 0z0): the next attempt of the tick is dispatched at CarryRef's
+	// head, CarrySHA, so the next worker starts from the commits rather than
+	// redoing them. The gate still decides what merges.
+	Carried  bool
+	CarryRef string
+	CarrySHA string
+
 	// Decision is the decision number the release landed as, and Recorded is
 	// false when a settlement for this attempt was already on origin.
 	Decision int
@@ -82,18 +141,146 @@ type Settlement struct {
 
 // settlement is one released attempt, as the run reads it back.
 type settlement struct {
-	by string
-	at string
+	by, at string
+
+	// carry is set when the release CARRIED the attempt's work forward
+	// (disposition carry-work), and carryRef is the ref the work is on — the
+	// next dispatch of this tick is cut from its head (dispatch.go).
+	carry    bool
+	carryRef string
 }
 
 func attemptKey(tick string, attempt int) string { return fmt.Sprintf("%s#%d", tick, attempt) }
 
+// releaseHandle is the value a settlement records for the person who released
+// the attempt: a stable PSEUDONYMOUS id, never the string itself.
+//
+// `--release "<who>"` is an operator's answer in their own words — a name, an
+// email address, whatever says "me" to them — and the decision it lands in is
+// COMMITTED to the target repository's epic branch, whose rules may forbid
+// operator identifiers in tracked files outright (a public repository's do).
+// What the run needs from released_by survives the substitution, and it is
+// all the run ever needed:
+//
+//   - that a PERSON made this decision (a person-shaped handle, not "clock"),
+//     which is what separates a release from the clock release A11 refuses;
+//   - WHICH person, when two releases are compared — the handle is a pure
+//     function of the input, so the same operator reads as the same handle
+//     every time, and the next run's carried-dispatch provenance names the
+//     same person the decision does;
+//   - which agent acted on it — the decision's own provenance, untouched.
+//
+// The real value is kept in run-local state outside the repository
+// (keepReleaseIdentity), so a person who can read the host can still join a
+// handle to a name — and nobody who can read only the repository can.
+//
+// The handle is a FULL sha256 over a domain-separated prefix and the input.
+// A truncation is how this record family went wrong once before (tick 4ys):
+// 32 hex characters are exactly the shape of a cloud account id, so every
+// run record carrying one tripped a public-repo account detector — a full
+// digest collides with nothing.
+func releaseHandle(by string) string {
+	sum := sha256.Sum256([]byte("ticfac/settle-release\x00" + by))
+	return "person-" + hex.EncodeToString(sum[:])
+}
+
+// releaseRecord is the run-local counterpart of a settlement's committed
+// decision: the REAL value behind the handle. It lives under the run's
+// ExecStateRoot — host-local, outside the repository, the same place the
+// executor keeps its own attempt state — so the repository a settlement is
+// committed to carries the handle alone.
+type releaseRecord struct {
+	RunID      string `json:"run_id"`
+	TickID     string `json:"tick_id"`
+	Attempt    int    `json:"attempt"`
+	Handle     string `json:"handle"`
+	ReleasedBy string `json:"released_by"`
+	At         string `json:"at"`
+}
+
+// releaseRecordPath is where one settlement's real identity lives. It is
+// named by the attempt key the decisions are read back by, and it sits
+// BESIDE the executor's attempt state (not inside it) because the teardown a
+// settlement runs disposes that state — the mapping outlives the attempt's
+// own records the same way the kept branch outlives its worktree.
+func (r *Reconciler) releaseRecordPath(tickID string, attempt int) string {
+	return filepath.Join(r.opts.ExecStateRoot, r.runID, "settlements", attemptKey(tickID, attempt)+".json")
+}
+
+// keepReleaseIdentity writes the real value behind a release handle to
+// run-local state, BEFORE the decision is recorded: a handle this host can
+// no longer resolve is a release nobody can attribute, and a decision whose
+// identity could not be kept is refused rather than recorded.
+func (r *Reconciler) keepReleaseIdentity(marker attemptHandle, by, at string) error {
+	raw, err := json.Marshal(releaseRecord{
+		RunID: r.runID, TickID: marker.TickID, Attempt: marker.Attempt,
+		Handle: releaseHandle(by), ReleasedBy: by, At: at,
+	})
+	if err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s: %w",
+			marker.Attempt, marker.TickID, err)
+	}
+	path := r.releaseRecordPath(marker.TickID, marker.Attempt)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
+			"repository: %w", marker.Attempt, marker.TickID, err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
+			"repository: %w", marker.Attempt, marker.TickID, err)
+	}
+	return nil
+}
+
+// releaseIdentity reads the real value back, for an operator asking who a
+// settled attempt was released by. Run-local state may be gone — a different
+// host, a cleaned state root, a release recorded before the handle existed —
+// and the answer is then false: the caller falls back to the handle the
+// committed record carries, whose claim ("a person") is untouched either way.
+func (r *Reconciler) releaseIdentity(tickID string, attempt int) (string, bool) {
+	raw, err := os.ReadFile(r.releaseRecordPath(tickID, attempt))
+	if err != nil {
+		return "", false
+	}
+	var record releaseRecord
+	if json.Unmarshal(raw, &record) != nil || record.ReleasedBy == "" {
+		return "", false
+	}
+	return record.ReleasedBy, true
+}
+
 // Settle releases one attempt this host cannot address, on a person's word.
+// The released attempt's work stays on its own write ref, for a person to
+// take by hand — and the settlement SAYS where that ref lives: on the
+// remote, or only as a local branch in the checkout the run works in, which
+// is the case the old promise silently covered and a person had to guess at.
 //
 // It is the same reconciler a run is made with — the same repository, remote,
 // integration branch, run id and executor factory — because settling an
 // attempt is an act inside a run and not a tool beside it.
 func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by string) (*Settlement, error) {
+	return r.settle(ctx, tickID, attempt, by, false)
+}
+
+// SettleCarry releases one attempt AND carries its work forward (tick 0z0):
+// the next attempt of the tick is dispatched at the released attempt's head,
+// so the next worker starts from the commits rather than redoing them. The
+// release itself is the same person's decision Settle records; what carrying
+// adds is the DISPOSITION of the work, recorded on the decision the next run
+// reads — and nothing merges unproven, because the gate still decides.
+//
+// It refuses what a carry cannot honestly be:
+//
+//   - an attempt that left no commit beyond its base — there is no work to
+//     carry, and recording a carry with nothing in it would be a decision that
+//     lies about what it did;
+//   - an attempt already released WITHOUT carrying: a decision is created if
+//     absent and never rewritten, so the earlier release stands as made.
+func (r *Reconciler) SettleCarry(ctx context.Context, tickID string, attempt int, by string) (*Settlement, error) {
+	return r.settle(ctx, tickID, attempt, by, true)
+}
+
+func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by string, carry bool) (*Settlement, error) {
 	if by == "" {
 		return nil, fmt.Errorf("reconcile: a settlement names who made it: a release with no author is the clock " +
 			"release Appendix A #11 refuses (pass --release \"<who>\")")
@@ -148,12 +335,30 @@ func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by 
 	marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 
 	// Already settled: a settlement is a decision, and a decision is created if
-	// absent and never rewritten.
+	// absent and never rewritten. A carry asked over a release that made no
+	// such decision is refused rather than quietly rewriting one — the release
+	// stands as the person made it.
 	if existing, err := r.settlements(); err != nil {
 		return nil, err
 	} else if was, ok := existing[attemptKey(tickID, attempt)]; ok {
-		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: was.by,
-			State: subprocess.StateLost, Recorded: false}, nil
+		// The operator-facing name for a release already on record: the real
+		// value when this host still holds it, the handle the record carries
+		// otherwise. Both are answers to "a person"; neither is a claim the
+		// record does not make.
+		by := was.by
+		if real, found := r.releaseIdentity(tickID, attempt); found {
+			by = real
+		}
+		if carry && !was.carry {
+			return nil, fmt.Errorf(
+				"reconcile: attempt %d of %s was already released by %s without carrying its work, and a "+
+					"decision is created if absent and never rewritten: the release stands as it was made. "+
+					"The work is still on %s — a person who wants it to go forward can merge it by hand, or "+
+					"push it where the next run will branch from it",
+				attempt, tickID, by, was.carryRef)
+		}
+		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
+			State: subprocess.StateLost, Recorded: false, Carried: was.carry, CarryRef: was.carryRef}, nil
 	}
 
 	handle, executor, state, err := r.addressForSettlement(marker)
@@ -161,10 +366,55 @@ func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by 
 		return nil, err
 	}
 
-	number, err := r.recordSettlement(marker, by, state)
+	// The work a carried release takes forward, read BEFORE the decision is
+	// written so the decision states what is actually there — the ref and the
+	// commit — rather than what the person meant. Read exactly as the next
+	// run's dispatch reads it (carryHead), so the two can never disagree about
+	// what was carried; and refused when there is nothing to carry, because a
+	// decision that says "carry the work" and carries none is one nobody can
+	// act on.
+	carryRef, carrySHA := "", ""
+	if carry {
+		branch := branchOf(marker.WriteRef)
+		head, err := r.remoteWork(branch, marker.BaseSHA)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile: read %s on %s to carry the work of attempt %d of %s: %w",
+				branch, r.opts.Remote, attempt, tickID, err)
+		}
+		if head == "" {
+			head = r.attemptWorkHead(marker)
+		}
+		if head == "" {
+			return nil, fmt.Errorf(
+				"reconcile: attempt %d of %s left no commit beyond its base on %s: there is no work to "+
+					"carry, so release it without --carry-work — the next run dispatches a new attempt from "+
+					"the integration branch",
+				attempt, tickID, branch)
+		}
+		carryRef, carrySHA = marker.WriteRef, head
+	}
+
+	// The real identity behind the release is kept BEFORE the decision is
+	// written, because a handle nobody can resolve is an unattributable
+	// release — the clock release A11 refuses, wearing a different string.
+	if err := r.keepReleaseIdentity(marker, by, r.now().UTC().Format(time.RFC3339)); err != nil {
+		return nil, err
+	}
+
+	number, err := r.recordSettlement(marker, by, state, carry, carryRef, carrySHA)
 	if err != nil {
 		return nil, err
 	}
+
+	// Where the released work can be found, read BEFORE the teardown so the
+	// answer is what the release is about to leave behind: on the remote at
+	// the write ref's head, or — when the push never landed — only as a local
+	// branch, and then the settlement names the checkout that holds it, because
+	// the worktree is already going. A read that fails leaves all four zero:
+	// the message then says nothing rather than guessing, because a
+	// settlement that pointed at a place it did not check is a pointer a
+	// person walks to and finds empty.
+	workRef, workSHA, workDurable, workIn := r.workWhereabouts(marker)
 
 	// The record is on origin; only now is anything torn down. A1's order
 	// inside the teardown: revoke, then dispose, and the branch is KEPT —
@@ -180,7 +430,26 @@ func (r *Reconciler) Settle(ctx context.Context, tickID string, attempt int, by 
 	}
 
 	return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
-		State: state, Decision: number, Recorded: true, Disposed: disposed}, nil
+		State: state, Decision: number, Recorded: true, Disposed: disposed,
+		Carried: carry, CarryRef: carryRef, CarrySHA: carrySHA,
+		WorkRef: workRef, WorkSHA: workSHA, WorkDurable: workDurable, WorkIn: workIn}, nil
+}
+
+// workWhereabouts says where an attempt's commits can be found: on the
+// remote at the write ref's head when the remote carries work beyond the
+// base, or — when it does not — as a local branch in this checkout, named.
+// It is the same question disposition asks of both refs, read the same way,
+// so the release and the next run's hold can never disagree about where the
+// work is. All-zero answers that the attempt left no work anywhere.
+func (r *Reconciler) workWhereabouts(marker attemptHandle) (ref, sha string, durable bool, in string) {
+	branch := branchOf(marker.WriteRef)
+	if head, err := r.remoteWork(branch, marker.BaseSHA); err == nil && head != "" {
+		return marker.WriteRef, head, true, ""
+	}
+	if local := r.attemptWorkHead(marker); local != "" {
+		return marker.WriteRef, local, false, r.opts.Repo
+	}
+	return "", "", false, ""
 }
 
 // addressForSettlement asks the executor what it can still say about the
@@ -315,7 +584,7 @@ func (r *Reconciler) attemptIsMerged(marker attemptHandle) (bool, error) {
 }
 
 // recordSettlement writes the release to origin, as a decision.
-func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string) (int, error) {
+func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string, carry bool, carryRef, carrySHA string) (int, error) {
 	decisions, err := r.store.Decisions()
 	if err != nil {
 		return 0, err
@@ -332,6 +601,30 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string) (i
 	if err != nil {
 		return 0, fmt.Errorf("record the settlement decision for %s: %w", marker.TickID, err)
 	}
+	// The disposition is the half of the release the NEXT RUN reads: what
+	// happens to the work the released attempt left. Unaddressable is the
+	// default — the commits stay stranded on their write ref; carry-work
+	// sends the next attempt of the tick to the released head, and names the
+	// ref and the commit so what is being carried is a field, never prose
+	// (tick 0z0).
+	//
+	// released_by is the stable PSEUDONYMOUS handle, never the string the
+	// operator handed --release (tick 4ys): this decision is COMMITTED to the
+	// target repository's epic branch, whose rules may forbid operator
+	// identifiers in tracked files — and attribution, not identification, is
+	// all this field ever owed the run. The real value is kept in run-local
+	// state outside the repository (keepReleaseIdentity).
+	response := map[string]any{
+		"settled":     true,
+		"released_by": releaseHandle(by),
+		"disposition": dispositionUnaddressable,
+		"state":       state,
+	}
+	if carry {
+		response["disposition"] = dispositionCarryWork
+		response["carry_ref"] = carryRef
+		response["carry_sha"] = carrySHA
+	}
 	outcome, err := r.store.PutDecision(runstate.Decision{
 		Decision: number,
 		Role:     settleRole,
@@ -344,12 +637,7 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string) (i
 			"job_id":  marker.JobID,
 			"state":   state,
 		},
-		Response: map[string]any{
-			"settled":     true,
-			"released_by": by,
-			"disposition": "unaddressable",
-			"state":       state,
-		},
+		Response:    response,
 		Validated:   true,
 		RequestedAt: stamp,
 		AnsweredAt:  stamp,
@@ -391,7 +679,15 @@ func (r *Reconciler) settlements() (map[string]settlement, error) {
 			continue
 		}
 		by, _ := decision.Response["released_by"].(string)
-		out[attemptKey(tick, attempt)] = settlement{by: by, at: decision.AnsweredAt}
+		s := settlement{by: by, at: decision.AnsweredAt}
+		// The disposition of the WORK, read as a field (tick 0z0): a release
+		// that carried names the ref the work is on, and the next dispatch of
+		// the tick is cut from that ref's head.
+		if disposition, _ := decision.Response["disposition"].(string); disposition == dispositionCarryWork {
+			s.carry = true
+			s.carryRef, _ = decision.Response["carry_ref"].(string)
+		}
+		out[attemptKey(tick, attempt)] = s
 	}
 	return out, nil
 }

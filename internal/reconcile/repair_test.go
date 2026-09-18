@@ -247,8 +247,8 @@ func TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne(t *testin
 	for _, decision := range decisions {
 		if decision.Request["op"] == settleOp && decision.Request["tick_id"] == "a1" {
 			found = true
-			if decision.Response["released_by"] != "an operator" {
-				t.Errorf("the release does not name who made it: %+v", decision.Response)
+			if by, _ := decision.Response["released_by"].(string); by != releaseHandle("an operator") {
+				t.Errorf("the release does not name who made it as a stable handle: %+v", decision.Response)
 			}
 		}
 	}
@@ -929,6 +929,13 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	}
 	tick, attempt := *passed.Provenance.TickID, *passed.Provenance.Attempt
 	base := evidenceKey(tick, attempt, passed.Check.ID)
+	if passed.Provenance.ProfileDigest == nil {
+		t.Fatalf("evidence %s names no profile digest", passed.Key)
+	}
+	// The profile that dispatched the attempt, which an unchanged resolution
+	// still resolves: the profile comparison in the reuse judgement must
+	// change nothing for a profile that did not change.
+	recordedProfile := *passed.Provenance.ProfileDigest
 
 	r, err := New(f.options(f.Repo, fixtureOptions{}))
 	if err != nil {
@@ -941,7 +948,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	// The same commit is the same key: re-running a check on a commit nothing
 	// changed about would spend the same minutes for the same answer, and the
 	// record already there is never overwritten.
-	same, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA)
+	same, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA, recordedProfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -954,7 +961,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	// integration head moves every time the run checkpoints.
 	bookkeeping := commitOnto(t, f.Repo, passed.Provenance.SourceSHA,
 		runstate.Root+"/runs/r-fixture/a-record.json", "{}\n", "the run writes down what it is doing")
-	unchanged, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping)
+	unchanged, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping, recordedProfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -968,7 +975,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	// again and records its own answer rather than inheriting one.
 	moved := commitOnto(t, f.Repo, passed.Provenance.SourceSHA, "README.md", "a genuinely different tree\n",
 		"a source change")
-	rekeyed, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, moved)
+	rekeyed, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, moved, recordedProfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -995,7 +1002,7 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	if treeOf(t, f.Repo, twin) != treeOf(t, f.Repo, moved) {
 		t.Fatal("the two probe commits do not share a tree; this proves nothing about chaining")
 	}
-	again, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, twin)
+	again, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, twin, recordedProfile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1012,6 +1019,236 @@ func TestAPassingCheckIsNotReusedAsEvidenceAtADifferentCommit(t *testing.T) {
 	}
 	if still.Provenance.SourceSHA != passed.Provenance.SourceSHA || still.Result != "pass" {
 		t.Errorf("the original record changed: %s %s", still.Result, short(still.Provenance.SourceSHA))
+	}
+}
+
+// A record is evidence for the gate that RAN it, and for no other declared
+// gate — the reuse judgement asks the digest too (tick 0dc).
+//
+// The bug this pins: gateEvidenceKey decided reuse by the source tree alone, so
+// a resumed run that adopted an already-merged attempt re-read a record made
+// under a DIFFERENT declared gate — the operator had changed the command — and
+// published its verdict, where the fresh path refuses the identical record as
+// stale. The whole point of keying evidence by a manifest digest is that a
+// verdict from a different check is not a verdict about this gate; without
+// this comparison the digest was decorative on exactly one path.
+func TestAChangedGateCommandIsNotEvidenceForTheGateDeclaredNow(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %v: %v", result, err)
+	}
+
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	var passed *runstate.Evidence
+	for _, key := range store.EvidenceKeys() {
+		evidence, ok, err := store.Evidence(key)
+		if err != nil || !ok {
+			t.Fatalf("read evidence %s: %v", key, err)
+		}
+		if evidence.Result == "pass" {
+			passed = evidence
+			break
+		}
+	}
+	if passed == nil {
+		t.Fatal("the completed run recorded no passing check; this fixture proves nothing about reuse")
+	}
+	if passed.Provenance.TickID == nil || passed.Provenance.Attempt == nil || passed.Provenance.ContextManifestDigest == nil {
+		t.Fatalf("evidence %s names no tick, attempt or digest", passed.Key)
+	}
+	if passed.Provenance.ProfileDigest == nil {
+		t.Fatalf("evidence %s names no profile digest", passed.Key)
+	}
+	tick, attempt := *passed.Provenance.TickID, *passed.Provenance.Attempt
+	base := evidenceKey(tick, attempt, passed.Check.ID)
+	recordedProfile := *passed.Provenance.ProfileDigest
+
+	// Under the gate that ran — the unchanged declaration — the record at the
+	// very commit it was made on is reused, exactly as before: the digest in
+	// the judgement changes nothing for a gate that did not change.
+	r, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.store = store
+	if r.gateDigest != *passed.Provenance.ContextManifestDigest {
+		t.Fatalf("the fixture's declared gate is not the one that ran: %s vs %s", r.gateDigest,
+			*passed.Provenance.ContextManifestDigest)
+	}
+	same, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA, recordedProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same != base {
+		t.Errorf("the key under an unchanged gate is %q, want the plain key %q", same, base)
+	}
+
+	// The declared gate changes — the incident's edit. The identical record at
+	// the identical commit is NOT evidence for the new gate: a verdict from a
+	// different check is not a verdict about this gate.
+	changed := strings.Replace(passingGate, "test -f README.md", "test -f README.md && true", 1)
+	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), changed)
+	r2, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.store = store
+	if r2.gateDigest == r.gateDigest {
+		t.Fatal("the changed gate has the same digest as the one that ran; this proves nothing about staleness")
+	}
+	rekeyed, err := r2.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA, recordedProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rekeyed == base {
+		t.Fatalf("a record made under the gate %s was reused as evidence for the gate %s at the same "+
+			"commit: both are keyed %q", short(r.gateDigest), short(r2.gateDigest), base)
+	}
+	if !strings.HasPrefix(rekeyed, base+"-") {
+		t.Errorf("the rekeyed evidence key %q is not a key of this check", rekeyed)
+	}
+
+	// The resume shape from the incident: the commit moved but the SOURCE did
+	// not — only the run's own records were written. The tree alone would say
+	// "reuse"; the digest must overrule it, or the digest is decorative on
+	// exactly the path that runs nothing.
+	bookkeeping := commitOnto(t, f.Repo, passed.Provenance.SourceSHA,
+		runstate.Root+"/runs/r-fixture/a-record.json", "{}\n", "the run writes down what it is doing")
+	unchanged, err := r2.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping, recordedProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged == base {
+		t.Fatalf("an unchanged source tree overruled a changed declared gate: the record made under "+
+			"%s was reused for %s at %s", short(r.gateDigest), short(r2.gateDigest), short(bookkeeping))
+	}
+	if unchanged != rekeyed {
+		t.Errorf("the same source under the same gate was keyed %q and then %q; the rekey chains",
+			rekeyed, unchanged)
+	}
+
+	// And the rekey does not chain across resumes either: a third incarnation
+	// under the same changed gate names the same key, so the record minted for
+	// it stands rather than a third key being minted.
+	again, err := r2.gateEvidenceKey(tick, attempt, passed.Check.ID, bookkeeping, recordedProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != rekeyed {
+		t.Errorf("a resume of the same source under the same gate minted %q after %q; the rekey chains",
+			again, rekeyed)
+	}
+
+	// The original record stands, unoverwritten: the refusal is about
+	// publishing it, and evidence is never rewritten.
+	still, ok, err := store.Evidence(base)
+	if err != nil || !ok {
+		t.Fatalf("the original record under %s is gone: %v", base, err)
+	}
+	if still.StartedAt != passed.StartedAt {
+		t.Errorf("the record under the plain key was overwritten: %s -> %s", passed.StartedAt, still.StartedAt)
+	}
+}
+
+// A record is evidence for the PROFILE that dispatched the attempt it was
+// recorded over, and for no other resolved profile — the reuse judgement
+// asks the profile digest too (tick oe0).
+//
+// The bug this pins: 0dc made the same judgement ask the record's
+// context_manifest_digest and stopped there. An evidence record also states
+// profile_digest — one of Appendix A #13's four — and the argument for
+// leaving it out is real: a gate command is about the CHECK while the profile
+// is about the WORKER. But the record's own provenance NAMES the profile, so
+// a published record that says a verdict was produced under a profile the
+// current configuration no longer describes is exactly the claim freshness
+// exists to refuse. The argument loses for the same reason the tree's does:
+// the reuse path must ask the same question the fresh path is held to.
+func TestAChangedProfileIsNotEvidenceForTheProfileResolvedNow(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %v: %v", result, err)
+	}
+
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	var passed *runstate.Evidence
+	for _, key := range store.EvidenceKeys() {
+		evidence, ok, err := store.Evidence(key)
+		if err != nil || !ok {
+			t.Fatalf("read evidence %s: %v", key, err)
+		}
+		if evidence.Result == "pass" {
+			passed = evidence
+			break
+		}
+	}
+	if passed == nil {
+		t.Fatal("the completed run recorded no passing check; this fixture proves nothing about reuse")
+	}
+	if passed.Provenance.TickID == nil || passed.Provenance.Attempt == nil || passed.Provenance.ProfileDigest == nil {
+		t.Fatalf("evidence %s names no tick, attempt or profile digest", passed.Key)
+	}
+	tick, attempt := *passed.Provenance.TickID, *passed.Provenance.Attempt
+	base := evidenceKey(tick, attempt, passed.Check.ID)
+	recordedProfile := *passed.Provenance.ProfileDigest
+
+	// Under the profile that ran — the unchanged resolution — the record at
+	// the very commit it was made on is reused, exactly as before: the
+	// profile in the judgement changes nothing for a profile that did not
+	// change.
+	r, err := New(f.options(f.Repo, fixtureOptions{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.store = store
+	same, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA, recordedProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if same != base {
+		t.Errorf("the key under an unchanged profile is %q, want the plain key %q", same, base)
+	}
+
+	// The resolved profile changes — the incident's edit. The identical
+	// record at the identical commit is NOT evidence for the new profile: a
+	// verdict produced under a profile the configuration no longer describes
+	// is not a verdict about the profile resolved now.
+	rekeyed, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA,
+		digestOf("a profile the configuration changed to"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rekeyed == base {
+		t.Fatalf("a record made under the profile %s was reused as evidence for a different resolved profile at "+
+			"the same commit: both are keyed %q", short(recordedProfile), base)
+	}
+	if !strings.HasPrefix(rekeyed, base+"-") {
+		t.Errorf("the rekeyed evidence key %q is not a key of this check", rekeyed)
+	}
+
+	// The rekey does not chain: a second resume under the same changed profile
+	// names the same key, so the record minted for it stands rather than a
+	// third key being minted and the whole gate paid for again.
+	again, err := r.gateEvidenceKey(tick, attempt, passed.Check.ID, passed.Provenance.SourceSHA,
+		digestOf("a profile the configuration changed to"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != rekeyed {
+		t.Errorf("a resume of the same source under the same profile minted %q after %q; the rekey chains",
+			again, rekeyed)
+	}
+
+	// And nothing was overwritten on the way: the original record still
+	// stands under its own key, naming the profile that ran it.
+	still, ok, err := store.Evidence(base)
+	if err != nil || !ok {
+		t.Fatalf("the original record under %s is gone: %v", base, err)
+	}
+	if deref(still.Provenance.ProfileDigest) != recordedProfile || still.StartedAt != passed.StartedAt {
+		t.Errorf("the record under the plain key was overwritten: %s %s",
+			deref(still.Provenance.ProfileDigest), still.StartedAt)
 	}
 }
 
