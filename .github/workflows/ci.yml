@@ -128,7 +128,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The version is named here rather than by a `packageManager` field in
+      # cloud/factory/package.json: adding that field makes pnpm record
+      # packageManagerDependencies in the lockfile, so `--frozen-lockfile`
+      # refuses until the lockfile is regenerated. This says the same thing
+      # without rewriting the lockfile in a tick about gating.
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
 
       - uses: actions/setup-node@v4
         with:
