@@ -82,6 +82,89 @@ func TestARedispatchedPromptNamesItsPredecessors(t *testing.T) {
 	}
 }
 
+// TestAPredecessorOfAnotherRunNamesItsRun is tick n4h's rendering half.
+//
+// Attempt numbers count a RUN's dispatches, so attempt 1 of a previous run
+// and attempt 1 of this one are different attempts with the same number: a
+// worker handed a cross-run predecessor must be told WHICH RUN it ran under,
+// or "attempt 1" reads as this run's own first try — analysis of a different
+// dispatch wearing the identity of another.
+func TestAPredecessorOfAnotherRunNamesItsRun(t *testing.T) {
+	t.Parallel()
+
+	section := PriorReportsSection([]PriorReport{
+		{Run: "r-first", Attempt: 1, Path: "/state/r-first/a1/1/report.md",
+			Status: StatusBlocked, Dispatched: "2026-09-01T00:00:00Z"},
+	})
+	if !strings.Contains(section, "run r-first attempt 1") {
+		t.Errorf("a predecessor of another run is not named with its run:\n%s", section)
+	}
+	// This run's own predecessors keep the shorter label: the prompt already
+	// names the worker's own run in its job line, so an unnamed run IS this
+	// one, and the named one is distinguishable from it precisely because the
+	// other is unnamed.
+	same := PriorReportsSection([]PriorReport{
+		{Attempt: 1, Path: "/state/r-second/a1/1/report.md", Status: StatusBlocked,
+			Dispatched: "2026-09-02T00:00:00Z"},
+	})
+	if !strings.Contains(same, "- attempt 1") {
+		t.Errorf("this run's own predecessor lost its in-run label:\n%s", same)
+	}
+	if strings.Contains(same, "run r-second") {
+		t.Errorf("this run's own predecessor is labelled with a run the worker never heard of:\n%s", same)
+	}
+}
+
+// TestPriorReportsOrderNewestFirstAcrossRuns: the section's order across
+// runs cannot come from attempt numbers — they are a run's own count, and
+// attempt 9 of an older run is not newer than attempt 1 of this one. The
+// dispatch times order the list (tick n4h): dated predecessors newest
+// first, whatever run issued them; an undated record — one that cannot be
+// read — is the least fresh thing the list can say and sorts after every
+// dated entry; a list with no dates at all falls back to attempt numbers,
+// which is the order of every list the seam ever handed over before this.
+func TestPriorReportsOrderNewestFirstAcrossRuns(t *testing.T) {
+	t.Parallel()
+
+	section := PriorReportsSection([]PriorReport{
+		// Deliberately in the wrong order on every key except the truth:
+		// the oldest run's attempt 9 arrived first, and its number is the
+		// biggest — sorting by attempt would put it first, and it is the
+		// OLDEST analysis in the list.
+		{Run: "r-old", Attempt: 9, Path: "/state/r-old/a1/9/report.md", Status: StatusDone,
+			Dispatched: "2026-07-01T00:00:00Z"},
+		{Run: "r-first", Attempt: 2, Path: "/state/r-first/a1/2/report.md", Status: StatusDone,
+			Dispatched: "2026-08-01T00:00:00Z"},
+		{Attempt: 1, Path: "/state/r-second/a1/1/report.md", Status: StatusBlocked,
+			Dispatched: "2026-09-01T00:00:00Z"},
+		// A predecessor whose record does not read is undated: it sorts after
+		// every dated entry, never between them by its attempt number.
+		{Run: "r-first", Attempt: 3, Path: "/state/r-first/a1/3/report.md", Status: StatusDone},
+	})
+
+	want := []string{
+		"- attempt 1 — ",
+		"- run r-first attempt 2 — ",
+		"- run r-old attempt 9 — ",
+		"- run r-first attempt 3 — ",
+	}
+	var got []string
+	for _, line := range strings.Split(section, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "- ") {
+			got = append(got, strings.TrimSpace(line))
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("the section renders %d predecessors, want %d:\n%s", len(got), len(want), section)
+	}
+	for i := range want {
+		if !strings.HasPrefix(got[i], want[i]) {
+			t.Errorf("entry %d is %q, want it to start %q — the section is not newest first across runs:\n%s",
+				i, got[i], want[i], section)
+		}
+	}
+}
+
 // TestAFirstAttemptsPromptNamesNoPredecessors guards the other direction: a
 // first attempt has nothing to inherit, and a prompt that printed the section
 // header over an empty list would teach every worker to skip a section it

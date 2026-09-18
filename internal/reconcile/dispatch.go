@@ -10,6 +10,7 @@ import (
 	osexec "os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1348,44 +1349,155 @@ func findAttemptState(root string) (string, bool) {
 }
 
 // priorReports gathers the archived reports of a tick's EARLIER attempts,
-// newest first (tick nvn).
+// newest first (tick nvn) — this run's own AND every previous run's (tick
+// n4h).
 //
 // The reports are what tick 35h made survive teardown: report.md beside the
-// attempt record, in the executor state directory this run assigns each
-// dispatch. findAttemptState locates a predecessor's state the same way every
-// adopt and teardown already does — by walking for the attempt record rather
-// than by recomputing an executor's internal naming — and the report sits
-// under the name that executor exports as part of that seam.
+// attempt record, in the executor state directory a dispatch was assigned.
+// findAttemptState locates a predecessor's state the same way every adopt
+// and teardown already does — by walking for the attempt record rather than
+// by recomputing an executor's internal naming — and the report sits under
+// the name that executor exports as part of that seam.
+//
+// nvn's discovery walked <ExecStateRoot>/<runID>/<tick>/<n> and nothing
+// else, so a re-run of the epic under a NEW run id — a fresh run-state
+// store, attempt numbers that begin again at 1 — saw none of the previous
+// run's reports: the starting-blind case the feature exists for, one level
+// up. The discovery here is therefore keyed by the TICK: every OTHER run id
+// under the executor state root that holds the tick's attempts is walked
+// too, and an attempt whose own record names a different tick is not
+// offered, because a state root shared by several runs can hold the
+// same-named directory of an attempt that was genuinely another tick's.
+// The reports stay local to the executor's state root, which is where the
+// executor put them; no worker prose moves into the target repository.
 //
 // Nothing here can refuse a dispatch: a predecessor with no report (it never
 // settled, or settled without saying anything) is simply absent from the list,
 // because the prompt's job is to name the analysis that EXISTS, not to narrate
-// the attempts that produced none. A first attempt gathers nothing.
+// the attempts that produced none. A first attempt of a first run gathers
+// nothing.
 func (r *Reconciler) priorReports(tickID string, attempt int) []subprocess.PriorReport {
 	out := []subprocess.PriorReport{}
-	if attempt <= 1 {
-		return out
-	}
 	for n := attempt - 1; n >= 1; n-- {
-		state, found := findAttemptState(r.execStateDir(tickID, n))
-		if !found {
-			// Never dispatched, or never started: no report to name.
-			continue
+		if prior, ok := priorReportAt(r.execStateDir(tickID, n), n, tickID, ""); ok {
+			out = append(out, prior)
 		}
-		path := filepath.Join(state, subprocess.FileReportArchive)
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			// Dispatched, but it left no report — settled with nothing said.
-			// The attempt is still visible to the worker through the run's own
-			// records; it has no analysis to hand over.
-			continue
+	}
+	for _, run := range r.priorRuns(tickID) {
+		tickDir := filepath.Join(r.opts.ExecStateRoot, run, tickID)
+		for _, n := range attemptNumbers(tickDir) {
+			if prior, ok := priorReportAt(filepath.Join(tickDir, strconv.Itoa(n)), n, tickID, run); ok {
+				out = append(out, prior)
+			}
 		}
-		report := subprocess.ParseReport(string(raw))
-		out = append(out, subprocess.PriorReport{
-			Attempt: n, Path: path, Status: report.Status, Detail: report.Detail,
-		})
 	}
 	return out
+}
+
+// priorReportAt reads one predecessor's archived report out of the state
+// directory a dispatch was given (tick nvn). run is the run the predecessor
+// was dispatched under — empty when it was this run's own attempt, the run's
+// id when it was another run's (tick n4h), so a worker handed a cross-run
+// report can tell it from this run's numbering — and tickID is the tick the
+// attempt's own record must name, the key the cross-run discovery is keyed by.
+func priorReportAt(stateDir string, attempt int, tickID, run string) (subprocess.PriorReport, bool) {
+	state, found := findAttemptState(stateDir)
+	if !found {
+		// Never dispatched, or never started: no report to name.
+		return subprocess.PriorReport{}, false
+	}
+	issuedAt, ok := attemptFacts(state, tickID)
+	if !ok {
+		// An attempt record that does not read, or that names another tick:
+		// the record that cannot be parsed is the same as no record.
+		return subprocess.PriorReport{}, false
+	}
+	path := filepath.Join(state, subprocess.FileReportArchive)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		// Dispatched, but it left no report — settled with nothing said.
+		// The attempt is still visible to the worker through the run's own
+		// records; it has no analysis to hand over.
+		return subprocess.PriorReport{}, false
+	}
+	report := subprocess.ParseReport(string(raw))
+	return subprocess.PriorReport{
+		Attempt: attempt, Run: run, Path: path,
+		Status: report.Status, Detail: report.Detail, Dispatched: issuedAt,
+	}, true
+}
+
+// attemptFacts reads the two facts a predecessor's attempt record carries
+// that its directory names cannot (tick n4h): when the attempt was dispatched
+// — the one fact that orders a list spanning runs, since attempt numbers
+// are a run's own count — and WHICH TICK the attempt was for, so a state
+// root shared by several runs never hands one tick the same-named attempt
+// of another. The record is read loosely, the way the marker reader reads
+// it: both executors write it, and this is the reconciler walking their
+// seam, not importing their shape.
+func attemptFacts(state, tickID string) (issuedAt string, ok bool) {
+	raw, err := os.ReadFile(filepath.Join(state, "attempt.json"))
+	if err != nil {
+		return "", false
+	}
+	var record struct {
+		TickID   string `json:"tick_id"`
+		IssuedAt string `json:"issued_at"`
+	}
+	if json.Unmarshal(raw, &record) != nil || record.TickID != tickID {
+		return "", false
+	}
+	return record.IssuedAt, true
+}
+
+// priorRuns lists, deterministically, every OTHER run id under the executor
+// state root that holds attempts of this tick (tick n4h). The order is
+// alphabetical because it is only a gathering order — the prompt owns the
+// order the worker reads — and a deterministic one keeps a dispatch that is
+// re-derived half-made identical to itself.
+func (r *Reconciler) priorRuns(tickID string) []string {
+	entries, err := os.ReadDir(r.opts.ExecStateRoot)
+	if err != nil {
+		// No state root, or nothing under it: no previous run to read.
+		return nil
+	}
+	var runs []string
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == r.runID {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(r.opts.ExecStateRoot, entry.Name(), tickID)); err == nil && info.IsDir() {
+			runs = append(runs, entry.Name())
+		}
+	}
+	sort.Strings(runs)
+	return runs
+}
+
+// attemptNumbers lists the attempt numbers one run's tick directory holds,
+// descending. The names are the reconciler's own layout — one numeric
+// directory per dispatch, named for the run's own attempt number — so
+// reading them back is not recomputing an executor's naming, and every
+// number the tick's earlier attempts landed on is visited whatever the
+// numbering of the run that used it.
+func attemptNumbers(tickDir string) []int {
+	entries, err := os.ReadDir(tickDir)
+	if err != nil {
+		return nil
+	}
+	var numbers []int
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		n, err := strconv.Atoi(entry.Name())
+		if err != nil || n < 1 {
+			continue
+		}
+		numbers = append(numbers, n)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(numbers)))
+	return numbers
 }
 
 // priorSnapshots gathers the preserved work of a tick's EARLIER attempts,
