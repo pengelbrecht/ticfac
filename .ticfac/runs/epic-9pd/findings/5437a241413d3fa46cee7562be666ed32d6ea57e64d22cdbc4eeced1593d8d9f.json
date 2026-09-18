@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "usx",
   "attempt": 29,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-09-18T06:30:15Z",
+  "triaged_at": "2026-09-18T06:38:36Z",
+  "triaged_by": "claude:orchestrator",
+  "fixed_as": "1d5a8f2",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "usx",
