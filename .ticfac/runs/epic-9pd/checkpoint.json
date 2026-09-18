@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 319,
-  "state": "publishing",
-  "reason": "closing 3kx behind the integrated gate on 4b0751b2ce87",
-  "updated_at": "2026-09-18T08:18:53Z",
+  "sequence": 320,
+  "state": "running",
+  "reason": "3kx is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T08:18:58Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -138,7 +138,7 @@
     },
     {
       "tick_id": "3kx",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 31
     },
     {
