@@ -57,7 +57,28 @@ effort = "high"
 # gate had drifted to a bare `go test -short -count=1 ./...`, losing the timeout
 # and the parallelism that keep internal/reconcile inside go's per-package
 # limit, and nothing noticed.
-go = { command = "go test -short -count=1 -timeout 45m -parallel 12 ./...", description = "Go" }
+#
+# 2026-09-18 — the `-count=1` is dropped, deliberately, by the operator.
+#
+# It disabled Go's test cache, so every package was re-run for every tick even
+# when nothing it depends on had changed. Epic 9pd ran this gate 49 times at
+# roughly 20 minutes idle and 45-60+ under load, and finished with three ticks
+# whose code was already merged facing three sequential full runs.
+#
+# The suite still runs in full. What changes is that a package whose inputs are
+# unchanged answers from cache, which is a true statement about this tree: Go
+# keys the cache on the package's sources, its dependencies, and the files and
+# environment the test consulted.
+#
+# The known exposure, measured rather than assumed: a test that reads a file by
+# an ABSOLUTE path outside the module can be served from cache after that file
+# changes. contracts.RepoRoot() builds absolute paths, so the drift guards that
+# read this very file — TestThisRepositorysGateIsReadable,
+# TestTheGateTargetMatchesTheDeclaredGate,
+# TestTheHarnessBoundOutlivesEveryDeclaredGateBound — are the ones to watch.
+# Tick mbv owns proving this either way; until it lands, run `make suite` (which
+# keeps -count=1) before trusting a green gate about THOSE guards.
+go = { command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }
