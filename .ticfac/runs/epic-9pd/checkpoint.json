@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 341,
-  "state": "publishing",
-  "reason": "closing h0f behind its validated review-epic answer",
-  "updated_at": "2026-09-18T08:52:14Z",
+  "sequence": 342,
+  "state": "failed",
+  "reason": "h0f reported 7 finding(s) nobody has triaged — \"runlife compares `ps -o lstart` text, which depends on TZ and locale: a live run reads dead and a second run-epic can claim it\" (defect, for this repository); \"Reconcile 9pd A2 with the checkpoint-conflict decision taken in wdb\" (proposed-tick, for this repository); \"Seam test is a file grep; reconcile links internal/herd/client through runconfig\" (proposed-tick, for this repository); \"A4 gaps: non-main-goroutine panics, MultiWriter stderr failure, and a racy pidfile Claim/Release\" (proposed-tick, for this repository); \"Local executor's Dispose deletes an uncollected attempt's report: ticfac settle loses it (A5)\" (defect, for this repository); \"ticfac findings in the run's checkout ends the run: the per-run peek ref is shared across processes\" (defect, for this repository); \"Role decision create refused on conflict returns nil: a role answer can be dropped while its tick closes\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e, 52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f, 7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab, 91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72, a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7, ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675, dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d under .ticfac/runs/epic-9pd/findings/ on origin",
+  "updated_at": "2026-09-18T08:52:24Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -69,7 +69,7 @@
     },
     {
       "tick_id": "h0f",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 14
     },
     {
