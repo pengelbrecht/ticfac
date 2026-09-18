@@ -468,8 +468,8 @@ func TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedProfile(t *testin
 	}
 	if backed == nil {
 		t.Fatalf("a1 closed with no evidence carrying the profile resolved now (%s): "+
-				"the identical record from the profile that ran (%s) was published instead",
-				short(resolved.Digest), short(*first.Provenance.ProfileDigest))
+			"the identical record from the profile that ran (%s) was published instead",
+			short(resolved.Digest), short(*first.Provenance.ProfileDigest))
 	}
 
 	// And the backing evidence really is a run that happened after the dead
