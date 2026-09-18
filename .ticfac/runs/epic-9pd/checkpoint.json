@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 331,
-  "state": "publishing",
-  "reason": "closing n4h behind the integrated gate on 797afad62120",
-  "updated_at": "2026-09-18T08:39:16Z",
+  "sequence": 332,
+  "state": "running",
+  "reason": "n4h is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T08:39:22Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -143,7 +143,7 @@
     },
     {
       "tick_id": "n4h",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 32
     },
     {
