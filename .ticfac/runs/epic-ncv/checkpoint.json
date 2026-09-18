@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 21,
-  "state": "running",
-  "reason": "l9n is refused its close: a drafted finding is untriaged",
-  "updated_at": "2026-09-18T16:20:03Z",
+  "sequence": 22,
+  "state": "failed",
+  "reason": "l9n reported 3 finding(s) nobody has triaged — \"lifecycle-invariants.json names cloud/factory/** for today-sites; consumers now map\" (contract, for this repository); \".tick/learnings.md is at 170 lines against its own 150-line hard cap\" (proposed-tick, for this repository); \"Vendored cloud/sandbox docs still point at cloud/factory paths the move renamed\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding ncv 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a|4a87c9e304f94445c7e13ce2649042f3f20b1105038c08248a3a66730ce92edf|4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding ncv 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a|4a87c9e304f94445c7e13ce2649042f3f20b1105038c08248a3a66730ce92edf|4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding ncv 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a|4a87c9e304f94445c7e13ce2649042f3f20b1105038c08248a3a66730ce92edf|4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a, 4a87c9e304f94445c7e13ce2649042f3f20b1105038c08248a3a66730ce92edf, 4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 under .ticfac/runs/epic-ncv/findings/ on origin",
+  "updated_at": "2026-09-18T16:20:07Z",
   "ticks": [
     {
       "tick_id": "l9n",
