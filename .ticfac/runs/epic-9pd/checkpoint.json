@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 298,
-  "state": "gating",
-  "reason": "running the integrated gate for usx on c28bef79bb81",
-  "updated_at": "2026-09-18T06:40:07Z",
+  "sequence": 299,
+  "state": "publishing",
+  "reason": "closing usx behind the integrated gate on c28bef79bb81",
+  "updated_at": "2026-09-18T06:54:59Z",
   "ticks": [
     {
       "tick_id": "0z0",
