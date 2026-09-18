@@ -716,3 +716,4 @@
 {"ts":"2026-09-18T16:39:47.337851Z","tick":"z23","action":"note","actor":"ticfac","epic":"ncv","data":{"note":"\n2026-09-18 18:39 - ticfac run epic-ncv: attempt 2 merged into epic/ncv as b0f207a48664; the integrated gate (go, ts) passed.","title":"RunWorkflow hosts the reconciler: one Workflow per EpicRun, tracker access in TypeScript"}}
 {"ts":"2026-09-18T16:39:53.289067Z","tick":"z23","action":"close","actor":"ticfac","epic":"ncv","data":{"title":"RunWorkflow hosts the reconciler: one Workflow per EpicRun, tracker access in TypeScript"}}
 {"ts":"2026-09-18T16:50:48.213567Z","tick":"9fc","action":"start","actor":"ticfac","epic":"ncv","data":{"title":"Move run, attempt and decision records from D1 into .ticfac/ on the run branch"}}
+{"ts":"2026-09-18T16:51:18.744507Z","tick":"ef7","action":"start","actor":"ticfac","epic":"ncv","data":{"title":"A repository Durable Object with one slot and one serialized publisher"}}
