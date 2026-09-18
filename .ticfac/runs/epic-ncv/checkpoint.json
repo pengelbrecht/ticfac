@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 53,
-  "state": "integrating",
-  "reason": "integrating vyg attempt 3 into epic/ncv",
-  "updated_at": "2026-09-18T17:34:11Z",
+  "sequence": 54,
+  "state": "gating",
+  "reason": "running the integrated gate for vyg on e46fb0e03d79",
+  "updated_at": "2026-09-18T17:34:18Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -33,7 +33,7 @@
     },
     {
       "tick_id": "vyg",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 3
     },
     {
