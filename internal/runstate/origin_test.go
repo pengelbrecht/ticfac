@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // A real origin: a bare repository in a temp directory, with the EpicRun
@@ -124,7 +126,7 @@ func (o *origin) tags() []string {
 
 func gitRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command(gitbin.Path(), args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=ticfac test", "GIT_AUTHOR_EMAIL=ticfac@example.com",
