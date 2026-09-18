@@ -603,3 +603,4 @@
 {"ts":"2026-09-18T03:30:52.640099Z","tick":"j3t","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"An attempt stopped at its wall clock with nothing committed is classed runner_error, not wall_clock_exceeded","type":"task"}}
 {"ts":"2026-09-18T03:58:10.677835Z","tick":"pbb","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"\n2026-09-18 05:58 - ticfac run epic-9pd: attempt 26 merged into epic/9pd as c192b5faab75; the integrated gate (go) passed.","title":"A wall-clock stop throws away the attempt's uncommitted work"}}
 {"ts":"2026-09-18T03:58:15.630352Z","tick":"pbb","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"A wall-clock stop throws away the attempt's uncommitted work"}}
+{"ts":"2026-09-18T03:58:38.759556Z","tick":"vw0","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"fake-runner's blocked-first mode keys on the run-wide attempt number"}}
