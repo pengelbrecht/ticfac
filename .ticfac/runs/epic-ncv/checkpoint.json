@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 42,
-  "state": "running",
-  "reason": "9fc is running as attempt 4",
-  "updated_at": "2026-09-18T16:50:56Z",
+  "sequence": 43,
+  "state": "dispatching",
+  "reason": "dispatching ef7 as attempt 5",
+  "updated_at": "2026-09-18T16:51:09Z",
   "ticks": [
     {
       "tick_id": "l9n",
