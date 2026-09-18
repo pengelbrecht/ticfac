@@ -81,6 +81,16 @@ type Options struct {
 	// side deciding what the other side's identifier means.
 	Attempt int
 
+	// Try is which try of its OWN tick this attempt is: 1 for the tick's
+	// first dispatch, 2 for the redispatch after a spent one — whatever the
+	// run-wide number is (tick vw0). Host-supplied for the same reason
+	// Attempt is, and reaching the runner as $TICFAC_TRY for the reason the
+	// two numbers differ: Attempt counts every dispatch the RUN made and is
+	// the attempt's identity, while a worker asking "is this my tick's first
+	// try?" must not have to infer the answer from a number that moved
+	// because another tick was dispatched first.
+	Try int
+
 	PushInterval  time.Duration
 	SalvageWindow time.Duration
 
@@ -338,6 +348,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		Repo:           e.repo,
 		JobID:          spec.JobID,
 		Attempt:        attempt,
+		Try:            e.opts.Try,
 		TickID:         tickOf(spec),
 		Branch:         branch,
 		WriteRef:       spec.Source.WriteRef,

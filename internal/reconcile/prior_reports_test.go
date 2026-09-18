@@ -45,13 +45,21 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 	}
 
 	// The re-dispatch: the same checkout, the same run id, a new attempt
-	// number — and a prompt that names what its predecessor found.
+	// number — and a prompt that names what its predecessor found. Under
+	// blocked-first keyed on the tick's OWN first try (tick vw0), the
+	// re-dispatch settles a1 and then refuses at a2's own first try exactly
+	// as a1's did; every assertion below reads what a1's re-dispatch left in
+	// the executor state, and a completed run was never among them.
 	_, result, err = f.run(f.Repo, blocked)
 	if err != nil {
 		t.Fatalf("the re-dispatch did not finish: %v", err)
 	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the re-dispatch ended %s: %s", result.State, result.Reason)
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the re-dispatch ended %s, want a2's own first try to refuse it after a1 settled: %s",
+			result.State, result.Reason)
+	}
+	if result.Failure == nil || result.Failure.TickID != "a2" {
+		t.Fatalf("the re-dispatch's refusal is %+v, want a2's first try", result.Failure)
 	}
 
 	// Where this run put each attempt of a1 — the layout the dispatch walks.

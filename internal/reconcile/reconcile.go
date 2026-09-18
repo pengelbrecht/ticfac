@@ -190,6 +190,17 @@ type Dispatch struct {
 	WriteRef string
 	BaseSHA  string
 
+	// Try is which try of its OWN tick this dispatch is (tick vw0): 1 for the
+	// tick's first dispatch, 2 for the redispatch after a spent attempt —
+	// the number tryOf computes for the feed lines, whatever number the
+	// run-wide counter handed the dispatch. It rides the dispatch because the
+	// two numbers answer different questions and both reach a worker:
+	// Attempt is the identity (its branch, its marker, the argument to
+	// `ticfac settle`), Try is the ordinal a worker means by "this tick's
+	// first attempt" — and anything keyed on Attempt = 1 was keyed on dispatch
+	// order, which no fixture and no worker should depend on.
+	Try int
+
 	// StateDir is a directory private to THIS dispatch. The reconciler assigns
 	// it so that a restarted run — on a fresh clone, holding nothing but the
 	// dispatch marker it reads from origin — can find the attempt the previous

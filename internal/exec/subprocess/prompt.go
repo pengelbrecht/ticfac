@@ -111,6 +111,10 @@ func runnerEnv(record *attemptRecord, spec *JobSpec) []string {
 		"TICFAC_BASE_SHA=" + record.BaseSHA,
 		"TICFAC_JOB_ID=" + spec.JobID,
 		"TICFAC_ATTEMPT=" + fmt.Sprint(record.Attempt),
+		// The tick's own try (tick vw0): the number a worker means by "this
+		// tick's first attempt", independent of where the run's dispatch
+		// counter happens to stand.
+		"TICFAC_TRY=" + fmt.Sprint(record.Try),
 		"TICFAC_TICK=" + record.TickID,
 		"TICFAC_ROLE=" + spec.Role,
 		"TICFAC_MODEL=" + record.Model,
