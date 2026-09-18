@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 343,
+  "sequence": 344,
   "state": "failed",
-  "reason": "h0f did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: h0f reported 7 finding(s) nobody has triaged — \"runlife compares `ps -o lstart` text, which depends on TZ and locale: a live run reads dead and a second run-epic can claim it\" (defect, for this repository); \"Reconcile 9pd A2 with the checkpoint-conflict decision taken in wdb\" (proposed-tick, for this repository); \"Seam test is a file grep; reconcile links internal/herd/client through runconfig\" (proposed-tick, for this repository); \"A4 gaps: non-main-goroutine panics, MultiWriter stderr failure, and a racy pidfile Claim/Release\" (proposed-tick, for this repository); \"Local executor's Dispose deletes an uncollected attempt's report: ticfac settle loses it (A5)\" (defect, for this repository); \"ticfac findings in the run's checkout ends the run: the per-run peek ref is shared across processes\" (defect, for this repository); \"Role decision create refused on conflict returns nil: a role answer can be dropped while its tick closes\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding 9pd 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e|52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f|7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab|91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72|a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7|ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675|dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 251534b21f6b7648070de0c9fb10a7792ad336efb2b639ee3852d9bd717b8e8e, 52134ccf9d11a3217c51326795739cf5bf5db7827621066f6d6988ddc66ed11f, 7ef810f2045331055155083a0b99bfd07ee0303cbcf901e32ab09fa0489842ab, 91eb6ed795f7ad91570e454cb0938f6926f7638753b47eb2e9c32e6b16e87f72, a46419d57a2d027fa82f331f8417d4b314bd1e8f20cee4f4d6254e54291fa9a7, ceb563ac0d0c9cb66d15de665f742550e5a162d8582aaf13cdc4b641e66a3675, dcc152575015e41c736e39413d9c9adcae381f51aadca0c6abe99b547139ae2d under .ticfac/runs/epic-9pd/findings/ on origin",
-  "updated_at": "2026-09-18T08:52:29Z",
+  "reason": "15c5bbc61dd3 of main does not fold into epic/9pd: internal/reconcile/git.go, internal/runstate/git.go. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
+  "updated_at": "2026-09-18T09:38:16Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -162,7 +162,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "9dfa1d4ca2d32f4b3b9f8fb26da9ee04e5529a71",
+    "source_sha": "27f069129d18e269896c460eae6fefb3f7ec9618",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
@@ -170,9 +170,9 @@
     "backend": null,
     "role": null,
     "tier": null,
-    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
+    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9",
     "model": null,
-    "context_manifest_digest": "sha256:ce17a87f5eb09521e51e2225573ebb66181e172b1228190e91c75effe244f2c0",
+    "context_manifest_digest": "sha256:ce17a87f5eb09521e51e2225573ebb66",
     "substrate_protocol": null,
     "substrate_server_version": null
   }
