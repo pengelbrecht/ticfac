@@ -426,6 +426,11 @@ type fixtureOptions struct {
 	// surface, and construction refuses one that does.
 	pullRequests forge.PullRequests
 
+	// runID overrides the run id the fixture's runs run under — the fact tick
+	// n4h is about: a second run id is a re-run of the epic whose attempt
+	// numbers begin again at 1 out of a run-state store of its own.
+	runID string
+
 	// gateTimeout overrides the CI wait bound for the admission tests, the
 	// way the harness overrides every other cadence: a bound measured in
 	// minutes is testable in milliseconds without the bound being a
@@ -485,11 +490,15 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 	if opts.gateTimeout > 0 {
 		gateTimeout = opts.gateTimeout
 	}
+	runID := opts.runID
+	if runID == "" {
+		runID = "r-fixture"
+	}
 	return Options{
 		Repo:           repo.Dir,
 		Remote:         "origin",
 		EpicID:         "qeu",
-		RunID:          "r-fixture",
+		RunID:          runID,
 		BaseRef:        "HEAD",
 		Owner:          "ticfac-test",
 		Tracker:        f.Tracker,
