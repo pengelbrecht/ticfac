@@ -1,0 +1,22 @@
+{
+  "id": "r6v",
+  "title": "Final review of the test-performance diff",
+  "description": "Review the whole epic's diff against its definition of done, outside-in.\n\nThe two questions this epic can fail on quietly, so ask them explicitly:\n1. Is every defect class the suite used to catch still caught? Reintroduce the FETCH_HEAD, --refmap=, shared peek-ref and ref-lock regressions one at a time and confirm each still fails its guard. A faster suite that stopped catching them is a loss, not a win.\n2. Did any durable-evidence semantics change without a tick saying so? The commit/push batching tick is allowed to change them deliberately and with its analysis recorded; nothing else is.\n\nThen measure: time the declared gate on a quiet host and compare against the before figure recorded on the epic.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "1qy",
+    "pul",
+    "f61",
+    "x73",
+    "u51",
+    "mbv"
+  ],
+  "parent": "t8u",
+  "role": "review",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:58:20.86497Z",
+  "updated_at": "2026-09-18T06:58:20.86497Z"
+}

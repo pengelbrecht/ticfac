@@ -1,0 +1,14 @@
+{
+  "id": "u51",
+  "title": "herdr tests burn the full confirm wait for a dispatch that never spawns an agent",
+  "description": "internal/exec/herdr/harness_test.go:590 sets ConfirmTimeout to 1 second. After the prompt, Start waits for the agent to reach 'working' (internal/exec/herdr/gate.go:131). The fake herdr server polls a status file every 25ms and reports 'idle' while the file is absent; harnessOptions.spawnAgent defaults FALSE, so in most tests nothing ever writes it and the wait burns the full second. The harness comment at :586 says so outright - 'the confirm wait, which a dispatch with no visible work burns in full'.\n\nEstimated 70-85s of internal/exec/herdr's 185s: roughly 40% of the package spent waiting for workers that were never started.\n\nThe fix is not a shorter timeout - the wait is real behaviour worth testing. It is that a test dispatching no agent should not wait for one: let the harness say it spawns nothing and skip the confirm, or have the fake server answer definitively instead of staying silent.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "A test that spawns no agent does not pay the confirm wait, and the tests that DO exercise the confirm path still exercise it. internal/exec/herdr's wall clock drops materially (report before and after).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:58:10.59352Z",
+  "updated_at": "2026-09-18T06:58:10.59352Z"
+}

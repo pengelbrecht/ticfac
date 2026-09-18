@@ -1,0 +1,13 @@
+{
+  "id": "t8u",
+  "title": "Test suite performance: fewer git processes, deterministic contention, parallel packages",
+  "description": "The gate is 'go test -short -count=1 -timeout 45m -parallel 12 ./...' and it runs in FULL for every tick closed. Run epic-9pd ran it 49 times: roughly 20 minutes idle, 45-60+ under load, so the gate - not the work - dominated the epic's wall clock.\n\nProfiling found the cost is not git, and not the tests' logic. It is process creation and one spinning loop.\n\nMeasured on this machine:\n- ONE reconcile end-to-end test spawns 1148 git processes in 18 seconds (172 rev-parse, 109 fetch, 91 cat-file, 90 write-tree, 90 read-tree, 87 push, 75 update-index, 75 commit-tree, 46 hash-object).\n- A git process costs 21.6ms to spawn; the same query through a long-lived 'git cat-file --batch' costs 0.90ms. 24x.\n- internal/runstate spends 32s of its 50.7s in two tests that run an unthrottled 'for { git fetch }' goroutine, burning a core each.\n- Four of five slow packages are effectively single-threaded: -parallel 12 does nothing without t.Parallel(). internal/exec/subprocess is 65.3s serial against a ~8s parallel wall.\n\nWhat this epic must NOT do: replace git with a library. Every serious defect this project has found - FETCH_HEAD, the missing --refmap=, the shared peek ref, ref-lock contention, the ssh hang - lives in real git's behaviour, and a reimplementation would have let all of them through. The axis is fewer processes for the SAME git, using the streaming plumbing git already ships for exactly this.\n\nOrder matters: the load-sensitive tests (cy2) are fixed first, because raising parallelism makes contention worse, and a gate that refuses innocent work costs an hour per false refusal.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The full gate on an idle machine completes in under half its current wall clock, measured the same way (time the declared command on a quiet host, before and after). No test asserts on a condition it can sample rather than wait for. Every defect class the current suite catches is still caught: the FETCH_HEAD, refmap, peek-ref and ref-lock regressions each still fail their guard when reintroduced. Nothing in the run's durable-evidence semantics changes without its own tick saying so.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:57:10.170231Z",
+  "updated_at": "2026-09-18T06:57:10.170231Z"
+}
