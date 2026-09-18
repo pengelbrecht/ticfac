@@ -1,0 +1,14 @@
+{
+  "id": "z23",
+  "title": "RunWorkflow hosts the reconciler: one Workflow per EpicRun, tracker access in TypeScript",
+  "description": "SPEC 12 Phase 4 item 2, and the heart of the phase. Today RunWorkflow boots a container that runs an orchestrating agent; after this it hosts the RECONCILER itself, one Workflow per EpicRun.\n\nThe constraint that shapes everything (SPEC line 191): a Cloudflare Workflow or isolate CANNOT execute a Go binary, so on that host the reconciler cannot shell out to tk. tk --json defines the tracker contract, and a host that cannot run tk must implement the same contract in its own language and prove it against the pinned fixtures of SPEC 3.2.\n\nSo this item is really two: the reconciler's control flow on a Workflow, and a TypeScript tracker client that the pinned fixtures certify. Do not let the second be written by inspection of tk's output - the fixtures exist so that agreement is demonstrated.\n\nNote what this does NOT change: the reconciler's semantics. Same dispatch window, same durable evidence, same refusals. If a behaviour has to differ on this host, that is a decision to record, not an implementation detail.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "ncv",
+  "acceptance_criteria": "An epic run is driven by a Workflow rather than a container agent, one Workflow per EpicRun, and the run's records are indistinguishable from a local run's. The TypeScript tracker client passes the pinned 3.2 fixtures. A Workflow restarted mid-run resumes from .ticfac/ and reconciles every in-flight attempt.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T11:24:11.045522Z",
+  "updated_at": "2026-09-18T11:24:11.045522Z"
+}
