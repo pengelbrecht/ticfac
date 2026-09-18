@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The git this executor needs — the READ half of what collect and dispose
@@ -35,7 +37,7 @@ func (e *gitError) Unwrap() error { return e.err }
 
 // git runs one git command and returns its trimmed stdout.
 func git(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command(gitbin.Path(), args...)
 	cmd.Dir = dir
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -267,7 +269,7 @@ func statusPorcelain(worktree string) ([]string, error) {
 // isAncestor answers whether a commit is already reachable from a ref — the
 // question disposal asks before it deletes a branch.
 func isAncestor(repo, commit, ref string) bool {
-	cmd := exec.Command("git", "merge-base", "--is-ancestor", commit, ref)
+	cmd := exec.Command(gitbin.Path(), "merge-base", "--is-ancestor", commit, ref)
 	cmd.Dir = repo
 	return cmd.Run() == nil
 }

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // git is the store's whole dependency on git: a runner in one repository, with
@@ -16,6 +18,11 @@ import (
 type git struct {
 	dir string
 	env []string
+
+	// reader is the held-open object reader (see batch.go). Nil is valid
+	// and means every read spawns its own process, which is what this store
+	// did before.
+	reader *objectReader
 }
 
 func newGit(dir, authorName, authorEmail string) *git {
@@ -28,8 +35,14 @@ func newGit(dir, authorName, authorEmail string) *git {
 		// refusal: fail loudly instead of waiting for a terminal nobody is at.
 		"GIT_TERMINAL_PROMPT=0",
 	)
+	// Both halves of this line's history matter: the transport bound (a git
+	// that has gone silent must give up) and the held-open object reader (a
+	// read must not cost a process). They are independent and the store wants
+	// both.
 	env = append(env, TransportEnv()...)
-	return &git{dir: dir, env: env}
+	g := &git{dir: dir, env: env}
+	g.reader = newObjectReader(dir, env)
+	return g
 }
 
 // TransportEnv bounds a git transport that has gone silent, for the same
@@ -83,7 +96,7 @@ var safeArgs = []string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}
 // try is run without the error wrapping: it hands back stderr so a caller that
 // must classify a refusal (a push the lease rejected) can read it.
 func (g *git) try(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, err error) {
-	cmd := exec.Command("git", append(append([]string{}, safeArgs...), args...)...)
+	cmd := exec.Command(gitbin.Path(), append(append([]string{}, safeArgs...), args...)...)
 	cmd.Dir = g.dir
 	cmd.Env = append(append([]string{}, g.env...), extraEnv...)
 	if stdin != nil {
@@ -103,15 +116,7 @@ func (g *git) try(stdin []byte, extraEnv []string, args ...string) (stdout, stde
 // catFile returns a blob's bytes, untrimmed: a record's content is what it is,
 // and a reader that eats a trailing newline hands back a different file.
 func (g *git) catFile(sha string) ([]byte, error) {
-	cmd := exec.Command("git", append(append([]string{}, safeArgs...), "cat-file", "blob", sha)...)
-	cmd.Dir = g.dir
-	cmd.Env = g.env
-	var out, errBuf bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errBuf
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git cat-file blob %s: %w: %s", sha, err, strings.TrimSpace(errBuf.String()))
-	}
-	return out.Bytes(), nil
+	return g.blobThroughBatch(sha)
 }
 
 // lsTree lists the blobs under a pathspec at a commit, as path -> blob sha.

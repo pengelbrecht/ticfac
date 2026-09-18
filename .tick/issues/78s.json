@@ -1,0 +1,13 @@
+{
+  "id": "78s",
+  "title": "A4 gaps: goroutine panics, a broken stderr silencing run.log, and a racy pidfile claim",
+  "description": "Three holes in the A4 liveness story, found by reading the code during the h0f review and NOT reproduced - verify each before repairing:\n\n1. The recover at cli.go:386-397 covers only the main goroutine. A panic on any other goroutine leaves no cause and no run_died event, which is exactly the silence run_died exists to prevent.\n2. io.MultiWriter(stderr, log) at cli.go:367 stops writing run.log once stderr is broken - a redirected or closed terminal takes the durable log with it.\n3. Claim (runlife.go:88-105) is check-then-rename with no exclusion, so two run-epic processes racing can both believe they hold the run.\n\nEach is small on its own; together they are the difference between 'the run died and said so' and 'the run vanished'.\n\nFound by the h0f Phase 3 review.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A panic on a non-main goroutine still produces a cause and a run_died event. run.log keeps receiving output when stderr fails. Two processes racing to claim one run cannot both win, proven by a test that runs the race.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T08:55:26.733417Z",
+  "updated_at": "2026-09-18T08:55:26.733417Z"
+}

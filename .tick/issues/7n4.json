@@ -1,0 +1,13 @@
+{
+  "id": "7n4",
+  "title": "A refused role-decision create returns nil, so a role's answer can be dropped as its tick closes",
+  "description": "rolejob.go:246-254 returns nil when the decision create is not permitted. Decision numbers are run-wide and are also taken by settle releases (settle.go:617), so a collision on number N can silently discard this role's decision before closeRoleTick runs - the tick then closes without the answer the role job produced.\n\nFound by READING the code during the h0f Phase 3 review, not reproduced. Verify it can actually happen before building a repair: establish whether a settle release and a role decision can really contend for the same number in one run, and if they can, write the test that shows the decision being dropped.\n\nIf it is real, the repair is presumably to treat a refused create as a conflict to resolve rather than an outcome to ignore - the same discipline the rest of the store applies to a refused write.\n\ndiscovered_from run-epic-9pd/tick-h0f/attempt-33",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Either a test demonstrates the dropped decision and the refused create is handled as a conflict rather than nil, or the tick records why the collision cannot occur and the nil return is made impossible-by-construction or commented as such.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T09:32:29.931667Z",
+  "updated_at": "2026-09-18T09:32:29.931667Z"
+}

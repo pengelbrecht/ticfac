@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -46,7 +47,7 @@ func (g *repoGit) tryEnv(dir string, extraEnv []string, args ...string) (stdout,
 	if dir == "" {
 		dir = g.dir
 	}
-	cmd := exec.Command("git", append([]string{
+	cmd := exec.Command(gitbin.Path(), append([]string{
 		"-c", "user.name=" + g.name,
 		"-c", "user.email=" + g.email,
 		"-c", "commit.gpgsign=false",
