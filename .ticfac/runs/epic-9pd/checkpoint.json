@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 271,
-  "state": "integrating",
-  "reason": "integrating sqx attempt 28 into epic/9pd",
-  "updated_at": "2026-09-18T05:25:30Z",
+  "sequence": 272,
+  "state": "gating",
+  "reason": "running the integrated gate for sqx on 0e2de9e6098a",
+  "updated_at": "2026-09-18T05:25:38Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "sqx",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 28
     },
     {
