@@ -2,6 +2,7 @@
   "id": "flj",
   "title": "Nothing checks formatting: the gate is go test, which does not care",
   "description": "The declared gate is 'go test -short -count=1 -timeout 45m -parallel 12 ./...'. go test does not check gofmt, so an unformatted file can merge and stay merged indefinitely. internal/reconcile/restart_test.go was unformatted from the moment it merged until the usx worker found it at its base and filed it (repaired as 1d5a8f2).\n\nA worker finding it is the system working, but it should not need a worker: the check is one command and it is deterministic, which is exactly the kind of thing a gate should carry rather than a person or an agent noticing.\n\nWorth deciding at the same time whether the repository wants more than gofmt - go vet already runs as part of go test, but staticcheck/golangci-lint do not - and whether a formatting failure should refuse a tick the way a test failure does, or be reported separately. A formatting violation is not a claim about behaviour, so refusing a tick for it may be the wrong shape.",
+  "notes": "2026-09-18 17:40 - The TypeScript half of this gap is filed separately as the Biome tick: cloud/factory has no formatter AND no linter, where Go at least has gofmt in CI. Same class of hole, worse on the TypeScript side, and worth doing together if either is picked up.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "acceptance_criteria": "An unformatted file cannot reach the integration branch unnoticed: the repository declares a formatting check and it runs where the gate runs. The check names the files and is fast enough that it does not add meaningfully to the gate. A deliberately unformatted file fails it.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T06:38:50.660684Z",
-  "updated_at": "2026-09-18T06:38:50.660684Z"
+  "updated_at": "2026-09-18T15:40:16.649237Z"
 }

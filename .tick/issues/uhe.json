@@ -1,0 +1,14 @@
+{
+  "id": "uhe",
+  "title": "Apply the D1 migrations once, not once per test file",
+  "description": "Measured on the operator's run of cloud/factory's suite: 345.57s total, of which SETUP IS 97.81s - transform is 10.31s and tests are 158.80s. The setup is test/apply-migrations.ts, which applies the deploy-authored migration set (16 migrations) and is registered as vitest's setupFiles, so it runs ONCE PER TEST FILE across 53 files. Roughly 1.8s x 53 spent re-applying the same schema to a fresh D1.\n\nThe file is correct as written - it leans on applyD1Migrations being idempotent and says so - it is just paid 53 times. Candidate shapes: seed one D1 and share it, snapshot after migration and restore per file, or apply in a global setup rather than a per-file one. Which is available depends on @cloudflare/vitest-pool-workers' isolation model, so measure before committing to one.\n\nDo not fix this by weakening isolation: the per-file fresh database is what stops one file's rows reaching another, and tick 5qj's comment records real corruption when files shared state. A faster setup that reintroduces cross-file bleed is a worse trade than the 97 seconds.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The migration set is applied once per run rather than once per file, and the suite's reported setup time drops materially (report before and after from vitest's own summary). Every test still sees a schema-correct database with no rows from another file, proven by the existing suite passing unchanged.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T15:39:34.138836Z",
+  "updated_at": "2026-09-18T15:39:34.138836Z"
+}

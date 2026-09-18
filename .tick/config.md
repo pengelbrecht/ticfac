@@ -2,7 +2,7 @@
 
 ## Rules
 
-- Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch.
+- Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch. **The merge itself is a person's**, and deliberately so: everything up to it — the waves, the per-tick gates, the final review, the close-out — is work a run can prove it did, while the merge is a judgement about whether to accept that work. A run's job is to hand a person a PR that is reviewed and CI-verified, so the judgement is quick; it is not to make it.
 - ticfac depends on ticks ONLY through `tk --json` (contract in `contracts/tk-json-manifest.json` of the pinned ticks ref) and the pinned contract bundle. Never import a ticks Go package. A fixture break must fail a build here.
 - Package management is pnpm only — never npm or yarn. Go stdlib-first.
 - **This is a public repository. Nothing operator-specific is ever committed.** No secrets or tokens, and no identifiers tying the repo to one operator: cloud account IDs, workspace IDs, organisation names, personal or work email addresses, real bucket/database names, deployment URLs. This applies to `.tick/` notes and activity as much as to source. Use placeholders; fixtures and tests use example.com addresses.
