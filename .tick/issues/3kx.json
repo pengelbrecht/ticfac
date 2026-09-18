@@ -3,7 +3,7 @@
   "title": "The all-errors fixture does not cover collect after teardown",
   "description": "From the Phase 3 review (h0f, attempt 14), finding 6.\n\nTick 35h added a read of the archived report to herdr's readReport. The reviewer mutated that branch to call e.client.AgentGet and every Herdr|Durable|Report|Teardown|Archive test in exec/herdr stayed green: the zero-substrate-calls doctrine — collect makes no herdr calls, proven by an all-errors fixture — is untested on the post-teardown path 35h introduced.\n\nExtend the all-errors fixture to collect AFTER the worktree is removed, so the doctrine covers the path that reads the archive.",
   "notes": "2026-09-18 09:56 - ticfac run epic-9pd: attempt 31 reported a finding drafted for triage — defect \"doc.go names the all-errors fixture by a test name that no longer exists\" (key e83859c4e71c435352a88def79d1395f57329f43a9cadaaf13ec130a9bad3946, severity low, for this repository). Triage with `ticfac finding 9pd e83859c4e71c435352a88def79d1395f57329f43a9cadaaf13ec130a9bad3946 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-18 10:30 - ticfac run epic-9pd: attempt 31 merged into epic/9pd as f90354ca4089; the integrated gate (go) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 3,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "A mutation adding a substrate call to herdr's post-teardown report read fails the all-errors fixture",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-16T13:02:13.58721Z",
-  "updated_at": "2026-09-18T08:30:00.567666Z",
-  "started_at": "2026-09-18T04:21:31.513676Z"
+  "updated_at": "2026-09-18T08:30:06.731898Z",
+  "closed_at": "2026-09-18T08:30:06.731898Z"
 }
