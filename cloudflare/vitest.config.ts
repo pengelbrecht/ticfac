@@ -49,7 +49,11 @@ export default defineConfig(async () => {
       //    that deliberately abandon Workflow and Durable Object work, and
       //    counting them tells you nothing. "no such table" appeared zero
       //    times in any run, serial or parallel. Judge this by whether tests
-      //    FAIL, not by grepping the log.
+      //    FAIL, not by grepping the log. This is the same finding as tick
+      //    heu, from the other end: a green run of this suite and a broken
+      //    one produce indistinguishable stderr, so the wall of workerd noise
+      //    heu is about is exactly what makes the 5qj signatures useless as
+      //    evidence. Fixing heu would also make this flag re-measurable.
       //
       // 2. Parallel does not reliably fail — which is exactly why it must not
       //    be turned on. Five full parallel runs on a 10-core laptop: four
@@ -67,6 +71,17 @@ export default defineConfig(async () => {
       // cores for the gain and every reason for the contention. Ten seconds is
       // not worth a test suite that fails one run in five for reasons that
       // have nothing to do with the code under test.
+      //
+      // What this re-measurement could NOT test, stated plainly so nobody
+      // reads more into it than it holds: all six runs were on a 10-core
+      // macOS laptop under varying load from other work on the same machine.
+      // NOTHING here was run on the 2-vCPU ubuntu-latest runner where 5qj's
+      // corruption was actually observed, so this confirms that parallelism
+      // still breaks, and does NOT establish how it breaks on CI or how often.
+      // The only place that claim can be settled is CI itself. If a future
+      // tick wants to settle it, the shape is a temporary workflow_dispatch
+      // job that runs this suite with the flag on, N times, on the real
+      // runner — not another laptop sample.
       fileParallelism: false,
       // Serial files removed the state-corruption failures and left plain
       // "Test timed out in 5000ms" on the same file: run-workflow's Workflow

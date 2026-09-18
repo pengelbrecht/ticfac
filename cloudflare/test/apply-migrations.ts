@@ -43,21 +43,20 @@ await env.DB.prepare(
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT UNIQUE,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-  );`
+  );`,
 ).run();
 
-const applied = new Set(
-  (await env.DB.prepare(`SELECT name FROM ${MIGRATIONS_TABLE};`).all<{ name: string }>()).results.map(
-    ({ name }) => name
-  )
-);
+const recorded = await env.DB.prepare(`SELECT name FROM ${MIGRATIONS_TABLE};`).all<{
+  name: string;
+}>();
+const applied = new Set(recorded.results.map(({ name }) => name));
 
 // Setup files may run more than once, so an already-applied migration is
 // skipped rather than replayed — the same guard the helper applies, and what
 // makes re-running this file safe rather than a UNIQUE violation on `name`.
 const insert = env.DB.prepare(`INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES (?);`);
 const pending: { name: string; queries: string[] }[] = env.TEST_MIGRATIONS.filter(
-  ({ name }) => !applied.has(name)
+  ({ name }) => !applied.has(name),
 );
 const statements = pending.flatMap((migration) => [
   ...migration.queries.map((query) => env.DB.prepare(query)),
