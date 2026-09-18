@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 314,
-  "state": "integrating",
-  "reason": "integrating 3kx attempt 31 into epic/9pd",
-  "updated_at": "2026-09-18T07:56:04Z",
+  "sequence": 315,
+  "state": "gating",
+  "reason": "running the integrated gate for 3kx on f97e7c8732dd",
+  "updated_at": "2026-09-18T07:56:19Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -138,7 +138,7 @@
     },
     {
       "tick_id": "3kx",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 31
     },
     {
