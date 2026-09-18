@@ -407,11 +407,12 @@ half-works: a logged-in **wrangler**, a running **Docker** (the image), and
 **pnpm** (the Worker imports the Sandbox SDK, so the staged bundle is installed
 from the embedded lockfile before it is bundled).
 
-The bundle is staged in `~/.tick/factory/bundle` (override with `--bundle-dir`)
-and the image's build context beside it in `~/.tick/factory/sandbox`, so the
-`[[containers]]` image path (`../sandbox/Dockerfile`) means the same thing there
-as it does in this repository. Both directories are tk's, rewritten on every
-deploy, and are where to look to see exactly what was uploaded. The Go side of the deploy lives in
+The bundle is staged in `~/.tick/factory/ticfac/cloudflare` (override with
+`--bundle-dir`) and the image's build context at `~/.tick/factory/cloud/sandbox`
+— the staging mirrors the repository layout, so the `[[containers]]` image path
+(`../../cloud/sandbox/Dockerfile`) means the same thing there as it does in
+this repository. Both directories are tk's, rewritten on every deploy, and are
+where to look to see exactly what was uploaded. The Go side of the deploy lives in
 `internal/factory`; `scripts/verify-factory-deploy.sh` exercises it end to end
 against a stateful wrangler stand-in, since CI has no Cloudflare account.
 
@@ -424,7 +425,7 @@ pnpm install --prod --frozen-lockfile     # the Worker imports @cloudflare/sandb
 npx wrangler r2 bucket create ticks-factory-artifacts
 npx wrangler d1 create ticks-factory      # paste the printed database_id into wrangler.toml
 npx wrangler d1 migrations apply ticks-factory --remote
-npx wrangler deploy                       # builds and pushes ../sandbox as the container image
+npx wrangler deploy                       # builds and pushes ../../cloud/sandbox as the container image
 pnpm mint-token --hash-only | npx wrangler secret put FACTORY_TOKEN_HASH
 curl https://ticks-factory.<your-subdomain>.workers.dev/health   # auth.configured: true
 ```

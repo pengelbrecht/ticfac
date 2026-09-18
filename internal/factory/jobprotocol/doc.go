@@ -7,7 +7,7 @@
 // point of Phase 0 step 3: the schemas are frozen *before* code moves, so the
 // reconciler and every executor are written against a surface that already has
 // two readers. This package is the Go half; the TypeScript half is
-// cloud/factory/test/job-protocol.test.ts. A schema, a golden example or a
+// ticfac/cloudflare/test/job-protocol.test.ts. A schema, a golden example or a
 // refusal changed on one side only fails the other.
 //
 // It is also where the bundle's ONE evidence record lives (SPEC §10.1,

@@ -11,7 +11,7 @@ declare namespace Cloudflare {
 
 /**
  * Vite's `?raw` suffix, used by `tk-json-manifest.test.ts` to read
- * `cloud/factory/required-tk-commands` — a plain text file, not a module.
+ * `ticfac/cloudflare/required-tk-commands` — a plain text file, not a module.
  * The factory suite runs inside workerd, which has no filesystem, so a file
  * that is not JSON has to arrive through the bundler or not at all.
  */

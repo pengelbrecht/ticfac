@@ -13,7 +13,7 @@ import (
 // Worker as the FACTORY_TOKEN_HASH secret, so a deployed factory never holds
 // anything that can authenticate against it.
 //
-// Every constant here mirrors cloud/factory/src/auth.ts, which is the format's
+// Every constant here mirrors ticfac/cloudflare/src/auth.ts, which is the format's
 // definition — the Worker rejects anything outside these bounds. The two
 // implementations exist because the mint runs in Go (tk must not require a
 // Node >= 22.6 able to type-strip the worker's TypeScript just to deploy) and
@@ -37,7 +37,7 @@ const (
 	// 210_000 shipped and was caught by the first live deploy. Neither local
 	// workerd nor Go's pbkdf2 enforces it, so only the guard test in
 	// token_test.go stands between a future raise and a dead deployment.
-	// Mirrors PLATFORM_MAX_ITERATIONS in cloud/factory/src/auth.ts.
+	// Mirrors PLATFORM_MAX_ITERATIONS in ticfac/cloudflare/src/auth.ts.
 	// https://developers.cloudflare.com/workers/runtime-apis/web-crypto/
 	platformMaxIterations = 100_000
 

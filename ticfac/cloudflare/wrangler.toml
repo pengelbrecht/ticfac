@@ -54,16 +54,18 @@ tag = "v3"
 new_sqlite_classes = ["SignalInbox"]
 
 # The container application the Sandbox class runs. `image` is a path to the
-# Dockerfile of cloud/sandbox, which is why `tk factory deploy` stages that tree
-# next to the bundle it deploys from: the same relative path has to be true in
-# this repository and in the staged copy. Wrangler builds it and pushes it to
+# Dockerfile of cloud/sandbox, relative to this bundle's directory
+# (ticfac/cloudflare — SPEC §12 Phase 4 item 1 moved the bundle there;
+# cloud/sandbox moves to ticfac/image in item 4, and this path moves with
+# it). `ticfac factory deploy` stages that tree so the same relative path is
+# true in this repository and in the staged copy. Wrangler builds it and pushes it to
 # the operator's own managed registry before it uploads the Worker (D16 — the
 # factory runs in the operator's account or not at all), so a deploy without a
 # working Docker is a stop, not a Worker that refuses every run.
 [[containers]]
 class_name = "Sandbox"
 name = "ticks-orchestrator"
-image = "../sandbox/Dockerfile"
+image = "../../cloud/sandbox/Dockerfile"
 # Phase 1 boots one container per run. The headroom is for the overlap a reboot
 # creates (the replacement is addressed before the dead one is destroyed) and
 # for a second project's run holding its own lease. Raising it is a deployment

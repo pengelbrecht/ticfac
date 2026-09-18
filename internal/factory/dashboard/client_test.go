@@ -180,7 +180,7 @@ func TestNewClientRefusesAnUnconfiguredFactoryByName(t *testing.T) {
 	}
 }
 
-// workerGateFixture is one `PendingEntry` exactly as cloud/factory/src/run-room.ts
+// workerGateFixture is one `PendingEntry` exactly as ticfac/cloudflare/src/run-room.ts
 // serialises it — every optional field populated, including the `epic` the
 // tracker's own entry has never had. It is the wire contract this package
 // decodes; keeping it verbatim is what proves the Go struct needs no change on

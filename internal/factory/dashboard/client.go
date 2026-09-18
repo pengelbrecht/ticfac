@@ -34,7 +34,7 @@ type Run struct {
 }
 
 // Active reports whether the run is one the factory still considers live. It
-// mirrors ACTIVE_RUN_STATES in cloud/factory/src/runs.ts.
+// mirrors ACTIVE_RUN_STATES in ticfac/cloudflare/src/runs.ts.
 func (r Run) Active() bool {
 	switch r.State {
 	case "starting", "running", "stopping":
@@ -44,7 +44,7 @@ func (r Run) Active() bool {
 }
 
 // Lease is the project's dispatch lease as everyone but its holder sees it —
-// the fencing token is never served (see cloud/factory/src/run-room.ts).
+// the fencing token is never served (see ticfac/cloudflare/src/run-room.ts).
 type Lease struct {
 	RunID       string `json:"run_id"`
 	Epic        string `json:"epic"`
@@ -113,7 +113,7 @@ type Stop struct {
 }
 
 // Gate is one pending question as the factory's Worker reports it, mirroring
-// `PendingEntry` in cloud/factory/src/run-room.ts.
+// `PendingEntry` in ticfac/cloudflare/src/run-room.ts.
 //
 // This is a WIRE type, not a borrowed tracker type. The board only ever
 // DECODES it out of `GET /api/observe`; it never registers, answers or stores

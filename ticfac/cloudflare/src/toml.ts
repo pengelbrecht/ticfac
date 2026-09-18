@@ -2,7 +2,7 @@
  * A small, strict TOML reader for `.tick/runners.toml`.
  *
  * A VERBATIM COPY of `extensions/ticks-runner/toml.ts`, and deliberately so:
- * `tk factory deploy` stages `cloud/factory` and `cloud/sandbox` and uploads
+ * `ticfac factory deploy` stages `ticfac/cloudflare` and `cloud/sandbox` and uploads
  * the bundle from there, so a worker source file may not import anything
  * outside those two trees. Keep the two files identical — a fix to one is a
  * fix to both, and `test/toml.test.ts` pins the behaviour this bundle needs.

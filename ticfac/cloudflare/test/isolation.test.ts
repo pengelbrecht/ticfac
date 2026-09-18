@@ -30,7 +30,7 @@ describe("separation from cloud/worker", () => {
     expect(Object.keys(sources).length).toBeGreaterThan(0);
   });
 
-  it("imports nothing outside cloud/factory", () => {
+  it("imports nothing outside ticfac/cloudflare", () => {
     for (const [path, source] of Object.entries(sources)) {
       // Covers `import x from "y"`, `import("y")` and `import("y").Type` in
       // the .d.ts, which is where the binding types live.
@@ -39,7 +39,7 @@ describe("separation from cloud/worker", () => {
       );
 
       for (const specifier of specifiers) {
-        expect(specifier, `${path} imports outside cloud/factory`).not.toMatch(/(^|\/)\.\.\//);
+        expect(specifier, `${path} imports outside ticfac/cloudflare`).not.toMatch(/(^|\/)\.\.\//);
         expect(specifier, `${path} imports from cloud/worker`).not.toMatch(/worker\//);
       }
     }

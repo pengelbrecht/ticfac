@@ -285,7 +285,7 @@ func TestCredentialOwnershipContractHasAValidatingExample(t *testing.T) {
 
 // parseCredentialSchema reads the contract's `schema` block through the ONE
 // strict-subset validator this repository has (its TypeScript twin is
-// cloud/factory/test/json-schema.ts, which refuses the same documents with the
+// ticfac/cloudflare/test/json-schema.ts, which refuses the same documents with the
 // same words). Parsing is itself an assertion: a keyword outside the subset —
 // `oneOf`, `const`, `minLength`, `format`, `pattern`, all of which this block
 // carried until bundle 3.0.0 — fails here rather than being ignored, so the
@@ -316,7 +316,7 @@ func assertRedacted(t *testing.T, key, value string) {
 // Every negative pins the refusal it expects. Without that a case can start
 // failing for a completely different reason and stay green, which is a
 // validator that has quietly stopped checking the thing the case was written
-// about. `cloud/factory/test/json-schema.ts` matches Go's message text
+// about. `ticfac/cloudflare/test/json-schema.ts` matches Go's message text
 // character for character, so one pin means the same thing to both readers.
 func TestCredentialSchemaRefusesItsNegativeExamples(t *testing.T) {
 	contract := readCredentialContract(t)

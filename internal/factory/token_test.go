@@ -7,7 +7,7 @@ import (
 )
 
 // goldenToken/goldenSalt/goldenHash pin this package's derivation to the
-// worker's. The record was produced by cloud/factory/src/auth.ts itself
+// worker's. The record was produced by ticfac/cloudflare/src/auth.ts itself
 // (deriveTokenHash with the fixed salt below); TestGoldenVectorMatchesWorker
 // re-derives it live wherever Node can run the TypeScript module.
 const (
@@ -30,7 +30,7 @@ func TestDeriveTokenHashMatchesGoldenVector(t *testing.T) {
 		t.Fatalf("deriveTokenHashWithSalt: %v", err)
 	}
 	if got != goldenHash {
-		t.Errorf("hash record mismatch with cloud/factory/src/auth.ts:\n got %s\nwant %s", got, goldenHash)
+		t.Errorf("hash record mismatch with ticfac/cloudflare/src/auth.ts:\n got %s\nwant %s", got, goldenHash)
 	}
 }
 
@@ -93,7 +93,7 @@ func TestDeriveTokenHashRejectsCostOutsideWorkerBounds(t *testing.T) {
 }
 
 // TestIterationConstantsRespectPlatformCap is the Go counterpart of the guard
-// in cloud/factory/test/auth.test.ts. Cloudflare Workers refuses PBKDF2 above
+// in ticfac/cloudflare/test/auth.test.ts. Cloudflare Workers refuses PBKDF2 above
 // 100,000 iterations — crypto.subtle.deriveBits throws on the edge — so a cost
 // minted here above the cap produces a record the deployed worker can never
 // verify: every authenticated request 503s. Nothing local enforces that cap
@@ -136,7 +136,7 @@ func TestGoldenVectorMatchesWorker(t *testing.T) {
 		t.Skip("node not on PATH")
 	}
 	script := `
-import { deriveTokenHash } from "../../cloud/factory/src/auth.ts";
+import { deriveTokenHash } from "../../ticfac/cloudflare/src/auth.ts";
 const salt = new TextEncoder().encode(process.argv[1]);
 process.stdout.write(await deriveTokenHash(process.argv[2], { salt }));
 `
@@ -148,6 +148,6 @@ process.stdout.write(await deriveTokenHash(process.argv[2], { salt }));
 		t.Skipf("node could not run the worker module (needs Node >= 22.6 type stripping): %v\n%s", err, out)
 	}
 	if got := strings.TrimSpace(string(out)); got != goldenHash {
-		t.Errorf("cloud/factory/src/auth.ts derives %s, this package pins %s", got, goldenHash)
+		t.Errorf("ticfac/cloudflare/src/auth.ts derives %s, this package pins %s", got, goldenHash)
 	}
 }

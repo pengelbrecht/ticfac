@@ -24,7 +24,7 @@ import (
 //
 // The rules stay pinned as data (a pattern string with a maximum length, and a
 // minimum) because the file's second reader is TypeScript
-// (cloud/factory/src/repo-runconfig.ts), which cannot share a Go regexp; the
+// (ticfac/cloudflare/src/repo-runconfig.ts), which cannot share a Go regexp; the
 // in-repo reader adds the behavioural pin on top of the data pin.
 //
 // The image rule is the one that matters to ticfac: it is what stands between

@@ -99,7 +99,7 @@ go = { command = "go test -short -timeout 45m -parallel 12 ./...", description =
 #
 # contracts:check is the one that earns its place here: it is the check that
 # would have caught b9w's drift the day it happened, and it costs a second.
-ts = { command = "cd cloud/factory && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript contracts and types" }
+ts = { command = "cd ticfac/cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript contracts and types" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }

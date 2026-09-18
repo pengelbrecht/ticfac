@@ -25,7 +25,7 @@ import { insertRun } from "../src/db";
 
 const BASE = "https://factory.example.com";
 const PROJECT = "example-org/example-repo";
-/** A well-formed trace id, of the shape cloud/factory/src/trace.ts mints. */
+/** A well-formed trace id, of the shape ticfac/cloudflare/src/trace.ts mints. */
 const TRACE_ID = "tr_0123456789abcdef0123456789abcdef";
 
 let token: string;

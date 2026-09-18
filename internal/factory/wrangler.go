@@ -148,7 +148,7 @@ func localWranglerCandidates(bundleDir, startDir string) []wranglerCandidate {
 	if path := findRepositoryFactoryWrangler(startDir); path != "" {
 		candidates = append(candidates, wranglerCandidate{
 			bin:   path,
-			label: "cloud/factory/node_modules/.bin/wrangler",
+			label: "ticfac/cloudflare/node_modules/.bin/wrangler",
 		})
 	}
 	return candidates
@@ -172,7 +172,7 @@ func findRepositoryFactoryWrangler(startDir string) string {
 	}
 
 	for {
-		candidate := filepath.Join(dir, "cloud", "factory", "node_modules", ".bin", "wrangler")
+		candidate := filepath.Join(dir, "ticfac", "cloudflare", "node_modules", ".bin", "wrangler")
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
