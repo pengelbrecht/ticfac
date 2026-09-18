@@ -2,7 +2,7 @@
   "id": "usx",
   "title": "ticfac watch still replays an earlier incarnation's terminal line",
   "description": "Found by tick 55i (run epic-9pd, attempt 2). 55i fixed events --follow with a from-now cursor. ticfac watch, added by tick 0z0 in the same run, still calls runfeed.Follow from offset zero: a watch started on a resumed run reads the previous incarnation's run_finished first, exits at once, and reports a failure that already happened. It is the defect 55i describes, in the command built to be alerted by it. Same fix shape (follow from the end), and its run_held semantics need deciding: whether a watch started while a run is already holding should report the hold it joined.",
-  "notes": "2026-09-18 08:30 - ticfac run epic-9pd: attempt 29 reported a finding drafted for triage — defect \"internal/reconcile/restart_test.go is not gofmt-formatted at the base commit\" (key 5437a241413d3fa46cee7562be666ed32d6ea57e64d22cdbc4eeced1593d8d9f, severity low, for this repository). Triage with `ticfac finding 9pd 5437a241413d3fa46cee7562be666ed32d6ea57e64d22cdbc4eeced1593d8d9f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
+  "notes": "2026-09-18 08:30 - ticfac run epic-9pd: attempt 29 reported a finding drafted for triage — defect \"internal/reconcile/restart_test.go is not gofmt-formatted at the base commit\" (key 5437a241413d3fa46cee7562be666ed32d6ea57e64d22cdbc4eeced1593d8d9f, severity low, for this repository). Triage with `ticfac finding 9pd 5437a241413d3fa46cee7562be666ed32d6ea57e64d22cdbc4eeced1593d8d9f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-18 08:55 - ticfac run epic-9pd: attempt 29 merged into epic/9pd as c28bef79bb81; the integrated gate (go) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "A watch started on a resumed run does not exit on a previous incarnation's terminal line, and a watch started while the run holds an attempt reports that hold; both proven by tests",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T11:03:30.202753Z",
-  "updated_at": "2026-09-18T06:30:19.624738Z",
+  "updated_at": "2026-09-18T06:55:38.313434Z",
   "started_at": "2026-09-17T22:23:41.630884Z"
 }
