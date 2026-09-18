@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 360,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-18T11:06:17Z",
+  "sequence": 361,
+  "state": "running",
+  "reason": "the epic PR #3 (epic/9pd → main) is open; close-out of 9pd waits on CI",
+  "updated_at": "2026-09-18T11:06:21Z",
   "ticks": [
     {
       "tick_id": "0z0",
