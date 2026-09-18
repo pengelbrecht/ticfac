@@ -13,6 +13,6 @@
   "acceptance_criteria": "Run, attempt and decision records live in .ticfac/ on the run branch and a resumed run reads them with no D1 access. D1 is either rebuildable from them or gone. An epic close-out still reaches a CI verdict with these writes happening - the 9da interaction is demonstrated as resolved, not assumed.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:45.162719Z",
-  "updated_at": "2026-09-18T16:50:48.213299Z",
+  "updated_at": "2026-09-18T18:21:25.686839Z",
   "started_at": "2026-09-18T16:50:48.213299Z"
 }
