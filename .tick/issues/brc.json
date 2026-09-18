@@ -1,0 +1,13 @@
+{
+  "id": "brc",
+  "title": "Cross-run report discovery keys on tick_id, which two repositories sharing an ExecStateRoot can collide on",
+  "description": "Report discovery matches a previous attempt by the tick_id on its attempt record. Within one tracker that is exact - tick ids are unique per tracker - but a host running epics of TWO repositories against one ExecStateRoot could be offered the other repository's reports whenever the tick ids collide.\n\nNothing durable on the attempt record distinguishes them: repo is a host path (different in every clone), repo_key hashes that host path, and job_id names only the run and the tick. A durable remote or tracker identity on the record would close it.\n\nFiled rather than fixed because it is latent: it needs two repositories, one shared ExecStateRoot and a tick id collision. Worth doing before ticfac is pointed at more than one repository on a host - which Phase 4's cloud host makes likelier, not less.\n\ndiscovered_from run-epic-9pd/tick-n4h/attempt-32",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An attempt record carries an identity that distinguishes its tracker across clones, and cross-run discovery uses it alongside the tick id. A test covers two repositories sharing one ExecStateRoot with the same tick id, and proves neither is offered the other's reports.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T08:40:04.933247Z",
+  "updated_at": "2026-09-18T08:40:04.933247Z"
+}

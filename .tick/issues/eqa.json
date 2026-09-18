@@ -1,0 +1,13 @@
+{
+  "id": "eqa",
+  "title": "Preserved wip snapshots are invisible across run ids, exactly as reports were",
+  "description": "priorSnapshots walks the same \u003cExecStateRoot\u003e/\u003crunID\u003e/\u003ctick\u003e/\u003cn\u003e layout that report discovery used before n4h, so a re-run under a NEW run id is never pointed at a previous run's preserved wip refs. Work that was deliberately snapshotted to survive a teardown is then invisible to the attempt most likely to need it.\n\nn4h already solved this shape once, for reports: the same cross-run walk, the same tick-keyed record check (a wip snapshot beside an attempt.json naming the tick). This is that fix applied to WORK instead of analysis, so the design is proven rather than speculative.\n\ndiscovered_from run-epic-9pd/tick-n4h/attempt-32",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An attempt dispatched under a new run id is offered the wip snapshots preserved by previous runs of the same tick, discovered the same way n4h discovers prior reports. A test covers a snapshot made under one run id and found under another.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T08:40:04.869713Z",
+  "updated_at": "2026-09-18T08:40:04.869713Z"
+}
