@@ -395,6 +395,78 @@ func TestTheFeedLivesWhereTheContractSays(t *testing.T) {
 	}
 }
 
+// ReadLocated is Read with each line's byte range (ticfac tick usx): a
+// subscriber that wants only PART of the standing feed — a watch joining the
+// current incarnation of a resumed run, everything after the last terminal
+// line — needs the byte offset where the rest begins, and the only honest
+// source of that offset is the same strict parser that reads the events. The
+// offsets must be exact: a follower started at one line's End sees that line
+// neither again nor never.
+func TestReadLocatedNamesTheByteRangeOfEveryLine(t *testing.T) {
+	feed := Open(t.TempDir(), "r-1")
+	if err := feed.Append(goldenEvent(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := feed.Append(goldenRunLevel(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	located, err := ReadLocated(feed.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(located) != 2 {
+		t.Fatalf("ReadLocated returned %d lines, want the standing feed's 2", len(located))
+	}
+	if located[0].Stage != "dispatched" || located[1].Stage != "run_finished" {
+		t.Errorf("the events read as %s then %s — not the order the lines landed", located[0].Stage, located[1].Stage)
+	}
+	if located[0].Start != 0 {
+		t.Errorf("the first line starts at %d, want 0", located[0].Start)
+	}
+	if located[0].End != located[1].Start {
+		t.Errorf("line 1 ends at %d but line 2 starts at %d — the ranges do not tile the file", located[0].End, located[1].Start)
+	}
+	info, err := os.Stat(feed.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if located[1].End != info.Size() {
+		t.Errorf("the last line ends at %d, want the file's size %d", located[1].End, info.Size())
+	}
+
+	// A follower started at the first line's End receives the second line
+	// exactly once — the offset is the resumption cursor the range exists to
+	// name.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var mu sync.Mutex
+	var got []Event
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := FollowFrom(ctx, feed.Path(), located[0].End, func(e Event) {
+			mu.Lock()
+			got = append(got, e)
+			mu.Unlock()
+		}); err != nil {
+			t.Errorf("follow from a line's End: %v", err)
+		}
+	}()
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(got) == 1
+	}, "the follower to see the second line once")
+	cancel()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 || got[0].Stage != "run_finished" {
+		t.Errorf("a follower from line 1's End saw %+v, want exactly the second line", got)
+	}
+}
+
 func waitFor(t *testing.T, condition func() bool, what string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
