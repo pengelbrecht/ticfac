@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 240,
-  "state": "publishing",
-  "reason": "closing pbb behind the integrated gate on 9e541edb51e4",
-  "updated_at": "2026-09-18T03:14:56Z",
+  "sequence": 241,
+  "state": "running",
+  "reason": "pbb is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T03:15:02Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -118,7 +118,7 @@
     },
     {
       "tick_id": "pbb",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 26
     },
     {
