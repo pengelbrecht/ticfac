@@ -40,7 +40,19 @@ test:
 # The gate's copy had drifted to a bare `go test -short -count=1 ./...`, losing
 # both numbers above: the gate, the one runner that can block every tick, was
 # running internal/reconcile serially against go's 10-minute per-package limit.
-# -count=1 is the gate's own addition: a verdict served from go's test cache is
-# not evidence that this tree passes.
+# -count=1 was the gate's own addition, on the reasoning that a verdict served
+# from go's test cache is not evidence that this tree passes. That reasoning is
+# half right, and on 2026-09-18 the operator traded the other half for speed:
+# for a package whose sources, dependencies and consulted files are unchanged, a
+# cached pass IS a true statement about this tree, and re-running it 49 times an
+# epic is what made the gate cost more than the work.
+#
+# `make suite` below keeps -count=1 for when you want the paranoid answer —
+# notably for the drift guards that read .tick/runners.toml by absolute path,
+# which are the one place caching is known to be able to serve a stale pass.
 gate:
+	go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+
+# The gate, with the cache refused. Slower and unconditional.
+suite:
 	go test -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
