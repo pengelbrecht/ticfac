@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 285,
-  "state": "publishing",
-  "reason": "closing sqx behind the integrated gate on 8d70029ca6ce",
-  "updated_at": "2026-09-18T06:29:17Z",
+  "sequence": 286,
+  "state": "running",
+  "reason": "sqx is closed",
+  "updated_at": "2026-09-18T06:29:34Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "sqx",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 28
     },
     {
