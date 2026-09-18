@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 292,
-  "state": "publishing",
-  "reason": "closing usx behind the integrated gate on 80fe6fc2c8d3",
-  "updated_at": "2026-09-18T06:37:51Z",
+  "sequence": 293,
+  "state": "running",
+  "reason": "usx is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T06:37:57Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -128,7 +128,7 @@
     },
     {
       "tick_id": "usx",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 29
     },
     {
