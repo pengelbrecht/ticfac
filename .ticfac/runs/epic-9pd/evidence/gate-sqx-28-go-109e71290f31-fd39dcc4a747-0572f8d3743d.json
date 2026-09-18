@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-sqx-28-go-109e71290f31-fd39dcc4a747-0572f8d3743d",
+  "provenance": {
+    "run_id": "epic-9pd",
+    "tick_id": "sqx",
+    "attempt": 28,
+    "source_ref": "refs/heads/epic/9pd",
+    "source_sha": "0e2de9e6098a76df80f24c7cd2d809ff85e33a33",
+    "integration_ref": "refs/heads/epic/9pd",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260d335be7664b3af33531bb0becce28b17",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -count=1 -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-18T05:25:44Z",
+  "finished_at": "2026-09-18T05:53:19Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t325.068s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t2.400s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.099s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t332.821s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t244.223s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t216.240s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t1.108s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.644s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.397s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.498s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.503s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.079s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.471s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.525s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.801s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.113s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t1.890s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.134s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t2.556s\n--- FAIL: TestAPendingCIThatNeverConcludesIsBounded (142.01s)\n    closeout_test.go:481: the failure is the integrated gate on 0eb4298613e5 did not pass for a2: tree (error). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/qeu, so the repair is to fix the check or the tree, push it to epic/qeu, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit, want a closeout_ci_pending refusal\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t1382.572s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t7.826s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t4.589s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t5.990s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t5.609s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t320.293s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t2.083s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.381s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.460s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:f37759d0396f29d026e95be5d70d4c9aaa39f6d41cf5527c6b091895a04d8adf",
+  "persistence_uri": "git:refs/heads/epic/9pd:.ticfac/runs/epic-9pd/evidence/gate-sqx-28-go-109e71290f31-fd39dcc4a747-0572f8d3743d.json"
+}
