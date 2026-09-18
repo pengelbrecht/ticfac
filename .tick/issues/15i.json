@@ -1,0 +1,13 @@
+{
+  "id": "15i",
+  "title": "fake-runner's wallwip mode still gates on the run-wide attempt number",
+  "description": "wallwip in internal/reconcile/testdata/fake-runner.sh keys on TICFAC_ATTEMPT = 1 (and on tick a1) - the same latent order-dependence vw0 fixed in the blocked-first and finding_blocked modes, left out of that tick's named scope.\n\nThis is the bug class the dispatch window made real: attempt numbers are run-wide, so a fixture mode keyed on 'attempt 1' silently means 'the run's first dispatch', not 'this tick's first try'. Dispatch another tick first and the mode never fires. TICFAC_TRY now exists and the fixture always passes it, so the repair is a one-line gate change plus a test that dispatches another tick before the one under test.\n\ndiscovered_from run-epic-9pd/tick-vw0/attempt-30",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "wallwip fires on the tick's own first TRY regardless of how many dispatches the run made before it, and a test proves it by dispatching another tick first. No fixture mode keys on TICFAC_ATTEMPT to mean 'first try'.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T07:46:27.683484Z",
+  "updated_at": "2026-09-18T07:46:27.683484Z"
+}
