@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 262,
-  "state": "running",
-  "reason": "q1e is closed",
-  "updated_at": "2026-09-18T04:21:09Z",
+  "sequence": 263,
+  "state": "dispatching",
+  "reason": "dispatching 3kx as attempt 31",
+  "updated_at": "2026-09-18T04:21:23Z",
   "ticks": [
     {
       "tick_id": "0z0",
