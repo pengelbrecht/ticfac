@@ -1,0 +1,13 @@
+{
+  "id": "8kz",
+  "title": "GateTimeout bounds two unrelated things: a gate command's runtime and the close-out's CI wait",
+  "description": "internal/reconcile Options.GateTimeout is read by two call sites that want different numbers:\n\n- gate.go runShell - how long ONE declared gate command may run. Wants a large number: the real command is 'go test -timeout 45m ./...'.\n- closeout.go - how long the close-out waits for a PENDING CI answer on the epic PR, at admission (0iz) and now at close (sqx). Wants a number sized to CI, not to the test suite.\n\nA caller cannot set one without setting the other. The collision is already real in the fixtures: the CI-wait tests set gateTimeout to 200ms so their wait ends quickly, which also gave the fixture's gate command ('test -f README.md \u0026\u0026 ls work-*.txt') 200ms to live. It takes about five milliseconds idle, exceeded 200ms under the integrated gate's load, and TestAPendingCIThatNeverConcludesIsBounded failed reporting a gate ERROR for tick a2 instead of the closeout_ci_pending refusal it asserts - refusing tick sqx for the machine's speed.\n\nWorked around by raising the fixture bound to 2s (f436737), which puts it outside shell noise but does not separate the two concerns. In production the same conflation means an operator who wants to wait longer for CI must also let a gate command run longer, and vice versa.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The gate command's bound and the close-out's CI wait are separately configurable, each named for what it bounds. Existing behaviour is preserved when only one is set. A test sets a short CI wait and a long command bound at the same time and gets both.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T05:56:45.354672Z",
+  "updated_at": "2026-09-18T05:56:45.354672Z"
+}
