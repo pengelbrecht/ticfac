@@ -2,7 +2,7 @@
   "id": "vyg",
   "title": "Move Factory credentials, embedding, deployment bundles and CI",
   "description": "SPEC 12 Phase 4 item 7. Move the Factory's credential ladder, embedded payload, deployment bundles and CI into ticfac.\n\nLast of the seven because it is the one that makes the move irreversible: until the deploy path lives here, the old one can still deploy. Related open work: ticks s70 (configure Cloudflare release secrets for the deploy-cloud workflow) and zkq (required-tk-commands cannot express the tk subcommands tk itself invokes for the sandbox image build) - settle both or record why they do not block.\n\nThe credential ownership split from Phase 3 (9hu, ~/.ticfacrc) is the precedent: say which credentials are ticfac's and which remain the operator's, and do not let a secret become a thing that only works on one machine.",
-  "notes": "2026-09-18 19:03 - ticfac run epic-ncv: attempt 3 reported a finding drafted for triage — defect \"factory deploy's output and D1 record call the ticfac version \\\"tk\\\"\" (key ad7a1b7898c5340f852fad53fabbef51a35dfe5dd6f7c22d5c1e0058bc2b1bdf, severity low, for this repository). Triage with `ticfac finding ncv ad7a1b7898c5340f852fad53fabbef51a35dfe5dd6f7c22d5c1e0058bc2b1bdf --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
+  "notes": "2026-09-18 19:03 - ticfac run epic-ncv: attempt 3 reported a finding drafted for triage — defect \"factory deploy's output and D1 record call the ticfac version \\\"tk\\\"\" (key ad7a1b7898c5340f852fad53fabbef51a35dfe5dd6f7c22d5c1e0058bc2b1bdf, severity low, for this repository). Triage with `ticfac finding ncv ad7a1b7898c5340f852fad53fabbef51a35dfe5dd6f7c22d5c1e0058bc2b1bdf --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-18 19:34 - ticfac run epic-ncv: attempt 3 merged into epic/ncv as e46fb0e03d79; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "ticfac factory deploy works end to end from this repository with no dependency on the ticks deployment path, and the credential ladder states what it needs and verifies each rung. CI deploys from ticfac. s70 and zkq are resolved or explicitly deferred with a reason.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:45.215599Z",
-  "updated_at": "2026-09-18T17:03:05.345331Z",
+  "updated_at": "2026-09-18T17:34:38.187201Z",
   "started_at": "2026-09-18T16:32:26.271136Z"
 }
