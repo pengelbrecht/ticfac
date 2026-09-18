@@ -1,0 +1,13 @@
+{
+  "id": "b05",
+  "title": "The all-errors fixture misses collect's branch-fallback read, and everyHerdrMethod omits pane.close",
+  "description": "Two gaps in the guard that says collect answers from durable evidence without asking herdr, both found by mutation during the h0f review:\n\n1. Injecting e.client.AgentGet into readReport's branch fallback (internal/exec/herdr/inspect.go:326 - the path taken when both the worktree copy and the archive are gone) passes every test in internal/exec/herdr. TestCollectReadsTheReportFromTheBranchWhenTheWorktreeIsGone drives that path but never counts herdr calls, so the all-errors fixture cannot see a call added there.\n\n2. everyHerdrMethod omits pane.close, so a herdr call added on that method is invisible to the same guard.\n\nThe behaviour is right today; what is missing is the ability of the guard to notice if it stops being right. Same shape as 889: a property asserted by a test that cannot fail for the reason it was written.\n\ndiscovered_from run-epic-9pd/tick-h0f/attempt-33",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A herdr call injected into readReport's branch fallback fails the all-errors guard, and pane.close is in everyHerdrMethod. Both verified by making the injection and watching the guard fail.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T10:15:39.004811Z",
+  "updated_at": "2026-09-18T10:15:39.004811Z"
+}
