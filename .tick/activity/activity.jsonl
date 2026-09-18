@@ -647,3 +647,4 @@
 {"ts":"2026-09-18T08:40:04.933521Z","tick":"brc","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"Cross-run report discovery keys on tick_id, which two repositories sharing an ExecStateRoot can collide on","type":"task"}}
 {"ts":"2026-09-18T08:50:21.736845Z","tick":"n4h","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"\n2026-09-18 10:50 - ticfac run epic-9pd: attempt 32 merged into epic/9pd as 2c54aeab2847; the integrated gate (go) passed.","title":"Predecessor reports are invisible across run ids"}}
 {"ts":"2026-09-18T08:50:27.151913Z","tick":"n4h","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Predecessor reports are invisible across run ids"}}
+{"ts":"2026-09-18T08:50:43.360435Z","tick":"h0f","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Final review of the Phase 3 diff"}}
