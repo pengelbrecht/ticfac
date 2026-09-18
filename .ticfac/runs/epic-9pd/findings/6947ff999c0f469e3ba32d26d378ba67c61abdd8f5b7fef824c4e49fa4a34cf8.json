@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pbb",
   "attempt": 26,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-17T22:24:04Z",
+  "triaged_at": "2026-09-18T03:31:03Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "j3t",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "pbb",
