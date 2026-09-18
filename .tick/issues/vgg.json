@@ -1,0 +1,13 @@
+{
+  "id": "vgg",
+  "title": "The close-out holds on CI for a stale PR head and never sees the green it is waiting for",
+  "description": "Observed live at the end of epic 9pd. The close-out opened epic PR #3 at 10:17:24, CI completed GREEN on the PR's head (cde6d962) at 10:25:22 - three checks, all completed/success, confirmed against the check-runs API by hand - and the run was still emitting 'CI on the epic PR #3 is pending; the close-out is held' at 11:02:33, thirty-seven minutes later. It would have refused at the 60-minute bound having never seen a CI answer that had been sitting there the whole time.\n\nThe mechanism: the sha the run polls has ZERO check-runs (total_count 0), while the PR's actual head has three successes. The close-out's own commits move epic/9pd after the PR is opened, so a head captured at open time is stale by the time CI is asked about - and CI only ever runs on the pushed head. forge.CI is correct in isolation: given the real head it returns green, and given a sha with no checks it returns CINone, which the close gate holds on rather than refusing (by sqx's deliberate design, so that a race with the first check run does not end a healthy run).\n\nSo the defect is upstream of forge.CI: the PR's head must be RE-READ from the forge on every CI poll, not carried from when the PR was opened. sqx's close gate already states the principle - 're-derives CI from the PR, never from a checkpoint, because CI's answer changes with every push' - and this is the same argument applied one field earlier: the head is part of what changes.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The close-out asks CI about the PR's CURRENT head on every poll, re-read from the forge. A test moves the branch after the PR is opened, puts green CI on the new head, and shows the close-out proceeding rather than holding. The hold's message distinguishes 'CI has not answered yet' from 'this sha has no CI at all'.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T11:04:58.033279Z",
+  "updated_at": "2026-09-18T11:04:58.033279Z"
+}
