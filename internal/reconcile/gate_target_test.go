@@ -36,17 +36,39 @@ func TestTheGateTargetMatchesTheDeclaredGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read this repository's gate: %v", err)
 	}
-	if len(declared) != 1 {
-		t.Fatalf("this repository declares %d gate commands; this test assumes the single Go gate", len(declared))
+
+	// Each declared check has a Makefile target carrying the SAME line. The
+	// mapping is spelled out rather than derived, so adding a check without a
+	// target — or a target without a check — fails here instead of being
+	// discovered when one of the two silently stops running, which is exactly
+	// how cloud/factory's suite came to be unrun for two major bundle versions
+	// (ticks odc and b9w).
+	targets := map[string]string{
+		"go": "gate",
+		"ts": "ts-gate",
+	}
+	if len(declared) != len(targets) {
+		t.Fatalf("this repository declares %d gate command(s) and this test knows %d: add the new one to "+
+			"`targets` with its Makefile target, or say why it has none", len(declared), len(targets))
 	}
 
-	recipe, ok := makeRecipe(t, filepath.Join(root, "Makefile"), "gate")
-	if !ok {
-		t.Fatal("the Makefile has no `gate` target: either restore it, or delete this test with the reason")
-	}
-	if got, want := recipe, declared[0].Command; got != want {
-		t.Errorf("the Makefile's gate target and the declared gate have drifted:\n  Makefile:      %s\n  runners.toml:  %s\n"+
-			"They are the same thing said twice; the gate is the one runner that can block every tick.", got, want)
+	for _, command := range declared {
+		target, known := targets[command.Name]
+		if !known {
+			t.Errorf("the declared gate %q has no Makefile target in this test: the gate is the one runner that "+
+				"can block every tick, and a check only this file knows about is one `make` cannot run", command.Name)
+			continue
+		}
+		recipe, ok := makeRecipe(t, filepath.Join(root, "Makefile"), target)
+		if !ok {
+			t.Errorf("the Makefile has no `%s` target for declared gate %q: either restore it, or drop the "+
+				"declaration", target, command.Name)
+			continue
+		}
+		if got, want := recipe, command.Command; got != want {
+			t.Errorf("the Makefile's %s target and the declared gate %q have drifted:\n  Makefile:      %s\n  runners.toml:  %s\n"+
+				"They are the same thing said twice.", target, command.Name, got, want)
+		}
 	}
 }
 

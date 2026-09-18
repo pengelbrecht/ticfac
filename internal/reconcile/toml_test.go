@@ -150,10 +150,21 @@ func TestThisRepositorysGateIsReadable(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("this repository declares [testing.commands] and the reader found none")
 	}
+	// This repository's gate is no longer Go alone (tick odc): the `ts` check
+	// covers the TypeScript control plane's contracts and types, which nothing
+	// ran until b9w found it two major bundle versions behind. What every check
+	// still owes is a command a reader can see and run.
+	byName := map[string]string{}
 	for _, command := range got {
-		if !strings.Contains(command.Command, "go test") {
-			t.Errorf("gate %q is %q", command.Name, command.Command)
+		if strings.TrimSpace(command.Command) == "" {
+			t.Errorf("gate %q declares no command", command.Name)
 		}
+		byName[command.Name] = command.Command
+	}
+	if goGate, ok := byName["go"]; !ok {
+		t.Error("this repository declares no `go` gate: the Go suite is the check every tick's close stands behind")
+	} else if !strings.Contains(goGate, "go test") {
+		t.Errorf("the `go` gate does not run go test: %q", goGate)
 	}
 }
 

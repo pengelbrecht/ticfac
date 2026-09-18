@@ -53,6 +53,16 @@ test:
 gate:
 	go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
+# The TypeScript half of the gate (tick odc). Kept as its own target, and its
+# own [testing.commands] entry, so each check records its own evidence and a
+# reader can see which half refused a tick.
+#
+# vitest is deliberately NOT here: it is 82s against these two at 3s, gate
+# commands run serially, and CI runs it as its own job beside the Go one for no
+# wall clock at all. This target covers CONTRACTS AND TYPES, not behaviour.
+ts-gate:
+	cd cloud/factory && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit
+
 # The gate, with the cache refused. Slower and unconditional.
 suite:
 	go test -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
