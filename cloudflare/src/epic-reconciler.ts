@@ -16,7 +16,11 @@
  * evidence (an attempt's marker on the run branch and the executor's own
  * four operations — never a claim's word for its own progress), same
  * refusals (a wave-full claim is a retry; a human gate is a hold, not a
- * failure of the work). `planFrom`, the window and the settle loop below are
+ * failure of the work). A role job's answer is durable evidence too, the
+ * same way it is locally: the review and closeout exchanges land on the run
+ * branch as the contract's decision records, so a restart re-reads them
+ * instead of re-asking a model it already paid. `planFrom`, the window and
+ * the settle loop below are
  * ports of those pieces, re-expressed for a host that cannot run tk
  * (tracker access goes through `tracker-client.ts`, the contract-held
  * implementation of §3.1).
@@ -214,6 +218,86 @@ export function tryOf(attempts: Array<{ attempt: number; tick_id: string }>, tic
     if (existing.tick_id === tick && existing.attempt < number) try_ += 1;
   }
   return try_;
+}
+
+/**
+ * Whether a tick's deliverable is an ANSWER rather than a change — the port
+ * of `internal/reconcile`'s `isRoleJob` (profiles.go): review and closeout
+ * run through the same executor as any implementation tick, but what the
+ * reconciler acts on is the answer they return, and that answer is what the
+ * run-state contract's decision record exists to hold.
+ */
+export function isRoleJob(role: string): boolean {
+  return role === "review-epic" || role === "closeout-epic";
+}
+
+/**
+ * The number a new recorded exchange takes. Decision numbers are run-wide
+ * identity, the same rule attempt numbers answer to: a number names its
+ * record and every citation of the exchange.
+ */
+export function nextDecisionNumber(decisions: Array<{ decision: number }>): number {
+  let number = decisions.length + 1;
+  for (const existing of decisions) {
+    if (existing.decision >= number) number = existing.decision + 1;
+  }
+  return number;
+}
+
+/** The minimal shape a recorded exchange is adopted by. */
+type DecisionKey = {
+  decision: number;
+  role: string;
+  request: Record<string, unknown>;
+  response: Record<string, unknown>;
+};
+
+/**
+ * The recorded exchange for one attempt, if the run branch holds one — keyed
+ * by tick, attempt AND role, so a redispatch under a new number can never be
+ * mistaken for the previous attempt's answer.
+ */
+function decisionFor(
+  decisions: DecisionKey[],
+  role: string,
+  tickID: string,
+  attempt: number
+): DecisionKey | null {
+  for (const existing of decisions) {
+    if (existing.role !== role) continue;
+    if (existing.request.tick_id !== tickID) continue;
+    if (existing.request.attempt !== attempt) continue;
+    return existing;
+  }
+  return null;
+}
+
+/**
+ * Whether an executor report carries the shape the settle acts on. The
+ * collect of a role job IS the answer this host records — an answer outside
+ * the closed vocabulary is not recorded as a decision, and settles as an
+ * attempt that left nothing, the same closed-envelope rule the local
+ * `collectRole` holds a role result to.
+ */
+function reportIsShaped(
+  report: { outcome?: unknown; commits?: unknown; detail?: unknown }
+): report is AttemptReport {
+  return (
+    (report.outcome === "done" || report.outcome === "blocked" || report.outcome === "failed") &&
+    typeof report.commits === "number" &&
+    report.commits >= 0 &&
+    typeof report.detail === "string" &&
+    report.detail !== ""
+  );
+}
+
+/**
+ * The phase a recorded exchange names — the same mapping the local
+ * reconciler's `phaseFor` makes, and the same closed vocabulary
+ * `$defs.phase` pins.
+ */
+function decisionPhase(role: string): "review" | "closeout" {
+  return role === "review-epic" ? "review" : "closeout";
 }
 
 // ----------------------------------------------------------- the reconciler ---
@@ -450,6 +534,7 @@ export class EpicReconciler {
 
     // ---- settle: every in-flight attempt, from durable evidence.
     let stateChanged = false; // any row mutation this pass — settle or dispatch
+    const decisions = (await store.decisions()) as DecisionKey[]; // recorded exchanges, read once and shadowed below
     for (const [tickID, row] of [...rows]) {
       if (row.state === "reported") {
         // Reported by an earlier pass (or an earlier incarnation): the work
@@ -485,9 +570,61 @@ export class EpicReconciler {
           dispatched: dispatchedThisPass,
         };
       }
-      const status = await executor.inspect(marker.job_handle); // adopted by identity
-      if (status.state === "running") continue;
-      const report = await executor.collect(marker.job_handle);
+      // The exchange's role is the plan's: a review or closeout attempt's
+      // collect is the role-job EXCHANGE — the answer the local reconciler
+      // records as a decision before it decides anything on it. Here that
+      // answer lands on the run branch too, so a restart re-reads it instead
+      // of re-asking a model it already paid.
+      const role = plan.find((entry) => entry.tick_id === tickID)?.role ?? "implement-tick";
+      const recorded = isRoleJob(role)
+        ? decisionFor(decisions, role, tickID, attempt)
+        : null;
+      let report: AttemptReport;
+      if (recorded !== null && reportIsShaped(recorded.response)) {
+        // A decision already names this exact exchange: re-READ it, never
+        // re-ask it. This is what makes a Workflow restart recoverable with
+        // a wiped executor — the answer is on the branch (SPEC §10.4).
+        report = recorded.response;
+      } else {
+        const status = await executor.inspect(marker.job_handle); // adopted by identity
+        if (status.state === "running") continue;
+        report = await executor.collect(marker.job_handle);
+        if (isRoleJob(role) && reportIsShaped(report)) {
+          // The request and the validated response land together, with
+          // provenance — the contract's decision record, create-if-absent:
+          // a refused create is another incarnation's record standing, a
+          // decision is never rewritten, and this pass proceeds on the
+          // answer it already collected either way. A shadow keeps later
+          // numbers in this pass honest against what the ref may hold.
+          const number = nextDecisionNumber(decisions);
+          const outcome = await store.recordDecision({
+            decision: number,
+            role: role as "review-epic" | "closeout-epic",
+            request: {
+              tick_id: tickID,
+              epic_id: store.epicID,
+              attempt,
+              job_id:
+                typeof marker.job_handle.job_id === "string" ? marker.job_handle.job_id : null,
+              write_ref: writeRefFor(store.runID, tickID, attempt),
+              role,
+            },
+            response: { outcome: report.outcome, commits: report.commits, detail: report.detail },
+            validated: true,
+            requested_at: marker.dispatched_at,
+            answered_at: new Date().toISOString(),
+            provenance: { ...marker.provenance, phase: decisionPhase(role) },
+          });
+          if (outcome.state === "created" || outcome.state === "conflict_exists") {
+            decisions.push({
+              decision: number,
+              role: role as "review-epic" | "closeout-epic",
+              request: { tick_id: tickID, attempt },
+              response: { outcome: report.outcome, commits: report.commits, detail: report.detail },
+            });
+          }
+        }
+      }
       if (report.outcome === "done" && report.commits > 0) {
         rows.set(tickID, { tick_id: tickID, state: "reported", attempt });
         const settle = await this.#settleReported(tickID, attempt, rows, dispatchedThisPass);

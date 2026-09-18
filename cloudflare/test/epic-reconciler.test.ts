@@ -8,12 +8,15 @@
  *  - ONE Workflow per EpicRun drives the run (the Workflow-engine test below
  *    creates a real instance through the `EPIC_RECONCILER` binding).
  *  - the run's records are INDISTINGUISHABLE from a local run's: every
- *    checkpoint and attempt record the reconciler writes is validated against
- *    `contracts/ticfac-run-state.json`'s own schemas — the same schema set
+ *    checkpoint, attempt and decision record the reconciler writes is validated
+ *    against `contracts/ticfac-run-state.json`'s own schemas — the same schema set
  *    `internal/runstate` writes for a local run, pinned once for both.
  *  - a Workflow restarted mid-run RESUMES from `.ticfac/`: incarnation two
- *    is a fresh reconciler over the same durable state, and every in-flight
- *    attempt is adopted by its marker's identity — never dispatched over.
+ *    is a fresh reconciler over the same durable state, every in-flight
+ *    attempt is adopted by its marker's identity — never dispatched over —
+ *    and a role job whose answer already landed as a decision is RE-READ,
+ *    never re-asked (tick 9fc: run, attempt and decision records all live on
+ *    the run branch, so the resumed run needs no D1 access at all).
  */
 
 import { env } from "cloudflare:test";
@@ -25,6 +28,8 @@ import { parseDefs, parseSchema, validate, type Defs } from "./json-schema";
 
 import {
   EpicReconciler,
+  isRoleJob,
+  nextDecisionNumber,
   nextAttemptNumber,
   planFrom,
   roleOf,
@@ -40,12 +45,14 @@ import {
 import {
   provenance,
   RunStateStore,
+  ROLES,
   RUN_STATES,
   RUN_STATE_SCHEMA_VERSION,
   terminalState,
   TICK_STATES,
-  checkpointPath,
   attemptPath,
+  checkpointPath,
+  decisionPath,
   type Checkpoint,
 } from "../src/run-state-store";
 import { TrackerClient, encodeTick, type Tick } from "../src/tracker-client";
@@ -60,7 +67,10 @@ const contract = runStateContract as {
 
 const contractDefs: Defs = parseDefs(contract.$defs);
 
-function expectRecordValid(record: string, name: "checkpoint" | "attempt"): void {
+function expectRecordValid(
+  record: string,
+  name: "checkpoint" | "attempt" | "decision"
+): void {
   const schema = parseSchema(contract.schemas[name], "$");
   const errors = validate(schema, contractDefs, JSON.parse(record));
   expect(errors, `${name} must satisfy the pinned run-state schema: ${errors.join("; ")}`).toEqual([]);
@@ -186,6 +196,8 @@ class FakeExecutor implements AttemptExecutor {
   readonly started: Array<{ tick_id: string; attempt: number; write_ref: string }> = [];
   readonly settled = new Map<string, AttemptReport>();
   readonly cancelled: string[] = [];
+  /** Every collect this executor was asked for, in order — what a resumed run must NOT re-ask. */
+  readonly collects: string[] = [];
 
   constructor(readonly contents: MemoryContents) {}
 
@@ -213,6 +225,7 @@ class FakeExecutor implements AttemptExecutor {
   }
 
   async collect(handle: AttemptHandle): Promise<AttemptReport> {
+    this.collects.push(this.#key(handle));
     return (
       this.settled.get(this.#key(handle)) ?? { outcome: "failed", commits: 0, detail: "never settled" }
     );
@@ -235,6 +248,17 @@ class FakeIntegration implements IntegrationHost {
   async integrate(input: { tick_id: string; attempt: number; write_ref: string }) {
     this.integrated.push(`${input.tick_id}#${input.attempt}`);
     return { integrated: true as const };
+  }
+}
+
+/**
+ * An isolate that dies mid-settle, after the decision write and before the
+ * integration: the crash shape a restart must recover the already-recorded
+ * exchange from.
+ */
+class DyingIntegration implements IntegrationHost {
+  async integrate(): Promise<{ integrated: true } | { integrated: false; reason: string }> {
+    throw new Error("died mid-settle: the isolate crashed after recording the decision");
   }
 }
 
@@ -296,6 +320,15 @@ describe("the plan, ported", () => {
     expect(nextAttemptNumber([{ attempt: 1 }, { attempt: 2 }])).toBe(3);
     expect(nextAttemptNumber([{ attempt: 4 }, { attempt: 2 }])).toBe(5);
     expect(tryOf([{ attempt: 1, tick_id: "t01" }, { attempt: 3, tick_id: "t02" }], "t01", 3)).toBe(2);
+    expect(nextDecisionNumber([{ decision: 1 }, { decision: 2 }])).toBe(3);
+    expect(nextDecisionNumber([{ decision: 4 }, { decision: 2 }])).toBe(5);
+    // Only review and closeout are role jobs — the port of the Go
+    // reconciler's isRoleJob: their deliverable is an ANSWER, and it is
+    // those exchanges a decision record exists to hold.
+    expect(isRoleJob("review-epic")).toBe(true);
+    expect(isRoleJob("closeout-epic")).toBe(true);
+    expect(isRoleJob("implement-tick")).toBe(false);
+    expect(isRoleJob("plan-epic")).toBe(false);
   });
 });
 
@@ -375,6 +408,54 @@ describe("the run state store, against the pinned contract", () => {
     expect(second.state).toBe("conflict_exists");
   });
 
+  it("records decisions create-if-absent: one validated exchange, never rewritten", async () => {
+    const contents = sharedContents();
+    const store = storeFor(contents);
+    const exchange = {
+      role: "review-epic" as const,
+      request: {
+        tick_id: "rev1",
+        epic_id: EPIC_ID,
+        attempt: 5,
+        job_id: `run-${RUN_ID}/tick-rev1/attempt-5`,
+        write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-rev1/attempt-5`,
+        role: "review-epic",
+      },
+      response: { outcome: "done", commits: 0, detail: "the review found nothing to refuse" },
+      validated: true,
+      requested_at: NOW.toISOString(),
+      answered_at: NOW.toISOString(),
+    };
+
+    const first = await store.recordDecision({ decision: 1, ...exchange });
+    expect(first.state).toBe("created");
+    expectRecordValid((await contents.read(decisionPath(RUN_ID, 1)))!.content, "decision");
+
+    // A decision is created once and never rewritten: the same number is the
+    // repository refusing a second recording of one exchange, the same
+    // create-if-absent rule an attempt marker answers to.
+    const again = await store.recordDecision({ decision: 1, ...exchange });
+    expect(again.state).toBe("conflict_exists");
+    expect((await store.decision(1))?.request).toMatchObject({ tick_id: "rev1", attempt: 5 });
+    expect((await store.decisions()).map((d) => d.decision)).toEqual([1]);
+
+    // The VALIDATED answer is what lands. An unvalidated response is refused
+    // before it is written — an unvalidated model answer landing as a
+    // decision is how a hallucinated wave gets dispatched, which is the
+    // local store's own rule (Decision.Validate).
+    await expect(
+      store.recordDecision({ decision: 2, ...exchange, validated: false })
+    ).rejects.toThrow(/validated/);
+    expect(await contents.read(decisionPath(RUN_ID, 2))).toBeNull();
+
+    // The role vocabulary is the pinned bundle's — a role outside it is
+    // refused before anything is written.
+    await expect(
+      store.recordDecision({ decision: 2, ...exchange, role: "not-a-role" as never })
+    ).rejects.toThrow(/role/);
+    expect(await contents.read(decisionPath(RUN_ID, 2))).toBeNull();
+  });
+
   it("terminal states: completed and cancelled end a run, failed is resumable", () => {
     expect(terminalState("completed")).toBe(true);
     expect(terminalState("cancelled")).toBe(true);
@@ -388,6 +469,9 @@ describe("the run state store, against the pinned contract", () => {
     expect([...TICK_STATES]).toEqual(
       (contract.$defs as { tick_state: { properties: { state: { enum: string[] } } } }).tick_state.properties.state.enum
     );
+    // The role vocabulary is the pinned bundle's too — the decisions this
+    // run records name their role from the same closed enum a local run's do.
+    expect([...ROLES]).toEqual((contract.$defs as { role: { enum: string[] } }).role.enum);
   });
 });
 
@@ -487,6 +571,44 @@ describe("the reconciler's window and records", () => {
     }
     // Each tick was integrated exactly once, before its close.
     expect(integration.integrated.length).toBe(6);
+
+    // The role-job exchanges — and ONLY those, the same rule the local
+    // reconciler records by (isRoleJob: review and closeout, whose
+    // deliverable is an answer) — landed on the run branch as the
+    // contract's decision records, so a resumed run re-reads them with no
+    // D1 access at all. An implement-tick attempt's verdict is its branch
+    // and the gate, never a recorded answer.
+    const decisionFiles = await contents.list(`.ticfac/runs/${RUN_ID}/decisions`);
+    expect(decisionFiles).toEqual([
+      `.ticfac/runs/${RUN_ID}/decisions/1.json`,
+      `.ticfac/runs/${RUN_ID}/decisions/2.json`,
+    ]);
+    const byTick = new Map<string, { role: string; phase: string; response: Record<string, unknown> }>();
+    for (const path of decisionFiles) {
+      const file = (await contents.read(path))!;
+      expectRecordValid(file.content, "decision");
+      const record = JSON.parse(file.content) as {
+        role: string;
+        request: Record<string, unknown>;
+        response: Record<string, unknown>;
+        provenance: { phase: string; tick_id: string | null };
+      };
+      byTick.set(String(record.request.tick_id), {
+        role: record.role,
+        phase: record.provenance.phase,
+        response: record.response,
+      });
+    }
+    expect([...byTick.keys()].sort()).toEqual(["clo1", "rev1"]);
+    expect(byTick.get("rev1")?.role).toBe("review-epic");
+    expect(byTick.get("rev1")?.phase).toBe("review");
+    expect(byTick.get("rev1")?.response).toMatchObject({
+      outcome: "done",
+      commits: 2,
+      detail: "pushed and reported",
+    });
+    expect(byTick.get("clo1")?.role).toBe("closeout-epic");
+    expect(byTick.get("clo1")?.phase).toBe("closeout");
   });
 });
 
@@ -630,6 +752,131 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     expect(integration.integrated).toContain("t01#1");
   });
 
+  it("re-reads a recorded decision rather than re-asking the executor", async () => {
+    const contents = sharedContents();
+    const executor = new FakeExecutor(contents);
+    const integration = new FakeIntegration();
+
+    // Incarnation one drives the work ticks to closed and dispatches the
+    // skeleton — the review, and the closeout beside it in the window.
+    const firstIncarnation = reconcilerFor(contents, executor, integration);
+    let reviewAttempt = 0;
+    let closeoutAttempt = 0;
+    for (;;) {
+      const outcome = await firstIncarnation.reconcilePass();
+      const review = outcome.dispatched.find((d) => d.tick_id === "rev1");
+      if (review !== undefined) {
+        reviewAttempt = review.attempt;
+        closeoutAttempt = outcome.dispatched.find((d) => d.tick_id === "clo1")?.attempt ?? 0;
+        break;
+      }
+      if (outcome.terminal) {
+        throw new Error(`the run ended before the review was dispatched: ${outcome.reason}`);
+      }
+      for (const dispatch of outcome.dispatched) {
+        executor.finish(dispatch.tick_id, dispatch.attempt, {
+          outcome: "done",
+          commits: 1,
+          detail: "pushed",
+        });
+      }
+    }
+
+    // The review container finishes; the closeout's is still booting. The
+    // settling pass collects the review's answer, records it as a decision
+    // on the run branch — then the isolate dies mid-settle, after the decision
+    // write and before the integration, the row write or the close. The
+    // decision is on the ref and the checkpoint still says dispatched: the
+    // crash shape a restart must recover the recorded exchange from.
+    executor.finish("rev1", reviewAttempt, {
+      outcome: "done",
+      commits: 2,
+      detail: "the review found nothing to refuse",
+    });
+    const dying = reconcilerFor(contents, executor, new DyingIntegration());
+    await expect(dying.reconcilePass()).rejects.toThrow(/died mid-settle/);
+
+    expect((await contents.read(decisionPath(RUN_ID, 1)))?.content).toBeTruthy();
+    expectRecordValid((await contents.read(decisionPath(RUN_ID, 1)))!.content, "decision");
+    const recorded = JSON.parse((await contents.read(decisionPath(RUN_ID, 1)))!.content) as {
+      role: string;
+      request: Record<string, unknown>;
+      response: Record<string, unknown>;
+      provenance: { tick_id: string | null; attempt: number | null; phase: string };
+    };
+    expect(recorded.role).toBe("review-epic");
+    expect(recorded.request).toMatchObject({ tick_id: "rev1", epic_id: EPIC_ID, attempt: reviewAttempt });
+    expect(recorded.response).toMatchObject({
+      outcome: "done",
+      commits: 2,
+      detail: "the review found nothing to refuse",
+    });
+    expect(recorded.provenance.tick_id).toBe("rev1");
+    expect(recorded.provenance.attempt).toBe(reviewAttempt);
+    expect(recorded.provenance.phase).toBe("review");
+    // The row write the dying pass never reached: still dispatched on the ref.
+    expect((await readCheckpoint(contents))?.ticks?.find((t) => t.tick_id === "rev1")?.state).toBe(
+      "dispatched"
+    );
+
+    // Incarnation two: a FRESH reconciler over the same durable state — a
+    // contents store and the tracker, no database anywhere. It re-reads the
+    // recorded decision for the review (the executor is never asked for that
+    // answer again: a validated decision is a thing a model was paid for
+    // once) and closes it, while the closeout's container is still running.
+    const collectedBefore = executor.collects.length;
+    const secondIncarnation = reconcilerFor(contents, executor, integration);
+    const resume = await secondIncarnation.reconcilePass();
+    expect(resume.terminal).toBe(false);
+    expect(executor.collects.length).toBe(collectedBefore); // nothing re-asked
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "rev1")?.state).toBe("closed");
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "clo1")?.state).toBe("dispatched");
+
+    // The closeout container finishes; the resumed run collects it for the
+    // first time, records ITS decision, and completes the epic.
+    executor.finish("clo1", closeoutAttempt, {
+      outcome: "done",
+      commits: 1,
+      detail: "the closeout wrote the retro",
+    });
+    const run = await drive(async () => secondIncarnation.reconcilePass());
+    expect(run.outcome.state).toBe("completed");
+    // The review was collected exactly once — by the incarnation that died —
+    // and its answer was re-read from the run branch ever after. The
+    // closeout is the only exchange collected after the crash.
+    expect(executor.collects.filter((key) => key.includes("tick-rev1")).length).toBe(1);
+    expect(executor.collects.length).toBe(collectedBefore + 1);
+
+    const decisionFiles = await contents.list(`.ticfac/runs/${RUN_ID}/decisions`);
+    expect(decisionFiles).toEqual([
+      `.ticfac/runs/${RUN_ID}/decisions/1.json`,
+      `.ticfac/runs/${RUN_ID}/decisions/2.json`,
+    ]);
+    for (const path of decisionFiles) {
+      expectRecordValid((await contents.read(path))!.content, "decision");
+    }
+    const review = JSON.parse((await contents.read(decisionPath(RUN_ID, 1)))!.content) as {
+      role: string;
+      request: Record<string, unknown>;
+      provenance: { phase: string };
+    };
+    expect(review.role).toBe("review-epic");
+    expect(review.request).toMatchObject({ tick_id: "rev1", attempt: reviewAttempt });
+    expect(review.provenance.phase).toBe("review");
+    const closeout = JSON.parse((await contents.read(decisionPath(RUN_ID, 2)))!.content) as {
+      role: string;
+      request: Record<string, unknown>;
+      provenance: { phase: string };
+    };
+    expect(closeout.role).toBe("closeout-epic");
+    expect(closeout.request).toMatchObject({ tick_id: "clo1", attempt: closeoutAttempt });
+    expect(closeout.provenance.phase).toBe("closeout");
+    const final = await readCheckpoint(contents);
+    expect(final?.state).toBe("completed");
+    expect(final?.ticks?.every((t) => t.state === "closed")).toBe(true);
+  });
+
   it("a terminal non-failed checkpoint is not restarted by replay", async () => {
     const contents = sharedContents();
     const store = storeFor(contents);
@@ -758,6 +1005,21 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     for (const path of markers) {
       expectRecordValid((await contents.read(path))!.content, "attempt");
     }
+    // The role-job exchanges landed on the run branch as decision records —
+    // and D1 was never asked to hold any of the run's state. The runs index
+    // is the submission control plane's, not the reconciler's; this run's
+    // records are all in the repository it runs against, which is what
+    // makes a resumed Workflow recoverable with no database at all (SPEC
+    // §10.4, tick 9fc).
+    const decisions = await contents.list(`.ticfac/runs/${runID}/decisions`);
+    expect(decisions.length).toBe(2);
+    for (const path of decisions) {
+      expectRecordValid((await contents.read(path))!.content, "decision");
+    }
+    const indexed = await env.DB.prepare("SELECT run_id FROM runs WHERE run_id = ?")
+      .bind(runID)
+      .first<{ run_id: string }>();
+    expect(indexed).toBeNull();
     expect(instance.id).toBe(runID);
     const status = (await instance.status()) as { status?: string };
     expect(String(status.status)).toContain("complete");
