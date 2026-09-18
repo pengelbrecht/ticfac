@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 5,
-  "state": "running",
-  "reason": "z23 is running as attempt 2",
-  "updated_at": "2026-09-18T14:08:08Z",
+  "sequence": 6,
+  "state": "collecting",
+  "reason": "collecting l9n attempt 1",
+  "updated_at": "2026-09-18T15:01:18Z",
   "ticks": [
     {
       "tick_id": "l9n",
