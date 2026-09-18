@@ -1,0 +1,14 @@
+{
+  "id": "3xe",
+  "title": "Re-measure fileParallelism: the corruption it works around may be fixed",
+  "description": "cloud/factory's vitest config sets fileParallelism: false, so 53 test files run strictly serially. The comment (legacy tick 5qj) records why: the suite runs inside real workerd, and run-workflow.test.ts drives Workflows, Durable Objects and D1 with wall-clock budgets; beside other files on a 2-vCPU runner it failed with hung-context cancellations, 'evicted mid-commit' and 'no such table' - state torn out from under a live test, not code under test.\n\nThat was a real observation and the workaround was right. It may also be stale: @cloudflare/vitest-pool-workers has isolated storage per test file, and the versions have moved since. This tick is to MEASURE, not to flip the flag: run the suite with fileParallelism on, repeatedly, and see whether the corruption returns.\n\nIf it does, record that and leave the flag alone - the 5qj comment gets a date and a version rather than being quietly deleted. If it does not, the serial cost (most of a 345s run) comes back.\n\nThe trap to avoid is the one cy2 is about: five tests in this project have already refused innocent work because they sampled timing rather than waiting for it. Turning on parallelism without measuring would manufacture exactly that failure class in a second language.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "A recorded measurement of the suite with fileParallelism enabled, repeated enough times to distinguish a pass from luck. Either the flag is on and the suite is stable across those runs, or it stays off and the comment records the version and date the corruption was last confirmed.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T15:39:34.212004Z",
+  "updated_at": "2026-09-18T15:39:34.212004Z"
+}

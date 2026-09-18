@@ -80,7 +80,7 @@ effort = "high"
 # keeps -count=1) before trusting a green gate about THOSE guards.
 go = { command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
 
-# The TypeScript half, added by tick odc. Until it, NOTHING ran cloudflare's
+# The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the
 # control plane sat pinned to contract bundle 3.0.0 against a 5.2.0 bundle,
 # wrong about three record shapes, for two major versions.
@@ -115,7 +115,19 @@ go = { command = "go test -short -timeout 45m -parallel 12 ./...", description =
 #
 # This is still CONTRACTS AND TYPES, not behaviour: Biome reads one file at a
 # time and answers about its shape, not about what the Worker does.
-ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript format, lint, contracts and types" }
+#
+# The two-layout dance is a TRANSITION MEASURE, not a style. This command is
+# read from the RUN'S checkout while it runs against the MERGED tree (defect
+# 19q), so while Phase 4's l9n moves cloud/factory to cloudflare/ the two
+# disagree: main still says the old path, the merged tree only has the new one,
+# and l9n could never pass the gate whose job it was to move. Trying the new
+# location first and falling back keeps both trees gateable across the move.
+# DELETE the fallback once the move has reached main — and note that the
+# fallback arm cannot run `pnpm lint` at all (Biome is a dependency of
+# cloudflare/, which is the layout that replaces it), so the old layout is
+# gateable for contracts and types only. That is the correct trade for a path
+# that exists to be deleted.
+ts = { command = "{ cd cloudflare 2>/dev/null || cd cloud/factory; } && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript format, lint, contracts and types" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }
