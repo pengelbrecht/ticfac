@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching l9n as attempt 1",
-  "updated_at": "2026-09-18T14:07:25Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "l9n is running as attempt 1",
+  "updated_at": "2026-09-18T14:07:40Z",
   "ticks": [
     {
       "tick_id": "l9n",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "z23",
