@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 6,
-  "state": "collecting",
-  "reason": "collecting l9n attempt 1",
-  "updated_at": "2026-09-18T15:01:18Z",
+  "sequence": 7,
+  "state": "integrating",
+  "reason": "integrating l9n attempt 1 into epic/ncv",
+  "updated_at": "2026-09-18T15:01:55Z",
   "ticks": [
     {
       "tick_id": "l9n",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
