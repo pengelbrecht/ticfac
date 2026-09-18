@@ -464,13 +464,29 @@ func TestNoCIOnThePRRefusesUnsatisfiable(t *testing.T) {
 
 // A CI that never concludes is a wait the run BOUNDS: the refusal names the
 // clock, and re-running the epic re-derives the admission from the PR.
+// ciWaitBound is what the CI-wait tests set GateTimeout to.
+//
+// One knob bounds two different things: how long the close-out waits for a
+// pending CI answer, AND how long any single gate COMMAND may run. The CI wait
+// wants a small number so the test is quick; the gate command wants a number
+// comfortably above shell noise, because the fixture's gate is
+// `test -f README.md && ls work-*.txt` and killing that produces
+// "tree (error)" instead of the CI refusal the test is about.
+//
+// At 200ms those two wants collided. The command takes about five milliseconds
+// on an idle machine and sailed past 200ms under the integrated gate's load,
+// so this test failed claiming tick a2's gate errored — refusing tick sqx for
+// the machine's speed rather than anything in the tree. Two seconds is still
+// fast and is far outside anything a two-command shell script does.
+const ciWaitBound = 2 * time.Second
+
 func TestAPendingCIThatNeverConcludesIsBounded(t *testing.T) {
 	t.Parallel()
 	forge := &fakeForge{exists: true, pr: openPR(),
 		ci: []forge.CIReport{{State: forge.CIPending}}}
-	f := newFixture(t, fixtureOptions{pullRequests: forge, gateTimeout: 200 * time.Millisecond})
+	f := newFixture(t, fixtureOptions{pullRequests: forge, gateTimeout: ciWaitBound})
 	declareCloseoutRule(t, f.Repo)
-	_, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge, gateTimeout: 200 * time.Millisecond})
+	_, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge, gateTimeout: ciWaitBound})
 	if err != nil {
 		t.Fatal(err)
 	}
