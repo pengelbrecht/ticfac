@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "n4h",
   "attempt": 32,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-18T08:30:34Z",
+  "triaged_at": "2026-09-18T08:40:25Z",
+  "triaged_by": "claude:orchestrator",
+  "promoted_as": "brc",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "n4h",
