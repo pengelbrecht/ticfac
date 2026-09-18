@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 310,
-  "state": "gating",
-  "reason": "running the integrated gate for vw0 on f797ba058700",
-  "updated_at": "2026-09-18T07:47:59Z",
+  "sequence": 311,
+  "state": "publishing",
+  "reason": "closing vw0 behind the integrated gate on f797ba058700",
+  "updated_at": "2026-09-18T07:55:25Z",
   "ticks": [
     {
       "tick_id": "0z0",
