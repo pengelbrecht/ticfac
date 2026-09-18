@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 361,
-  "state": "running",
-  "reason": "the epic PR #3 (epic/9pd → main) is open; close-out of 9pd waits on CI",
-  "updated_at": "2026-09-18T11:06:21Z",
+  "sequence": 362,
+  "state": "failed",
+  "reason": "no CI has run on the epic PR #3 (https://github.com/pengelbrecht/ticfac/pull/3): .github/workflows/ci.yml has produced no check runs on its head, so the close-out's precondition is unsatisfiable by waiting — the workflow may not trigger on pull_request at all. The rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch.",
+  "updated_at": "2026-09-18T11:06:24Z",
   "ticks": [
     {
       "tick_id": "0z0",
