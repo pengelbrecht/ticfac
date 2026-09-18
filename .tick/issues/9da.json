@@ -1,0 +1,13 @@
+{
+  "id": "9da",
+  "title": "The close-out cannot pass: its own checkpoint writes move the PR head it gates CI on",
+  "description": "A deadlock, observed live at the end of epic 9pd and reproduced on every resume.\n\nThe run's durable state lives in .ticfac/ ON the integration branch, and the close-out gates on CI of the epic PR whose head IS that branch. So:\n\n1. the run resumes and writes a checkpoint, which pushes to epic/9pd\n2. the PR head moves to that checkpoint commit\n3. the close-out asks the forge for CI on the PR's head - a commit created seconds ago, on which GitHub has not started any check\n4. it sees zero check runs and refuses with closeout_ci_absent\n5. the operator resumes, and step 1 happens again\n\nObserved: heads cde6d962 -\u003e 73fdbb59 -\u003e ae0089e75, each refused, and the last four commits on epic/9pd are all 'update .ticfac/runs/epic-9pd/checkpoint.json'. CI was green the whole time on whichever head had stood still long enough - three checks, completed, success - and the run never saw it.\n\nThis is the collision of two decisions that are each right alone: run records are durable on the run branch (so a resumed run can read them), and the epic's merge is gated on CI of that branch (so nothing reaches main unproven). Together they mean the gate's subject is rewritten by the act of gating.\n\nCandidate repairs, none obviously free: ask CI about the last NON-run-state commit; keep run state on a separate ref that is not the PR's head; or have the close-out stop writing checkpoints between reading the PR and reading its CI, and wait for checks to appear rather than refusing an absence it just caused.\n\nRelates to vgg (stale head) - same seam, and vgg's 'always re-read the head' would make this worse, not better, because the freshest head is the one with no CI.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An epic close-out completes on a repository that declares the PR + CI rule, with the run's own checkpoint writes happening as they do today. A test drives a close-out whose checkpoint push moves the PR head and shows it still reaching a CI verdict rather than refusing an absence it caused.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T11:09:06.723773Z",
+  "updated_at": "2026-09-18T11:09:06.723773Z"
+}

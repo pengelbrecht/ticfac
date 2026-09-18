@@ -529,3 +529,4 @@
 {"ts":"2026-09-18T10:15:20.778416Z","tick":"qqy","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"Private per-instance fetch refs accumulate forever and pin deleted branches against gc","type":"task"}}
 {"ts":"2026-09-18T10:15:39.005368Z","tick":"b05","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"The all-errors fixture misses collect's branch-fallback read, and everyHerdrMethod omits pane.close","type":"task"}}
 {"ts":"2026-09-18T11:04:58.033836Z","tick":"vgg","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"The close-out holds on CI for a stale PR head and never sees the green it is waiting for","type":"task"}}
+{"ts":"2026-09-18T11:09:06.725251Z","tick":"9da","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"The close-out cannot pass: its own checkpoint writes move the PR head it gates CI on","type":"task"}}
