@@ -637,3 +637,4 @@
 {"ts":"2026-09-18T07:46:27.683746Z","tick":"15i","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"fake-runner's wallwip mode still gates on the run-wide attempt number","type":"task"}}
 {"ts":"2026-09-18T07:46:27.735782Z","tick":"65s","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"ticfac-exec-subprocess start accepts --attempt but not --try","type":"task"}}
 {"ts":"2026-09-18T07:55:32.974558Z","tick":"vw0","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"\n2026-09-18 09:55 - ticfac run epic-9pd: attempt 30 merged into epic/9pd as f797ba058700; the integrated gate (go) passed.","title":"fake-runner's blocked-first mode keys on the run-wide attempt number"}}
+{"ts":"2026-09-18T07:55:38.257136Z","tick":"vw0","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"fake-runner's blocked-first mode keys on the run-wide attempt number"}}
