@@ -146,10 +146,13 @@ watch flags:
 
 "watch" is the consumer the run event feed was built for: it subscribes like
 events --follow, and when the run stops holding a tick for a person it SAYS
-SO — which tick, which attempt, why, and the command that moves it on. Exit
-codes: 0 the run ended (the last line says how), 3 it ended holding something
-only a person can move, 1 the feed could not be read or the watch was
-interrupted, 2 usage. A run whose process died without a terminal line is
+SO — which tick, which attempt, why, and the command that moves it on. With a
+live run it joins the CURRENT incarnation: the ending of a previous
+incarnation is not replayed, and a hold already standing when the watch
+starts is reported as the hold it joined. Exit codes: 0 the run ended (the
+last line says how), 3 it ended holding something only a person can move,
+1 the feed could not be read or the watch was interrupted, 2 usage. A run
+whose process died without a terminal line is
 ticfac status's question, not the feed's.
 
 events flags:

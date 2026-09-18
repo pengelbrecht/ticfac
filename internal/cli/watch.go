@@ -37,7 +37,8 @@ const ExitHeld = 3
 // the line, in fields) and the refusal's own reason; the alert repeats all
 // three and says the command that moves the hold on. The watch keeps
 // following until the run reaches its own terminal line, so it never reports
-// an end the run did not write.
+// an end the run did not write — where "its own" is the point the cursor
+// below exists to keep honest on a resumed run.
 //
 // A line is still a hint about when to LOOK, never a verdict: the alert sends
 // a person to the durable evidence — the branch, the report, the decisions on
@@ -45,6 +46,30 @@ const ExitHeld = 3
 // whose process died without a terminal line is `ticfac status`'s question,
 // not the feed's; a watch that has not returned is following a run that has
 // not said it ended.
+//
+// WHERE the subscription starts is decided from the run's own liveness claim
+// (tick usx). The feed is append-only per RUN ID, so a resumed run appends to
+// a file a previous, failed incarnation already ended with a terminal line,
+// and a watch that replays the standing feed from offset zero reads that
+// ending FIRST — it exits at once and reports a failure that already
+// happened, even a hold the release has already settled: the same defect
+// `events --follow` carried (ticfac tick 55i), in the command built to be
+// alerted by it. So:
+//
+//   - A LIVE process claims the run: an incarnation is in flight, and every
+//     terminal line standing in the feed belongs to an earlier one. The watch
+//     joins the CURRENT incarnation — everything after the last terminal
+//     line, then each line as it lands — which is also the decided run_held
+//     semantics: a watch started while the run is already holding reports
+//     the hold it joined, because the current incarnation's run_held line
+//     stands after the last terminal line and is delivered, not skipped.
+//
+//   - No live process claims the run — it ended and released, or nobody has
+//     claimed it here: the standing feed IS the run's last word, so the watch
+//     replays it whole and ends on its terminal line the way it always did.
+//     A run about to be resumed has not claimed yet; its previous ending was
+//     the truth until the resume, and a watch started in that gap reports
+//     that ending rather than an open-ended silence.
 func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -68,13 +93,17 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	path := runfeed.Path(*repo, runID)
 
+	// The run's own liveness claim, asked once up front: it decides both
+	// whether there is anything to watch at all and, below, where the
+	// subscription starts.
+	probe := runlife.Probe(*repo, runID, time.Now())
+
 	// A watcher may be started beside the run it watches, before the feed's
 	// first line exists — that is the good case, and waiting is the point. A
 	// LIVE pidfile is the run's own claim that it will write one, so it is
 	// what tells "too early to watch" from "nothing to watch here"; a run
 	// with neither a feed nor a live claim never ran on this checkout.
 	if _, err := os.Stat(path); errors.Is(err, iofs.ErrNotExist) {
-		probe := runlife.Probe(*repo, runID, time.Now())
 		if probe.State != runlife.Alive {
 			fmt.Fprintf(stderr, "ticfac watch: no feed for run %s at %s — and no live process claims the run "+
 				"here, so there is nothing to watch. %s\n", runID, path, probe.Reason)
@@ -128,7 +157,31 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			cancel()
 		}
 	}
-	if err := runfeed.Follow(followCtx, path, print); err != nil {
+	// Where the subscription starts (tick usx): offset zero replays the whole
+	// standing feed; a live run's cursor is just past the last terminal line,
+	// so the watch joins the current incarnation and no earlier one. A
+	// terminal line read here is history by construction — it stands BEFORE the
+	// cursor — so the watch can still end only on a terminal line the current
+	// incarnation writes (or, with no live claim, the run's own last word).
+	cursor := int64(0)
+	if probe.State == runlife.Alive {
+		located, err := runfeed.ReadLocated(path)
+		switch {
+		case errors.Is(err, iofs.ErrNotExist):
+			// The live run has not written its first line yet: everything it
+			// will say is still to come, from offset zero.
+		case err != nil:
+			fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+			return 1
+		default:
+			for _, line := range located {
+				if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
+					cursor = line.End
+				}
+			}
+		}
+	}
+	if err := runfeed.FollowFrom(followCtx, path, cursor, print); err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 		return 1
 	}
