@@ -164,6 +164,22 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 		}
 	}
 
+	// The close-out's own commits are the one thing the admission's green CI
+	// is not evidence about (tick sqx): they are already merged onto the
+	// integration branch — the PR's head — and CI runs again on that head.
+	// The close-out's CLOSE is gated on green CI for IT, re-derived from the
+	// PR rather than trusted from the admission, for the same reason CI
+	// state is re-derived there: CI's answer changes with every push, and
+	// this push was the close-out's own. Other roles integrate onto the same
+	// branch and move the same head — but the rule a repository declares is
+	// a gate on the epic's CLOSE-OUT, the phase whose own writes are its
+	// deliverable, and their closes stand on the integrated gate above.
+	if entry.Role == "closeout-epic" {
+		if err := r.gateCloseoutClose(ctx, marker, merged); err != nil {
+			return err
+		}
+	}
+
 	return r.closeTick(ctx, entry, marker, collected, merged)
 }
 

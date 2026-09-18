@@ -41,6 +41,13 @@ import (
 // than trusted from the checkpoint: CI's answer changes with every push, and
 // a checkpointed "green" is stale evidence — the same reason the gate's
 // evidence is keyed by the commit it ran on.
+//
+// The admission is the FIRST of this file's two CI gates. The second is the
+// close's own (tick sqx, gateCloseoutClose): the admission covers the head
+// as it stands when the close-out STARTS, and the close-out's own commits —
+// the very thing the phase exists to write — then move that head, so the
+// CLOSE re-derives CI from the PR before it happens rather than trusting the
+// admission's green. One rule, two gates, one gap.
 
 // ------------------------------------------------------- the rule itself ---
 
@@ -257,6 +264,132 @@ func (r *Reconciler) prBase() string {
 		return r.opts.BaseRef
 	}
 	return "main"
+}
+
+// gateCloseoutClose is the close-out's OTHER CI gate (tick sqx): the one
+// over the head the admission's green CI is not evidence about. The
+// admission checks the epic PR's head as it stands when the close-out
+// STARTS; the close-out then writes — a retro, the learnings it compacts —
+// and those integrate onto the epic branch, which IS the PR's head, so CI
+// runs again on a tree nobody gated. The pwp run is why the gap is not
+// theoretical: its close-out committed records a public-repo guard then
+// failed on, the admission stayed green, and the close stood behind
+// evidence about a head that no longer existed.
+//
+// It runs at the CLOSE — after the integrated gate, before the tick closes —
+// and re-derives CI from the PR the way the admission does, never from a
+// checkpoint, because CI's answer changes with every push and this push was
+// the close-out's own. A repo that declares no rule has no PR to ask and no
+// CI to wait on, so the gate is a no-op there, exactly as the admission is.
+//
+// One deliberate difference from the admission's loop: CI reporting
+// NOTHING on the head is a wait here rather than an immediate refusal. At
+// the admission, `none` means the workflow does not trigger on
+// pull_request at all — unsatisfiable by waiting. At the close, the run
+// itself just pushed the head CI is asked about, and between that push and
+// the forge's first check run there is a window where nothing has reported
+// yet: refusing it as unsatisfiable would end a healthy run on a race. So
+// it is held against the same clock the admission's pending wait uses, and
+// only a `none` that survives that bound is the workflow's failure again.
+func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle, merged merge) error {
+	tick := marker.TickID
+	if !r.closeoutRule.Declared {
+		return nil
+	}
+	if r.opts.PullRequests == nil {
+		// Defensive, and the same fail-closed answer the admission keeps: New
+		// refuses this configuration before anything is claimed, and the
+		// admission for this very tick already needed the surface to pass.
+		return r.refuse(RefusedCloseoutForge, tick,
+			"the repository declares the PR + CI close-out rule, and this build has no code-hosting surface "+
+				"to gate the close-out's close on: %s", r.closeoutRule.Stated)
+	}
+
+	// The PR is looked up rather than remembered from the admission, for the
+	// same reason the admission looks before it opens: the forge is the PR's
+	// authority the way origin is the run's, and a PR a resumed run — or a
+	// person — closed or reopened in between must be read as it stands.
+	head, base := r.branch, r.prBase()
+	pr, err := r.opts.PullRequests.Find(ctx, head, base)
+	if err != nil {
+		return r.refuse(RefusedCloseoutPR, tick,
+			"the close-out of %s cannot be gated on CI: the code-hosting surface could not say whether the epic PR "+
+				"still exists for %s (→ %s): %v. The rule the repository declares is: %s",
+			tick, head, base, err, r.closeoutRule.Stated)
+	}
+	if pr == nil {
+		return r.refuse(RefusedCloseoutPR, tick,
+			"the epic PR for %s (→ %s) is gone: the close-out's commits are merged onto %s, but a close-out "+
+				"whose rule declares a PR does not close behind a PR that no longer exists. Re-run the epic: the "+
+				"admission re-opens the PR and the close is gated again", head, base, r.branch)
+	}
+
+	// The CI wait, with the admission's own bound: a CI run on the PR is a
+	// gate this run waits on, and the same clock that bounds the admission's
+	// wait bounds the close's.
+	deadline := r.now().Add(r.opts.GateTimeout)
+	for {
+		report, ciErr := r.opts.PullRequests.CI(ctx, *pr)
+		if ciErr != nil {
+			return r.refuse(RefusedCloseoutPR, tick,
+				"the close-out of %s cannot be gated on CI: CI on the epic PR #%d could not be read: %v. "+
+					"The rule the repository declares is: %s", tick, pr.Number, ciErr, r.closeoutRule.Stated)
+		}
+		switch report.State {
+		case forge.CIGreen:
+			r.record(tick, StageCloseoutCloseGated,
+				"CI is green on the epic PR #%d on the head that includes the close-out's own commits (%s); the close proceeds",
+				pr.Number, short(merged.GateSHA))
+			return nil
+		case forge.CIRed:
+			// The refusal is typed apart from the admission's (tick sqx):
+			// both are red CI, but the repairs point at different writers —
+			// the epic's tree at the admission, the close-out's own writes
+			// here — and a person reading the run's record reads WHICH red
+			// CI stopped the run from the reason alone.
+			r.setTick(tick, "rejected")
+			r.record(tick, StageCloseoutHeld,
+				"CI on the epic PR #%d is red on the head that includes the close-out's own commits: %s failed",
+				pr.Number, strings.Join(report.Failing, ", "))
+			return r.refuse(RefusedCloseoutCIOnClose, tick,
+				"CI is red on the epic PR #%d (%s) on the head that includes the close-out's own commits (merged as %s): "+
+					"the failing job is %s. The close-out of %s is NOT closed behind it, and the rule the repository "+
+					"declares is: %s. The close-out's commits are already on %s, so the repair is what the failing job "+
+					"names — the retro, the learnings or the records the close-out itself wrote: fix them, push to %s, "+
+					"and run the epic again under this run id — the close gate re-derives CI from the PR, it does not "+
+					"trust the admission's green", pr.Number, pr.URL, short(merged.GateSHA),
+				strings.Join(report.Failing, ", "), r.opts.EpicID, r.closeoutRule.Stated, r.branch, r.branch)
+		case forge.CINone, forge.CIPending:
+			// A pending CI — and a silent one, in the window after this run's
+			// own push — is a hold, not a failure; see the comment above the
+			// loop for why `none` waits here where the admission refuses it.
+			if now := r.now(); now.After(deadline) {
+				reason := RefusedCloseoutCIPending
+				what := "was still pending"
+				if report.State == forge.CINone {
+					reason = RefusedCloseoutCIAbsent
+					what = "had still produced no check runs"
+				}
+				r.setTick(tick, "rejected")
+				r.record(tick, StageCloseoutHeld, "CI on the epic PR #%d %s on the head that includes the "+
+					"close-out's own commits when the run's bound fired", pr.Number, what)
+				return r.refuse(reason, tick,
+					"CI on the epic PR #%d (%s) %s %s after the close-out began waiting on the head that includes "+
+						"its own commits, so this run does not close the close-out of %s: re-run the epic once CI "+
+						"concludes, and this gate is re-derived from the PR, not rediscovered. The rule the repository "+
+						"declares is: %s", pr.Number, pr.URL, what, r.opts.GateTimeout, r.opts.EpicID, r.closeoutRule.Stated)
+			}
+			r.record(tick, StageCloseoutHeld,
+				"CI on the epic PR #%d is %s on the head that includes the close-out's own commits; the close is held",
+				pr.Number, report.State)
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("CI on the epic PR #%d is %s on the head that includes the close-out's own commits; "+
+					"the close-out of %s is held", pr.Number, report.State, r.opts.EpicID)); err != nil {
+				return err
+			}
+			r.sleep(r.pollInterval)
+		}
+	}
 }
 
 // repoConfigPath is where the run reads the target repository's own config:
