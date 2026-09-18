@@ -72,6 +72,18 @@ export const TICK_STATES = [
   "closed",
 ] as const;
 
+/** The closed role vocabulary (`$defs.role`): every LLM call is a bounded job. */
+export const ROLES = [
+  "plan-epic",
+  "implement-tick",
+  "review-epic",
+  "triage-failure",
+  "plan-repair",
+  "resolve-conflict",
+  "closeout-epic",
+  "evaluate-goal",
+] as const;
+
 /** A terminal checkpoint is one whose run is over; `failed` is still resumable. */
 export function terminalState(state: string): boolean {
   return state === "completed" || state === "cancelled";
@@ -144,6 +156,25 @@ export type AttemptRecord = {
   provenance: Provenance;
 };
 
+/**
+ * One role-job exchange, at `decisions/<n>.json`: the request that was made
+ * and the VALIDATED response that came back, with provenance — the record a
+ * restart re-reads rather than re-asking a model for.
+ */
+export type DecisionRecord = {
+  schema_version: number;
+  /** 1-based, run-wide, the number the recorded exchange takes. */
+  decision: number;
+  role: (typeof ROLES)[number];
+  request: Record<string, unknown>;
+  response: Record<string, unknown>;
+  /** The VALIDATED response is what lands — never the raw answer. */
+  validated: boolean;
+  requested_at: string;
+  answered_at: string;
+  provenance: Provenance;
+};
+
 // -------------------------------------------------------------- the paths ---
 
 export function checkpointPath(runID: string): string {
@@ -152,6 +183,10 @@ export function checkpointPath(runID: string): string {
 
 export function attemptPath(runID: string, attempt: number): string {
   return `${RUN_STATE_ROOT}/runs/${runID}/attempts/${attempt}.json`;
+}
+
+export function decisionPath(runID: string, decision: number): string {
+  return `${RUN_STATE_ROOT}/runs/${runID}/decisions/${decision}.json`;
 }
 
 /** Two-space indent, no trailing newline — the same shape `internal/runstate` writes. */
@@ -187,6 +222,37 @@ export function validateCheckpoint(checkpoint: Checkpoint): string | null {
     if (ts.tick_id === "" || !(TICK_STATES as readonly string[]).includes(ts.state)) {
       return `checkpoint ticks[${i}] is ${JSON.stringify(ts)}, which is not a tick state`;
     }
+  }
+  return null;
+}
+
+/**
+ * The parts of `schemas.decision` a type cannot carry. The same rule as the
+ * Go store's `Decision.Validate`: an unvalidated model response landing as a
+ * decision is how a hallucinated wave gets dispatched, so the VALIDATED
+ * response is the only thing that may land here.
+ */
+export function validateDecision(record: DecisionRecord): string | null {
+  if (record.schema_version !== RUN_STATE_SCHEMA_VERSION) {
+    return `decision schema_version is ${record.schema_version}, want ${RUN_STATE_SCHEMA_VERSION}`;
+  }
+  if (record.decision < 1) {
+    return `decision number ${record.decision} is not 1-based`;
+  }
+  if (!(ROLES as readonly string[]).includes(record.role)) {
+    return `decision role ${JSON.stringify(record.role)} is not one of the permitted values`;
+  }
+  if (record.request === null || typeof record.request !== "object") {
+    return "decision carries no request";
+  }
+  if (record.response === null || typeof record.response !== "object") {
+    return "decision carries no response";
+  }
+  if (!record.validated) {
+    return "decision is not validated: the VALIDATED response is what lands, so it can be re-read without re-asking a model";
+  }
+  if (record.requested_at === "" || record.answered_at === "") {
+    return "decision has no requested_at or answered_at";
   }
   return null;
 }
@@ -366,6 +432,60 @@ export class RunStateStore {
     const result = await this.store.create(path, {
       content: encodeRecord(full),
       message: `ticfac run ${this.runID}: record attempt ${full.attempt} of ${full.tick_id}`,
+    });
+    if (result.state === "written") return { state: "created" };
+    if (result.state === "exists") return { state: "conflict_exists", detail: result.detail };
+    if (result.state === "conflict") {
+      return { state: "conflict_stale_sha", detail: result.detail };
+    }
+    return { state: "conflict_missing_base", detail: result.detail };
+  }
+
+  /** One recorded exchange, by number — null when the ref holds none. */
+  async decision(n: number): Promise<DecisionRecord | null> {
+    const file = await this.store.read(decisionPath(this.runID, n));
+    if (file === null) return null;
+    const parsed = JSON.parse(file.content) as DecisionRecord;
+    const problem = validateDecision(parsed);
+    if (problem !== null) {
+      throw new Error(`the run branch holds an unreadable decision ${n} for ${this.runID}: ${problem}`);
+    }
+    return parsed;
+  }
+
+  /** Every recorded exchange the ref holds, in decision order. */
+  async decisions(): Promise<DecisionRecord[]> {
+    const paths = await this.store.list(`${RUN_STATE_ROOT}/runs/${this.runID}/decisions`);
+    const records: Array<{ n: number; record: DecisionRecord }> = [];
+    for (const path of paths) {
+      const match = /^.*\/decisions\/(\d+)\.json$/.exec(path);
+      if (match === null) continue;
+      const record = await this.decision(Number(match[1]));
+      if (record !== null) records.push({ n: Number(match[1]), record });
+    }
+    records.sort((a, b) => a.n - b.n);
+    return records.map((entry) => entry.record);
+  }
+
+  /**
+   * Records one exchange, create-if-absent: a validated decision is a thing a
+   * model was paid for once, so `conflict_exists` is another incarnation's
+   * record standing, never an error — and never overwritten.
+   */
+  async recordDecision(
+    record: Omit<DecisionRecord, "schema_version" | "provenance"> & { provenance?: Provenance }
+  ): Promise<RunWriteOutcome> {
+    const full: DecisionRecord = {
+      schema_version: RUN_STATE_SCHEMA_VERSION,
+      provenance: record.provenance ?? this.provenance,
+      ...record,
+    };
+    const problem = validateDecision(full);
+    if (problem !== null) throw new Error(problem);
+    const path = decisionPath(this.runID, full.decision);
+    const result = await this.store.create(path, {
+      content: encodeRecord(full),
+      message: `ticfac run ${this.runID}: record decision ${full.decision} (${full.role})`,
     });
     if (result.state === "written") return { state: "created" };
     if (result.state === "exists") return { state: "conflict_exists", detail: result.detail };
