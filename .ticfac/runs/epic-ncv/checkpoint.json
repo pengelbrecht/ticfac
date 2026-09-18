@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 28,
-  "state": "running",
-  "reason": "l9n is closed",
-  "updated_at": "2026-09-18T16:27:59Z",
+  "sequence": 29,
+  "state": "collecting",
+  "reason": "collecting z23 attempt 2",
+  "updated_at": "2026-09-18T16:28:08Z",
   "ticks": [
     {
       "tick_id": "l9n",
