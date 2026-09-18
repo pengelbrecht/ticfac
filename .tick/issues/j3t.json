@@ -1,0 +1,13 @@
+{
+  "id": "j3t",
+  "title": "An attempt stopped at its wall clock with nothing committed is classed runner_error, not wall_clock_exceeded",
+  "description": "subprocess classify (internal/exec/subprocess/collect.go) runs the no-commits check BEFORE the wall-marker check, and failureClass never consults the wall marker. So a worker stopped at its bound with zero commits persists failure_class=runner_error, while the same worker with one commit persists wall_clock_exceeded. Same incident, two classes, decided by whether the worker happened to commit.\n\nThe run's own feed says the bound fired, so the durable records disagree with the feed about one event. And the class misdirects diagnosis in exactly the way the quota-exhausted hint exists to prevent (SPEC 10.1): runner_error sends a reader to look for a broken runner when what actually happened is a worker that ran out of time.\n\nFound by the pbb worker while writing its acceptance test, and deliberately left out of scope by it: the collect vocabulary is pinned in contracts/ and shared by three implementations, so the repair owns that seam rather than one executor. The herdr classify's no-commits path likely needs the same treatment.\n\ndiscovered_from run-epic-9pd/tick-pbb/attempt-26",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An attempt that reaches its wall clock is classed wall_clock_exceeded whether or not it committed anything, on every executor. A test covers the zero-commit case specifically, since that is the one that was wrong. The feed and the persisted failure_class agree about the same incident.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T03:30:52.639771Z",
+  "updated_at": "2026-09-18T03:30:52.639771Z"
+}
