@@ -513,3 +513,128 @@ func TestAResumedRunFindsThePROpenedAndDoesNotOpenAnother(t *testing.T) {
 		t.Errorf("the PR was looked for %d times across two incarnations, want at least 2", got)
 	}
 }
+
+// ------------------------------------------------- the close-out's close ---
+
+// The close-out's OWN commits are the one head the admission's green CI is
+// not evidence about (tick sqx): the close-out writes — a retro, learnings
+// — and those integrate onto the epic branch, which IS the PR's head, so CI
+// runs again on a tree nobody gated. The pwp run is why the gap is not
+// theoretical: its close-out committed records a public-repo guard then
+// failed on, the admission stayed green, and the close stood behind
+// evidence about a head that no longer existed.
+//
+// A close-out whose own commits turn the PR's CI red is NOT closed: the
+// refusal names the failing job, the merge already on the integration
+// branch stays there for the repair to fix, and the tick stays open.
+func TestCloseoutOwnCommitsThatFailCIHoldTheClose(t *testing.T) {
+	t.Parallel()
+	// The CI sequence is the tick's whole point: green on the head as it
+	// stood when the close-out STARTED, red on the head its own commits
+	// made. The same PR, two different heads, two different answers.
+	forge := &fakeForge{ci: []forge.CIReport{
+		{State: forge.CIGreen}, // the admission: the head before the close-out
+		{State: forge.CIRed, Failing: []string{"public-repo-guard", "go"}}, // the head after it
+	}}
+	f := newFixture(t, fixtureOptions{pullRequests: forge})
+	declareCloseoutRule(t, f.Repo)
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge})
+	if err != nil {
+		t.Fatalf("the run should have finished with a failed state, not an error: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the run ended %s", result.State)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCIOnClose {
+		t.Fatalf("the failure is %+v, want a %s refusal", result.Failure, RefusedCloseoutCIOnClose)
+	}
+	// The failing job is NAMED, and so is the PR the red CI is on: the
+	// repair's address, not "the run broke".
+	for _, job := range []string{"public-repo-guard", "go"} {
+		if !strings.Contains(result.Failure.Message, job) {
+			t.Errorf("the refusal does not name the failing job %q: %q", job, result.Failure.Message)
+		}
+	}
+	if !strings.Contains(result.Failure.Message, "#7") {
+		t.Errorf("the refusal does not name the PR it is about: %q", result.Failure.Message)
+	}
+	// The feed line names the failing job too, at the close-out's scope.
+	var held string
+	for _, e := range r.Journal() {
+		if e.Tick == "co" && e.Stage == StageCloseoutHeld {
+			held = e.Detail
+		}
+	}
+	if !strings.Contains(held, "red") || !strings.Contains(held, "public-repo-guard") {
+		t.Errorf("the feed line does not name the failing job: %q", held)
+	}
+	// The close-out RAN — it was dispatched, and its commits are merged onto
+	// the integration branch. What is held is the CLOSE, not the merge: the
+	// work stays where CI can see it, so the repair is the tree the failing
+	// job names and not a redone close-out.
+	if d := f.dispatch("co"); d.TickID == "" {
+		t.Fatal("the close-out was never dispatched")
+	}
+	mustRun(t, f.Repo.Dir, "git", "cat-file", "-e", "origin/"+r.IntegrationBranch()+":work-co.txt")
+	// And the tick is not closed behind its own red CI.
+	current, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status == "closed" {
+		t.Fatal("the close-out tick was closed behind a CI its own commits turned red")
+	}
+	// Everything before the close-out closed as usual: the close gate is a
+	// gate on the close-out's close, not a work gate on the epic.
+	for _, tick := range []string{"a1", "a2", "b1", "rv"} {
+		current, err := f.Tracker.Show(context.Background(), tick)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.Status != "closed" {
+			t.Errorf("%s is %s: the close-out's close gate is not a work gate", tick, current.Status)
+		}
+	}
+}
+
+// The close's other half: green on the head that includes the close-out's
+// own commits CLOSES the tick, through the same wait the admission keeps —
+// a pending CI on that head is a hold, and the close proceeds the moment it
+// turns green.
+func TestCloseoutClosesBehindGreenCIOnItsOwnCommits(t *testing.T) {
+	t.Parallel()
+	forge := &fakeForge{ci: []forge.CIReport{
+		{State: forge.CIGreen},   // the admission
+		{State: forge.CIPending}, // the close-out's own commits just pushed
+		{State: forge.CIGreen},   // ... and CI concludes on them
+	}}
+	f := newFixture(t, fixtureOptions{pullRequests: forge})
+	declareCloseoutRule(t, f.Repo)
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	stages := r.Stages("co")
+	if !contains(stages, StageCloseoutCloseGated) {
+		t.Errorf("stages %v do not record the close gate's green CI", stages)
+	}
+	if !contains(stages, StageCloseoutHeld) {
+		t.Errorf("stages %v do not record the hold while CI on the close-out's own head was pending", stages)
+	}
+	if contains(stages, StageRejected) {
+		t.Errorf("stages %v reject a close-out whose own commits' CI turned green", stages)
+	}
+	if got := forge.count("ci"); got != 3 {
+		t.Errorf("CI was asked %d times, want 3: admission, pending, green", got)
+	}
+	current, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Errorf("co is %s, want closed behind green CI on its own commits", current.Status)
+	}
+}

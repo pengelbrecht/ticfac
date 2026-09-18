@@ -615,12 +615,21 @@ const (
 	// The phase it admits then proceeds through the ordinary stages.
 	StageCloseoutAdmitted = "closeout_admitted"
 
-	// StageCloseoutHeld is the line the close-out admission leaves while it
-	// holds the phase: CI is pending on the epic PR. Which half of the
-	// precondition is unmet is in the detail when a refusal follows, and the
-	// typed refusal carries the verdict — the line says when to look, never
-	// what happened (tick 0iz).
+	// StageCloseoutHeld is the line the close-out's CI gates leave while they
+	// hold it: CI is pending on the epic PR, at the admission (tick 0iz) or
+	// on the head that includes the close-out's own commits at the close
+	// (tick sqx). Which half of the precondition is unmet is in the detail
+	// when a refusal follows, and the typed refusal carries the verdict —
+	// the line says when to look, never what happened.
 	StageCloseoutHeld = "closeout_held"
+
+	// StageCloseoutCloseGated is the line the close-out's CLOSE gate leaves
+	// when CI is green on the epic PR's head as it stands AFTER the
+	// close-out's own commits have integrated onto it (tick sqx): the head
+	// the admission's green CI is not evidence about, re-derived at the
+	// close rather than trusted from anywhere — because CI's answer changes
+	// with every push, and this push was the close-out's own.
+	StageCloseoutCloseGated = "closeout_close_gated"
 
 	// StageWallClock is the line a bound's firing owes the feed (tick emk):
 	// the wall clock fired and the attempt has NOT settled, which is the
@@ -1547,23 +1556,34 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
-	// The five the CLOSE-OUT ADMISSION adds (tick 0iz). The PR + CI rule a
-	// target repository declares in .tick/config.md is a precondition the
-	// RUN enforces, and each refusal names which half of it is unmet, because
-	// the halves send the next repair somewhere different: the first at the
-	// HOST, which configured no code-hosting surface for a repo that declares
-	// the rule; the second at the FORGE, which could not open or read the
-	// PR (a credential, a permission, a network); the third at the WORKFLOW,
-	// which never ran on the PR at all — unsatisfiable by waiting, which is
-	// the failure the rule exists to surface; the fourth at the CODE, named
-	// by the failing job the message carries; the fifth at the CLOCK — the
-	// run bounded its wait, and re-running the epic re-derives the admission
-	// from the PR rather than rediscovering it.
+	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), and the sixth its
+	// own CLOSE gate adds (tick sqx). The PR + CI rule a target repository
+	// declares in .tick/config.md is a precondition the RUN enforces, and
+	// each refusal names which half of it is unmet, because the halves send
+	// the next repair somewhere different: the first at the HOST, which
+	// configured no code-hosting surface for a repo that declares the rule;
+	// the second at the FORGE, which could not open or read the PR (a
+	// credential, a permission, a network); the third at the WORKFLOW, which
+	// never ran on the PR at all — unsatisfiable by waiting, which is the
+	// failure the rule exists to surface; the fourth at the CODE, named by
+	// the failing job the message carries; the fifth at the CLOCK — the run
+	// bounded its wait, and re-running the epic re-derives the admission from
+	// the PR rather than rediscovering it. The sixth is the fourth again, one
+	// head later: CI red on the PR head the close-out's OWN commits made —
+	// the head its admission's green CI is not evidence about — with the
+	// repair aimed at the close-out's writes rather than at the epic's tree.
 	RefusedCloseoutForge     = "closeout_forge_absent" // no surface behind the rule
 	RefusedCloseoutPR        = "closeout_pr_unmet"     // no PR, or one the forge could not open or read
 	RefusedCloseoutCIAbsent  = "closeout_ci_absent"    // CI never ran on the PR head
 	RefusedCloseoutCI        = "closeout_ci_failed"    // CI red; the message names the failing job
 	RefusedCloseoutCIPending = "closeout_ci_pending"   // CI still pending past the run's bound
+
+	// RefusedCloseoutCIOnClose is CI red on the PR head that includes the
+	// close-out's OWN commits (tick sqx): the head the admission's green CI
+	// never saw, because the close-out had not written it yet. The message
+	// names the failing job, and the repair is the close-out's own writes —
+	// the retro, the learnings, the records — rather than the epic's tree.
+	RefusedCloseoutCIOnClose = "closeout_ci_failed_on_close" // the close-out's own commits turned CI red
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9
