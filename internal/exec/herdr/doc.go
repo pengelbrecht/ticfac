@@ -103,7 +103,9 @@
 //
 //   - 2xu: DONE. The verdict comes from durable evidence only —
 //     CollectDetail here makes ZERO herdr calls, by construction, and the
-//     all-errors fixture (TestCollectNeedsNoHerdr) is the test of record.
+//     all-errors fixture
+//     (TestCollectAnswersFromDurableEvidenceWhenEveryHerdrCallErrors) is the
+//     test of record.
 //   - gwc: DONE. The wall clock is enforced in both halves — the stop at
 //     spec.Limits.WallSeconds delivered through herdr inside observe
 //     (wall.go), and the refusal at dispatch when the pinned herdr is too
