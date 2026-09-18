@@ -69,3 +69,20 @@ runs 600-620s even under `-short`, past `go test`'s default 10-minute
 per-package timeout. Use these targets (or pass `-timeout` yourself) rather
 than a bare `go test ./...`.
 
+## Deploying the factory
+
+`ticfac factory deploy` installs or upgrades the factory in the operator's
+own Cloudflare account, from the bundle embedded in the exact binary running
+the deploy — the version pin rides the repository (D16). `ticfac factory
+setup` is the first-run walk: it climbs the credential ladder one rung at a
+time (wrangler, a deployment, a GitHub credential, model access) and verifies
+every rung against the live service before storing it; `ticfac factory status`
+re-checks all of them live.
+
+`.github/workflows/deploy-factory.yml` runs the same installer in CI on a `v*`
+tag, so releases upgrade the factory: configure `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID` and `TICFAC_FACTORY_TOKEN` (the `factory_token` from
+`~/.ticfacrc`) as repository secrets to enable it. A repository without them
+skips the deploy with a warning naming what is missing — the factory is the
+operator's opt-in, not a service this repository runs.
+
