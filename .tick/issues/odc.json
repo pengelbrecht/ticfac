@@ -3,7 +3,7 @@
   "title": "Nothing tests the TypeScript: Phase 4 would move 46 modules behind a Go-only gate",
   "description": "The declared gate is 'go test -short -timeout 45m -parallel 12 ./...' and CI runs three jobs (go, contracts, sandbox), all Go. cloud/factory HAS a test script - 'pnpm contracts:check \u0026\u0026 pnpm contracts:test \u0026\u0026 vitest run' - and nothing runs it: not the per-tick gate, not CI.\n\nThat is survivable today, because the TypeScript control plane is inherited rather than actively developed. It stops being survivable at Phase 4 (ncv), which moves cloud/factory's ~46 modules into ticfac/cloudflare and then has RunWorkflow host the reconciler in TypeScript. Every one of those ticks would close behind a gate that cannot see the work it did, which is the close-behind-a-gate-that-proves-nothing this project refuses everywhere else.\n\nThis must land BEFORE ncv starts, not inside it: a tick that moves TypeScript cannot be its own first proof that TypeScript is tested.\n\nShape to decide: the per-tick gate wants to stay fast (it is 3m26s and that was hard won), so the heavy vitest run may belong in CI - which already gates the epic's merge - with a cheap typecheck per tick. Say which, and make the declared gate and CI agree the way the Makefile and runners.toml already do.",
   "notes": "2026-09-18 14:13 - Found while implementing this tick: the reason nothing runs cloud/factory's tests is not only oversight - the tests do not pass. The TypeScript consumer is pinned to contract bundle 3.0.0 against a 5.2.0 bundle, with a MAJOR bump in between that made it wrong about three closed records. Filed as b9w, which now blocks this tick: a gate cannot be added while it is red, and adding it as allow-failure would be a gate that does not gate.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,5 +13,7 @@
   "acceptance_criteria": "A TypeScript change that breaks cloud/factory's tests fails something before it can merge, demonstrated by breaking one deliberately. The per-tick gate and CI each state what they cover, and the gate does not silently claim to cover TypeScript it never runs.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T12:11:54.917218Z",
-  "updated_at": "2026-09-18T12:13:32.321111Z"
+  "updated_at": "2026-09-18T14:06:39.767951Z",
+  "closed_at": "2026-09-18T14:06:39.767951Z",
+  "closed_reason": "Merged to main (PR #6, all four CI jobs green). The gate gains a ts check (contracts:check + tsc --noEmit, about 3s) and CI gains a typescript job running the full suite including vitest - 3m3s, inside the 6m36s go job, so zero added CI wall time. The split is stated in both files: the gate covers contracts and types, CI covers behaviour. Both drift guards were extended rather than weakened."
 }
