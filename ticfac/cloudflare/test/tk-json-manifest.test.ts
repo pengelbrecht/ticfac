@@ -29,7 +29,7 @@ import { parseDefs, parseSchema, type Defs, type Schema } from "./json-schema";
  *
  * And then the one assertion that is about THIS repository rather than about
  * the manifest in the abstract: every invocation in
- * `cloud/factory/required-tk-commands` must appear in the manifest. That file
+ * `ticfac/cloudflare/required-tk-commands` must appear in the manifest. That file
  * is the factory's real call-site list, derived from the `cloudTkJSON` call
  * sites by a Go test. Its own header says what it does NOT cover — "a field
  * renamed, retyped or dropped INSIDE `--json` output would sail past every

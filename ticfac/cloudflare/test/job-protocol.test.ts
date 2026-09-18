@@ -357,7 +357,7 @@ describe("the evidence record carries SPEC §10.1's minimum", () => {
   });
 
   it("says terminal output is not the completion contract", () => {
-    // SPEC §10.1, and the rule cloud/factory/src/worker-collect.ts already
+    // SPEC §10.1, and the rule ticfac/cloudflare/src/worker-collect.ts already
     // enforces: durable git refs and RESULT-<tick-id>.md reports drive
     // collection. The rule survives the move only if the file states it.
     const rule = contract.rules.completion_contract;

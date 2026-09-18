@@ -4,7 +4,7 @@
  * factory is extracted into its own repository.
  *
  * The rationale, the option comparison and the extraction checklist live in
- * cloud/factory/CONTRACTS.md. The short version:
+ * CONTRACTS.md beside this script. The short version:
  *
  *   The contracts are consumed as a VENDORED, VERSION-PINNED, DIGEST-VERIFIED
  *   copy of a published `ticks` module version — the same shape as
@@ -45,11 +45,11 @@ const FACTORY_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PIN_PATH = join(FACTORY_DIR, "contracts.pin.json");
 
 /**
- * The consuming repository's root. Today that is the ticks checkout three
- * levels up (`cloud/factory` -> `cloud` -> root). After the extraction it is
- * the ticfac checkout, and `cloud/factory` is expected to keep its position
- * relative to the root so that both this resolution and the tests' own
- * `../../../contracts/...` imports keep pointing at the same directory.
+ * The consuming repository's root. Three levels up from the bundle
+ * (`cloud/factory` -> `cloud` -> root in ticks; `ticfac/cloudflare` ->
+ * `ticfac` -> root here, after SPEC §12 Phase 4 item 1's move — the same
+ * two-up depth, which is the whole contract). This resolution and the tests'
+ * own `../../../contracts/...` imports keep pointing at the same directory.
  */
 const REPO_ROOT = resolve(FACTORY_DIR, "..", "..");
 const CONTRACTS_DIR = join(REPO_ROOT, "contracts");
@@ -663,7 +663,7 @@ async function commandSync() {
         "contracts/ is authored in this repository and the Go readers use the same\n" +
         "files. Syncing would overwrite the source with a copy of itself.\n" +
         "`pnpm contracts:sync` becomes meaningful when the factory is extracted and\n" +
-        'the pin is flipped to "pinned" — see cloud/factory/CONTRACTS.md.',
+        'the pin is flipped to "pinned" — see CONTRACTS.md beside this script.',
     );
   }
 

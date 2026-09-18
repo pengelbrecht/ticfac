@@ -1,5 +1,9 @@
-# Build output
+# Build output. `/ticfac` is the built binary; `!/ticfac/` un-ignores the
+# directory of the same name (SPEC §12 Phase 4: the factory worker bundle
+# moved there as ticfac/cloudflare), so a new file under it can never be
+# silently skipped by `git add`.
 /ticfac
+!/ticfac/
 /bin/
 
 # Go test and coverage artefacts

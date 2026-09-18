@@ -322,24 +322,24 @@ func TestConfigFromNamesWhichHalfIsMissing(t *testing.T) {
 // the Worker reads these logs for cost and this package reads them for the
 // conversation, and a half-applied fix leaves both suites internally green.
 func TestFilterVocabularyMatchesTheWorkersOwn(t *testing.T) {
-	source, err := os.ReadFile(filepath.Join("..", "..", "cloud", "factory", "src", "gateway.ts"))
+	source, err := os.ReadFile(filepath.Join("..", "..", "ticfac", "cloudflare", "src", "gateway.ts"))
 	if err != nil {
 		t.Skipf("the factory worker source is not in this checkout: %v", err)
 	}
 	text := string(source)
 	for _, filter := range metadataFilters("run_id", "run_1") {
 		if !strings.Contains(text, `"`+filter.Key+`"`) {
-			t.Errorf("cloud/factory/src/gateway.ts does not accept filter key %q", filter.Key)
+			t.Errorf("ticfac/cloudflare/src/gateway.ts does not accept filter key %q", filter.Key)
 		}
 		if !strings.Contains(text, `"`+filter.Operator+`"`) {
-			t.Errorf("cloud/factory/src/gateway.ts does not accept filter operator %q", filter.Operator)
+			t.Errorf("ticfac/cloudflare/src/gateway.ts does not accept filter operator %q", filter.Operator)
 		}
 	}
 	if !strings.Contains(text, fmt.Sprintf("GATEWAY_LOG_MAX_PAGE_SIZE = %d", PageSize)) {
-		t.Errorf("PageSize %d no longer matches GATEWAY_LOG_MAX_PAGE_SIZE in cloud/factory/src/gateway.ts", PageSize)
+		t.Errorf("PageSize %d no longer matches GATEWAY_LOG_MAX_PAGE_SIZE in ticfac/cloudflare/src/gateway.ts", PageSize)
 	}
 	if !strings.Contains(text, fmt.Sprintf("MAX_LOG_PAGES = %d", MaxPages)) {
-		t.Errorf("MaxPages %d no longer matches MAX_LOG_PAGES in cloud/factory/src/gateway.ts", MaxPages)
+		t.Errorf("MaxPages %d no longer matches MAX_LOG_PAGES in ticfac/cloudflare/src/gateway.ts", MaxPages)
 	}
 }
 

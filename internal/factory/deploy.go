@@ -124,17 +124,22 @@ type Result struct {
 }
 
 // DefaultBundleDir is where the bundle is materialized: under the ticks home
-// directory, so wrangler's per-project state survives between deploys and the
-// operator can inspect exactly what was uploaded.
+// directory, at the repository-relative position the bundle holds in this
+// repository (ticfac/cloudflare — the move of SPEC §12 Phase 4 item 1 made
+// the staging a mirror of the repository layout, so the committed
+// wrangler.toml's `[[containers]]` image path `../../cloud/sandbox/Dockerfile`
+// resolves in the staged copy exactly as it does in the repository). Wrangler's
+// per-project state survives between deploys and the operator can inspect
+// exactly what was uploaded.
 func DefaultBundleDir() (string, error) {
 	if dir := os.Getenv("TK_HOME"); dir != "" {
-		return filepath.Join(dir, "factory", "bundle"), nil
+		return filepath.Join(dir, "factory", "ticfac", "cloudflare"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("locating home directory: %w", err)
 	}
-	return filepath.Join(home, ".tick", "factory", "bundle"), nil
+	return filepath.Join(home, ".tick", "factory", "ticfac", "cloudflare"), nil
 }
 
 // Deploy installs (or upgrades) the factory in the operator's Cloudflare
@@ -219,10 +224,12 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	}
 	fmt.Fprintf(out, "bundle %s (tk %s) staged in %s\n", shortSHA(BundleSHA()), opts.Version, bundleDir)
 
-	// The image's build context is staged as a sibling of the bundle, because
-	// that is what makes the `[[containers]]` image path in the committed
-	// wrangler.toml (`../sandbox/Dockerfile`) resolve to the same tree here as
-	// it does in the repository.
+	// The image's build context is staged at the repository-relative position
+	// the `[[containers]]` image path in the committed wrangler.toml names
+	// (`../../cloud/sandbox/Dockerfile`, true of the moved bundle at
+	// ticfac/cloudflare): the staging mirrors the repository layout, so the
+	// committed path resolves to the same tree here as it does in the
+	// repository (SandboxDir, bundle.go).
 	// The ref the image builds its tk from — resolved here, after the
 	// prerequisite probes (a missing wrangler is a more useful thing to be told
 	// about first) and still before anything is created in the account. It

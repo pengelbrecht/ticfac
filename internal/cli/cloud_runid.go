@@ -15,7 +15,7 @@ import (
 )
 
 // A run id is "run_" followed by a UUID with its dashes removed — 32 hex
-// characters (newRunID in cloud/factory/src/runs.ts). That shape is what makes
+// characters (newRunID in ticfac/cloudflare/src/runs.ts). That shape is what makes
 // a truncation recognisable rather than guessed at: "run_62c289d1" is hex and
 // too short, so it cannot be an id and can only be the head of one.
 const (
@@ -23,7 +23,7 @@ const (
 	cloudRunIDDigits = 32
 )
 
-// cloudRunIndexLimit is MAX_RUN_LIMIT in cloud/factory/src/runs.ts: the widest
+// cloudRunIndexLimit is MAX_RUN_LIMIT in ticfac/cloudflare/src/runs.ts: the widest
 // window the run index will serve. A prefix is resolved against as many runs as
 // the factory will name, because the cost of a narrow window is telling an
 // operator their run is unknown when it is merely older than the window.

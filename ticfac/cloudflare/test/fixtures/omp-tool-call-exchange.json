@@ -1,5 +1,5 @@
 {
-  "_comment": "Recorded by scripts/verify-harness-tool-execution.mjs from a real omp run. These are the requests omp puts on the wire AFTER it has executed a tool call, which is the shape cloud/factory/src/gateway.ts has to carry on the workers-ai route. Do not hand-edit: re-record by running the script.",
+  "_comment": "Recorded by scripts/verify-harness-tool-execution.mjs from a real omp run. These are the requests omp puts on the wire AFTER it has executed a tool call, which is the shape ticfac/cloudflare/src/gateway.ts has to carry on the workers-ai route. Do not hand-edit: re-record by running the script.",
   "omp_version": "omp/17.3.4",
   "after_first_tool_result": {
     "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",

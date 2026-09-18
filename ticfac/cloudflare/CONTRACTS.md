@@ -63,7 +63,9 @@ guarantee without needing a Go toolchain in the consuming repository's CI.
 ### Why the copy lands at the repository root
 
 The vendored copy goes to the **consuming repository's root** `contracts/`,
-which is exactly where the ticks copy sits relative to `cloud/factory`. That is
+which is exactly where the ticks copy sits relative to the factory bundle —
+`cloud/factory` in ticks, `ticfac/cloudflare` here (the move of SPEC §12
+Phase 4 item 1 kept the two-level depth this resolution depends on). That is
 deliberate: `../../../contracts/<name>.json` resolves to the right file in both
 worlds, so **the extraction does not touch a single test file.** Thirteen
 imports stay as they are.
@@ -212,7 +214,9 @@ turns it on. In order:
    github.com/pengelbrecht/ticks@<commit>` prints the pseudo-version to use. A
    branch name or a short sha is **not** resolvable and `sync` will 404 and say
    so.
-2. **Keep `cloud/factory` two levels below the new repository's root**, or
+2. **Keep the factory bundle two levels below the new repository's root**
+   (`cloud/factory` in ticks, `ticfac/cloudflare` here — the depth is what the
+   `../../../contracts/...` imports resolve by), or
    change `REPO_ROOT` in `scripts/contracts.mjs` *and* every
    `../../../contracts/...` import in `test/` together. Keeping the position is
    free and means no test file changes.

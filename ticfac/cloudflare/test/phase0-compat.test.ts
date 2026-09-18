@@ -9,8 +9,11 @@ import collectContract from "../../../contracts/collect-vocabulary.json";
 // at all in a suite that executes inside workerd with no filesystem — and it
 // is the difference between pinning `cloud/sandbox/worker.sh` and pinning a
 // copy of what it said once. A literal here drifts silently; these cannot.
+// (The path is from this bundle's moved location, ticfac/cloudflare —
+// SPEC §12 Phase 4 item 1 — to the image context, which still lives at
+// cloud/sandbox until item 4 moves it.)
 import RUN_WORKFLOW_TS from "../src/run-workflow.ts?raw";
-import WORKER_SH from "../../sandbox/worker.sh?raw";
+import WORKER_SH from "../../../cloud/sandbox/worker.sh?raw";
 import WRANGLER_TOML from "../wrangler.toml?raw";
 
 import {

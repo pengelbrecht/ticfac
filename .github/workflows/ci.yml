@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v6
 
       # The version is named here rather than by a `packageManager` field in
-      # cloud/factory/package.json: adding that field makes pnpm record
+      # ticfac/cloudflare/package.json: adding that field makes pnpm record
       # packageManagerDependencies in the lockfile, so `--frozen-lockfile`
       # refuses until the lockfile is regenerated. This says the same thing
       # without rewriting the lockfile in a tick about gating.
@@ -141,10 +141,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cloud/factory/pnpm-lock.yaml
+          cache-dependency-path: ticfac/cloudflare/pnpm-lock.yaml
 
       - name: Install
-        working-directory: cloud/factory
+        working-directory: ticfac/cloudflare
         run: pnpm install --frozen-lockfile
 
       # The whole TypeScript suite, and the reason this job exists (tick odc).
@@ -162,7 +162,7 @@ jobs:
       # The split, stated so neither side can quietly claim the other's work:
       # the GATE covers contracts and types, THIS covers behaviour.
       - name: pnpm test
-        working-directory: cloud/factory
+        working-directory: ticfac/cloudflare
         run: pnpm test
 
   sandbox:

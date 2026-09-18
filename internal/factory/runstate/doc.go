@@ -6,7 +6,7 @@
 // It is deliberately test-only. Phase 0 freezes these rules BEFORE any
 // reconciler exists, so there is nothing here to call: the contract is the
 // artifact, and the tests are what make it executable rather than prose. The
-// TypeScript half lives in cloud/factory/test/ticfac-run-state.test.ts, and
+// TypeScript half lives in ticfac/cloudflare/test/ticfac-run-state.test.ts, and
 // runs the same compare-and-swap sequences against its own copy of the same
 // in-memory git fake. Two implementations of one rule is the whole point —
 // see contracts/README.md.
