@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 345,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-18T09:45:01Z",
+  "sequence": 346,
+  "state": "dispatching",
+  "reason": "dispatching h0f as attempt 33",
+  "updated_at": "2026-09-18T09:45:11Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -69,7 +69,7 @@
     },
     {
       "tick_id": "h0f",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 14
     },
     {
