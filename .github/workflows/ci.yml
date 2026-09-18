@@ -122,6 +122,49 @@ jobs:
   # tree: without this job nothing stops the copies drifting while ticks' tests
   # guard ITS copy and ticfac's cold-start budget bounds a container built from
   # THIS one. sandbox.pin.json is the pin; cmd/sandbox is the check.
+  typescript:
+    name: typescript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # The version is named here rather than by a `packageManager` field in
+      # cloud/factory/package.json: adding that field makes pnpm record
+      # packageManagerDependencies in the lockfile, so `--frozen-lockfile`
+      # refuses until the lockfile is regenerated. This says the same thing
+      # without rewriting the lockfile in a tick about gating.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cloud/factory/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: cloud/factory
+        run: pnpm install --frozen-lockfile
+
+      # The whole TypeScript suite, and the reason this job exists (tick odc).
+      # Until it, NOTHING ran these tests - not the gate, not CI - and the cost
+      # was tick b9w: the control plane sat pinned to contract bundle 3.0.0
+      # against a 5.2.0 bundle, wrong about three record shapes, for two major
+      # versions, silently.
+      #
+      # vitest is HERE and not in the per-tick gate because it is 82s against
+      # the gate's other TypeScript checks at 3s, and gate commands run
+      # serially: it would take every tick's gate from 3m26s to about 4m48s.
+      # Here it runs beside the Go job, which is several times longer, so it
+      # costs no wall clock at all.
+      #
+      # The split, stated so neither side can quietly claim the other's work:
+      # the GATE covers contracts and types, THIS covers behaviour.
+      - name: pnpm test
+        working-directory: cloud/factory
+        run: pnpm test
+
   sandbox:
     name: sandbox
     runs-on: ubuntu-latest

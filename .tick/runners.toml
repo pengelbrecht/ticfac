@@ -80,6 +80,27 @@ effort = "high"
 # keeps -count=1) before trusting a green gate about THOSE guards.
 go = { command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
 
+# The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
+# tests — not this gate, not CI — and the cost of that silence was tick b9w: the
+# control plane sat pinned to contract bundle 3.0.0 against a 5.2.0 bundle,
+# wrong about three record shapes, for two major versions.
+#
+# What is here and what is NOT is a measurement, not a preference. On this host:
+# pnpm install from a warm store 1s, contracts:check under 1s, tsc --noEmit 2s,
+# vitest 82s. Gate commands run SERIALLY, so vitest would take the gate from
+# 3m26s to about 4m48s on every tick — and the gate's speed is what made this
+# epic survivable at all.
+#
+# So the gate takes the two cheap checks and CI takes vitest, where it runs as
+# its own job beside the 7m15s Go job and costs no wall clock at all. The split
+# is stated rather than implied: THIS GATE COVERS CONTRACTS AND TYPES, NOT
+# BEHAVIOUR. A behavioural TypeScript regression is caught by CI on the epic PR,
+# before anything reaches main, and never by this line.
+#
+# contracts:check is the one that earns its place here: it is the check that
+# would have caught b9w's drift the day it happened, and it costs a second.
+ts = { command = "cd cloud/factory && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript contracts and types" }
+
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }
 git-config-user-email = { command = "git config user.email", description = "git identity configured" }
