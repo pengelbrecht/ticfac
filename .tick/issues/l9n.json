@@ -2,13 +2,14 @@
   "id": "l9n",
   "title": "Move cloud/factory to ticfac/cloudflare, preserving routes and D1/R2 behaviour",
   "description": "SPEC 12 Phase 4 item 1. Move the control plane (~46 TypeScript modules: run-workflow.ts, sandbox.ts, worker-dispatch/boot/collect, gateway.ts, D1 migrations 0001-0013, R2 artifacts, Telegram, CI remediation, PR review) from cloud/factory/** to ticfac/cloudflare/**.\n\nDeliberately a MOVE and nothing else: routes, D1 schema and R2 keys keep their current behaviour so that a deployed factory keeps working while the reconciler moves in behind it. Behaviour changes belong to the later items, where they can be attributed.\n\nThe compatibility checks that prove the move changed nothing (routes, D1/R2 keys, image tags) already exist as tick mrq's work in ticks - port them alongside, or this item has no evidence.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "ncv",
   "acceptance_criteria": "The factory deploys and serves from ticfac/cloudflare/** with routes, D1 keys and R2 keys unchanged, proven by the ported compatibility checks rather than by inspection. A deployed factory from before the move still answers.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:10.994325Z",
-  "updated_at": "2026-09-18T11:24:10.994325Z"
+  "updated_at": "2026-09-18T14:07:32.730523Z",
+  "started_at": "2026-09-18T14:07:32.730523Z"
 }
