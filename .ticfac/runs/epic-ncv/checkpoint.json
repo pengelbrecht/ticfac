@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 38,
-  "state": "publishing",
-  "reason": "closing z23 behind the integrated gate on b0f207a48664",
-  "updated_at": "2026-09-18T16:39:39Z",
+  "sequence": 39,
+  "state": "running",
+  "reason": "z23 is closed",
+  "updated_at": "2026-09-18T16:39:57Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "z23",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
