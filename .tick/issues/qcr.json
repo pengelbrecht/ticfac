@@ -1,0 +1,13 @@
+{
+  "id": "qcr",
+  "title": "Decide on TypeScript 7 for cloud/factory before Phase 4 grows the TypeScript",
+  "description": "TypeScript 7.0 is generally available (the native port, 8-12x on full builds, still installed as 'typescript' and still invoked as tsc). cloud/factory is on 5.9.3.\n\nDO NOT do this for gate speed. Measured here, tsc --noEmit is 2s of a 3m26s gate; a 10x type-checker saves under two seconds a tick, which is noise. The 82s item is vitest, and TS7 does not touch it - vitest 4 transpiles through esbuild and never calls the type-checker.\n\nThe reason to do it is Phase 4. ncv moves ~46 TypeScript modules into ticfac and then has RunWorkflow host the RECONCILER in TypeScript, which is the point where this stops being inherited code and becomes the product. A 10x type-checker matters on a codebase that is about to grow several times over, and adopting after the growth is more migration than before it.\n\nWhat the migration actually costs here, checked rather than assumed. The tsconfig is already aligned with most of TS7's new defaults: strict is true, target is ES2022 (not ES5), moduleResolution is bundler (not node10), and types is explicitly listed (TS7 defaults it to []).\n\nThe one real hazard is rootDir, which TS7 defaults to ./ and this config does not set. The contract tests import ../../../contracts/*.json - deliberately OUTSIDE cloud/factory, because reading the shared bundle is the whole point of that suite (see b9w). Cross-package imports are exactly what a package-scoped rootDir rejects, so this needs an explicit rootDir (or a project layout that puts the contracts inside the root) before the upgrade will typecheck at all.\n\nOne more caveat from the release: TS7.0 ships without a stable programmatic API until 7.1. Nothing here consumes the compiler API today - worth re-checking if the Workflow-hosted reconciler ever wants to.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A decision recorded here: adopt TS7 now, at Phase 4, or not - with the rootDir question answered either way. If adopted, cloud/factory typechecks and its full suite passes on TypeScript 7 with the cross-package contract imports still working, and the gate's tsc step is re-measured.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T13:58:38.980518Z",
+  "updated_at": "2026-09-18T13:58:38.980518Z"
+}
