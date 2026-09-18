@@ -1,0 +1,14 @@
+{
+  "id": "mbv",
+  "title": "Audit whether go test caching is sound here, then decide about -count=1",
+  "description": "The gate passes -count=1, which disables Go's test cache entirely, so every package is re-run for every tick even when nothing it depends on changed.\n\nWhether that can safely be dropped is NOT obvious, and three experiments on this machine disagreed:\n- a package whose test reads a file INSIDE the package directory: cached, and correctly invalidated when the file changed.\n- a package whose test reads a file ABOVE its own directory by a relative path: go refused to cache it at all (safe, just never fast).\n- a test reading an ABSOLUTE path outside the module: cached, and NOT invalidated when the file changed. Unsound.\n- and internal/sandboxpin, which reads the repo tree through contracts.RepoRoot(), caches cleanly in practice.\n\ncontracts.RepoRoot() builds from os.Getwd(), so it yields absolute paths - the shape that behaved unsoundly. The concrete risk is the drift guards: TestThisRepositorysGateIsReadable, the Makefile-matches-the-declared-gate test and the harness-bound-outlives-the-declared-bound test all read .tick/runners.toml. A cached pass surviving an edit to that file would leave those guards silently not guarding.\n\nSo this tick is an AUDIT first and a flag change second. If caching cannot be made sound for the guard tests, the answer may be to keep -count=1 for them and allow caching elsewhere, or to have those guards read their inputs in a way go tracks.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "A written answer, on this tick, to whether a cached pass can ever hide a change to .tick/runners.toml or another input a guard test reads - demonstrated either way, not asserted. If caching is adopted, a deliberately edited runners.toml still fails the drift guards. One uncached full run remains somewhere in the epic's lifecycle.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:58:10.698368Z",
+  "updated_at": "2026-09-18T06:58:10.698368Z"
+}

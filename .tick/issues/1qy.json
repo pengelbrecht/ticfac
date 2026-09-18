@@ -1,0 +1,14 @@
+{
+  "id": "1qy",
+  "title": "Replace the spinning watcher in concurrent_fetch tests with a deterministic contention seam",
+  "description": "internal/runstate/concurrent_fetch_test.go:69 and :168 each run a bare goroutine:\n\n  for { select { case \u003c-stop: return; default: exec.Command(\"git\",\"-C\",dir,\"fetch\",\"--quiet\",\"origin\").Run() } }\n\nNo sleep, no throttle - git fetch spawned back to back for the whole test, saturating a core and hammering the filesystem. Measured 26.47s and 5.37s, i.e. 32s of internal/runstate's 50.7s. The loops also run 60 and 30 iterations of record-writing, counts that look arbitrary: the FETCH_HEAD regression they guard (tick wdb) reproduces within a handful.\n\nThrottling the loop is a band-aid. What the tests actually want is one fact: ANOTHER WRITER MOVED THE REF BETWEEN MY READ AND MY WRITE. Spraying fetches and hoping to land inside that window is why they need 60 iterations and a spinning core. A seam that performs the competing write at exactly that moment makes the test deterministic, near-instant, and immune to machine load.\n\nThis is first in the epic because it is also a cy2 fix: these two tests are a load source that flips OTHER tests in the same run.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The FETCH_HEAD/concurrent-fetch guards provoke their contention deterministically, with no unthrottled loop and no iteration count chosen by feel. Reintroducing the wdb regression still fails them. internal/runstate's wall clock drops by at least 25 seconds, and the package no longer saturates a core while it runs.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:57:29.326623Z",
+  "updated_at": "2026-09-18T06:57:29.326623Z"
+}

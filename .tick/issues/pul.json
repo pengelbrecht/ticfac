@@ -1,0 +1,14 @@
+{
+  "id": "pul",
+  "title": "Read and write through git's streaming plumbing instead of one process per verb",
+  "description": "internal/runstate/git.go:152 commitWithFile writes every durable record as: hash-object, read-tree, update-index, write-tree, commit-tree, then push and rev-parse. Seven processes per record, ~90 records per fixture epic.\n\nMeasured: 21.6ms to spawn a git process on this machine; 0.90ms for the same query through a long-lived 'git cat-file --batch'. 24x, and process creation is the majority of a test's wall clock rather than git's work.\n\nGit ships streaming plumbing for exactly this shape, and using it keeps full fidelity - it is still real git, the same on-disk format and the same ref semantics, so the defect classes this suite exists to catch stay catchable:\n- git cat-file --batch for reads (one process, many queries)\n- git hash-object --stdin-paths for blobs\n- git update-index --index-info for index entries\n- git fast-import where many objects or commits are written at once\n\nScope this tick to the read and object-write paths, held open per store instance. The commit/push batching is a separate tick because it changes what a record's durability means.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The store reads and writes objects through long-lived batch processes rather than one process per operation. A counted run of the same reconcile end-to-end test spawns substantially fewer git processes (report the before and after counts). Every runstate and reconcile test still passes, and the FETCH_HEAD, refmap and peek-ref guards still fail when their regressions are reintroduced.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:57:29.375199Z",
+  "updated_at": "2026-09-18T06:57:29.375199Z"
+}

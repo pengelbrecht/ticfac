@@ -1,0 +1,17 @@
+{
+  "id": "x73",
+  "title": "Parallelise internal/exec/herdr and internal/exec/subprocess",
+  "description": "-parallel 12 does nothing for a package whose tests never call t.Parallel(). Four of the five slow packages are effectively single-threaded:\n\n  internal/reconcile        167 tests, 165 parallel   (the one that IS parallel, and not the slowest)\n  internal/cli              130 tests,   4 parallel\n  internal/exec/herdr       103 tests,   4 parallel\n  internal/exec/subprocess  101 tests,  17 parallel\n  internal/runstate          42 tests,   3 parallel\n\nMeasured: internal/exec/subprocess 65.3s serial, slowest single test 5.31s, so a parallel wall of roughly 8s. internal/runstate 50.7s serial, slowest 26.5s.\n\nherdr and subprocess are first because nothing blocks them: zero t.Setenv, zero os.Setenv, zero os.Chdir in either, and each harness already takes its own t.TempDir() and its own unix socket. runstate has two t.Setenv call sites and cli has 25 plus two os.Chdir, so those are follow-ons, not this tick.\n\nBlocked on cy2: raising concurrency makes machine contention worse, and five tests in this suite already return verdicts about the machine rather than the tree. Parallelising before they are fixed would manufacture more false refusals, each costing an hour-long re-gate.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "cy2"
+  ],
+  "parent": "t8u",
+  "acceptance_criteria": "Every test in internal/exec/herdr and internal/exec/subprocess that can run in parallel does, and the ones that cannot say why in a comment. Both packages' wall clocks drop materially (report before and after). Run with -race and repeated -count to show the parallelism exposed no shared state.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:57:50.669899Z",
+  "updated_at": "2026-09-18T06:57:50.669899Z"
+}

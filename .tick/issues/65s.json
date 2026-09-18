@@ -1,0 +1,13 @@
+{
+  "id": "65s",
+  "title": "ticfac-exec-subprocess start accepts --attempt but not --try",
+  "description": "The manual executor CLI takes --attempt and not --try, so a hand-started attempt's runner sees TICFAC_TRY=0 rather than the tick's real try count. Nothing keys on it today, which is exactly why it is worth fixing now rather than after something does: the reconciler's own dispatches speak a two-number contract (run-wide attempt, per-tick try) and the manual surface speaks half of it.\n\ndiscovered_from run-epic-9pd/tick-vw0/attempt-30",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "ticfac-exec-subprocess start accepts --try alongside --attempt and passes it through to the runner's environment, and a test covers a hand-started attempt seeing the try it was given.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T07:46:27.735522Z",
+  "updated_at": "2026-09-18T07:46:27.735522Z"
+}
