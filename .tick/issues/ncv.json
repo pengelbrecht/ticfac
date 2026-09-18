@@ -12,8 +12,8 @@
     "9da",
     "odc"
   ],
-  "acceptance_criteria": "Gate: project w1z A1 again — an epic completes unattended and merges its own PR — through the new reconciler, with a Workflow restart mid-run and every in-flight attempt reconciled from .ticfac/.",
+  "acceptance_criteria": "An epic runs to completion unattended and stops at a PR that is REVIEWED and CI-VERIFIED, for a person to merge.\n\nReviewed: the final review ran as a dispatched job, not as a claim - its verdict and every finding it raised are on the PR where the person merging reads them, and any finding still awaiting triage is named rather than silently carried.\n\nCI-verified: CI is green on the head that would be merged, re-derived from the forge at the moment the close-out completes rather than trusted from earlier - and if the run's own writes moved the head, the close-out says which commit the verdict is about (9da).\n\nUnattended: waves, per-tick gates, the final review and the close-out all complete with no operator intervention. Count the interventions and report the number; one is a failure of this gate. Merging is NOT an intervention - it is the one step this gate deliberately leaves to a person.\n\nAlso: a Workflow restarted mid-run resumes from .ticfac/ and reconciles every in-flight attempt, and the TypeScript tracker client passes the pinned 3.2 fixtures.",
   "created_by": "noreply@anthropic.com",
   "created_at": "2026-09-02T11:28:24.528753Z",
-  "updated_at": "2026-09-18T12:12:01.844572Z"
+  "updated_at": "2026-09-18T14:11:16.911451Z"
 }
