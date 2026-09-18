@@ -1,0 +1,13 @@
+{
+  "id": "889",
+  "title": "No test proves a window stop leaves in-flight siblings alone: a teardown-all mutant passes",
+  "description": "When one tick's refusal stops a width\u003e1 dispatch window, runPlan calls announceAbandoned and must leave every live sibling's worktree, branch and credential untouched, so a resumed run can adopt them. That is the claim 5fx's commit message makes and the reason the feed line says 'nothing about this attempt is lost'.\n\nNothing tests it. The h0f reviewer mutated announceAbandoned to tear down every live sibling and the whole internal/reconcile suite still passed (-short -count=1, ok 561s). TestARefusalStopsTheWindowAndNamesWhatIsStillRunning asserts the feed LINE and never the survival it describes.\n\nThis is a hole in the test the orchestrator wrote, not in the behaviour: the behaviour is correct today. But an untested safety property is one a later change removes silently, and this one is the difference between a resumed run adopting three attempts and three workers' work being destroyed.\n\ndiscovered_from run-epic-9pd/tick-h0f/attempt-33",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A test fails when announceAbandoned tears down a live sibling: it asserts the sibling's worktree, branch and credential still exist after the window stops, not merely that the feed mentioned them. Verified by making that exact mutation and watching the test fail.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T10:15:20.727768Z",
+  "updated_at": "2026-09-18T10:15:20.727768Z"
+}

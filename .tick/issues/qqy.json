@@ -1,0 +1,13 @@
+{
+  "id": "qqy",
+  "title": "Private per-instance fetch refs accumulate forever and pin deleted branches against gc",
+  "description": "The wdb/e09c976 fix fetches into refs named by a pid-seq instance id (reconcile/git.go:173, reconcile/tracker.go:113, runstate/store.go:349). Nothing ever deletes them, and every run-epic incarnation and every 'ticfac findings' call mints a new set.\n\nMeasured on the operator's own checkout during the h0f review: 87 refs/ticfac/fetched/* and 121 refs/ticfac/peek/*. They also pin the objects of deleted attempt branches, so gc cannot reclaim them - an unbounded growth in both refs and objects, on every host that has ever run an epic.\n\nThe fix is presumably to delete the private ref when the instance that minted it is done with it, with a sweep for the ones older incarnations left behind. Note the constraint that produced the leading-id shape in the first place: a ref and a directory cannot share a path, so any sweep must not recreate that collision.\n\ndiscovered_from run-epic-9pd/tick-h0f/attempt-33",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An instance deletes its own private fetch refs when it is done, and a sweep removes refs left by incarnations that died. A test runs several store instances and shows the ref count returning to its starting point. Running the sweep against a checkout holding an older build's refs does not fail.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T10:15:20.778153Z",
+  "updated_at": "2026-09-18T10:15:20.778153Z"
+}
