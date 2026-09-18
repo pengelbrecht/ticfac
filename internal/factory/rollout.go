@@ -49,7 +49,7 @@ import (
 // ContainerAppName is the `[[containers]]` application the bundle declares.
 // Wrangler creates and looks the application up by exactly this name (it is
 // `containerConfig.name`), so it is also the name the rollout wait asks about.
-// It must stay in step with ticfac/cloudflare/wrangler.toml.
+// It must stay in step with cloudflare/wrangler.toml.
 const ContainerAppName = "ticks-orchestrator"
 
 const (

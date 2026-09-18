@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/job-protocol.json";
-import credentialOwnership from "../../../contracts/credential-ownership.json";
-import collectVocabulary from "../../../contracts/collect-vocabulary.json";
+import contract from "../../contracts/job-protocol.json";
+import credentialOwnership from "../../contracts/credential-ownership.json";
+import collectVocabulary from "../../contracts/collect-vocabulary.json";
 import { parseDefs, parseSchema, validate, type Defs, type Schema } from "./json-schema";
 
 /**

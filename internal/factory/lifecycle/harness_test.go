@@ -15,7 +15,7 @@ import (
 // one is OBSERVABLE — which is what lets the suite exist in Phase 0, before any
 // reconciler code does, and lets ticfac inherit it unchanged in Phase 1.
 //
-// The TypeScript half (ticfac/cloudflare/test/lifecycle-harness.ts) implements this
+// The TypeScript half (cloudflare/test/lifecycle-harness.ts) implements this
 // independently against the same fixture. That duplication is the deliverable:
 // contracts/README.md's rule is that a fixture with one reader detects nothing,
 // and the failure this suite guards is the quiet kind — a guard that has

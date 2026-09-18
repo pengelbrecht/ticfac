@@ -12,7 +12,7 @@ import (
 	"testing/fstest"
 )
 
-// The embedded payload (ticfac/cloudflare — moved there from cloud/factory by
+// The embedded payload (cloudflare — moved there from cloud/factory by
 // SPEC §12 Phase 4 item 1 — and cloud/sandbox) landed with ticks tick
 // b3a ("Factory move B"), wired into the seams at the top of bundle.go by
 // payload.go's init. The tests here still split in two, and the split stays
@@ -35,7 +35,7 @@ import (
 func requireEmbeddedPayload(t *testing.T) {
 	t.Helper()
 	if factoryFS == nil || sandboxFS == nil {
-		t.Skip("the embedded payload (ticfac/cloudflare, cloud/sandbox) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
+		t.Skip("the embedded payload (cloudflare, cloud/sandbox) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
 	}
 }
 
@@ -48,7 +48,7 @@ func requireEmbeddedPayload(t *testing.T) {
 // payload-guarded tests assert once the payload lands.
 func fakeBundle() fstest.MapFS {
 	return fstest.MapFS{
-		"ticfac/cloudflare/wrangler.toml": &fstest.MapFile{Data: []byte(
+		"cloudflare/wrangler.toml": &fstest.MapFile{Data: []byte(
 			`name = "ticks-factory"
 main = "src/index.ts"
 [[d1_databases]]
@@ -57,15 +57,15 @@ database_id = "` + placeholderDatabaseID + `"
 [[containers]]
 class_name = "Sandbox"
 new_sqlite_classes = ["Sandbox"]
-image = "../../cloud/sandbox/Dockerfile"
+image = "../cloud/sandbox/Dockerfile"
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "ticks-factory-artifacts"
 `)},
-		"ticfac/cloudflare/src/index.ts":             &fstest.MapFile{Data: []byte("export {};")},
-		"ticfac/cloudflare/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
-		"ticfac/cloudflare/migrations/0001_init.sql": &fstest.MapFile{Data: []byte("-- fake migration")},
-		"ticfac/cloudflare/package.json":             &fstest.MapFile{Data: []byte("{}")},
+		"cloudflare/src/index.ts":             &fstest.MapFile{Data: []byte("export {};")},
+		"cloudflare/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
+		"cloudflare/migrations/0001_init.sql": &fstest.MapFile{Data: []byte("-- fake migration")},
+		"cloudflare/package.json":             &fstest.MapFile{Data: []byte("{}")},
 		"cloud/sandbox/Dockerfile": &fstest.MapFile{Data: []byte(
 			"FROM docker.io/cloudflare/sandbox:fake\n" +
 				"ARG TK_VERSION=0.31.0\n" +
@@ -156,7 +156,7 @@ func TestBundlePathsCoverWhatWranglerNeeds(t *testing.T) {
 }
 
 // node_modules is never committed, but a developer who ran `pnpm install` in
-// ticfac/cloudflare must not end up embedding it into the binary.
+// cloudflare must not end up embedding it into the binary.
 func TestBundleExcludesDependenciesAndTests(t *testing.T) {
 	requireEmbeddedPayload(t)
 	for _, p := range BundlePaths() {
@@ -380,7 +380,7 @@ func TestContainerImagePathResolvesAgainstAFakeStagedContext(t *testing.T) {
 	}
 }
 
-// SPEC §12 Phase 4 item 1 moved the bundle to ticfac/cloudflare while
+// SPEC §12 Phase 4 item 1 moved the bundle to cloudflare while
 // cloud/sandbox stays at cloud/sandbox until item 4 takes it, so the
 // committed image path is only true in this repository if it names that
 // cross. This is the half of "one relative path, true in both places" a

@@ -58,13 +58,13 @@ var TkJSONManifestJSON []byte
 //go:embed factory.pin.json
 var SourcePinJSON []byte
 
-// factoryFS holds the deployable factory worker (ticfac/cloudflare — moved
+// factoryFS holds the deployable factory worker (cloudflare — moved
 // there from cloud/factory by SPEC §12 Phase 4 item 1, a move and nothing
 // else), so `ticfac factory deploy` installs the bundle that shipped with
 // this exact ticfac build — the version pin in D16 ("upgrades ride the
 // repo").
 //
-// The patterns are enumerated rather than "all:ticfac/cloudflare" on purpose: a
+// The patterns are enumerated rather than "all:cloudflare" on purpose: a
 // wildcard would sweep in node_modules/, .wrangler/ and dist/ from a
 // developer who ran pnpm install in that directory, and go:embed resolves at
 // compile time, so the binary's size would depend on the build machine's
@@ -82,13 +82,13 @@ var SourcePinJSON []byte
 // tick b3a) because //go:embed cannot reach across modules: the payload and
 // the deploy code that ships it have to live in one module.
 //
-//go:embed ticfac/cloudflare/wrangler.toml ticfac/cloudflare/package.json ticfac/cloudflare/tsconfig.json ticfac/cloudflare/README.md
-//go:embed ticfac/cloudflare/pnpm-lock.yaml ticfac/cloudflare/pnpm-workspace.yaml
-//go:embed ticfac/cloudflare/src ticfac/cloudflare/migrations ticfac/cloudflare/scripts
+//go:embed cloudflare/wrangler.toml cloudflare/package.json cloudflare/tsconfig.json cloudflare/README.md
+//go:embed cloudflare/pnpm-lock.yaml cloudflare/pnpm-workspace.yaml
+//go:embed cloudflare/src cloudflare/migrations cloudflare/scripts
 var factoryFS embed.FS
 
 // FactoryFS returns the embedded factory worker bundle. Paths inside it are
-// rooted at "ticfac/cloudflare", e.g. "ticfac/cloudflare/wrangler.toml".
+// rooted at "cloudflare", e.g. "cloudflare/wrangler.toml".
 func FactoryFS() embed.FS {
 	return factoryFS
 }

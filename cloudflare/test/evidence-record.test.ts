@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import jobProtocol from "../../../contracts/job-protocol.json";
-import runState from "../../../contracts/ticfac-run-state.json";
+import jobProtocol from "../../contracts/job-protocol.json";
+import runState from "../../contracts/ticfac-run-state.json";
 import { parseDefs, parseSchema, validate, type Defs, type Schema } from "./json-schema";
 
 /**

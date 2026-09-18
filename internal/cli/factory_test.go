@@ -128,7 +128,7 @@ func TestFactorySetupAcceptsTheDocumentedFlags(t *testing.T) {
 }
 
 // The staging directory: a deploy materializes the bundle under the ticks home
-// (~/.tick/factory/ticfac/cloudflare by default — the staging mirrors the
+// (~/.tick/factory/cloudflare by default — the staging mirrors the
 // repository layout, TK_HOME for tests) — the touchpoint the tick called out. The path is the library's; what this pins is that the CLI
 // offers --bundle-dir to name it and the flag reaches Deploy.
 func TestFactoryDeployBundleDirFlagReachesTheLibrary(t *testing.T) {

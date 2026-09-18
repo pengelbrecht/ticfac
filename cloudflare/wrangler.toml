@@ -65,7 +65,7 @@ new_sqlite_classes = ["SignalInbox"]
 [[containers]]
 class_name = "Sandbox"
 name = "ticks-orchestrator"
-image = "../../cloud/sandbox/Dockerfile"
+image = "../cloud/sandbox/Dockerfile"
 # Phase 1 boots one container per run. The headroom is for the overlap a reboot
 # creates (the replacement is addressed before the dead one is destroyed) and
 # for a second project's run holding its own lease. Raising it is a deployment

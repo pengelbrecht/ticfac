@@ -11,7 +11,7 @@ import (
 )
 
 // verifyTokenAgainstHash is the test's stand-in for the worker's
-// verifyFactoryToken (ticfac/cloudflare/src/auth.ts). It lives in the test build
+// verifyFactoryToken (cloudflare/src/auth.ts). It lives in the test build
 // only: nothing tk does needs to verify a token — the deployed worker does
 // that — but the fake endpoint in deploy_test.go has to, or "the deploy pushed
 // a hash that matches the token it stored" would go unproven.

@@ -125,9 +125,9 @@ type Result struct {
 
 // DefaultBundleDir is where the bundle is materialized: under the ticks home
 // directory, at the repository-relative position the bundle holds in this
-// repository (ticfac/cloudflare — the move of SPEC §12 Phase 4 item 1 made
+// repository (cloudflare — the move of SPEC §12 Phase 4 item 1 made
 // the staging a mirror of the repository layout, so the committed
-// wrangler.toml's `[[containers]]` image path `../../cloud/sandbox/Dockerfile`
+// wrangler.toml's `[[containers]]` image path `../cloud/sandbox/Dockerfile`
 // resolves in the staged copy exactly as it does in the repository). Wrangler's
 // per-project state survives between deploys and the operator can inspect
 // exactly what was uploaded.
@@ -226,8 +226,8 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 
 	// The image's build context is staged at the repository-relative position
 	// the `[[containers]]` image path in the committed wrangler.toml names
-	// (`../../cloud/sandbox/Dockerfile`, true of the moved bundle at
-	// ticfac/cloudflare): the staging mirrors the repository layout, so the
+	// (`../cloud/sandbox/Dockerfile`, true of the moved bundle at
+	// cloudflare): the staging mirrors the repository layout, so the
 	// committed path resolves to the same tree here as it does in the
 	// repository (SandboxDir, bundle.go).
 	// The ref the image builds its tk from — resolved here, after the

@@ -111,7 +111,7 @@ func (l Loader) Load(ctx context.Context, focus string) (Snapshot, error) {
 // Cost is what a run has spent, as the AI Gateway logs report it.
 //
 // There is deliberately no path here from a run's own claim: the number on the
-// board is telemetry or it is absent (the rule ticfac/cloudflare/src/run-events.ts
+// board is telemetry or it is absent (the rule cloudflare/src/run-events.ts
 // states for `metrics.costUsd`).
 type Cost struct {
 	RunID string    `json:"run_id"`

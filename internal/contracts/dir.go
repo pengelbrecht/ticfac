@@ -21,7 +21,7 @@ func Dir() (string, error) {
 
 // DirName is where the vendored bundle lives, relative to the repository root.
 //
-// It is the root, exactly as ticfac/cloudflare/CONTRACTS.md prescribes for a
+// It is the root, exactly as cloudflare/CONTRACTS.md prescribes for a
 // consuming repository: the copy sits where ticks' own copy sits, so a reader
 // ported from ticks resolves the same relative path.
 const DirName = "contracts"

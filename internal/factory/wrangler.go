@@ -148,7 +148,7 @@ func localWranglerCandidates(bundleDir, startDir string) []wranglerCandidate {
 	if path := findRepositoryFactoryWrangler(startDir); path != "" {
 		candidates = append(candidates, wranglerCandidate{
 			bin:   path,
-			label: "ticfac/cloudflare/node_modules/.bin/wrangler",
+			label: "cloudflare/node_modules/.bin/wrangler",
 		})
 	}
 	return candidates

@@ -1,8 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import bootContract from "../../../contracts/worker-boot-contract.json";
-import collectContract from "../../../contracts/collect-vocabulary.json";
+import bootContract from "../../contracts/worker-boot-contract.json";
+import collectContract from "../../contracts/collect-vocabulary.json";
 
 // The two deployable files this suite pins strings out of. Vite inlines a
 // `?raw` import at transform time, which is what makes reading them possible
@@ -13,7 +13,7 @@ import collectContract from "../../../contracts/collect-vocabulary.json";
 // SPEC §12 Phase 4 item 1 — to the image context, which still lives at
 // cloud/sandbox until item 4 moves it.)
 import RUN_WORKFLOW_TS from "../src/run-workflow.ts?raw";
-import WORKER_SH from "../../../cloud/sandbox/worker.sh?raw";
+import WORKER_SH from "../../cloud/sandbox/worker.sh?raw";
 import WRANGLER_TOML from "../wrangler.toml?raw";
 
 import {

@@ -51,7 +51,12 @@ const PIN_PATH = join(FACTORY_DIR, "contracts.pin.json");
  * two-up depth, which is the whole contract). This resolution and the tests'
  * own `../../../contracts/...` imports keep pointing at the same directory.
  */
-const REPO_ROOT = resolve(FACTORY_DIR, "..", "..");
+// One level up, not two: this package moved from cloud/factory to cloudflare/
+// at the repository root (tick l9n). Resolved from the package rather than
+// hardcoded depth-by-counting where practical — a path that encodes how deep
+// the package sits breaks silently the next time it moves, which is exactly
+// what this line did.
+const REPO_ROOT = resolve(FACTORY_DIR, "..");
 const CONTRACTS_DIR = join(REPO_ROOT, "contracts");
 const TEST_DIR = join(FACTORY_DIR, "test");
 
@@ -410,7 +415,13 @@ export function verifySchemaIds(contractsDir) {
  */
 function importedContracts() {
   const imported = new Set();
-  const pattern = /["']\.\.\/\.\.\/\.\.\/contracts\/([a-z0-9-]+\.json)["']/g;
+  // Any number of leading ../ rather than exactly three: the three encoded
+  // where this package used to sit (cloud/factory), so moving it to the
+  // repository root made every import invisible to this scanner at once — and
+  // an import this cannot see is a contract it reports as unread, which is the
+  // refusal that then blocks the pin. Depth is not what makes an import a
+  // contract import; the contracts/ path is.
+  const pattern = /["'](?:\.\.\/)+contracts\/([a-z0-9-]+\.json)["']/g;
 
   for (const entry of readdirSync(TEST_DIR)) {
     if (!entry.endsWith(".test.ts")) continue;

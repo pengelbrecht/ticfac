@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/sweep-selection-contract.json";
-import parityCases from "../../../contracts/sweep-policy-cases.json";
+import contract from "../../contracts/sweep-selection-contract.json";
+import parityCases from "../../contracts/sweep-policy-cases.json";
 import {
   CLOSED_STATUS,
   SWEEP_GATES,

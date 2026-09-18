@@ -196,7 +196,7 @@ func load(t *testing.T) contract {
 // before a test asserts symbols inside those files.
 //
 // Files under cloud/** are the embedded payload (the factory Worker bundle,
-// at ticfac/cloudflare since the SPEC §12 Phase 4 item 1 move, and the
+// at cloudflare since the SPEC §12 Phase 4 item 1 move, and the
 // orchestrator image context at cloud/sandbox), which landed with ticks
 // tick b3a ("Factory move B") together with the trees the contract points
 // into. Now that it is here, a named cloud/** file that is absent IS drift:
@@ -228,7 +228,7 @@ func requireContractSources(t *testing.T, files ...string) {
 // where it lives in this repository. The bundle predates the SPEC §12 Phase 4
 // item 1 move: its `today` sites and threshold sources say
 // "cloud/factory/..." for the worker bundle this repository now ships at
-// ticfac/cloudflare, and the vendored contract moves by bundle bump
+// cloudflare, and the vendored contract moves by bundle bump
 // (CONTRACTS.md), never by a payload edit behind its back. Until a bundle
 // version names the new location, this reader - and only this reader -
 // carries the translation: every other path in it ("cloud/sandbox/...",
@@ -238,7 +238,7 @@ func requireContractSources(t *testing.T, files ...string) {
 // teeth.
 func contractSourcePath(file string) string {
 	if after, ok := strings.CutPrefix(file, "cloud/factory/"); ok {
-		return "ticfac/cloudflare/" + after
+		return "cloudflare/" + after
 	}
 	return file
 }
@@ -395,7 +395,7 @@ func TestEveryInvariantCrossReferencesWhereItLivesToday(t *testing.T) {
 	// SPEC says is 3,500 lines BECAUSE of these orderings is caught: that is a
 	// cross-reference rotting, not a rule moving.
 	if runWorkflow < 10 {
-		t.Errorf("only %d of 13 invariants cross-reference cloud/factory/src/run-workflow.ts (the contract's spelling for the bundle this repository now holds at ticfac/cloudflare)", runWorkflow)
+		t.Errorf("only %d of 13 invariants cross-reference cloud/factory/src/run-workflow.ts (the contract's spelling for the bundle this repository now holds at cloudflare)", runWorkflow)
 	}
 }
 
@@ -618,7 +618,7 @@ func TestPollCadenceIsPinnedUnderTheWipeThreshold(t *testing.T) {
 // substrate's wipe threshold at all — and satisfied every inequality here while
 // describing a substrate that does not exist. So each threshold now names the
 // constant it must equal, and the reader that can reach that constant asserts
-// the equality: ticfac/cloudflare/test/lifecycle-invariants.test.ts IMPORTS the
+// the equality: cloudflare/test/lifecycle-invariants.test.ts IMPORTS the
 // three TypeScript ones, and this side takes the shell default it can read and
 // checks that every named symbol is still where the fixture says it is.
 func TestThresholdsNameTheSubstrateConstantTheyPin(t *testing.T) {

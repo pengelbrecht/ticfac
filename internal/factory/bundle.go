@@ -14,7 +14,7 @@ import (
 	"sync"
 )
 
-// The embedded payload — ticfac/cloudflare (the Worker bundle, moved there
+// The embedded payload — cloudflare (the Worker bundle, moved there
 // from cloud/factory by SPEC §12 Phase 4 item 1) and cloud/sandbox (the
 // orchestrator image's build context) — moved repository with this code
 // (ticks tick b3a, "Factory move B"), because //go:embed cannot reach across
@@ -27,7 +27,7 @@ import (
 // a silent empty bundle.
 var (
 	// factoryFS is the embedded factory bundle tree, rooted at the
-	// repository root: its paths carry the "ticfac/cloudflare" prefix.
+	// repository root: its paths carry the "cloudflare" prefix.
 	factoryFS fs.FS
 	// sandboxFS is the embedded orchestrator image context, rooted at the
 	// repository root: its paths carry the "cloud/sandbox" prefix.
@@ -47,7 +47,7 @@ func missingPayload(which string) error {
 // BundleSHA hashes, what every consumer reads) are unchanged, so a factory
 // deployed from before the move is indistinguishable from one deployed
 // after it.
-const bundleRoot = "ticfac/cloudflare"
+const bundleRoot = "cloudflare"
 
 // sandboxRoot is the prefix the embedded FS uses for the orchestrator image's
 // build context.
@@ -66,13 +66,13 @@ const sandboxHashDir = "sandbox"
 // path in the committed wrangler.toml says the same thing, and the deploy
 // stages the image context so the committed path resolves there too — the
 // staging mirrors the repository layout (the bundle sits at
-// ticfac/cloudflare under the staging root, the image context at
+// cloudflare under the staging root, the image context at
 // cloud/sandbox), so one relative path is true in both places and the
 // committed config is the deployed config. When SPEC §12 Phase 4 item 4
 // moves the image context to ticfac/image, this constant and the committed
 // path move together, and the guard in bundle_test fails first if they do
 // not.
-const sandboxRelativeToBundle = "../../cloud/sandbox"
+const sandboxRelativeToBundle = "../cloud/sandbox"
 
 // placeholderDatabaseID is the database_id committed in wrangler.toml. It
 // keeps `wrangler dev` and the vitest harness working out of the box; a real

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/credential-ownership.json";
+import contract from "../../contracts/credential-ownership.json";
 
 import { parseSchema, validate, type Schema } from "./json-schema";
 

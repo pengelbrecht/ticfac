@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/ticfac-run-state.json";
-import jobProtocol from "../../../contracts/job-protocol.json";
+import contract from "../../contracts/ticfac-run-state.json";
+import jobProtocol from "../../contracts/job-protocol.json";
 
 import { FakeGit, canonical, type Content, type Step } from "./git-cas-fake";
 import { parseSchema, validate, type Schema } from "./json-schema";

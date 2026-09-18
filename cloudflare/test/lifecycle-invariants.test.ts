@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/lifecycle-invariants.json";
-import jobProtocol from "../../../contracts/job-protocol.json";
+import contract from "../../contracts/lifecycle-invariants.json";
+import jobProtocol from "../../contracts/job-protocol.json";
 
 import { MAX_POLL_MS } from "../src/run-workflow";
 import { SANDBOX_SLEEP_AFTER } from "../src/sandbox";

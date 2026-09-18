@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import manifest from "../../../contracts/tk-json-manifest.json";
+import manifest from "../../contracts/tk-json-manifest.json";
 import requiredTkCommands from "../required-tk-commands?raw";
 
 import { parseDefs, parseSchema, type Defs, type Schema } from "./json-schema";

@@ -4,7 +4,7 @@ import (
 	ticfac "github.com/pengelbrecht/ticfac"
 )
 
-// The embedded payload — ticfac/cloudflare (the Worker bundle) and cloud/sandbox
+// The embedded payload — cloudflare (the Worker bundle) and cloud/sandbox
 // (the orchestrator image's build context) — lives in the module-root package,
 // because //go:embed can only reference paths at or below its own package
 // directory. This file is the one line of glue: it wires the module-root

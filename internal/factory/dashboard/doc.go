@@ -24,7 +24,7 @@
 // factory surface it can reach, has two methods and both are GETs, so a board
 // that could steer a run cannot be built out of this package by accident.
 // That is not fastidiousness: the board is not the completion authority
-// (ticfac/cloudflare/src/worker-collect.ts is), and a frame is up to a couple of
+// (cloudflare/src/worker-collect.ts is), and a frame is up to a couple of
 // seconds old, so an action taken from here would be an action taken on a
 // stale view. If it ever gains actions they route through the same closed
 // command surface as `tk cloud run/stop` (D21), not a private path.
@@ -42,7 +42,7 @@
 //
 // # Where the picture comes from
 //
-// One read: `GET /api/observe` (ticfac/cloudflare/src/observe.ts), which composes
+// One read: `GET /api/observe` (cloudflare/src/observe.ts), which composes
 // the run listing, the focused run's Workflow phase, image digest and boot
 // attempt, the RunRoom's pending questions, the `dispatch_log` refusals and
 // the tail of the `run_event` stream the room forwarded (tick bne). One

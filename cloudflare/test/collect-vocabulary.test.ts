@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import contract from "../../../contracts/collect-vocabulary.json";
+import contract from "../../contracts/collect-vocabulary.json";
 import {
   parseStatus,
   needsHuman,

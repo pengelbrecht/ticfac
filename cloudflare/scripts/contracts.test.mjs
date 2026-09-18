@@ -27,7 +27,8 @@ import { after, test } from "node:test";
 import { verifyBundle, verifySchemaIds } from "./contracts.mjs";
 
 const FACTORY_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const REPO_ROOT = resolve(FACTORY_DIR, "..", "..");
+// One level, not two: this package sits at the repository root now (tick l9n).
+const REPO_ROOT = resolve(FACTORY_DIR, "..");
 const CONTRACTS_DIR = join(REPO_ROOT, "contracts");
 const PIN_PATH = join(FACTORY_DIR, "contracts.pin.json");
 

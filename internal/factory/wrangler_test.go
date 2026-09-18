@@ -46,7 +46,7 @@ func TestFindWranglerFromRepositoryFactoryNodeModules(t *testing.T) {
 	if filepath.Clean(w.bin) != filepath.Clean(localWrangler) {
 		t.Errorf("resolved binary = %q, want repository copy %q", w.bin, localWrangler)
 	}
-	if !strings.Contains(w.label, "ticfac/cloudflare/node_modules/.bin/wrangler") {
+	if !strings.Contains(w.label, "cloudflare/node_modules/.bin/wrangler") {
 		t.Errorf("label = %q, want the repository-local path", w.label)
 	}
 }
@@ -144,7 +144,7 @@ func TestFindWranglerSkipsNpxThatReportsItsOwnVersion(t *testing.T) {
 	if filepath.Clean(w.bin) != filepath.Clean(localWrangler) {
 		t.Errorf("resolved binary = %q, want repository copy %q", w.bin, localWrangler)
 	}
-	if w.label != "ticfac/cloudflare/node_modules/.bin/wrangler" {
+	if w.label != "cloudflare/node_modules/.bin/wrangler" {
 		t.Errorf("label = %q, want repository-local Wrangler", w.label)
 	}
 }
