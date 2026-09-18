@@ -616,3 +616,4 @@
 {"ts":"2026-09-18T06:10:13.525817Z","tick":"593","action":"create","actor":"claude:orchestrator","data":{"priority":2,"title":"A CI read error is typed as a PR refusal in both close-out gates","type":"task"}}
 {"ts":"2026-09-18T06:29:24.677534Z","tick":"sqx","action":"note","actor":"ticfac","epic":"9pd","data":{"note":"\n2026-09-18 08:29 - ticfac run epic-9pd: attempt 28 merged into epic/9pd as 8d70029ca6ce; the integrated gate (go) passed.","title":"Close-out's own commits are never held for green CI"}}
 {"ts":"2026-09-18T06:29:30.289002Z","tick":"sqx","action":"close","actor":"ticfac","epic":"9pd","data":{"title":"Close-out's own commits are never held for green CI"}}
+{"ts":"2026-09-18T06:29:53.693052Z","tick":"n4h","action":"start","actor":"ticfac","epic":"9pd","data":{"title":"Predecessor reports are invisible across run ids"}}
