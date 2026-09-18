@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // TestAnOperatorFetchingInTheRunsCheckoutEndsNothing is the end-to-end proof
@@ -72,7 +74,7 @@ func TestAnOperatorFetchingInTheRunsCheckoutEndsNothing(t *testing.T) {
 				return
 			default:
 				// What a watcher does: fetch everything, in the run's checkout.
-				_ = exec.Command("git", "-C", dir, "fetch", "--quiet", "origin").Run()
+				_ = exec.Command(gitbin.Path(), "-C", dir, "fetch", "--quiet", "origin").Run()
 			}
 		}
 	}()

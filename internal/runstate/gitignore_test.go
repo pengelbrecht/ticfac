@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The `.gitignore` fragment, asserted with git itself.
@@ -168,7 +170,7 @@ func TestThisRepositoryCarriesTheInstalledFragment(t *testing.T) {
 
 func gitIgnores(t *testing.T, root, path string) bool {
 	t.Helper()
-	cmd := exec.Command("git", "check-ignore", "-q", "--no-index", path)
+	cmd := exec.Command(gitbin.Path(), "check-ignore", "-q", "--no-index", path)
 	cmd.Dir = root
 	err := cmd.Run()
 	if err == nil {
