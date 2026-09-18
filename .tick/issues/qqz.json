@@ -1,0 +1,13 @@
+{
+  "id": "qqz",
+  "title": "The no-herdr seam test is a file grep and cannot see a real dependency edge",
+  "description": "TestReconcileContainsNoHerdrCode greps internal/reconcile's own files, so it passes while 'go list -deps ./internal/reconcile' includes internal/herd/client - pulled in through internal/runconfig/substrate.go:11. The seam the test exists to defend is already crossed, and the test cannot see it.\n\nThis predates Phase 3 (present at 4d14be6), so it is not a regression; it is a guard that has never been able to fail for the reason it was written.\n\nTwo candidate repairs: assert on 'go list -deps' output instead of file contents, or move the socket helpers out of runconfig so the edge genuinely does not exist. The second is better if the seam is meant to be real.\n\nFound by the h0f Phase 3 review.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The seam is asserted from the dependency graph rather than from file text, and the assertion fails if reconcile gains a herdr dependency by any path. If the existing edge through runconfig is meant to be allowed, it is named explicitly as an exception with the reason.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T08:55:26.67663Z",
+  "updated_at": "2026-09-18T08:55:26.67663Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "gf3",
+  "title": "Appendix A2 and the code disagree about a checkpoint conflict, and A2 was never amended",
+  "description": "A2 says a run-state conflict does not end the run and fails only after a bounded number of CONSECUTIVE conflicts. reconcile.go:1341-1352 ends the run on the FIRST checkpoint conflict, by a decision recorded in wdb's close note - and A2 was never amended, the way A3 and A4 were when their decisions changed.\n\nSo the contract and the implementation disagree, and the contract is the one people read. Two honest ways out: amend A2 to say what the run actually does and why one conflict is enough, or implement the bounded continue A2 promises. Decide which, do it, and do not leave the pair disagreeing.\n\nFound by the h0f Phase 3 review.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Appendix A2 and reconcile's behaviour say the same thing, with the decision and its reason recorded where a reader of A2 will find it. If the bounded continue is implemented, a test covers consecutive conflicts up to and past the bound.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T08:55:26.622937Z",
+  "updated_at": "2026-09-18T08:55:26.622937Z"
+}
