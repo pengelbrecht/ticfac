@@ -125,7 +125,9 @@ export class FakeGit {
       case "update_if_sha":
         return this.updateIfSha(step.actor, step.path as string, step.content as Content);
       default:
-        throw new Error(`the fixture uses op ${JSON.stringify(step.op)}, which this fake does not implement`);
+        throw new Error(
+          `the fixture uses op ${JSON.stringify(step.op)}, which this fake does not implement`,
+        );
     }
   }
 }

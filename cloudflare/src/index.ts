@@ -45,64 +45,62 @@
  * docs/design/cloud-factory.md.
  */
 
-import { WAVE_PATH, authenticateFactoryRequest, isAuthConfigured, isAuthExempt } from "./auth";
 import {
   HARNESS_TAIL_MAX_BYTES,
   listWorkerLogStreams,
   readHarnessTail,
   readWorkerLogTail,
 } from "./artifacts";
+import { authenticateFactoryRequest, isAuthConfigured, isAuthExempt, WAVE_PATH } from "./auth";
+import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
+import { ciEscalationsRoute } from "./ci-escalations";
+import { proxyGitRequest } from "./credentials";
 import {
+  type EnrolledProject,
   enrolProject,
   getEnrolledProject,
   getRun,
+  getSweepSelection,
   listEnrolledProjects,
+  listSweepSelections,
   removeEnrolledProject,
-  type EnrolledProject,
 } from "./db";
-import { proxyGitRequest } from "./credentials";
-import { proxyModelRequest } from "./gateway";
 import { handleDraftPress, parseDraftCallback } from "./drafts";
-import { ciEscalationsRoute } from "./ci-escalations";
-import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
-import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
-import { REVIEW_PATH, postReviewFindings } from "./pr-review";
-import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
-import { observeRoute } from "./observe";
-import { requestWave } from "./wave-request";
-import { runDueSweeps } from "./sweep-dispatch";
-import { runDailyDigest } from "./loop-digest";
-import { getSweepSelection, listSweepSelections } from "./db";
-import { SignalInbox } from "./signal-inbox";
-import { RunWorkflow, effectiveRunBudget } from "./run-workflow";
 import {
-  RunRoom,
+  bareTextOf,
+  type FreeTextCandidate,
+  renderFreeTextRefusal,
+  resolveFreeText,
+} from "./free-text";
+import { proxyModelRequest } from "./gateway";
+import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
+import { runDailyDigest } from "./loop-digest";
+import { observeRoute } from "./observe";
+import { postReviewFindings, REVIEW_PATH } from "./pr-review";
+import {
   type MessageRef,
   type Outcome,
   type PendingKind,
   type Question,
   type RegisterQuestionRequest,
+  RunRoom,
   type StopMode,
 } from "./run-room";
+import { effectiveRunBudget, RunWorkflow } from "./run-workflow";
 import {
   DEFAULT_RUN_LIMIT,
-  MAX_RUN_LIMIT,
-  RUN_STATES,
   listRunStatus,
+  MAX_RUN_LIMIT,
   parseSubmission,
+  RUN_STATES,
   roomFor,
   runStatus,
   stopRun,
   submitRun,
 } from "./runs";
+import { SignalInbox } from "./signal-inbox";
+import { runDueSweeps } from "./sweep-dispatch";
 import {
-  bareTextOf,
-  renderFreeTextRefusal,
-  resolveFreeText,
-  type FreeTextCandidate,
-} from "./free-text";
-import {
-  TELEGRAM_WEBHOOK_PATH,
   answerTelegramCallback,
   deliverTelegramQuestion,
   isPairedTelegramUpdate,
@@ -111,13 +109,16 @@ import {
   registerTelegramWebhook,
   sendTelegramReport,
   settleTelegramQuestion,
+  TELEGRAM_WEBHOOK_PATH,
+  type TelegramRouting,
+  type TelegramWebhookUpdate,
   telegramCallbackText,
   telegramConfig,
   telegramWebhookInfo,
   unregisterTelegramWebhook,
-  type TelegramRouting,
-  type TelegramWebhookUpdate,
 } from "./telegram";
+import { requestWave } from "./wave-request";
+import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
 export type Env = Cloudflare.Env;
@@ -170,7 +171,7 @@ async function health(env: Env): Promise<Response> {
 function methodNotAllowed(allow: string[]): Response {
   return Response.json(
     { error: "method_not_allowed", detail: `allowed: ${allow.join(", ")}` },
-    { status: 405, headers: { Allow: allow.join(", ") } }
+    { status: 405, headers: { Allow: allow.join(", ") } },
   );
 }
 
@@ -224,7 +225,7 @@ async function submitRoute(request: Request, env: Env): Promise<Response> {
     case "started":
       return Response.json(
         { run: result.started.run, workflow: result.started.workflow, budget },
-        { status: 201 }
+        { status: 201 },
       );
     case "queued":
       // 202: accepted, not running. The holder is named either way, so the
@@ -237,7 +238,7 @@ async function submitRoute(request: Request, env: Env): Promise<Response> {
           reason: `lease_held_by:${result.holder.run_id}`,
           budget,
         },
-        { status: 202 }
+        { status: 202 },
       );
     case "refused":
       // 409: the project is busy, and the holder's run id is what makes the
@@ -250,14 +251,14 @@ async function submitRoute(request: Request, env: Env): Promise<Response> {
           detail: result.detail,
           run_id: result.run_id,
         },
-        { status: 409 }
+        { status: 409 },
       );
     case "not_enrolled":
       // 403, not 404: the caller is authenticated, and the project's absence
       // from the enrolment table is a policy answer, not a missing route.
       return Response.json(
         { error: "project_not_enrolled", detail: result.detail, run_id: result.run_id },
-        { status: 403 }
+        { status: 403 },
       );
     case "invalid":
       return badRequest(result.detail);
@@ -292,7 +293,7 @@ async function listRoute(url: URL, env: Env): Promise<Response> {
       ...(project === null ? {} : { project }),
       ...(state === null ? {} : { state }),
       limit,
-    })
+    }),
   );
 }
 
@@ -354,7 +355,7 @@ async function stopRoute(request: Request, runID: string, env: Env): Promise<Res
           detail: `run ${runID} is ${result.run.state}; there is nothing to stop`,
           run: result.run,
         },
-        { status: 409 }
+        { status: 409 },
       );
     case "invalid":
       return badRequest(result.detail);
@@ -390,7 +391,7 @@ async function logsRoute(url: URL, runID: string, env: Env): Promise<Response> {
         error: "artifacts_unavailable",
         detail: "this deployment has no artifacts bucket, so no harness output was ever stored",
       },
-      { status: 503 }
+      { status: 503 },
     );
   }
 
@@ -470,7 +471,10 @@ async function projectsRoute(request: Request, env: Env, path: string[]): Promis
     if (!json.ok) return badRequest("the request body must be JSON");
     const body = (json.body ?? {}) as Record<string, unknown>;
     const project = body?.project;
-    if (typeof project !== "string" || !PROJECT_PATTERN.test(project.trim().replace(/\.git$/, ""))) {
+    if (
+      typeof project !== "string" ||
+      !PROJECT_PATTERN.test(project.trim().replace(/\.git$/, ""))
+    ) {
       return badRequest("project must be the canonical owner/repo pair");
     }
 
@@ -506,7 +510,7 @@ async function projectsRoute(request: Request, env: Env, path: string[]): Promis
   if (!removed) {
     return Response.json(
       { error: "project_not_enrolled", detail: `project ${project} is not enrolled` },
-      { status: 404 }
+      { status: 404 },
     );
   }
   return Response.json({ project, enrolled: false });
@@ -522,7 +526,7 @@ async function projectsRoute(request: Request, env: Env, path: string[]): Promis
  * message the project ever sends.
  */
 function readTopicAssignment(
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
 ): { ok: true; value: string | null | undefined } | { ok: false; detail: string } {
   if (!("telegram_topic_id" in body)) return { ok: true, value: undefined };
   const raw = body.telegram_topic_id;
@@ -551,7 +555,7 @@ function readTopicAssignment(
  */
 function routingFor(
   enrolment: EnrolledProject,
-  about: { epic?: string; tick?: string } = {}
+  about: { epic?: string; tick?: string } = {},
 ): TelegramRouting {
   return {
     context: {
@@ -559,16 +563,14 @@ function routingFor(
       ...(about.epic === undefined ? {} : { epic: about.epic }),
       ...(about.tick === undefined ? {} : { tick: about.tick }),
     },
-    ...(enrolment.telegram_topic_id === undefined
-      ? {}
-      : { topic_id: enrolment.telegram_topic_id }),
+    ...(enrolment.telegram_topic_id === undefined ? {} : { topic_id: enrolment.telegram_topic_id }),
   };
 }
 
 /** routingFor, taking the epic and tick off a pending entry. */
 function questionRouting(
   enrolment: EnrolledProject,
-  entry: { epic?: string; tick_id?: string }
+  entry: { epic?: string; tick_id?: string },
 ): TelegramRouting {
   return routingFor(enrolment, {
     ...(entry.epic === undefined ? {} : { epic: entry.epic }),
@@ -582,7 +584,7 @@ async function projectOperatorRoute(
   request: Request,
   env: Env,
   project: string,
-  path: string[]
+  path: string[],
 ): Promise<Response> {
   // The RunRoom is per enrolled project. Refusing a missing project here keeps
   // an authenticated token from turning the bridge into an arbitrary DO probe.
@@ -590,7 +592,7 @@ async function projectOperatorRoute(
   if (enrolment === null) {
     return Response.json(
       { error: "project_not_enrolled", detail: `project ${project} is not enrolled` },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -611,14 +613,14 @@ async function projectOperatorRoute(
         routingFor(enrolment, {
           ...(typeof body?.epic === "string" ? { epic: body.epic } : {}),
           ...(typeof body?.tick_id === "string" ? { tick: body.tick_id } : {}),
-        })
+        }),
       );
       return Response.json({ ok: true, ref: sent });
     } catch (error) {
       console.error(`factory telegram: report delivery failed for ${project}: ${String(error)}`);
       return Response.json(
         { error: "telegram_unavailable", detail: "report could not be delivered" },
-        { status: 503 }
+        { status: 503 },
       );
     }
   }
@@ -652,7 +654,7 @@ async function projectOperatorRoute(
   if (entry === null) {
     return Response.json(
       { error: "unknown_question", detail: `no question ${questionID} is registered` },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -666,7 +668,7 @@ async function projectOperatorRoute(
       console.error(`factory telegram: settle failed for ${questionID}: ${String(error)}`);
       return Response.json(
         { error: "telegram_unavailable", detail: "question could not be updated" },
-        { status: 503 }
+        { status: 503 },
       );
     }
   }
@@ -680,8 +682,10 @@ async function projectOperatorRoute(
     answered_by: "terminal",
   });
   if (result.ok === false && result.error === "invalid_request") return badRequest(result.detail);
-  if (result.ok === false && result.error === "unknown_question") return Response.json(result, { status: 404 });
-  if (result.ok === false && result.error === "already_answered") return Response.json(result, { status: 409 });
+  if (result.ok === false && result.error === "unknown_question")
+    return Response.json(result, { status: 404 });
+  if (result.ok === false && result.error === "already_answered")
+    return Response.json(result, { status: 409 });
   try {
     await settleTelegramQuestion(env, result.entry, parsed.outcome, routing(result.entry));
   } catch (error) {
@@ -696,7 +700,7 @@ async function registerRemoteQuestion(
   request: Request,
   env: Env,
   room: DurableObjectStub<RunRoom>,
-  enrolment: EnrolledProject
+  enrolment: EnrolledProject,
 ): Promise<Response> {
   const json = await readJSON(request);
   if (!json.ok) return badRequest("the request body must be JSON");
@@ -713,38 +717,47 @@ async function registerRemoteQuestion(
         const delivered = await deliverTelegramQuestion(
           env,
           result.entry,
-          questionRouting(enrolment, result.entry)
+          questionRouting(enrolment, result.entry),
         );
         const marked = await room.markDelivered(result.entry.id, delivered);
         if (marked.ok) return Response.json({ entry: marked.entry });
       } catch (error) {
-        console.error(`factory telegram: retry delivery failed for ${result.entry.id}: ${String(error)}`);
+        console.error(
+          `factory telegram: retry delivery failed for ${result.entry.id}: ${String(error)}`,
+        );
         return Response.json(
           { error: "telegram_unavailable", detail: "question could not be delivered" },
-          { status: 503 }
+          { status: 503 },
         );
       }
     }
     return Response.json(
       { error: result.error, detail: result.detail, entry: result.entry },
-      { status: 409 }
+      { status: 409 },
     );
   }
 
   let entry = result.entry;
   if (notify === "telegram") {
     try {
-      const delivered = await deliverTelegramQuestion(env, entry, questionRouting(enrolment, entry));
+      const delivered = await deliverTelegramQuestion(
+        env,
+        entry,
+        questionRouting(enrolment, entry),
+      );
       const marked = await room.markDelivered(entry.id, delivered);
       if (!marked.ok) {
-        return Response.json({ error: "pending_delivery_failed", detail: marked.detail }, { status: 503 });
+        return Response.json(
+          { error: "pending_delivery_failed", detail: marked.detail },
+          { status: 503 },
+        );
       }
       entry = marked.entry;
     } catch (error) {
       console.error(`factory telegram: delivery failed for ${entry.id}: ${String(error)}`);
       return Response.json(
         { error: "telegram_unavailable", detail: "question could not be delivered" },
-        { status: 503 }
+        { status: 503 },
       );
     }
   }
@@ -752,10 +765,8 @@ async function registerRemoteQuestion(
 }
 
 function pendingRegistration(
-  body: JSONRecord
-):
-  | { ok: true; request: RegisterQuestionRequest }
-  | { ok: false; detail: string } {
+  body: JSONRecord,
+): { ok: true; request: RegisterQuestionRequest } | { ok: false; detail: string } {
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, detail: "the request body must be a JSON object" };
   }
@@ -785,10 +796,8 @@ function pendingRegistration(
 }
 
 function parseOutcome(
-  value: unknown
-):
-  | { ok: true; outcome: Outcome }
-  | { ok: false; detail: string } {
+  value: unknown,
+): { ok: true; outcome: Outcome } | { ok: false; detail: string } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return { ok: false, detail: "outcome is required" };
   }
@@ -832,7 +841,10 @@ async function telegramWebhookRoute(request: Request, env: Env): Promise<Respons
   try {
     config = telegramConfig(env);
   } catch (error) {
-    return Response.json({ error: "telegram_not_configured", detail: String(error) }, { status: 503 });
+    return Response.json(
+      { error: "telegram_not_configured", detail: String(error) },
+      { status: 503 },
+    );
   }
   if (
     config.webhook_secret !== undefined &&
@@ -899,13 +911,20 @@ async function telegramWebhookRoute(request: Request, env: Env): Promise<Respons
             env,
             result.entry,
             answer.outcome,
-            questionRouting(project, result.entry)
+            questionRouting(project, result.entry),
           );
         } catch (error) {
-          console.error(`factory telegram: webhook settle failed for ${entry.id}: ${String(error)}`);
+          console.error(
+            `factory telegram: webhook settle failed for ${entry.id}: ${String(error)}`,
+          );
         }
         await acknowledgeTelegramCallback(env, update);
-        return Response.json({ ok: true, answered: true, project: project.project, question_id: entry.id });
+        return Response.json({
+          ok: true,
+          answered: true,
+          project: project.project,
+          question_id: entry.id,
+        });
       }
       if (result.ok === false && result.error === "already_answered") {
         await acknowledgeTelegramCallback(env, update, telegramCallbackText(result.answered_by));
@@ -943,7 +962,7 @@ async function answerBareTelegramText(
   update: TelegramWebhookUpdate,
   text: string,
   candidates: FreeTextCandidate[],
-  enrolments: Map<string, EnrolledProject>
+  enrolments: Map<string, EnrolledProject>,
 ): Promise<Response> {
   const resolution = resolveFreeText(text, candidates);
   if (resolution.kind === "none") return Response.json({ ok: true, matched: false });
@@ -994,13 +1013,13 @@ async function answerBareTelegramText(
         env,
         result.entry,
         resolution.outcome,
-        questionRouting(enrolment, result.entry)
+        questionRouting(enrolment, result.entry),
       );
     }
   } catch (error) {
     // The DO answer is durable; a failed edit is presentation only.
     console.error(
-      `factory telegram: free-text settle failed for ${candidate.entry.id}: ${String(error)}`
+      `factory telegram: free-text settle failed for ${candidate.entry.id}: ${String(error)}`,
     );
   }
   return Response.json({
@@ -1023,7 +1042,7 @@ async function answerBareTelegramText(
 async function replyToTelegramMessage(
   env: Env,
   update: TelegramWebhookUpdate,
-  text: string
+  text: string,
 ): Promise<void> {
   const message = update.message;
   if (message === undefined) return;
@@ -1050,7 +1069,10 @@ async function telegramWebhookAdminRoute(request: Request, env: Env): Promise<Re
   try {
     telegramConfig(env);
   } catch (error) {
-    return Response.json({ error: "telegram_not_configured", detail: String(error) }, { status: 503 });
+    return Response.json(
+      { error: "telegram_not_configured", detail: String(error) },
+      { status: 503 },
+    );
   }
 
   try {
@@ -1085,12 +1107,12 @@ async function telegramWebhookAdminRoute(request: Request, env: Env): Promise<Re
 async function acknowledgeTelegramCallback(
   env: Env,
   update: TelegramWebhookUpdate,
-  text?: string
+  text?: string,
 ): Promise<void> {
   const callback = update.callback_query;
   if (callback === undefined) return;
   await answerTelegramCallback(env, callback.id, text).catch((error) =>
-    console.error(`factory telegram: callback acknowledgement failed: ${String(error)}`)
+    console.error(`factory telegram: callback acknowledgement failed: ${String(error)}`),
   );
 }
 
@@ -1114,7 +1136,7 @@ async function sweepsRoute(url: URL, env: Env): Promise<Response> {
   if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
     return Response.json(
       { error: "invalid_request", detail: "limit must be a positive integer" },
-      { status: 400 }
+      { status: 400 },
     );
   }
   const rows = await listSweepSelections(env.DB, {
@@ -1167,7 +1189,10 @@ export default {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       const result = await requestWave(env, request);
       if (!result.ok) {
-        return Response.json({ error: result.error, detail: result.detail }, { status: result.status });
+        return Response.json(
+          { error: result.error, detail: result.detail },
+          { status: result.status },
+        );
       }
       return Response.json({ wave: result.request }, { status: 202 });
     }
@@ -1184,14 +1209,14 @@ export default {
       if (!claimed.ok) {
         return Response.json(
           { error: claimed.error, detail: claimed.detail },
-          { status: claimed.status }
+          { status: claimed.status },
         );
       }
       return Response.json(
         { recorded: claimed.created, branch: claimed.record },
         // 200 rather than 201 when the record already existed: the branch is
         // decided either way, and the container is told which happened.
-        { status: claimed.created ? 201 : 200 }
+        { status: claimed.created ? 201 : 200 },
       );
     }
 
@@ -1206,7 +1231,7 @@ export default {
       if (!posted.ok) {
         return Response.json(
           { error: posted.denial.error, detail: posted.denial.detail },
-          { status: posted.denial.status }
+          { status: posted.denial.status },
         );
       }
       return Response.json(
@@ -1216,7 +1241,7 @@ export default {
           project: posted.project,
           pull_request: posted.pr_number,
         },
-        { status: 201 }
+        { status: 201 },
       );
     }
 
@@ -1366,12 +1391,12 @@ export default {
           const outcomes = await runDueSweeps(env, at);
           for (const outcome of outcomes) {
             console.log(
-              `factory sweep: ${outcome.sweep_id} ${outcome.outcome} — ${outcome.detail}`
+              `factory sweep: ${outcome.sweep_id} ${outcome.outcome} — ${outcome.detail}`,
             );
           }
         } catch (error) {
           console.error(
-            `factory sweep: the ${controller.cron} trigger at ${at.toISOString()} failed: ${String(error)}`
+            `factory sweep: the ${controller.cron} trigger at ${at.toISOString()} failed: ${String(error)}`,
           );
         }
         try {
@@ -1384,18 +1409,13 @@ export default {
           // itself the news: the watcher broke, and the one thing that must
           // never happen quietly is the watcher failing quietly.
           console.error(
-            `factory digest: the ${controller.cron} trigger at ${at.toISOString()} threw: ${String(error)}`
+            `factory digest: the ${controller.cron} trigger at ${at.toISOString()} threw: ${String(error)}`,
           );
         }
-      })()
+      })(),
     );
   },
 } satisfies ExportedHandler<Env>;
-
-// workerd accepts a Durable Object class and a Workflow entrypoint as named
-// exports of the entry module; anything else named here fails at boot, not at
-// deploy (see SERVICE above).
-export { RunRoom, RunWorkflow, SignalInbox };
 
 // The Sandbox SDK's own Durable Object class, which the `[[containers]]`
 // application in wrangler.toml attaches the orchestrator image to and the
@@ -1403,3 +1423,7 @@ export { RunRoom, RunWorkflow, SignalInbox };
 // class IS the container's control plane, and everything this factory wants
 // from it lives behind the seam in src/sandbox.ts.
 export { Sandbox } from "@cloudflare/sandbox";
+// workerd accepts a Durable Object class and a Workflow entrypoint as named
+// exports of the entry module; anything else named here fails at boot, not at
+// deploy (see SERVICE above).
+export { RunRoom, RunWorkflow, SignalInbox };

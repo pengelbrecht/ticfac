@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   bareTextOf,
+  type FreeTextCandidate,
   renderFreeTextRefusal,
   resolveFreeText,
-  type FreeTextCandidate,
 } from "../src/free-text";
 
 /**
@@ -20,7 +20,7 @@ import {
 function candidate(
   project: string,
   id: string,
-  extra: Partial<FreeTextCandidate["entry"]> = {}
+  extra: Partial<FreeTextCandidate["entry"]> = {},
 ): FreeTextCandidate {
   return {
     project,
@@ -44,7 +44,7 @@ describe("what counts as a bare message", () => {
     expect(
       bareTextOf({
         message: { message_id: 92, chat, from, text: "main", reply_to_message: { message_id: 91 } },
-      })
+      }),
     ).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe("what counts as a bare message", () => {
           reply_to_message: { message_id: 91, forum_topic_created: { name: "acme/web" } },
           text: "main",
         },
-      })
+      }),
     ).toBe("main");
   });
 
@@ -70,7 +70,7 @@ describe("what counts as a bare message", () => {
     expect(
       bareTextOf({
         callback_query: { id: "cb-1", from, data: "q:q123:0", message: { message_id: 91, chat } },
-      })
+      }),
     ).toBeNull();
   });
 

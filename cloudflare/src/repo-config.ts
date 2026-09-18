@@ -46,10 +46,9 @@
  * catch a miss.
  */
 
-import { GITHUB_API_BASE_URL } from "./progress";
-import { TomlParseError, parseToml } from "./toml";
-
 import type { Env } from "./index";
+import { GITHUB_API_BASE_URL } from "./progress";
+import { parseToml, TomlParseError } from "./toml";
 
 /** The tracked file a repository declares its runs in. */
 export const RUNNERS_CONFIG_PATH = ".tick/runners.toml";
@@ -122,14 +121,14 @@ export function githubRepoConfig(env: Env): RepoConfigReader {
       if (!response.ok) {
         throw new Error(
           `GitHub answered HTTP ${response.status} for ${RUNNERS_CONFIG_PATH} of ${project} at ` +
-            `${ref ?? "the default branch"}`
+            `${ref ?? "the default branch"}`,
         );
       }
       const text = await response.text();
       if (text.length > MAX_CONFIG_BYTES) {
         throw new Error(
           `${RUNNERS_CONFIG_PATH} of ${project} at ${ref ?? "the default branch"} is ${text.length} bytes, ` +
-            `past the ${MAX_CONFIG_BYTES} this reader will read`
+            `past the ${MAX_CONFIG_BYTES} this reader will read`,
         );
       }
       return text;
@@ -155,7 +154,8 @@ export function githubRepoConfig(env: Env): RepoConfigReader {
  * pattern or the bound without editing that fixture and Go's suite goes red,
  * which is the point: a comment saying "mirrored from" cannot fail.
  */
-export const IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$/;
+export const IMAGE_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$/;
 export const MAX_IMAGE_LENGTH = 512;
 
 /**
@@ -179,12 +179,12 @@ export function declaredSandboxImage(source: string): string | null {
   }
   if (image === "") {
     throw new Error(
-      "sandbox.image must not be empty — omit the key to boot the version-pinned base image"
+      "sandbox.image must not be empty — omit the key to boot the version-pinned base image",
     );
   }
   if (image.length > MAX_IMAGE_LENGTH) {
     throw new Error(
-      `sandbox.image is ${image.length} characters, past the limit of ${MAX_IMAGE_LENGTH}`
+      `sandbox.image is ${image.length} characters, past the limit of ${MAX_IMAGE_LENGTH}`,
     );
   }
   if (!IMAGE_PATTERN.test(image)) {
@@ -253,7 +253,7 @@ export type DeclaredMaxParallel = {
 export async function readDeclaredMaxParallel(
   env: Env,
   project: string,
-  ref: string
+  ref: string,
 ): Promise<DeclaredMaxParallel> {
   try {
     const source = await repoConfig(env).read(project, ref);
@@ -280,7 +280,7 @@ export async function readDeclaredMaxParallel(
 export async function readDeclaredSandboxImage(
   env: Env,
   project: string,
-  ref: string
+  ref: string,
 ): Promise<DeclaredImage> {
   try {
     const source = await repoConfig(env).read(project, ref);

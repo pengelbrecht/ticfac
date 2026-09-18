@@ -6,8 +6,8 @@ import {
   compareSnapshots,
   githubRepoRefs,
   MAX_REF_PAGES,
-  snapshotRefs,
   type RepoRefs,
+  snapshotRefs,
 } from "../src/progress";
 
 /**
@@ -64,7 +64,7 @@ describe("the verdict two reads support", () => {
   it("calls an unchanged remote no progress, and says so in the operator's words", () => {
     const verdict = compareSnapshots(
       { ok: true, refs: { main: SHA_A } },
-      { ok: true, refs: { main: SHA_A } }
+      { ok: true, refs: { main: SHA_A } },
     );
     expect(verdict.state).toBe("none");
     expect(verdict.detail).toMatch(/no branch on origin changed/i);
@@ -73,7 +73,7 @@ describe("the verdict two reads support", () => {
   it("names the branches that moved", () => {
     const verdict = compareSnapshots(
       { ok: true, refs: { main: SHA_A } },
-      { ok: true, refs: { main: SHA_A, "epic/ko8": SHA_B } }
+      { ok: true, refs: { main: SHA_A, "epic/ko8": SHA_B } },
     );
     expect(verdict.state).toBe("advanced");
     expect(verdict.detail).toContain("epic/ko8");
@@ -84,14 +84,14 @@ describe("the verdict two reads support", () => {
   it("refuses to call an unreadable remote either way", () => {
     const before = compareSnapshots(
       { ok: false, detail: "GitHub answered HTTP 503" },
-      { ok: true, refs: {} }
+      { ok: true, refs: {} },
     );
     expect(before.state).toBe("unknown");
     expect(before.detail).toContain("503");
 
     const after = compareSnapshots(
       { ok: true, refs: {} },
-      { ok: false, detail: "GitHub answered HTTP 403" }
+      { ok: false, detail: "GitHub answered HTTP 403" },
     );
     expect(after.state).toBe("unknown");
     expect(after.detail).toContain("403");

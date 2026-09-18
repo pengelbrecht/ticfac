@@ -114,7 +114,7 @@ export function credentialGrade(stored: string | null | undefined): RunCredentia
   if (isRunCredentialGrade(value)) return value;
   console.error(
     `factory credentials: unrecognised credential grade ${JSON.stringify(value)}; ` +
-      `treating it as ${LEAST_RUN_CREDENTIAL_GRADE}`
+      `treating it as ${LEAST_RUN_CREDENTIAL_GRADE}`,
   );
   return LEAST_RUN_CREDENTIAL_GRADE;
 }
@@ -159,7 +159,7 @@ export type GitService = "git-upload-pack" | "git-receive-pack";
 export function gitServiceRequested(
   method: string,
   tail: string[],
-  search: URLSearchParams
+  search: URLSearchParams,
 ): GitService | null {
   const named = (value: string | null): GitService | null =>
     value === "git-upload-pack" || value === "git-receive-pack" ? value : null;
@@ -267,10 +267,8 @@ const jsonError = (denial: GitDenial): Response =>
     {
       status: denial.status,
       // A 401 without {@link GIT_AUTH_CHALLENGE} is a 401 git cannot answer.
-      ...(denial.status === 401
-        ? { headers: { "WWW-Authenticate": GIT_AUTH_CHALLENGE } }
-        : {}),
-    }
+      ...(denial.status === 401 ? { headers: { "WWW-Authenticate": GIT_AUTH_CHALLENGE } } : {}),
+    },
   );
 
 /**
@@ -315,7 +313,7 @@ export async function proxyGitRequest(
   env: Env,
   request: Request,
   segments: string[],
-  options: GitProxyOptions = {}
+  options: GitProxyOptions = {},
 ): Promise<Response> {
   const project = gitProjectOf(segments);
   if (project === null) {
@@ -332,7 +330,7 @@ export async function proxyGitRequest(
 
   if (project !== run.project) {
     console.error(
-      `factory git: run ${run.run_id} (project ${run.project}) asked this door for ${project}`
+      `factory git: run ${run.run_id} (project ${run.project}) asked this door for ${project}`,
     );
     return refuseGit(request, {
       status: 403,
@@ -353,9 +351,7 @@ export async function proxyGitRequest(
     // where it stops — at the credential, not at an instruction the agent was
     // asked to respect (tick dxk's rule). Nothing is forwarded, so the
     // operator's token is never presented for a write.
-    console.error(
-      `factory git: refused a push from run ${run.run_id} (${grade}) to ${project}`
-    );
+    console.error(`factory git: refused a push from run ${run.run_id} (${grade}) to ${project}`);
     return refuseGit(request, {
       status: 403,
       error: "git_write_refused",
@@ -519,7 +515,7 @@ export function planSandboxGit(input: {
 export function containerGitToken(
   plan: SandboxGitPlan,
   operatorToken: string | undefined,
-  runToken: string
+  runToken: string,
 ): string {
   return plan.token_source === "operator" ? (operatorToken ?? "").trim() : runToken;
 }

@@ -19,10 +19,8 @@
  */
 
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
-
-import { WORKER_TRACE_ID_ENV } from "./worker-boot";
-
 import type { Env } from "./index";
+import { WORKER_TRACE_ID_ENV } from "./worker-boot";
 
 // -------------------------------------------------------------- the image ---
 
@@ -210,7 +208,7 @@ export type SandboxOutput = { text: string; offset: number };
 export interface OrchestratorSandbox {
   startProcess(
     command: string,
-    options: { env: Record<string, string> }
+    options: { env: Record<string, string> },
   ): Promise<SandboxProcessView>;
   /**
    * The process's current state, or `null` when this sandbox does not know it —
@@ -295,7 +293,7 @@ const MERGE_STDERR = " 2>&1";
 export type SdkSandbox = {
   startProcess(
     command: string,
-    options?: { env?: Record<string, string>; autoCleanup?: boolean }
+    options?: { env?: Record<string, string>; autoCleanup?: boolean },
   ): Promise<SdkProcess>;
   getProcess(id: string): Promise<SdkProcess | null>;
   listProcesses(): Promise<SdkProcess[]>;
@@ -324,7 +322,7 @@ export type SandboxNamespace = DurableObjectNamespace<Sandbox>;
  * seam does not: the seam's `get` takes a name, the namespace's takes an id.
  */
 export function isSandboxNamespace(
-  binding: SandboxBinding | SandboxNamespace
+  binding: SandboxBinding | SandboxNamespace,
 ): binding is SandboxNamespace {
   return typeof (binding as { idFromName?: unknown }).idFromName === "function";
 }
@@ -380,7 +378,7 @@ export function adaptSandbox(sandbox: SdkSandbox): OrchestratorSandbox {
         // says so rather than dropping the output silently.
         console.error(
           `factory sandbox: process ${id} wrote ${logs.stderr.length} bytes to stderr, ` +
-            "which the merged-output contract says cannot happen"
+            "which the merged-output contract says cannot happen",
         );
       }
       // A cursor past the end is a buffer that was reset under us. Resuming
@@ -586,7 +584,8 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   if (input.harness !== undefined && input.harness !== "") env.TICKS_HARNESS = input.harness;
   if (input.model !== undefined && input.model !== "") env.TICKS_MODEL = input.model;
   if (input.workdir !== undefined && input.workdir !== "") env.TICKS_WORKDIR = input.workdir;
-  if (input.cache_dir !== undefined && input.cache_dir !== "") env.TICKS_CACHE_DIR = input.cache_dir;
+  if (input.cache_dir !== undefined && input.cache_dir !== "")
+    env.TICKS_CACHE_DIR = input.cache_dir;
   if (input.sandbox_image !== undefined && input.sandbox_image !== "") {
     env.TICKS_SANDBOX_IMAGE = input.sandbox_image;
   }

@@ -77,20 +77,36 @@ describe("a worker container's log stream", () => {
     await writeWorkerLogSegment(env.ARTIFACTS, PROJECT, runID, "aaa", 1, 2, "aaa is working\n");
 
     expect((await readWorkerLogTail(env.ARTIFACTS, PROJECT, runID, "aaa")).text).toBe(
-      "aaa is booting\naaa is working\n"
+      "aaa is booting\naaa is working\n",
     );
     expect((await readWorkerLogTail(env.ARTIFACTS, PROJECT, runID, "bbb")).text).toBe(
-      "bbb is booting\n"
+      "bbb is booting\n",
     );
   });
 
   it("orders a later attempt after an earlier one, and never overwrites it", async () => {
     const runID = "run_worker_attempts";
-    await writeWorkerLogSegment(env.ARTIFACTS, PROJECT, runID, "aaa", 1_700_000_000_000, 1, "first supervisor\n");
-    await writeWorkerLogSegment(env.ARTIFACTS, PROJECT, runID, "aaa", 1_700_000_009_000, 1, "replacement supervisor\n");
+    await writeWorkerLogSegment(
+      env.ARTIFACTS,
+      PROJECT,
+      runID,
+      "aaa",
+      1_700_000_000_000,
+      1,
+      "first supervisor\n",
+    );
+    await writeWorkerLogSegment(
+      env.ARTIFACTS,
+      PROJECT,
+      runID,
+      "aaa",
+      1_700_000_009_000,
+      1,
+      "replacement supervisor\n",
+    );
 
     expect((await readWorkerLogTail(env.ARTIFACTS, PROJECT, runID, "aaa")).text).toBe(
-      "first supervisor\nreplacement supervisor\n"
+      "first supervisor\nreplacement supervisor\n",
     );
   });
 
@@ -203,7 +219,10 @@ class FakeProcess {
   exit_code: number | null = null;
   output = "";
 
-  constructor(readonly id: string, readonly command: string) {}
+  constructor(
+    readonly id: string,
+    readonly command: string,
+  ) {}
 }
 
 class FakeSandbox implements OrchestratorSandbox {
@@ -289,7 +308,11 @@ const stubReport = (task: WorkerTask): WorkerReport => ({
   detail: "the worker pushed nothing",
 });
 
-const collector: WorkerCollector = { async collect(task) { return stubReport(task); } };
+const collector: WorkerCollector = {
+  async collect(task) {
+    return stubReport(task);
+  },
+};
 
 const WORK_SPEC: WorkSpec = {
   probe: { command: "ticks-worker --probe", expect: "ticks-worker-probe-ok" },
@@ -334,7 +357,7 @@ describe("a worker that dies at boot", () => {
         sleep,
         logs: workerLogSink(env.ARTIFACTS, PROJECT, runID),
       },
-      collector
+      collector,
     );
 
     // The container was written off and destroyed — and its account of itself

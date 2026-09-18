@@ -60,8 +60,20 @@ gate:
 # vitest is deliberately NOT here: it is 82s against these two at 3s, gate
 # commands run serially, and CI runs it as its own job beside the Go one for no
 # wall clock at all. This target covers CONTRACTS AND TYPES, not behaviour.
+#
+# `pnpm lint` is Biome (tick ncr), the formatter and linter this side had
+# neither of. It rides inside this one command rather than taking a target of
+# its own because a second target means a second `pnpm install`: ~0.7s warm,
+# spent to learn nothing the &&-chain does not already say. `pnpm format` is
+# the write-mode twin, for a human fixing what this refuses.
+#
+# `pnpm lint` is `biome ci --error-on-warnings`, and the flag is the point:
+# plain `biome ci` exits 0 with warnings still on the floor, and MOST of what
+# Biome found in this tree — the unused variable, the implicit anys, the
+# optional-chain misses — is warning severity. Without the flag this is a gate
+# that cannot refuse the things it was added to catch.
 ts-gate:
-	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit
+	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:

@@ -3,17 +3,17 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { SpendResult } from "../src/gateway";
 import {
-  RUN_EVENT_SOURCES,
   boardEventPath,
   epicCompleted,
   epicStarted,
   gatewayMetrics,
   publishRunEvents,
+  RUN_EVENT_SOURCES,
+  type RunEventMessage,
+  type RunEventSink,
   runEventSink,
   tickCompleted,
   tickStarted,
-  type RunEventMessage,
-  type RunEventSink,
 } from "../src/run-events";
 import { MAX_RECENT_EVENTS } from "../src/run-room";
 
@@ -75,7 +75,7 @@ describe("the sources are the substrate-shaped ones", () => {
 
   it("attributes the run's own events to cloud:orchestrator and a tick's to cloud:worker", () => {
     expect(epicStarted({ epic: "ko8", run_id: "run_1", status: "2 ticks" }).source).toBe(
-      "cloud:orchestrator"
+      "cloud:orchestrator",
     );
     expect(
       epicCompleted({
@@ -84,7 +84,7 @@ describe("the sources are the substrate-shaped ones", () => {
         state: "completed",
         detail: "done",
         spend: spent(1),
-      }).source
+      }).source,
     ).toBe("cloud:orchestrator");
     expect(tickStarted({ epic: "ko8", tick: "aaa", batch: 1 }).source).toBe("cloud:worker");
     expect(
@@ -94,7 +94,7 @@ describe("the sources are the substrate-shaped ones", () => {
         verdict: "ready-to-merge",
         status: "DONE",
         detail: "",
-      }).source
+      }).source,
     ).toBe("cloud:worker");
   });
 
@@ -155,11 +155,17 @@ describe("costUsd can only come from gateway telemetry", () => {
 
 describe("collect is the completion authority, not the report", () => {
   it("calls a tick successful only on ready-to-merge", () => {
-    const verdicts = ["ready-to-merge", "no-commits", "missing-result", "boundary-violation", "unknown"];
+    const verdicts = [
+      "ready-to-merge",
+      "no-commits",
+      "missing-result",
+      "boundary-violation",
+      "unknown",
+    ];
     const success = verdicts.map(
       (verdict) =>
         tickCompleted({ epic: "ko8", tick: "aaa", verdict, status: "DONE", detail: "" }).event
-          .success
+          .success,
     );
 
     expect(success).toEqual([true, false, false, false, false]);
@@ -253,7 +259,12 @@ describe("the room keeps a bounded live tail", () => {
     const project = "owner/repo-events-tail";
 
     await publishRunEvents(env, project, [
-      epicStarted({ epic: "ko8", run_id: "run_1", status: "1 tick", at: "2026-08-21T10:00:00.000Z" }),
+      epicStarted({
+        epic: "ko8",
+        run_id: "run_1",
+        status: "1 tick",
+        at: "2026-08-21T10:00:00.000Z",
+      }),
       tickStarted({ epic: "ko8", tick: "aaa", batch: 1, at: "2026-08-21T10:00:01.000Z" }),
     ]);
 
@@ -294,8 +305,8 @@ describe("the room keeps a bounded live tail", () => {
       env,
       project,
       Array.from({ length: MAX_RECENT_EVENTS + 20 }, (_, i) =>
-        tickStarted({ epic: "ko8", tick: `t${i}`, batch: 1 })
-      )
+        tickStarted({ epic: "ko8", tick: `t${i}`, batch: 1 }),
+      ),
     );
 
     const room = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(project));
@@ -339,7 +350,7 @@ describe("the board sink", () => {
       const sink = runEventSink(env)!;
       const delivery = await sink.publish(
         "owner/repo",
-        epicStarted({ epic: "ko8", run_id: "run_1", status: "x" })
+        epicStarted({ epic: "ko8", run_id: "run_1", status: "x" }),
       );
 
       expect(delivery.delivered).toBe(true);
@@ -358,11 +369,12 @@ describe("the board sink", () => {
     set("BOARD_TOKEN", "board-token");
 
     const original = globalThis.fetch;
-    globalThis.fetch = (async () => Response.json({ error: "nope" }, { status: 403 })) as typeof fetch;
+    globalThis.fetch = (async () =>
+      Response.json({ error: "nope" }, { status: 403 })) as typeof fetch;
     try {
       const delivery = await runEventSink(env)!.publish(
         "owner/repo",
-        epicStarted({ epic: "ko8", run_id: "run_1", status: "x" })
+        epicStarted({ epic: "ko8", run_id: "run_1", status: "x" }),
       );
       expect(delivery).toMatchObject({ delivered: false });
       expect(delivery.detail).toContain("403");

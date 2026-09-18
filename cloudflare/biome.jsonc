@@ -1,0 +1,120 @@
+{
+  // Biome is this side's gofmt AND its vet (tick ncr). Before it there was
+  // neither: `tsc --noEmit` is the whole of what read this tree, and tsc is
+  // silent about unused values, floating promises, and unreachable code.
+  //
+  // JSONC, not JSON, ON PURPOSE. Biome accepts `biome.json` without comments;
+  // put a `//` line in a `biome.json` and Biome does NOT fail — it silently
+  // falls back to its built-in defaults (tabs, lineWidth 80, every rule on,
+  // every file in scope) and formats files this config never named. Measured
+  // here: the same tree checked 110 files with the config honoured and 113,
+  // including contracts.pin.json, with it silently dropped (109 now that
+  // test/fixtures is excluded below). `.jsonc` is the
+  // spelling Biome parses comments in.
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  // Named rather than left to default. The default scope includes
+  // contracts.pin.json and the other pinned/generated JSON in this directory,
+  // and reformatting a pin is how a digest check starts failing for reasons
+  // that have nothing to do with contracts.
+  //
+  // test/fixtures is out for the same reason: a fixture is a RECORDING of what
+  // a real payload looked like, and a formatter that rewrites one has changed
+  // the evidence rather than tidied it. (Biome reformatted
+  // omp-tool-call-exchange.json on the first pass here; that was reverted.)
+  "files": {
+    "includes": ["src/**", "test/**", "!test/fixtures", "scripts/**", "vitest.config.ts"]
+  },
+  // Two spaces and double quotes because that is what these 46 modules already
+  // are: 17147 space-indented lines against 233 tab-indented, and 504
+  // double-quoted imports against 2 single. lineWidth 100 rather than Biome's
+  // 80 for the same reason — this tree's prose comments and its long
+  // Workers/D1 call chains already sit past 80 in 1953 lines, and a formatter
+  // that rewrites them all is arguing with the codebase rather than settling it.
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "nursery": {
+        // The rule this tick was asked for, and the one tsc cannot do at all:
+        // a dropped promise in a Workers runtime is a request that returns
+        // before its own writes land, not a style preference. It is nursery,
+        // so it is not in `recommended`; it is named here deliberately.
+        //
+        // It finds nothing in this tree today — checked, and checked that it
+        // CAN fire (a probe module with a bare `returnsPromise();` is refused).
+        // It is here to keep it that way.
+        "noFloatingPromises": "error"
+      },
+      "style": {
+        // OFF, and this is the one judgement call in this file. 617 sites, 548
+        // of them in test/ where `!` follows an explicit assertion about the
+        // same value a line above (`expect(rows.length).toBe(1)` then
+        // `rows[0]!`). `!` is the author saying "I have checked"; tsc's
+        // strictNullChecks is what makes that claim mean something, and it is
+        // already on. Leaving the rule enabled would buy nothing and cost 617
+        // per-line ignores — a blanket disable written out longhand.
+        //
+        // The 69 sites in src/ are the ones worth revisiting; each would need
+        // a real narrowing check, which is a tick of its own, not this one.
+        "noNonNullAssertion": "off"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // src/untrusted-text.ts EXISTS to strip control characters from
+      // outsider-written prose. Its INVISIBLE class names the C0/C1 ranges and
+      // the bidi overrides on purpose — that regex is the module's whole point,
+      // and a rule that says "you probably did not mean to write U+202E here"
+      // is wrong about exactly this one file.
+      "includes": ["src/untrusted-text.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noControlCharactersInRegex": "off"
+          }
+        }
+      }
+    },
+    {
+      // The 15 sites are one idiom, used consistently by the fetch stubs these
+      // suites are built on: `restore: () => void (globalThis.fetch = original)`.
+      // The assignment IS the restore, the `void` says so, and rewriting 15 of
+      // them into block bodies is churn that makes the harness longer without
+      // making it clearer. Kept ON in src/, where an assignment hiding inside a
+      // condition is the bug the rule is actually about.
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noAssignInExpressions": "off"
+          }
+        }
+      }
+    }
+  ]
+}

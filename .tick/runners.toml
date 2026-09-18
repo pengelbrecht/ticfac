@@ -99,7 +99,23 @@ go = { command = "go test -short -timeout 45m -parallel 12 ./...", description =
 #
 # contracts:check is the one that earns its place here: it is the check that
 # would have caught b9w's drift the day it happened, and it costs a second.
-ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript contracts and types" }
+#
+# `pnpm lint` is Biome (tick ncr) — this side's gofmt AND its vet, in one Rust
+# binary. It is IN this command rather than a sibling [testing.commands] entry
+# for one measured reason: a sibling would repeat `pnpm install`, which is ~0.7s
+# on a warm store, to learn nothing the &&-chain's own output does not already
+# name. Biome itself is 0.47/0.55/0.64s over three runs on these 109 files, so
+# the gate's TypeScript half goes from ~3s to ~3.6s and the whole gate is
+# unmoved against the 3m26s Go side.
+#
+# `pnpm lint` is `biome ci --error-on-warnings`, and the flag matters: plain
+# `biome ci` exits 0 with warnings still on the floor, and most of what Biome
+# found here — the unused variable, the implicit anys — is warning severity, so
+# without it this half cannot refuse what it was added to catch.
+#
+# This is still CONTRACTS AND TYPES, not behaviour: Biome reads one file at a
+# time and answers about its shape, not about what the Worker does.
+ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript format, lint, contracts and types" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }

@@ -2,39 +2,33 @@ import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
-import { enrolProject, listRecentDispatch } from "../src/db";
-import { GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
-import {
-  CHECK_RUN_EVENT,
-} from "../src/ci-webhook";
+import { CI_BRANCHES_PATH, listUnrecordedBranches, recordBranch } from "../src/branch-registry";
 import { CI_ESCALATIONS_PATH } from "../src/ci-escalations";
 import {
   BRANCH_OWNERSHIP_BASIS,
-  FACTORY_BRANCH_NAMESPACES,
-  FACTORY_BRANCH_NAMESPACE_OVERLAP,
-  FLAKE_GATE_CONFIRMATIONS,
-  STRIKE_BUDGET,
-  STRIKE_WINDOW_MS,
   branchOwner,
-  clearEscalation,
-  checkConclusion,
-  classifyCheckEvent,
-  dispatchRemediation,
-  epicOfBranch,
-  factoryOwnedBranch,
-  remediateCheckFailure,
   type CheckConclusion,
   type CheckFailureFacts,
   type CheckHistoryReader,
+  checkConclusion,
+  classifyCheckEvent,
+  clearEscalation,
+  dispatchRemediation,
+  epicOfBranch,
+  FACTORY_BRANCH_NAMESPACE_OVERLAP,
+  FACTORY_BRANCH_NAMESPACES,
   type FactoryOwnedBranch,
+  FLAKE_GATE_CONFIRMATIONS,
+  factoryOwnedBranch,
+  remediateCheckFailure,
+  STRIKE_BUDGET,
+  STRIKE_WINDOW_MS,
 } from "../src/ci-remediation";
-import {
-  CI_BRANCHES_PATH,
-  listUnrecordedBranches,
-  recordBranch,
-} from "../src/branch-registry";
-import { WORKER_BRANCH_PREFIX } from "../src/worker-boot";
+import { CHECK_RUN_EVENT } from "../src/ci-webhook";
+import { enrolProject, listRecentDispatch } from "../src/db";
+import { GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
 import type { RunWorkflowInstance, RunWorkflowParams } from "../src/runs";
+import { WORKER_BRANCH_PREFIX } from "../src/worker-boot";
 
 /**
  * CI-failure remediation: the loop with teeth (UC4, D10, tick meo).
@@ -118,7 +112,11 @@ class FakeChecks implements CheckHistoryReader {
   readonly reads: { ref: string; check: string }[] = [];
   readonly reruns: number[] = [];
 
-  async conclusions(_project: string, ref: string, checkName: string): Promise<CheckConclusion[] | null> {
+  async conclusions(
+    _project: string,
+    ref: string,
+    checkName: string,
+  ): Promise<CheckConclusion[] | null> {
     if (this.unreachable) throw new Error("GitHub is unreachable");
     this.reads.push({ ref, check: checkName });
     return this.atRef.get(ref) ?? [];
@@ -285,7 +283,7 @@ async function deliver(payload: unknown, event = CHECK_RUN_EVENT): Promise<Respo
 
 async function attemptsFor(project: string, branch: string): Promise<number> {
   const row = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM ci_remediation_attempt WHERE project = ? AND branch = ?`
+    `SELECT COUNT(*) AS n FROM ci_remediation_attempt WHERE project = ? AND branch = ?`,
   )
     .bind(project, branch)
     .first<{ n: number }>();
@@ -497,7 +495,7 @@ describe("ownership is decided by a record of creation", () => {
     await deliver(checkRunPayload(project));
 
     const open = (await listUnrecordedBranches(env, "1970-01-01T00:00:00.000Z")).filter(
-      (row) => row.project === project
+      (row) => row.project === project,
     );
     // This row is the whole reason am2 said no: without it the refusal lands
     // in `dispatch_log` and nowhere else, and a lost record orphans a real
@@ -519,7 +517,7 @@ describe("ownership is decided by a record of creation", () => {
     // strike budget is: a branch that must not be worked on must not be able
     // to order CI minutes either.
     const observations = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM ci_check_observation WHERE project = ?`
+      `SELECT COUNT(*) AS n FROM ci_check_observation WHERE project = ?`,
     )
       .bind(project)
       .first<{ n: number }>();
@@ -548,8 +546,8 @@ describe("ownership is decided by a record of creation", () => {
     // the cry-wolf failure zaw's design exists to avoid.
     expect(
       (await listUnrecordedBranches(env, "1970-01-01T00:00:00.000Z")).filter(
-        (row) => row.project === project
-      )
+        (row) => row.project === project,
+      ),
     ).toHaveLength(0);
   });
 
@@ -571,7 +569,7 @@ describe("ownership is decided by a record of creation", () => {
       details_url: null,
     };
     await expect(dispatchRemediation(env, facts, { strikes: 0 })).rejects.toThrow(
-      /no record says this factory created/
+      /no record says this factory created/,
     );
     expect(await runsFor(project)).toBe(0);
   });
@@ -618,7 +616,7 @@ describe("nothing can dispatch against a human-owned branch", () => {
     // Not even the evidence table: a human's branch stops before the factory
     // starts keeping a file on it.
     const observed = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM ci_check_observation WHERE project = ?`
+      `SELECT COUNT(*) AS n FROM ci_check_observation WHERE project = ?`,
     )
       .bind(project)
       .first<{ n: number }>();
@@ -645,7 +643,7 @@ describe("nothing can dispatch against a human-owned branch", () => {
     };
 
     await expect(dispatchRemediation(env, forged, { strikes: 0 })).rejects.toThrow(
-      /not a factory-owned branch/
+      /not a factory-owned branch/,
     );
     expect(workflow.created).toHaveLength(0);
     expect(await runsFor(project)).toBe(0);
@@ -714,7 +712,7 @@ describe("the flake gate", () => {
 
     // The success arrives first and is recorded as evidence, not as work.
     const pass = await deliver(
-      checkRunPayload(project, { check_run: { conclusion: "success", node_id: "CR_pass" } })
+      checkRunPayload(project, { check_run: { conclusion: "success", node_id: "CR_pass" } }),
     );
     expect(await pass.json()).toMatchObject({ dispatched: false, reason: "not_a_failure" });
 
@@ -804,18 +802,14 @@ describe("the flake gate", () => {
 
   it("ignores a delivery that is not a completed check run", async () => {
     const project = await enrolled();
-    const queued = await deliver(
-      checkRunPayload(project, { action: "created" })
-    );
+    const queued = await deliver(checkRunPayload(project, { action: "created" }));
     expect(queued.status).toBe(200);
     expect(await queued.json()).toMatchObject({ reason: "action_not_completed" });
   });
 
   it("refuses a check run with no stable dedup key", async () => {
     const project = await enrolled();
-    const response = await deliver(
-      checkRunPayload(project, { check_run: { node_id: "" } })
-    );
+    const response = await deliver(checkRunPayload(project, { check_run: { node_id: "" } }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ reason: "invalid_payload" });
     expect(workflow.created).toHaveLength(0);
@@ -861,13 +855,13 @@ describe("the strike budget", () => {
   async function spend(
     project: string,
     n: number,
-    { branch = OWNED, ageMs = 0 }: { branch?: string; ageMs?: number } = {}
+    { branch = OWNED, ageMs = 0 }: { branch?: string; ageMs?: number } = {},
   ): Promise<void> {
     for (let i = 0; i < n; i++) {
       await env.DB.prepare(
         `INSERT INTO ci_remediation_attempt
            (run_id, project, branch, head_sha, check_name, trace_id, dispatched_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
         .bind(
           `run_seed_${(seedCounter += 1)}`,
@@ -876,7 +870,7 @@ describe("the strike budget", () => {
           SHAS[i % SHAS.length],
           "test (go)",
           `tr_seed${i}`,
-          new Date(Date.now() - ageMs).toISOString()
+          new Date(Date.now() - ageMs).toISOString(),
         )
         .run();
     }
@@ -952,7 +946,7 @@ describe("the strike budget", () => {
     expect(text).toContain("keep trying");
 
     const row = await env.DB.prepare(
-      `SELECT strikes, notified_at FROM ci_escalation WHERE project = ? AND branch = ?`
+      `SELECT strikes, notified_at FROM ci_escalation WHERE project = ? AND branch = ?`,
     )
       .bind(project, OWNED)
       .first<{ strikes: number; notified_at: string | null }>();
@@ -988,7 +982,7 @@ describe("the strike budget", () => {
     expect(await response.json()).toMatchObject({ escalated: true, opened: true });
 
     const row = await env.DB.prepare(
-      `SELECT strikes, notified_at FROM ci_escalation WHERE project = ? AND branch = ?`
+      `SELECT strikes, notified_at FROM ci_escalation WHERE project = ? AND branch = ?`,
     )
       .bind(project, OWNED)
       .first<{ strikes: number; notified_at: string | null }>();
@@ -1072,10 +1066,11 @@ describe("the strike budget", () => {
     const FRESH = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
     /** Push every attempt on `project` `ms` into the past: the window rolls. */
-    async function rollWindow(project: string, ms = STRIKE_WINDOW_MS + 60 * 60 * 1000): Promise<void> {
-      await env.DB.prepare(
-        `UPDATE ci_remediation_attempt SET dispatched_at = ? WHERE project = ?`
-      )
+    async function rollWindow(
+      project: string,
+      ms = STRIKE_WINDOW_MS + 60 * 60 * 1000,
+    ): Promise<void> {
+      await env.DB.prepare(`UPDATE ci_remediation_attempt SET dispatched_at = ? WHERE project = ?`)
         .bind(new Date(Date.now() - ms).toISOString(), project)
         .run();
     }
@@ -1170,16 +1165,16 @@ describe("the strike budget", () => {
       await strikeOut(project);
 
       expect(
-        await clearEscalation(env, { project, branch: OWNED, cleared_by: "operator@example.com" })
+        await clearEscalation(env, { project, branch: OWNED, cleared_by: "operator@example.com" }),
       ).toBe(true);
       // Idempotent, and honestly so: the second call reports that it changed
       // nothing rather than stamping a fresh release over the real one.
       expect(
-        await clearEscalation(env, { project, branch: OWNED, cleared_by: "someone-else" })
+        await clearEscalation(env, { project, branch: OWNED, cleared_by: "someone-else" }),
       ).toBe(false);
 
       const row = await env.DB.prepare(
-        `SELECT state, cleared_at, cleared_by FROM ci_escalation WHERE project = ? AND branch = ?`
+        `SELECT state, cleared_at, cleared_by FROM ci_escalation WHERE project = ? AND branch = ?`,
       )
         .bind(project, OWNED)
         .first<{ state: string; cleared_at: string | null; cleared_by: string | null }>();
@@ -1210,7 +1205,7 @@ describe("the strike budget", () => {
       expect(sent().slice(before)).toHaveLength(1);
 
       const row = await env.DB.prepare(
-        `SELECT state, cleared_at FROM ci_escalation WHERE project = ? AND branch = ?`
+        `SELECT state, cleared_at FROM ci_escalation WHERE project = ? AND branch = ?`,
       )
         .bind(project, OWNED)
         .first<{ state: string; cleared_at: string | null }>();
@@ -1356,17 +1351,24 @@ describe("when the door breaks in a way it has no rule for", () => {
 
   /** Scoped to one project: every test in this file shares one D1. */
   async function faults(project: string): Promise<
-    { fault_id: string; occurrences: number; notified_at: string | null; cleared_at: string | null }[]
-  > {
-    const rows = await env.DB.prepare(
-      `SELECT fault_id, occurrences, notified_at, cleared_at FROM ci_webhook_fault
-        WHERE project = ?`
-    ).bind(project).all<{
+    {
       fault_id: string;
       occurrences: number;
       notified_at: string | null;
       cleared_at: string | null;
-    }>();
+    }[]
+  > {
+    const rows = await env.DB.prepare(
+      `SELECT fault_id, occurrences, notified_at, cleared_at FROM ci_webhook_fault
+        WHERE project = ?`,
+    )
+      .bind(project)
+      .all<{
+        fault_id: string;
+        occurrences: number;
+        notified_at: string | null;
+        cleared_at: string | null;
+      }>();
     return rows.results ?? [];
   }
 

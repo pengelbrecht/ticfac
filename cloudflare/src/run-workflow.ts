@@ -58,22 +58,22 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 import {
+  type RunRecord,
   readWaveRequest,
   workerLogSink,
-  writeHarnessSegment,
   writeCombinedHarnessLog,
+  writeHarnessSegment,
   writeReconcileRecord,
   writeRunRecord,
   writeWaveOutcomes,
-  type RunRecord,
 } from "./artifacts";
-import { getRun, recordRunProgress, updateRunState } from "./db";
 import {
   containerGitToken,
   credentialGrade,
   planSandboxGit,
   type SandboxGitPlan,
 } from "./credentials";
+import { getRun, recordRunProgress, updateRunState } from "./db";
 import {
   factoryBaseURL,
   issueRunToken,
@@ -85,22 +85,27 @@ import {
 } from "./gateway";
 import type { Env } from "./index";
 import {
+  getReviewForRun,
+  type ReviewTarget,
+  reviewEvidence,
+  reviewGradeComplaint,
+} from "./pr-review";
+import {
   compareSnapshots,
-  snapshotRefs,
-  unverifiedProgress,
   type RefSnapshot,
   type RunProgress,
+  snapshotRefs,
+  unverifiedProgress,
 } from "./progress";
 import {
-  NOT_ASKED,
   adoptions,
   dispatchable,
   manifestRecorder,
+  NOT_ASKED,
   reconcileWave,
   settled,
   settledOutcome,
 } from "./reconcile";
-import { getReviewForRun, reviewEvidence, reviewGradeComplaint, type ReviewTarget } from "./pr-review";
 import { readDeclaredMaxParallel, readDeclaredSandboxImage } from "./repo-config";
 import {
   epicCompleted,
@@ -109,41 +114,41 @@ import {
   tickCompleted,
   tickStarted,
 } from "./run-events";
-import { MAX_LEASE_TTL_MS, DEFAULT_LEASE_TTL_MS, type LeaseLostReason } from "./run-room";
-import { logDispatch, roomFor, type RunWorkflowParams } from "./runs";
+import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
+import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
   deploymentImage,
   isTerminalExit,
+  ORCHESTRATOR_COMMAND,
+  type OrchestratorPhase,
   orchestratorEnv,
   repoURL,
   resolveSandboxImage,
+  type SandboxProcessState,
   sandboxBinding,
   sandboxName,
-  ORCHESTRATOR_COMMAND,
-  type OrchestratorPhase,
-  type SandboxProcessState,
 } from "./sandbox";
+import { MAX_RUN_WAVES } from "./wave-request";
 import {
   DEFAULT_WORKER_HARNESS_BUDGET_MS,
   waveWaitTimeoutMs,
-  workerHarnessBudgetMs,
-  workerTask,
   workerHarness,
+  workerHarnessBudgetMs,
   workerModel,
+  workerTask,
   workerWorkSpec,
 } from "./worker-boot";
-import { MAX_RUN_WAVES } from "./wave-request";
-import { workerCollector, type WorkerCollector } from "./worker-collect";
+import { type WorkerCollector, workerCollector } from "./worker-collect";
 import {
   DEFAULT_CONFIRM_TIMEOUT_MS,
   DEFAULT_SALVAGE_GRACE_MS,
   DEFAULT_WAIT_POLL_MS,
   dispatchWave,
   probeTimeoutMs,
-  waveCanceller,
-  workerSandboxName,
   type WaveCancellation,
   type WorkerWaveOutcome,
+  waveCanceller,
+  workerSandboxName,
 } from "./worker-dispatch";
 import { STEP_WORK_BUDGET_MS, shareStepBudget, stepBudget } from "./workflow-limits";
 
@@ -309,7 +314,7 @@ function positiveVar(env: Env, name: keyof Env, fallback: number, integer: boole
   const usable = integer ? Number.isSafeInteger(parsed) : Number.isFinite(parsed);
   if (!usable || parsed <= 0) {
     console.error(
-      `factory run-workflow: ${String(name)} must be a positive number; ignoring "${raw}" and using ${fallback}`
+      `factory run-workflow: ${String(name)} must be a positive number; ignoring "${raw}" and using ${fallback}`,
     );
     return fallback;
   }
@@ -355,13 +360,13 @@ function boundedBudget(
   ceiling: number,
   requested: number | undefined,
   name: string,
-  integer: boolean
+  integer: boolean,
 ): { value: number; applied: boolean } {
   if (requested === undefined) return { value: ceiling, applied: false };
   const usable = integer ? Number.isSafeInteger(requested) : Number.isFinite(requested);
   if (!usable || requested <= 0) {
     console.error(
-      `factory run-workflow: ${name} must be a positive number; ignoring ${String(requested)} and using ${ceiling}`
+      `factory run-workflow: ${name} must be a positive number; ignoring ${String(requested)} and using ${ceiling}`,
     );
     return { value: ceiling, applied: false };
   }
@@ -371,7 +376,7 @@ function boundedBudget(
     // the deployment ceiling is what it actually got.
     console.error(
       `factory run-workflow: ${name} ${requested} exceeds the deployment ceiling ${ceiling}; ` +
-        "a submission may lower a budget, never raise it"
+        "a submission may lower a budget, never raise it",
     );
     return { value: ceiling, applied: true };
   }
@@ -394,7 +399,8 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
     cost_budget_configured: hasPositiveVar(env, "RUN_MAX_COST_USD", false) || cost.applied,
     stop_grace_ms: positiveVar(env, "RUN_STOP_GRACE_MS", DEFAULT_STOP_GRACE_MS, true),
     closeout_ms: positiveVar(env, "RUN_CLOSEOUT_MS", DEFAULT_CLOSEOUT_MS, true),
-    poll_interval_ms: poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true),
+    poll_interval_ms:
+      poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true),
     max_observations: positiveVar(env, "RUN_MAX_OBSERVATIONS", MAX_OBSERVATIONS, true),
     // Clamped, never trusted: a leg longer than a step may execute for is the
     // bug this tick fixed, and a var is exactly how it would come back.
@@ -487,7 +493,7 @@ export type SpendSample = {
 export function spendSample(
   previous: SpendSample | null,
   cost_usd: number | null,
-  at_ms: number
+  at_ms: number,
 ): SpendSample | null {
   if (cost_usd === null) return previous;
   const carried = previous === null ? null : previous.rate_usd_per_ms;
@@ -613,7 +619,7 @@ export type LeaseRenewal =
 export async function renewRunLease(
   env: Env,
   params: RunWorkflowParams,
-  ttlMs: number
+  ttlMs: number,
 ): Promise<LeaseRenewal | null> {
   try {
     const renewed = await roomFor(env, params.project).renewDispatchLease({
@@ -625,7 +631,7 @@ export async function renewRunLease(
     if (renewed.error !== "lease_lost") {
       // A malformed call is this supervisor's own bug, not a lost lease.
       console.error(
-        `factory run-workflow: ${params.run_id} could not renew its lease: ${renewed.detail}`
+        `factory run-workflow: ${params.run_id} could not renew its lease: ${renewed.detail}`,
       );
       return null;
     }
@@ -637,7 +643,7 @@ export async function renewRunLease(
     };
   } catch (error) {
     console.error(
-      `factory run-workflow: ${params.run_id} could not renew its lease: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not renew its lease: ${String(error)}`,
     );
     return null;
   }
@@ -799,7 +805,7 @@ export type CloudWavePlan = {
  */
 export function resolveDispatchWidth(
   deploymentCeiling: number,
-  maxParallel: number | null
+  maxParallel: number | null,
 ): { width: number; capped: boolean; detail: string } {
   const requested = maxParallel ?? deploymentCeiling;
   if (requested <= deploymentCeiling) {
@@ -823,9 +829,7 @@ export function resolveDispatchWidth(
   };
 }
 
-export type ContextResult =
-  | { ok: true; context: RunContext }
-  | { ok: false; detail: string };
+export type ContextResult = { ok: true; context: RunContext } | { ok: false; detail: string };
 
 /**
  * Everything the run needs before it boots anything, checked once.
@@ -834,10 +838,7 @@ export type ContextResult =
  * broken deploy, not a run that should be attempted: both refusals happen here,
  * before a sandbox exists and before any credential is handed to one.
  */
-export async function acquireContext(
-  env: Env,
-  params: RunWorkflowParams
-): Promise<ContextResult> {
+export async function acquireContext(env: Env, params: RunWorkflowParams): Promise<ContextResult> {
   const run = await getRun(env.DB, params.run_id);
   if (run === null) {
     return { ok: false, detail: `run ${params.run_id} has no index row — it was never recorded` };
@@ -867,7 +868,7 @@ export async function acquireContext(
   const telemetry = await syncRunCost(env, params.run_id);
   if (!telemetry.ok) {
     console.error(
-      `factory run-workflow: ${params.run_id} has no gateway cost telemetry: ${telemetry.detail}`
+      `factory run-workflow: ${params.run_id} has no gateway cost telemetry: ${telemetry.detail}`,
     );
     if (config.cost_budget_configured) {
       // Which failure it was decides what the operator should do: a query this
@@ -890,7 +891,7 @@ export async function acquireContext(
   if (!refs.ok) {
     console.error(
       `factory run-workflow: ${params.run_id} could not read the branches of ` +
-        `${params.project} before booting: ${refs.detail}`
+        `${params.project} before booting: ${refs.detail}`,
     );
   }
 
@@ -906,7 +907,7 @@ export async function acquireContext(
   if (declared.unread !== null) {
     console.error(
       `factory run-workflow: ${params.run_id} booted this deployment's image because ` +
-        `${declared.unread}; the container checks its own checkout`
+        `${declared.unread}; the container checks its own checkout`,
     );
   }
   const image = resolveSandboxImage({
@@ -925,7 +926,7 @@ export async function acquireContext(
     if (declaredParallel.unread !== null) {
       console.error(
         `factory run-workflow: ${params.run_id} could not read [orchestration].max_parallel: ` +
-          `${declaredParallel.unread}; falling back to this deployment's own ceiling`
+          `${declaredParallel.unread}; falling back to this deployment's own ceiling`,
       );
     }
     const resolved = resolveDispatchWidth(factoryMaxInstances(env), declaredParallel.max_parallel);
@@ -1113,7 +1114,7 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
         params.run_id,
         input.boot,
         seq,
-        output.text
+        output.text,
       );
       if (wrote) seq += 1;
       offset = output.offset;
@@ -1122,7 +1123,7 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
     // A sandbox that cannot be read is a sandbox that is probably dying. That
     // is the process check's verdict to make, not this one's.
     console.error(
-      `factory run-workflow: ${params.run_id} could not drain its harness output: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not drain its harness output: ${String(error)}`,
     );
   }
 
@@ -1184,7 +1185,7 @@ async function hardStopTrip(env: Env, input: ObserveInput): Promise<Trip | null>
 /** The standing hard stop for a run, or null. A read failure is not a stop. */
 async function hardStopRecord(
   env: Env,
-  params: RunWorkflowParams
+  params: RunWorkflowParams,
 ): Promise<{ requested_by: string; requested_at: string } | null> {
   const stop = await roomFor(env, params.project)
     .stopRequest(params.run_id)
@@ -1210,7 +1211,7 @@ async function detectTrip(
   env: Env,
   input: ObserveInput,
   at: number,
-  leaseLost: { lost: LeaseLostReason; holder: string | null } | null
+  leaseLost: { lost: LeaseLostReason; holder: string | null } | null,
 ): Promise<TripCheck> {
   const { params, context } = input;
 
@@ -1259,7 +1260,7 @@ async function detectTrip(
   const spend = await syncRunCost(env, params.run_id);
   if (!spend.ok) {
     console.error(
-      `factory run-workflow: ${params.run_id} could not read gateway spend: ${spend.detail}`
+      `factory run-workflow: ${params.run_id} could not read gateway spend: ${spend.detail}`,
     );
   }
   const run = await getRun(env.DB, params.run_id).catch(() => null);
@@ -1367,7 +1368,7 @@ async function supervisePass(
   params: RunWorkflowParams,
   context: RunContext,
   counter: BootCounter,
-  options: PassOptions
+  options: PassOptions,
 ): Promise<PassOutcome> {
   let lastDetail = "the orchestrator never started";
   let lastSeen: { state: SandboxProcessState; exit_code: number | null } = {
@@ -1386,7 +1387,7 @@ async function supervisePass(
     // container application itself was deleted. A hard stop is therefore a
     // durable refusal to mint, not a one-off revocation (tick gyl).
     const killed = await step.do(`${options.label}:killcheck:${attempt}`, OBSERVE_RETRIES, () =>
-      hardStopRecord(env, params)
+      hardStopRecord(env, params),
     );
     if (killed !== null) {
       await step.do(`${options.label}:killrevoke:${attempt}`, OBSERVE_RETRIES, async () => {
@@ -1476,9 +1477,7 @@ async function supervisePass(
           ...(options.substrate === undefined ? {} : { substrate: options.substrate }),
           ...(options.pass === undefined ? {} : { pass: options.pass }),
           ...(options.wave_ticks === undefined ? {} : { wave_ticks: options.wave_ticks }),
-          ...(options.wave_base_sha === undefined
-            ? {}
-            : { wave_base_sha: options.wave_base_sha }),
+          ...(options.wave_base_sha === undefined ? {} : { wave_base_sha: options.wave_base_sha }),
           ...(options.pass === undefined || factoryBaseURL(env) === null
             ? {}
             : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
@@ -1530,19 +1529,18 @@ async function supervisePass(
       if (renewal.ok) return { ok: true };
       console.error(
         `factory run-workflow: ${params.run_id} could not renew its lease after boot ${boot}: ` +
-          `${renewal.detail}`
+          `${renewal.detail}`,
       );
       return { ok: false, lost: renewal.lost, holder: renewal.holder, detail: renewal.detail };
     });
 
-    const deadline =
-      options.pass_max_ms === null ? null : booted.at_ms + options.pass_max_ms;
+    const deadline = options.pass_max_ms === null ? null : booted.at_ms + options.pass_max_ms;
     // Every absolute deadline a sleep on this pass must not run past: the run's
     // wall clock while budgets are enforced, this pass's own window otherwise.
     // Whichever comes first is the one the cadence stops at.
     const cadenceDeadline = earliestDeadline(
       options.enforce_budgets ? context.started_at_ms + context.config.max_wall_clock_ms : null,
-      deadline
+      deadline,
     );
 
     let offset = 0;
@@ -1580,7 +1578,7 @@ async function supervisePass(
             poll_ms: pollMs,
             pass_deadline_ms: deadline,
             enforce_budgets: options.enforce_budgets,
-          })
+          }),
       );
       offset = seen.offset;
       seq = seen.seq;
@@ -1612,7 +1610,7 @@ async function supervisePass(
         // lost either way — tracker state is committed to the run branch.
         await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-          drainAndKill(env, params, name, booted.process_id, boot, offset, seq)
+          drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
         );
         // The closeout boot mints a fresh credential — a stop must still reach
         // review and closeout (D15) — unless a hard stop stands, which the
@@ -1651,10 +1649,9 @@ async function supervisePass(
       // The orchestrator is still running and this instance is out of looks.
       // Stop it cleanly — never boot a replacement beside a live one.
       await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-        drainAndKill(env, params, name, booted.process_id, boot, offset, seq)
+        drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
       );
-      const detail =
-        `the run outlived its observation budget (${context.config.max_observations} looks)`;
+      const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
       return options.on_exhausted === "fail"
         ? { kind: "failed", detail, boots: counter.next - 1 }
         : {
@@ -1692,7 +1689,7 @@ async function supervisePass(
             await dying.destroy();
           } catch (error) {
             console.error(
-              `factory run-workflow: ${params.run_id} could not tear down sandbox ${boot}: ${String(error)}`
+              `factory run-workflow: ${params.run_id} could not tear down sandbox ${boot}: ${String(error)}`,
             );
           }
         }
@@ -1716,29 +1713,22 @@ async function drainAndKill(
   processID: string,
   boot: number,
   offset: number,
-  seq: number
+  seq: number,
 ): Promise<{ killed: boolean }> {
   const binding = sandboxBinding(env);
   if (binding === null) return { killed: false };
   const sandbox = await binding.get(name);
   try {
     const output = await sandbox.readOutput(processID, offset);
-    await writeHarnessSegment(
-      env.ARTIFACTS,
-      params.project,
-      params.run_id,
-      boot,
-      seq,
-      output.text
-    );
+    await writeHarnessSegment(env.ARTIFACTS, params.project, params.run_id, boot, seq, output.text);
   } catch (error) {
     console.error(
-      `factory run-workflow: ${params.run_id} could not make a final log flush: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not make a final log flush: ${String(error)}`,
     );
   }
   await sandbox.killProcess(processID).catch((error: unknown) => {
     console.error(
-      `factory run-workflow: ${params.run_id} could not kill its orchestrator: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not kill its orchestrator: ${String(error)}`,
     );
   });
   return { killed: true };
@@ -1755,7 +1745,9 @@ async function drainAndKill(
  * narrower policies than a quick D1 read does. One retry still recovers a
  * transient failure without compounding a slow one.
  */
-const CLOUD_DISPATCH_RETRIES = { retries: { limit: 1, delay: 2_000, backoff: "constant" } } as const;
+const CLOUD_DISPATCH_RETRIES = {
+  retries: { limit: 1, delay: 2_000, backoff: "constant" },
+} as const;
 
 /**
  * What one worker container in this run may spend: how long its harness may
@@ -1778,7 +1770,7 @@ const CLOUD_DISPATCH_RETRIES = { retries: { limit: 1, delay: 2_000, backoff: "co
  */
 export function cloudWaveBudget(
   config: Pick<RunConfig, "max_wall_clock_ms" | "worker_budget_ms">,
-  elapsedMs: number
+  elapsedMs: number,
 ): { harness_budget_ms: number; wait_timeout_ms: number } {
   const remaining = Math.max(0, config.max_wall_clock_ms - Math.max(0, elapsedMs));
   const harness_budget_ms = workerHarnessBudgetMs({
@@ -1883,7 +1875,7 @@ async function waveLeaseHeartbeat(
   env: Env,
   params: RunWorkflowParams,
   context: RunContext,
-  watch: WaveWatch
+  watch: WaveWatch,
 ): Promise<{ lost: LeaseLostReason; holder: string | null } | null> {
   const ttl = renewalTtl(context.config.wave_leg_ms);
   const now = Date.now();
@@ -1904,7 +1896,7 @@ async function cloudWaveTrip(
   env: Env,
   params: RunWorkflowParams,
   context: RunContext,
-  telemetry: WaveWatch
+  telemetry: WaveWatch,
 ): Promise<Trip | null> {
   const stop = await hardStopRecord(env, params);
   if (stop !== null) {
@@ -1939,7 +1931,7 @@ async function cloudWaveTrip(
     telemetry.complained = true;
     console.error(
       `factory run-workflow: ${params.run_id} could not read gateway spend for its cloud wave: ` +
-        `${spend.detail}`
+        `${spend.detail}`,
     );
   }
   const run = await getRun(env.DB, params.run_id).catch(() => null);
@@ -2039,13 +2031,13 @@ export function describeCloudWaveLoss(loss: CloudWaveLoss): string {
   if (loss.rescued.length > 0) {
     parts.push(
       `${loss.rescued.length} pushed what they had inside the salvage window ` +
-        `(${loss.rescued.join(", ")})`
+        `(${loss.rescued.join(", ")})`,
     );
   }
   if (loss.lost.length > 0) {
     parts.push(
       `${loss.lost.length} were DESTROYED MID-WORK with nothing on their branch, so that ` +
-        `work is lost and the run paid for it (${loss.lost.join(", ")})`
+        `work is lost and the run paid for it (${loss.lost.join(", ")})`,
     );
   }
   return parts.join("; ");
@@ -2136,7 +2128,7 @@ export function waveSpawnBudget(width: number): {
 } {
   const shared = shareStepBudget(
     { probe: probeTimeoutMs(width), confirm: DEFAULT_CONFIRM_TIMEOUT_MS },
-    `a cloud wave ${width} container(s) wide`
+    `a cloud wave ${width} container(s) wide`,
   );
   return { probe_timeout_ms: shared.probe!, confirm_timeout_ms: shared.confirm! };
 }
@@ -2211,7 +2203,7 @@ async function runWaveBatch(
     token: string;
     telemetry: WaveWatch;
     cancel_poll_ms: number;
-  }
+  },
 ): Promise<WaveBatchOutcome> {
   const label = `${input.tag}${input.index}`;
   const batchNumber = input.wave * 1000 + input.index + 1;
@@ -2251,7 +2243,7 @@ async function runWaveBatch(
     const name = leg === 0 ? `cloud:dispatch:${label}` : `cloud:dispatch:${label}:${leg}`;
     const legTicks = [...pending];
     const priorOutcomes = [...merged.values()].filter(
-      (outcome) => !legTicks.includes(outcome.collect.tick_id)
+      (outcome) => !legTicks.includes(outcome.collect.tick_id),
     );
     const adoptOffsets = Object.fromEntries(offsets);
     const started = Object.fromEntries(dispatches);
@@ -2307,7 +2299,7 @@ async function runWaveBatch(
       // it alone — never dropped. A tick missing from a wave's outcomes is a
       // tick the board and the run record cannot account for.
       const untouched = settled(reconciled).map((item) =>
-        settledOutcome(item, taskFor(item.tick_id))
+        settledOutcome(item, taskFor(item.tick_id)),
       );
       // What this batch's containers may spend, computed HERE rather than
       // hoisted: a Workflow step that ran, died and re-ran has to be sized by
@@ -2340,7 +2332,7 @@ async function runWaveBatch(
           on_cancel: async (cancellation) => {
             await revokeRunTokens(env, params.run_id, cancellation.reason);
           },
-        }
+        },
       );
       const batch_outcomes = await dispatchWave(
         binding,
@@ -2423,7 +2415,7 @@ async function runWaveBatch(
             ? {}
             : { logs: workerLogSink(env.ARTIFACTS, params.project, params.run_id) }),
         },
-        collector
+        collector,
       );
       const all_outcomes = [...batch_outcomes, ...untouched];
 
@@ -2445,7 +2437,7 @@ async function runWaveBatch(
         } catch (error) {
           console.error(
             `factory run-workflow: ${params.run_id} could not record batch ${input.index + 1} ` +
-              `leg ${leg} outcomes: ${String(error)}`
+              `leg ${leg} outcomes: ${String(error)}`,
           );
         }
       }
@@ -2471,7 +2463,7 @@ async function runWaveBatch(
       // costs. Bounded by `MAX_WAVE_LEGS` whatever the arithmetic says.
       legCount = Math.min(
         MAX_WAVE_LEGS,
-        2 + Math.ceil(Math.max(waveWaitMs, 0) / Math.max(legMs, 1))
+        2 + Math.ceil(Math.max(waveWaitMs, 0) / Math.max(legMs, 1)),
       );
     }
     for (const tick of ran.dispatched) dispatches.set(tick, (dispatches.get(tick) ?? 0) + 1);
@@ -2489,8 +2481,7 @@ async function runWaveBatch(
       if (
         outcome.launched &&
         outcome.settled === undefined &&
-        outcome.wait !== null &&
-        outcome.wait.timed_out &&
+        outcome.wait?.timed_out &&
         outcome.wait.cancelled === null
       ) {
         stillRunning.push(tick);
@@ -2528,8 +2519,8 @@ async function runWaveBatch(
               sandbox_name: workerSandboxName(params.run_id, tick),
             },
           },
-          workerTask(params.epic, tick, params.base_sha)
-        )
+          workerTask(params.epic, tick, params.base_sha),
+        ),
     ),
     cancelled,
     reconcile: firstPlan,
@@ -2582,7 +2573,7 @@ export async function superviseCloudWave(
    * `cloud:dispatch:0` would replay the FIRST wave's checkpointed result and
    * dispatch nothing at all while reporting that it had.
    */
-  wave: number = 0
+  wave: number = 0,
 ): Promise<PassOutcome> {
   const collector = workerCollector(env, params.project);
   const batches = chunkWave(plan.tick_ids, plan.width);
@@ -2603,7 +2594,7 @@ export async function superviseCloudWave(
     // budget already spent — refuses to credential ANOTHER batch, the same way
     // it refuses to credential another orchestrator boot (tick gyl).
     const standing = await step.do(`cloud:killcheck:${tag}${i}`, OBSERVE_RETRIES, () =>
-      cloudWaveTrip(env, params, context, telemetry)
+      cloudWaveTrip(env, params, context, telemetry),
     );
     if (standing !== null) {
       await step.do(`cloud:killrevoke:${tag}${i}`, OBSERVE_RETRIES, async () => {
@@ -2634,7 +2625,7 @@ export async function superviseCloudWave(
         // Wave and batch, so two waves' batches are distinguishable in the
         // gateway's own logs rather than both reading as `attempt: 1`.
         attempt: wave * 1000 + i + 1,
-      })
+      }),
     );
 
     // The board learns which ticks are in flight BEFORE the containers are
@@ -2651,9 +2642,9 @@ export async function superviseCloudWave(
             tick,
             batch: i + 1,
             ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          })
-        )
-      )
+          }),
+        ),
+      ),
     );
 
     const ran = await runWaveBatch(env, step, params, context, plan, collector, batch, {
@@ -2731,8 +2722,8 @@ export async function superviseCloudWave(
             detail: reported ? outcome.collect.detail : outcome.detail,
             ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
           });
-        })
-      )
+        }),
+      ),
     );
 
     if (dispatched.cancelled !== null) {
@@ -2879,7 +2870,7 @@ async function superviseWaveLoop(
   params: RunWorkflowParams,
   context: RunContext,
   counter: BootCounter,
-  first: CloudWavePlan
+  first: CloudWavePlan,
 ): Promise<PassOutcome> {
   let plan = first;
   // Every wave's own account, kept because nothing else records the per-tick
@@ -2959,8 +2950,7 @@ async function superviseWaveLoop(
     if (continued.kind === "failed") {
       return withHistory({
         kind: "handoff",
-        detail:
-          `the orchestrator integrating wave ${wave + 1} did not finish (${continued.detail})`,
+        detail: `the orchestrator integrating wave ${wave + 1} did not finish (${continued.detail})`,
         boots: continued.boots,
         clean: false,
       });
@@ -3037,21 +3027,19 @@ export async function finalize(
   outcome: RunOutcome,
   boots: number,
   costTelemetry: string | null = null,
-  progress: RunProgress = unverifiedProgress("the run ended before its progress was assessed")
+  progress: RunProgress = unverifiedProgress("the run ended before its progress was assessed"),
 ): Promise<void> {
   const endedAt = new Date().toISOString();
 
   // Model access ends when the run does, whatever else happens below. A run
   // whose lease release fails is a delay; a run that leaves a live gateway
   // credential behind is a container that can still spend (D17).
-  await revokeRunTokens(env, params.run_id, `finished:${outcome.state}`).catch(
-    (error: unknown) => {
-      console.error(
-        `factory run-workflow: ${params.run_id} could not revoke its gateway tokens: ${String(error)}`
-      );
-      return 0;
-    }
-  );
+  await revokeRunTokens(env, params.run_id, `finished:${outcome.state}`).catch((error: unknown) => {
+    console.error(
+      `factory run-workflow: ${params.run_id} could not revoke its gateway tokens: ${String(error)}`,
+    );
+    return 0;
+  });
 
   // One last telemetry read, so the closing record carries what the run
   // actually spent rather than what it had spent at the last observation.
@@ -3098,7 +3086,7 @@ export async function finalize(
     reason: null,
   }).catch((error: unknown) => {
     console.error(
-      `factory run-workflow: ${params.run_id} could not log its finish decision: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not log its finish decision: ${String(error)}`,
     );
   });
 
@@ -3110,10 +3098,10 @@ export async function finalize(
     env.DB,
     params.run_id,
     { progress: progress.state, detail: progress.detail },
-    endedAt
+    endedAt,
   ).catch((error: unknown) => {
     console.error(
-      `factory run-workflow: ${params.run_id} could not stamp its progress verdict: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not stamp its progress verdict: ${String(error)}`,
     );
   });
 
@@ -3145,9 +3133,9 @@ export async function finalize(
   await writeCombinedHarnessLog(env.ARTIFACTS, params.project, params.run_id).catch(
     (error: unknown) => {
       console.error(
-        `factory run-workflow: ${params.run_id} could not write a combined harness log: ${String(error)}`
+        `factory run-workflow: ${params.run_id} could not write a combined harness log: ${String(error)}`,
       );
-    }
+    },
   );
 
   // Tear down every container this run booted — and only those. `destroy` on a
@@ -3162,7 +3150,7 @@ export async function finalize(
         await sandbox.destroy();
       } catch (error) {
         console.error(
-          `factory run-workflow: ${params.run_id} could not destroy sandbox ${boot}: ${String(error)}`
+          `factory run-workflow: ${params.run_id} could not destroy sandbox ${boot}: ${String(error)}`,
         );
       }
     }
@@ -3177,7 +3165,7 @@ export async function finalize(
     // The lease expires on the RunRoom's alarm anyway; losing the release is a
     // delay, not a wedge, and must not fail a finalize that already landed.
     console.error(
-      `factory run-workflow: ${params.run_id} could not release its lease: ${String(error)}`
+      `factory run-workflow: ${params.run_id} could not release its lease: ${String(error)}`,
     );
   }
 }
@@ -3199,7 +3187,7 @@ function tripReason(trip: Trip): "budget_exhausted" | null {
 export async function assessProgress(
   env: Env,
   params: RunWorkflowParams,
-  context: RunContext
+  context: RunContext,
 ): Promise<RunProgress> {
   return compareSnapshots(context.refs_baseline, await snapshotRefs(env, params.project));
 }
@@ -3281,7 +3269,7 @@ export async function superviseReview(
   step: WorkflowStep,
   params: RunWorkflowParams,
   context: RunContext,
-  counter: BootCounter
+  counter: BootCounter,
 ): Promise<RunOutcome> {
   const work = await supervisePass(env, step, params, context, counter, {
     label: "review",
@@ -3307,7 +3295,7 @@ export async function superviseReview(
           };
 
   const evidence = await step.do("review:evidence", OBSERVE_RETRIES, () =>
-    reviewEvidence(env.DB, params.run_id)
+    reviewEvidence(env.DB, params.run_id),
   );
   const progress: RunProgress = {
     state: evidence.posted ? "advanced" : "none",
@@ -3340,13 +3328,13 @@ export async function superviseReview(
 export async function superviseRun(
   env: Env,
   params: RunWorkflowParams,
-  step: WorkflowStep
+  step: WorkflowStep,
 ): Promise<RunOutcome> {
   const acquired = await step.do("context", CONTEXT_RETRIES, () => acquireContext(env, params));
   if (!acquired.ok) {
     const outcome: RunOutcome = { state: "failed", detail: acquired.detail, boots: 0 };
     const never = unverifiedProgress(
-      "the run never booted an orchestrator, so nothing could have advanced the epic"
+      "the run never booted an orchestrator, so nothing could have advanced the epic",
     );
     await step.do("finalize", FINALIZE_RETRIES, async () => {
       await finalize(env, params, outcome, 0, null, never);
@@ -3481,7 +3469,7 @@ export async function superviseRun(
   // the PROCESS did; the durable layer reports what the RUN did, and only the
   // second one can promote an exit into a completion (tick ehy).
   const progress = await step.do("progress", OBSERVE_RETRIES, () =>
-    assessProgress(env, params, context)
+    assessProgress(env, params, context),
   );
   outcome = applyProgress(outcome, progress);
 
@@ -3499,7 +3487,7 @@ export async function superviseRun(
 export class RunWorkflow extends WorkflowEntrypoint<Env, RunWorkflowParams> {
   override async run(
     event: Readonly<WorkflowEvent<RunWorkflowParams>>,
-    step: WorkflowStep
+    step: WorkflowStep,
   ): Promise<RunOutcome> {
     return superviseRun(this.env, event.payload, step);
   }

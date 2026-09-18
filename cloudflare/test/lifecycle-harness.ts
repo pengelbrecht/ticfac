@@ -125,7 +125,7 @@ export class LifecycleHarness {
      * hard-coded copies of one boundary is two copies that can drift apart
      * with both suites green.
      */
-    private readonly protectedPrefixes: string[]
+    private readonly protectedPrefixes: string[],
   ) {}
 
   private guarded(name: string): boolean {
@@ -428,34 +428,58 @@ export class LifecycleHarness {
     };
 
     const names = (pick: (job: Job) => boolean) =>
-      [...this.jobs.entries()].filter(([, job]) => pick(job)).map(([name]) => name).sort();
+      [...this.jobs.entries()]
+        .filter(([, job]) => pick(job))
+        .map(([name]) => name)
+        .sort();
 
-    if (want.booted_jobs !== undefined) cmp("booted_jobs", names((j) => j.booted), want.booted_jobs);
+    if (want.booted_jobs !== undefined)
+      cmp(
+        "booted_jobs",
+        names((j) => j.booted),
+        want.booted_jobs,
+      );
     if (want.issued_credentials !== undefined) {
       cmp("issued_credentials", [...this.credentials.keys()].sort(), want.issued_credentials);
     }
-    if (want.torn_down !== undefined) cmp("torn_down", names((j) => j.tornDown), want.torn_down);
+    if (want.torn_down !== undefined)
+      cmp(
+        "torn_down",
+        names((j) => j.tornDown),
+        want.torn_down,
+      );
     if (want.liveness !== undefined) {
       const got: Record<string, string> = {};
       for (const job of Object.keys(want.liveness)) got[job] = this.liveness.get(job) ?? "";
       cmp("liveness", got, want.liveness);
     }
-    if (want.step_spent_ms !== undefined) cmp("step_spent_ms", this.step?.spentMs ?? 0, want.step_spent_ms);
-    if (want.origin !== undefined) cmp("origin", sortedRecord(this.origin), sortedObject(want.origin));
+    if (want.step_spent_ms !== undefined)
+      cmp("step_spent_ms", this.step?.spentMs ?? 0, want.step_spent_ms);
+    if (want.origin !== undefined)
+      cmp("origin", sortedRecord(this.origin), sortedObject(want.origin));
     if (want.dispatches !== undefined) {
       cmp("dispatches", sortedRecord(this.dispatches), sortedObject(want.dispatches));
     }
     if (want.settled !== undefined) {
-      const settled = [...this.claims.entries()].filter(([, c]) => c.settled).map(([p]) => p).sort();
+      const settled = [...this.claims.entries()]
+        .filter(([, c]) => c.settled)
+        .map(([p]) => p)
+        .sort();
       cmp("settled", settled, want.settled);
     }
     if (want.reported_classes !== undefined) {
-      cmp("reported_classes", this.reports.map((r) => r.class), want.reported_classes);
+      cmp(
+        "reported_classes",
+        this.reports.map((r) => r.class),
+        want.reported_classes,
+      );
     }
-    if (want.boundary_reports !== undefined) cmp("boundary_reports", this.boundaryReports, want.boundary_reports);
+    if (want.boundary_reports !== undefined)
+      cmp("boundary_reports", this.boundaryReports, want.boundary_reports);
     if (want.released_by !== undefined) {
       const got: Record<string, string> = {};
-      for (const [unit, hold] of this.holds) if (hold.releasedBy !== null) got[unit] = hold.releasedBy;
+      for (const [unit, hold] of this.holds)
+        if (hold.releasedBy !== null) got[unit] = hold.releasedBy;
       cmp("released_by", sortedObject(got), sortedObject(want.released_by));
     }
     if (want.budget !== undefined) {
@@ -468,11 +492,13 @@ export class LifecycleHarness {
           reported: this.budget.reported,
           clamped: this.budget.clamped,
         },
-        want.budget
+        want.budget,
       );
     }
-    if (want.evidence_keys !== undefined) cmp("evidence_keys", [...this.evidence.keys()].sort(), want.evidence_keys);
-    if (want.published_keys !== undefined) cmp("published_keys", this.published, want.published_keys);
+    if (want.evidence_keys !== undefined)
+      cmp("evidence_keys", [...this.evidence.keys()].sort(), want.evidence_keys);
+    if (want.published_keys !== undefined)
+      cmp("published_keys", this.published, want.published_keys);
 
     return bad;
   }

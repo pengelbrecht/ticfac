@@ -86,10 +86,7 @@ export function bareTextOf(update: TelegramWebhookUpdate): string | null {
  * `candidates` must already be every OPEN question across every enrolled
  * project, in a stable order — the refusal lists them in the order given.
  */
-export function resolveFreeText(
-  text: string,
-  candidates: FreeTextCandidate[]
-): FreeTextResolution {
+export function resolveFreeText(text: string, candidates: FreeTextCandidate[]): FreeTextResolution {
   if (candidates.length === 0) return { kind: "none" };
   if (candidates.length > 1) return { kind: "refused", reason: "ambiguous", candidates };
 
@@ -120,7 +117,7 @@ export function textOutcome(question: Question, text: string): Outcome | null {
   const option = options.find(
     (candidate) =>
       candidate.id.toLowerCase() === answer.toLowerCase() ||
-      candidate.label.toLowerCase() === answer.toLowerCase()
+      candidate.label.toLowerCase() === answer.toLowerCase(),
   );
   return option === undefined ? null : optionOutcome(option);
 }
@@ -141,7 +138,7 @@ export function optionOutcome(option: QuestionOption): Outcome {
  * press one of its buttons.
  */
 export function renderFreeTextRefusal(
-  resolution: Extract<FreeTextResolution, { kind: "refused" }>
+  resolution: Extract<FreeTextResolution, { kind: "refused" }>,
 ): string {
   const lines: string[] =
     resolution.reason === "ambiguous"
@@ -176,7 +173,7 @@ export function renderFreeTextRefusal(
     lines.push(
       options.length === 0
         ? "   Reply to that message with your answer."
-        : `   Reply to that message with one of: ${options.map((option) => option.label).join(" / ")}`
+        : `   Reply to that message with one of: ${options.map((option) => option.label).join(" / ")}`,
     );
   });
   return lines.join("\n");

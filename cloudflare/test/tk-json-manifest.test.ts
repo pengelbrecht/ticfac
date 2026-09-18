@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import manifest from "../../contracts/tk-json-manifest.json";
 import requiredTkCommands from "../required-tk-commands?raw";
 
-import { parseDefs, parseSchema, type Defs, type Schema } from "./json-schema";
+import { type Defs, parseDefs, parseSchema, type Schema } from "./json-schema";
 
 /**
  * The TypeScript reader for `contracts/tk-json-manifest.json`.
@@ -48,7 +48,9 @@ const commands = manifest.commands as readonly Command[];
 
 /** `["show", "<tick-id>", "--json"]` -> `show <arg> --json`. */
 function normalizeArgv(argv: readonly string[]): string {
-  return argv.map((token) => (token.startsWith("<") && token.endsWith(">") ? "<arg>" : token)).join(" ");
+  return argv
+    .map((token) => (token.startsWith("<") && token.endsWith(">") ? "<arg>" : token))
+    .join(" ");
 }
 
 /** `required-tk-commands` minus its comment block and blank lines. */
@@ -102,10 +104,13 @@ describe("the tk --json manifest is complete enough to consume", () => {
       expect(typeof command.command, `${where}: command`).toBe("string");
       expect(command.command, `${where}: command`).not.toBe("");
 
-      expect(KINDS.has(command.kind), `${where}: kind ${command.kind} is not read|write`).toBe(true);
-      expect(OUTPUTS.has(command.output), `${where}: output ${command.output} is not json|exit-code`).toBe(
+      expect(KINDS.has(command.kind), `${where}: kind ${command.kind} is not read|write`).toBe(
         true,
       );
+      expect(
+        OUTPUTS.has(command.output),
+        `${where}: output ${command.output} is not json|exit-code`,
+      ).toBe(true);
 
       expect(Array.isArray(command.argv), `${where}: argv`).toBe(true);
       expect(command.argv.length, `${where}: argv is empty`).toBeGreaterThan(0);
@@ -119,9 +124,10 @@ describe("the tk --json manifest is complete enough to consume", () => {
       // `since` is what lets a consumer on contract N know whether a command
       // exists for it at all.
       expect(Number.isInteger(command.since), `${where}: since`).toBe(true);
-      expect(manifest.supported_contracts, `${where}: since ${command.since} is not a served contract`).toContain(
-        command.since,
-      );
+      expect(
+        manifest.supported_contracts,
+        `${where}: since ${command.since} is not a served contract`,
+      ).toContain(command.since);
 
       expect(typeof command.description, `${where}: description`).toBe("string");
       expect(command.description, `${where}: description`).not.toBe("");
@@ -200,10 +206,14 @@ describe("the tk --json manifest is complete enough to consume", () => {
       }
     };
 
-    for (const command of commands) collect((command as { schema?: unknown }).schema, `command ${command.id}`);
+    for (const command of commands)
+      collect((command as { schema?: unknown }).schema, `command ${command.id}`);
     collect(defs, "$defs");
 
-    expect(refs.length, "the manifest uses no $ref at all — has $defs been inlined away?").toBeGreaterThan(0);
+    expect(
+      refs.length,
+      "the manifest uses no $ref at all — has $defs been inlined away?",
+    ).toBeGreaterThan(0);
 
     for (const { where, ref } of refs) {
       const local = ref.match(/^#\/\$defs\/([A-Za-z0-9_]+)$/);
@@ -268,13 +278,18 @@ describe("the tk --json manifest is complete enough to consume", () => {
       "tk ask <id> --json",
       "tk graph --json",
     ]) {
-      expect(note, `$comment does not record ${phrase} as an unpublished §3.1 invocation`).toContain(phrase);
+      expect(
+        note,
+        `$comment does not record ${phrase} as an unpublished §3.1 invocation`,
+      ).toContain(phrase);
     }
 
     // The correction §3.1 was given: `graph` takes the epic it is asked about.
     const graph = commands.find((command) => command.id === "graph");
     expect(graph, "the manifest no longer declares `graph`").toBeDefined();
-    expect(graph?.argv[1], "graph argv omits the epic id §3.1 was corrected to name").toBe("<epic-id>");
+    expect(graph?.argv[1], "graph argv omits the epic id §3.1 was corrected to name").toBe(
+      "<epic-id>",
+    );
   });
 
   it("has unique ids", () => {

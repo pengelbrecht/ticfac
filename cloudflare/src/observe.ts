@@ -32,18 +32,18 @@
  *    (tick z1b).
  */
 
-import { listRecentDispatch, listRunGatewayTokens, type DispatchLog } from "./db";
+import type { Run } from "./db";
+import { type DispatchLog, listRecentDispatch, listRunGatewayTokens } from "./db";
 import type { Env } from "./index";
 import { MAX_RECENT_EVENTS, type PendingEntry, type RunEventView } from "./run-room";
 import {
-  MAX_RUN_LIMIT,
   listRunStatus,
-  roomFor,
-  runStatus,
+  MAX_RUN_LIMIT,
   type ProjectStatus,
   type RunStatus,
+  roomFor,
+  runStatus,
 } from "./runs";
-import type { Run } from "./db";
 
 /** The default event tail: enough to see what an agent is doing, not a log. */
 export const DEFAULT_OBSERVE_EVENTS = 25;
@@ -119,7 +119,7 @@ export async function bootView(env: Env, runID: string): Promise<BootView> {
 async function roomTail(
   env: Env,
   project: string | null,
-  limit: number
+  limit: number,
 ): Promise<{ events: RunEventView[]; gates: PendingEntry[]; detail: string | null }> {
   if (project === null) {
     return { events: [], gates: [], detail: "no project has a run to stream events for" };
@@ -130,7 +130,7 @@ async function roomTail(
     return { events, gates, detail: null };
   } catch (error) {
     const detail = `the run room for ${project} did not answer: ${String(
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     )}`;
     console.error(`factory observe: ${detail}`);
     return { events: [], gates: [], detail };
@@ -157,8 +157,7 @@ export async function observe(env: Env, query: ObserveQuery): Promise<Observatio
   // Whose stream to tail: the project asked for, else the focused run's, else
   // the newest run's. A single-project deployment is the normal case and must
   // not have to name itself.
-  const eventsProject =
-    query.project ?? status?.run.project ?? listing.runs[0]?.project ?? null;
+  const eventsProject = query.project ?? status?.run.project ?? listing.runs[0]?.project ?? null;
 
   const [dispatch, tail, boot] = await Promise.all([
     listRecentDispatch(env.DB, query.dispatch ?? DEFAULT_OBSERVE_DISPATCH),
@@ -182,7 +181,7 @@ export async function observe(env: Env, query: ObserveQuery): Promise<Observatio
 function bound(
   value: string | null,
   name: string,
-  max: number
+  max: number,
 ): { ok: true; value?: number } | { ok: false; detail: string } {
   if (value === null) return { ok: true };
   const parsed = Number(value);
@@ -197,19 +196,21 @@ export async function observeRoute(request: Request, env: Env): Promise<Response
   if (request.method !== "GET") {
     return Response.json(
       { error: "method_not_allowed", detail: "allowed: GET" },
-      { status: 405, headers: { Allow: "GET" } }
+      { status: 405, headers: { Allow: "GET" } },
     );
   }
 
   const url = new URL(request.url);
   const events = bound(url.searchParams.get("events"), "events", MAX_OBSERVE_EVENTS);
-  if (!events.ok) return Response.json({ error: "invalid_request", detail: events.detail }, { status: 400 });
+  if (!events.ok)
+    return Response.json({ error: "invalid_request", detail: events.detail }, { status: 400 });
   const dispatch = bound(url.searchParams.get("dispatch"), "dispatch", MAX_OBSERVE_DISPATCH);
   if (!dispatch.ok) {
     return Response.json({ error: "invalid_request", detail: dispatch.detail }, { status: 400 });
   }
   const runs = bound(url.searchParams.get("runs"), "runs", MAX_RUN_LIMIT);
-  if (!runs.ok) return Response.json({ error: "invalid_request", detail: runs.detail }, { status: 400 });
+  if (!runs.ok)
+    return Response.json({ error: "invalid_request", detail: runs.detail }, { status: 400 });
 
   const project = url.searchParams.get("project");
   const run = url.searchParams.get("run");

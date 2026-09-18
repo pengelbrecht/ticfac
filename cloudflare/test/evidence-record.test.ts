@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import jobProtocol from "../../contracts/job-protocol.json";
 import runState from "../../contracts/ticfac-run-state.json";
-import { parseDefs, parseSchema, validate, type Defs, type Schema } from "./json-schema";
+import { type Defs, parseDefs, parseSchema, type Schema, validate } from "./json-schema";
 
 /**
  * THE TEST THAT WOULD HAVE CAUGHT IT.
@@ -57,12 +57,16 @@ describe("the evidence record is defined once and pointed at from the other side
 
     // And there is nothing beside the pointer to drift from.
     for (const name of Object.keys(runState.schemas)) {
-      expect(name, "ticfac-run-state.json still defines an evidence schema").not.toContain("evidence");
+      expect(name, "ticfac-run-state.json still defines an evidence schema").not.toContain(
+        "evidence",
+      );
     }
   });
 
   it("resolves through the pointer to this record", () => {
-    const target = (records as Record<string, RecordEntry>)[reference.pointer.replace("#/records/", "")];
+    const target = (records as Record<string, RecordEntry>)[
+      reference.pointer.replace("#/records/", "")
+    ];
     expect(target, `${reference.pointer} resolves to nothing`).toBeDefined();
     expect(target.schema_id).toBe(reference.schema_id);
   });
@@ -76,7 +80,9 @@ describe("each contract's golden evidence example validates against the other's 
   });
 
   it("run-state's invalid evidence documents are refused by records.evidence", () => {
-    const bad = (runState.invalid as unknown as InvalidExample[]).filter((x) => x.record === "evidence");
+    const bad = (runState.invalid as unknown as InvalidExample[]).filter(
+      (x) => x.record === "evidence",
+    );
     expect(bad.length, "no cross-file refusal is proven").toBeGreaterThan(0);
     for (const example of bad) {
       expect(
@@ -97,7 +103,10 @@ describe("each contract's golden evidence example validates against the other's 
 
     for (const example of golden) {
       for (const field of runState.envelope.required_on_every_committed_record) {
-        expect(Object.hasOwn(example.document, field), `${example.name} does not carry ${field}`).toBe(true);
+        expect(
+          Object.hasOwn(example.document, field),
+          `${example.name} does not carry ${field}`,
+        ).toBe(true);
       }
 
       // `<key>` in the path is the record's own key, so it has to be usable as
@@ -116,13 +125,18 @@ describe("the shared provenance object is one shape, not two compatible ones", (
       const here = (jobProtocol as { $defs: Record<string, unknown> }).$defs[name];
       const there = (runState as { $defs: Record<string, unknown> }).$defs[name];
       expect(here, `job-protocol.json $defs.${name}`).toBeDefined();
-      expect(there, `ticfac-run-state.json $defs.${name} — it references this definition`).toBeDefined();
+      expect(
+        there,
+        `ticfac-run-state.json $defs.${name} — it references this definition`,
+      ).toBeDefined();
       expect(there, `$defs.${name} differs between the two contracts`).toEqual(here);
     }
   });
 
   it("is what every committed run-state record carries", () => {
-    for (const [name, schema] of Object.entries(runState.schemas as Record<string, { properties?: Record<string, { $ref?: string }> }>)) {
+    for (const [name, schema] of Object.entries(
+      runState.schemas as Record<string, { properties?: Record<string, { $ref?: string }> }>,
+    )) {
       expect(schema.properties?.provenance?.$ref, `schemas.${name}`).toBe("#/$defs/provenance");
     }
     expect(evidenceDef.properties?.provenance?.$ref).toBe("#/$defs/provenance");

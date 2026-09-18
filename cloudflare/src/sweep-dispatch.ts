@@ -54,29 +54,26 @@
  * where `tk graph` already runs.
  */
 
-import { getEnrolledProject, listEnrolledProjects, insertSweepSelection } from "./db";
-import { GITHUB_API_BASE_URL } from "./progress";
-import { repoRefs } from "./progress";
+import { getEnrolledProject, insertSweepSelection, listEnrolledProjects } from "./db";
+import type { Env } from "./index";
+import { GITHUB_API_BASE_URL, repoRefs } from "./progress";
 import { repoConfig } from "./repo-config";
 import { submitRun } from "./runs";
-import { TICK_RECORD_DIR } from "./tick-membership";
-import { trackerReader } from "./tick-membership";
-import { commitTickRecord, tickIDCandidates, trackerWriter } from "./tracker-write";
-import { newTraceID } from "./trace";
 import {
   cronMatches,
   declaredSweeps,
   describeClamps,
   effectiveSweepPolicy,
   parseSweepCandidate,
-  selectSweep,
-  sweepCeilings,
   type SweepCandidate,
   type SweepPolicy,
   type SweepSelection,
+  selectSweep,
+  sweepCeilings,
 } from "./sweeps";
-
-import type { Env } from "./index";
+import { TICK_RECORD_DIR, trackerReader } from "./tick-membership";
+import { newTraceID } from "./trace";
+import { commitTickRecord, tickIDCandidates, trackerWriter } from "./tracker-write";
 
 /**
  * The most tick records one sweep will read before it refuses to select.
@@ -148,11 +145,13 @@ export function githubTickIndex(env: Env): TickIndexReader {
     async list(project: string, ref: string): Promise<string[]> {
       const query = ref === "" ? "" : `?ref=${encodeURIComponent(ref)}`;
       const url = `${base}/repos/${project}/contents/${TICK_RECORD_DIR}${query}`;
-      const response = await fetch(url, { headers: githubHeaders(env, "application/vnd.github+json") });
+      const response = await fetch(url, {
+        headers: githubHeaders(env, "application/vnd.github+json"),
+      });
       if (response.status === 404) return [];
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} listing ${TICK_RECORD_DIR} of ${project} at ${ref}`
+          `GitHub answered HTTP ${response.status} listing ${TICK_RECORD_DIR} of ${project} at ${ref}`,
         );
       }
       const body = await response.json();
@@ -228,7 +227,7 @@ export async function readFrontier(env: Env, project: string, ref: string): Prom
       if (candidate === null) {
         console.error(
           `factory sweep: ${TICK_RECORD_DIR}/${batch[index]}.json@${ref} in ${project} is not a ` +
-            "tick record this reader understands; it is not a sweep candidate"
+            "tick record this reader understands; it is not a sweep candidate",
         );
         return;
       }
@@ -336,7 +335,7 @@ export async function runDueSweeps(env: Env, at: Date): Promise<SweepOutcome[]> 
       console.error(
         `factory sweep: ${projects.length} enrolled projects but only ${limit} are swept per ` +
           `trigger (SWEEP_MAX_PROJECTS); ${project} and the rest were not swept at ` +
-          `${at.toISOString()}`
+          `${at.toISOString()}`,
       );
       break;
     }
@@ -360,7 +359,7 @@ export async function runDueSweeps(env: Env, at: Date): Promise<SweepOutcome[]> 
         // cannot repair — the run may already be live. Loud, and not fatal to
         // the projects after it.
         console.error(
-          `factory sweep: ${outcome.sweep_id} ran but its record could not be written: ${String(error)}`
+          `factory sweep: ${outcome.sweep_id} ran but its record could not be written: ${String(error)}`,
         );
       }
     }
@@ -375,7 +374,7 @@ function maxSweepProjects(env: Env): number {
   if (!Number.isSafeInteger(parsed) || parsed < 1) {
     console.error(
       `factory sweep: SWEEP_MAX_PROJECTS must be a positive integer; ignoring "${raw}" and ` +
-        `using ${DEFAULT_MAX_SWEEP_PROJECTS}`
+        `using ${DEFAULT_MAX_SWEEP_PROJECTS}`,
     );
     return DEFAULT_MAX_SWEEP_PROJECTS;
   }
@@ -424,11 +423,15 @@ export async function runOneSweep(
   env: Env,
   project: string,
   policy: SweepPolicy,
-  at: Date
+  at: Date,
 ): Promise<SweepOutcome> {
   const id = sweepID(project, policy.name, at);
   const fired = at.toISOString();
-  const refused = (detail: string, base = "", selection: SweepSelection | null = null): SweepOutcome => ({
+  const refused = (
+    detail: string,
+    base = "",
+    selection: SweepSelection | null = null,
+  ): SweepOutcome => ({
     sweep_id: id,
     project,
     sweep: policy.name,
@@ -455,7 +458,7 @@ export async function runOneSweep(
     return refused(
       `the default branch head of ${project} could not be read: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
   }
 
@@ -469,9 +472,7 @@ export async function runOneSweep(
   // Said at the one moment an operator might still be reading, as well as
   // written into the record: tick 7zk's whole lesson is that a ceiling which
   // replaced a number must not first appear in a cancellation.
-  const budgetLine =
-    `$${effective.budget_usd.effective} effective` +
-    (clamps === "" ? "" : ` (clamped: ${clamps})`);
+  const budgetLine = `$${effective.budget_usd.effective} effective${clamps === "" ? "" : ` (clamped: ${clamps})`}`;
 
   if (selection.selected.length === 0) {
     return {
@@ -517,7 +518,7 @@ export async function runOneSweep(
     return refused(
       `the sweep epic could not be committed to ${project}, so nothing ran: ${epic.detail}`,
       base.sha,
-      selection
+      selection,
     );
   }
 

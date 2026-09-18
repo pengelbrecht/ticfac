@@ -1,34 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-
-import bootContract from "../../contracts/worker-boot-contract.json";
-import collectContract from "../../contracts/collect-vocabulary.json";
-
-// The two deployable files this suite pins strings out of. Vite inlines a
-// `?raw` import at transform time, which is what makes reading them possible
-// at all in a suite that executes inside workerd with no filesystem — and it
-// is the difference between pinning `cloud/sandbox/worker.sh` and pinning a
-// copy of what it said once. A literal here drifts silently; these cannot.
-// (The path is from this bundle's moved location, ticfac/cloudflare —
-// SPEC §12 Phase 4 item 1 — to the image context, which still lives at
-// cloud/sandbox until item 4 moves it.)
-import RUN_WORKFLOW_TS from "../src/run-workflow.ts?raw";
 import WORKER_SH from "../../cloud/sandbox/worker.sh?raw";
-import WRANGLER_TOML from "../wrangler.toml?raw";
-
-import {
-  BRANCH_CLAIM_PREFIX,
-  GATEWAY_PREFIX,
-  GIT_PREFIX,
-  HEALTH_PATH,
-  REVIEW_PREFIX,
-  TELEGRAM_WEBHOOK_PATH,
-  WAVE_PATH,
-  WEBHOOK_PREFIX,
-  deriveTokenHash,
-  isAuthExempt,
-  mintFactoryToken,
-} from "../src/auth";
+import collectContract from "../../contracts/collect-vocabulary.json";
+import bootContract from "../../contracts/worker-boot-contract.json";
 import {
   CONTROL_PLANE_LOG_EPOCH,
   harnessLogKey,
@@ -45,57 +19,30 @@ import {
   workerManifestKey,
 } from "../src/artifacts";
 import {
-  getDeploymentImage,
-  getRunImage,
-  insertRunImage,
-  listRunGatewayTokens,
-} from "../src/db";
-import {
-  authorizeRunCredential,
-  issueRunToken,
-  revokeRunTokens,
-} from "../src/gateway";
-import {
-  DEFAULT_SANDBOX_IMAGE,
-  deploymentImage,
-  resolveSandboxImage,
-} from "../src/sandbox";
+  BRANCH_CLAIM_PREFIX,
+  deriveTokenHash,
+  GATEWAY_PREFIX,
+  GIT_PREFIX,
+  HEALTH_PATH,
+  isAuthExempt,
+  mintFactoryToken,
+  REVIEW_PREFIX,
+  TELEGRAM_WEBHOOK_PATH,
+  WAVE_PATH,
+  WEBHOOK_PREFIX,
+} from "../src/auth";
+import { getDeploymentImage, getRunImage, insertRunImage, listRunGatewayTokens } from "../src/db";
+import { authorizeRunCredential, issueRunToken, revokeRunTokens } from "../src/gateway";
 import { effectiveRunBudget } from "../src/run-workflow";
-import {
-  WORKER_DEFAULT_HARNESS,
-  WORKER_DEFAULT_MODEL,
-  WORKER_EXIT,
-  WORKER_PUSH_MARGIN_MS,
-  MIN_WORKER_HARNESS_BUDGET_MS,
-  DEFAULT_WORKER_HARNESS_BUDGET_MS,
-  workerBranch,
-  workerHarness,
-  workerHarnessBudgetMs,
-  workerModel,
-  workerResultFile,
-  waveWaitTimeoutMs,
-} from "../src/worker-boot";
-import {
-  BOUNDARY_REPORT_MARKER,
-  STATUS_BLOCKED,
-  STATUS_DONE,
-  STATUS_DONE_WITH_CONCERNS,
-  STATUS_NEEDS_CONTEXT,
-  WORKER_VERDICTS,
-  needsHuman,
-  parseStatus,
-  resultFile,
-  type WorkerCollector,
-  type WorkerReport,
-  type WorkerTask,
-} from "../src/worker-collect";
-import {
-  dispatchWave,
-  waveCanceller,
-  workerSandboxName,
-  type Sleeper,
-  type WorkSpec,
-} from "../src/worker-dispatch";
+// The two deployable files this suite pins strings out of. Vite inlines a
+// `?raw` import at transform time, which is what makes reading them possible
+// at all in a suite that executes inside workerd with no filesystem — and it
+// is the difference between pinning `cloud/sandbox/worker.sh` and pinning a
+// copy of what it said once. A literal here drifts silently; these cannot.
+// (The path is from this bundle's moved location, ticfac/cloudflare —
+// SPEC §12 Phase 4 item 1 — to the image context, which still lives at
+// cloud/sandbox until item 4 moves it.)
+import RUN_WORKFLOW_TS from "../src/run-workflow.ts?raw";
 import type {
   OrchestratorSandbox,
   SandboxBinding,
@@ -103,6 +50,43 @@ import type {
   SandboxProcessState,
   SandboxProcessView,
 } from "../src/sandbox";
+import { DEFAULT_SANDBOX_IMAGE, deploymentImage, resolveSandboxImage } from "../src/sandbox";
+import {
+  DEFAULT_WORKER_HARNESS_BUDGET_MS,
+  MIN_WORKER_HARNESS_BUDGET_MS,
+  WORKER_DEFAULT_HARNESS,
+  WORKER_DEFAULT_MODEL,
+  WORKER_EXIT,
+  WORKER_PUSH_MARGIN_MS,
+  waveWaitTimeoutMs,
+  workerBranch,
+  workerHarness,
+  workerHarnessBudgetMs,
+  workerModel,
+  workerResultFile,
+} from "../src/worker-boot";
+import {
+  BOUNDARY_REPORT_MARKER,
+  needsHuman,
+  parseStatus,
+  resultFile,
+  STATUS_BLOCKED,
+  STATUS_DONE,
+  STATUS_DONE_WITH_CONCERNS,
+  STATUS_NEEDS_CONTEXT,
+  WORKER_VERDICTS,
+  type WorkerCollector,
+  type WorkerReport,
+  type WorkerTask,
+} from "../src/worker-collect";
+import {
+  dispatchWave,
+  type Sleeper,
+  type WorkSpec,
+  waveCanceller,
+  workerSandboxName,
+} from "../src/worker-dispatch";
+import WRANGLER_TOML from "../wrangler.toml?raw";
 
 /**
  * PHASE 0 COMPATIBILITY SUITE — the cloud factory's externally observable
@@ -216,9 +200,7 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     // `isAuthExempt` is the one function that decides this, and it is
     // consulted before routing, so its answer IS the grade.
     const exempt = ROUTES.map((route) => `${route.path} ${isAuthExempt(route.path)}`);
-    const expected = ROUTES.map(
-      (route) => `${route.path} ${route.grade !== "factory"}`
-    );
+    const expected = ROUTES.map((route) => `${route.path} ${route.grade !== "factory"}`);
     expect(exempt).toEqual(expected);
   });
 
@@ -241,14 +223,10 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     const seen: string[] = [];
     for (const route of ROUTES.filter((r) => r.grade === "factory")) {
       const response = await SELF.fetch(`${BASE}${route.path}`);
-      seen.push(
-        `${route.path} ${response.status} ${response.headers.get("WWW-Authenticate")}`
-      );
+      seen.push(`${route.path} ${response.status} ${response.headers.get("WWW-Authenticate")}`);
     }
     expect(seen).toEqual(
-      ROUTES.filter((r) => r.grade === "factory").map(
-        (r) => `${r.path} 401 ${FACTORY_CHALLENGE}`
-      )
+      ROUTES.filter((r) => r.grade === "factory").map((r) => `${r.path} 401 ${FACTORY_CHALLENGE}`),
     );
   });
 
@@ -272,7 +250,7 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     const response = await SELF.fetch(`${BASE}/api/git/o/r/info/refs`);
 
     expect(response.headers.get("WWW-Authenticate")).toBe(
-      'Basic realm="ticks-factory", charset="UTF-8"'
+      'Basic realm="ticks-factory", charset="UTF-8"',
     );
   });
 
@@ -340,12 +318,10 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
         ...(guard.authenticated ? bearer() : {}),
       });
       seen.push(
-        `${guard.method} ${guard.path} ${response.status} ${response.headers.get("Allow")}`
+        `${guard.method} ${guard.path} ${response.status} ${response.headers.get("Allow")}`,
       );
     }
-    expect(seen).toEqual(
-      METHOD_GUARDS.map((g) => `${g.method} ${g.path} 405 ${g.allow}`)
-    );
+    expect(seen).toEqual(METHOD_GUARDS.map((g) => `${g.method} ${g.path} 405 ${g.allow}`));
   });
 });
 
@@ -362,7 +338,7 @@ async function columns(table: string): Promise<ColumnInfo[]> {
 
 async function tableSQL(name: string): Promise<string> {
   const row = await env.DB.prepare(
-    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?"
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
   )
     .bind(name)
     .first<{ sql: string }>();
@@ -476,7 +452,7 @@ describe("SPEC §8.1/§10.4: D1 table and key shapes", () => {
 
   it("keeps the indexes the control plane's lookups depend on", async () => {
     const rows = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name"
+      "SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name",
     ).all<{ name: string }>();
     const present = new Set(rows.results.map((row) => row.name));
 
@@ -492,8 +468,8 @@ describe("SPEC §8.1/§10.4: D1 table and key shapes", () => {
 
     await expect(
       env.DB.prepare(
-        "INSERT INTO factory_deployment (id, tk_version, bundle_sha256, deployed_at) VALUES (2, 'v', 'sha', 'now')"
-      ).run()
+        "INSERT INTO factory_deployment (id, tk_version, bundle_sha256, deployed_at) VALUES (2, 'v', 'sha', 'now')",
+      ).run(),
     ).rejects.toThrow();
   });
 
@@ -505,7 +481,7 @@ describe("SPEC §8.1/§10.4: D1 table and key shapes", () => {
     const insert = (id: string) =>
       env.DB.prepare(
         `INSERT INTO signals (signal_id, source, external_ref, payload_digest, verdict, tick_id, received_at)
-         VALUES (?, 'github', 'compat-external-ref', 'digest', 'accepted', NULL, '2026-09-02T00:00:00Z')`
+         VALUES (?, 'github', 'compat-external-ref', 'digest', 'accepted', NULL, '2026-09-02T00:00:00Z')`,
       )
         .bind(id)
         .run();
@@ -530,8 +506,8 @@ describe("SPEC §8.1/§10.4: D1 table and key shapes", () => {
 
     await expect(
       env.DB.prepare(
-        "INSERT INTO dispatch_log (run_id, tick_id, decision, reason, at) VALUES ('run_compat', 'mrq', 'refused', 'made_up', 'now')"
-      ).run()
+        "INSERT INTO dispatch_log (run_id, tick_id, decision, reason, at) VALUES ('run_compat', 'mrq', 'refused', 'made_up', 'now')",
+      ).run(),
     ).rejects.toThrow();
   });
 });
@@ -548,34 +524,34 @@ describe("SPEC §10.1: the R2 artifact key layout", () => {
     expect(runPrefix(project, run)).toBe("runs/acme/widgets/run_compat/");
     expect(runRecordKey(project, run)).toBe("runs/acme/widgets/run_compat/run.json");
     expect(orchestratorPrefix(project, run)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/orchestrator/"
+      "runs/acme/widgets/run_compat/artifacts/orchestrator/",
     );
     expect(harnessStreamPrefix(project, run)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness/"
+      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness/",
     );
     expect(harnessSegmentKey(project, run, 2, 9)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness/002/000009.log"
+      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness/002/000009.log",
     );
     expect(harnessLogKey(project, run)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness.log"
+      "runs/acme/widgets/run_compat/artifacts/orchestrator/harness.log",
     );
     expect(reconcileKey(project, run, 3)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/orchestrator/reconcile/003.json"
+      "runs/acme/widgets/run_compat/artifacts/orchestrator/reconcile/003.json",
     );
     expect(waveOutcomesKey(project, run, 1)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/wave/001.json"
+      "runs/acme/widgets/run_compat/artifacts/wave/001.json",
     );
     expect(waveRequestKey(project, run, 1)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/wave-request/001.json"
+      "runs/acme/widgets/run_compat/artifacts/wave-request/001.json",
     );
     expect(workerManifestKey(project, run, "mrq")).toBe(
-      "runs/acme/widgets/run_compat/artifacts/mrq/manifest.json"
+      "runs/acme/widgets/run_compat/artifacts/mrq/manifest.json",
     );
     expect(workerLogStreamPrefix(project, run, "mrq")).toBe(
-      "runs/acme/widgets/run_compat/artifacts/mrq/harness/"
+      "runs/acme/widgets/run_compat/artifacts/mrq/harness/",
     );
     expect(workerLogSegmentKey(project, run, "mrq", 1756771200000, 4)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/mrq/harness/1756771200000/000004.log"
+      "runs/acme/widgets/run_compat/artifacts/mrq/harness/1756771200000/000004.log",
     );
   });
 
@@ -612,7 +588,7 @@ describe("SPEC §10.1: the R2 artifact key layout", () => {
 
     const listed = await env.ARTIFACTS.list({ prefix: harnessStreamPrefix(project, run) });
     const bodies = await Promise.all(
-      listed.objects.map(async (object) => (await env.ARTIFACTS.get(object.key))!.text())
+      listed.objects.map(async (object) => (await env.ARTIFACTS.get(object.key))!.text()),
     );
 
     expect(bodies.join("")).toBe("1\n9\n10\n100\n");
@@ -628,18 +604,15 @@ describe("SPEC §10.1: the R2 artifact key layout", () => {
     const run = "run_banner";
     await env.ARTIFACTS.put(
       workerLogSegmentKey(project, run, "mrq", CONTROL_PLANE_LOG_EPOCH, 1),
-      "banner\n"
+      "banner\n",
     );
-    await env.ARTIFACTS.put(
-      workerLogSegmentKey(project, run, "mrq", Date.now(), 1),
-      "container\n"
-    );
+    await env.ARTIFACTS.put(workerLogSegmentKey(project, run, "mrq", Date.now(), 1), "container\n");
 
     const listed = await env.ARTIFACTS.list({
       prefix: workerLogStreamPrefix(project, run, "mrq"),
     });
     const bodies = await Promise.all(
-      listed.objects.map(async (object) => (await env.ARTIFACTS.get(object.key))!.text())
+      listed.objects.map(async (object) => (await env.ARTIFACTS.get(object.key))!.text()),
     );
 
     expect(bodies).toEqual(["banner\n", "container\n"]);
@@ -680,14 +653,19 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // A repository may DECLARE an image, but a declaration this deployment
     // does not serve is refused rather than pulled: §8.4's explicit backend
     // selection, one layer down.
+    expect(resolveSandboxImage({ declared: null, deployment: "ticks-orchestrator" })).toEqual({
+      ok: true,
+      image: "ticks-orchestrator",
+      source: "base",
+    });
     expect(
-      resolveSandboxImage({ declared: null, deployment: "ticks-orchestrator" })
-    ).toEqual({ ok: true, image: "ticks-orchestrator", source: "base" });
-    expect(
-      resolveSandboxImage({ declared: "ticks-orchestrator:latest", deployment: "ticks-orchestrator" })
+      resolveSandboxImage({
+        declared: "ticks-orchestrator:latest",
+        deployment: "ticks-orchestrator",
+      }),
     ).toEqual({ ok: true, image: "ticks-orchestrator:latest", source: "declared" });
     expect(
-      resolveSandboxImage({ declared: "someone/else:1", deployment: "ticks-orchestrator" }).ok
+      resolveSandboxImage({ declared: "someone/else:1", deployment: "ticks-orchestrator" }).ok,
     ).toBe(false);
   });
 
@@ -699,7 +677,7 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       env.DB,
       "run_image_compat",
       { image_ref: "ticks-orchestrator:abc", image_digest: "sha256:abc" },
-      "2026-09-02T00:00:00Z"
+      "2026-09-02T00:00:00Z",
     );
 
     await expect(getRunImage(env.DB, "run_image_compat")).resolves.toEqual({
@@ -720,7 +698,7 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       Object.keys(vars)
         .filter((name) => typeof vars[name] === "string" && name !== "FACTORY_TOKEN_HASH")
         .sort()
-        .map((name) => [name, vars[name]])
+        .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
       FACTORY_MAX_INSTANCES: "3",
@@ -908,22 +886,19 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
   }> = [
     {
       shape: "nothing landed",
-      line:
-        "STATUS: BLOCKED — the harness exited 124, wrote no report, and nothing landed on tick/692/mrq; re-dispatch this tick",
+      line: "STATUS: BLOCKED — the harness exited 124, wrote no report, and nothing landed on tick/692/mrq; re-dispatch this tick",
       status: STATUS_BLOCKED,
       vars: { status: "124", landed: "0 work commit(s)", worker_branch: "tick/692/mrq" },
     },
     {
       shape: "exit 0 with work on the branch",
-      line:
-        "STATUS: DONE_WITH_CONCERNS — the harness exited 0 and 2 work commit(s) landed on tick/692/mrq, but no agent report exists; review the branch, and note nothing describes the work but the diff",
+      line: "STATUS: DONE_WITH_CONCERNS — the harness exited 0 and 2 work commit(s) landed on tick/692/mrq, but no agent report exists; review the branch, and note nothing describes the work but the diff",
       status: STATUS_DONE_WITH_CONCERNS,
       vars: { status: "0", landed: "2 work commit(s)", worker_branch: "tick/692/mrq" },
     },
     {
       shape: "a failed harness with work on the branch",
-      line:
-        "STATUS: NEEDS_CONTEXT — the harness exited 124 and wrote no report, but 1 work commit(s) landed on tick/692/mrq; a human has to review what is there before this tick is run again",
+      line: "STATUS: NEEDS_CONTEXT — the harness exited 124 and wrote no report, but 1 work commit(s) landed on tick/692/mrq; a human has to review what is there before this tick is run again",
       status: STATUS_NEEDS_CONTEXT,
       vars: { status: "124", landed: "1 work commit(s)", worker_branch: "tick/692/mrq" },
     },
@@ -951,7 +926,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
 
   function substituteShellVars(line: string, vars: Record<string, string>): string {
     return line.replace(/\$\{(\w+)\}/g, (whole, name: string) =>
-      Object.hasOwn(vars, name) ? vars[name]! : whole
+      Object.hasOwn(vars, name) ? vars[name]! : whole,
     );
   }
 
@@ -959,9 +934,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
     const written = fallbackStatusLinesInWorkerSh();
     expect(written).toHaveLength(FALLBACK_REPORTS.length);
 
-    const rendered = written.map((line, i) =>
-      substituteShellVars(line, FALLBACK_REPORTS[i]!.vars)
-    );
+    const rendered = written.map((line, i) => substituteShellVars(line, FALLBACK_REPORTS[i]!.vars));
     expect(rendered).toEqual(FALLBACK_REPORTS.map((fallback) => fallback.line));
 
     // Nothing was left unsubstituted: a line still carrying `${...}` would
@@ -972,10 +945,10 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
 
   it("parses each fallback report the container writes when the agent wrote none", () => {
     const parsed = FALLBACK_REPORTS.map(
-      (fallback) => `${fallback.shape}: ${parseStatus(fallback.line).status}`
+      (fallback) => `${fallback.shape}: ${parseStatus(fallback.line).status}`,
     );
     expect(parsed).toEqual(
-      FALLBACK_REPORTS.map((fallback) => `${fallback.shape}: ${fallback.status}`)
+      FALLBACK_REPORTS.map((fallback) => `${fallback.shape}: ${fallback.status}`),
     );
 
     // Exit 0 is not "done" and a nonzero exit is not "unimplemented": both
@@ -1007,11 +980,11 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
     // the margin comes out of what is left — never out of thin air.
     expect(workerHarnessBudgetMs()).toBe(DEFAULT_WORKER_HARNESS_BUDGET_MS);
     expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 20 * 60_000 })).toBe(
-      20 * 60_000 - WORKER_PUSH_MARGIN_MS
+      20 * 60_000 - WORKER_PUSH_MARGIN_MS,
     );
     // …and never so little that it fails every worker rather than rescuing any.
     expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 61_000 })).toBe(
-      MIN_WORKER_HARNESS_BUDGET_MS
+      MIN_WORKER_HARNESS_BUDGET_MS,
     );
   });
 });
@@ -1033,7 +1006,7 @@ class JournalProcess {
 
   constructor(
     readonly id: string,
-    readonly command: string
+    readonly command: string,
   ) {}
 
   say(text: string): void {
@@ -1057,7 +1030,7 @@ class JournalSandbox implements OrchestratorSandbox {
 
   constructor(
     readonly name: string,
-    readonly journal: string[]
+    readonly journal: string[],
   ) {}
 
   async startProcess(command: string): Promise<SandboxProcessView> {
@@ -1124,7 +1097,7 @@ class JournalCollector implements WorkerCollector {
 
   constructor(
     readonly journal: string[],
-    readonly verdict: WorkerReport["verdict"] = WORKER_VERDICTS.readyToMerge
+    readonly verdict: WorkerReport["verdict"] = WORKER_VERDICTS.readyToMerge,
   ) {}
 
   async collect(task: WorkerTask): Promise<WorkerReport> {
@@ -1167,10 +1140,7 @@ const task = (tickID: string): WorkerTask => ({
 });
 
 /** Drives every live process one stage forward per sleep. */
-function stagedSleeper(
-  binding: JournalBinding,
-  opts: { finishWork: boolean }
-): Sleeper {
+function stagedSleeper(binding: JournalBinding, opts: { finishWork: boolean }): Sleeper {
   const spoke = new Set<string>();
   return async () => {
     for (const sandbox of binding.booted) {
@@ -1220,7 +1190,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
       [task("mrq")],
       () => SPEC,
       { ...WAVE_TIMINGS, sleep: stagedSleeper(binding, { finishWork: true }) },
-      collector
+      collector,
     );
 
     const collectAt = journal.indexOf("collect:mrq");
@@ -1254,9 +1224,8 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
     const inWait = () =>
       tasks.every(
         (candidate) =>
-          binding.gets.filter(
-            (name) => name === workerSandboxName("run_compat", candidate.tick_id)
-          ).length >= 2
+          binding.gets.filter((name) => name === workerSandboxName("run_compat", candidate.tick_id))
+            .length >= 2,
       );
     const cancel = waveCanceller(
       async () =>
@@ -1266,7 +1235,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
         on_cancel: async () => {
           journal.push("revoke");
         },
-      }
+      },
     );
 
     await dispatchWave(
@@ -1281,7 +1250,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
         salvage_grace_ms: 0,
         salvage_poll_ms: 1,
       },
-      collector
+      collector,
     );
 
     const revokeAt = journal.indexOf("revoke");
@@ -1315,8 +1284,10 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
     // A source read is a weak pin and is meant to be: it catches the wiring
     // being deleted or reordered, not every way it could be made wrong.
     const cancellerHook = /on_cancel:[\s\S]{0,400}?revokeRunTokens\(/.exec(RUN_WORKFLOW_TS);
-    expect(cancellerHook, "run-workflow.ts no longer revokes from a wave canceller's on_cancel")
-      .not.toBeNull();
+    expect(
+      cancellerHook,
+      "run-workflow.ts no longer revokes from a wave canceller's on_cancel",
+    ).not.toBeNull();
 
     const finalizeAt = RUN_WORKFLOW_TS.indexOf("export async function finalize(");
     expect(finalizeAt, "run-workflow.ts no longer exports finalize()").toBeGreaterThan(-1);
@@ -1335,7 +1306,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
     // that ignores every message it is sent.
     await env.DB.prepare(
       `INSERT OR REPLACE INTO runs (run_id, project, epic, base_sha, requested_by, state, started_at, ended_at, cost_usd)
-       VALUES ('run_revoke', 'acme/widgets', '692', 'b', 'operator', 'running', '2026-09-02T00:00:00Z', NULL, 0)`
+       VALUES ('run_revoke', 'acme/widgets', '692', 'b', 'operator', 'running', '2026-09-02T00:00:00Z', NULL, 0)`,
     ).run();
 
     const issued = await issueRunToken(env, {
@@ -1344,7 +1315,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
       attempt: 1,
     });
     await expect(
-      authorizeRunCredential(env, issued.token).then((result) => result.ok)
+      authorizeRunCredential(env, issued.token).then((result) => result.ok),
     ).resolves.toBe(true);
 
     const revoked = await revokeRunTokens(env, "run_revoke", "stopped:hard");
@@ -1367,10 +1338,9 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
     });
     expect(reissued.token).not.toBe(issued.token);
     const tokens = await listRunGatewayTokens(env.DB, "run_revoke");
-    expect(tokens.map((row) => `${row.attempt}:${row.revoked_at === null ? "live" : "dead"}`)).toEqual([
-      "1:dead",
-      "2:live",
-    ]);
+    expect(
+      tokens.map((row) => `${row.attempt}:${row.revoked_at === null ? "live" : "dead"}`),
+    ).toEqual(["1:dead", "2:live"]);
   });
 
   it("hands collect only durable facts, so a container's exit cannot be the verdict", async () => {
@@ -1388,7 +1358,7 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
       [task("mrq")],
       () => SPEC,
       { ...WAVE_TIMINGS, sleep: stagedSleeper(binding, { finishWork: true }) },
-      collector
+      collector,
     );
 
     expect(collector.seenKeys).toEqual([["base_sha", "branch", "tick_id"]]);

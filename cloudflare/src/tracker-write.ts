@@ -39,10 +39,9 @@
  * a writer, it commits or it says why it could not.
  */
 
+import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 import { TICK_RECORD_DIR, tickRecordPath } from "./tick-membership";
-
-import type { Env } from "./index";
 
 // ------------------------------------------------------------ the record ---
 
@@ -220,7 +219,7 @@ export interface TrackerWriter {
   create(
     project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult>;
 }
 
@@ -376,7 +375,7 @@ const defaultSleep = (ms: number) =>
  */
 export async function commitTickRecord(
   writer: TrackerWriter,
-  options: CommitTickOptions
+  options: CommitTickOptions,
 ): Promise<CommitTickOutcome> {
   const retryMs = options.retryMs ?? DEFAULT_COMMIT_RETRY_MS;
   const sleep = options.sleep ?? defaultSleep;

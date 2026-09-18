@@ -134,7 +134,7 @@ export function probeTimeoutMs(width: number): number {
  * cost of not waiting long enough is declaring healthy containers dead.
  */
 export const DEFAULT_PROBE_TIMEOUT_MS = Math.ceil(
-  COLD_START_BENCHMARK_MS * FANOUT_DEGRADATION_FACTOR * 1.2
+  COLD_START_BENCHMARK_MS * FANOUT_DEGRADATION_FACTOR * 1.2,
 );
 export const DEFAULT_PROBE_POLL_MS = 2_000;
 /**
@@ -204,7 +204,7 @@ async function drain(
   sandbox: OrchestratorSandbox,
   processID: string,
   offset: number,
-  log: WorkerLogWriter | undefined
+  log: WorkerLogWriter | undefined,
 ): Promise<SandboxOutput> {
   const chunk = await sandbox.readOutput(processID, offset);
   if (chunk.text !== "" && log !== undefined) {
@@ -212,7 +212,7 @@ async function drain(
       await log(chunk.text);
     } catch (error) {
       console.error(
-        `factory worker-dispatch: could not stream a container's output: ${String(error)}`
+        `factory worker-dispatch: could not stream a container's output: ${String(error)}`,
       );
     }
   }
@@ -306,7 +306,9 @@ export function waveCanceller(probe: CancelProbe, opts: CancellerOptions = {}): 
     try {
       seen = await probe();
     } catch (error) {
-      console.error(`factory worker-dispatch: a wave's cancellation probe failed: ${String(error)}`);
+      console.error(
+        `factory worker-dispatch: a wave's cancellation probe failed: ${String(error)}`,
+      );
       return null;
     }
     nextAt = Date.now() + pollMs;
@@ -317,7 +319,7 @@ export function waveCanceller(probe: CancelProbe, opts: CancellerOptions = {}): 
         await opts.on_cancel(seen);
       } catch (error) {
         console.error(
-          `factory worker-dispatch: a wave's cancellation hook failed: ${String(error)}`
+          `factory worker-dispatch: a wave's cancellation hook failed: ${String(error)}`,
         );
       }
     }
@@ -358,7 +360,7 @@ export function waveCanceller(probe: CancelProbe, opts: CancellerOptions = {}): 
 async function sleepUnlessCancelled(
   ms: number,
   sleep: Sleeper,
-  cancel: Canceller | undefined
+  cancel: Canceller | undefined,
 ): Promise<WaveCancellation | null> {
   if (cancel === undefined) {
     await sleep(ms);
@@ -416,7 +418,11 @@ export type ProbeOutcome =
  * green-start trap applied to CLI discovery, and it applies here unchanged —
  * a probe that exits 0 having printed the wrong thing is exactly the trap.
  */
-export function evaluateProbeOutput(output: string, expect: string, exitCode: number | null): ProbeOutcome {
+export function evaluateProbeOutput(
+  output: string,
+  expect: string,
+  exitCode: number | null,
+): ProbeOutcome {
   if (output.includes(expect)) return { ok: true };
   const trimmed = output.trim();
   return {
@@ -440,7 +446,7 @@ async function watchProbe(
     sleep: Sleeper;
     cancel?: Canceller;
     log?: WorkerLogWriter;
-  }
+  },
 ): Promise<ProbeOutcome> {
   const deadline = Date.now() + opts.timeoutMs;
   let output = "";
@@ -451,7 +457,12 @@ async function watchProbe(
     offset = chunk.offset;
     const view = await sandbox.getProcess(processID);
     if (view === null) {
-      return { ok: false, reason: "process-gone", detail: "the probe process vanished before it finished", output };
+      return {
+        ok: false,
+        reason: "process-gone",
+        detail: "the probe process vanished before it finished",
+        output,
+      };
     }
     if (view.state === "completed" || view.state === "failed") {
       // One more read AFTER the terminal state was observed. A container can
@@ -525,7 +536,7 @@ export async function confirmDispatch(
     sleep?: Sleeper;
     cancel?: Canceller;
     log?: WorkerLogWriter;
-  }
+  },
 ): Promise<ConfirmOutcome> {
   const sleep = opts.sleep ?? defaultSleeper;
   const deadline = Date.now() + opts.timeoutMs;
@@ -658,7 +669,7 @@ export type WorkerRecorder = {
   probeFailed?(
     task: WorkerTask,
     sandboxName: string,
-    probe: Extract<ProbeOutcome, { ok: false }>
+    probe: Extract<ProbeOutcome, { ok: false }>,
   ): Promise<void>;
 };
 
@@ -702,7 +713,7 @@ export async function spawnWorker(
   sandboxName: string,
   task: WorkerTask,
   spec: WorkSpec,
-  opts: SpawnOptions = {}
+  opts: SpawnOptions = {},
 ): Promise<SpawnResult> {
   const sleep = opts.sleep ?? defaultSleeper;
   // Bound once for this container: every loop below streams the SAME tick's
@@ -718,7 +729,9 @@ export async function spawnWorker(
 
   let probe: ProbeOutcome;
   try {
-    const probeStarted = await sandbox.startProcess(spec.probe.command, { env: spec.probe.env ?? {} });
+    const probeStarted = await sandbox.startProcess(spec.probe.command, {
+      env: spec.probe.env ?? {},
+    });
     probe = await watchProbe(sandbox, probeStarted.id, spec.probe.expect, {
       timeoutMs: opts.probe_timeout_ms ?? DEFAULT_PROBE_TIMEOUT_MS,
       pollMs: opts.probe_poll_ms ?? DEFAULT_PROBE_POLL_MS,
@@ -758,7 +771,9 @@ export async function spawnWorker(
       adopted: false,
       cancelled,
       detail:
-        cancelled === null ? `green-start trap: ${probe.detail}` : `wave cancelled: ${probe.detail}`,
+        cancelled === null
+          ? `green-start trap: ${probe.detail}`
+          : `wave cancelled: ${probe.detail}`,
     };
   }
 
@@ -840,7 +855,7 @@ export async function waitForWorker(
     log?: WorkerLogWriter;
     /** How much of it `confirmDispatch` already streamed — never restart at 0. */
     offset?: number;
-  } = {}
+  } = {},
 ): Promise<WaitOutcome> {
   const sleep = opts.sleep ?? defaultSleeper;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
@@ -862,7 +877,7 @@ export async function waitForWorker(
       offset = chunk.offset;
     } catch (error) {
       console.error(
-        `factory worker-dispatch: could not read ${sandboxName}'s output: ${String(error)}`
+        `factory worker-dispatch: could not read ${sandboxName}'s output: ${String(error)}`,
       );
     }
   };
@@ -879,10 +894,22 @@ export async function waitForWorker(
       // out landed after the flush above, and that is the half of the log a
       // failed worker is read for.
       await flush(sandbox);
-      return { state: view.state, exit_code: view.exit_code, timed_out: false, cancelled: null, offset };
+      return {
+        state: view.state,
+        exit_code: view.exit_code,
+        timed_out: false,
+        cancelled: null,
+        offset,
+      };
     }
     if (Date.now() >= deadline) {
-      return { state: view.state, exit_code: view.exit_code, timed_out: true, cancelled: null, offset };
+      return {
+        state: view.state,
+        exit_code: view.exit_code,
+        timed_out: true,
+        cancelled: null,
+        offset,
+      };
     }
     // The wait is where a wave spends nearly all of its wall clock, and it is
     // therefore where an operator's stop was being ignored for up to
@@ -902,7 +929,7 @@ export type LivenessCheck = { alive: boolean; state: SandboxProcessState | "gone
 export async function checkLiveness(
   binding: SandboxBinding,
   sandboxName: string,
-  processID: string
+  processID: string,
 ): Promise<LivenessCheck> {
   const sandbox = await binding.get(sandboxName);
   const view = await sandbox.getProcess(processID);
@@ -1002,7 +1029,7 @@ export async function salvageWorker(
     log?: WorkerLogWriter;
     /** How far that stream has already been read — never restart at 0 (tick 0fg). */
     offset?: number;
-  } = {}
+  } = {},
 ): Promise<SalvageOutcome> {
   if (processID === null || spec === undefined) {
     return {
@@ -1027,7 +1054,7 @@ export async function salvageWorker(
       offset = chunk.offset;
     } catch (error) {
       console.error(
-        `factory worker-dispatch: could not read ${sandboxName}'s output during its salvage window: ${String(error)}`
+        `factory worker-dispatch: could not read ${sandboxName}'s output during its salvage window: ${String(error)}`,
       );
     }
   };
@@ -1067,12 +1094,12 @@ export async function salvageWorker(
     if (spec.marker !== undefined && said.text !== "" && !said.text.includes(spec.marker)) {
       console.error(
         `factory worker-dispatch: ${sandboxName} did not answer the salvage ask with ` +
-          `${JSON.stringify(spec.marker)}: ${excerpt(said.text)}`
+          `${JSON.stringify(spec.marker)}: ${excerpt(said.text)}`,
       );
     }
   } catch (error) {
     console.error(
-      `factory worker-dispatch: could not ask ${sandboxName} to stop and push: ${String(error)}`
+      `factory worker-dispatch: could not ask ${sandboxName} to stop and push: ${String(error)}`,
     );
   }
 
@@ -1155,14 +1182,17 @@ export type TeardownOutcome = {
 export async function teardownWorker(
   binding: SandboxBinding,
   sandboxName: string,
-  processID: string | null
+  processID: string | null,
 ): Promise<TeardownOutcome> {
   const sandbox = await binding.get(sandboxName);
 
   let liveness: LivenessCheck | null = null;
   if (processID !== null) {
     const view = await sandbox.getProcess(processID);
-    liveness = view === null ? { alive: false, state: "gone" } : { alive: view.state === "running", state: view.state };
+    liveness =
+      view === null
+        ? { alive: false, state: "gone" }
+        : { alive: view.state === "running", state: view.state };
     if (liveness.alive) {
       await sandbox.killProcess(processID);
     }
@@ -1272,11 +1302,7 @@ export const LEFT_RUNNING: TeardownOutcome = { killed: false, destroyed: false, 
  * are the ones who started it". A collect that read the branch would otherwise
  * be filed under a wave that never launched anything.
  */
-function adoptedSpawn(
-  task: WorkerTask,
-  sandboxName: string,
-  adoption: Adoption
-): SpawnResult {
+function adoptedSpawn(task: WorkerTask, sandboxName: string, adoption: Adoption): SpawnResult {
   return {
     tick_id: task.tick_id,
     sandbox_name: sandboxName,
@@ -1308,7 +1334,7 @@ async function dispatchOneWorker(
   task: WorkerTask,
   spec: WorkSpec,
   opts: WaveOptions,
-  collector: WorkerCollector
+  collector: WorkerCollector,
 ): Promise<WorkerWaveOutcome> {
   // Before a container is even ADDRESSED. `binding.get` provisions on
   // Cloudflare, so a wave already cancelled must not touch the sandbox at all:
@@ -1385,7 +1411,14 @@ async function dispatchOneWorker(
       offset: wait?.offset ?? spawned.output_offset ?? 0,
     });
     const teardown = await teardownWorker(binding, sandboxName, spawned.process_id);
-    return { ...spawned, cancelled, wait, salvage, collect: await collector.collect(task), teardown };
+    return {
+      ...spawned,
+      cancelled,
+      wait,
+      salvage,
+      collect: await collector.collect(task),
+      teardown,
+    };
   }
 
   // Collect ALWAYS runs, whatever spawn/wait decided: a green-start trap or
@@ -1399,12 +1432,7 @@ async function dispatchOneWorker(
   // the whole leg mechanism exists to avoid — the worker is mid-tick and the
   // next leg adopts it. Every other path still tears down, cancellation
   // included, and so does the final leg.
-  if (
-    wait !== null &&
-    wait.timed_out &&
-    wait.cancelled === null &&
-    opts.on_wait_timeout === "leave"
-  ) {
+  if (wait?.timed_out && wait.cancelled === null && opts.on_wait_timeout === "leave") {
     return { ...spawned, wait, collect, teardown: LEFT_RUNNING };
   }
 
@@ -1458,12 +1486,19 @@ export async function dispatchWave(
   tasks: WorkerTask[],
   specFor: (task: WorkerTask) => WorkSpec,
   opts: WaveOptions,
-  collector: WorkerCollector
+  collector: WorkerCollector,
 ): Promise<WorkerWaveOutcome[]> {
   return Promise.all(
     tasks.map((task) =>
-      dispatchOneWorker(binding, sandboxNameFor(task.tick_id), task, specFor(task), opts, collector)
-    )
+      dispatchOneWorker(
+        binding,
+        sandboxNameFor(task.tick_id),
+        task,
+        specFor(task),
+        opts,
+        collector,
+      ),
+    ),
   );
 }
 

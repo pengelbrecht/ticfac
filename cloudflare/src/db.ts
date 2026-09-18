@@ -98,7 +98,7 @@ export async function insertRun(db: D1Database, run: Run): Promise<void> {
       `INSERT INTO runs
         (run_id, project, epic, base_sha, requested_by, state, started_at, ended_at, cost_usd,
          trace_id, credential_grade)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       run.run_id,
@@ -111,7 +111,7 @@ export async function insertRun(db: D1Database, run: Run): Promise<void> {
       run.ended_at,
       run.cost_usd,
       run.trace_id,
-      run.credential_grade
+      run.credential_grade,
     )
     .run();
 }
@@ -143,14 +143,14 @@ export async function insertRunImage(
   db: D1Database,
   runId: string,
   image: DeploymentImage,
-  recordedAt: string
+  recordedAt: string,
 ): Promise<void> {
   await db
     .prepare(
       `INSERT INTO run_image (run_id, image_ref, image_digest, recorded_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(run_id) DO UPDATE SET image_ref=excluded.image_ref,
-         image_digest=excluded.image_digest, recorded_at=excluded.recorded_at`
+         image_digest=excluded.image_digest, recorded_at=excluded.recorded_at`,
     )
     .bind(runId, image.image_ref, image.image_digest, recordedAt)
     .run();
@@ -181,14 +181,14 @@ export async function recordRunProgress(
   db: D1Database,
   runId: string,
   progress: RunProgressRecord,
-  recordedAt: string
+  recordedAt: string,
 ): Promise<void> {
   await db
     .prepare(
       `INSERT INTO run_progress (run_id, progress, detail, recorded_at)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(run_id) DO UPDATE SET progress=excluded.progress,
-         detail=excluded.detail, recorded_at=excluded.recorded_at`
+         detail=excluded.detail, recorded_at=excluded.recorded_at`,
     )
     .bind(runId, progress.progress, progress.detail, recordedAt)
     .run();
@@ -197,7 +197,7 @@ export async function recordRunProgress(
 /** The verdict one run ended on, or null for a run that predates the stamp. */
 export async function getRunProgress(
   db: D1Database,
-  runId: string
+  runId: string,
 ): Promise<RunProgressRecord | null> {
   return db
     .prepare("SELECT progress, detail FROM run_progress WHERE run_id = ?")
@@ -215,7 +215,7 @@ export async function getRun(db: D1Database, runId: string): Promise<Run | null>
       `SELECT run_id, project, epic, base_sha, requested_by, state,
               started_at, ended_at, cost_usd, trace_id, credential_grade
        FROM runs
-       WHERE run_id = ?`
+       WHERE run_id = ?`,
     )
     .bind(runId)
     .first<Run>();
@@ -231,7 +231,7 @@ export async function getRun(db: D1Database, runId: string): Promise<Run | null>
 export async function updateRunCost(
   db: D1Database,
   runId: string,
-  costUsd: number
+  costUsd: number,
 ): Promise<Run | null> {
   return db
     .prepare(
@@ -239,7 +239,7 @@ export async function updateRunCost(
        SET cost_usd = ?
        WHERE run_id = ?
        RETURNING run_id, project, epic, base_sha, requested_by, state,
-                 started_at, ended_at, cost_usd, trace_id, credential_grade`
+                 started_at, ended_at, cost_usd, trace_id, credential_grade`,
     )
     .bind(costUsd, runId)
     .first<Run>();
@@ -262,15 +262,12 @@ export interface RunGatewayToken {
   revoked_reason: string | null;
 }
 
-export async function insertRunGatewayToken(
-  db: D1Database,
-  token: RunGatewayToken
-): Promise<void> {
+export async function insertRunGatewayToken(db: D1Database, token: RunGatewayToken): Promise<void> {
   await db
     .prepare(
       `INSERT INTO run_gateway_token
         (token_hash, run_id, tick_id, attempt, issued_at, revoked_at, revoked_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       token.token_hash,
@@ -279,7 +276,7 @@ export async function insertRunGatewayToken(
       token.attempt,
       token.issued_at,
       token.revoked_at,
-      token.revoked_reason
+      token.revoked_reason,
     )
     .run();
 }
@@ -287,13 +284,13 @@ export async function insertRunGatewayToken(
 /** The credential behind a presented token, or null when there is no such row. */
 export async function getRunGatewayToken(
   db: D1Database,
-  tokenHash: string
+  tokenHash: string,
 ): Promise<RunGatewayToken | null> {
   return db
     .prepare(
       `SELECT token_hash, run_id, tick_id, attempt, issued_at, revoked_at, revoked_reason
        FROM run_gateway_token
-       WHERE token_hash = ?`
+       WHERE token_hash = ?`,
     )
     .bind(tokenHash)
     .first<RunGatewayToken>();
@@ -301,14 +298,14 @@ export async function getRunGatewayToken(
 
 export async function listRunGatewayTokens(
   db: D1Database,
-  runId: string
+  runId: string,
 ): Promise<RunGatewayToken[]> {
   const result = await db
     .prepare(
       `SELECT token_hash, run_id, tick_id, attempt, issued_at, revoked_at, revoked_reason
        FROM run_gateway_token
        WHERE run_id = ?
-       ORDER BY attempt ASC`
+       ORDER BY attempt ASC`,
     )
     .bind(runId)
     .all<RunGatewayToken>();
@@ -326,13 +323,13 @@ export async function revokeRunGatewayTokens(
   db: D1Database,
   runId: string,
   reason: string,
-  at: string
+  at: string,
 ): Promise<number> {
   const result = await db
     .prepare(
       `UPDATE run_gateway_token
        SET revoked_at = ?, revoked_reason = ?
-       WHERE run_id = ? AND revoked_at IS NULL`
+       WHERE run_id = ? AND revoked_at IS NULL`,
     )
     .bind(at, reason, runId)
     .run();
@@ -344,7 +341,7 @@ export async function insertSignal(db: D1Database, signal: Signal): Promise<void
     .prepare(
       `INSERT INTO signals
         (signal_id, source, external_ref, payload_digest, verdict, tick_id, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       signal.signal_id,
@@ -353,7 +350,7 @@ export async function insertSignal(db: D1Database, signal: Signal): Promise<void
       signal.payload_digest,
       signal.verdict,
       signal.tick_id,
-      signal.received_at
+      signal.received_at,
     )
     .run();
 }
@@ -363,7 +360,7 @@ export async function getSignal(db: D1Database, signalId: string): Promise<Signa
     .prepare(
       `SELECT signal_id, source, external_ref, payload_digest, verdict, tick_id, received_at
        FROM signals
-       WHERE signal_id = ?`
+       WHERE signal_id = ?`,
     )
     .bind(signalId)
     .first<Signal>();
@@ -373,7 +370,7 @@ export async function insertDispatchLog(db: D1Database, dispatch: DispatchLog): 
   await db
     .prepare(
       `INSERT INTO dispatch_log (run_id, tick_id, decision, reason, "at")
-       VALUES (?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?)`,
     )
     .bind(dispatch.run_id, dispatch.tick_id, dispatch.decision, dispatch.reason, dispatch.at)
     .run();
@@ -382,14 +379,14 @@ export async function insertDispatchLog(db: D1Database, dispatch: DispatchLog): 
 export async function listDispatchLogs(
   db: D1Database,
   runId: string,
-  tickId: string
+  tickId: string,
 ): Promise<DispatchLog[]> {
   const result = await db
     .prepare(
       `SELECT run_id, tick_id, decision, reason, "at"
        FROM dispatch_log
        WHERE run_id = ? AND tick_id = ?
-       ORDER BY "at" ASC`
+       ORDER BY "at" ASC`,
     )
     .bind(runId, tickId)
     .all<DispatchLog>();
@@ -410,7 +407,7 @@ export async function listRecentDispatch(db: D1Database, limit: number): Promise
       `SELECT run_id, tick_id, decision, reason, "at"
        FROM dispatch_log
        ORDER BY "at" DESC, rowid DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .bind(limit)
     .all<DispatchLog>();
@@ -443,7 +440,7 @@ export interface EnrolledProject {
  */
 export async function listRuns(
   db: D1Database,
-  filter: { project?: string; state?: string; limit?: number } = {}
+  filter: { project?: string; state?: string; limit?: number } = {},
 ): Promise<Run[]> {
   const clauses: string[] = [];
   const values: string[] = [];
@@ -463,7 +460,7 @@ export async function listRuns(
               started_at, ended_at, cost_usd, trace_id, credential_grade
        FROM runs${where}
        ORDER BY started_at DESC, run_id DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .bind(...values, filter.limit ?? 100)
     .all<Run>();
@@ -482,7 +479,7 @@ export async function updateRunState(
   db: D1Database,
   runId: string,
   state: string,
-  endedAt: string | null = null
+  endedAt: string | null = null,
 ): Promise<Run | null> {
   return db
     .prepare(
@@ -490,7 +487,7 @@ export async function updateRunState(
        SET state = ?, ended_at = COALESCE(?, ended_at)
        WHERE run_id = ?
        RETURNING run_id, project, epic, base_sha, requested_by, state,
-                 started_at, ended_at, cost_usd, trace_id, credential_grade`
+                 started_at, ended_at, cost_usd, trace_id, credential_grade`,
     )
     .bind(state, endedAt, runId)
     .first<Run>();
@@ -521,7 +518,9 @@ const ENROLLED_PROJECT_SELECT = `SELECT e.project        AS project,
        LEFT JOIN project_topic t ON t.project = e.project`;
 
 /** Drops the SQL null the LEFT JOIN produces for a project with no topic. */
-function enrolledProjectRow(row: EnrolledProject & { telegram_topic_id?: string | null }): EnrolledProject {
+function enrolledProjectRow(
+  row: EnrolledProject & { telegram_topic_id?: string | null },
+): EnrolledProject {
   const { telegram_topic_id: topic, ...rest } = row;
   return topic === null || topic === undefined || topic === ""
     ? rest
@@ -532,7 +531,7 @@ function enrolledProjectRow(row: EnrolledProject & { telegram_topic_id?: string 
 export async function enrolProject(
   db: D1Database,
   project: EnrolledProject,
-  topic: TopicAssignment = project.telegram_topic_id
+  topic: TopicAssignment = project.telegram_topic_id,
 ): Promise<void> {
   await db
     .prepare(
@@ -540,7 +539,7 @@ export async function enrolProject(
        VALUES (?, ?, ?)
        ON CONFLICT(project) DO UPDATE SET
          enrolled_by = excluded.enrolled_by,
-         enrolled_at = excluded.enrolled_at`
+         enrolled_at = excluded.enrolled_at`,
     )
     .bind(project.project, project.enrolled_by, project.enrolled_at)
     .run();
@@ -555,7 +554,7 @@ export async function enrolProject(
        VALUES (?, ?, ?)
        ON CONFLICT(project) DO UPDATE SET
          topic_id = excluded.topic_id,
-         set_at = excluded.set_at`
+         set_at = excluded.set_at`,
     )
     .bind(project.project, topic, project.enrolled_at)
     .run();
@@ -563,7 +562,7 @@ export async function enrolProject(
 
 export async function getEnrolledProject(
   db: D1Database,
-  project: string
+  project: string,
 ): Promise<EnrolledProject | null> {
   const row = await db
     .prepare(`${ENROLLED_PROJECT_SELECT} WHERE e.project = ?`)
@@ -617,15 +616,12 @@ export interface SweepSelectionRow {
   record: string;
 }
 
-export async function insertSweepSelection(
-  db: D1Database,
-  row: SweepSelectionRow
-): Promise<void> {
+export async function insertSweepSelection(db: D1Database, row: SweepSelectionRow): Promise<void> {
   await db
     .prepare(
       `INSERT OR REPLACE INTO sweep_selection
         (sweep_id, project, sweep, cron, fired_at, base_sha, outcome, run_id, detail, record)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       row.sweep_id,
@@ -637,14 +633,14 @@ export async function insertSweepSelection(
       row.outcome,
       row.run_id,
       row.detail,
-      row.record
+      row.record,
     )
     .run();
 }
 
 export async function getSweepSelection(
   db: D1Database,
-  sweepID: string
+  sweepID: string,
 ): Promise<SweepSelectionRow | null> {
   return await db
     .prepare("SELECT * FROM sweep_selection WHERE sweep_id = ?")
@@ -655,7 +651,7 @@ export async function getSweepSelection(
 /** The most recent sweeps, newest first — optionally for one project. */
 export async function listSweepSelections(
   db: D1Database,
-  options: { project?: string; limit?: number } = {}
+  options: { project?: string; limit?: number } = {},
 ): Promise<SweepSelectionRow[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
   const statement =
@@ -665,7 +661,7 @@ export async function listSweepSelections(
           .bind(limit)
       : db
           .prepare(
-            "SELECT * FROM sweep_selection WHERE project = ? ORDER BY fired_at DESC, sweep_id DESC LIMIT ?"
+            "SELECT * FROM sweep_selection WHERE project = ? ORDER BY fired_at DESC, sweep_id DESC LIMIT ?",
           )
           .bind(options.project, limit);
   const result = await statement.all<SweepSelectionRow>();

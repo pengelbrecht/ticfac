@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { enrolProject, getSweepSelection, listSweepSelections } from "../src/db";
 import { runConfig } from "../src/run-workflow";
-import { type RunWorkflowInstance, type RunWorkflowParams } from "../src/runs";
+import type { RunWorkflowInstance, RunWorkflowParams } from "../src/runs";
 import { MAX_SWEEP_FRONTIER, runDueSweeps, sweepProject } from "../src/sweep-dispatch";
-import { type TrackerWriteResult } from "../src/tracker-write";
+import type { TrackerWriteResult } from "../src/tracker-write";
 
 /**
  * The sweep as it actually runs: policy read from the repository, frontier
@@ -99,7 +99,7 @@ class FakeTracker {
       async create(
         _project: string,
         path: string,
-        input: { content: string }
+        input: { content: string },
       ): Promise<TrackerWriteResult> {
         tracker.created.push({ path, content: input.content });
         return { state: "created", commit_sha: "c".repeat(40), content_sha: "d".repeat(40) };
@@ -136,8 +136,16 @@ beforeEach(() => {
   env.TICK_INDEX = tracker.index();
   env.TICK_TRACKER = tracker.reader();
   env.TICK_WRITER = tracker.writer();
-  env.SWEEP_BASE = { async head() { return { branch: "main", sha: HEAD }; } };
-  env.REPO_CONFIG = { async read() { return POLICY; } };
+  env.SWEEP_BASE = {
+    async head() {
+      return { branch: "main", sha: HEAD };
+    },
+  };
+  env.REPO_CONFIG = {
+    async read() {
+      return POLICY;
+    },
+  };
   // A submission is refused outright when the deployment has no gateway
   // configured (D17), so a harness that submits runs is a harness with one.
   env.AI_GATEWAY_BASE_URL = "https://gateway.ai.cloudflare.com/v1/account/ticks";
@@ -288,7 +296,11 @@ describe("cron sweeps", () => {
 
   it("sweeps nothing when the policy itself cannot be read", async () => {
     const project = await enrolled("unreadable");
-    env.REPO_CONFIG = { async read() { return "[sweeps.morning]\nbugdet_usd = 4\n"; } };
+    env.REPO_CONFIG = {
+      async read() {
+        return "[sweeps.morning]\nbugdet_usd = 4\n";
+      },
+    };
     const [outcome] = await sweepProject(env, project, DUE);
     expect(outcome!.outcome).toBe("refused");
     expect(outcome!.detail).toContain("could not be read, so nothing was swept");
@@ -297,7 +309,11 @@ describe("cron sweeps", () => {
 
   it("has no sweeps when the repository declares none", async () => {
     const project = await enrolled("silent");
-    env.REPO_CONFIG = { async read() { return null; } };
+    env.REPO_CONFIG = {
+      async read() {
+        return null;
+      },
+    };
     expect(await sweepProject(env, project, DUE)).toEqual([]);
   });
 
@@ -347,7 +363,13 @@ describe("cron sweeps", () => {
     expect(record.order).toBe("priority asc, created_at asc, id asc");
     expect(record.effective.budget_usd.effective).toBe(10);
     expect(record.considered).toEqual([
-      { tick_id: "aaa", priority: 2, created_at: "2026-08-01T00:00:00Z", verdict: "selected", rank: 1 },
+      {
+        tick_id: "aaa",
+        priority: 2,
+        created_at: "2026-08-01T00:00:00Z",
+        verdict: "selected",
+        rank: 1,
+      },
     ]);
 
     const listed = await listSweepSelections(env.DB, { project });

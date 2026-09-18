@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
-
-import contract from "../../contracts/ticfac-run-state.json";
 import jobProtocol from "../../contracts/job-protocol.json";
+import contract from "../../contracts/ticfac-run-state.json";
 
-import { FakeGit, canonical, type Content, type Step } from "./git-cas-fake";
-import { parseSchema, validate, type Schema } from "./json-schema";
+import { type Content, canonical, FakeGit, type Step } from "./git-cas-fake";
+import { parseSchema, type Schema, validate } from "./json-schema";
 
 /**
  * The TypeScript reader for `contracts/ticfac-run-state.json`.
@@ -91,7 +90,10 @@ function referenced(record: string): boolean {
   return Object.hasOwn(contract.references, record);
 }
 
-const jobProtocolRecords = jobProtocol.records as unknown as Record<string, { schema_id: string; schema: unknown }>;
+const jobProtocolRecords = jobProtocol.records as unknown as Record<
+  string,
+  { schema_id: string; schema: unknown }
+>;
 const jobProtocolDefs: Record<string, Schema> = Object.fromEntries(
   Object.entries((jobProtocol as { $defs: Record<string, unknown> }).$defs).map(([name, raw]) => [
     name,
@@ -100,7 +102,11 @@ const jobProtocolDefs: Record<string, Schema> = Object.fromEntries(
 );
 
 /** Resolve a referenced record's schema out of the contract that defines it. */
-function referencedSchema(record: string): { schema: Schema; defs: Record<string, Schema>; schemaId: string } {
+function referencedSchema(record: string): {
+  schema: Schema;
+  defs: Record<string, Schema>;
+  schemaId: string;
+} {
   const ref = contract.references[record as keyof typeof contract.references] as {
     schema_id: string;
     contract: string;
@@ -123,10 +129,16 @@ function referencedSchema(record: string): { schema: Schema; defs: Record<string
 }
 
 const defs: Record<string, Schema> = Object.fromEntries(
-  Object.entries(contract.$defs as Record<string, unknown>).map(([name, raw]) => [name, parseSchema(raw, `$defs.${name}`)]),
+  Object.entries(contract.$defs as Record<string, unknown>).map(([name, raw]) => [
+    name,
+    parseSchema(raw, `$defs.${name}`),
+  ]),
 );
 const schemas: Record<string, Schema> = Object.fromEntries(
-  Object.entries(contract.schemas as Record<string, unknown>).map(([name, raw]) => [name, parseSchema(raw, `schemas.${name}`)]),
+  Object.entries(contract.schemas as Record<string, unknown>).map(([name, raw]) => [
+    name,
+    parseSchema(raw, `schemas.${name}`),
+  ]),
 );
 
 describe("the .ticfac/ run-state contract identifies itself", () => {
@@ -334,7 +346,9 @@ describe("the golden examples validate here too", () => {
         // Validated against the contract that DEFINES the record. This is the
         // cross-file check bundle 1.2.0 had in neither direction.
         const { schema, defs: refDefs, schemaId } = referencedSchema(record);
-        expect(validate(schema, refDefs, document), `golden.${record} against ${schemaId}`).toEqual([]);
+        expect(validate(schema, refDefs, document), `golden.${record} against ${schemaId}`).toEqual(
+          [],
+        );
         return;
       }
       const schema = schemas[record];
@@ -360,7 +374,10 @@ describe("and the negative examples are refused", () => {
       // A schema nothing has ever seen refuse a document is not known to
       // refuse anything.
       const errors = validate(schema, usedDefs, bad.document);
-      expect(errors.length, `invalid[${i}] VALIDATED — the schema does not refuse it`).toBeGreaterThan(0);
+      expect(
+        errors.length,
+        `invalid[${i}] VALIDATED — the schema does not refuse it`,
+      ).toBeGreaterThan(0);
 
       // And a negative that only proves "something failed" is satisfied by a
       // validator that has quietly stopped checking the thing the case was
@@ -379,7 +396,9 @@ describe("and the negative examples are refused", () => {
 
   it("gives every schema and every referenced record at least one refusal to prove", () => {
     const covered = new Set(invalid.map((bad) => bad.record));
-    expect([...covered].sort()).toEqual([...Object.keys(schemas), ...Object.keys(contract.references)].sort());
+    expect([...covered].sort()).toEqual(
+      [...Object.keys(schemas), ...Object.keys(contract.references)].sort(),
+    );
   });
 });
 
@@ -398,10 +417,15 @@ describe("the compare-and-swap sequences, against this side's fake", () => {
           expect(git.writes, `step ${i} returned ${outcome} but origin moved`).toBe(before);
         }
         if (step.op === "commit_local") {
-          expect(git.origin.has(step.path as string), `step ${i} committed locally and reached origin`).toBe(false);
+          expect(
+            git.origin.has(step.path as string),
+            `step ${i} committed locally and reached origin`,
+          ).toBe(false);
         }
         if (step.effect_permitted !== undefined) {
-          expect(!outcome.startsWith("conflict_"), `step ${i} effect_permitted`).toBe(step.effect_permitted);
+          expect(!outcome.startsWith("conflict_"), `step ${i} effect_permitted`).toBe(
+            step.effect_permitted,
+          );
         }
       }
 
@@ -460,7 +484,9 @@ describe("the compare-and-swap sequences, against this side's fake", () => {
   });
 
   it("reaches both conflict outcomes the modes declare", () => {
-    const seen = new Set(sequences.flatMap((sequence) => sequence.steps.map((step) => step.expect)));
+    const seen = new Set(
+      sequences.flatMap((sequence) => sequence.steps.map((step) => step.expect)),
+    );
     for (const mode of modes) {
       expect(seen, `mode ${mode.mode}`).toContain(mode.on_conflict);
     }

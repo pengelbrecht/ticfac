@@ -27,10 +27,9 @@
  *    somebody dealt with it alerts again.
  */
 
+import type { Env } from "./index";
 import { sendTelegramReport } from "./telegram";
 import { sanitizeUntrustedLine } from "./untrusted-text";
-
-import type { Env } from "./index";
 
 /** How much of an error message a fault record keeps. */
 const DETAIL_MAX_CHARS = 500;
@@ -118,7 +117,7 @@ export async function faultID(input: {
 export async function recordWebhookFault(
   env: Env,
   input: { event: string; project?: string | null; branch?: string | null; error: unknown },
-  now = new Date()
+  now = new Date(),
 ): Promise<string> {
   const detail = faultDetail(input.error);
   const project = input.project ?? null;
@@ -136,7 +135,7 @@ export async function recordWebhookFault(
        ON CONFLICT (fault_id) DO UPDATE SET
          occurrences  = ci_webhook_fault.occurrences + 1,
          last_seen_at = excluded.last_seen_at,
-         detail       = excluded.detail`
+         detail       = excluded.detail`,
     )
       .bind(id, input.event, project, branch, detail, at, at)
       .run();
@@ -144,7 +143,7 @@ export async function recordWebhookFault(
     // than inferred from `changes` — the count cannot tell an insert from an
     // increment, and alerting on the wrong one is the whole question here.
     const row = await env.DB.prepare(
-      `SELECT occurrences, notified_at, cleared_at FROM ci_webhook_fault WHERE fault_id = ?`
+      `SELECT occurrences, notified_at, cleared_at FROM ci_webhook_fault WHERE fault_id = ?`,
     )
       .bind(id)
       .first<{ occurrences: number; notified_at: string | null; cleared_at: string | null }>();
@@ -157,7 +156,7 @@ export async function recordWebhookFault(
     // this, so the log is the last resort rather than the design.
     console.error(
       `factory ci: could not record a webhook fault (${id}); the fault was: ${detail}. ` +
-        `Recording failed with: ${String(error)}`
+        `Recording failed with: ${String(error)}`,
     );
   }
 
@@ -166,19 +165,18 @@ export async function recordWebhookFault(
   try {
     await sendTelegramReport(
       env,
-      faultReport({ fault_id: id, event: input.event, project, branch, detail })
+      faultReport({ fault_id: id, event: input.event, project, branch, detail }),
     );
     await env.DB.prepare(
       `UPDATE ci_webhook_fault
           SET notified_at = ?, cleared_at = NULL, cleared_by = NULL
-        WHERE fault_id = ?`
+        WHERE fault_id = ?`,
     )
       .bind(at, id)
       .run();
   } catch (error) {
     console.error(
-      `factory ci: webhook fault ${id} was recorded but could not be delivered: ` +
-        String(error)
+      `factory ci: webhook fault ${id} was recorded but could not be delivered: ${String(error)}`,
     );
   }
   return id;
@@ -212,7 +210,7 @@ export async function listOpenFaults(env: Env): Promise<WebhookFault[]> {
             notified_at, cleared_at, cleared_by
        FROM ci_webhook_fault
       WHERE cleared_at IS NULL
-      ORDER BY last_seen_at DESC`
+      ORDER BY last_seen_at DESC`,
   ).all<WebhookFault>();
   return rows.results ?? [];
 }
@@ -221,17 +219,17 @@ export async function listOpenFaults(env: Env): Promise<WebhookFault[]> {
 export async function clearWebhookFault(
   env: Env,
   release: { fault_id: string; cleared_by?: string },
-  now = new Date()
+  now = new Date(),
 ): Promise<boolean> {
   const cleared = await env.DB.prepare(
     `UPDATE ci_webhook_fault
         SET cleared_at = ?, cleared_by = ?
-      WHERE fault_id = ? AND cleared_at IS NULL`
+      WHERE fault_id = ? AND cleared_at IS NULL`,
   )
     .bind(
       now.toISOString(),
       sanitizeUntrustedLine(release.cleared_by ?? "", 120) || null,
-      release.fault_id
+      release.fault_id,
     )
     .run();
   return (cleared.meta.changes ?? 0) > 0;

@@ -192,7 +192,9 @@ export interface WorkerCollector {
  */
 export function workerCollector(env: Env, project: string): WorkerCollector {
   const injected = env.WORKER_COLLECTOR;
-  return injected === undefined || injected === null ? githubWorkerCollector(env, project) : injected;
+  return injected === undefined || injected === null
+    ? githubWorkerCollector(env, project)
+    : injected;
 }
 
 export const GITHUB_API_BASE_URL = "https://api.github.com";
@@ -232,7 +234,7 @@ async function compareBranch(
   env: Env,
   project: string,
   base: string,
-  branch: string
+  branch: string,
 ): Promise<CompareResult> {
   const url =
     `${apiBase(env)}/repos/${project}/compare/` +
@@ -268,7 +270,12 @@ type ContentsResult =
   | { ok: false; missing: false; detail: string };
 
 /** GitHub's contents API, decoded. */
-async function readFileAt(env: Env, project: string, ref: string, path: string): Promise<ContentsResult> {
+async function readFileAt(
+  env: Env,
+  project: string,
+  ref: string,
+  path: string,
+): Promise<ContentsResult> {
   const url = `${apiBase(env)}/repos/${project}/contents/${path}?ref=${encodeURIComponent(ref)}`;
   const response = await fetch(url, { headers: githubHeaders(env) });
   if (response.status === 404) return { ok: false, missing: true };
@@ -307,7 +314,11 @@ export function githubWorkerCollector(env: Env, project: string): WorkerCollecto
  * committing says so here, which is the most useful thing an operator can be
  * told (the same reasoning `Collect` in Go gives).
  */
-export async function collectFromGithub(env: Env, project: string, task: WorkerTask): Promise<WorkerReport> {
+export async function collectFromGithub(
+  env: Env,
+  project: string,
+  task: WorkerTask,
+): Promise<WorkerReport> {
   const report: WorkerReport = {
     tick_id: task.tick_id,
     branch: task.branch,

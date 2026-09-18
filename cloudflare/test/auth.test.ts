@@ -1,29 +1,29 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  authenticateFactoryRequest,
+  DEFAULT_ITERATIONS,
+  deriveTokenHash,
+  extractBearerToken,
+  HASH_SCHEME,
+  isAuthConfigured,
+  isAuthExempt,
+  MAX_ITERATIONS,
+  MIN_ITERATIONS,
+  mintFactoryToken,
+  PLATFORM_MAX_ITERATIONS,
+  parseTokenHash,
+  TELEGRAM_WEBHOOK_PATH,
+  TOKEN_PREFIX,
+  timingSafeEqual,
+  verifyFactoryToken,
+} from "../src/auth";
 // The two modules as TEXT, which is the only way to assert that a constant is
 // declared once: two copies of the same literal are equal at runtime, so a
 // runtime check could never have caught the duplication this pins.
 import authSource from "../src/auth.ts?raw";
-import telegramSource from "../src/telegram.ts?raw";
 import { TELEGRAM_WEBHOOK_PATH as TELEGRAM_WEBHOOK_PATH_FROM_TELEGRAM } from "../src/telegram";
-import {
-  DEFAULT_ITERATIONS,
-  HASH_SCHEME,
-  MAX_ITERATIONS,
-  MIN_ITERATIONS,
-  PLATFORM_MAX_ITERATIONS,
-  TELEGRAM_WEBHOOK_PATH,
-  TOKEN_PREFIX,
-  authenticateFactoryRequest,
-  deriveTokenHash,
-  extractBearerToken,
-  isAuthConfigured,
-  isAuthExempt,
-  mintFactoryToken,
-  parseTokenHash,
-  timingSafeEqual,
-  verifyFactoryToken,
-} from "../src/auth";
+import telegramSource from "../src/telegram.ts?raw";
 
 const BASE = "https://factory.example.com";
 
@@ -78,7 +78,7 @@ describe("hash derivation", () => {
   it("is not the unsalted SHA-256 pattern from cloud/worker/src/auth.ts", async () => {
     const token = mintFactoryToken();
     const digest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token)),
     );
     const hex = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -98,14 +98,14 @@ describe("hash derivation", () => {
 
     await expect(deriveTokenHash(token, { iterations: 1 })).rejects.toThrow(RangeError);
     await expect(deriveTokenHash(token, { iterations: MAX_ITERATIONS + 1 })).rejects.toThrow(
-      RangeError
+      RangeError,
     );
   });
 
   it("refuses to mint a record on a short salt", async () => {
-    await expect(
-      deriveTokenHash(mintFactoryToken(), { salt: new Uint8Array(4) })
-    ).rejects.toThrow(RangeError);
+    await expect(deriveTokenHash(mintFactoryToken(), { salt: new Uint8Array(4) })).rejects.toThrow(
+      RangeError,
+    );
   });
 });
 
@@ -357,7 +357,7 @@ describe("route middleware", () => {
 
     expect(res.status).toBe(401);
     expect(res.headers.get("WWW-Authenticate")).toBe(
-      'Bearer realm="ticks-factory", error="invalid_token"'
+      'Bearer realm="ticks-factory", error="invalid_token"',
     );
     await expect(res.json()).resolves.toEqual({ error: "unauthorized" });
   });
@@ -547,18 +547,17 @@ describe("secret hygiene", () => {
     setSecret(stored);
 
     const bodies = await Promise.all(
-      [
-        new Request(`${BASE}/api/runs`, bearer("tkf_wrong")),
-        new Request(`${BASE}/api/runs`),
-      ].map(async (request) => {
-        const res = await authenticateFactoryRequest(request, env);
-        return `${await res!.text()} ${[...res!.headers].flat().join(" ")}`;
-      })
+      [new Request(`${BASE}/api/runs`, bearer("tkf_wrong")), new Request(`${BASE}/api/runs`)].map(
+        async (request) => {
+          const res = await authenticateFactoryRequest(request, env);
+          return `${await res!.text()} ${[...res!.headers].flat().join(" ")}`;
+        },
+      ),
     );
     setSecret("sha256$deadbeef");
     const misconfigured = await authenticateFactoryRequest(
       new Request(`${BASE}/api/runs`, bearer(token)),
-      env
+      env,
     );
     bodies.push(await misconfigured!.text());
 
@@ -573,7 +572,7 @@ describe("secret hygiene", () => {
 describe("no secret material is committed to the repo", () => {
   const files = import.meta.glob(
     ["../*.toml", "../*.json", "../*.ts", "../*.md", "../src/**/*.ts", "../scripts/**/*.mjs"],
-    { query: "?raw", eager: true, import: "default" }
+    { query: "?raw", eager: true, import: "default" },
   ) as Record<string, string>;
 
   it("has files to check", () => {
@@ -585,7 +584,7 @@ describe("no secret material is committed to the repo", () => {
     // do not match: these patterns only fire on real base64url payloads.
     const tokenLiteral = new RegExp(`${TOKEN_PREFIX}[A-Za-z0-9_-]{20,}`);
     const hashRecord = new RegExp(
-      `${HASH_SCHEME}\\$[0-9]{4,}\\$[A-Za-z0-9_-]{16,}\\$[A-Za-z0-9_-]{16,}`
+      `${HASH_SCHEME}\\$[0-9]{4,}\\$[A-Za-z0-9_-]{16,}\\$[A-Za-z0-9_-]{16,}`,
     );
 
     for (const [path, source] of Object.entries(files)) {
@@ -657,7 +656,7 @@ describe("misconfiguration diagnostics", () => {
 
     const res = await authenticateFactoryRequest(
       new Request(`${BASE}/api/runs`, bearer(token)),
-      env
+      env,
     );
     const body = (await res!.json()) as { error: string; detail: string };
 
@@ -676,12 +675,12 @@ describe("misconfiguration diagnostics", () => {
   it("names a crypto failure on a parseable record as a runtime failure", async () => {
     const logged = captureLogs();
     vi.spyOn(crypto.subtle, "deriveBits").mockRejectedValue(
-      new Error("Cannot use PBKDF2 with more than 100000 iterations.")
+      new Error("Cannot use PBKDF2 with more than 100000 iterations."),
     );
 
     const res = await authenticateFactoryRequest(
       new Request(`${BASE}/api/runs`, bearer(token)),
-      env
+      env,
     );
     const body = (await res!.json()) as { error: string; detail: string };
 
@@ -707,7 +706,7 @@ describe("misconfiguration diagnostics", () => {
 
     const res = await authenticateFactoryRequest(
       new Request(`${BASE}/api/runs`, bearer(token)),
-      env
+      env,
     );
     const body = await res!.text();
 

@@ -2,7 +2,12 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { insertRun, type Run } from "../src/db";
-import { GATEWAY_PATH_PREFIX, issueRunToken, proxyModelRequest, stringifyContentParts } from "../src/gateway";
+import {
+  GATEWAY_PATH_PREFIX,
+  issueRunToken,
+  proxyModelRequest,
+  stringifyContentParts,
+} from "../src/gateway";
 import recorded from "./fixtures/omp-tool-call-exchange.json";
 
 /**
@@ -94,13 +99,16 @@ async function forward(body: unknown): Promise<{ status: number; sent: string }>
   const { calls, fetcher } = recorder();
   const response = await proxyModelRequest(
     env,
-    new Request(`https://factory.example.com${GATEWAY_PATH_PREFIX}/workers-ai/v1/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    }),
+    new Request(
+      `https://factory.example.com${GATEWAY_PATH_PREFIX}/workers-ai/v1/chat/completions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      },
+    ),
     WORKERS_AI_PATH,
-    { fetcher }
+    { fetcher },
   );
   return { status: response.status, sent: calls[0] ?? "" };
 }
@@ -185,10 +193,23 @@ describe("the tool shapes the translation must survive if a harness sends them",
     const rewrite = stringifyContentParts(
       JSON.stringify({
         messages: [
-          { role: "assistant", content: "", tool_calls: [{ id: "call_1", type: "function", function: { name: "read", arguments: "{}" } }] },
-          { role: "tool", tool_call_id: "call_1", content: [{ type: "text", text: "line one" }, { type: "text", text: "line two" }] },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              { id: "call_1", type: "function", function: { name: "read", arguments: "{}" } },
+            ],
+          },
+          {
+            role: "tool",
+            tool_call_id: "call_1",
+            content: [
+              { type: "text", text: "line one" },
+              { type: "text", text: "line two" },
+            ],
+          },
         ],
-      })
+      }),
     );
     expect(rewrite.ok).toBe(true);
     const sent = JSON.parse((rewrite as { body: string }).body) as { messages: Message[] };
@@ -207,9 +228,13 @@ describe("the tool shapes the translation must survive if a harness sends them",
       JSON.stringify({
         messages: [
           { role: "user", content: "look at this" },
-          { role: "tool", tool_call_id: "call_1", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AA" } }] },
+          {
+            role: "tool",
+            tool_call_id: "call_1",
+            content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AA" } }],
+          },
         ],
-      })
+      }),
     );
     expect(rewrite.ok).toBe(false);
     expect((rewrite as { detail: string }).detail).toContain("messages[1]");

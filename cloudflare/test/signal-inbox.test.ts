@@ -2,17 +2,21 @@ import { env, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  SIGNAL_INBOX_QUEUE_LIMIT,
   commitRetryMs,
+  type DraftDecision,
   inboxFor,
   parseSignal,
-  submitSignal,
-  type DraftDecision,
+  SIGNAL_INBOX_QUEUE_LIMIT,
   type Signal,
   type SignalInbox,
+  submitSignal,
 } from "../src/signal-inbox";
-import { MAX_COMMIT_ATTEMPTS, type TrackerWriteResult, type TrackerWriter } from "../src/tracker-write";
 import { TICK_RECORD_DIR, type TrackerReader } from "../src/tick-membership";
+import {
+  MAX_COMMIT_ATTEMPTS,
+  type TrackerWriteResult,
+  type TrackerWriter,
+} from "../src/tracker-write";
 
 /**
  * A repository as GitHub's contents API presents it: a set of paths, a branch
@@ -57,7 +61,7 @@ class FakeContents implements TrackerWriter {
   async create(
     _project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult> {
     this.attempted.push(path);
     this.concurrent += 1;
@@ -118,7 +122,7 @@ class FakeTracker implements TrackerReader {
         created_by: "operator@example.com",
         created_at: "2026-01-01T00:00:00.000Z",
         updated_at: "2026-01-01T00:00:00.000Z",
-      })
+      }),
     );
   }
 
@@ -208,7 +212,7 @@ const HUMAN = "telegram:424242";
  */
 async function file(
   name: string,
-  sig: Signal
+  sig: Signal,
 ): Promise<Extract<DraftDecision, { state: "accepted" }> | DraftDecision> {
   const admitted = await inbox(name).submit(sig);
   expect(admitted.state).toBe("drafted");
@@ -256,7 +260,11 @@ describe("a signal becomes a proposal, and a human makes it a tick", () => {
     expect(contents.files.size).toBe(0);
 
     const draft = await inbox(name).getDraft(outcome.draft_id);
-    expect(draft).toMatchObject({ state: "pending", tick_id: null, title: signal({ project: name }).title });
+    expect(draft).toMatchObject({
+      state: "pending",
+      tick_id: null,
+      title: signal({ project: name }).title,
+    });
   });
 
   it("commits one record to .tick/issues when a human accepts, and reports the commit", async () => {
@@ -296,8 +304,8 @@ describe("a signal becomes a proposal, and a human makes it a tick", () => {
           type: "bug",
           description: "the trailing newline is eaten by the heredoc",
           acceptance_criteria: "a deploy leaves the file byte-identical",
-        })
-      )
+        }),
+      ),
     );
 
     expect(recordAt(outcome.path)).toMatchObject({
@@ -344,7 +352,7 @@ describe("two proposals accepted at once", () => {
     const outcomes = await Promise.all(drafts.map((id) => inbox(name).decide(id, "create", HUMAN)));
 
     const created = outcomes.filter(
-      (o): o is Extract<DraftDecision, { state: "accepted" }> => o.state === "accepted"
+      (o): o is Extract<DraftDecision, { state: "accepted" }> => o.state === "accepted",
     );
     expect(created).toHaveLength(3);
 
@@ -367,8 +375,8 @@ describe("two proposals accepted at once", () => {
     const drafts = await propose(
       name,
       ["a", "b", "c", "d", "e"].map((ref) =>
-        signal({ project: name, external_ref: ref, title: `signal ${ref}` })
-      )
+        signal({ project: name, external_ref: ref, title: `signal ${ref}` }),
+      ),
     );
     // seq is assigned in the synchronous prefix of submit(), so it is arrival
     // order; accepting them in that order commits them in it.
@@ -392,7 +400,7 @@ describe("two proposals accepted at once", () => {
       signal({ project: name, external_ref: "b" }),
     ]);
     const [first, second] = await Promise.all(
-      drafts.map((id) => inbox(name).decide(id, "create", HUMAN))
+      drafts.map((id) => inbox(name).decide(id, "create", HUMAN)),
     );
 
     expect(first).toMatchObject({ state: "deferred", reason: "commit_unsettled" });
@@ -461,10 +469,10 @@ describe("the same signal delivered twice", () => {
     const name = project();
 
     const telegram = accepted(
-      await file(name, signal({ project: name, source: "telegram", external_ref: "42" }))
+      await file(name, signal({ project: name, source: "telegram", external_ref: "42" })),
     );
     const github = accepted(
-      await file(name, signal({ project: name, source: "github", external_ref: "42" }))
+      await file(name, signal({ project: name, source: "github", external_ref: "42" })),
     );
 
     expect(telegram.tick_id).not.toBe(github.tick_id);
@@ -486,10 +494,10 @@ describe("the same signal delivered twice", () => {
     const name = project();
 
     const lower = await inbox(name).submit(
-      signal({ project: name, source: "github", external_ref: "MDU6SXNzdWU0Mg" })
+      signal({ project: name, source: "github", external_ref: "MDU6SXNzdWU0Mg" }),
     );
     const upper = await inbox(name).submit(
-      signal({ project: name, source: "github", external_ref: "mdu6sxnzdwu0mg" })
+      signal({ project: name, source: "github", external_ref: "mdu6sxnzdwu0mg" }),
     );
 
     expect(lower.state).toBe("drafted");
@@ -522,7 +530,11 @@ describe("the same signal delivered twice", () => {
       state: "discarded",
     });
     const redelivered = await inbox(name).submit(signal({ project: name }));
-    expect(redelivered).toMatchObject({ state: "duplicate", draft_state: "discarded", tick_id: null });
+    expect(redelivered).toMatchObject({
+      state: "duplicate",
+      draft_state: "discarded",
+      tick_id: null,
+    });
     expect(await inbox(name).listDrafts()).toHaveLength(1);
     expect(contents.committed).toHaveLength(0);
   });
@@ -670,8 +682,8 @@ describe("what the funnel refuses", () => {
     const drafts = await propose(
       name,
       Array.from({ length: SIGNAL_INBOX_QUEUE_LIMIT + 5 }, (_, i) =>
-        signal({ project: name, external_ref: `flood-${i}` })
-      )
+        signal({ project: name, external_ref: `flood-${i}` }),
+      ),
     );
     // Nothing settles until the flood has actually filled the queue. Waiting on
     // a latency instead made this a coin flip under a loaded runtime: the
@@ -732,7 +744,7 @@ describe("what the inbox records", () => {
     await runInDurableObject(inbox(name) as DurableObjectStub<SignalInbox>, (_instance, state) => {
       rows = [
         ...state.storage.sql.exec<{ source: string; external_ref: string; tick_id: string }>(
-          "SELECT source, external_ref, tick_id FROM signal_dedup"
+          "SELECT source, external_ref, tick_id FROM signal_dedup",
         ),
       ];
     });
@@ -772,7 +784,7 @@ async function strandMidCommit(name: string, draftID: string): Promise<string[]>
     .decide(draftID, "create", HUMAN)
     .then(
       () => "settled",
-      (error) => String(error)
+      (error) => String(error),
     );
   for (let spin = 0; spin < 200 && hanging.calls === 0; spin += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -784,7 +796,7 @@ async function strandMidCommit(name: string, draftID: string): Promise<string[]>
     const rows = [
       ...state.storage.sql.exec<{ state: string; candidates: string | null }>(
         "SELECT state, candidates FROM signal_draft WHERE id = ?",
-        draftID
+        draftID,
       ),
     ];
     expect(rows[0]!.state).toBe("committing");

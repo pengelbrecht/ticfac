@@ -36,7 +36,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
@@ -341,7 +341,9 @@ export function verifySchemaIds(contractsDir) {
 
   const collect = (node, file, pointer) => {
     if (Array.isArray(node)) {
-      node.forEach((item, i) => collect(item, file, `${pointer}[${i}]`));
+      node.forEach((item, i) => {
+        collect(item, file, `${pointer}[${i}]`);
+      });
       return;
     }
     if (node === null || typeof node !== "object") return;
@@ -376,7 +378,9 @@ export function verifySchemaIds(contractsDir) {
     if (definitions.length === 1) continue;
 
     if (definitions.length === 0) {
-      problems.push(`${id}: referenced by ${files.join(", ")} and defined nowhere — a pointer at nothing`);
+      problems.push(
+        `${id}: referenced by ${files.join(", ")} and defined nowhere — a pointer at nothing`,
+      );
     } else {
       const where = definitions.map((use) => `${use.file} ${use.pointer}`).sort();
       problems.push(`${id} is defined ${definitions.length} times: ${where.join(", ")}`);
@@ -445,7 +449,7 @@ function checkPinMatchesImports(pin) {
     fail(
       `contracts.pin.json does not list ${missing.length} contract(s) the test suite imports:\n` +
         missing.map((name) => `  ${name}`).join("\n") +
-        "\n\nAdd them to \"files\" (and run `pnpm contracts:sync` if mode is \"pinned\").\n" +
+        '\n\nAdd them to "files" (and run `pnpm contracts:sync` if mode is "pinned").\n' +
         "An unpinned contract is one that nothing vendors and nothing verifies.",
     );
   }
@@ -511,7 +515,7 @@ function checkDigests(pin) {
         problems.map((line) => `  ${line}`).join("\n") +
         "\n\nThe vendored copy is not editable. It is a copy of what ticks published,\n" +
         "and the digests are what makes an edit to this side detectable at all.\n" +
-        "If ticks changed the contract, bump \"ref\" and run `pnpm contracts:sync`.\n" +
+        'If ticks changed the contract, bump "ref" and run `pnpm contracts:sync`.\n' +
         "If you changed it here, revert — the change belongs in the ticks repository,\n" +
         "where the Go readers that also assert against it live.",
     );

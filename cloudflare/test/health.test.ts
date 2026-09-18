@@ -75,7 +75,7 @@ describe("worker module shape", () => {
       expect(typeof value, `export ${name} must be a Durable Object class`).toBe("function");
       expect(
         Object.getOwnPropertyDescriptor(value as object, "prototype")?.writable,
-        `export ${name} must be a class, not a plain function`
+        `export ${name} must be a class, not a plain function`,
       ).toBe(false);
     }
   });
@@ -129,7 +129,7 @@ describe("health proves a derivation, not just a parse", () => {
     // the runtime's ability to run it is broken — exactly the live failure.
     env.FACTORY_TOKEN_HASH = await deriveTokenHash(mintFactoryToken());
     vi.spyOn(crypto.subtle, "deriveBits").mockRejectedValue(
-      new Error("Cannot use PBKDF2 with more than 100000 iterations.")
+      new Error("Cannot use PBKDF2 with more than 100000 iterations."),
     );
 
     await expect(healthAuth()).resolves.toEqual({ required: true, configured: false });
@@ -165,7 +165,7 @@ describe("health proves a derivation, not just a parse", () => {
     env.FACTORY_TOKEN_HASH = await deriveTokenHash(mintFactoryToken());
     const derivationLogs = captureLogs();
     vi.spyOn(crypto.subtle, "deriveBits").mockRejectedValue(
-      new Error("Cannot use PBKDF2 with more than 100000 iterations.")
+      new Error("Cannot use PBKDF2 with more than 100000 iterations."),
     );
     await healthAuth();
     vi.restoreAllMocks();
@@ -188,7 +188,7 @@ describe("health proves a derivation, not just a parse", () => {
     env.FACTORY_TOKEN_HASH = stored;
     const logged = captureLogs();
     vi.spyOn(crypto.subtle, "deriveBits").mockRejectedValue(
-      new Error("Cannot use PBKDF2 with more than 100000 iterations.")
+      new Error("Cannot use PBKDF2 with more than 100000 iterations."),
     );
 
     const body = await (await SELF.fetch("https://factory.example.com/health")).text();

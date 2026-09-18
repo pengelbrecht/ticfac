@@ -104,7 +104,11 @@ export function parseSchema(node: unknown, path = ""): Schema {
   }
 
   if (raw.properties !== undefined) {
-    if (raw.properties === null || typeof raw.properties !== "object" || Array.isArray(raw.properties)) {
+    if (
+      raw.properties === null ||
+      typeof raw.properties !== "object" ||
+      Array.isArray(raw.properties)
+    ) {
       throw new Error(`schema ${where}: "properties" must be an object`);
     }
     schema.properties = {};
@@ -174,13 +178,23 @@ function walk(schema: Schema, defs: Defs, value: unknown, path: string, errors: 
     walk(target, defs, value, path, errors);
   }
 
-  if (schema.type && schema.type.length > 0 && !schema.type.some((name) => matchesType(name, value))) {
+  if (
+    schema.type &&
+    schema.type.length > 0 &&
+    !schema.type.some((name) => matchesType(name, value))
+  ) {
     errors.push(`${path}: expected type ${schema.type.join("|")}, got ${jsonTypeOf(value)}`);
     return;
   }
 
-  if (schema.enum && schema.enum.length > 0 && !schema.enum.some((candidate) => candidate === value)) {
-    errors.push(`${path}: ${format(value)} is not one of the permitted values ${formatList(schema.enum)}`);
+  if (
+    schema.enum &&
+    schema.enum.length > 0 &&
+    !schema.enum.some((candidate) => candidate === value)
+  ) {
+    errors.push(
+      `${path}: ${format(value)} is not one of the permitted values ${formatList(schema.enum)}`,
+    );
   }
 
   if (schema.anyOf && schema.anyOf.length > 0) {
@@ -205,7 +219,9 @@ function walk(schema: Schema, defs: Defs, value: unknown, path: string, errors: 
       walk(sub, defs, value[name], `${path}.${name}`, errors);
     }
   } else if (Array.isArray(value) && schema.items) {
-    value.forEach((item, i) => walk(schema.items!, defs, item, `${path}[${i}]`, errors));
+    value.forEach((item, i) => {
+      walk(schema.items!, defs, item, `${path}[${i}]`, errors);
+    });
   }
 }
 

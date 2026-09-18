@@ -60,8 +60,10 @@ const acceptingSink: RunEventSink = {
   },
 };
 
-const get = (path: string, headers: Record<string, string> = { Authorization: `Bearer ${token}` }) =>
-  SELF.fetch(`${BASE}${path}`, { headers });
+const get = (
+  path: string,
+  headers: Record<string, string> = { Authorization: `Bearer ${token}` },
+) => SELF.fetch(`${BASE}${path}`, { headers });
 
 type Observation = {
   observed_at: string;

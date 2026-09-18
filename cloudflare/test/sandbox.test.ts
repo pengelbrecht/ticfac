@@ -1,16 +1,16 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import {
-  DEFAULT_SANDBOX_IMAGE,
   adaptSandbox,
+  DEFAULT_SANDBOX_IMAGE,
   deploymentImage,
   isSandboxNamespace,
   resolveSandboxImage,
-  sameImageReference,
-  sandboxBinding,
   type SandboxBinding,
   type SdkProcess,
   type SdkSandbox,
+  sameImageReference,
+  sandboxBinding,
 } from "../src/sandbox";
 
 /**
@@ -290,16 +290,30 @@ describe("resolveSandboxImage", () => {
   });
 
   it("treats a digest as the stronger claim it is", () => {
-    const digest = "@sha256:" + "0".repeat(64);
+    const digest = `@sha256:${"0".repeat(64)}`;
 
-    expect(sameImageReference(`acme/orchestrator:1.0${digest}`, "acme/orchestrator:1.0")).toBe(false);
-    expect(sameImageReference(`acme/orchestrator:1.0${digest}`, `acme/orchestrator:1.0${digest}`)).toBe(true);
+    expect(sameImageReference(`acme/orchestrator:1.0${digest}`, "acme/orchestrator:1.0")).toBe(
+      false,
+    );
+    expect(
+      sameImageReference(`acme/orchestrator:1.0${digest}`, `acme/orchestrator:1.0${digest}`),
+    ).toBe(true);
   });
 
   // A registry port is not a tag, so `host:5000/image` still gets `:latest`.
   it("does not mistake a registry port for a tag", () => {
-    expect(sameImageReference("registry.example.com:5000/acme/orchestrator", "registry.example.com:5000/acme/orchestrator:latest")).toBe(true);
-    expect(sameImageReference("registry.example.com:5000/acme/orchestrator", "registry.example.com:5000/acme/orchestrator:2.0")).toBe(false);
+    expect(
+      sameImageReference(
+        "registry.example.com:5000/acme/orchestrator",
+        "registry.example.com:5000/acme/orchestrator:latest",
+      ),
+    ).toBe(true);
+    expect(
+      sameImageReference(
+        "registry.example.com:5000/acme/orchestrator",
+        "registry.example.com:5000/acme/orchestrator:2.0",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -308,7 +322,7 @@ describe("deploymentImage", () => {
     expect(deploymentImage({} as never)).toBe(DEFAULT_SANDBOX_IMAGE);
     expect(deploymentImage({ SANDBOX_IMAGE: "  " } as never)).toBe(DEFAULT_SANDBOX_IMAGE);
     expect(deploymentImage({ SANDBOX_IMAGE: " acme/orchestrator:2.0 " } as never)).toBe(
-      "acme/orchestrator:2.0"
+      "acme/orchestrator:2.0",
     );
   });
 });

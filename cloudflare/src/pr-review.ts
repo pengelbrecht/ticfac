@@ -97,19 +97,18 @@ import { carriesLabel, consentLabel, labelNames } from "./consent";
 import { credentialGrade, gradeMayWrite } from "./credentials";
 import { getEnrolledProject } from "./db";
 import { authorizeRunCredential, type GatewayDenial } from "./gateway";
+import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
-import { submitRun, type RunSubmission } from "./runs";
+import { type RunSubmission, submitRun } from "./runs";
 import { newTraceID } from "./trace";
 import {
   MAX_UNTRUSTED_CHARS,
   MAX_UNTRUSTED_LINES,
-  UNTRUSTED_LINE_PREFIX,
   quoteUntrusted,
   sanitizeUntrusted,
   sanitizeUntrustedLine,
+  UNTRUSTED_LINE_PREFIX,
 } from "./untrusted-text";
-
-import type { Env } from "./index";
 
 // ------------------------------------------------------------- vocabulary ---
 
@@ -305,7 +304,7 @@ function sha(raw: unknown): string {
  */
 export function classifyPullRequestEvent(
   payload: unknown,
-  options: { label: string }
+  options: { label: string },
 ): PullRequestVerdict {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return refused("invalid_payload", "a pull_request event must be an object");
@@ -335,14 +334,14 @@ export function classifyPullRequestEvent(
     return refused(
       "invalid_payload",
       `${project}#${number} carries no usable node id, which is the dedup key — without it a ` +
-        "redelivery would be a second paid run and a second comment"
+        "redelivery would be a second paid run and a second comment",
     );
   }
 
   if (!(REVIEWING_ACTIONS as readonly string[]).includes(action)) {
     return ignored(
       "not_a_reviewing_action",
-      `${project}#${number}: nothing is reviewed on \`${action}\``
+      `${project}#${number}: nothing is reviewed on \`${action}\``,
     );
   }
 
@@ -364,7 +363,7 @@ export function classifyPullRequestEvent(
   if (headSHA === "" || baseSHA === "") {
     return refused(
       "invalid_payload",
-      `${project}#${number} names no head/base commit; a run is submitted at a pushed SHA (D3)`
+      `${project}#${number} names no head/base commit; a run is submitted at a pushed SHA (D3)`,
     );
   }
 
@@ -504,7 +503,7 @@ export type ReviewBudgetVerdict =
 export async function reviewBudget(
   db: D1Database,
   project: string,
-  now = new Date()
+  now = new Date(),
 ): Promise<ReviewBudgetVerdict> {
   const since = new Date(now.getTime() - REVIEW_BUDGET_WINDOW_MS).toISOString();
   const row = await db
@@ -556,13 +555,13 @@ export type ReviewTarget = {
  */
 export async function claimPullRequestReview(
   db: D1Database,
-  facts: PullRequestFacts
+  facts: PullRequestFacts,
 ): Promise<{ claimed: boolean; existing: ReviewTarget | null }> {
   const result = await db
     .prepare(
       `INSERT OR IGNORE INTO pr_reviews
          (pr_node_id, project, pr_number, head_sha, base_sha, run_id, state, detail, posted_at, comment_id, claimed_at)
-       VALUES (?, ?, ?, ?, ?, NULL, 'claiming', NULL, NULL, NULL, ?)`
+       VALUES (?, ?, ?, ?, ?, NULL, 'claiming', NULL, NULL, NULL, ?)`,
     )
     .bind(
       facts.node_id,
@@ -570,7 +569,7 @@ export async function claimPullRequestReview(
       facts.number,
       facts.head_sha,
       facts.base_sha,
-      new Date().toISOString()
+      new Date().toISOString(),
     )
     .run();
   if ((result.meta.changes ?? 0) > 0) return { claimed: true, existing: null };
@@ -591,7 +590,7 @@ export async function bindReviewRun(
   nodeID: string,
   runID: string,
   state: string,
-  detail: string | null
+  detail: string | null,
 ): Promise<void> {
   await db
     .prepare("UPDATE pr_reviews SET run_id = ?, state = ?, detail = ? WHERE pr_node_id = ?")
@@ -601,7 +600,7 @@ export async function bindReviewRun(
 
 export async function getReviewByNode(
   db: D1Database,
-  nodeID: string
+  nodeID: string,
 ): Promise<ReviewTarget | null> {
   return await db
     .prepare("SELECT * FROM pr_reviews WHERE pr_node_id = ?")
@@ -629,13 +628,11 @@ export async function getReviewForRun(db: D1Database, runID: string): Promise<Re
  * changes no rows and is refused, whether it is a retry, a second container or
  * a confused agent calling twice.
  */
-export async function claimReviewPost(
-  db: D1Database,
-  runID: string,
-  at: string
-): Promise<boolean> {
+export async function claimReviewPost(db: D1Database, runID: string, at: string): Promise<boolean> {
   const result = await db
-    .prepare("UPDATE pr_reviews SET posted_at = ?, state = 'posting' WHERE run_id = ? AND posted_at IS NULL")
+    .prepare(
+      "UPDATE pr_reviews SET posted_at = ?, state = 'posting' WHERE run_id = ? AND posted_at IS NULL",
+    )
     .bind(at, runID)
     .run();
   return (result.meta.changes ?? 0) > 0;
@@ -645,7 +642,7 @@ export async function claimReviewPost(
 export async function releaseReviewPost(db: D1Database, runID: string): Promise<void> {
   await db
     .prepare(
-      "UPDATE pr_reviews SET posted_at = NULL, state = 'dispatched' WHERE run_id = ? AND comment_id IS NULL"
+      "UPDATE pr_reviews SET posted_at = NULL, state = 'dispatched' WHERE run_id = ? AND comment_id IS NULL",
     )
     .bind(runID)
     .run();
@@ -655,7 +652,7 @@ export async function releaseReviewPost(db: D1Database, runID: string): Promise<
 export async function recordReviewComment(
   db: D1Database,
   runID: string,
-  commentID: string
+  commentID: string,
 ): Promise<void> {
   await db
     .prepare("UPDATE pr_reviews SET comment_id = ?, state = 'reviewed' WHERE run_id = ?")
@@ -683,13 +680,13 @@ export async function claimReviewExpiry(
   db: D1Database,
   runID: string,
   detail: string,
-  at: string
+  at: string,
 ): Promise<boolean> {
   const result = await db
     .prepare(
       `UPDATE pr_reviews
           SET expired_at = ?, state = 'expired', detail = ?
-        WHERE run_id = ? AND expired_at IS NULL AND comment_id IS NULL`
+        WHERE run_id = ? AND expired_at IS NULL AND comment_id IS NULL`,
     )
     .bind(at, detail, runID)
     .run();
@@ -707,7 +704,7 @@ export async function claimReviewExpiry(
 export async function recordExpiryComment(
   db: D1Database,
   runID: string,
-  commentID: string
+  commentID: string,
 ): Promise<void> {
   await db
     .prepare("UPDATE pr_reviews SET expiry_comment_id = ? WHERE run_id = ?")
@@ -852,7 +849,7 @@ export type PullRequestIngestResult =
  */
 export async function ingestPullRequestEvent(
   env: Env,
-  payload: unknown
+  payload: unknown,
 ): Promise<PullRequestIngestResult> {
   const label = consentLabel(env);
   const verdict = classifyPullRequestEvent(payload, { label });
@@ -900,7 +897,7 @@ export async function ingestPullRequestEvent(
   }
 
   const submission = reviewRunSubmission(facts);
-  let result;
+  let result: Awaited<ReturnType<typeof submitRun>>;
   try {
     result = await submitRun(env, submission);
   } catch (error) {
@@ -914,8 +911,7 @@ export async function ingestPullRequestEvent(
 
   if (result.outcome === "started") {
     const runID = result.started.run.run_id;
-    const detail =
-      `${facts.project}#${facts.number} is being reviewed by run ${runID} (${consent.via})`;
+    const detail = `${facts.project}#${facts.number} is being reviewed by run ${runID} (${consent.via})`;
     await bindReviewRun(env.DB, facts.node_id, runID, "dispatched", detail);
     return { state: "dispatched", run_id: runID, queued: false, facts, detail };
   }
@@ -1039,7 +1035,7 @@ export function githubReviewCommenter(env: Env): ReviewCommenter {
       if (token === "") {
         throw new Error(
           "this factory holds no GITHUB_TOKEN, so it cannot post a review comment; run " +
-            "`tk factory setup`"
+            "`tk factory setup`",
         );
       }
       const response = await fetch(`${base}/repos/${project}/issues/${number}/comments`, {
@@ -1055,11 +1051,12 @@ export function githubReviewCommenter(env: Env): ReviewCommenter {
       });
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} posting a review comment on ${project}#${number}`
+          `GitHub answered HTTP ${response.status} posting a review comment on ${project}#${number}`,
         );
       }
       const payload = (await response.json()) as { id?: unknown };
-      const id = typeof payload.id === "number" || typeof payload.id === "string" ? String(payload.id) : "";
+      const id =
+        typeof payload.id === "number" || typeof payload.id === "string" ? String(payload.id) : "";
       if (id === "") throw new Error("GitHub returned a comment with no id");
       return { id };
     },
@@ -1109,7 +1106,7 @@ export async function postReviewFindings(env: Env, request: Request): Promise<Re
     // submission's own project — and checked anyway, because this is the one
     // place a mismatch would turn into a write on somebody else's repository.
     console.error(
-      `factory review: run ${run.run_id} (project ${run.project}) is bound to a review on ${target.project}`
+      `factory review: run ${run.run_id} (project ${run.project}) is bound to a review on ${target.project}`,
     );
     return {
       ok: false,
@@ -1253,7 +1250,7 @@ export function extractRunToken(request: Request): string | null {
  */
 export async function reviewEvidence(
   db: D1Database,
-  runID: string
+  runID: string,
 ): Promise<{ posted: boolean; detail: string }> {
   const target = await getReviewForRun(db, runID);
   if (target === null) {

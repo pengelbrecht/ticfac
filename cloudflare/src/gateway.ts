@@ -41,10 +41,10 @@ import {
   getRun,
   getRunGatewayToken,
   insertRunGatewayToken,
-  revokeRunGatewayTokens,
-  updateRunCost,
   type Run,
   type RunGatewayToken,
+  revokeRunGatewayTokens,
+  updateRunCost,
 } from "./db";
 import type { Env } from "./index";
 
@@ -122,7 +122,7 @@ export function allowedProviders(env: Env): ProviderSlug[] {
       else {
         console.error(
           `factory gateway: ${PROVIDER_OPT_IN_VAR} names "${entry}", which is not a provider ` +
-            `this gateway routes (${PROVIDER_SLUGS.join(", ")}); ignoring it`
+            `this gateway routes (${PROVIDER_SLUGS.join(", ")}); ignoring it`,
         );
       }
     }
@@ -276,10 +276,7 @@ export const RUN_TOKEN_PREFIX = "tkr_";
 
 export function mintRunToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return (
-    RUN_TOKEN_PREFIX +
-    [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")
-  );
+  return RUN_TOKEN_PREFIX + [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -306,7 +303,7 @@ export type IssuedRunToken = { token: string; record: RunGatewayToken };
  */
 export async function issueRunToken(
   env: Env,
-  input: { run_id: string; tick_id: string; attempt: number }
+  input: { run_id: string; tick_id: string; attempt: number },
 ): Promise<IssuedRunToken> {
   const at = new Date().toISOString();
   await revokeRunGatewayTokens(env.DB, input.run_id, `rotated:boot:${input.attempt}`, at);
@@ -326,11 +323,7 @@ export async function issueRunToken(
 }
 
 /** The kill switch: every live credential this run holds, dead. */
-export async function revokeRunTokens(
-  env: Env,
-  runID: string,
-  reason: string
-): Promise<number> {
+export async function revokeRunTokens(env: Env, runID: string, reason: string): Promise<number> {
   return revokeRunGatewayTokens(env.DB, runID, reason, new Date().toISOString());
 }
 
@@ -366,7 +359,7 @@ export function extractRunToken(request: Request): string | null {
  */
 export async function authorizeGatewayRequest(
   env: Env,
-  request: Request
+  request: Request,
 ): Promise<GatewayAuthorization> {
   return authorizeRunCredential(env, extractRunToken(request));
 }
@@ -382,7 +375,7 @@ export async function authorizeGatewayRequest(
  */
 export async function authorizeRunCredential(
   env: Env,
-  presented: string | null
+  presented: string | null,
 ): Promise<GatewayAuthorization> {
   if (presented === null) {
     return {
@@ -621,8 +614,7 @@ function sanitizedHeaders(request: Request): Headers {
  */
 export type ContentPartsRewrite =
   /** `body` is the rewritten JSON, or null when the request already conformed. */
-  | { ok: true; body: string | null }
-  | { ok: false; detail: string };
+  { ok: true; body: string | null } | { ok: false; detail: string };
 
 /** The part types that have a faithful string form. */
 const TEXT_PART_TYPES = ["text", "input_text"];
@@ -673,13 +665,9 @@ export function stringifyContentParts(raw: string): ContentPartsRewrite {
     const texts: string[] = [];
     for (const part of content) {
       const type =
-        part !== null && typeof part === "object"
-          ? (part as { type?: unknown }).type
-          : undefined;
+        part !== null && typeof part === "object" ? (part as { type?: unknown }).type : undefined;
       const text =
-        part !== null && typeof part === "object"
-          ? (part as { text?: unknown }).text
-          : undefined;
+        part !== null && typeof part === "object" ? (part as { text?: unknown }).text : undefined;
       if (typeof type === "string" && TEXT_PART_TYPES.includes(type) && typeof text === "string") {
         texts.push(text);
         continue;
@@ -725,7 +713,7 @@ export async function proxyModelRequest(
   env: Env,
   request: Request,
   path: string[],
-  options: ProxyOptions = {}
+  options: ProxyOptions = {},
 ): Promise<Response> {
   const config = gatewayConfig(env);
   if (!config.ok) {
@@ -747,7 +735,7 @@ export async function proxyModelRequest(
   if (!allowed.includes(slug)) {
     console.error(
       `factory gateway: refused a ${slug} request — this factory routes ` +
-        `${allowed.join(", ")} and ${PROVIDER_OPT_IN_VAR} does not name ${slug}`
+        `${allowed.join(", ")} and ${PROVIDER_OPT_IN_VAR} does not name ${slug}`,
     );
     return jsonError({
       status: 403,
@@ -804,7 +792,7 @@ export async function proxyModelRequest(
     if (!rewrite.ok) {
       console.error(
         `factory gateway: run ${authorized.run.run_id} sent the workers-ai route content ` +
-          `parts it cannot carry: ${rewrite.detail}`
+          `parts it cannot carry: ${rewrite.detail}`,
       );
       return jsonError({
         status: 400,
@@ -826,7 +814,7 @@ export async function proxyModelRequest(
     } as RequestInit);
   } catch (error) {
     console.error(
-      `factory gateway: run ${authorized.run.run_id} could not reach the gateway: ${String(error)}`
+      `factory gateway: run ${authorized.run.run_id} could not reach the gateway: ${String(error)}`,
     );
     return jsonError({
       status: 502,
@@ -1009,7 +997,7 @@ export function metadataFilters(name: GatewayMetadataKey, value: string): Gatewa
   if (!(GATEWAY_METADATA_KEYS as readonly string[]).includes(name)) {
     throw new Error(
       `gateway logs: no proxied request is stamped with metadata "${name}", so filtering on it ` +
-        `would match nothing (stamped: ${GATEWAY_METADATA_KEYS.join(", ")})`
+        `would match nothing (stamped: ${GATEWAY_METADATA_KEYS.join(", ")})`,
     );
   }
   return [
@@ -1024,13 +1012,13 @@ export function encodeLogFilters(filters: GatewayLogFilter[]): string {
     if (!(GATEWAY_LOG_FILTER_KEYS as readonly string[]).includes(filter.key)) {
       throw new Error(
         `gateway logs: "${filter.key}" is not a filter key the logs API accepts ` +
-          `(it accepts: ${GATEWAY_LOG_FILTER_KEYS.join(", ")})`
+          `(it accepts: ${GATEWAY_LOG_FILTER_KEYS.join(", ")})`,
       );
     }
     if (!(GATEWAY_LOG_FILTER_OPERATORS as readonly string[]).includes(filter.operator)) {
       throw new Error(
         `gateway logs: "${filter.operator}" is not a filter operator the logs API accepts ` +
-          `(it accepts: ${GATEWAY_LOG_FILTER_OPERATORS.join(", ")})`
+          `(it accepts: ${GATEWAY_LOG_FILTER_OPERATORS.join(", ")})`,
       );
     }
   }
@@ -1094,7 +1082,7 @@ async function refusalDetail(response: Response): Promise<string> {
 export async function fetchRunSpend(
   env: Env,
   runID: string,
-  options: ProxyOptions = {}
+  options: ProxyOptions = {},
 ): Promise<SpendResult> {
   const config = gatewayConfig(env);
   if (!config.ok) return { ok: false, kind: "not_configured", detail: config.detail };
@@ -1121,7 +1109,7 @@ export async function fetchRunSpend(
 
   const apiBase = (textVar(env.CLOUDFLARE_API_BASE_URL) ?? DEFAULT_CLOUDFLARE_API_BASE).replace(
     /\/+$/,
-    ""
+    "",
   );
   const filters = encodeLogFilters(metadataFilters("run_id", runID));
   const fetcher = options.fetcher ?? fetch;
@@ -1146,9 +1134,7 @@ export async function fetchRunSpend(
         // "our query is wrong" is not read as "the gateway is down".
         const kind = spendFailureKind(response.status);
         const what =
-          kind === "request_rejected"
-            ? "rejected this factory's own logs query with"
-            : "answered";
+          kind === "request_rejected" ? "rejected this factory's own logs query with" : "answered";
         return {
           ok: false,
           kind,
@@ -1222,7 +1208,7 @@ export async function fetchRunSpend(
 export async function syncRunCost(
   env: Env,
   runID: string,
-  options: ProxyOptions = {}
+  options: ProxyOptions = {},
 ): Promise<SpendResult> {
   const spend = await fetchRunSpend(env, runID, options);
   if (!spend.ok) {

@@ -131,7 +131,7 @@ export function githubRepoRefs(env: Env): RepoRefs {
         const response = await fetch(url, { headers });
         if (!response.ok) {
           throw new Error(
-            `GitHub answered HTTP ${response.status} for the branch listing of ${project}`
+            `GitHub answered HTTP ${response.status} for the branch listing of ${project}`,
           );
         }
         const body = (await response.json()) as { ref?: string; object?: { sha?: string } }[];
@@ -149,7 +149,7 @@ export function githubRepoRefs(env: Env): RepoRefs {
       }
       throw new Error(
         `${project} has more than ${MAX_REF_PAGES * REF_PAGE_SIZE} branches, so its refs ` +
-          "cannot be compared without truncating the listing"
+          "cannot be compared without truncating the listing",
       );
     },
   };
@@ -174,7 +174,7 @@ export async function snapshotRefs(env: Env, project: string): Promise<RefSnapsh
 /** Branches that appeared, moved or were deleted between two reads. */
 export function changedBranches(
   before: Record<string, string>,
-  after: Record<string, string>
+  after: Record<string, string>,
 ): string[] {
   const changed = new Set<string>();
   for (const [branch, sha] of Object.entries(after)) {

@@ -42,6 +42,7 @@
  * reports exactly that as a finding of its own.
  */
 
+import type { Env } from "./index";
 import {
   claimReviewExpiry,
   getReviewForRun,
@@ -49,8 +50,6 @@ import {
   renderExpiredReviewComment,
   reviewCommenter,
 } from "./pr-review";
-
-import type { Env } from "./index";
 import type { QueuedSubmission } from "./run-room";
 
 /** What became of one expired submission. Returned so a caller (and a test) can assert it. */
@@ -77,7 +76,7 @@ export type QueueExpiryOutcome =
  */
 export async function announceQueueExpiry(
   env: Env,
-  expired: QueuedSubmission[]
+  expired: QueuedSubmission[],
 ): Promise<QueueExpiryOutcome[]> {
   const outcomes: QueueExpiryOutcome[] = [];
   for (const submission of expired) {
@@ -127,7 +126,7 @@ async function announceOne(env: Env, submission: QueuedSubmission): Promise<Queu
     env.DB,
     submission.run_id,
     detail,
-    new Date().toISOString()
+    new Date().toISOString(),
   );
   if (!claimed) {
     const already =

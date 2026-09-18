@@ -50,6 +50,6 @@ if (hashOnly) {
   process.stdout.write(`token: ${token}\nhash:  ${hash}\n`);
   process.stderr.write(
     "\nStore the token in ~/.ticksrc (chmod 0600) — it is never recoverable from the worker.\n" +
-      "Push the hash with: npx wrangler secret put FACTORY_TOKEN_HASH\n"
+      "Push the hash with: npx wrangler secret put FACTORY_TOKEN_HASH\n",
   );
 }

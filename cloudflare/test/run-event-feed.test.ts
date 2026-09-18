@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import contract from "../../contracts/run-event-feed.json";
 
-import { parseDefs, parseSchema, validate, type Defs, type Schema } from "./json-schema";
+import { type Defs, parseDefs, parseSchema, type Schema, validate } from "./json-schema";
 
 /**
  * The TypeScript reader for `contracts/run-event-feed.json`.

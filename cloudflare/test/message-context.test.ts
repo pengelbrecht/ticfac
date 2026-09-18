@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import fixture from "../../contracts/message-context.json";
 
 import {
+  contextLine,
   MESSAGE_CONTEXT_EPIC_PREFIX,
   MESSAGE_CONTEXT_SEPARATOR,
   MESSAGE_CONTEXT_TICK_PREFIX,
-  contextLine,
-  withContext,
   type MessageContext,
+  withContext,
 } from "../src/message-context";
 
 // The other reader of this fixture is
@@ -25,7 +25,7 @@ describe("the project/epic/tick line", () => {
   it("prefixes a message exactly as the shared fixture pins", () => {
     for (const example of fixture.prefix_examples) {
       expect(withContext(example.context as MessageContext, example.body), example.name).toBe(
-        example.prefixed
+        example.prefixed,
       );
     }
   });
