@@ -2,6 +2,7 @@
   "id": "l9n",
   "title": "Move cloud/factory to ticfac/cloudflare, preserving routes and D1/R2 behaviour",
   "description": "SPEC 12 Phase 4 item 1. Move the control plane (~46 TypeScript modules: run-workflow.ts, sandbox.ts, worker-dispatch/boot/collect, gateway.ts, D1 migrations 0001-0013, R2 artifacts, Telegram, CI remediation, PR review) from cloud/factory/** to ticfac/cloudflare/**.\n\nDeliberately a MOVE and nothing else: routes, D1 schema and R2 keys keep their current behaviour so that a deployed factory keeps working while the reconciler moves in behind it. Behaviour changes belong to the later items, where they can be attributed.\n\nThe compatibility checks that prove the move changed nothing (routes, D1/R2 keys, image tags) already exist as tick mrq's work in ticks - port them alongside, or this item has no evidence.",
+  "notes": "2026-09-18 17:44 - Corrected by the operator and pushed to epic/ncv (5165061). The move landed at a literal ticfac/cloudflare/ INSIDE the repository; SPEC 12 item 1's 'move cloud/factory/** to ticfac/cloudflare/**' names the REPOSITORY with that prefix, so the destination is cloudflare/ at the root.\n\nEleven encoded depths came with it, none visible in a diff and all of them only findable by running the suite at the new location: contracts.mjs's REPO_ROOT, its import-scanner regex hardcoding exactly three ../, contracts.test.mjs's REPO_ROOT, wrangler.toml's Dockerfile path, a raw asset import in phase0-compat.test.ts, embedded.go's //go:embed patterns, bundle.go's bundleRoot and sandboxRelativeToBundle, payload_parity_test.go's path parts, a wrangler fixture inside bundle_test.go, and ~30 Go files naming the old path in prose. Plus 18 test imports.\n\nTwo failed by LOOKING LIKE SUCCESS, which is the part worth carrying forward: the wrangler image path broke config validation so all 53 test files errored in setup and vitest reported 'no tests' — a suite that ran nothing; and bundleRoot made the embed walker strip a prefix that no longer existed, so FactoryFS returned empty and factory deploy would have shipped a Worker with no source. Only a test asserting specific files are present caught the second one.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "The factory deploys and serves from ticfac/cloudflare/** with routes, D1 keys and R2 keys unchanged, proven by the ported compatibility checks rather than by inspection. A deployed factory from before the move still answers.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:10.994325Z",
-  "updated_at": "2026-09-18T11:24:10.994325Z"
+  "updated_at": "2026-09-18T15:44:44.115607Z"
 }
