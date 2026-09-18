@@ -268,5 +268,15 @@ name = "ticks-run"
 binding = "RUN_WORKFLOW"
 class_name = "RunWorkflow"
 
+# The EpicReconciler Workflow (tick z23, SPEC 12 Phase 4 item 2): the
+# reconciler's control flow hosted by a Workflow rather than an
+# orchestrating agent container — one instance per EpicRun, keyed by run
+# id. Tracker access goes through the contract-held TypeScript client
+# (src/tracker-client.ts); run state lives in .ticfac/ on the run branch.
+[[workflows]]
+name = "ticfac-epic-reconciler"
+binding = "EPIC_RECONCILER"
+class_name = "EpicReconcilerWorkflow"
+
 [dev]
 port = 8788

@@ -32,6 +32,27 @@ declare namespace Cloudflare {
      */
     RUN_WORKFLOW?: import("./runs").RunWorkflowBinding;
     /**
+     * The EpicReconciler Workflow (tick z23): the reconciler's control flow
+     * hosted by a Workflow, one instance per EpicRun keyed by run id
+     * (`[[workflows]]` in wrangler.toml, class `EpicReconcilerWorkflow`).
+     *
+     * Optional for the same reason `RUN_WORKFLOW` is — a deployment whose
+     * Workflow failed to register must fail closed at the point of use
+     * rather than record runs that could never reconcile — and typed as the
+     * structural subset the reconciler's own start path uses so a test can
+     * substitute a recording fake for it.
+     */
+    EPIC_RECONCILER?: {
+      create(options: {
+        id?: string;
+        params: import("./epic-reconciler").EpicReconcilerParams;
+      }): Promise<{
+        id: string;
+        status: () => Promise<unknown>;
+      }>;
+      get(id: string): Promise<unknown>;
+    };
+    /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
      * tick from Phase 2 (see cloud/sandbox).
      *
@@ -397,6 +418,42 @@ declare namespace Cloudflare {
      * `TICK_INDEX` is one.
      */
     SWEEP_BASE?: import("./sweep-dispatch").SweepBaseReader;
+    /**
+     * The tracked-file store the Workflow-hosted reconciler reaches BOTH
+     * durable authorities through: `.tick/` records (the tk --json contract
+     * client, tick z23) and `.ticfac/` run state (checkpoint + attempt
+     * markers), each against the run branch.
+     *
+     * Unset on a deployment, which reads and writes GitHub's contents API
+     * directly. A seam for the same reason `TICK_TRACKER` is one — and the
+     * only way the compare-and-swap rules worth testing here (a stale-sha
+     * refusal, a create-if-absent marker refusing a second dispatch, a
+     * resumed pass adopting an in-flight attempt from the marker) are
+     * exercisable at all.
+     */
+    TICK_CONTENTS?: {
+      project: string;
+      ref: string;
+      store: import("./git-contents").ContentsStore;
+    };
+    /**
+     * The attempt executor the EpicReconciler Workflow dispatches through
+     * (tick z23): the job-protocol four operations. Unset on a deployment
+     * until the sandbox compatibility executor (this phase's item 4) is
+     * wired — the Workflow then refuses dispatches naming this binding
+     * rather than recording attempts nobody started.
+     */
+    TICFAC_EXECUTOR?: import("./epic-reconciler").AttemptExecutor;
+    /**
+     * The merge-and-gate half of a tick's settle on the Workflow host (tick
+     * z23): what turns a reported attempt into a closeable one. Unset on a
+     * deployment, where the run refuses to close ticks behind an
+     * integration it cannot perform — the serialized publisher is this
+     * phase's item 3.
+     */
+    TICFAC_INTEGRATION?: import("./epic-reconciler").IntegrationHost;
+    /** Test knob for the reconcile Workflow's poll cadence (ms). */
+    TICFAC_RECONCILE_POLL_MS?: number;
     [signalSecret: `SIGNAL_SECRET_${string}`]: string | undefined;
   }
 }

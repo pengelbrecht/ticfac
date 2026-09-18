@@ -75,6 +75,7 @@ import { runDailyDigest } from "./loop-digest";
 import { getSweepSelection, listSweepSelections } from "./db";
 import { SignalInbox } from "./signal-inbox";
 import { RunWorkflow, effectiveRunBudget } from "./run-workflow";
+import { EpicReconcilerWorkflow } from "./epic-reconciler";
 import {
   RunRoom,
   type MessageRef,
@@ -1395,7 +1396,7 @@ export default {
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
-export { RunRoom, RunWorkflow, SignalInbox };
+export { RunRoom, RunWorkflow, SignalInbox, EpicReconcilerWorkflow };
 
 // The Sandbox SDK's own Durable Object class, which the `[[containers]]`
 // application in wrangler.toml attaches the orchestrator image to and the
