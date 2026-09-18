@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 236,
-  "state": "publishing",
-  "reason": "closing pbb behind the integrated gate on f5f6bc4ac8c2",
-  "updated_at": "2026-09-17T22:33:15Z",
+  "sequence": 237,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-18T01:08:12Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -159,7 +159,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "111167853dcc5751ccc6a0411a9cbc27aeba8a19",
+    "source_sha": "6566a367a23f21aafd5d599cf784d9cb72814f48",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
