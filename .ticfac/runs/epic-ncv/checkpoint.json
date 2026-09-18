@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 54,
-  "state": "gating",
-  "reason": "running the integrated gate for vyg on e46fb0e03d79",
-  "updated_at": "2026-09-18T17:34:18Z",
+  "sequence": 55,
+  "state": "publishing",
+  "reason": "closing vyg behind the integrated gate on e46fb0e03d79",
+  "updated_at": "2026-09-18T17:34:31Z",
   "ticks": [
     {
       "tick_id": "l9n",
