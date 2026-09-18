@@ -37,10 +37,15 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 import { contentsStore } from "./git-contents";
-import { RunStateStore, provenance, terminalState, type Checkpoint, type TickState } from "./run-state-store";
-import { TrackerClient, type Graph, type GraphTask } from "./tracker-client";
-
 import type { Env } from "./index";
+import {
+  type Checkpoint,
+  provenance,
+  RunStateStore,
+  type TickState,
+  terminalState,
+} from "./run-state-store";
+import { type Graph, type GraphTask, TrackerClient } from "./tracker-client";
 
 // ----------------------------------------------------------- the executor ---
 
@@ -208,7 +213,11 @@ export function nextAttemptNumber(attempts: Array<{ attempt: number }>): number 
 }
 
 /** How many dispatches this tick has had — the tick's own TRY, not identity. */
-export function tryOf(attempts: Array<{ attempt: number; tick_id: string }>, tick: string, number: number): number {
+export function tryOf(
+  attempts: Array<{ attempt: number; tick_id: string }>,
+  tick: string,
+  number: number,
+): number {
   let try_ = 1;
   for (const existing of attempts) {
     if (existing.tick_id === tick && existing.attempt < number) try_ += 1;
@@ -292,7 +301,11 @@ export class EpicReconciler {
     return changed;
   }
 
-  async #checkpoint(state: Checkpoint["state"], reason: string, rows: Map<string, TickState>): Promise<void> {
+  async #checkpoint(
+    state: Checkpoint["state"],
+    reason: string,
+    rows: Map<string, TickState>,
+  ): Promise<void> {
     this.#sequence += 1;
     const ticks = [...rows.values()].sort((a, b) => (a.tick_id < b.tick_id ? -1 : 1));
     const outcome = await this.#deps.store.writeCheckpoint({
@@ -320,7 +333,7 @@ export class EpicReconciler {
     tickID: string,
     attempt: number,
     rows: Map<string, TickState>,
-    dispatchedThisPass: Array<{ tick_id: string; attempt: number }>
+    dispatchedThisPass: Array<{ tick_id: string; attempt: number }>,
   ): Promise<PassResult | null> {
     const { client, store } = this.#deps;
     if (this.#deps.integration === undefined) {
@@ -398,7 +411,12 @@ export class EpicReconciler {
       // own account of a tick — the tracker is asked whether it is closed,
       // and the attempt marker decides whether a dispatch is adopted.
       if (terminalState(checkpoint.state)) {
-        return { terminal: true, state: checkpoint.state, reason: checkpoint.reason, dispatched: [] };
+        return {
+          terminal: true,
+          state: checkpoint.state,
+          reason: checkpoint.reason,
+          dispatched: [],
+        };
       }
     }
 
@@ -454,7 +472,12 @@ export class EpicReconciler {
       if (row.state === "reported") {
         // Reported by an earlier pass (or an earlier incarnation): the work
         // exists, and the close it never reached runs here.
-        const settle = await this.#settleReported(tickID, row.attempt ?? 0, rows, dispatchedThisPass);
+        const settle = await this.#settleReported(
+          tickID,
+          row.attempt ?? 0,
+          rows,
+          dispatchedThisPass,
+        );
         if (settle !== null) return settle;
         stateChanged = true;
         continue;
@@ -476,7 +499,7 @@ export class EpicReconciler {
         await this.#checkpoint(
           "failed",
           `attempt ${attempt} of this run belongs to ${marker.tick_id}, not ${tickID}; the state and the markers disagree`,
-          rows
+          rows,
         );
         return {
           terminal: true,
@@ -523,7 +546,7 @@ export class EpicReconciler {
       // the row. The marker is the durable evidence — adopt the attempt by
       // identity rather than dispatching over it.
       const orphaned = markers.filter(
-        (m) => m.tick_id === entry.tick_id && m.attempt > (row.attempt ?? 0)
+        (m) => m.tick_id === entry.tick_id && m.attempt > (row.attempt ?? 0),
       );
       if (orphaned.length > 0) {
         const latest = orphaned.reduce((a, b) => (a.attempt > b.attempt ? a : b));
@@ -701,7 +724,8 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
   async run(event: WorkflowEvent<EpicReconcilerParams>, step: WorkflowStep) {
     const params = event.payload;
     const env = this.env;
-    const pollMs = params.poll_interval_ms ?? env.TICFAC_RECONCILE_POLL_MS ?? DEFAULT_RECONCILE_POLL_MS;
+    const pollMs =
+      params.poll_interval_ms ?? env.TICFAC_RECONCILE_POLL_MS ?? DEFAULT_RECONCILE_POLL_MS;
 
     const store = new RunStateStore(contentsStore(env, params.project, params.branch), {
       run_id: params.run_id,
@@ -719,7 +743,7 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       contentsStore(env, params.project, params.branch),
       params.project,
       params.branch,
-      { maxParallel: params.max_parallel }
+      { maxParallel: params.max_parallel },
     );
 
     const executor = env.TICFAC_EXECUTOR; // undefined refuses dispatches, by design

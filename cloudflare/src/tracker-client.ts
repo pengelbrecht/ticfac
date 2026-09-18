@@ -45,9 +45,9 @@
  *    published, not merged locally.
  */
 
+import { type ContentsStore, contentsStore, type StoredFile } from "./git-contents";
 import { declaredMaxParallel, RUNNERS_CONFIG_PATH } from "./repo-config";
 import { TICK_RECORD_DIR } from "./tick-membership";
-import { contentsStore, type ContentsStore, type StoredFile } from "./git-contents";
 
 /**
  * The pinned manifest's own numbers, mirrored here because src/ cannot import
@@ -370,7 +370,7 @@ export class TrackerClient {
     store: ContentsStore,
     project: string,
     ref: string,
-    options: TrackerClientOptions = {}
+    options: TrackerClientOptions = {},
   ) {
     this.store = store;
     this.project = project;
@@ -455,8 +455,7 @@ export class TrackerClient {
       // unblocked epic that wins the pool still needs planning — the rule
       // `nextAction` applies to whatever the selection produced.
       const all = await this.#all();
-      const planningEpic =
-        tick.type === "epic" && !all.some((child) => child.parent === tick.id);
+      const planningEpic = tick.type === "epic" && !all.some((child) => child.parent === tick.id);
       return { ...tick, action: planningEpic ? "plan" : "implement" };
     }
     const ticks = await this.#all();
@@ -474,7 +473,7 @@ export class TrackerClient {
           const found = ticks.find((other) => other.id === b);
           return found === undefined || found.status === "closed";
         }) &&
-        !ticks.some((child) => child.parent === t.id)
+        !ticks.some((child) => child.parent === t.id),
     );
     epics.sort(readyOrder);
     if (epics.length > 0) return { ...epics[0], action: "plan" };
@@ -533,7 +532,7 @@ export class TrackerClient {
     // Non-epic children; closed ones are not part of the plan (tk --all is
     // not this surface).
     const tasks = all.filter(
-      (t) => t.parent === epicId && t.type !== "epic" && t.status !== "closed"
+      (t) => t.parent === epicId && t.type !== "epic" && t.status !== "closed",
     );
 
     if (tasks.length === 0) {
@@ -612,7 +611,9 @@ export class TrackerClient {
     while (remaining.size > 0) {
       const readyTasks = eligible
         .filter((t) => remaining.has(t.id) && (waveInDegree.get(t.id) ?? 0) === 0)
-        .sort((a, b) => (a.priority !== b.priority ? a.priority - b.priority : a.id < b.id ? -1 : 1));
+        .sort((a, b) =>
+          a.priority !== b.priority ? a.priority - b.priority : a.id < b.id ? -1 : 1,
+        );
       if (readyTasks.length === 0 && remainingVirtual.size === 0) {
         // Cycle: the waves computed so far stand, the rest is reported by
         // being absent, the same stop tk's loop takes.
@@ -670,8 +671,10 @@ export class TrackerClient {
     // Children of ANY status satisfy the skeleton.
     const rolesPresent = new Set(
       all
-        .filter((t) => t.parent === epicId && typeof t.role === "string" && (t.role as string) !== "")
-        .map((t) => t.role as string)
+        .filter(
+          (t) => t.parent === epicId && typeof t.role === "string" && (t.role as string) !== "",
+        )
+        .map((t) => t.role as string),
     );
     const missingProcess: string[] = [];
     for (const role of ["review", "closeout"]) {
@@ -684,7 +687,12 @@ export class TrackerClient {
     const gateLint: string[] = [];
     for (const t of tasks) {
       let gated = typeof t.requires === "string" && t.requires !== "";
-      if (!gated && isAwaitingHuman(t) && t.awaiting !== "checkpoint" && t.awaiting !== "escalation") {
+      if (
+        !gated &&
+        isAwaitingHuman(t) &&
+        t.awaiting !== "checkpoint" &&
+        t.awaiting !== "escalation"
+      ) {
         gated = true;
       }
       if (!gated) continue;
@@ -730,7 +738,7 @@ export class TrackerClient {
     t: Tick,
     openBlockers: Map<string, string[]>,
     dependents: Map<string, string[]>,
-    now: Date
+    now: Date,
   ): GraphTask {
     const task: GraphTask = {
       id: t.id,
@@ -771,11 +779,16 @@ export class TrackerClient {
   async claim(id: string, owner: string): Promise<TrackerWrite> {
     const all = await this.#all();
     const found = all.find((t) => t.id === id);
-    if (found === undefined) return { state: "refused", reason: "not_found", detail: `no tick ${id}` };
+    if (found === undefined)
+      return { state: "refused", reason: "not_found", detail: `no tick ${id}` };
     const width = await this.#width();
     if (typeof found.parent === "string" && found.parent !== "" && width.value > 0) {
       const inFlight = all.filter(
-        (t) => t.parent === found.parent && t.id !== id && t.type !== "epic" && t.status === "in_progress"
+        (t) =>
+          t.parent === found.parent &&
+          t.id !== id &&
+          t.type !== "epic" &&
+          t.status === "in_progress",
       );
       if (inFlight.length >= width.value) {
         return {
@@ -783,7 +796,10 @@ export class TrackerClient {
           reason: "wave_full",
           detail:
             `wave width ${width.value} is full: ${inFlight.length} implementer(s) already in flight under ` +
-            `${found.parent} (${inFlight.map((t) => t.id).sort().join(", ")}); the width is ` +
+            `${found.parent} (${inFlight
+              .map((t) => t.id)
+              .sort()
+              .join(", ")}); the width is ` +
             `${width.source}[orchestration].max_parallel`,
           tick: found,
         };
@@ -830,7 +846,7 @@ export class TrackerClient {
   async note(
     id: string,
     text: string,
-    options: { from?: "agent" | "human" } = {}
+    options: { from?: "agent" | "human" } = {},
   ): Promise<TrackerWrite> {
     const trimmed = text.trim();
     if (trimmed === "") {
@@ -855,7 +871,8 @@ export class TrackerClient {
   async close(id: string, options: { reason?: string } = {}): Promise<TrackerWrite> {
     const all = await this.#all();
     const found = all.find((t) => t.id === id);
-    if (found === undefined) return { state: "refused", reason: "not_found", detail: `no tick ${id}` };
+    if (found === undefined)
+      return { state: "refused", reason: "not_found", detail: `no tick ${id}` };
 
     if (found.type === "epic") {
       const openChildren = all.filter((t) => t.parent === id && t.status !== "closed");
@@ -865,7 +882,10 @@ export class TrackerClient {
           reason: "gate",
           detail:
             `epic ${id} has ${openChildren.length} open children ` +
-            `(${openChildren.map((t) => t.id).sort().join(", ")})`,
+            `(${openChildren
+              .map((t) => t.id)
+              .sort()
+              .join(", ")})`,
           tick: found,
         };
       }
@@ -965,7 +985,7 @@ export function trackerClient(
   env: Env,
   project: string,
   ref: string,
-  options: TrackerClientOptions = {}
+  options: TrackerClientOptions = {},
 ): TrackerClient {
   return new TrackerClient(contentsStore(env, project, ref), project, ref, options);
 }

@@ -20,36 +20,34 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import runStateContract from "../../contracts/ticfac-run-state.json";
-
-import { parseDefs, parseSchema, validate, type Defs } from "./json-schema";
-
 import {
-  EpicReconciler,
-  nextAttemptNumber,
-  planFrom,
-  roleOf,
-  skeletonRank,
-  tryOf,
   type AttemptExecutor,
   type AttemptHandle,
   type AttemptReport,
   type AttemptSpec,
   type AttemptStatus,
+  EpicReconciler,
   type IntegrationHost,
+  nextAttemptNumber,
+  planFrom,
+  roleOf,
+  skeletonRank,
+  tryOf,
 } from "../src/epic-reconciler";
+import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
 import {
-  provenance,
-  RunStateStore,
-  RUN_STATES,
-  RUN_STATE_SCHEMA_VERSION,
-  terminalState,
-  TICK_STATES,
-  checkpointPath,
   attemptPath,
   type Checkpoint,
+  checkpointPath,
+  provenance,
+  RUN_STATE_SCHEMA_VERSION,
+  RUN_STATES,
+  RunStateStore,
+  TICK_STATES,
+  terminalState,
 } from "../src/run-state-store";
-import { TrackerClient, encodeTick, type Tick } from "../src/tracker-client";
-import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
+import { encodeTick, type Tick, TrackerClient } from "../src/tracker-client";
+import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // ------------------------------------------------------------ the contract ---
 
@@ -63,7 +61,9 @@ const contractDefs: Defs = parseDefs(contract.$defs);
 function expectRecordValid(record: string, name: "checkpoint" | "attempt"): void {
   const schema = parseSchema(contract.schemas[name], "$");
   const errors = validate(schema, contractDefs, JSON.parse(record));
-  expect(errors, `${name} must satisfy the pinned run-state schema: ${errors.join("; ")}`).toEqual([]);
+  expect(errors, `${name} must satisfy the pinned run-state schema: ${errors.join("; ")}`).toEqual(
+    [],
+  );
 }
 
 // --------------------------------------------------------- the memory store ---
@@ -105,7 +105,7 @@ class MemoryContents implements ContentsStore {
   async update(
     path: string,
     sha: string,
-    input: { content: string; message: string }
+    input: { content: string; message: string },
   ): Promise<StoreWrite> {
     const file = this.files.get(path);
     if (file === undefined) return { state: "missing", detail: `${path} is not on this ref` };
@@ -149,8 +149,24 @@ function seedTracker(): Record<string, string> {
   add(tick({ id: "t02", title: "Second", parent: EPIC_ID }));
   add(tick({ id: "t03", title: "Third", parent: EPIC_ID }));
   add(tick({ id: "t04", title: "After first", parent: EPIC_ID, blocked_by: ["t01"] }));
-  add(tick({ id: "rev1", title: "Final review", parent: EPIC_ID, role: "review", blocked_by: ["t01", "t02", "t03", "t04"] }));
-  add(tick({ id: "clo1", title: "Close out", parent: EPIC_ID, role: "closeout", blocked_by: ["rev1"] }));
+  add(
+    tick({
+      id: "rev1",
+      title: "Final review",
+      parent: EPIC_ID,
+      role: "review",
+      blocked_by: ["t01", "t02", "t03", "t04"],
+    }),
+  );
+  add(
+    tick({
+      id: "clo1",
+      title: "Close out",
+      parent: EPIC_ID,
+      role: "closeout",
+      blocked_by: ["rev1"],
+    }),
+  );
   records[".tick/runners.toml"] = "[orchestration]\nmax_parallel = 2\n";
   return records;
 }
@@ -209,12 +225,18 @@ class FakeExecutor implements AttemptExecutor {
   }
 
   async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
-    return this.settled.has(this.#key(handle)) ? { state: "exited", exit_code: 0 } : { state: "running" };
+    return this.settled.has(this.#key(handle))
+      ? { state: "exited", exit_code: 0 }
+      : { state: "running" };
   }
 
   async collect(handle: AttemptHandle): Promise<AttemptReport> {
     return (
-      this.settled.get(this.#key(handle)) ?? { outcome: "failed", commits: 0, detail: "never settled" }
+      this.settled.get(this.#key(handle)) ?? {
+        outcome: "failed",
+        commits: 0,
+        detail: "never settled",
+      }
     );
   }
 
@@ -242,7 +264,7 @@ function reconcilerFor(
   contents: MemoryContents,
   executor?: AttemptExecutor,
   integration?: IntegrationHost,
-  maxParallel?: number
+  maxParallel?: number,
 ): EpicReconciler {
   const store = storeFor(contents);
   return new EpicReconciler({
@@ -263,14 +285,17 @@ async function readCheckpoint(contents: MemoryContents): Promise<Checkpoint | nu
 /** Runs passes until terminal — a test's driver, never the reconciler's own. */
 async function drive(
   pass: () => Promise<import("../src/epic-reconciler").PassResult>,
-  budget = 40
-): Promise<{ outcome: import("../src/epic-reconciler").PassResult; dispatched: Array<{ tick_id: string; attempt: number }> }> {
+  budget = 40,
+): Promise<{
+  outcome: import("../src/epic-reconciler").PassResult;
+  dispatched: Array<{ tick_id: string; attempt: number }>;
+}> {
   const seen: Array<{ tick_id: string; attempt: number }> = [];
   const trace: string[] = [];
   for (let i = 0; i < budget; i += 1) {
     const outcome = await pass();
     trace.push(
-      `${i}: ${outcome.state} (${outcome.reason}) dispatched=${JSON.stringify(outcome.dispatched)}`
+      `${i}: ${outcome.state} (${outcome.reason}) dispatched=${JSON.stringify(outcome.dispatched)}`,
     );
     seen.push(...outcome.dispatched);
     if (outcome.terminal) return { outcome, dispatched: seen };
@@ -285,17 +310,44 @@ describe("the plan, ported", () => {
     const contents = sharedContents();
     const graph = await clientFor(contents).graph(EPIC_ID);
     const plan = planFrom(graph!);
-    expect(plan.map((entry) => entry.tick_id)).toEqual(["t01", "t02", "t03", "t04", "rev1", "clo1"]);
+    expect(plan.map((entry) => entry.tick_id)).toEqual([
+      "t01",
+      "t02",
+      "t03",
+      "t04",
+      "rev1",
+      "clo1",
+    ]);
     expect(skeletonRank("implement-tick")).toBeLessThan(skeletonRank("review-epic"));
     expect(skeletonRank("review-epic")).toBeLessThan(skeletonRank("closeout-epic"));
-    expect(roleOf({ id: "x", title: "", priority: 0, status: "open", agent_ready: true, role: "review" })).toBe("review-epic");
-    expect(roleOf({ id: "x", title: "", priority: 0, status: "open", agent_ready: true })).toBe("implement-tick");
+    expect(
+      roleOf({
+        id: "x",
+        title: "",
+        priority: 0,
+        status: "open",
+        agent_ready: true,
+        role: "review",
+      }),
+    ).toBe("review-epic");
+    expect(roleOf({ id: "x", title: "", priority: 0, status: "open", agent_ready: true })).toBe(
+      "implement-tick",
+    );
   });
 
   it("attempt numbers are run-wide identity, and a tick's try is its own count", () => {
     expect(nextAttemptNumber([{ attempt: 1 }, { attempt: 2 }])).toBe(3);
     expect(nextAttemptNumber([{ attempt: 4 }, { attempt: 2 }])).toBe(5);
-    expect(tryOf([{ attempt: 1, tick_id: "t01" }, { attempt: 3, tick_id: "t02" }], "t01", 3)).toBe(2);
+    expect(
+      tryOf(
+        [
+          { attempt: 1, tick_id: "t01" },
+          { attempt: 3, tick_id: "t02" },
+        ],
+        "t01",
+        3,
+      ),
+    ).toBe(2);
   });
 });
 
@@ -345,11 +397,10 @@ describe("the run state store, against the pinned contract", () => {
     // blob sha after the ref moved is a REFUSAL — the compare-and-swap the
     // contract's `cas.mechanisms` name, never a lost update.
     const before = (await contents.read(checkpointPath(RUN_ID)))!;
-    const direct = await contents.update(
-      checkpointPath(RUN_ID),
-      "blob-totally-stale",
-      { content: before.content, message: "a stale-sha update" }
-    );
+    const direct = await contents.update(checkpointPath(RUN_ID), "blob-totally-stale", {
+      content: before.content,
+      message: "a stale-sha update",
+    });
     expect(direct.state).toBe("conflict");
     expect((await contents.read(checkpointPath(RUN_ID)))!.content).toBe(before.content);
   });
@@ -383,10 +434,12 @@ describe("the run state store, against the pinned contract", () => {
     // The mirrored vocabularies ARE the pinned bundle's enums, in its order —
     // a bundle bump that does not pass through the constants fails here.
     expect([...RUN_STATES]).toEqual(
-      (contract.schemas.checkpoint as { properties: { state: { enum: string[] } } }).properties.state.enum
+      (contract.schemas.checkpoint as { properties: { state: { enum: string[] } } }).properties
+        .state.enum,
     );
     expect([...TICK_STATES]).toEqual(
-      (contract.$defs as { tick_state: { properties: { state: { enum: string[] } } } }).tick_state.properties.state.enum
+      (contract.$defs as { tick_state: { properties: { state: { enum: string[] } } } }).tick_state
+        .properties.state.enum,
     );
   });
 });
@@ -556,15 +609,14 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     // row: the checkpoint on the ref still says both ticks are ready.
     const stale = await readCheckpoint(contents);
     const demoted = stale!.ticks!.map((row) =>
-      row.tick_id === "t01" ? { tick_id: "t01", state: "ready" as const } : row
+      row.tick_id === "t01" ? { tick_id: "t01", state: "ready" as const } : row,
     );
     const file = (await contents.read(checkpointPath(RUN_ID)))!;
     const edited = JSON.stringify({ ...JSON.parse(file.content), ticks: demoted }, null, 2);
-    await contents.update(
-      checkpointPath(RUN_ID),
-      file.sha,
-      { content: edited, message: "simulate the lost row" }
-    );
+    await contents.update(checkpointPath(RUN_ID), file.sha, {
+      content: edited,
+      message: "simulate the lost row",
+    });
 
     const resumed = reconcilerFor(contents, executor, integration);
     const resume = await resumed.reconcilePass();
@@ -608,7 +660,11 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     executor.finish("t02", 2, { outcome: "done", commits: 1, detail: "pushed" });
     // ...and so are the ones the resumed pass itself dispatched.
     for (const dispatch of pass.dispatched) {
-      executor.finish(dispatch.tick_id, dispatch.attempt, { outcome: "done", commits: 1, detail: "pushed" });
+      executor.finish(dispatch.tick_id, dispatch.attempt, {
+        outcome: "done",
+        commits: 1,
+        detail: "pushed",
+      });
     }
 
     const run = await drive(async () => {
@@ -743,16 +799,15 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
         if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
       }
       if (Date.now() > deadline) {
-        throw new Error(`timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`);
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
       }
       await scheduler.wait(20);
     }
 
     expect(checkpoint?.state).toBe("completed");
-    expectRecordValid(
-      (await contents.read(checkpointPath(runID)))!.content,
-      "checkpoint"
-    );
+    expectRecordValid((await contents.read(checkpointPath(runID)))!.content, "checkpoint");
     const markers = await contents.list(`.ticfac/runs/${runID}/attempts`);
     expect(markers.length).toBe(6);
     for (const path of markers) {
