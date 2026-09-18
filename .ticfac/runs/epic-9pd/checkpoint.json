@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 281,
-  "state": "failed",
-  "reason": "sqx did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: sqx reported 1 finding(s) nobody has triaged — \"Close-out CI read errors are typed as PR refusals (closeout_pr_unmet) in both gates\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding 9pd 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35 --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding 9pd 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35 --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding 9pd 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35 --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 275d9dcee5c9bd0fc4f5bbce33ccd2fd7172ebcec7f228dd9cda8e111b97cf35 under .ticfac/runs/epic-9pd/findings/ on origin",
-  "updated_at": "2026-09-18T06:06:19Z",
+  "sequence": 282,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-18T06:10:55Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -161,7 +161,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/9pd",
-    "source_sha": "26a1980b00357c375c90563ba00096343a1f2317",
+    "source_sha": "7a253872f8b2afc322ceeface10325054b198b8b",
     "integration_ref": "refs/heads/epic/9pd",
     "phase": "worker",
     "executor": null,
