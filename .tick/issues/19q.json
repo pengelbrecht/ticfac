@@ -1,0 +1,13 @@
+{
+  "id": "19q",
+  "title": "A tick that moves what the gate points at can never pass its own gate",
+  "description": "The gate's command is read from r.opts.GateConfig, which is the RUN'S CHECKOUT (.tick/runners.toml on main), while the gate RUNS in a worktree at the merged commit. So the check that judges a tree comes from a different tree.\n\nThat is usually harmless and arguably right - the gate is the run's, not the tick's, and letting a tick rewrite its own gate would let it weaken the thing judging it. It becomes a deadlock the moment a tick legitimately changes what the gate references. Phase 4's l9n moved cloud/factory to cloudflare/ and the ts gate kept running 'cd cloud/factory' from main: 'No such file or directory', twice, on a tree where the move was complete and both suites were green.\n\nThe general shape: a tick may not move, rename or restructure anything the declared gate names, because the gate will still be looking at the old location until the tick's own change reaches main - which it cannot, because it cannot pass the gate.\n\nCandidate repairs, none free. Read the gate config from the MERGED TREE, which fixes the deadlock and hands a tick the ability to weaken its own gate - the evidence fingerprint already includes context_manifest_digest, so at least a changed gate is visible rather than silent. Or keep reading it from the run's checkout and give the run a way to say 'this tick changes the gate, re-read it', which is narrower and needs a person to authorise. Or declare gate commands in a layout-independent way so a move does not touch them.\n\nWorked around for now by making the ts gate try both layouts (see the entry in runners.toml), which is honest about being a transition measure and should be removed once the move reaches main.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A tick that moves a path the declared gate references can pass its gate, without a tick being able to silently weaken the gate that judges it. The chosen repair is recorded with its trade-off, and a test covers a tick that relocates a gated directory.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:07:09.178633Z",
+  "updated_at": "2026-09-18T16:07:09.178633Z"
+}

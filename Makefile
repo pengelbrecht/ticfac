@@ -61,7 +61,7 @@ gate:
 # commands run serially, and CI runs it as its own job beside the Go one for no
 # wall clock at all. This target covers CONTRACTS AND TYPES, not behaviour.
 ts-gate:
-	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit
+	{ cd cloudflare 2>/dev/null || cd cloud/factory; } && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:
