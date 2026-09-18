@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 14,
+  "sequence": 15,
   "state": "failed",
-  "reason": "the integrated gate on e77ef587c1f7 did not pass for l9n: ts (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/ncv, so the repair is to fix the check or the tree, push it to epic/ncv, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
-  "updated_at": "2026-09-18T16:06:03Z",
+  "reason": "l9n did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the integrated gate on e77ef587c1f7 did not pass for l9n: ts (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/ncv, so the repair is to fix the check or the tree, push it to epic/ncv, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+  "updated_at": "2026-09-18T16:06:08Z",
   "ticks": [
     {
       "tick_id": "l9n",
