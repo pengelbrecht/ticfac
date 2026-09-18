@@ -7,11 +7,12 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "l9n"
+    "l9n",
+    "xo2"
   ],
   "parent": "ncv",
   "acceptance_criteria": "ticfac dispatches a tick to a Cloudflare sandbox through an executor implementing the same four operations as the local ones, and the attempt's records are indistinguishable in shape from a local attempt's. cloud/worker stays in ticks and the ticks.sh board is verified absent from the deployment. The 5bp ownership decision is restated or replaced explicitly.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:27.094125Z",
-  "updated_at": "2026-09-18T11:24:27.094125Z"
+  "updated_at": "2026-09-18T14:06:01.63078Z"
 }
