@@ -32,8 +32,8 @@ const SCHEMA_IDS: Record<string, string> = {
   job_status: "ticfac.job-status.v1",
   cancel_ack: "ticfac.cancel-ack.v1",
   job_result: "ticfac.job-result.v1",
-  role_result: "ticfac.role-result.v1",
-  evidence: "ticfac.evidence.v1",
+  role_result: "ticfac.role-result.v2",
+  evidence: "ticfac.evidence.v3",
 };
 
 /** The one golden example that is SPEC §4.3's printed JobSpec byte for byte. */
@@ -64,7 +64,11 @@ function def(name: string): Schema {
 
 describe("the job protocol contract is what a consumer can pin", () => {
   it("declares its version and name", () => {
-    expect(contract.schema_version).toBe(1);
+    // 3, not 1: the contract's own schema_version moved with the closed-record
+    // bumps of 4.1.0 (provenance gains tier) and 5.1.0 (provenance gains the
+    // substrate). A consumer that kept asserting 1 was asserting it had not
+    // adopted them.
+    expect(contract.schema_version).toBe(3);
     expect(contract.contract).toBe("ticfac.job-protocol");
   });
 

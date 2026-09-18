@@ -131,7 +131,10 @@ const schemas: Record<string, Schema> = Object.fromEntries(
 
 describe("the .ticfac/ run-state contract identifies itself", () => {
   it("is the contract this reader was written against", () => {
-    expect(contract.schema_version).toBe(1);
+    // 3: this contract carries its own copy of $defs.provenance, so it moved
+    // in lockstep with job-protocol.json through the same two closed-record
+    // bumps. A reader still asserting 1 was asserting it had not adopted them.
+    expect(contract.schema_version).toBe(3);
     expect(contract.contract).toBe("ticfac.run_state");
     expect(contract.spec_sections).toContain("10.4");
     expect(contract.spec_sections).toContain("4.2");
@@ -281,6 +284,14 @@ describe("every committed record carries the envelope", () => {
 
   it("closes provenance over the fields §10.1 lists", () => {
     const provenance = defs.provenance;
+    // Seventeen, not the fourteen this reader was written against. The three
+    // it was missing are the closed-record bumps it never adopted:
+    // `substrate_protocol` and `substrate_server_version` (the herdr protocol
+    // and server version a dispatch ran under), and `tier` (the rung of the
+    // runners-config ladder that routed the model, 4.1.0). Each is
+    // required-and-nullable for the same reason the rest are: "there was no
+    // tier" and "the tier was not recorded" are different claims, and only the
+    // first is a null a reader may trust.
     expect(provenance.required).toEqual([
       "run_id",
       "tick_id",
@@ -292,7 +303,10 @@ describe("every committed record carries the envelope", () => {
       "executor",
       "workspace_id",
       "backend",
+      "substrate_protocol",
+      "substrate_server_version",
       "role",
+      "tier",
       "profile_digest",
       "model",
       "context_manifest_digest",
