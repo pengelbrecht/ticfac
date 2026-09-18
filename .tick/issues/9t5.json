@@ -2,7 +2,8 @@
   "id": "9t5",
   "title": "Close out Phase 3: retro, and say whether ticfac is ready to run unattended",
   "description": "Run the epic-close retro.\n\nThen answer the question Phase 3 exists to settle, in plain words and with evidence: can ticfac drive an epic unattended, without a person watching for stalls?\n\nThe bar is the one the pwp run failed. During that run the orchestrator died three times, could not say whether it was alive, lost every superseded attempt's reasoning, and left a role unable to write its own deliverable — and a person caught each of those, not a mechanism. Phase 3 is done when the mechanisms catch them.\n\nSay plainly what is still carried by a human, if anything. An honest residual list is worth more than a claim of completeness.",
-  "status": "open",
+  "notes": "2026-09-18 13:16 - Completed by the operator, not by the close-out job, because the close-out cannot complete itself on this repository. Recorded as defect 9da.\n\nTHE DEADLOCK: ticfac's durable run state lives in .ticfac/ ON the integration branch, and the close-out gates on CI of the epic PR whose head IS that branch. Every resume writes a checkpoint, pushes it, moves the PR head, then asks the forge for CI on a commit created seconds earlier that has no checks yet - and refuses with closeout_ci_absent. Observed three times: heads cde6d962 -\u003e 73fdbb59 -\u003e ae0089e75, each refused, the last four commits on the branch all 'update checkpoint.json'. CI was green the whole time on whichever head stood still long enough. The act of gating rewrote the thing being gated.\n\nWHAT WAS DONE INSTEAD: the run was stopped so the head would settle, CI ran to green on ae0089e75dc7 (contracts, go, sandbox - all pass), and epic PR #3 was merged to main as 1e12cd5 through the PR, which is what the .tick/config.md rule asks for: the merge is gated on green CI of the head being merged. The rule's substance is satisfied; what is missing is that a JOB did it rather than a person.\n\nSTILL OWED, and not done by this note:\n- the epic retro\n- the close-out's second duty: fleshing the next feasible epic (ncv, Phase 4: Cloudflare as a compatibility host) into child ticks. ncv has zero children and is blocked by tw6 and xo2.\n- 9da must be fixed before any future epic can close itself on a repository that declares the PR + CI rule. Phase 3 is the first epic to hit it because it is the first to run close-out under that rule with run state on the branch.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -13,5 +14,7 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-15T07:35:44.926692Z",
-  "updated_at": "2026-09-15T07:35:44.926692Z"
+  "updated_at": "2026-09-18T11:16:42.95136Z",
+  "closed_at": "2026-09-18T11:16:42.95136Z",
+  "closed_reason": "Phase 3 merged to main as 1e12cd5 through epic PR #3 with CI green (contracts, go, sandbox). Closed by the operator because the close-out job cannot complete itself: defect 9da, the run's own checkpoint writes move the PR head it gates CI on. The retro and the Phase 4 planning the close-out also owes are recorded as outstanding on the tick."
 }
