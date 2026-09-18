@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 337,
-  "state": "gating",
-  "reason": "running the integrated gate for n4h on 2c54aeab2847",
-  "updated_at": "2026-09-18T08:41:32Z",
+  "sequence": 338,
+  "state": "publishing",
+  "reason": "closing n4h behind the integrated gate on 2c54aeab2847",
+  "updated_at": "2026-09-18T08:50:14Z",
   "ticks": [
     {
       "tick_id": "0z0",
