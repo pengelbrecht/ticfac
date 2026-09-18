@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
@@ -57,7 +58,31 @@ func TestAReleaseNeverRecordsTheOperatorIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	settled, err := settler.Settle(context.Background(), "a1", 1, who)
+	// WAITED for, not sampled. The precondition is that the attempt reads
+	// LOST, and stopEverything above is what makes it so — but the kill has to
+	// land in the operating system before a fresh reconciler's probe agrees,
+	// and Settle refuses a still-live attempt by design ("a live attempt is
+	// cancelled, never released"). On an idle machine the kill wins that race
+	// every time; under the gate's load it does not, and this test failed on
+	// the integrated gate for tick sqx with the refusal rather than the
+	// verdict — sqx having changed nothing but close-out CI gating.
+	//
+	// Retrying while the refusal is "still running" waits for the precondition
+	// the test set up. It does not weaken the assertion: any other error still
+	// fails immediately, and everything this test is actually about — what the
+	// settlement RECORDS — is unchanged below.
+	var settled *Settlement
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		settled, err = settler.Settle(context.Background(), "a1", 1, who)
+		if err == nil || !strings.Contains(err.Error(), "the executor can still address it") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a1's attempt still reads running 60s after its supervisor was killed: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 	if err != nil {
 		t.Fatalf("settle a1's lost attempt: %v", err)
 	}
