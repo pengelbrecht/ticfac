@@ -1,0 +1,13 @@
+{
+  "id": "593",
+  "title": "A CI read error is typed as a PR refusal in both close-out gates",
+  "description": "When the forge cannot READ CI on the epic PR - network, credential, rate limit - both the 0iz admission and the sqx close gate refuse with RefusedCloseoutPR, whose message is 'no PR, or one the forge could not open or read'. The PR exists and is fine; what failed is reaching the forge. The refusal sends the next repair at the PR when the repair is the network or the credential.\n\nAppendix A #9 is the standard this misses: each failure class gets its own type, because the type is what tells the next actor where to look. The run already honours this elsewhere - sqx itself split closeout_ci_failed_on_close from the admission's refusal precisely so the two point at different writers.\n\nA distinct reason (closeout_ci_unreadable, or similar) in BOTH gates is the repair. The sqx worker left it deliberately rather than fixing one gate and leaving the two asymmetric, which was the right call: the two gates should be changed together or not at all.\n\ndiscovered_from run-epic-9pd/tick-sqx/attempt-28",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A forge that cannot be read yields a refusal typed apart from a missing or unopenable PR, in both the close-out admission and the close gate, and its message names reachability rather than the PR. The two gates stay symmetrical. A test covers a readable PR whose CI cannot be read.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T06:10:13.525311Z",
+  "updated_at": "2026-09-18T06:10:13.525311Z"
+}
