@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 340,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for h0f",
-  "updated_at": "2026-09-18T08:50:48Z",
+  "sequence": 341,
+  "state": "publishing",
+  "reason": "closing h0f behind its validated review-epic answer",
+  "updated_at": "2026-09-18T08:52:14Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -69,7 +69,7 @@
     },
     {
       "tick_id": "h0f",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 14
     },
     {
