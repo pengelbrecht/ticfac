@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 15,
+  "sequence": 16,
   "state": "failed",
-  "reason": "l9n did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the integrated gate on e77ef587c1f7 did not pass for l9n: ts (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/ncv, so the repair is to fix the check or the tree, push it to epic/ncv, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
-  "updated_at": "2026-09-18T16:06:08Z",
+  "reason": "8cdaecc849b0 of main does not fold into epic/ncv: .tick/runners.toml, Makefile. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
+  "updated_at": "2026-09-18T16:08:49Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -47,7 +47,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ncv",
-    "source_sha": "db7fcde2c814b1493e5f04ad9345359c3669c64b",
+    "source_sha": "47257c22edf01205bec445ed91ab6024208f1a26",
     "integration_ref": "refs/heads/epic/ncv",
     "phase": "worker",
     "executor": null,
@@ -57,7 +57,7 @@
     "tier": null,
     "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
     "model": null,
-    "context_manifest_digest": "sha256:f6cf7266ab9519d1464248a45d7e16c4b0ffbb4159c28778a5083ebd0b8d6421",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
     "substrate_protocol": null,
     "substrate_server_version": null
   }
