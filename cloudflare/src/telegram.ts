@@ -23,15 +23,9 @@
 
 import { TELEGRAM_WEBHOOK_PATH } from "./auth";
 import { optionOutcome, textOutcome } from "./free-text";
-import { withContext, type MessageContext } from "./message-context";
+import { type MessageContext, withContext } from "./message-context";
 
-import type {
-  MessageRef,
-  Outcome,
-  PendingEntry,
-  Question,
-  QuestionOption,
-} from "./run-room";
+import type { MessageRef, Outcome, PendingEntry, Question, QuestionOption } from "./run-room";
 
 export type TelegramWebhookUpdate = {
   update_id?: number;
@@ -176,7 +170,7 @@ export function telegramConfig(env: TelegramRuntimeEnv): TelegramConfig {
  */
 export function isPairedTelegramUpdate(
   update: TelegramWebhookUpdate,
-  pairing: TelegramPairing
+  pairing: TelegramPairing,
 ): boolean {
   const userID = pairing.user_id?.trim() ?? "";
   const chatID = pairing.chat_id?.trim() ?? "";
@@ -184,8 +178,7 @@ export function isPairedTelegramUpdate(
 
   if (update.message !== undefined) {
     return (
-      String(update.message.from?.id ?? "") === userID &&
-      String(update.message.chat.id) === chatID
+      String(update.message.from?.id ?? "") === userID && String(update.message.chat.id) === chatID
     );
   }
   const message = update.callback_query?.message;
@@ -209,14 +202,14 @@ export type TelegramAnswer = {
  */
 export function parseTelegramAnswer(
   update: TelegramWebhookUpdate,
-  entry: Pick<PendingEntry, "id" | "kind" | "question" | "ref">
+  entry: Pick<PendingEntry, "id" | "kind" | "question" | "ref">,
 ): TelegramAnswer | null {
   if (update.callback_query !== undefined) {
     const callback = update.callback_query;
     const message = callback.message;
     if (message === undefined || callback.data === undefined) return null;
     const parts = callback.data.split(":");
-    if (parts.length !== 3 || parts[0] !== "q" && parts[0] !== "r") return null;
+    if (parts.length !== 3 || (parts[0] !== "q" && parts[0] !== "r")) return null;
 
     if (parts[0] === "q" && parts[1] !== entry.id) return null;
     if (
@@ -266,20 +259,22 @@ export function parseTelegramAnswer(
 export async function deliverTelegramQuestion(
   env: TelegramRuntimeEnv,
   entry: Pick<PendingEntry, "id" | "question">,
-  routing?: TelegramRouting
+  routing?: TelegramRouting,
 ): Promise<MessageRef> {
   const config = telegramConfig(env);
   const question = entry.question;
   const keyboard = questionKeyboard(entry.id, question);
   const useQuestionID = keyboard.every((row) =>
-    row.every((button) => new TextEncoder().encode(button.callback_data).length <= CALLBACK_LIMIT)
+    row.every((button) => new TextEncoder().encode(button.callback_data).length <= CALLBACK_LIMIT),
   );
   const sent = await telegramCall<{ message_id: number }>(config, "sendMessage", {
     chat_id: config.chat_id,
     ...threadField(routing),
     text: renderQuestion(question, routing?.context),
     parse_mode: "HTML",
-    ...(useQuestionID && keyboard.length > 0 ? { reply_markup: { inline_keyboard: keyboard } } : {}),
+    ...(useQuestionID && keyboard.length > 0
+      ? { reply_markup: { inline_keyboard: keyboard } }
+      : {}),
     ...(keyboard.length === 0 ? { reply_markup: { force_reply: true } } : {}),
   });
   const ref: MessageRef = {
@@ -305,7 +300,7 @@ export async function settleTelegramQuestion(
   env: TelegramRuntimeEnv,
   entry: Pick<PendingEntry, "question" | "ref">,
   outcome: Outcome,
-  routing?: TelegramRouting
+  routing?: TelegramRouting,
 ): Promise<void> {
   const config = telegramConfig(env);
   const ref = entry.ref;
@@ -332,7 +327,7 @@ export async function sendTelegramReport(
   env: TelegramRuntimeEnv,
   text: string,
   ref?: MessageRef,
-  routing?: TelegramRouting
+  routing?: TelegramRouting,
 ): Promise<MessageRef> {
   const config = telegramConfig(env);
   const sent = await telegramCall<{ message_id: number }>(config, "sendMessage", {
@@ -364,7 +359,7 @@ export type InlineButton = { text: string; callback_data: string };
 export async function sendTelegramHTML(
   env: TelegramRuntimeEnv,
   html: string,
-  options: { topic_id?: string; keyboard?: InlineButton[][] } = {}
+  options: { topic_id?: string; keyboard?: InlineButton[][] } = {},
 ): Promise<MessageRef> {
   const config = telegramConfig(env);
   const keyboard = options.keyboard ?? [];
@@ -388,14 +383,15 @@ export async function editTelegramHTML(
   env: TelegramRuntimeEnv,
   ref: { channel_id?: string; message_id?: string },
   html: string,
-  options: { keyboard?: InlineButton[][] } = {}
+  options: { keyboard?: InlineButton[][] } = {},
 ): Promise<void> {
   const config = telegramConfig(env);
   if (ref.message_id === undefined || ref.message_id === "") return;
   // No thread field on an edit: a message id already names the message, topic
   // and all, and Telegram rejects the pair.
   await telegramCall(config, "editMessageText", {
-    chat_id: ref.channel_id === undefined || ref.channel_id === "" ? config.chat_id : ref.channel_id,
+    chat_id:
+      ref.channel_id === undefined || ref.channel_id === "" ? config.chat_id : ref.channel_id,
     message_id: Number(ref.message_id),
     text: html,
     parse_mode: "HTML",
@@ -407,7 +403,7 @@ export async function editTelegramHTML(
 export async function answerTelegramCallback(
   env: TelegramRuntimeEnv,
   callbackID: string,
-  text?: string
+  text?: string,
 ): Promise<void> {
   const config = telegramConfig(env);
   await telegramCall(config, "answerCallbackQuery", {
@@ -472,7 +468,7 @@ export async function assertTelegramPrivacyMode(env: TelegramRuntimeEnv): Promis
     throw new Error(
       "this bot has group privacy mode DISABLED, so it would be delivered every message in " +
         "every group it is in. Turn it back on in @BotFather (/setprivacy -> Enable), remove " +
-        "and re-add the bot to the chat, then register the webhook again."
+        "and re-add the bot to the chat, then register the webhook again.",
     );
   }
 }
@@ -494,7 +490,7 @@ export async function assertTelegramPrivacyMode(env: TelegramRuntimeEnv): Promis
  */
 export async function registerTelegramWebhook(
   env: TelegramRuntimeEnv,
-  baseURL: string
+  baseURL: string,
 ): Promise<TelegramWebhookRegistration> {
   const config = telegramConfig(env);
   const origin = baseURL.trim().replace(/\/+$/, "");
@@ -537,10 +533,18 @@ export function telegramCallbackText(answeredBy: string): string {
   return `Already answered by ${answeredBy}.`;
 }
 
-function questionKeyboard(questionID: string, question: Question): { text: string; callback_data: string }[][] {
+function questionKeyboard(
+  questionID: string,
+  question: Question,
+): { text: string; callback_data: string }[][] {
   if (question.options === undefined || question.options.length === 0) return [];
   return question.options.map((option, index) => [
-    { text: option.label, callback_data: questionID.startsWith("r:") ? `r:${questionID.slice(2)}:${index}` : `q:${questionID}:${index}` },
+    {
+      text: option.label,
+      callback_data: questionID.startsWith("r:")
+        ? `r:${questionID.slice(2)}:${index}`
+        : `q:${questionID}:${index}`,
+    },
   ]);
 }
 
@@ -562,14 +566,15 @@ export function renderQuestion(question: Question, context?: MessageContext): st
       lines.push(`• <b>${escapeHTML(option.label)}</b> — ${escapeHTML(description)}`);
     }
   }
-  if ((question.options ?? []).length === 0) lines.push("\n<i>Reply to this message with your answer.</i>");
+  if ((question.options ?? []).length === 0)
+    lines.push("\n<i>Reply to this message with your answer.</i>");
   return lines.join("\n");
 }
 
 export function renderOutcome(
   question: Question,
   outcome: Outcome,
-  context?: MessageContext
+  context?: MessageContext,
 ): string {
   const heading =
     outcome.status === "answered"
@@ -580,12 +585,17 @@ export function renderOutcome(
           ? "Timed out"
           : "Resolved";
   const lines = [renderQuestion(question, context), `<b>${heading}</b>`];
-  if (outcome.text !== undefined && outcome.text !== "") lines[1] += ` — ${escapeHTML(outcome.text)}`;
+  if (outcome.text !== undefined && outcome.text !== "")
+    lines[1] += ` — ${escapeHTML(outcome.text)}`;
   return lines.join("\n\n");
 }
 
 export function escapeHTML(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 async function telegramCall<T>(config: TelegramConfig, method: string, body: unknown): Promise<T> {

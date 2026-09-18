@@ -1,25 +1,21 @@
 import { describe, expect, it } from "vitest";
 
+import { MAX_WAVE_LEGS, WAVE_LEG_MS, waveSpawnBudget } from "../src/run-workflow";
 import {
-  MAX_WAVE_LEGS,
-  WAVE_LEG_MS,
-  waveSpawnBudget,
-} from "../src/run-workflow";
-import {
+  COLD_START_BENCHMARK_MS,
   DEFAULT_CONFIRM_TIMEOUT_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_SALVAGE_GRACE_MS,
   DEFAULT_WAIT_TIMEOUT_MS,
   FANOUT_DEGRADATION_FACTOR,
-  COLD_START_BENCHMARK_MS,
   probeTimeoutMs,
 } from "../src/worker-dispatch";
 import {
-  STEP_WORK_BUDGET_MS,
-  WORKFLOW_STEP_TIMEOUT_MS,
   fitsInStep,
+  STEP_WORK_BUDGET_MS,
   shareStepBudget,
   stepBudget,
+  WORKFLOW_STEP_TIMEOUT_MS,
 } from "../src/workflow-limits";
 
 /**
@@ -116,7 +112,7 @@ describe("probeTimeoutMs", () => {
   it("keeps tick 7go's derivation at the widest measured width", () => {
     expect(probeTimeoutMs(5)).toBe(DEFAULT_PROBE_TIMEOUT_MS);
     expect(probeTimeoutMs(5)).toBe(
-      Math.ceil(COLD_START_BENCHMARK_MS * FANOUT_DEGRADATION_FACTOR * 1.2)
+      Math.ceil(COLD_START_BENCHMARK_MS * FANOUT_DEGRADATION_FACTOR * 1.2),
     );
   });
 

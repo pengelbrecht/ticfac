@@ -41,8 +41,10 @@ afterAll(() => {
   else env.FACTORY_TOKEN_HASH = originalHash;
 });
 
-const get = (path: string, headers: Record<string, string> = { Authorization: `Bearer ${token}` }) =>
-  SELF.fetch(`${BASE}${path}`, { headers });
+const get = (
+  path: string,
+  headers: Record<string, string> = { Authorization: `Bearer ${token}` },
+) => SELF.fetch(`${BASE}${path}`, { headers });
 
 async function recordedRun(runID: string): Promise<void> {
   await insertRun(env.DB, {

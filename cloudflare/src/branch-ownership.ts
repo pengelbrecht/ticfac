@@ -47,22 +47,21 @@
  * and reads like the deliberate act it is.
  */
 
-import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import {
   BRANCH_CLAIM_PATH,
-  CI_BRANCHES_PATH,
+  type BranchRecord,
   branchRecord,
+  CI_BRANCHES_PATH,
   forgetBranchRecord,
   isBranchRecordOwner,
   listBranchRecords,
   listUnrecordedBranches,
   recordBranch,
-  type BranchRecord,
 } from "./branch-registry";
-import { epicOfBranch, factoryOwnedBranch, FACTORY_BRANCH_NAMESPACES } from "./ci-remediation";
-import { sanitizeUntrustedLine } from "./untrusted-text";
-
+import { epicOfBranch, FACTORY_BRANCH_NAMESPACES, factoryOwnedBranch } from "./ci-remediation";
+import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
+import { sanitizeUntrustedLine } from "./untrusted-text";
 
 export { BRANCH_CLAIM_PATH, CI_BRANCHES_PATH };
 
@@ -121,7 +120,7 @@ export async function claimBranch(env: Env, request: Request): Promise<BranchCla
       "branch_not_claimable",
       `branch must name a branch inside ${FACTORY_BRANCH_NAMESPACES.join(", ")}; a run may ` +
         "record what it created in the factory's own namespaces and nothing else — recording " +
-        "another branch would be a container widening what this factory may push to"
+        "another branch would be a container widening what this factory may push to",
     );
   }
 
@@ -141,7 +140,7 @@ export async function claimBranch(env: Env, request: Request): Promise<BranchCla
       400,
       "branch_outside_epic",
       `${branch} belongs to epic ${JSON.stringify(epic)}, and run ${run.run_id} is working on ` +
-        `${JSON.stringify(run.epic)}; a run records the branches of its own epic`
+        `${JSON.stringify(run.epic)}; a run records the branches of its own epic`,
     );
   }
 
@@ -171,7 +170,7 @@ export async function claimBranch(env: Env, request: Request): Promise<BranchCla
       503,
       "branch_not_recorded",
       `${branch} could not be recorded; retry — until it is recorded, CI remediation will ` +
-        "refuse to act on this branch and report it in the daily digest"
+        "refuse to act on this branch and report it in the daily digest",
     );
   }
   return { ok: true, record: stored, created };
@@ -214,7 +213,7 @@ function recordView(row: BranchRecord): Record<string, unknown> {
 export async function branchOwnershipRoute(
   request: Request,
   env: Env,
-  segments: readonly string[]
+  segments: readonly string[],
 ): Promise<Response> {
   if (segments.length !== 0) {
     return json({ error: "not_found", detail: request.url }, 404);
@@ -225,7 +224,7 @@ export async function branchOwnershipRoute(
     if (project === "") {
       return json(
         { error: "invalid_request", detail: "name the project: ?project=<owner>/<repo>" },
-        400
+        400,
       );
     }
     const since = new Date(Date.now() - OPERATOR_UNRECORDED_SINCE_MS).toISOString();
@@ -241,7 +240,7 @@ export async function branchOwnershipRoute(
         // which asks across every project the factory serves.
         unrecorded: unanswered.filter((row) => row.project === project),
       },
-      200
+      200,
     );
   }
 
@@ -280,7 +279,7 @@ export async function branchOwnershipRoute(
             }
           : { detail: "no record for that branch; nothing was deleted" }),
       },
-      forgotten ? 200 : 404
+      forgotten ? 200 : 404,
     );
   }
 
@@ -292,7 +291,7 @@ export async function branchOwnershipRoute(
           'owner must be "factory" (this factory created the branch and may drive it to green) ' +
           'or "human" (a person owns it; the factory reviews it and never pushes to it)',
       },
-      400
+      400,
     );
   }
   // The name is checked for `factory` only. A person may record ANY branch as
@@ -310,7 +309,7 @@ export async function branchOwnershipRoute(
           `${FACTORY_BRANCH_NAMESPACES.join(", ")}; the dispatcher refuses it on the name ` +
           'before it reads any record, so recording it as "factory" would change nothing',
       },
-      400
+      400,
     );
   }
 
@@ -345,6 +344,6 @@ export async function branchOwnershipRoute(
               "first if the existing answer is wrong",
           }),
     },
-    created ? 201 : 409
+    created ? 201 : 409,
   );
 }

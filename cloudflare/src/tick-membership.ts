@@ -49,9 +49,8 @@
  * change fails a test rather than turning every verdict into `unreadable`.
  */
 
-import { GITHUB_API_BASE_URL } from "./progress";
-
 import type { Env } from "./index";
+import { GITHUB_API_BASE_URL } from "./progress";
 
 // --------------------------------------------------------------- the layout ---
 
@@ -191,7 +190,7 @@ export function githubTrackerReader(env: Env): TrackerReader {
       const text = await response.text();
       if (text.length > MAX_TICK_RECORD_BYTES) {
         throw new Error(
-          `${path}@${ref} is ${text.length} bytes, past the ${MAX_TICK_RECORD_BYTES} this reader will read`
+          `${path}@${ref} is ${text.length} bytes, past the ${MAX_TICK_RECORD_BYTES} this reader will read`,
         );
       }
       return text;
@@ -229,7 +228,7 @@ export async function checkWaveMembership(
   project: string,
   epic: string,
   ref: string,
-  tickIDs: string[]
+  tickIDs: string[],
 ): Promise<WaveMembership> {
   // One read per distinct id, however many walks cross it: waves share
   // ancestors by construction, and the epic itself is on every chain.
@@ -246,7 +245,9 @@ export async function checkWaveMembership(
       // tick". Collapsing the two would turn a format change into a wave
       // apparently full of intruders.
       if (record === null) {
-        throw new Error(`${tickRecordPath(id)}@${ref} is not a tick record this reader understands`);
+        throw new Error(
+          `${tickRecordPath(id)}@${ref} is not a tick record this reader understands`,
+        );
       }
       return record;
     });
@@ -270,7 +271,7 @@ export async function checkWaveMembership(
   const outside: string[] = [];
   try {
     const verdicts = await Promise.all(
-      tickIDs.map(async (id) => ({ id, inside: await descendsFrom(readRecord, id, epic) }))
+      tickIDs.map(async (id) => ({ id, inside: await descendsFrom(readRecord, id, epic) })),
     );
     for (const verdict of verdicts) if (!verdict.inside) outside.push(verdict.id);
   } catch (error) {
@@ -295,7 +296,7 @@ export async function checkWaveMembership(
 async function descendsFrom(
   readRecord: (id: string) => Promise<TickRecord | null>,
   tickID: string,
-  epic: string
+  epic: string,
 ): Promise<boolean> {
   // A tick the tracker does not have is not a member of anything — the same
   // refusal the local door makes with "no tick %q in this checkout".

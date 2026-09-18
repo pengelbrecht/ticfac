@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import contract from "../../contracts/worker-boot-contract.json";
 import {
+  DEFAULT_WORKER_HARNESS_BUDGET_MS,
+  MIN_WORKER_HARNESS_BUDGET_MS,
   ORCHESTRATOR_COMMAND,
   WORKER_ACTOR,
   WORKER_BRANCH_PREFIX,
+  WORKER_CANCEL_ARG,
+  WORKER_CANCEL_COMMAND,
+  WORKER_CANCEL_MARKER,
+  WORKER_CANCEL_REPORT_MARKER,
   WORKER_COMMAND,
   WORKER_DEFAULT_HARNESS,
   WORKER_DEFAULT_MODEL,
@@ -11,17 +17,11 @@ import {
   WORKER_PROBE_ARG,
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
-  WORKER_CANCEL_ARG,
-  WORKER_CANCEL_COMMAND,
-  WORKER_CANCEL_MARKER,
-  WORKER_CANCEL_REPORT_MARKER,
   WORKER_PUSH_MARGIN_MS,
-  workerCancelCommand,
-  DEFAULT_WORKER_HARNESS_BUDGET_MS,
-  MIN_WORKER_HARNESS_BUDGET_MS,
   waveWaitTimeoutMs,
   workerBootEnv,
   workerBranch,
+  workerCancelCommand,
   workerHarness,
   workerHarnessBudgetMs,
   workerHarnessTimeoutSeconds,
@@ -77,7 +77,9 @@ describe("the worker boot contract", () => {
   it("derives the branch and report names the collector reads", () => {
     const b = contract.branch_example;
     expect(workerBranch(b.epic, b.tick)).toBe(b.branch);
-    expect(workerResultFile(contract.result_file_example.tick)).toBe(contract.result_file_example.path);
+    expect(workerResultFile(contract.result_file_example.tick)).toBe(
+      contract.result_file_example.path,
+    );
     expect(workerTask(b.epic, b.tick, boot.base_sha)).toEqual({
       tick_id: b.tick,
       branch: b.branch,
@@ -135,13 +137,15 @@ describe("the boot environment", () => {
     // than "use the worker default".
     expect(workerBootEnv({ ...boot, model: "" }).TICKS_MODEL).toBeUndefined();
     expect(workerBootEnv({ ...boot, model: "anthropic/claude-fable-5" }).TICKS_MODEL).toBe(
-      "anthropic/claude-fable-5"
+      "anthropic/claude-fable-5",
     );
   });
 
   it("runs the repository's setup unless the caller opts the wave out", () => {
     expect(workerBootEnv(boot).TICKS_WORKER_SETUP).toBe(contract.setup_modes.always);
-    expect(workerBootEnv({ ...boot, setup: "skip" }).TICKS_WORKER_SETUP).toBe(contract.setup_modes.skip);
+    expect(workerBootEnv({ ...boot, setup: "skip" }).TICKS_WORKER_SETUP).toBe(
+      contract.setup_modes.skip,
+    );
   });
 
   // tick ys3: per-tick container fan-out failed on EVERY wave, deterministically.
@@ -221,7 +225,7 @@ describe("the boot environment", () => {
       expect(workerModel("", FLASH)).toBe(FLASH);
       expect(workerModel("   ", "  ")).toBe(WORKER_DEFAULT_MODEL);
       expect(workerHarness("", "")).toBe(WORKER_DEFAULT_HARNESS);
-      expect(workerModel(" " + FLASH + " ", null)).toBe(FLASH);
+      expect(workerModel(` ${FLASH} `, null)).toBe(FLASH);
     });
 
     // The resolved value has to be a real string the container can export:
@@ -277,14 +281,14 @@ describe("the harness budget (tick 5fg)", () => {
   // run: the default caps what any single worker may take.
   it("caps a long run's worker at the measured default rather than the whole run", () => {
     expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 6 * 60 * MINUTE })).toBe(
-      DEFAULT_WORKER_HARNESS_BUDGET_MS
+      DEFAULT_WORKER_HARNESS_BUDGET_MS,
     );
   });
 
   it("honours a deployment's own cap when it names one", () => {
     expect(workerHarnessBudgetMs({ cap_ms: 20 * MINUTE })).toBe(20 * MINUTE);
     expect(
-      workerHarnessBudgetMs({ remaining_wall_clock_ms: 6 * 60 * MINUTE, cap_ms: 20 * MINUTE })
+      workerHarnessBudgetMs({ remaining_wall_clock_ms: 6 * 60 * MINUTE, cap_ms: 20 * MINUTE }),
     ).toBe(20 * MINUTE);
   });
 
@@ -294,10 +298,10 @@ describe("the harness budget (tick 5fg)", () => {
   // (tick k24), not a budget of nine seconds.
   it("floors the derived budget rather than handing a worker seconds", () => {
     expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 30_000 })).toBe(
-      MIN_WORKER_HARNESS_BUDGET_MS
+      MIN_WORKER_HARNESS_BUDGET_MS,
     );
     expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 0 })).toBe(
-      MIN_WORKER_HARNESS_BUDGET_MS
+      MIN_WORKER_HARNESS_BUDGET_MS,
     );
   });
 });
@@ -317,7 +321,7 @@ describe("the harness bound", () => {
     expect(seconds * 1000).toBeLessThanOrEqual(waveWaitTimeoutMs(budget) - WORKER_PUSH_MARGIN_MS);
     expect(waveWaitTimeoutMs(budget)).toBe(budget + WORKER_PUSH_MARGIN_MS);
     expect(workerBootEnv({ ...boot, harness_budget_ms: budget }).TICKS_WORKER_TIMEOUT).toBe(
-      String(seconds)
+      String(seconds),
     );
   });
 
@@ -352,10 +356,10 @@ describe("the harness bound", () => {
 describe("the cancellation door", () => {
   it("carries the wave's own reason", () => {
     expect(workerCancelCommand("budget:cost")).toBe(
-      "/usr/local/bin/ticks-worker --cancel budget:cost"
+      "/usr/local/bin/ticks-worker --cancel budget:cost",
     );
     expect(workerCancelCommand("stopped:hard")).toBe(
-      "/usr/local/bin/ticks-worker --cancel stopped:hard"
+      "/usr/local/bin/ticks-worker --cancel stopped:hard",
     );
   });
 
@@ -367,13 +371,13 @@ describe("the cancellation door", () => {
 
   it("never composes anything but a label into the command line", () => {
     expect(workerCancelCommand("budget:cost; rm -rf /")).toBe(
-      "/usr/local/bin/ticks-worker --cancel budget:costrm-rf"
+      "/usr/local/bin/ticks-worker --cancel budget:costrm-rf",
     );
     expect(workerCancelCommand("$(curl evil)")).toBe(
-      "/usr/local/bin/ticks-worker --cancel curlevil"
+      "/usr/local/bin/ticks-worker --cancel curlevil",
     );
     expect(workerCancelCommand("x".repeat(500)).length).toBeLessThan(
-      WORKER_CANCEL_COMMAND.length + 70
+      WORKER_CANCEL_COMMAND.length + 70,
     );
   });
 

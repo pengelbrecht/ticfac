@@ -5,25 +5,25 @@ import { deriveTokenHash, isAuthExempt, mintFactoryToken } from "../src/auth";
 import { getRun, insertRun, type Run } from "../src/db";
 import {
   allowedProviders,
+  encodeLogFilters,
+  fetchRunSpend,
   GATEWAY_LOG_FILTER_KEYS,
   GATEWAY_LOG_FILTER_OPERATORS,
   GATEWAY_LOG_MAX_PAGE_SIZE,
   GATEWAY_METADATA_KEYS,
   GATEWAY_PATH_PREFIX,
-  LOG_PAGE_SIZE,
-  MAX_LOG_PAGES,
-  PROVIDER_OPT_IN_VAR,
-  SESSION_AFFINITY_HEADER,
-  encodeLogFilters,
-  fetchRunSpend,
   gatewayConfig,
   gatewayMetadata,
   issueRunToken,
+  LOG_PAGE_SIZE,
+  MAX_LOG_PAGES,
   metadataFilters,
   modelRoutingComplaint,
+  PROVIDER_OPT_IN_VAR,
   proxyModelRequest,
   revokeRunTokens,
   runGatewayEndpoint,
+  SESSION_AFFINITY_HEADER,
   sessionAffinityKey,
   spendFailureRemedy,
   stringifyContentParts,
@@ -140,10 +140,18 @@ function stubUpstream(): { calls: string[]; restore: () => void } {
     }
     return original(input as RequestInfo, init);
   }) as unknown as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = original; } };
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = original;
+    },
+  };
 }
 
-function modelRequest(body = '{"model":"claude","messages":[]}', headers: HeadersInit = {}): Request {
+function modelRequest(
+  body = '{"model":"claude","messages":[]}',
+  headers: HeadersInit = {},
+): Request {
   return new Request(`${FACTORY}${GATEWAY_PATH_PREFIX}/anthropic/v1/messages`, {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
@@ -218,7 +226,7 @@ describe("every model request carries run and tick metadata", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(200);
@@ -236,11 +244,12 @@ describe("every model request carries run and tick metadata", () => {
     const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
     const gateway = new FakeGateway();
 
-    await proxyModelRequest(env, modelRequest(undefined, { "x-api-key": token }), [
-      "anthropic",
-      "v1",
-      "messages",
-    ], { fetcher: gateway.fetcher });
+    await proxyModelRequest(
+      env,
+      modelRequest(undefined, { "x-api-key": token }),
+      ["anthropic", "v1", "messages"],
+      { fetcher: gateway.fetcher },
+    );
 
     // The vendor key the operator configured, and NOT the run's token.
     expect(gateway.last.headers.get("x-api-key")).toBe("sk-operator-key");
@@ -261,7 +270,7 @@ describe("every model request carries run and tick metadata", () => {
         "cf-aig-metadata": JSON.stringify({ run_id: "run_somebody_else", tick_id: "free" }),
       }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(gateway.metadata()).toMatchObject({ run_id: run.run_id, tick_id: "k2s" });
@@ -276,13 +285,13 @@ describe("every model request carries run and tick metadata", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     await proxyModelRequest(
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     // The run id, on every call, unchanged between them: prefix caching only
@@ -308,7 +317,7 @@ describe("every model request carries run and tick metadata", () => {
         env,
         modelRequest(undefined, { authorization: `Bearer ${token}` }),
         ["anthropic", "v1", "messages"],
-        { fetcher: gateway.fetcher }
+        { fetcher: gateway.fetcher },
       );
     }
 
@@ -350,7 +359,7 @@ describe("every model request carries run and tick metadata", () => {
         env,
         modelRequest(body, { authorization: `Bearer ${token}` }),
         ["anthropic", "v1", "messages"],
-        { fetcher: gateway.fetcher }
+        { fetcher: gateway.fetcher },
       );
     }
 
@@ -377,7 +386,7 @@ describe("every model request carries run and tick metadata", () => {
         [SESSION_AFFINITY_HEADER]: "run_somebody_else",
       }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(gateway.last.headers.get(SESSION_AFFINITY_HEADER)).toBe(sessionAffinityKey(run));
@@ -396,7 +405,7 @@ describe("every model request carries run and tick metadata", () => {
         [SESSION_AFFINITY_HEADER]: "run_somebody_else",
       }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     // Affinity is attribution's twin: an agent that could pick it could park
@@ -421,7 +430,7 @@ describe("every model request carries run and tick metadata", () => {
         body: "{}",
       }),
       ["openai", "v1", "chat", "completions"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(503);
@@ -473,7 +482,7 @@ describe("the workers-ai route takes content as a string, not as parts", () => {
       env,
       workersAIRequest(OMP_REQUEST, token),
       WORKERS_AI_PATH,
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(200);
@@ -516,10 +525,10 @@ describe("the workers-ai route takes content as a string, not as parts", () => {
             },
           ],
         }),
-        token
+        token,
       ),
       WORKERS_AI_PATH,
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     const sent = JSON.parse(gateway.last.body ?? "null") as { messages: { content: string }[] };
@@ -545,10 +554,10 @@ describe("the workers-ai route takes content as a string, not as parts", () => {
             },
           ],
         }),
-        token
+        token,
       ),
       WORKERS_AI_PATH,
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(400);
@@ -609,7 +618,7 @@ describe("the workers-ai route takes content as a string, not as parts", () => {
         body: OMP_REQUEST,
       }),
       ["openai", "v1", "chat", "completions"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     // Not a string: the body was forwarded as the stream it arrived on, so the
@@ -648,7 +657,7 @@ describe("what the workers-ai translation will and will not touch", () => {
 
   it("turns an empty parts array into an empty string, not into a dropped message", () => {
     const rewrite = stringifyContentParts(
-      JSON.stringify({ messages: [{ role: "user", content: [] }] })
+      JSON.stringify({ messages: [{ role: "user", content: [] }] }),
     );
     expect(rewrite.ok).toBe(true);
     const sent = JSON.parse((rewrite as { body: string }).body) as {
@@ -660,7 +669,9 @@ describe("what the workers-ai translation will and will not touch", () => {
 
   it("accepts the responses-style input_text part name too", () => {
     const rewrite = stringifyContentParts(
-      JSON.stringify({ messages: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }] })
+      JSON.stringify({
+        messages: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }],
+      }),
     );
     const sent = JSON.parse((rewrite as { body: string }).body) as {
       messages: { content: string }[];
@@ -675,7 +686,7 @@ describe("what the workers-ai translation will and will not touch", () => {
           { role: "user", content: "ok" },
           { role: "user", content: [{ type: "input_audio", input_audio: {} }] },
         ],
-      })
+      }),
     );
     expect(rewrite.ok).toBe(false);
     expect((rewrite as { detail: string }).detail).toContain("messages[1]");
@@ -724,7 +735,7 @@ describe("workers-ai is the only route a factory takes without an explicit opt-i
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(403);
@@ -749,7 +760,7 @@ describe("workers-ai is the only route a factory takes without an explicit opt-i
       env,
       workersAIRequest(OMP_REQUEST, token),
       WORKERS_AI_PATH,
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     expect(response.status).toBe(200);
@@ -766,7 +777,7 @@ describe("workers-ai is the only route a factory takes without an explicit opt-i
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(opted.status).toBe(200);
 
@@ -778,7 +789,7 @@ describe("workers-ai is the only route a factory takes without an explicit opt-i
         body: "{}",
       }),
       ["openrouter", "v1", "chat", "completions"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     // Configured, keyed, and still not routed: one opt-in is not four.
     expect(other.status).toBe(403);
@@ -798,7 +809,7 @@ describe("workers-ai is the only route a factory takes without an explicit opt-i
         body: "{}",
       }),
       ["__proto__", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
 
     // `"__proto__" in PROVIDERS` is true for any object literal, so an
@@ -821,7 +832,7 @@ describe("revoking a run's token stops its model traffic", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(before.status).toBe(200);
     expect(gateway.calls).toHaveLength(1);
@@ -832,7 +843,7 @@ describe("revoking a run's token stops its model traffic", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(after.status).toBe(403);
     await expect(after.json()).resolves.toMatchObject({ error: "run_token_revoked" });
@@ -887,7 +898,7 @@ describe("revoking a run's token stops its model traffic", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${first.token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(stale.status).toBe(403);
 
@@ -895,7 +906,7 @@ describe("revoking a run's token stops its model traffic", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${second.token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(fresh.status).toBe(200);
     expect(gateway.metadata().attempt).toBe("2");
@@ -910,7 +921,7 @@ describe("revoking a run's token stops its model traffic", () => {
       env,
       modelRequest(undefined, { authorization: `Bearer ${token}` }),
       ["anthropic", "v1", "messages"],
-      { fetcher: gateway.fetcher }
+      { fetcher: gateway.fetcher },
     );
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({ error: "run_not_active" });
@@ -1046,7 +1057,7 @@ function fakeLogs(pages: Record<string, unknown>[][]): {
             ],
             result: null,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -1058,12 +1069,16 @@ function fakeLogs(pages: Record<string, unknown>[][]): {
           errors: [{ code: 7003, message: "Number must be less than or equal to 50" }],
           result: null,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
     const page = Number(new URL(url).searchParams.get("page") ?? "1");
     const result = pages[page - 1] ?? [];
-    return Response.json({ success: true, result, result_info: liveResultInfo(page, result.length, total(pages)) });
+    return Response.json({
+      success: true,
+      result,
+      result_info: liveResultInfo(page, result.length, total(pages)),
+    });
   }) as unknown as typeof fetch;
   return { fetcher, urls };
 }
@@ -1169,7 +1184,10 @@ describe("the runs row cost is gateway telemetry, not a self-report", () => {
       const rows = page === 1 ? LOG_PAGE_SIZE : 45;
       return Response.json({
         success: true,
-        result: Array.from({ length: rows }, () => ({ cost: 0.1, metadata: { run_id: run.run_id } })),
+        result: Array.from({ length: rows }, () => ({
+          cost: 0.1,
+          metadata: { run_id: run.run_id },
+        })),
         // Verbatim from the API: count, page, per_page, total_count. Nothing
         // else — reading a field it does not send is what broke this.
         result_info: { count: rows, page, per_page: 50, total_count: LOG_PAGE_SIZE + 45 },
@@ -1209,7 +1227,7 @@ describe("the runs row cost is gateway telemetry, not a self-report", () => {
     expect(spend.ok).toBe(false);
     expect((await getRun(env.DB, run.run_id))?.cost_usd).toBeCloseTo(
       MAX_LOG_PAGES * LOG_PAGE_SIZE * 0.05,
-      6
+      6,
     );
   });
 
@@ -1272,18 +1290,16 @@ describe("the gateway logs query is pinned to the shape the API documents", () =
     // shape of wrongness a budget must never be handed.
     expect(() => metadataFilters("run" as never, "run_abc")).toThrow(/run/);
     expect(() => metadataFilters("metadata.run_id" as never, "run_abc")).toThrow(
-      /metadata\.run_id/
+      /metadata\.run_id/,
     );
   });
 
   it("refuses a filter key outside the documented enum before it reaches the API", () => {
     expect(() =>
-      encodeLogFilters([
-        { key: "metadata.run_id" as never, operator: "eq", value: ["run_abc"] },
-      ])
+      encodeLogFilters([{ key: "metadata.run_id" as never, operator: "eq", value: ["run_abc"] }]),
     ).toThrow(/metadata\.run_id/);
     expect(() =>
-      encodeLogFilters([{ key: "model", operator: "matches" as never, value: ["claude"] }])
+      encodeLogFilters([{ key: "model", operator: "matches" as never, value: ["claude"] }]),
     ).toThrow(/matches/);
   });
 
@@ -1297,7 +1313,7 @@ describe("the gateway logs query is pinned to the shape the API documents", () =
     // A name stamped but not queryable, or queryable but never stamped, is a
     // filter that quietly matches nothing.
     expect(Object.keys(gatewayMetadata(record, run)).sort()).toEqual(
-      [...GATEWAY_METADATA_KEYS].sort()
+      [...GATEWAY_METADATA_KEYS].sort(),
     );
   });
 
@@ -1338,7 +1354,7 @@ describe("the gateway logs query is pinned to the shape the API documents", () =
           errors: [{ code: 7001, message: 'Invalid enum value. received "metadata.run_id"' }],
           result: null,
         },
-        { status: 400 }
+        { status: 400 },
       )) as unknown as typeof fetch;
 
     const spend = await fetchRunSpend(env, run.run_id, { fetcher: refusing });
@@ -1362,7 +1378,7 @@ describe("a bug in our own query is not an outage", () => {
           errors: [{ code: 7003, message: "Number must be less than or equal to 50" }],
           result: null,
         },
-        { status: 400 }
+        { status: 400 },
       )) as unknown as typeof fetch;
 
     const spend = await fetchRunSpend(env, run.run_id, { fetcher: rejecting });

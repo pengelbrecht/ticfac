@@ -98,7 +98,7 @@ export function stepBudget(ms: number): number {
 export function shareStepBudget(
   wants: Record<string, number>,
   label: string,
-  budgetMs: number = STEP_WORK_BUDGET_MS
+  budgetMs: number = STEP_WORK_BUDGET_MS,
 ): Record<string, number> {
   const total = Object.values(wants).reduce((sum, ms) => sum + Math.max(0, ms), 0);
   if (total <= budgetMs) return { ...wants };
@@ -107,7 +107,7 @@ export function shareStepBudget(
     `factory workflow-limits: ${label} asked for ${total}ms of waiting inside one step, ` +
       `more than the ${budgetMs}ms a step may be sized for against Cloudflare's ` +
       `${WORKFLOW_STEP_TIMEOUT_MS}ms execution cap; every wait is scaled by ` +
-      `${scale.toFixed(2)} so the step survives`
+      `${scale.toFixed(2)} so the step survives`,
   );
   const shared: Record<string, number> = {};
   for (const [name, ms] of Object.entries(wants)) {

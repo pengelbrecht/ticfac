@@ -63,7 +63,7 @@ function base64(mac: ArrayBuffer): string {
 export async function signBody(
   scheme: SignatureScheme,
   secret: string,
-  body: string
+  body: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -71,7 +71,7 @@ export async function signBody(
     encoder.encode(secret),
     { name: "HMAC", hash: SUBTLE_HASH[scheme.algorithm] },
     false,
-    ["sign"]
+    ["sign"],
   );
   const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
   return scheme.prefix + (scheme.encoding === "base64" ? base64(mac) : hex(mac));
@@ -103,7 +103,7 @@ export async function verifySignature(
   scheme: SignatureScheme,
   secret: string,
   body: string,
-  header: string | null
+  header: string | null,
 ): Promise<boolean> {
   if (typeof header !== "string") return false;
   const presented = header.trim();

@@ -1,9 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
+import type { Question } from "../src/run-room";
 import {
-  TELEGRAM_ALLOWED_UPDATES,
-  TELEGRAM_WEBHOOK_PATH,
   deliverTelegramQuestion,
   isPairedTelegramUpdate,
   parseTelegramAnswer,
@@ -12,12 +10,13 @@ import {
   renderOutcome,
   renderQuestion,
   sendTelegramReport,
-  telegramWebhookInfo,
-  unregisterTelegramWebhook,
+  TELEGRAM_ALLOWED_UPDATES,
+  TELEGRAM_WEBHOOK_PATH,
   type TelegramRuntimeEnv,
   type TelegramWebhookUpdate,
+  telegramWebhookInfo,
+  unregisterTelegramWebhook,
 } from "../src/telegram";
-import type { Question } from "../src/run-room";
 
 describe("Telegram webhook transport", () => {
   const paired: TelegramWebhookUpdate = {
@@ -31,18 +30,12 @@ describe("Telegram webhook transport", () => {
   };
 
   it("drops a callback from an unpaired sender before resolving a room entry", () => {
-    expect(
-      isPairedTelegramUpdate(paired, { user_id: "777", chat_id: "919191" })
-    ).toBe(false);
-    expect(
-      isPairedTelegramUpdate(paired, { user_id: "424242", chat_id: "123" })
-    ).toBe(false);
+    expect(isPairedTelegramUpdate(paired, { user_id: "777", chat_id: "919191" })).toBe(false);
+    expect(isPairedTelegramUpdate(paired, { user_id: "424242", chat_id: "123" })).toBe(false);
   });
 
   it("accepts only the paired user in the paired chat", () => {
-    expect(
-      isPairedTelegramUpdate(paired, { user_id: "424242", chat_id: "919191" })
-    ).toBe(true);
+    expect(isPairedTelegramUpdate(paired, { user_id: "424242", chat_id: "919191" })).toBe(true);
   });
 
   it("turns an inline option press into the RunRoom outcome", () => {
@@ -74,12 +67,15 @@ describe("Telegram webhook transport", () => {
     env.TELEGRAM_USER_ID = "424242";
     env.TELEGRAM_CHAT_ID = "919191";
     try {
-      const response = await SELF.fetch("https://factory.example.com/api/channels/telegram/webhook", {
-        method: "POST",
-        body: JSON.stringify({
-          message: { message_id: 92, chat: { id: 919191 }, from: { id: 777 }, text: "approve" },
-        }),
-      });
+      const response = await SELF.fetch(
+        "https://factory.example.com/api/channels/telegram/webhook",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            message: { message_id: 92, chat: { id: 919191 }, from: { id: 777 }, text: "approve" },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ ok: true, dropped: true });
     } finally {
@@ -99,14 +95,17 @@ describe("Telegram webhook transport", () => {
 
 /** A fake Bot API on the global fetch, capturing every call's method and body. */
 function fakeBotAPI(
-  respond: (method: string, body: Record<string, unknown>) => unknown = () => ({ message_id: 4242 })
+  respond: (method: string, body: Record<string, unknown>) => unknown = () => ({
+    message_id: 4242,
+  }),
 ) {
   const calls: { method: string; body: Record<string, unknown> }[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const method = url.slice(url.lastIndexOf("/") + 1);
-    const body = init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
+    const body =
+      init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
     return Response.json({ ok: true, result: respond(method, body) });
   }) as typeof fetch;
@@ -159,7 +158,7 @@ describe("project legibility in the message text", () => {
     const settled = renderOutcome(
       shipIt,
       { status: "answered", text: "Approve", option_ids: ["approve"] },
-      { project: "acme/web", epic: "4f2", tick: "8sm" }
+      { project: "acme/web", epic: "4f2", tick: "8sm" },
     );
     expect(settled).toContain("acme/web");
     expect(settled).toContain("tick 8sm");
@@ -178,9 +177,13 @@ describe("project legibility in the message text", () => {
   it("puts the project on a delivered question and on a report", async () => {
     const api = fakeBotAPI();
     try {
-      await deliverTelegramQuestion(telegramEnv(), { id: "q1", question: shipIt }, {
-        context: { project: "acme/web", epic: "4f2", tick: "8sm" },
-      });
+      await deliverTelegramQuestion(
+        telegramEnv(),
+        { id: "q1", question: shipIt },
+        {
+          context: { project: "acme/web", epic: "4f2", tick: "8sm" },
+        },
+      );
       await sendTelegramReport(telegramEnv(), "Run complete: 3 ticks closed.", undefined, {
         context: { project: "acme/web", epic: "4f2" },
       });
@@ -201,10 +204,14 @@ describe("per-project forum topics", () => {
   it("posts a question and a report into the project's topic", async () => {
     const api = fakeBotAPI();
     try {
-      await deliverTelegramQuestion(telegramEnv(), { id: "q1", question: shipIt }, {
-        context: { project: "acme/web" },
-        topic_id: "17",
-      });
+      await deliverTelegramQuestion(
+        telegramEnv(),
+        { id: "q1", question: shipIt },
+        {
+          context: { project: "acme/web" },
+          topic_id: "17",
+        },
+      );
       await sendTelegramReport(telegramEnv(), "done", undefined, {
         context: { project: "acme/web" },
         topic_id: "17",
@@ -220,9 +227,13 @@ describe("per-project forum topics", () => {
   it("omits message_thread_id for a project with no topic, so a plain chat still works", async () => {
     const api = fakeBotAPI();
     try {
-      await deliverTelegramQuestion(telegramEnv(), { id: "q1", question: shipIt }, {
-        context: { project: "acme/web" },
-      });
+      await deliverTelegramQuestion(
+        telegramEnv(),
+        { id: "q1", question: shipIt },
+        {
+          context: { project: "acme/web" },
+        },
+      );
     } finally {
       api.restore();
     }
@@ -236,7 +247,7 @@ describe("per-project forum topics", () => {
         telegramEnv(),
         "done",
         { channel_id: "-1001919191", message_id: "88" },
-        { context: { project: "acme/web" }, topic_id: "17" }
+        { context: { project: "acme/web" }, topic_id: "17" },
       );
     } finally {
       api.restore();
@@ -264,13 +275,13 @@ describe("webhook mode", () => {
     const api = fakeBotAPI((method) =>
       method === "getMe"
         ? { id: 1, username: "ticks_bot", first_name: "Ticks", can_read_all_group_messages: false }
-        : true
+        : true,
     );
-    let registered;
+    let registered: Awaited<ReturnType<typeof registerTelegramWebhook>>;
     try {
       registered = await registerTelegramWebhook(
         telegramEnv({ TELEGRAM_WEBHOOK_SECRET: "shh" }),
-        "https://factory.example.com"
+        "https://factory.example.com",
       );
     } finally {
       api.restore();
@@ -290,11 +301,11 @@ describe("webhook mode", () => {
     const api = fakeBotAPI((method) =>
       method === "getMe"
         ? { id: 1, username: "ticks_bot", first_name: "Ticks", can_read_all_group_messages: true }
-        : true
+        : true,
     );
     try {
       await expect(
-        registerTelegramWebhook(telegramEnv(), "https://factory.example.com")
+        registerTelegramWebhook(telegramEnv(), "https://factory.example.com"),
       ).rejects.toThrow(/privacy mode/i);
       expect(api.calls.some((entry) => entry.method === "setWebhook")).toBe(false);
     } finally {
@@ -318,7 +329,7 @@ describe("webhook mode", () => {
       pending_update_count: 0,
       last_error_message: "wrong response from the webhook",
     }));
-    let info;
+    let info: Awaited<ReturnType<typeof telegramWebhookInfo>>;
     try {
       info = await telegramWebhookInfo(telegramEnv());
     } finally {
@@ -350,17 +361,24 @@ describe("reply-to routing, which privacy mode makes load-bearing", () => {
             text: "main",
           },
         },
-        entry
-      )
+        entry,
+      ),
     ).toEqual({ question_id: "q123", outcome: { status: "answered", text: "main" } });
   });
 
   it("ignores free text that replies to nothing — privacy mode should not deliver it anyway", () => {
     expect(
       parseTelegramAnswer(
-        { message: { message_id: 92, chat: { id: -1001919191 }, from: { id: 424242 }, text: "main" } },
-        entry
-      )
+        {
+          message: {
+            message_id: 92,
+            chat: { id: -1001919191 },
+            from: { id: 424242 },
+            text: "main",
+          },
+        },
+        entry,
+      ),
     ).toBeNull();
   });
 
@@ -379,8 +397,8 @@ describe("reply-to routing, which privacy mode makes load-bearing", () => {
             text: "main",
           },
         },
-        entry
-      )
+        entry,
+      ),
     ).toBeNull();
   });
 });

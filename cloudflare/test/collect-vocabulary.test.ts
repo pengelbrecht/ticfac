@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import contract from "../../contracts/collect-vocabulary.json";
 import {
-  parseStatus,
   needsHuman,
+  parseStatus,
   STATUS_BLOCKED,
   STATUS_DONE,
   STATUS_DONE_WITH_CONCERNS,
@@ -116,14 +116,15 @@ describe("the collect vocabulary, shared with the two Go implementations", () =>
     for (const char of contract.decoration.trimmed) {
       const body = `${char}STATUS: DONE${char}`;
       expect(parseStatus(body).status, `${JSON.stringify(char)} is in the shared trim set`).toBe(
-        STATUS_DONE
+        STATUS_DONE,
       );
     }
     for (const char of contract.decoration.not_trimmed) {
       const body = `${char}STATUS: DONE${char}`;
-      expect(parseStatus(body).status, `${JSON.stringify(char)} is NOT in the shared trim set`).toBe(
-        ""
-      );
+      expect(
+        parseStatus(body).status,
+        `${JSON.stringify(char)} is NOT in the shared trim set`,
+      ).toBe("");
     }
   });
 

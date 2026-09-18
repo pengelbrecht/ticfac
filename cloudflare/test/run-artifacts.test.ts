@@ -11,19 +11,27 @@ import {
 } from "../src/artifacts";
 import {
   BUDGET_POLL_HEADROOM,
+  cloudWaveBudget,
   DEFAULT_MAX_COST_USD,
   DEFAULT_MAX_WALL_CLOCK_MS,
+  earliestDeadline,
   MAX_POLL_MS,
   MIN_POLL_MS,
-  cloudWaveBudget,
-  earliestDeadline,
   pollDelay,
+  type RunConfig,
   renewalTtl,
   runConfig,
-  spendSample,
-  type RunConfig,
   type SpendSample,
+  spendSample,
 } from "../src/run-workflow";
+import { parseSubmission } from "../src/runs";
+import {
+  DEFAULT_SANDBOX_IMAGE,
+  deploymentImage,
+  isTerminalExit,
+  orchestratorEnv,
+  sandboxName,
+} from "../src/sandbox";
 import {
   DEFAULT_WORKER_HARNESS_BUDGET_MS,
   MIN_WORKER_HARNESS_BUDGET_MS,
@@ -33,14 +41,6 @@ import {
   workerHarness,
   workerModel,
 } from "../src/worker-boot";
-import {
-  DEFAULT_SANDBOX_IMAGE,
-  deploymentImage,
-  isTerminalExit,
-  orchestratorEnv,
-  sandboxName,
-} from "../src/sandbox";
-import { parseSubmission } from "../src/runs";
 
 /**
  * The pieces the supervision loop leans on that a run-level test would only
@@ -59,7 +59,7 @@ describe("the harness log stream", () => {
     // R2 lists lexicographically: unpadded keys would put 10 before 9 and
     // silently reorder the log.
     expect(await readHarnessOutput(env.ARTIFACTS, PROJECT, runID)).toBe(
-      "1\n2\n9\n10\n11\n99\n100\n101\n"
+      "1\n2\n9\n10\n11\n99\n100\n101\n",
     );
   });
 
@@ -69,7 +69,7 @@ describe("the harness log stream", () => {
     await writeHarnessSegment(env.ARTIFACTS, PROJECT, runID, 2, 1, "replacement sandbox\n");
 
     expect(await readHarnessOutput(env.ARTIFACTS, PROJECT, runID)).toBe(
-      "first sandbox\nreplacement sandbox\n"
+      "first sandbox\nreplacement sandbox\n",
     );
   });
 
@@ -83,10 +83,10 @@ describe("the harness log stream", () => {
 
   it("keeps every run's artifacts under its own project-scoped prefix", () => {
     expect(harnessSegmentKey(PROJECT, "run_x", 2, 5)).toBe(
-      `runs/${PROJECT}/run_x/artifacts/orchestrator/harness/002/000005.log`
+      `runs/${PROJECT}/run_x/artifacts/orchestrator/harness/002/000005.log`,
     );
     expect(harnessLogKey(PROJECT, "run_x")).toBe(
-      `runs/${PROJECT}/run_x/artifacts/orchestrator/harness.log`
+      `runs/${PROJECT}/run_x/artifacts/orchestrator/harness.log`,
     );
   });
 
@@ -136,20 +136,20 @@ describe("budget configuration", () => {
   // the ceiling is the operator's standing decision and a submission — which
   // an agent can make — must never be able to widen it.
   it("lets a submission lower the deployment ceiling", () => {
-    const config = runConfig(
-      { RUN_MAX_COST_USD: "8", RUN_MAX_WALL_CLOCK_MS: "2700000" } as never,
-      { max_cost_usd: 2, max_wall_clock_ms: 600_000 }
-    );
+    const config = runConfig({ RUN_MAX_COST_USD: "8", RUN_MAX_WALL_CLOCK_MS: "2700000" } as never, {
+      max_cost_usd: 2,
+      max_wall_clock_ms: 600_000,
+    });
 
     expect(config.max_cost_usd).toBe(2);
     expect(config.max_wall_clock_ms).toBe(600_000);
   });
 
   it("clamps a submission that tries to raise the deployment ceiling", () => {
-    const config = runConfig(
-      { RUN_MAX_COST_USD: "8", RUN_MAX_WALL_CLOCK_MS: "2700000" } as never,
-      { max_cost_usd: 50, max_wall_clock_ms: 21_600_000 }
-    );
+    const config = runConfig({ RUN_MAX_COST_USD: "8", RUN_MAX_WALL_CLOCK_MS: "2700000" } as never, {
+      max_cost_usd: 50,
+      max_wall_clock_ms: 21_600_000,
+    });
 
     expect(config.max_cost_usd).toBe(8);
     expect(config.max_wall_clock_ms).toBe(2_700_000);
@@ -166,10 +166,10 @@ describe("budget configuration", () => {
   });
 
   it("ignores an unusable override rather than widening the budget", () => {
-    const config = runConfig(
-      { RUN_MAX_COST_USD: "8" } as never,
-      { max_cost_usd: -1, max_wall_clock_ms: Number.NaN }
-    );
+    const config = runConfig({ RUN_MAX_COST_USD: "8" } as never, {
+      max_cost_usd: -1,
+      max_wall_clock_ms: Number.NaN,
+    });
 
     expect(config.max_cost_usd).toBe(8);
     expect(config.max_wall_clock_ms).toBe(DEFAULT_MAX_WALL_CLOCK_MS);
@@ -266,7 +266,7 @@ describe("budget-aware cadence", () => {
    */
   function simulate(
     config: RunConfig,
-    options: { rate_usd_per_ms: number; started_at_ms: number; budget_aware: boolean }
+    options: { rate_usd_per_ms: number; started_at_ms: number; budget_aware: boolean },
   ): { overshoot_usd: number; overshoot_ms: number; looks: number } {
     let now = options.started_at_ms;
     let cost = 0;
@@ -282,7 +282,7 @@ describe("budget-aware cadence", () => {
               deadline_ms: options.started_at_ms + config.max_wall_clock_ms,
               spend,
             }
-          : null
+          : null,
       );
       now += pollMs;
       cost += pollMs * options.rate_usd_per_ms;
@@ -308,7 +308,11 @@ describe("budget-aware cadence", () => {
     const config = runConfig({ RUN_MAX_COST_USD: "5", RUN_MAX_WALL_CLOCK_MS: "21600000" } as never);
     const rate = 10.3 / (60 * MINUTE);
 
-    const before = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: false });
+    const before = simulate(config, {
+      rate_usd_per_ms: rate,
+      started_at_ms: 0,
+      budget_aware: false,
+    });
     const after = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: true });
 
     // How far a crossing lands into the sleep it happens in is luck, so the
@@ -331,7 +335,11 @@ describe("budget-aware cadence", () => {
     const config = runConfig({ RUN_MAX_COST_USD: "5", RUN_MAX_WALL_CLOCK_MS: "21600000" } as never);
     const rate = 10.3 / (60 * MINUTE);
 
-    const before = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: false });
+    const before = simulate(config, {
+      rate_usd_per_ms: rate,
+      started_at_ms: 0,
+      budget_aware: false,
+    });
     const after = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: true });
 
     expect(after.looks - before.looks).toBeLessThanOrEqual(10);
@@ -345,7 +353,11 @@ describe("budget-aware cadence", () => {
     const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(45 * MINUTE) } as never);
     const rate = 0.5 / (60 * MINUTE);
 
-    const before = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: false });
+    const before = simulate(config, {
+      rate_usd_per_ms: rate,
+      started_at_ms: 0,
+      budget_aware: false,
+    });
     const after = simulate(config, { rate_usd_per_ms: rate, started_at_ms: 0, budget_aware: true });
 
     expect(before.overshoot_ms).toBeGreaterThan(0);
@@ -360,7 +372,7 @@ describe("budget-aware cadence", () => {
     // $1 of headroom at $1/minute is a minute away; half of that is the cap,
     // and it wins over the 300s the backoff wanted at this look.
     expect(pollDelay(config, 99, { now_ms: 0, deadline_ms: null, spend })).toBe(
-      MINUTE * BUDGET_POLL_HEADROOM
+      MINUTE * BUDGET_POLL_HEADROOM,
     );
   });
 
@@ -392,7 +404,7 @@ describe("budget-aware cadence", () => {
     // And the first look, where the backoff is already at the floor, cannot be
     // stretched by a cadence that has nothing to say.
     expect(pollDelay(config, 0, { now_ms: 0, deadline_ms: 10 ** 12, spend: null })).toBe(
-      MIN_POLL_MS
+      MIN_POLL_MS,
     );
   });
 
@@ -401,7 +413,7 @@ describe("budget-aware cadence", () => {
     const slow = runConfig({ RUN_POLL_INTERVAL_MS: "300000", RUN_MAX_COST_USD: "5" } as never);
     const spend: SpendSample = { cost_usd: 4.5, at_ms: 0, rate_usd_per_ms: 1 / MINUTE };
     expect(pollDelay(slow, 0, { now_ms: 0, deadline_ms: null, spend })).toBe(
-      30_000 * BUDGET_POLL_HEADROOM
+      30_000 * BUDGET_POLL_HEADROOM,
     );
 
     // But an operator who asked for a one-second cadence gets one second: the
@@ -504,9 +516,9 @@ describe("the per-repo sandbox declaration", () => {
   it("boots the bundled image unless the deployment pushed its own", () => {
     expect(deploymentImage({} as never)).toBe(DEFAULT_SANDBOX_IMAGE);
     expect(deploymentImage({ SANDBOX_IMAGE: "  " } as never)).toBe(DEFAULT_SANDBOX_IMAGE);
-    expect(deploymentImage({ SANDBOX_IMAGE: "registry.example.com/acme/orchestrator:2.0.0" } as never)).toBe(
-      "registry.example.com/acme/orchestrator:2.0.0"
-    );
+    expect(
+      deploymentImage({ SANDBOX_IMAGE: "registry.example.com/acme/orchestrator:2.0.0" } as never),
+    ).toBe("registry.example.com/acme/orchestrator:2.0.0");
   });
 
   it("tells the container which image it got, so its own reader can refuse a boot the repo did not ask for", () => {
@@ -550,7 +562,7 @@ describe("the per-repo sandbox declaration", () => {
       // `trace_id` is minted by the parser, not accepted from the body unless
       // it is a well-formed trace id (tick hyi) — it is part of the closed
       // field set, not an escape from it.
-      ["base_sha", "epic", "project", "queue", "requested_by", "trace_id"].sort()
+      ["base_sha", "epic", "project", "queue", "requested_by", "trace_id"].sort(),
     );
     expect(JSON.stringify(parsed.submission)).not.toContain("evil.example.com");
 

@@ -2,19 +2,14 @@ import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
-import {
-  getRun,
-  listDispatchLogs,
-  listRunGatewayTokens,
-  type DispatchLog,
-} from "../src/db";
+import { type DispatchLog, getRun, listDispatchLogs, listRunGatewayTokens } from "../src/db";
 import { GATEWAY_PATH_PREFIX, issueRunToken } from "../src/gateway";
-import { type QueuedSubmission } from "../src/run-room";
+import type { QueuedSubmission } from "../src/run-room";
 import {
   MIN_QUEUE_TTL_MS,
-  roomFor,
   type RunWorkflowInstance,
   type RunWorkflowParams,
+  roomFor,
 } from "../src/runs";
 
 /**
@@ -298,7 +293,7 @@ describe("submission on a free project", () => {
 
     const res = await post(
       "/api/runs",
-      submission(project, { origin: "local", tick_ids: ["bmo", "s7f"] })
+      submission(project, { origin: "local", tick_ids: ["bmo", "s7f"] }),
     );
 
     expect(res.status).toBe(201);
@@ -341,7 +336,7 @@ describe("submission on a free project", () => {
 
     const res = await post(
       "/api/runs",
-      submission(project, { max_cost_usd: 2.5, max_wall_clock_ms: 2_700_000 })
+      submission(project, { max_cost_usd: 2.5, max_wall_clock_ms: 2_700_000 }),
     );
 
     expect(res.status).toBe(201);
@@ -368,7 +363,7 @@ describe("submission on a free project", () => {
 
     const res = await post(
       "/api/runs",
-      submission(project, { max_cost_usd: 2.5, max_wall_clock_ms: 2_700_000 })
+      submission(project, { max_cost_usd: 2.5, max_wall_clock_ms: 2_700_000 }),
     );
 
     expect(res.status).toBe(201);
@@ -501,7 +496,10 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
   it("refuses an id that is not tick-id shaped", async () => {
     const project = await enrolled("wave-bad-id");
 
-    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa", "not-a-tick-id"] }));
+    const res = await post(
+      "/api/runs",
+      submission(project, { tick_ids: ["aaa", "not-a-tick-id"] }),
+    );
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
@@ -546,10 +544,7 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
   it("refuses to queue a wave until queued cloud-wave submissions are supported", async () => {
     const project = await enrolled("wave-queue");
 
-    const res = await post(
-      "/api/runs",
-      submission(project, { tick_ids: ["aaa"], queue: true })
-    );
+    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa"], queue: true }));
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
@@ -614,7 +609,7 @@ describe("queued submissions (D22)", () => {
 
     const res = await post(
       "/api/runs",
-      submission(project, { epic: "afj", base_sha: OTHER_SHA, queue: true })
+      submission(project, { epic: "afj", base_sha: OTHER_SHA, queue: true }),
     );
 
     expect(res.status).toBe(202);
@@ -644,7 +639,10 @@ describe("queued submissions (D22)", () => {
       run: { run_id: string };
     };
     const parked = (await (
-      await post("/api/runs", submission(project, { epic: "afj", base_sha: OTHER_SHA, queue: true }))
+      await post(
+        "/api/runs",
+        submission(project, { epic: "afj", base_sha: OTHER_SHA, queue: true }),
+      )
     ).json()) as { queued: QueuedSubmission };
 
     // The holder finishes and releases with its own credential — exactly what
@@ -672,10 +670,7 @@ describe("queued submissions (D22)", () => {
     await expect(roomFor(env, project).listQueuedSubmissions()).resolves.toEqual([]);
 
     const logs = await dispatchLogs(parked.queued.run_id, "afj");
-    expect(logs.map((l) => l.decision)).toEqual([
-      expect.stringContaining("queued"),
-      "dispatched",
-    ]);
+    expect(logs.map((l) => l.decision)).toEqual([expect.stringContaining("queued"), "dispatched"]);
   });
 
   // A budget that survives the submission but not the queue is a run the
@@ -694,7 +689,7 @@ describe("queued submissions (D22)", () => {
           queue: true,
           max_cost_usd: 1.25,
           max_wall_clock_ms: 600_000,
-        })
+        }),
       )
     ).json()) as { queued: QueuedSubmission };
 
@@ -724,7 +719,7 @@ describe("queued submissions (D22)", () => {
         base_sha: OTHER_SHA,
         queue: true,
         queue_ttl_ms: MIN_QUEUE_TTL_MS,
-      })
+      }),
     );
 
     await wait(MIN_QUEUE_TTL_MS + 60);
@@ -747,7 +742,7 @@ describe("queued submissions (D22)", () => {
 
     const res = await post(
       "/api/runs",
-      submission(project, { epic: "afj", queue: true, queue_ttl_ms: 5 })
+      submission(project, { epic: "afj", queue: true, queue_ttl_ms: 5 }),
     );
 
     expect(res.status).toBe(400);
@@ -840,7 +835,9 @@ describe("stop is enforced at the control plane", () => {
     // nothing downstream agrees to the stop, and it happens anyway.
     workflow.refuseEvents = true;
 
-    const res = await post(`/api/runs/${run.run_id}/stop`, { requested_by: "operator@example.com" });
+    const res = await post(`/api/runs/${run.run_id}/stop`, {
+      requested_by: "operator@example.com",
+    });
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -1000,8 +997,9 @@ describe("stop is enforced at the control plane", () => {
 
     const back = (await (await post(`/api/runs/${runID}/stop`)).json()) as { mode: string };
     expect(back.mode).toBe("hard");
-    await expect(roomFor(env, (await getRun(env.DB, runID))!.project).stopRequest(runID)).resolves
-      .toMatchObject({ mode: "hard" });
+    await expect(
+      roomFor(env, (await getRun(env.DB, runID))!.project).stopRequest(runID),
+    ).resolves.toMatchObject({ mode: "hard" });
   });
 
   it("refuses a stop mode it does not know rather than quietly stopping cleanly", async () => {
@@ -1012,8 +1010,9 @@ describe("stop is enforced at the control plane", () => {
     expect(res.status).toBe(400);
     const tokens = await listRunGatewayTokens(env.DB, runID);
     expect(tokens.every((entry) => entry.revoked_at === null)).toBe(true);
-    await expect(roomFor(env, (await getRun(env.DB, runID))!.project).stopRequest(runID)).resolves
-      .toBeNull();
+    await expect(
+      roomFor(env, (await getRun(env.DB, runID))!.project).stopRequest(runID),
+    ).resolves.toBeNull();
   });
 
   it("404s an unknown run and 409s one that already ended", async () => {
@@ -1049,7 +1048,7 @@ describe("request validation", () => {
   it("refuses a remote URL where the canonical owner/repo pair belongs", async () => {
     const res = await post(
       "/api/runs",
-      submission("git@github.com:owner/repo.git", { base_sha: SHA })
+      submission("git@github.com:owner/repo.git", { base_sha: SHA }),
     );
 
     expect(res.status).toBe(400);
@@ -1103,7 +1102,7 @@ describe("a run records the orchestrator image it booted", () => {
       `INSERT INTO factory_deployment_image (id, image_ref, image_digest, confirmed_at)
        VALUES (1, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET image_ref=excluded.image_ref,
-         image_digest=excluded.image_digest, confirmed_at=excluded.confirmed_at`
+         image_digest=excluded.image_digest, confirmed_at=excluded.confirmed_at`,
     )
       .bind(ref, digest, new Date().toISOString())
       .run();
@@ -1123,7 +1122,9 @@ describe("a run records the orchestrator image it booted", () => {
 
     const status = await get(`/api/runs/${runID}`);
     expect(status.status).toBe(200);
-    const body = (await status.json()) as { image: { image_ref: string; image_digest: string } | null };
+    const body = (await status.json()) as {
+      image: { image_ref: string; image_digest: string } | null;
+    };
     expect(body.image).toEqual({ image_ref: REF, image_digest: DIGEST });
   });
 
@@ -1137,7 +1138,10 @@ describe("a run records the orchestrator image it booted", () => {
     // The next deploy rolls a new image out. What the run above booted must not
     // move with it — that is the whole reason the stamp is per run.
     const nextDigest = `sha256:${"c".repeat(64)}`;
-    await confirmDeployedImage(`registry.cloudflare.com/acct/ticks-orchestrator@${nextDigest}`, nextDigest);
+    await confirmDeployedImage(
+      `registry.cloudflare.com/acct/ticks-orchestrator@${nextDigest}`,
+      nextDigest,
+    );
 
     const status = await get(`/api/runs/${runID}`);
     const body = (await status.json()) as { image: { image_digest: string } | null };
@@ -1172,7 +1176,7 @@ describe("a run records the orchestrator image it booted", () => {
            image_ref    TEXT NOT NULL,
            image_digest TEXT NOT NULL,
            recorded_at  TEXT NOT NULL
-         )`
+         )`,
       ).run();
     }
   });

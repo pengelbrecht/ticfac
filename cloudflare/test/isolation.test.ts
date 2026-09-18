@@ -35,7 +35,7 @@ describe("separation from cloud/worker", () => {
       // Covers `import x from "y"`, `import("y")` and `import("y").Type` in
       // the .d.ts, which is where the binding types live.
       const specifiers = [...source.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
-        (m) => m[1]
+        (m) => m[1],
       );
 
       for (const specifier of specifiers) {

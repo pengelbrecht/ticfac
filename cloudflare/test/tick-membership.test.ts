@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
-
+import layout from "../../contracts/tracker-layout.json";
 import {
+  checkWaveMembership,
   EPIC_TYPE,
   MAX_ANCESTOR_DEPTH,
-  TICK_RECORD_DIR,
-  checkWaveMembership,
   parseTickRecord,
-  tickRecordPath,
+  TICK_RECORD_DIR,
   type TrackerReader,
+  tickRecordPath,
 } from "../src/tick-membership";
-
-import layout from "../../contracts/tracker-layout.json";
 
 /**
  * The tracker as GitHub would serve it: one JSON record per tick at one
@@ -26,7 +24,13 @@ class FakeTracker implements TrackerReader {
   readonly asked: { project: string; ref: string; tickID: string }[] = [];
 
   tick(id: string, parent?: string, type = "task"): this {
-    this.records.set(id, { id, title: id, status: "open", type, ...(parent === undefined ? {} : { parent }) });
+    this.records.set(id, {
+      id,
+      title: id,
+      status: "open",
+      type,
+      ...(parent === undefined ? {} : { parent }),
+    });
     return this;
   }
 
@@ -37,7 +41,8 @@ class FakeTracker implements TrackerReader {
   async read(project: string, ref: string, tickID: string): Promise<string | null> {
     this.asked.push({ project, ref, tickID });
     if (this.unreadable !== null) throw new Error(this.unreadable);
-    if (this.erroring.has(tickID)) throw new Error(`GitHub answered HTTP 502 reading ${tickRecordPath(tickID)}`);
+    if (this.erroring.has(tickID))
+      throw new Error(`GitHub answered HTTP 502 reading ${tickRecordPath(tickID)}`);
     const record = this.records.get(tickID);
     return record === undefined ? null : JSON.stringify(record);
   }
@@ -168,7 +173,11 @@ describe("checkWaveMembership: the rule cloudIsDescendant walks, one door later"
   });
 
   it("reads one record per distinct id however many walks cross it", async () => {
-    const tracker = new FakeTracker().epic("1vn").tick("mid", "1vn").tick("aaa", "mid").tick("bbb", "mid");
+    const tracker = new FakeTracker()
+      .epic("1vn")
+      .tick("mid", "1vn")
+      .tick("aaa", "mid")
+      .tick("bbb", "mid");
     await expect(check(tracker, "1vn", ["aaa", "bbb"])).resolves.toEqual({ state: "inside" });
     // The epic, mid, and the two ticks — `mid` is on both chains and is read once.
     expect(tracker.asked.map((a) => a.tickID).sort()).toEqual(["1vn", "aaa", "bbb", "mid"]);

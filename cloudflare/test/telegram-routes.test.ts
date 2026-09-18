@@ -65,7 +65,9 @@ type BotCall = { method: string; body: Record<string, unknown> };
 let bot: { calls: BotCall[]; restore: () => void } | null = null;
 
 function fakeBotAPI(
-  respond: (method: string, body: Record<string, unknown>) => unknown = () => ({ message_id: 4242 })
+  respond: (method: string, body: Record<string, unknown>) => unknown = () => ({
+    message_id: 4242,
+  }),
 ) {
   const calls: BotCall[] = [];
   const original = globalThis.fetch;
@@ -73,7 +75,8 @@ function fakeBotAPI(
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith("https://telegram.test/")) return original(input as RequestInfo, init);
     const method = url.slice(url.lastIndexOf("/") + 1);
-    const body = init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
+    const body =
+      init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
     return Response.json({ ok: true, result: respond(method, body) });
   }) as typeof fetch;
@@ -273,7 +276,7 @@ describe("webhook registration", () => {
     const api = fakeBotAPI((method) =>
       method === "getMe"
         ? { id: 1, username: "ticks_bot", can_read_all_group_messages: false }
-        : true
+        : true,
     );
     env.TELEGRAM_WEBHOOK_SECRET = "shh";
     try {
@@ -294,7 +297,7 @@ describe("webhook registration", () => {
 
   it("refuses while the bot's group privacy mode is off", async () => {
     const api = fakeBotAPI((method) =>
-      method === "getMe" ? { id: 1, can_read_all_group_messages: true } : true
+      method === "getMe" ? { id: 1, can_read_all_group_messages: true } : true,
     );
     const res = await post(REGISTRATION);
     expect(res.status).toBe(409);
@@ -306,7 +309,7 @@ describe("webhook registration", () => {
     const api = fakeBotAPI((method) =>
       method === "getWebhookInfo"
         ? { url: `${BASE}${TELEGRAM_WEBHOOK_PATH}`, pending_update_count: 0 }
-        : true
+        : true,
     );
     const info = await get(REGISTRATION);
     expect(info.status).toBe(200);

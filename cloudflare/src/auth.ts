@@ -198,10 +198,10 @@ function base64UrlEncode(bytes: Uint8Array): string {
 
 function base64UrlDecode(value: string): Uint8Array | null {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
-  const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(
-    value.length + ((4 - (value.length % 4)) % 4),
-    "="
-  );
+  const padded = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(value.length + ((4 - (value.length % 4)) % 4), "=");
   try {
     const binary = atob(padded);
     const bytes = new Uint8Array(binary.length);
@@ -230,12 +230,12 @@ export function mintFactoryToken(): string {
  */
 export async function deriveTokenHash(
   token: string,
-  options: { salt?: Uint8Array; iterations?: number } = {}
+  options: { salt?: Uint8Array; iterations?: number } = {},
 ): Promise<string> {
   const iterations = options.iterations ?? DEFAULT_ITERATIONS;
   if (!Number.isInteger(iterations) || iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS) {
     throw new RangeError(
-      `iterations must be an integer in [${MIN_ITERATIONS}, ${MAX_ITERATIONS}], got ${iterations}`
+      `iterations must be an integer in [${MIN_ITERATIONS}, ${MAX_ITERATIONS}], got ${iterations}`,
     );
   }
 
@@ -250,30 +250,27 @@ export async function deriveTokenHash(
   }
 
   const derivedKey = await deriveBits(token, salt, iterations);
-  return [
-    HASH_SCHEME,
-    String(iterations),
-    base64UrlEncode(salt),
-    base64UrlEncode(derivedKey),
-  ].join("$");
+  return [HASH_SCHEME, String(iterations), base64UrlEncode(salt), base64UrlEncode(derivedKey)].join(
+    "$",
+  );
 }
 
 async function deriveBits(
   token: string,
   salt: Uint8Array,
-  iterations: number
+  iterations: number,
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(token),
     "PBKDF2",
     false,
-    ["deriveBits"]
+    ["deriveBits"],
   );
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: salt as BufferSource, iterations },
     key,
-    DERIVED_BITS
+    DERIVED_BITS,
   );
   return new Uint8Array(bits);
 }
@@ -323,7 +320,7 @@ export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
  */
 export async function verifyAgainstRecord(
   token: string,
-  record: TokenHashRecord
+  record: TokenHashRecord,
 ): Promise<boolean> {
   const candidate = await deriveBits(token, record.salt, record.iterations);
   return timingSafeEqual(candidate, record.derivedKey);
@@ -396,7 +393,7 @@ function misconfigured(detail: string): Response {
  */
 export async function authenticateFactoryRequest(
   request: Request,
-  env: FactoryAuthEnv
+  env: FactoryAuthEnv,
 ): Promise<Response | null> {
   const stored = env.FACTORY_TOKEN_HASH;
   if (typeof stored !== "string" || stored.length === 0) {
@@ -414,7 +411,7 @@ export async function authenticateFactoryRequest(
   if (record === null) {
     // Names the secret and the scheme we expect, never the stored value.
     console.error(
-      `factory auth: FACTORY_TOKEN_HASH is not a valid ${HASH_SCHEME} record; re-run the deploy`
+      `factory auth: FACTORY_TOKEN_HASH is not a valid ${HASH_SCHEME} record; re-run the deploy`,
     );
     return misconfigured(`FACTORY_TOKEN_HASH is not a valid ${HASH_SCHEME} record`);
   }
@@ -433,12 +430,12 @@ export async function authenticateFactoryRequest(
     console.error(
       `factory auth: PBKDF2 derivation failed for a well-formed FACTORY_TOKEN_HASH record ` +
         `at ${record.iterations} iterations (platform cap ${PLATFORM_MAX_ITERATIONS}); ` +
-        `re-mint the secret. Runtime said: ${reason}`
+        `re-mint the secret. Runtime said: ${reason}`,
     );
     // The body carries only what we composed: a runtime message is not ours to
     // hand to whoever can reach the route.
     return misconfigured(
-      `FACTORY_TOKEN_HASH parsed but PBKDF2 derivation failed at ${record.iterations} iterations`
+      `FACTORY_TOKEN_HASH parsed but PBKDF2 derivation failed at ${record.iterations} iterations`,
     );
   }
 }
@@ -489,7 +486,7 @@ export async function isAuthConfigured(env: FactoryAuthEnv): Promise<boolean> {
     // Names the secret and the scheme we expect, never the stored value.
     console.error(
       `factory health: FACTORY_TOKEN_HASH is not a valid ${HASH_SCHEME} record; ` +
-        `reporting auth.configured=false`
+        `reporting auth.configured=false`,
     );
     return false;
   }
@@ -506,7 +503,7 @@ export async function isAuthConfigured(env: FactoryAuthEnv): Promise<boolean> {
     console.error(
       `factory health: PBKDF2 derivation failed for a well-formed FACTORY_TOKEN_HASH record ` +
         `at ${record.iterations} iterations (platform cap ${PLATFORM_MAX_ITERATIONS}); ` +
-        `reporting auth.configured=false. Runtime said: ${reason}`
+        `reporting auth.configured=false. Runtime said: ${reason}`,
     );
     return false;
   }

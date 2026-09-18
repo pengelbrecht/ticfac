@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
-
-import contract from "../../contracts/lifecycle-invariants.json";
 import jobProtocol from "../../contracts/job-protocol.json";
+import contract from "../../contracts/lifecycle-invariants.json";
 
 import { MAX_POLL_MS } from "../src/run-workflow";
 import { SANDBOX_SLEEP_AFTER } from "../src/sandbox";
 import { STEP_WORK_BUDGET_MS } from "../src/workflow-limits";
 
-import { LifecycleHarness, type FinalState, type Step, type Thresholds } from "./lifecycle-harness";
+import { type FinalState, LifecycleHarness, type Step, type Thresholds } from "./lifecycle-harness";
 
 /**
  * The TypeScript reader for `contracts/lifecycle-invariants.json` — SPEC
@@ -80,7 +79,9 @@ function harness(): LifecycleHarness {
 
 /** Replays every sequence of one invariant and asserts each step and the final state. */
 function conforms(inv: Invariant): void {
-  expect(inv.sequences.length, `${inv.id} has no sequence, so it is not runnable`).toBeGreaterThan(0);
+  expect(inv.sequences.length, `${inv.id} has no sequence, so it is not runnable`).toBeGreaterThan(
+    0,
+  );
   for (const seq of inv.sequences) {
     const h = harness();
     seq.steps.forEach((step, i) => {
@@ -181,8 +182,10 @@ describe("the Appendix A conformance suite", () => {
       expect(inv.statement).not.toBe("");
       // Guidance wearing a conformance test's clothes is the one thing
       // Appendix A's preamble says these are not.
-      expect(inv.earned_from.length, `${inv.id} does not name the live failure that earned it`)
-        .toBeGreaterThan(60);
+      expect(
+        inv.earned_from.length,
+        `${inv.id} does not name the live failure that earned it`,
+      ).toBeGreaterThan(60);
       expect(inv.guards.length).toBeGreaterThan(0);
       expect(inv.sequences.length).toBeGreaterThan(0);
       for (const seq of inv.sequences) {
@@ -200,7 +203,10 @@ describe("the Appendix A conformance suite", () => {
   it("cross-references where each invariant lives today", () => {
     let inRunWorkflow = 0;
     for (const inv of invariants) {
-      expect(inv.today.length, `${inv.id} names no implementation it was extracted from`).toBeGreaterThan(0);
+      expect(
+        inv.today.length,
+        `${inv.id} names no implementation it was extracted from`,
+      ).toBeGreaterThan(0);
       for (const site of inv.today) {
         expect(site.file).not.toBe("");
         expect(site.symbols.length).toBeGreaterThan(0);
@@ -238,7 +244,9 @@ describe("the Appendix A conformance suite", () => {
         for (const step of seq.steps) {
           const outcomes = declared.get(step.op);
           expect(outcomes, `${inv.id}/${seq.id} uses undeclared op ${step.op}`).toBeDefined();
-          expect(outcomes!.has(step.expect), `op ${step.op} does not declare ${step.expect}`).toBe(true);
+          expect(outcomes!.has(step.expect), `op ${step.op} does not declare ${step.expect}`).toBe(
+            true,
+          );
           reach(step.op, step.expect);
         }
         // The same sequence with this invariant's guards off. Whatever the fake
@@ -255,7 +263,10 @@ describe("the Appendix A conformance suite", () => {
     for (const [op, outcomes] of declared) {
       expect(reached.has(op), `op ${op} is declared but no sequence uses it`).toBe(true);
       for (const outcome of outcomes) {
-        expect(reached.get(op)!.has(outcome), `op ${op} declares ${outcome}, which nothing reaches`).toBe(true);
+        expect(
+          reached.get(op)!.has(outcome),
+          `op ${op} declares ${outcome}, which nothing reaches`,
+        ).toBe(true);
       }
       for (const outcome of reached.get(op)!) {
         expect(outcomes.has(outcome), `op ${op} produced undeclared outcome ${outcome}`).toBe(true);
@@ -275,12 +286,16 @@ describe("the Appendix A conformance suite", () => {
     for (const inv of invariants) {
       for (const guard of inv.guards) {
         expect(declared.has(guard), `${inv.id} names undeclared guard ${guard}`).toBe(true);
-        expect(claimed.has(guard), `guard ${guard} is claimed by more than one invariant`).toBe(false);
+        expect(claimed.has(guard), `guard ${guard} is claimed by more than one invariant`).toBe(
+          false,
+        );
         claimed.add(guard);
       }
     }
     for (const guard of declared) {
-      expect(claimed.has(guard), `guard ${guard} is declared but no invariant claims it`).toBe(true);
+      expect(claimed.has(guard), `guard ${guard} is declared but no invariant claims it`).toBe(
+        true,
+      );
     }
   });
 
@@ -310,7 +325,9 @@ describe("the Appendix A conformance suite", () => {
       thresholds.wipe_threshold_ms,
       `wipe_threshold_ms must equal SANDBOX_SLEEP_AFTER (${SANDBOX_SLEEP_AFTER})`,
     ).toBe(durationToMs(SANDBOX_SLEEP_AFTER));
-    expect(thresholds.max_poll_ms, "max_poll_ms must equal run-workflow.ts's MAX_POLL_MS").toBe(MAX_POLL_MS);
+    expect(thresholds.max_poll_ms, "max_poll_ms must equal run-workflow.ts's MAX_POLL_MS").toBe(
+      MAX_POLL_MS,
+    );
     expect(
       thresholds.step_cap_ms,
       "step_cap_ms must equal workflow-limits.ts's STEP_WORK_BUDGET_MS",
@@ -325,7 +342,9 @@ describe("the Appendix A conformance suite", () => {
     expect(contract.harness.protected_prefixes.why).toHaveLength(protectedPrefixes.length);
     for (const prefix of protectedPrefixes) {
       // A bare name would also match a file that merely starts with it.
-      expect(prefix.endsWith("/"), `protected prefix ${prefix} is not a directory prefix`).toBe(true);
+      expect(prefix.endsWith("/"), `protected prefix ${prefix} is not a directory prefix`).toBe(
+        true,
+      );
     }
 
     // And the boundary A10's sequence exercises is this one.
@@ -337,10 +356,14 @@ describe("the Appendix A conformance suite", () => {
         const under = protectedPrefixes.some((prefix) => step.path!.startsWith(prefix));
         if (step.expect === "refused_and_reported") {
           refused++;
-          expect(under, `A10 expects ${step.path} refused, but no declared prefix covers it`).toBe(true);
+          expect(under, `A10 expects ${step.path} refused, but no declared prefix covers it`).toBe(
+            true,
+          );
         } else if (step.expect === "permitted") {
           permitted++;
-          expect(under, `A10 expects ${step.path} permitted, but a declared prefix covers it`).toBe(false);
+          expect(under, `A10 expects ${step.path} permitted, but a declared prefix covers it`).toBe(
+            false,
+          );
         }
       }
     }
@@ -363,7 +386,9 @@ describe("the Appendix A conformance suite", () => {
     };
     expect(fingerprintFields).toHaveLength(4);
     for (const field of fingerprintFields) {
-      expect(Object.keys(provenance.properties), `${field} is not a provenance property`).toContain(field);
+      expect(Object.keys(provenance.properties), `${field} is not a provenance property`).toContain(
+        field,
+      );
       // Evidence that MAY omit a fingerprint field is not fingerprinted.
       expect(provenance.required, `${field} is not required by provenance`).toContain(field);
     }

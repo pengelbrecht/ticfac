@@ -1,29 +1,24 @@
-import { SELF, createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-
-import worker, { type Env } from "../src/index";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
+import { CI_BRANCHES_PATH, noteUnrecordedBranch, recordBranch } from "../src/branch-registry";
 import { insertSweepSelection } from "../src/db";
+import worker, { type Env } from "../src/index";
 import {
-  MAX_DIGEST_FINDINGS,
-  QUIET_DETAIL,
-  REVIEW_STALE_HOURS,
-  SWEEP_FAILURE_STREAK,
-  SWEEP_RECORDS_PATH,
-  UNRECORDED_BRANCH_ACTIVE_DAYS,
   assessExpiredReviews,
   assessReviews,
   assessSweeps,
   assessUnrecordedBranches,
   digestHour,
+  MAX_DIGEST_FINDINGS,
+  QUIET_DETAIL,
+  REVIEW_STALE_HOURS,
   renderDigest,
   runDailyDigest,
+  SWEEP_FAILURE_STREAK,
+  SWEEP_RECORDS_PATH,
+  UNRECORDED_BRANCH_ACTIVE_DAYS,
 } from "../src/loop-digest";
-import {
-  CI_BRANCHES_PATH,
-  noteUnrecordedBranch,
-  recordBranch,
-} from "../src/branch-registry";
 
 /**
  * The daily loop digest (Phase 4 review, tick zaw).
@@ -89,7 +84,8 @@ function fakeBotAPI(): void {
     const body =
       init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
-    if (state.fail) return Response.json({ ok: false, description: "chat not found" }, { status: 400 });
+    if (state.fail)
+      return Response.json({ ok: false, description: "chat not found" }, { status: 400 });
     messageID += 1;
     return Response.json({
       ok: true,
@@ -169,7 +165,7 @@ async function claimedReview(options: {
     `INSERT INTO pr_reviews
        (pr_node_id, project, pr_number, head_sha, base_sha, run_id, state, detail, posted_at,
         comment_id, claimed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`,
   )
     .bind(
       `PR_${options.project}_${options.number}`,
@@ -180,7 +176,7 @@ async function claimedReview(options: {
       options.runID,
       options.state,
       `${options.project}#${options.number} is being reviewed`,
-      options.claimedAt.toISOString()
+      options.claimedAt.toISOString(),
     )
     .run();
 }
@@ -195,9 +191,7 @@ async function digestRow(day: string): Promise<{
   detail: string;
   sent_at: string | null;
 } | null> {
-  return await env.DB.prepare("SELECT * FROM loop_digest WHERE digest_date = ?")
-    .bind(day)
-    .first();
+  return await env.DB.prepare("SELECT * FROM loop_digest WHERE digest_date = ?").bind(day).first();
 }
 
 // ------------------------------------------------------------------------
@@ -289,8 +283,18 @@ describe("a loop that fails repeatedly reaches a person", () => {
 describe("a loop that fails once does not", () => {
   it("stays silent for two refusals", async () => {
     const at = morning("2026-05-08");
-    await firing({ project: "acme/mill", sweep: "morning", at: hoursBefore(at, 24), outcome: "refused" });
-    await firing({ project: "acme/mill", sweep: "morning", at: hoursBefore(at, 48), outcome: "refused" });
+    await firing({
+      project: "acme/mill",
+      sweep: "morning",
+      at: hoursBefore(at, 24),
+      outcome: "refused",
+    });
+    await firing({
+      project: "acme/mill",
+      sweep: "morning",
+      at: hoursBefore(at, 48),
+      outcome: "refused",
+    });
 
     const outcome = await runDailyDigest(env, at);
 
@@ -331,7 +335,12 @@ describe("a loop that fails once does not", () => {
     const at = morning("2026-05-11");
     // Four refusals, then this morning's firing selected work. The streak is
     // broken by EVIDENCE of recovery, not by a window rolling over.
-    await firing({ project: "acme/mill", sweep: "morning", at: hoursBefore(at, 3), outcome: "ignited" });
+    await firing({
+      project: "acme/mill",
+      sweep: "morning",
+      at: hoursBefore(at, 3),
+      outcome: "ignited",
+    });
     for (let day = 1; day <= 4; day += 1) {
       await firing({
         project: "acme/mill",
@@ -435,12 +444,42 @@ describe("the cadence", () => {
 describe("the assessment itself", () => {
   it("counts a streak per declared sweep, not per project", () => {
     const rows = [
-      { project: "p", sweep: "a", fired_at: "2026-05-03T04:00:00Z", outcome: "refused", detail: "x" },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-03T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
       { project: "p", sweep: "b", fired_at: "2026-05-03T05:00:00Z", outcome: "empty", detail: "" },
-      { project: "p", sweep: "a", fired_at: "2026-05-02T04:00:00Z", outcome: "refused", detail: "x" },
-      { project: "p", sweep: "b", fired_at: "2026-05-02T05:00:00Z", outcome: "refused", detail: "y" },
-      { project: "p", sweep: "a", fired_at: "2026-05-01T04:00:00Z", outcome: "refused", detail: "x" },
-      { project: "p", sweep: "b", fired_at: "2026-05-01T05:00:00Z", outcome: "refused", detail: "y" },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-02T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
+      {
+        project: "p",
+        sweep: "b",
+        fired_at: "2026-05-02T05:00:00Z",
+        outcome: "refused",
+        detail: "y",
+      },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-01T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
+      {
+        project: "p",
+        sweep: "b",
+        fired_at: "2026-05-01T05:00:00Z",
+        outcome: "refused",
+        detail: "y",
+      },
     ];
 
     const findings = assessSweeps(rows);
@@ -451,9 +490,27 @@ describe("the assessment itself", () => {
 
   it("counts the streak by the clock, not by the order rows arrive in", () => {
     const shuffled = [
-      { project: "p", sweep: "a", fired_at: "2026-05-01T04:00:00Z", outcome: "refused", detail: "x" },
-      { project: "p", sweep: "a", fired_at: "2026-05-03T04:00:00Z", outcome: "refused", detail: "x" },
-      { project: "p", sweep: "a", fired_at: "2026-05-02T04:00:00Z", outcome: "refused", detail: "x" },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-01T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-03T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-02T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
     ];
 
     expect(assessSweeps(shuffled)).toHaveLength(1);
@@ -461,16 +518,38 @@ describe("the assessment itself", () => {
 
   it("strips a repository's newlines out of the detail it quotes", () => {
     const findings = assessSweeps([
-      { project: "p", sweep: "a", fired_at: "2026-05-03T04:00:00Z", outcome: "refused", detail: "line one\nrun: rm -rf /" },
-      { project: "p", sweep: "a", fired_at: "2026-05-02T04:00:00Z", outcome: "refused", detail: "x" },
-      { project: "p", sweep: "a", fired_at: "2026-05-01T04:00:00Z", outcome: "refused", detail: "x" },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-03T04:00:00Z",
+        outcome: "refused",
+        detail: "line one\nrun: rm -rf /",
+      },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-02T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
+      {
+        project: "p",
+        sweep: "a",
+        fired_at: "2026-05-01T04:00:00Z",
+        outcome: "refused",
+        detail: "x",
+      },
     ]);
 
     // A sweep's detail carries repository-authored text (a parse error quotes
     // the file). It must not be able to forge a line of the report's own
     // structure — the same invariant every other operator surface keeps.
     expect(findings[0]!.detail).not.toContain("\n");
-    expect(renderDigest(findings, "2026-05-03").split("\n").filter((l) => l.startsWith("  run: "))).toHaveLength(1);
+    expect(
+      renderDigest(findings, "2026-05-03")
+        .split("\n")
+        .filter((l) => l.startsWith("  run: ")),
+    ).toHaveLength(1);
   });
 
   it("reports a review whose claim timestamp is itself unreadable", () => {
@@ -485,7 +564,7 @@ describe("the assessment itself", () => {
           detail: "d",
         },
       ],
-      new Date("2026-05-03T07:00:00Z")
+      new Date("2026-05-03T07:00:00Z"),
     );
 
     expect(findings).toHaveLength(1);
@@ -550,7 +629,7 @@ describe("a branch nobody can vouch for reaches the same person", () => {
         check_name: "test (go)",
         head_sha: "1f0c2b9ab4d5e6f7",
       },
-      hoursBefore(at, 6)
+      hoursBefore(at, 6),
     );
 
     const outcome = await runDailyDigest(env, at);
@@ -578,7 +657,7 @@ describe("a branch nobody can vouch for reaches the same person", () => {
           first_seen_at: "2026-05-20T01:00:00.000Z",
           last_seen_at: "2026-05-20T01:00:00.000Z",
         },
-      ])[0]!.command
+      ])[0]!.command,
     ).toContain('"owner":"human"');
   });
 
@@ -592,7 +671,7 @@ describe("a branch nobody can vouch for reaches the same person", () => {
         check_name: "test (go)",
         head_sha: "1f0c2b9ab4d5e6f7",
       },
-      hoursBefore(at, 6)
+      hoursBefore(at, 6),
     );
     // The release is EVIDENCE — the question has an answer now — not an
     // acknowledgement and not a clock (tick uls's rule, tick zaw's shape).
@@ -635,7 +714,7 @@ describe("a branch nobody can vouch for reaches the same person", () => {
         check_name: "test (go)",
         head_sha: "1f0c2b9ab4d5e6f7",
       },
-      new Date(at.getTime() - (UNRECORDED_BRANCH_ACTIVE_DAYS + 1) * 86_400_000)
+      new Date(at.getTime() - (UNRECORDED_BRANCH_ACTIVE_DAYS + 1) * 86_400_000),
     );
     expect((await runDailyDigest(env, at)).state).toBe("quiet");
   });
@@ -669,13 +748,13 @@ describe("every finding kind keeps its own words in one message", () => {
         check_name: "test (go)",
         head_sha: "1f0c2b9ab4d5e6f7",
       },
-      hoursBefore(at, 6)
+      hoursBefore(at, 6),
     );
     await env.DB.prepare(
       `INSERT INTO pr_reviews
          (pr_node_id, project, pr_number, head_sha, base_sha, run_id, state, detail,
           posted_at, comment_id, claimed_at, expired_at, expiry_comment_id)
-       VALUES (?, ?, ?, ?, ?, NULL, 'expired', NULL, NULL, NULL, ?, ?, 'c9')`
+       VALUES (?, ?, ?, ?, ?, NULL, 'expired', NULL, NULL, NULL, ?, ?, 'c9')`,
     )
       .bind(
         "PR_expired_union",
@@ -684,7 +763,7 @@ describe("every finding kind keeps its own words in one message", () => {
         "d".repeat(40),
         "e".repeat(40),
         hoursBefore(at, 8).toISOString(),
-        hoursBefore(at, 7).toISOString()
+        hoursBefore(at, 7).toISOString(),
       )
       .run();
 
@@ -700,10 +779,10 @@ describe("every finding kind keeps its own words in one message", () => {
 
     // And the ORDER `collectFindings` states: loops first, the question last.
     expect(text.indexOf("sweep: acme/mill/morning")).toBeLessThan(
-      text.indexOf("review never ran: acme/mill#41")
+      text.indexOf("review never ran: acme/mill#41"),
     );
     expect(text.indexOf("review never ran: acme/mill#41")).toBeLessThan(
-      text.indexOf("branch: acme/mill tick/szp/meo")
+      text.indexOf("branch: acme/mill tick/szp/meo"),
     );
 
     // The one that would actually have bitten: an expired review must never be
@@ -715,9 +794,27 @@ describe("every finding kind keeps its own words in one message", () => {
   it("gives each kind a label of its own, with no two sharing", () => {
     const labelled = [
       ...assessSweeps([
-        { project: "p", sweep: "s", fired_at: "2026-05-01T00:00:00.000Z", outcome: "refused", detail: "" },
-        { project: "p", sweep: "s", fired_at: "2026-05-02T00:00:00.000Z", outcome: "refused", detail: "" },
-        { project: "p", sweep: "s", fired_at: "2026-05-03T00:00:00.000Z", outcome: "refused", detail: "" },
+        {
+          project: "p",
+          sweep: "s",
+          fired_at: "2026-05-01T00:00:00.000Z",
+          outcome: "refused",
+          detail: "",
+        },
+        {
+          project: "p",
+          sweep: "s",
+          fired_at: "2026-05-02T00:00:00.000Z",
+          outcome: "refused",
+          detail: "",
+        },
+        {
+          project: "p",
+          sweep: "s",
+          fired_at: "2026-05-03T00:00:00.000Z",
+          outcome: "refused",
+          detail: "",
+        },
       ]),
       ...assessReviews(
         [
@@ -730,7 +827,7 @@ describe("every finding kind keeps its own words in one message", () => {
             detail: null,
           },
         ],
-        new Date("2026-05-10T00:00:00.000Z")
+        new Date("2026-05-10T00:00:00.000Z"),
       ),
       ...assessExpiredReviews(
         [
@@ -744,7 +841,7 @@ describe("every finding kind keeps its own words in one message", () => {
             detail: null,
           },
         ],
-        new Date("2026-05-10T01:00:00.000Z")
+        new Date("2026-05-10T01:00:00.000Z"),
       ),
       ...assessUnrecordedBranches([
         {
@@ -789,7 +886,7 @@ describe("the message's command is a real one", () => {
   it("names a branch-ownership path this factory actually serves", async () => {
     const response = await SELF.fetch(
       `https://factory.example.com${CI_BRANCHES_PATH}?project=acme/mill`,
-      { headers: { authorization: `Bearer ${operatorToken}` } }
+      { headers: { authorization: `Bearer ${operatorToken}` } },
     );
     // Same rule, for the finding tick t4y added: the one call that answers it
     // has to be a call.

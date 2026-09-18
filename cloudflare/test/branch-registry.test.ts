@@ -4,8 +4,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BRANCH_CLAIM_PREFIX, deriveTokenHash, isAuthExempt, mintFactoryToken } from "../src/auth";
 import {
   BRANCH_CLAIM_PATH,
-  CI_BRANCHES_PATH,
   branchRecord,
+  CI_BRANCHES_PATH,
   listUnrecordedBranches,
   noteUnrecordedBranch,
   recordBranch,
@@ -71,7 +71,7 @@ let counter = 0;
 /** A live run holding its own gateway token — what a container actually is. */
 async function liveRun(
   epic: string,
-  project?: string
+  project?: string,
 ): Promise<{ run_id: string; project: string; epic: string; token: string }> {
   counter += 1;
   const resolved = project ?? `acme/mill-${counter}`;
@@ -211,7 +211,7 @@ describe("the container's door", () => {
     expect((await claim(null, { branch: "tick-run/szp" })).status).toBe(401);
 
     await env.DB.prepare(
-      `UPDATE run_gateway_token SET revoked_at = ?, revoked_reason = 'stopped' WHERE run_id = ?`
+      `UPDATE run_gateway_token SET revoked_at = ?, revoked_reason = 'stopped' WHERE run_id = ?`,
     )
       .bind(new Date().toISOString(), run.run_id)
       .run();
@@ -236,11 +236,11 @@ describe("the operator's door", () => {
 
     expect(
       (await operator("POST", { project: run.project, branch: "tick/szp/meo", owner: "factory" }))
-        .status
+        .status,
     ).toBe(201);
     expect(
       (await operator("POST", { project: run.project, branch: "tick/szp/mine", owner: "human" }))
-        .status
+        .status,
     ).toBe(201);
 
     expect(await branchOwnership(env, run.project, "tick/szp/meo")).toMatchObject({
@@ -272,7 +272,7 @@ describe("the operator's door", () => {
     });
 
     expect(
-      (await operator("DELETE", { project: run.project, branch: "tick/szp/meo" })).status
+      (await operator("DELETE", { project: run.project, branch: "tick/szp/meo" })).status,
     ).toBe(200);
     expect(await branchOwnership(env, run.project, "tick/szp/meo")).toEqual({
       state: "unrecorded",
@@ -280,7 +280,7 @@ describe("the operator's door", () => {
     // Deleting what is not there is a 404, so a typo is found rather than read
     // as a success.
     expect(
-      (await operator("DELETE", { project: run.project, branch: "tick/szp/meo" })).status
+      (await operator("DELETE", { project: run.project, branch: "tick/szp/meo" })).status,
     ).toBe(404);
   });
 
@@ -299,7 +299,7 @@ describe("the operator's door", () => {
     // "This is mine" is never a widening, so it is never refused on the name.
     const run = await liveRun("szp");
     expect(
-      (await operator("POST", { project: run.project, branch: "main", owner: "human" })).status
+      (await operator("POST", { project: run.project, branch: "main", owner: "human" })).status,
     ).toBe(201);
   });
 
@@ -353,7 +353,7 @@ describe("the refusal that must not be silent", () => {
     await noteUnrecordedBranch(env, refusal);
 
     const open = (await listUnrecordedBranches(env, "1970-01-01T00:00:00.000Z")).filter(
-      (row) => row.project === run.project
+      (row) => row.project === run.project,
     );
     // GitHub redelivers. One unanswered question must stay one finding.
     expect(open).toHaveLength(1);
@@ -370,7 +370,7 @@ describe("the refusal that must not be silent", () => {
     });
     const mine = async () =>
       (await listUnrecordedBranches(env, "1970-01-01T00:00:00.000Z")).filter(
-        (row) => row.project === run.project
+        (row) => row.project === run.project,
       );
     expect(await mine()).toHaveLength(1);
 
@@ -396,11 +396,11 @@ describe("the refusal that must not be silent", () => {
         check_name: "test (go)",
         head_sha: "abc123abc123",
       },
-      long
+      long,
     );
     const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
     expect(
-      (await listUnrecordedBranches(env, since)).filter((row) => row.project === run.project)
+      (await listUnrecordedBranches(env, since)).filter((row) => row.project === run.project),
     ).toHaveLength(0);
   });
 });

@@ -156,16 +156,25 @@ describe("collectFromGithub", () => {
   it("is ready-to-merge: commits beyond base, a DONE report, no boundary files", async () => {
     const github = stubGithub({
       compare: compareOK(3),
-      contents: { status: 200, body: { content: b64("work\n\nSTATUS: DONE\n"), encoding: "base64" } },
+      contents: {
+        status: 200,
+        body: { content: b64("work\n\nSTATUS: DONE\n"), encoding: "base64" },
+      },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("ready-to-merge");
       expect(report.branch_exists).toBe(true);
       expect(report.commits).toBe(3);
       expect(report.status).toBe(STATUS_DONE);
       expect(report.boundary_files).toEqual([]);
-      expect(github.calls[0]).toContain(`/repos/${PROJECT}/compare/${BASE}...${encodeURIComponent(BRANCH)}`);
+      expect(github.calls[0]).toContain(
+        `/repos/${PROJECT}/compare/${BASE}...${encodeURIComponent(BRANCH)}`,
+      );
       expect(github.calls[1]).toContain(`/repos/${PROJECT}/contents/${RESULT_PATH}?ref=`);
     } finally {
       github.restore();
@@ -175,7 +184,11 @@ describe("collectFromGithub", () => {
   it("is no-commits when the branch does not exist on origin", async () => {
     const github = stubGithub({ compare: { status: 404, body: { message: "Not Found" } } });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("no-commits");
       expect(report.branch_exists).toBe(false);
       expect(report.detail).toContain(BRANCH);
@@ -190,7 +203,11 @@ describe("collectFromGithub", () => {
       contents: { status: 404, body: { message: "Not Found" } },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("no-commits");
       expect(report.branch_exists).toBe(true);
       expect(report.commits).toBe(0);
@@ -202,10 +219,17 @@ describe("collectFromGithub", () => {
   it("still reads the result file when there are no commits, so a BLOCKED report without a push is visible", async () => {
     const github = stubGithub({
       compare: compareOK(0),
-      contents: { status: 200, body: { content: b64("STATUS: BLOCKED — no gateway credential"), encoding: "base64" } },
+      contents: {
+        status: 200,
+        body: { content: b64("STATUS: BLOCKED — no gateway credential"), encoding: "base64" },
+      },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("no-commits");
       expect(report.status).toBe(STATUS_BLOCKED);
       expect(needsHuman(report)).toBe(true);
@@ -220,7 +244,11 @@ describe("collectFromGithub", () => {
       contents: { status: 404, body: { message: "Not Found" } },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("missing-result");
       expect(report.result_exists).toBe(false);
     } finally {
@@ -231,10 +259,17 @@ describe("collectFromGithub", () => {
   it("is missing-result when the report exists but carries no recognisable STATUS: line", async () => {
     const github = stubGithub({
       compare: compareOK(2),
-      contents: { status: 200, body: { content: b64("Implemented the thing.\n"), encoding: "base64" } },
+      contents: {
+        status: 200,
+        body: { content: b64("Implemented the thing.\n"), encoding: "base64" },
+      },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("missing-result");
       expect(report.result_exists).toBe(true);
       expect(report.status).toBe("");
@@ -249,7 +284,11 @@ describe("collectFromGithub", () => {
       contents: { status: 200, body: { content: b64("STATUS: DONE"), encoding: "base64" } },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("boundary-violation");
       expect(report.boundary_files).toEqual([".tick/issues/0ds.json"]);
     } finally {
@@ -277,7 +316,11 @@ describe("collectFromGithub", () => {
       contents: { status: 200, body: { content: b64(body), encoding: "base64" } },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       // The guard worked, so the branch is mergeable and the verdict says so.
       expect(report.verdict).toBe("ready-to-merge");
       expect(report.boundary_files).toEqual([]);
@@ -291,10 +334,17 @@ describe("collectFromGithub", () => {
   it("does not claim a boundary attempt on a report that never mentions one", async () => {
     const github = stubGithub({
       compare: compareOK(2),
-      contents: { status: 200, body: { content: b64("Implemented it.\n\nSTATUS: DONE"), encoding: "base64" } },
+      contents: {
+        status: 200,
+        body: { content: b64("Implemented it.\n\nSTATUS: DONE"), encoding: "base64" },
+      },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.boundary_attempted).toBe(false);
     } finally {
       github.restore();
@@ -302,9 +352,15 @@ describe("collectFromGithub", () => {
   });
 
   it("reports unknown, not a failing verdict, when the compare API cannot be read", async () => {
-    const github = stubGithub({ compare: { status: 503, body: { message: "service unavailable" } } });
+    const github = stubGithub({
+      compare: { status: 503, body: { message: "service unavailable" } },
+    });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("unknown");
       expect(report.detail).toContain("503");
     } finally {
@@ -318,7 +374,11 @@ describe("collectFromGithub", () => {
       contents: { status: 500, body: { message: "internal error" } },
     });
     try {
-      const report = await collectFromGithub(env, PROJECT, { tick_id: "0ds", branch: BRANCH, base_sha: BASE });
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
       expect(report.verdict).toBe("unknown");
       expect(report.detail).toContain("500");
     } finally {

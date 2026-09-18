@@ -52,7 +52,7 @@ export function harnessSegmentKey(
   project: string,
   runID: string,
   attempt: number,
-  seq: number
+  seq: number,
 ): string {
   return `${harnessStreamPrefix(project, runID)}${pad(attempt, ATTEMPT_WIDTH)}/${pad(seq, SEQ_WIDTH)}.log`;
 }
@@ -120,7 +120,7 @@ export async function writeRunRecord(bucket: R2Bucket, record: RunRecord): Promi
 export async function readRunRecord(
   bucket: R2Bucket,
   project: string,
-  runID: string
+  runID: string,
 ): Promise<RunRecord | null> {
   const object = await bucket.get(runRecordKey(project, runID));
   if (object === null) return null;
@@ -140,7 +140,7 @@ export async function writeHarnessSegment(
   runID: string,
   attempt: number,
   seq: number,
-  text: string
+  text: string,
 ): Promise<boolean> {
   if (text === "") return false;
   await bucket.put(harnessSegmentKey(project, runID, attempt, seq), text, {
@@ -159,13 +159,16 @@ export async function writeHarnessSegment(
 export async function readHarnessOutput(
   bucket: R2Bucket,
   project: string,
-  runID: string
+  runID: string,
 ): Promise<string> {
   const prefix = harnessStreamPrefix(project, runID);
   const keys: string[] = [];
   let cursor: string | undefined;
   for (;;) {
-    const page: R2Objects = await bucket.list({ prefix, ...(cursor === undefined ? {} : { cursor }) });
+    const page: R2Objects = await bucket.list({
+      prefix,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
     keys.push(...page.objects.map((object) => object.key));
     if (!page.truncated) break;
     cursor = page.cursor;
@@ -189,7 +192,7 @@ export async function readHarnessOutput(
 export async function writeCombinedHarnessLog(
   bucket: R2Bucket,
   project: string,
-  runID: string
+  runID: string,
 ): Promise<void> {
   const text = await readHarnessOutput(bucket, project, runID);
   if (text === "") return;
@@ -211,12 +214,12 @@ export type ReconcileRecord = {
 export async function writeReconcileRecord(
   bucket: R2Bucket,
   project: string,
-  record: ReconcileRecord
+  record: ReconcileRecord,
 ): Promise<void> {
   await bucket.put(
     reconcileKey(project, record.run_id, record.attempt),
     JSON.stringify(record, null, 2),
-    { httpMetadata: { contentType: "application/json" } }
+    { httpMetadata: { contentType: "application/json" } },
   );
 }
 
@@ -255,7 +258,7 @@ export async function readHarnessTail(
   bucket: R2Bucket,
   project: string,
   runID: string,
-  maxBytes: number = HARNESS_TAIL_MAX_BYTES
+  maxBytes: number = HARNESS_TAIL_MAX_BYTES,
 ): Promise<HarnessOutput> {
   return readStreamTail(bucket, harnessStreamPrefix(project, runID), maxBytes);
 }
@@ -270,7 +273,7 @@ export async function readHarnessTail(
  */
 async function listSegments(
   bucket: R2Bucket,
-  prefix: string
+  prefix: string,
 ): Promise<{ key: string; size: number }[]> {
   const objects: { key: string; size: number }[] = [];
   let cursor: string | undefined;
@@ -298,7 +301,7 @@ async function listSegments(
 async function readStreamTail(
   bucket: R2Bucket,
   prefix: string,
-  maxBytes: number
+  maxBytes: number,
 ): Promise<HarnessOutput> {
   const objects = await listSegments(bucket, prefix);
 
@@ -415,12 +418,12 @@ export async function writeWaveOutcomes(
   project: string,
   runID: string,
   batch: number,
-  outcomes: unknown
+  outcomes: unknown,
 ): Promise<void> {
   await bucket.put(
     waveOutcomesKey(project, runID, batch),
     JSON.stringify({ run_id: runID, batch, at: new Date().toISOString(), outcomes }, null, 2),
-    { httpMetadata: { contentType: "application/json" } }
+    { httpMetadata: { contentType: "application/json" } },
   );
 }
 
@@ -468,12 +471,12 @@ export function waveRequestKey(project: string, runID: string, pass: number): st
 export async function writeWaveRequest(
   bucket: R2Bucket,
   project: string,
-  request: WaveRequest
+  request: WaveRequest,
 ): Promise<void> {
   await bucket.put(
     waveRequestKey(project, request.run_id, request.pass),
     JSON.stringify(request, null, 2),
-    { httpMetadata: { contentType: "application/json" } }
+    { httpMetadata: { contentType: "application/json" } },
   );
 }
 
@@ -491,7 +494,7 @@ export async function readWaveRequest(
   bucket: R2Bucket,
   project: string,
   runID: string,
-  pass: number
+  pass: number,
 ): Promise<WaveRequest | null> {
   const object = await bucket.get(waveRequestKey(project, runID, pass));
   if (object === null) return null;
@@ -508,12 +511,12 @@ const MANIFEST_SUFFIX = "/manifest.json";
 export async function writeWorkerManifest(
   bucket: R2Bucket,
   project: string,
-  manifest: WorkerManifest
+  manifest: WorkerManifest,
 ): Promise<void> {
   await bucket.put(
     workerManifestKey(project, manifest.run_id, manifest.tick_id),
     JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: "application/json" } }
+    { httpMetadata: { contentType: "application/json" } },
   );
 }
 
@@ -521,7 +524,7 @@ export async function readWorkerManifest(
   bucket: R2Bucket,
   project: string,
   runID: string,
-  tickID: string
+  tickID: string,
 ): Promise<WorkerManifest | null> {
   const object = await bucket.get(workerManifestKey(project, runID, tickID));
   if (object === null) return null;
@@ -540,7 +543,7 @@ export async function readWorkerManifest(
 export async function listWorkerManifests(
   bucket: R2Bucket,
   project: string,
-  runID: string
+  runID: string,
 ): Promise<WorkerManifest[]> {
   const prefix = `${runPrefix(project, runID)}artifacts/`;
   const manifests: WorkerManifest[] = [];
@@ -614,7 +617,7 @@ export function workerLogSegmentKey(
   runID: string,
   tickID: string,
   epoch: number,
-  seq: number
+  seq: number,
 ): string {
   return (
     `${workerLogStreamPrefix(project, runID, tickID)}` +
@@ -654,13 +657,13 @@ export async function writeWorkerLogHeader(
   project: string,
   runID: string,
   tickID: string,
-  banner: string
+  banner: string,
 ): Promise<boolean> {
   if (banner === "") return false;
   await bucket.put(
     workerLogSegmentKey(project, runID, tickID, CONTROL_PLANE_LOG_EPOCH, 0),
     banner,
-    { httpMetadata: { contentType: "text/plain; charset=utf-8" } }
+    { httpMetadata: { contentType: "text/plain; charset=utf-8" } },
   );
   return true;
 }
@@ -673,7 +676,7 @@ export async function writeWorkerLogSegment(
   tickID: string,
   epoch: number,
   seq: number,
-  text: string
+  text: string,
 ): Promise<boolean> {
   if (text === "") return false;
   await bucket.put(workerLogSegmentKey(project, runID, tickID, epoch, seq), text, {
@@ -688,7 +691,7 @@ export async function readWorkerLogTail(
   project: string,
   runID: string,
   tickID: string,
-  maxBytes: number = HARNESS_TAIL_MAX_BYTES
+  maxBytes: number = HARNESS_TAIL_MAX_BYTES,
 ): Promise<HarnessOutput> {
   return readStreamTail(bucket, workerLogStreamPrefix(project, runID, tickID), maxBytes);
 }
@@ -713,7 +716,7 @@ export type WorkerLogStream = {
 export async function listWorkerLogStreams(
   bucket: R2Bucket,
   project: string,
-  runID: string
+  runID: string,
 ): Promise<WorkerLogStream[]> {
   const prefix = `${runPrefix(project, runID)}artifacts/`;
   const byTick = new Map<string, WorkerLogStream>();
@@ -724,7 +727,8 @@ export async function listWorkerLogStreams(
     const tickID = rest[0]!;
     if (tickID === ORCHESTRATOR_DIR) continue;
     const seen = byTick.get(tickID);
-    if (seen === undefined) byTick.set(tickID, { tick_id: tickID, bytes: object.size, segments: 1 });
+    if (seen === undefined)
+      byTick.set(tickID, { tick_id: tickID, bytes: object.size, segments: 1 });
     else {
       seen.bytes += object.size;
       seen.segments += 1;
@@ -747,7 +751,7 @@ export function workerLogSink(
   bucket: R2Bucket,
   project: string,
   runID: string,
-  epoch: number = Date.now()
+  epoch: number = Date.now(),
 ): WorkerLogSink {
   const seq = new Map<string, number>();
   return {
@@ -761,7 +765,7 @@ export function workerLogSink(
           tickID,
           epoch,
           next,
-          text
+          text,
         );
         // Only a flush that actually wrote bytes advances the sequence, so
         // segment N always holds something — the rule `writeHarnessSegment`

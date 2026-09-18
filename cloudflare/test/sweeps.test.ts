@@ -3,21 +3,21 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_MAX_COST_USD, runConfig } from "../src/run-workflow";
 import {
-  DEFAULT_MAX_RUN_COST_USD,
-  MAX_DECLARED_SWEEPS,
-  SWEEP_ORDER,
-  SWEEP_TICKS_LIMIT,
   compareCandidates,
   cronMatches,
+  DEFAULT_MAX_RUN_COST_USD,
   declaredSweeps,
   describeClamps,
   effectiveSweepPolicy,
+  MAX_DECLARED_SWEEPS,
   parseCron,
   parseSweepCandidate,
   parseSweepFilter,
+  SWEEP_ORDER,
+  SWEEP_TICKS_LIMIT,
+  type SweepCandidate,
   selectSweep,
   sweepCeilings,
-  type SweepCandidate,
 } from "../src/sweeps";
 
 /**
@@ -69,7 +69,7 @@ describe("declaredSweeps", () => {
   });
 
   it("has no sweeps when the config declares none", () => {
-    expect(declaredSweeps("[sandbox]\nimage = \"ghcr.io/x:1\"\n")).toEqual([]);
+    expect(declaredSweeps('[sandbox]\nimage = "ghcr.io/x:1"\n')).toEqual([]);
   });
 
   it("returns them in name order whatever order they were written in", () => {
@@ -90,7 +90,7 @@ budget_usd = 1
   });
 
   it("refuses a key it does not know rather than ignoring it", () => {
-    const source = DOC_EXAMPLE + "\nbugdet_usd = 500\n";
+    const source = `${DOC_EXAMPLE}\nbugdet_usd = 500\n`;
     expect(() => declaredSweeps(source)).toThrow(/bugdet_usd is not a key this reader knows/);
   });
 
@@ -115,22 +115,22 @@ budget_usd = 1
 
   it("refuses numbers outside their bounds", () => {
     expect(() => declaredSweeps(DOC_EXAMPLE.replace("max_ticks = 5", "max_ticks = 0"))).toThrow(
-      /max_ticks must be an integer between 1 and/
+      /max_ticks must be an integer between 1 and/,
     );
     expect(() =>
-      declaredSweeps(DOC_EXAMPLE.replace("max_ticks = 5", `max_ticks = ${SWEEP_TICKS_LIMIT + 1}`))
+      declaredSweeps(DOC_EXAMPLE.replace("max_ticks = 5", `max_ticks = ${SWEEP_TICKS_LIMIT + 1}`)),
     ).toThrow(/max_ticks must be an integer between 1 and/);
     expect(() => declaredSweeps(DOC_EXAMPLE.replace("budget_usd = 10", "budget_usd = 0"))).toThrow(
-      /budget_usd must be a positive number/
+      /budget_usd must be a positive number/,
     );
   });
 
   it("refuses a tier or gate outside the closed vocabulary", () => {
     expect(() => declaredSweeps(DOC_EXAMPLE.replace('"economy"', '"unlimited"'))).toThrow(
-      /tier is "unlimited"; known values/
+      /tier is "unlimited"; known values/,
     );
     expect(() => declaredSweeps(DOC_EXAMPLE.replace('"telegram"', '"carrier-pigeon"'))).toThrow(
-      /gate_on_complete is "carrier-pigeon"; known values/
+      /gate_on_complete is "carrier-pigeon"; known values/,
     );
   });
 
@@ -234,7 +234,7 @@ describe("parseSweepCandidate", () => {
         created_at: "2026-08-01T00:00:00Z",
         updated_at: "2026-08-01T00:00:00Z",
         something_new_in_go: 42,
-      })
+      }),
     );
     expect(candidate).toMatchObject({
       id: "abc",
@@ -458,7 +458,10 @@ describe("selectSweep", () => {
   });
 
   it("counts a blocker as satisfied only when the tracker says it is closed", () => {
-    const closed = [tick({ id: "aaa", blocked_by: ["zzz"] }), tick({ id: "zzz", status: "closed" })];
+    const closed = [
+      tick({ id: "aaa", blocked_by: ["zzz"] }),
+      tick({ id: "zzz", status: "closed" }),
+    ];
     expect(selectionOf(closed).selected).toEqual(["aaa"]);
 
     const stillOpen = [tick({ id: "aaa", blocked_by: ["zzz"] }), tick({ id: "zzz" })];
@@ -506,16 +509,24 @@ describe("selectSweep", () => {
       (a: { priority: number; created_at: string; tick_id: string }, b: typeof a) =>
         a.priority - b.priority ||
         (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0) ||
-        (a.tick_id < b.tick_id ? -1 : 1)
+        (a.tick_id < b.tick_id ? -1 : 1),
     );
     expect(reordered.map((c: { tick_id: string }) => c.tick_id)).toEqual(
-      record.considered.map((c: { tick_id: string }) => c.tick_id)
+      record.considered.map((c: { tick_id: string }) => c.tick_id),
     );
-    expect(reordered.slice(0, record.effective.max_ticks.effective).map((c: { tick_id: string }) => c.tick_id)).toEqual(
-      record.selected
-    );
+    expect(
+      reordered
+        .slice(0, record.effective.max_ticks.effective)
+        .map((c: { tick_id: string }) => c.tick_id),
+    ).toEqual(record.selected);
     expect(record.dropped).toEqual([
-      { tick_id: "bbb", priority: 3, created_at: "2026-08-01T00:00:00Z", verdict: "priority", rank: null },
+      {
+        tick_id: "bbb",
+        priority: 3,
+        created_at: "2026-08-01T00:00:00Z",
+        verdict: "priority",
+        rank: null,
+      },
     ]);
   });
 });

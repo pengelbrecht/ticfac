@@ -147,6 +147,21 @@ jobs:
         working-directory: cloudflare
         run: pnpm install --frozen-lockfile
 
+      # Biome (tick ncr). The go job already runs `gofmt -l` here even though
+      # the Go gate does not, on the reasoning that main's copy must be the
+      # formatted one whatever a tick host did; this is that reasoning applied
+      # to the other language.
+      #
+      # Unlike vitest, this is NOT a case of CI taking what the gate cannot
+      # afford - the gate runs `pnpm lint` too. It runs in both because the
+      # gate is what a tick must pass and this is what main takes, and the two
+      # are not the same claim: a tick can be amended, rebased or landed by a
+      # route that never re-ran the gate. It costs ~1.5s in a job whose next
+      # step is the 82s suite.
+      - name: biome
+        working-directory: cloudflare
+        run: pnpm lint
+
       # The whole TypeScript suite, and the reason this job exists (tick odc).
       # Until it, NOTHING ran these tests - not the gate, not CI - and the cost
       # was tick b9w: the control plane sat pinned to contract bundle 3.0.0

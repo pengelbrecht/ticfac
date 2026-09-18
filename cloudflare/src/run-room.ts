@@ -60,16 +60,16 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { isRunCredentialGrade, type RunCredentialGrade } from "./credentials";
 import type { Env } from "./index";
+import { announceQueueExpiry } from "./queue-expiry";
 import {
   RUN_EVENT_SOURCES,
-  runEventSink,
   type RunEventDelivery,
   type RunEventMessage,
   type RunEventSource,
+  runEventSink,
 } from "./run-events";
-import { isRunCredentialGrade, type RunCredentialGrade } from "./credentials";
-import { announceQueueExpiry } from "./queue-expiry";
 import { MAX_QUEUE_TTL_MS, MIN_QUEUE_TTL_MS, startRun } from "./runs";
 
 /**
@@ -259,9 +259,7 @@ export type StopRequest = {
   requested_at: string;
 };
 
-export type RequestStopResult =
-  | { ok: true; stop: StopRequest; already: boolean }
-  | RequestInvalid;
+export type RequestStopResult = { ok: true; stop: StopRequest; already: boolean } | RequestInvalid;
 
 /** Mirrors operator.PendingKind. */
 export type PendingKind = "ask" | "gate" | "agent_relay";
@@ -494,8 +492,10 @@ function badRunEvent(event: unknown): string | null {
     return "the event's taskId is present but empty";
   }
   if (!RUN_EVENT_SOURCES.includes(message.source as RunEventSource)) {
-    return `${JSON.stringify(message.source)} is not one of the substrate-shaped sources ` +
-      `(${RUN_EVENT_SOURCES.join(", ")})`;
+    return (
+      `${JSON.stringify(message.source)} is not one of the substrate-shaped sources ` +
+      `(${RUN_EVENT_SOURCES.join(", ")})`
+    );
   }
   const data = message.event as Record<string, unknown> | undefined;
   if (typeof data !== "object" || data === null) return "the event carries no payload";
@@ -643,7 +643,9 @@ export class RunRoom extends DurableObject<Env> {
    */
   async acquireDispatchLease(request: AcquireLeaseRequest): Promise<AcquireLeaseResult> {
     const complaint =
-      badText(request?.run_id, "run_id") ?? badText(request?.epic, "epic") ?? badTtl(request?.ttl_ms);
+      badText(request?.run_id, "run_id") ??
+      badText(request?.epic, "epic") ??
+      badTtl(request?.ttl_ms);
     if (complaint !== null) return invalid(complaint);
     const runID = request.run_id;
     const epic = request.epic;
@@ -687,10 +689,12 @@ export class RunRoom extends DurableObject<Env> {
 
   /** Extends the lease for its holder. A lost or taken-over lease cannot be renewed. */
   async renewDispatchLease(
-    request: HolderCredentials & { ttl_ms?: number }
+    request: HolderCredentials & { ttl_ms?: number },
   ): Promise<RenewLeaseResult> {
     const complaint =
-      badText(request?.run_id, "run_id") ?? badText(request?.token, "token") ?? badTtl(request?.ttl_ms);
+      badText(request?.run_id, "run_id") ??
+      badText(request?.token, "token") ??
+      badTtl(request?.ttl_ms);
     if (complaint !== null) return invalid(complaint);
     const runID = request.run_id;
     const token = request.token;
@@ -763,7 +767,7 @@ export class RunRoom extends DurableObject<Env> {
       "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
       LEASE_ROW,
       runID,
-      token
+      token,
     );
     // The lease is free for exactly as long as it takes to hand it to the next
     // parked submission — the release is what ignites a queued run (D22).
@@ -812,7 +816,7 @@ export class RunRoom extends DurableObject<Env> {
         "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
         LEASE_ROW,
         current.run_id,
-        current.token
+        current.token,
       );
       // An abandoned run must not strand the queue behind it: the expiry is a
       // release like any other.
@@ -892,7 +896,7 @@ export class RunRoom extends DurableObject<Env> {
       record.queued_at,
       record.expires_at,
       record.trace_id,
-      record.credential_grade
+      record.credential_grade,
     );
     await this.#armAlarm();
     return { ok: true, queued: this.#queuedView(record) };
@@ -915,7 +919,7 @@ export class RunRoom extends DurableObject<Env> {
     const rows = [
       ...this.ctx.storage.sql.exec<QueuedRecord>(
         "DELETE FROM queued_submission WHERE run_id = ? RETURNING *",
-        runID
+        runID,
       ),
     ];
     if (rows.length === 0) {
@@ -970,7 +974,7 @@ export class RunRoom extends DurableObject<Env> {
         upgraded.mode,
         upgraded.requested_by,
         upgraded.requested_at,
-        upgraded.run_id
+        upgraded.run_id,
       );
       return { ok: true, stop: this.#stopView(upgraded), already: false };
     }
@@ -986,7 +990,7 @@ export class RunRoom extends DurableObject<Env> {
       record.run_id,
       record.mode,
       record.requested_by,
-      record.requested_at
+      record.requested_at,
     );
     return { ok: true, stop: this.#stopView(record), already: false };
   }
@@ -1047,7 +1051,7 @@ export class RunRoom extends DurableObject<Env> {
       record.ref,
       record.created_at,
       record.not_before,
-      record.resolution
+      record.resolution,
     );
     return { ok: true, entry: this.#entry(record) };
   }
@@ -1061,7 +1065,7 @@ export class RunRoom extends DurableObject<Env> {
       ...this.ctx.storage.sql.exec<QuestionRecord>(
         "UPDATE pending_question SET ref = ? WHERE id = ? RETURNING *",
         JSON.stringify(ref),
-        key
+        key,
       ),
     ];
     if (rows.length === 0) {
@@ -1101,7 +1105,7 @@ export class RunRoom extends DurableObject<Env> {
       ...this.ctx.storage.sql.exec<QuestionRecord>(
         "UPDATE pending_question SET resolution = ? WHERE id = ? AND resolution IS NULL RETURNING *",
         JSON.stringify(resolution),
-        id
+        id,
       ),
     ];
     if (rows.length > 0) return { ok: true, entry: this.#entry(rows[0]!) };
@@ -1158,7 +1162,7 @@ export class RunRoom extends DurableObject<Env> {
       ...this.ctx.storage.sql.exec<QuestionRecord>(
         "UPDATE pending_question SET resolution = ? WHERE id = ? RETURNING *",
         JSON.stringify(resolution),
-        key
+        key,
       ),
     ];
     return { ok: true, entry: this.#entry(rows[0]!) };
@@ -1184,7 +1188,7 @@ export class RunRoom extends DurableObject<Env> {
     return [
       ...this.ctx.storage.sql.exec<QuestionRecord>(
         `SELECT * FROM pending_question${where} ORDER BY created_at, id`,
-        ...values
+        ...values,
       ),
     ].map((record) => this.#entry(record));
   }
@@ -1205,10 +1209,7 @@ export class RunRoom extends DurableObject<Env> {
    * The batch is one round trip on purpose: a wave's per-tick events are
    * generated together, and one DO hop for a wave beats one per tick.
    */
-  async publishRunEvents(
-    project: string,
-    events: RunEventMessage[]
-  ): Promise<RunEventDelivery[]> {
+  async publishRunEvents(project: string, events: RunEventMessage[]): Promise<RunEventDelivery[]> {
     if (!Array.isArray(events) || events.length === 0) return [];
 
     const sink = runEventSink(this.env);
@@ -1238,7 +1239,7 @@ export class RunRoom extends DurableObject<Env> {
           delivery = {
             delivered: false,
             detail: `the board could not be reached: ${String(
-              error instanceof Error ? error.message : error
+              error instanceof Error ? error.message : error,
             )}`,
           };
         }
@@ -1260,7 +1261,7 @@ export class RunRoom extends DurableObject<Env> {
       ...this.ctx.storage.sql.exec<RunEventRecord>(
         `SELECT seq, at, epic, tick, source, type, status, message, delivered
          FROM run_event ORDER BY seq DESC LIMIT ?`,
-        bounded
+        bounded,
       ),
     ].map((record) => ({
       at: stamp(record.at),
@@ -1285,7 +1286,7 @@ export class RunRoom extends DurableObject<Env> {
       event.event.type,
       event.event.status ?? null,
       event.event.message ?? null,
-      delivered ? 1 : 0
+      delivered ? 1 : 0,
     );
     // Trim in the same synchronous block as the insert, so the table is never
     // observed above its cap and a long run cannot grow the room without bound.
@@ -1293,7 +1294,7 @@ export class RunRoom extends DurableObject<Env> {
       `DELETE FROM run_event WHERE seq <= (
          SELECT MAX(seq) FROM run_event
        ) - ?`,
-      MAX_RECENT_EVENTS
+      MAX_RECENT_EVENTS,
     );
   }
 
@@ -1306,7 +1307,7 @@ export class RunRoom extends DurableObject<Env> {
         `SELECT
            COUNT(*) FILTER (WHERE resolution IS NULL) AS open,
            COUNT(*) FILTER (WHERE resolution IS NOT NULL) AS resolved
-         FROM pending_question`
+         FROM pending_question`,
       ),
     ][0] ?? { open: 0, resolved: 0 };
 
@@ -1333,7 +1334,7 @@ export class RunRoom extends DurableObject<Env> {
     const rows = [
       ...this.ctx.storage.sql.exec<LeaseRecord>(
         "SELECT run_id, token, epic, origin, requested_by, acquired_at, expires_at FROM dispatch_lease WHERE id = ?",
-        LEASE_ROW
+        LEASE_ROW,
       ),
     ];
     return rows[0] ?? null;
@@ -1358,7 +1359,7 @@ export class RunRoom extends DurableObject<Env> {
       record.origin,
       record.requested_by,
       record.acquired_at,
-      record.expires_at
+      record.expires_at,
     );
   }
 
@@ -1390,7 +1391,7 @@ export class RunRoom extends DurableObject<Env> {
     if (lease !== null) deadlines.push(lease.expires_at);
     const soonest = [
       ...this.ctx.storage.sql.exec<{ expires_at: number }>(
-        "SELECT MIN(expires_at) AS expires_at FROM queued_submission"
+        "SELECT MIN(expires_at) AS expires_at FROM queued_submission",
       ),
     ][0]?.expires_at;
     if (typeof soonest === "number") deadlines.push(soonest);
@@ -1406,7 +1407,7 @@ export class RunRoom extends DurableObject<Env> {
     return [
       ...this.ctx.storage.sql.exec<QueuedRecord>(
         "SELECT * FROM queued_submission WHERE expires_at > ? ORDER BY queued_at, run_id",
-        now
+        now,
       ),
     ];
   }
@@ -1427,7 +1428,7 @@ export class RunRoom extends DurableObject<Env> {
     return [
       ...this.ctx.storage.sql.exec<QueuedRecord>(
         "DELETE FROM queued_submission WHERE expires_at <= ? RETURNING *",
-        now
+        now,
       ),
     ];
   }
@@ -1446,12 +1447,12 @@ export class RunRoom extends DurableObject<Env> {
     try {
       await announceQueueExpiry(
         this.env,
-        records.map((record) => this.#queuedView(record))
+        records.map((record) => this.#queuedView(record)),
       );
     } catch (error) {
       console.error(
         `RunRoom: ${records.length} queued submission(s) expired unrun and could not be ` +
-          `announced: ${String(error)}`
+          `announced: ${String(error)}`,
       );
     }
   }
@@ -1502,9 +1503,7 @@ export class RunRoom extends DurableObject<Env> {
         ...(next.trace_id === null ? {} : { trace_id: next.trace_id }),
         ...(next.notify === null ? {} : { notify: next.notify }),
         ...(next.max_cost_usd === null ? {} : { max_cost_usd: next.max_cost_usd }),
-        ...(next.max_wall_clock_ms === null
-          ? {}
-          : { max_wall_clock_ms: next.max_wall_clock_ms }),
+        ...(next.max_wall_clock_ms === null ? {} : { max_wall_clock_ms: next.max_wall_clock_ms }),
         // A grade this bundle does not recognise is dropped rather than
         // passed on, which lands the run on `write` — the same value the row
         // would have had before the column existed. It is unreachable in
@@ -1520,11 +1519,11 @@ export class RunRoom extends DurableObject<Env> {
         "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
         LEASE_ROW,
         next.run_id,
-        token
+        token,
       );
       console.error(
         `RunRoom: queued submission ${next.run_id} (epic ${next.epic}) could not ignite; ` +
-          `it stays queued until ${stamp(next.expires_at)}: ${String(error)}`
+          `it stays queued until ${stamp(next.expires_at)}: ${String(error)}`,
       );
       return { ignited: null, expired };
     }
@@ -1545,9 +1544,7 @@ export class RunRoom extends DurableObject<Env> {
         : { trace_id: record.trace_id }),
       ...(record.notify === null ? {} : { notify: record.notify }),
       ...(record.max_cost_usd === null ? {} : { max_cost_usd: record.max_cost_usd }),
-      ...(record.max_wall_clock_ms === null
-        ? {}
-        : { max_wall_clock_ms: record.max_wall_clock_ms }),
+      ...(record.max_wall_clock_ms === null ? {} : { max_wall_clock_ms: record.max_wall_clock_ms }),
       ...(isRunCredentialGrade(record.credential_grade)
         ? { credential_grade: record.credential_grade }
         : {}),
@@ -1561,7 +1558,7 @@ export class RunRoom extends DurableObject<Env> {
     const rows = [
       ...this.ctx.storage.sql.exec<StopRecord>(
         "SELECT run_id, mode, requested_by, requested_at FROM run_stop WHERE run_id = ?",
-        runID
+        runID,
       ),
     ];
     return rows[0] ?? null;
@@ -1580,7 +1577,7 @@ export class RunRoom extends DurableObject<Env> {
     const rows = [
       ...this.ctx.storage.sql.exec<QuestionRecord>(
         "SELECT * FROM pending_question WHERE id = ?",
-        id
+        id,
       ),
     ];
     return rows[0] ?? null;

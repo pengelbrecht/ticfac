@@ -1,31 +1,29 @@
 import { describe, expect, it } from "vitest";
-
+import layout from "../../contracts/tracker-layout.json";
+import { tickRecordPath } from "../src/tick-membership";
 import {
+  base64Utf8,
+  commitMessage,
+  commitTickRecord,
   DEFAULT_TICK_PRIORITY,
   DEFAULT_TICK_STATUS,
   DEFAULT_TICK_TYPE,
   EXTERNAL_REF_SEPARATOR,
-  MAX_COMMIT_ATTEMPTS,
-  MAX_TICK_ID_LENGTH,
-  MIN_TICK_ID_LENGTH,
-  TICK_ID_ALPHABET,
-  TICK_ID_ATTEMPTS_PER_LENGTH,
-  base64Utf8,
-  commitMessage,
-  commitTickRecord,
   encodeTickRecord,
   formatExternalRef,
   githubTrackerWriter,
+  MAX_COMMIT_ATTEMPTS,
+  MAX_TICK_ID_LENGTH,
+  MIN_TICK_ID_LENGTH,
   newTickID,
   parseExternalRef,
-  tickIDCandidates,
-  trackerWriter,
+  TICK_ID_ALPHABET,
+  TICK_ID_ATTEMPTS_PER_LENGTH,
   type TrackerWriteResult,
   type TrackerWriter,
+  tickIDCandidates,
+  trackerWriter,
 } from "../src/tracker-write";
-import { tickRecordPath } from "../src/tick-membership";
-
-import layout from "../../contracts/tracker-layout.json";
 
 const PROJECT = "acme/ticks";
 const NOW = "2026-08-23T10:00:00.000Z";
@@ -51,7 +49,7 @@ describe("the record this Worker writes is the record Go writes", () => {
     expect(MIN_TICK_ID_LENGTH).toBe(layout.written_by_the_control_plane.id_min_length);
     expect(MAX_TICK_ID_LENGTH).toBe(layout.written_by_the_control_plane.id_max_length);
     expect(TICK_ID_ATTEMPTS_PER_LENGTH).toBe(
-      layout.written_by_the_control_plane.id_attempts_per_length
+      layout.written_by_the_control_plane.id_attempts_per_length,
     );
 
     for (const id of tickIDCandidates()) {
@@ -81,10 +79,14 @@ describe("the record this Worker writes is the record Go writes", () => {
   });
 
   it("writes Go's field order and indentation, so an alternating write is a one-line diff", () => {
-    const text = encodeTickRecord(record({ description: "why", parent: "hdt", labels: ["signal"] }));
+    const text = encodeTickRecord(
+      record({ description: "why", parent: "hdt", labels: ["signal"] }),
+    );
 
     // json.MarshalIndent(t, "", "  "), no trailing newline.
-    expect(text).toBe(JSON.stringify(JSON.parse(text), null, layout.written_by_the_control_plane.json_indent));
+    expect(text).toBe(
+      JSON.stringify(JSON.parse(text), null, layout.written_by_the_control_plane.json_indent),
+    );
     expect(text.endsWith("\n")).toBe(false);
     expect(Object.keys(JSON.parse(text))).toEqual([
       "id",
@@ -115,9 +117,7 @@ describe("the record this Worker writes is the record Go writes", () => {
 
 describe("the external ref a signal leaves on the record", () => {
   it("carries the whole dedup key, source first", () => {
-    expect(EXTERNAL_REF_SEPARATOR).toBe(
-      layout.written_by_the_control_plane.external_ref_separator
-    );
+    expect(EXTERNAL_REF_SEPARATOR).toBe(layout.written_by_the_control_plane.external_ref_separator);
     expect(formatExternalRef("telegram", "8412")).toBe("telegram:8412");
     expect(parseExternalRef("telegram:8412")).toEqual({ source: "telegram", ref: "8412" });
   });
@@ -143,7 +143,7 @@ describe("base64 of a record", () => {
     const text = encodeTickRecord(record({ title: "ship the 🚀 — naïve, résumé, 日本語" }));
 
     const decoded = new TextDecoder().decode(
-      Uint8Array.from(atob(base64Utf8(text)), (c) => c.charCodeAt(0))
+      Uint8Array.from(atob(base64Utf8(text)), (c) => c.charCodeAt(0)),
     );
     expect(decoded).toBe(text);
     expect(JSON.parse(decoded).title).toContain("🚀");
@@ -153,7 +153,7 @@ describe("base64 of a record", () => {
     const text = encodeTickRecord(record({ description: "x".repeat(100_000) }));
 
     const decoded = new TextDecoder().decode(
-      Uint8Array.from(atob(base64Utf8(text)), (c) => c.charCodeAt(0))
+      Uint8Array.from(atob(base64Utf8(text)), (c) => c.charCodeAt(0)),
     );
     expect(decoded).toBe(text);
   });
@@ -197,7 +197,7 @@ describe("the contents API, asked to create one file", () => {
       () =>
         new Response(JSON.stringify({ content: { sha: "blob1" }, commit: { sha: "commit1" } }), {
           status: 201,
-        })
+        }),
     );
     try {
       const result = await githubTrackerWriter(env()).create(PROJECT, tickRecordPath("abc"), {
@@ -209,7 +209,9 @@ describe("the contents API, asked to create one file", () => {
       expect(result).toEqual({ state: "created", commit_sha: "commit1", content_sha: "blob1" });
       const request = fetching.seen[0];
       expect(request.method).toBe("PUT");
-      expect(request.url).toBe("https://github.test/repos/acme/ticks/contents/.tick/issues/abc.json");
+      expect(request.url).toBe(
+        "https://github.test/repos/acme/ticks/contents/.tick/issues/abc.json",
+      );
       expect(request.headers.get("authorization")).toBe("Bearer ghp_test");
       expect(request.headers.get("user-agent")).toBe("ticks-factory");
       const body = (await request.json()) as Record<string, unknown>;
@@ -226,7 +228,7 @@ describe("the contents API, asked to create one file", () => {
 
   it("omits the branch when the signal named none, so the default branch takes it", async () => {
     const fetching = respondWith(
-      () => new Response(JSON.stringify({ commit: { sha: "c" } }), { status: 201 })
+      () => new Response(JSON.stringify({ commit: { sha: "c" } }), { status: 201 }),
     );
     try {
       await githubTrackerWriter(env()).create(PROJECT, "p", { content: "{}", message: "m" });
@@ -269,7 +271,7 @@ describe("the contents API, asked to create one file", () => {
     const fetching = respondWith(() => new Response("boom", { status: 502 }));
     try {
       await expect(
-        githubTrackerWriter(env()).create(PROJECT, "p", { content: "{}", message: "m" })
+        githubTrackerWriter(env()).create(PROJECT, "p", { content: "{}", message: "m" }),
       ).rejects.toThrow(/502/);
     } finally {
       fetching.restore();
@@ -280,10 +282,12 @@ describe("the contents API, asked to create one file", () => {
   // that is not in the repository — and the redelivery that could still have
   // filed it is exactly what the index then suppresses.
   it("refuses to call a 2xx with no commit a commit", async () => {
-    const fetching = respondWith(() => new Response(JSON.stringify({ content: {} }), { status: 201 }));
+    const fetching = respondWith(
+      () => new Response(JSON.stringify({ content: {} }), { status: 201 }),
+    );
     try {
       await expect(
-        githubTrackerWriter(env()).create(PROJECT, "p", { content: "{}", message: "m" })
+        githubTrackerWriter(env()).create(PROJECT, "p", { content: "{}", message: "m" }),
       ).rejects.toThrow(/named no commit/);
     } finally {
       fetching.restore();
@@ -397,7 +401,7 @@ describe("committing one record", () => {
       Array.from({ length: MAX_COMMIT_ATTEMPTS }, () => ({
         state: "conflict" as const,
         detail: "409 the branch keeps moving",
-      }))
+      })),
     );
 
     const outcome = await commitTickRecord(writer, options());
@@ -428,7 +432,10 @@ describe("committing one record", () => {
       created("commit5"),
     ]);
 
-    await commitTickRecord(writer, options({ retryMs: 10, sleep: async (ms: number) => void slept.push(ms) }));
+    await commitTickRecord(
+      writer,
+      options({ retryMs: 10, sleep: async (ms: number) => void slept.push(ms) }),
+    );
 
     expect(slept).toEqual([10, 20]);
   });

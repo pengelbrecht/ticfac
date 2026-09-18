@@ -119,11 +119,15 @@ export type BranchClaim = {
  * rather than smoothing it over: a container told "already recorded" for a
  * branch it just created is being told something worth reading.
  */
-export async function recordBranch(env: Env, claim: BranchClaim, now = new Date()): Promise<boolean> {
+export async function recordBranch(
+  env: Env,
+  claim: BranchClaim,
+  now = new Date(),
+): Promise<boolean> {
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO factory_branch
        (project, branch, owner, recorded_by, run_id, epic, detail, recorded_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       claim.project,
@@ -133,7 +137,7 @@ export async function recordBranch(env: Env, claim: BranchClaim, now = new Date(
       claim.run_id ?? null,
       claim.epic ?? null,
       claim.detail ?? null,
-      now.toISOString()
+      now.toISOString(),
     )
     .run();
   return (result.meta.changes ?? 0) > 0;
@@ -143,12 +147,12 @@ export async function recordBranch(env: Env, claim: BranchClaim, now = new Date(
 export async function branchRecord(
   env: Env,
   project: string,
-  branch: string
+  branch: string,
 ): Promise<BranchRecord | null> {
   const row = await env.DB.prepare(
     `SELECT project, branch, owner, recorded_by, run_id, epic, detail, recorded_at
        FROM factory_branch
-      WHERE project = ? AND branch = ?`
+      WHERE project = ? AND branch = ?`,
   )
     .bind(project, branch)
     .first<BranchRecord>();
@@ -159,14 +163,14 @@ export async function branchRecord(
 export async function listBranchRecords(
   env: Env,
   project: string,
-  limit = 200
+  limit = 200,
 ): Promise<BranchRecord[]> {
   const rows = await env.DB.prepare(
     `SELECT project, branch, owner, recorded_by, run_id, epic, detail, recorded_at
        FROM factory_branch
       WHERE project = ?
       ORDER BY recorded_at DESC
-      LIMIT ?`
+      LIMIT ?`,
   )
     .bind(project, limit)
     .all<BranchRecord>();
@@ -184,11 +188,9 @@ export async function listBranchRecords(
 export async function forgetBranchRecord(
   env: Env,
   project: string,
-  branch: string
+  branch: string,
 ): Promise<boolean> {
-  const result = await env.DB.prepare(
-    `DELETE FROM factory_branch WHERE project = ? AND branch = ?`
-  )
+  const result = await env.DB.prepare(`DELETE FROM factory_branch WHERE project = ? AND branch = ?`)
     .bind(project, branch)
     .run();
   return (result.meta.changes ?? 0) > 0;
@@ -218,7 +220,7 @@ export type UnrecordedBranch = {
 export async function noteUnrecordedBranch(
   env: Env,
   refusal: { project: string; branch: string; check_name: string; head_sha: string },
-  now = new Date()
+  now = new Date(),
 ): Promise<void> {
   const at = now.toISOString();
   await env.DB.prepare(
@@ -229,7 +231,7 @@ export async function noteUnrecordedBranch(
        check_name   = excluded.check_name,
        head_sha     = excluded.head_sha,
        refusals     = unrecorded_branch.refusals + 1,
-       last_seen_at = excluded.last_seen_at`
+       last_seen_at = excluded.last_seen_at`,
   )
     .bind(refusal.project, refusal.branch, refusal.check_name, refusal.head_sha, at, at)
     .run();
@@ -248,7 +250,7 @@ export async function noteUnrecordedBranch(
 export async function listUnrecordedBranches(
   env: Env,
   since: string,
-  limit = 100
+  limit = 100,
 ): Promise<UnrecordedBranch[]> {
   const rows = await env.DB.prepare(
     `SELECT u.project, u.branch, u.check_name, u.head_sha, u.refusals,
@@ -260,7 +262,7 @@ export async function listUnrecordedBranches(
                WHERE f.project = u.project AND f.branch = u.branch
             )
       ORDER BY u.first_seen_at ASC
-      LIMIT ?`
+      LIMIT ?`,
   )
     .bind(since, limit)
     .all<UnrecordedBranch>();

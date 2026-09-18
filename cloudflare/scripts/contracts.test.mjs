@@ -21,8 +21,8 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { verifyBundle, verifySchemaIds } from "./contracts.mjs";
 
@@ -226,7 +226,11 @@ test("a second definition of a shared schema_id fails — the 1.2.0 shape", () =
   // Put the deleted evidence_envelope back, under the same schema_id.
   runState.schemas.evidence_envelope = {
     schema_id: "ticfac.evidence.v3",
-    schema: { type: "object", required: ["schema_version", "key", "provenance"], additionalProperties: true },
+    schema: {
+      type: "object",
+      required: ["schema_version", "key", "provenance"],
+      additionalProperties: true,
+    },
   };
   writeFileSync(path, `${JSON.stringify(runState, null, 2)}\n`);
 
@@ -241,7 +245,10 @@ test("a schema_id two contracts name and neither defines fails", () => {
   const dir = mkdtempSync(join(tmpdir(), "contracts-schema-ids-"));
   scratch.push(dir);
   for (const name of ["a-contract.json", "b-contract.json"]) {
-    writeFileSync(join(dir, name), JSON.stringify({ records: { thing: { schema_id: "ticfac.thing.v1" } } }));
+    writeFileSync(
+      join(dir, name),
+      JSON.stringify({ records: { thing: { schema_id: "ticfac.thing.v1" } } }),
+    );
   }
 
   assert.throws(() => verifySchemaIds(dir), /defined nowhere/);

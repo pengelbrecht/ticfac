@@ -106,23 +106,22 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import type { Env } from "./index";
+
+import { parseTickRecord, type TrackerReader, trackerReader } from "./tick-membership";
+
+import { carriedTraceID } from "./trace";
 import {
+  commitTickRecord,
   DEFAULT_COMMIT_RETRY_MS,
   DEFAULT_TICK_PRIORITY,
   DEFAULT_TICK_STATUS,
   DEFAULT_TICK_TYPE,
-  SIGNAL_SOURCE_PATTERN,
-  commitTickRecord,
   formatExternalRef,
+  SIGNAL_SOURCE_PATTERN,
   tickIDCandidates,
   trackerWriter,
 } from "./tracker-write";
-
-import { parseTickRecord, trackerReader, type TrackerReader } from "./tick-membership";
-
-import { carriedTraceID } from "./trace";
-
-import type { Env } from "./index";
 
 /**
  * How many ACCEPTED drafts may be committing at once in one project.
@@ -276,7 +275,7 @@ export function parseSignal(raw: unknown): SignalParse {
     return refuse(
       "invalid_signal",
       "source must name the kind of source this came from (lowercase letters, digits, - and _): " +
-        "it is half the dedup key, so an unnamed source cannot be deduped"
+        "it is half the dedup key, so an unnamed source cannot be deduped",
     );
   }
 
@@ -288,7 +287,7 @@ export function parseSignal(raw: unknown): SignalParse {
     return refuse(
       "invalid_signal",
       "external_ref must be the source's own stable id for this signal; without one a " +
-        "redelivery cannot be told from a new signal and every retry would file another tick"
+        "redelivery cannot be told from a new signal and every retry would file another tick",
     );
   }
   if (externalRef.length > MAX_EXTERNAL_REF) {
@@ -305,7 +304,7 @@ export function parseSignal(raw: unknown): SignalParse {
   if (description.length > MAX_SIGNAL_DESCRIPTION) {
     return refuse(
       "invalid_signal",
-      `description is ${description.length} bytes, past the ${MAX_SIGNAL_DESCRIPTION} a tick record carries`
+      `description is ${description.length} bytes, past the ${MAX_SIGNAL_DESCRIPTION} a tick record carries`,
     );
   }
 
@@ -354,7 +353,8 @@ export function parseSignal(raw: unknown): SignalParse {
   }
 
   const branch = text(input.branch);
-  const acceptance = typeof input.acceptance_criteria === "string" ? input.acceptance_criteria.trim() : "";
+  const acceptance =
+    typeof input.acceptance_criteria === "string" ? input.acceptance_criteria.trim() : "";
 
   return {
     ok: true,
@@ -399,7 +399,7 @@ export function inboxFor(env: Env, project: string): DurableObjectStub<SignalInb
 export async function submitSignal(
   env: Env,
   raw: unknown,
-  options: SubmitOptions = {}
+  options: SubmitOptions = {},
 ): Promise<SignalOutcome> {
   // MINTED HERE, before the payload is even parsed (D20, tick hyi). This
   // function is the single front door every source pours into, which makes it
@@ -445,7 +445,13 @@ type DedupRow = {
  * is why it is not terminal and never reads as a decision on its own — see
  * this module's header, and `#reconcileCommitting`.
  */
-export const DRAFT_STATES = ["pending", "committing", "created", "dispatched", "discarded"] as const;
+export const DRAFT_STATES = [
+  "pending",
+  "committing",
+  "created",
+  "dispatched",
+  "discarded",
+] as const;
 export type DraftState = (typeof DRAFT_STATES)[number];
 
 /** What a human may do with a proposal. Three, and there is no fourth. */
@@ -673,16 +679,18 @@ export class SignalInbox extends DurableObject<Env> {
     // tick at all. Added rather than recreated: an inbox already holding rows
     // must keep deduping the signals it has seen.
     const columns = new Set(
-      [...ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(signal_dedup)")].map(
-        (row) => String(row.name)
-      )
+      [...ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(signal_dedup)")].map((row) =>
+        String(row.name),
+      ),
     );
     if (!columns.has("draft_id")) {
       ctx.storage.sql.exec("ALTER TABLE signal_dedup ADD COLUMN draft_id TEXT NOT NULL DEFAULT ''");
     }
     if (!columns.has("state")) {
       // Every row that existed before the gate was a committed tick.
-      ctx.storage.sql.exec("ALTER TABLE signal_dedup ADD COLUMN state TEXT NOT NULL DEFAULT 'created'");
+      ctx.storage.sql.exec(
+        "ALTER TABLE signal_dedup ADD COLUMN state TEXT NOT NULL DEFAULT 'created'",
+      );
     }
     // The trace id (tick hyi) is younger than all three tables, and an inbox
     // that already holds drafts must keep answering about them rather than be
@@ -711,8 +719,8 @@ export class SignalInbox extends DurableObject<Env> {
   #addColumn(ctx: DurableObjectState, table: string, column: string): void {
     const columns = new Set(
       [...ctx.storage.sql.exec<{ name: string }>(`PRAGMA table_info(${table})`)].map((row) =>
-        String(row.name)
-      )
+        String(row.name),
+      ),
     );
     if (columns.has(column)) return;
     ctx.storage.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
@@ -762,7 +770,7 @@ export class SignalInbox extends DurableObject<Env> {
         at,
         deliveries,
         admitted.source,
-        admitted.external_ref
+        admitted.external_ref,
       );
       // The ORIGINAL's trace id, not the one minted for this delivery. Every
       // delivery of one signal is one causal chain, and a redelivery that
@@ -777,7 +785,7 @@ export class SignalInbox extends DurableObject<Env> {
         at,
         "duplicate",
         already.tick_id === "" ? null : already.tick_id,
-        carried
+        carried,
       );
       return {
         state: "duplicate",
@@ -807,7 +815,7 @@ export class SignalInbox extends DurableObject<Env> {
       options.presentation ?? "",
       JSON.stringify(admitted),
       at,
-      trace
+      trace,
     );
     // Written WITH the draft, in the same synchronous prefix, and with no tick
     // id because there is no tick. This ordering is the opposite of the
@@ -825,7 +833,7 @@ export class SignalInbox extends DurableObject<Env> {
       at,
       at,
       id,
-      trace
+      trace,
     );
 
     return {
@@ -841,7 +849,7 @@ export class SignalInbox extends DurableObject<Env> {
   /** What this inbox already knows about one `(source, external_ref)`. */
   async lookup(
     source: string,
-    externalRef: string
+    externalRef: string,
   ): Promise<{
     tick_id: string;
     draft_id: string;
@@ -877,7 +885,7 @@ export class SignalInbox extends DurableObject<Env> {
       }>(
         "SELECT seq, source, external_ref, state, tick_id, admitted_at, trace_id FROM signal_admission " +
           "ORDER BY seq DESC LIMIT ?",
-        STATUS_ADMISSION_LIMIT
+        STATUS_ADMISSION_LIMIT,
       ),
     ].map((row) => ({
       seq: Number(row.seq),
@@ -910,14 +918,14 @@ export class SignalInbox extends DurableObject<Env> {
         ? [
             ...this.ctx.storage.sql.exec<DraftRow>(
               "SELECT * FROM signal_draft ORDER BY seq DESC LIMIT ?",
-              limit
+              limit,
             ),
           ]
         : [
             ...this.ctx.storage.sql.exec<DraftRow>(
               "SELECT * FROM signal_draft WHERE state = ? ORDER BY seq DESC LIMIT ?",
               options.state,
-              limit
+              limit,
             ),
           ];
     return rows.map(draftFromRow);
@@ -931,7 +939,7 @@ export class SignalInbox extends DurableObject<Env> {
       "UPDATE signal_draft SET channel_id = ?, message_id = ? WHERE id = ?",
       ref.channel_id,
       ref.message_id,
-      draft.id
+      draft.id,
     );
     return this.#draft(draft.id);
   }
@@ -976,7 +984,7 @@ export class SignalInbox extends DurableObject<Env> {
       "UPDATE signal_draft SET type = ?, signal = ? WHERE id = ?",
       wanted,
       JSON.stringify({ ...draft.signal, type: wanted }),
-      draft.id
+      draft.id,
     );
     void by;
     return { ok: true, draft: this.#draft(draft.id)! };
@@ -1017,7 +1025,7 @@ export class SignalInbox extends DurableObject<Env> {
         "UPDATE signal_draft SET state = 'discarded', decided_by = ?, decided_at = ? WHERE id = ?",
         decidedBy,
         at,
-        draft.id
+        draft.id,
       );
       // The dedup row stays, and stays keyed on exactly what a redelivery
       // presents. That it SURVIVES the discard is the point: the same signal
@@ -1025,7 +1033,7 @@ export class SignalInbox extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         "UPDATE signal_dedup SET state = 'discarded' WHERE source = ? AND external_ref = ?",
         draft.source,
-        draft.external_ref
+        draft.external_ref,
       );
       this.#settle(draft.seq, "discarded", null, null, `discarded by ${decidedBy}`);
       return { state: "discarded", draft: this.#draft(draft.id)! };
@@ -1057,18 +1065,18 @@ export class SignalInbox extends DurableObject<Env> {
       decidedBy,
       at,
       JSON.stringify(candidates),
-      draft.id
+      draft.id,
     );
     this.#committing.add(draft.id);
 
     const claimed = this.#draft(draft.id)!;
     const work = this.#tail.then(
       () => this.#accept(claimed, action, candidates),
-      () => this.#accept(claimed, action, candidates)
+      () => this.#accept(claimed, action, candidates),
     );
     this.#tail = work.then(
       () => undefined,
-      () => undefined
+      () => undefined,
     );
     try {
       return await work;
@@ -1085,9 +1093,9 @@ export class SignalInbox extends DurableObject<Env> {
       [
         ...this.ctx.storage.sql.exec<{ n: number }>(
           "SELECT COUNT(*) AS n FROM signal_draft WHERE state = ?",
-          state
+          state,
         ),
-      ][0].n
+      ][0].n,
     );
   }
 
@@ -1104,7 +1112,7 @@ export class SignalInbox extends DurableObject<Env> {
     at: number,
     state: string,
     tickID: string | null,
-    traceID: string
+    traceID: string,
   ): number {
     this.ctx.storage.sql.exec(
       "INSERT INTO signal_admission (source, external_ref, title, admitted_at, state, tick_id, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1114,10 +1122,10 @@ export class SignalInbox extends DurableObject<Env> {
       at,
       state,
       tickID,
-      traceID
+      traceID,
     );
     return Number(
-      [...this.ctx.storage.sql.exec<{ seq: number }>("SELECT last_insert_rowid() AS seq")][0].seq
+      [...this.ctx.storage.sql.exec<{ seq: number }>("SELECT last_insert_rowid() AS seq")][0].seq,
     );
   }
 
@@ -1126,7 +1134,7 @@ export class SignalInbox extends DurableObject<Env> {
       ...this.ctx.storage.sql.exec<DedupRow>(
         "SELECT tick_id, draft_id, state, first_seen_at, deliveries, trace_id FROM signal_dedup WHERE source = ? AND external_ref = ?",
         source,
-        externalRef
+        externalRef,
       ),
     ];
     if (rows.length === 0) return null;
@@ -1137,7 +1145,13 @@ export class SignalInbox extends DurableObject<Env> {
     return { ...row, trace_id: row.trace_id ?? "" };
   }
 
-  #settle(seq: number, state: string, tickID: string | null, commitSHA: string | null, detail: string | null): void {
+  #settle(
+    seq: number,
+    state: string,
+    tickID: string | null,
+    commitSHA: string | null,
+    detail: string | null,
+  ): void {
     this.ctx.storage.sql.exec(
       "UPDATE signal_admission SET state = ?, tick_id = ?, commit_sha = ?, detail = ?, settled_at = ? WHERE seq = ?",
       state,
@@ -1145,7 +1159,7 @@ export class SignalInbox extends DurableObject<Env> {
       commitSHA,
       detail,
       Date.now(),
-      seq
+      seq,
     );
   }
 
@@ -1159,7 +1173,7 @@ export class SignalInbox extends DurableObject<Env> {
     const rows = [
       ...this.ctx.storage.sql.exec<{ candidates: string | null }>(
         "SELECT candidates FROM signal_draft WHERE id = ?",
-        id
+        id,
       ),
     ];
     const raw = rows.length === 0 ? "" : (rows[0]!.candidates ?? "");
@@ -1178,21 +1192,21 @@ export class SignalInbox extends DurableObject<Env> {
     action: DraftAction,
     tickID: string,
     commitSHA: string,
-    detail: string | null
+    detail: string | null,
   ): void {
     this.ctx.storage.sql.exec(
       "UPDATE signal_draft SET state = ?, tick_id = ?, commit_sha = ?, candidates = '' WHERE id = ?",
       action === "dispatch" ? "dispatched" : "created",
       tickID,
       commitSHA,
-      draft.id
+      draft.id,
     );
     this.ctx.storage.sql.exec(
       "UPDATE signal_dedup SET tick_id = ?, commit_sha = ?, state = 'created' WHERE source = ? AND external_ref = ?",
       tickID,
       commitSHA,
       draft.source,
-      draft.external_ref
+      draft.external_ref,
     );
     this.#settle(draft.seq, "created", tickID, commitSHA === "" ? null : commitSHA, detail);
   }
@@ -1225,7 +1239,7 @@ export class SignalInbox extends DurableObject<Env> {
    *    second tick.
    */
   async #reconcileCommitting(
-    draft: Draft
+    draft: Draft,
   ): Promise<{ state: "revived"; draft: Draft } | { state: "settled"; decision: DraftDecision }> {
     // Claimed for the duration, so a second press arriving mid-reconcile is
     // told "being filed right now" instead of starting a second reconcile that
@@ -1276,14 +1290,14 @@ export class SignalInbox extends DurableObject<Env> {
         // the state a signal that was never filed should be in.
         this.ctx.storage.sql.exec(
           "UPDATE signal_draft SET state = 'pending', decided_by = NULL, decided_at = NULL, candidates = '' WHERE id = ?",
-          draft.id
+          draft.id,
         );
         this.#settle(
           draft.seq,
           "drafted",
           null,
           null,
-          `a commit claimed by ${draft.decided_by ?? "an operator"} did not reach the tracker; the proposal is pending again`
+          `a commit claimed by ${draft.decided_by ?? "an operator"} did not reach the tracker; the proposal is pending again`,
         );
         return { state: "revived", draft: this.#draft(draft.id)! };
       }
@@ -1297,7 +1311,7 @@ export class SignalInbox extends DurableObject<Env> {
         action,
         found,
         "",
-        `reconciled after an interrupted commit: ${wanted} is filed as ${found}`
+        `reconciled after an interrupted commit: ${wanted} is filed as ${found}`,
       );
       return {
         state: "settled",
@@ -1362,7 +1376,7 @@ export class SignalInbox extends DurableObject<Env> {
       // signal behind a button that no longer does anything.
       this.ctx.storage.sql.exec(
         "UPDATE signal_draft SET state = 'pending', decided_by = NULL, decided_at = NULL, candidates = '' WHERE id = ?",
-        draft.id
+        draft.id,
       );
       this.#settle(draft.seq, "unsettled", null, null, outcome.detail);
       return {
@@ -1404,7 +1418,7 @@ export async function findCommittedTick(
   project: string,
   ref: string,
   candidates: string[],
-  externalRef: string
+  externalRef: string,
 ): Promise<string | null> {
   for (const id of candidates) {
     const text = await reader.read(project, ref, id);
@@ -1413,7 +1427,9 @@ export async function findCommittedTick(
     // A record this reader cannot parse is not an answer about whose tick it
     // is, and the walk must not conclude "not ours" from it.
     if (record === null) {
-      throw new Error(`.tick/issues/${id}.json in ${project} is not a tick record this reader understands`);
+      throw new Error(
+        `.tick/issues/${id}.json in ${project} is not a tick record this reader understands`,
+      );
     }
     if (record.external_ref === externalRef) return id;
   }
