@@ -2,7 +2,7 @@
   "id": "l9n",
   "title": "Move cloud/factory to ticfac/cloudflare, preserving routes and D1/R2 behaviour",
   "description": "SPEC 12 Phase 4 item 1. Move the control plane (~46 TypeScript modules: run-workflow.ts, sandbox.ts, worker-dispatch/boot/collect, gateway.ts, D1 migrations 0001-0013, R2 artifacts, Telegram, CI remediation, PR review) from cloud/factory/** to ticfac/cloudflare/**.\n\nDeliberately a MOVE and nothing else: routes, D1 schema and R2 keys keep their current behaviour so that a deployed factory keeps working while the reconciler moves in behind it. Behaviour changes belong to the later items, where they can be attributed.\n\nThe compatibility checks that prove the move changed nothing (routes, D1/R2 keys, image tags) already exist as tick mrq's work in ticks - port them alongside, or this item has no evidence.",
-  "notes": "2026-09-18 17:01 - ticfac run epic-ncv: attempt 1 reported a finding drafted for triage — proposed-tick \"Vendored cloud/sandbox docs still point at cloud/factory paths the move renamed\" (key 4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3, severity low, for this repository). Triage with `ticfac finding ncv 4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
+  "notes": "2026-09-18 17:01 - ticfac run epic-ncv: attempt 1 reported a finding drafted for triage — proposed-tick \"Vendored cloud/sandbox docs still point at cloud/factory paths the move renamed\" (key 4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3, severity low, for this repository). Triage with `ticfac finding ncv 4c8a55f84aaef7bb3351509a25e5c82488859760a7a6a9502a904e0612a287c3 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-18 17:01 - ticfac run epic-ncv: attempt 1 reported a finding drafted for triage — contract \"lifecycle-invariants.json names cloud/factory/** for today-sites; consumers now map\" (key 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a, severity low, for this repository). Triage with `ticfac finding ncv 0c0654b27725be6b649fdccd9f3a4ce90593da903247e088dd1f57056c924f4a --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "The factory deploys and serves from ticfac/cloudflare/** with routes, D1 keys and R2 keys unchanged, proven by the ported compatibility checks rather than by inspection. A deployed factory from before the move still answers.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:10.994325Z",
-  "updated_at": "2026-09-18T15:01:31.105071Z",
+  "updated_at": "2026-09-18T15:01:41.551825Z",
   "started_at": "2026-09-18T14:07:32.730523Z"
 }
