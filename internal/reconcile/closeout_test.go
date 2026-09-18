@@ -66,6 +66,12 @@ type fakeForge struct {
 	ci      []forge.CIReport
 	calls   []string
 	pr      *forge.PullRequest
+
+	// bySHA answers per commit rather than per call, which is what the
+	// close-out's real problem needs: CI exists on one commit and not on the
+	// newer one the run's own checkpoint just created. When it is nil the
+	// queue above answers, exactly as before.
+	bySHA map[string]forge.CIReport
 }
 
 var _ forge.PullRequests = (*fakeForge)(nil)
@@ -99,6 +105,13 @@ func (f *fakeForge) CI(_ context.Context, pr forge.PullRequest) (forge.CIReport,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "ci")
+	if f.bySHA != nil {
+		report, ok := f.bySHA[pr.HeadSHA]
+		if !ok {
+			return forge.CIReport{State: forge.CINone}, nil
+		}
+		return report, nil
+	}
 	if len(f.ci) == 0 {
 		return forge.CIReport{State: forge.CIGreen}, nil
 	}

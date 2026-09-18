@@ -201,7 +201,7 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 	// all) is a typed refusal naming which one it was.
 	deadline := r.now().Add(r.opts.GateTimeout)
 	for {
-		report, ciErr := r.opts.PullRequests.CI(ctx, *pr)
+		report, ciSHA, ciIsHead, ciErr := r.ciForTree(ctx, pr)
 		if ciErr != nil {
 			return r.refuse(RefusedCloseoutPR, tick,
 				"the close-out cannot be admitted: CI on the epic PR #%d could not be read: %v. The rule the "+
@@ -209,7 +209,8 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 		}
 		switch report.State {
 		case forge.CIGreen:
-			r.record(tick, StageCloseoutAdmitted, "CI is green on the epic PR #%d; the close-out is admitted", pr.Number)
+			r.record(tick, StageCloseoutAdmitted, "CI is green on %s; the close-out is admitted",
+				ciSubject(ciSHA, ciIsHead, pr))
 			if _, err := r.checkpoint(runstate.StateRunning,
 				fmt.Sprintf("CI is green on the epic PR #%d; the close-out of %s is admitted", pr.Number,
 					r.opts.EpicID)); err != nil {
@@ -329,7 +330,7 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 	// wait bounds the close's.
 	deadline := r.now().Add(r.opts.GateTimeout)
 	for {
-		report, ciErr := r.opts.PullRequests.CI(ctx, *pr)
+		report, ciSHA, ciIsHead, ciErr := r.ciForTree(ctx, pr)
 		if ciErr != nil {
 			return r.refuse(RefusedCloseoutPR, tick,
 				"the close-out of %s cannot be gated on CI: CI on the epic PR #%d could not be read: %v. "+
@@ -338,8 +339,8 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 		switch report.State {
 		case forge.CIGreen:
 			r.record(tick, StageCloseoutCloseGated,
-				"CI is green on the epic PR #%d on the head that includes the close-out's own commits (%s); the close proceeds",
-				pr.Number, short(merged.GateSHA))
+				"CI is green on %s, which carries the close-out's own commits; the close proceeds",
+				ciSubject(ciSHA, ciIsHead, pr))
 			return nil
 		case forge.CIRed:
 			// The refusal is typed apart from the admission's (tick sqx):
