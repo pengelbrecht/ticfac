@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 263,
-  "state": "dispatching",
-  "reason": "dispatching 3kx as attempt 31",
-  "updated_at": "2026-09-18T04:21:23Z",
+  "sequence": 264,
+  "state": "running",
+  "reason": "3kx is running as attempt 31",
+  "updated_at": "2026-09-18T04:21:39Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -138,7 +138,8 @@
     },
     {
       "tick_id": "3kx",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 31
     },
     {
       "tick_id": "n4h",
