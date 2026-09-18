@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 244,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-18T03:31:37Z",
+  "sequence": 245,
+  "state": "integrating",
+  "reason": "integrating pbb attempt 26 into epic/9pd",
+  "updated_at": "2026-09-18T03:35:33Z",
   "ticks": [
     {
       "tick_id": "0z0",
