@@ -1,0 +1,14 @@
+{
+  "id": "ncr",
+  "title": "Give TypeScript a formatter and linter: Biome",
+  "description": "cloud/factory has NO linter and NO formatter. No ESLint, no Prettier, no Biome, no config, no script - typecheck and test are the whole story. The Go side at least has gofmt in CI (and tick flj is open because nothing checked it at the gate); the TypeScript side has neither half.\n\ntsc --noEmit catches type errors and says nothing about unused variables, floating promises, accidental any, or unreachable code. A floating promise in a Workers runtime is a class of bug, not a style preference.\n\nBiome rather than Oxc/oxlint, decided: Biome is formatter AND linter in one Rust binary, which fills both halves, and its formatter is the gofmt equivalent TypeScript is missing here. oxlint is faster still and has a richer rule set, but formatting is the less mature half and this repository needs the formatter more than it needs the last microsecond.\n\nNOT for speed. Both are Rust and both are fast, but transform is 10.31s of a 345s suite - the cost is workerd execution, not tooling. This buys a check we do not have, at a cost the gate can afford (sub-second against 3m26s).\n\nPhase 4 is moving ~46 TypeScript modules and then writing a reconciler in TypeScript, so the rules want to exist before the code triples, not after.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "Biome runs in the gate and in CI, with the format check and the lint check both failing on a deliberately bad file. The existing tree passes, or every exception is recorded with a reason rather than silenced globally. The gate's added cost is measured and reported.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T15:40:16.595549Z",
+  "updated_at": "2026-09-18T15:40:16.595549Z"
+}
