@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 56,
-  "state": "running",
-  "reason": "vyg is closed",
-  "updated_at": "2026-09-18T17:34:47Z",
+  "sequence": 57,
+  "state": "collecting",
+  "reason": "collecting 9fc attempt 4",
+  "updated_at": "2026-09-18T17:52:58Z",
   "ticks": [
     {
       "tick_id": "l9n",
