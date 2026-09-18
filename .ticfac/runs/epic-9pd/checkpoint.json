@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 239,
-  "state": "gating",
-  "reason": "running the integrated gate for pbb on 9e541edb51e4",
-  "updated_at": "2026-09-18T01:08:48Z",
+  "sequence": 240,
+  "state": "publishing",
+  "reason": "closing pbb behind the integrated gate on 9e541edb51e4",
+  "updated_at": "2026-09-18T03:14:56Z",
   "ticks": [
     {
       "tick_id": "0z0",
