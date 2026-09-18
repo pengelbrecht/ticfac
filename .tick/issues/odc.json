@@ -1,0 +1,13 @@
+{
+  "id": "odc",
+  "title": "Nothing tests the TypeScript: Phase 4 would move 46 modules behind a Go-only gate",
+  "description": "The declared gate is 'go test -short -timeout 45m -parallel 12 ./...' and CI runs three jobs (go, contracts, sandbox), all Go. cloud/factory HAS a test script - 'pnpm contracts:check \u0026\u0026 pnpm contracts:test \u0026\u0026 vitest run' - and nothing runs it: not the per-tick gate, not CI.\n\nThat is survivable today, because the TypeScript control plane is inherited rather than actively developed. It stops being survivable at Phase 4 (ncv), which moves cloud/factory's ~46 modules into ticfac/cloudflare and then has RunWorkflow host the reconciler in TypeScript. Every one of those ticks would close behind a gate that cannot see the work it did, which is the close-behind-a-gate-that-proves-nothing this project refuses everywhere else.\n\nThis must land BEFORE ncv starts, not inside it: a tick that moves TypeScript cannot be its own first proof that TypeScript is tested.\n\nShape to decide: the per-tick gate wants to stay fast (it is 3m26s and that was hard won), so the heavy vitest run may belong in CI - which already gates the epic's merge - with a cheap typecheck per tick. Say which, and make the declared gate and CI agree the way the Makefile and runners.toml already do.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A TypeScript change that breaks cloud/factory's tests fails something before it can merge, demonstrated by breaking one deliberately. The per-tick gate and CI each state what they cover, and the gate does not silently claim to cover TypeScript it never runs.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T12:11:54.917218Z",
+  "updated_at": "2026-09-18T12:11:54.917218Z"
+}
