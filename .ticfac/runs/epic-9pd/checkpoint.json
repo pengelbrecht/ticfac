@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 247,
-  "state": "publishing",
-  "reason": "closing pbb behind the integrated gate on c192b5faab75",
-  "updated_at": "2026-09-18T03:58:03Z",
+  "sequence": 248,
+  "state": "running",
+  "reason": "pbb is closed",
+  "updated_at": "2026-09-18T03:58:19Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -118,7 +118,7 @@
     },
     {
       "tick_id": "pbb",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 26
     },
     {
