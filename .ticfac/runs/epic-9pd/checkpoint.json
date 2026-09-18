@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 297,
-  "state": "integrating",
-  "reason": "integrating usx attempt 29 into epic/9pd",
-  "updated_at": "2026-09-18T06:40:01Z",
+  "sequence": 298,
+  "state": "gating",
+  "reason": "running the integrated gate for usx on c28bef79bb81",
+  "updated_at": "2026-09-18T06:40:07Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -128,7 +128,7 @@
     },
     {
       "tick_id": "usx",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 29
     },
     {
