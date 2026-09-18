@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 25,
-  "state": "integrating",
-  "reason": "integrating l9n attempt 1 into epic/ncv",
-  "updated_at": "2026-09-18T16:27:19Z",
+  "sequence": 26,
+  "state": "gating",
+  "reason": "running the integrated gate for l9n on 49a72f4cee3a",
+  "updated_at": "2026-09-18T16:27:27Z",
   "ticks": [
     {
       "tick_id": "l9n",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 1
     },
     {
