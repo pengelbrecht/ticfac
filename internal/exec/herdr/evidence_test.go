@@ -23,6 +23,12 @@ package herdr
 // that consulted it even once would show up here as a counted call, whatever
 // it then did with the answer. A rendering change, a renamed status word or a
 // dropped connection can cost a dispatch; none of them can cost a result.
+//
+//   - the fourth part is the one tick 3kx added: the same all-errors
+//     fixture, collected AFTER teardown removed the worktree, so the
+//     doctrine also covers the post-teardown report read (tick 35h's
+//     archive fallback) — the path a reviewer's mutation once rode
+//     through every test green, because no fixture there counted calls.
 
 import (
 	"bufio"
@@ -190,6 +196,95 @@ func TestCollectAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(t *testing.T)
 	if got := len(h.server.Methods()); got != callsBefore {
 		t.Errorf("collect made %d herdr call(s) (%v): the verdict is derivable from the report, the "+
 			"branch and the settlement record, so no herdr answer — error or success — can reach it",
+			got-callsBefore, h.server.Methods()[callsBefore:])
+	}
+}
+
+// TestCollectAfterTeardownAnswersFromDurableEvidenceWhenEveryHerdrCallErrors
+// is the all-errors fixture on the path tick 35h added to readReport: collect
+// AFTER the worktree is removed, when the report read falls back to the
+// archived copy beside the attempt record. Until tick 3kx the doctrine's
+// fixture stopped at the worktree copy — collect before teardown — so the
+// post-teardown read had no zero-calls proof at all: a mutation that made THAT
+// read consult the substrate passed every test in this package, because the
+// one test that drove the path (TestTheReportSurvivesTheWorktree) never
+// counted calls. The doctrine has to hold on EVERY path a verdict is minted
+// on, so the fixture drives the ordinary end-of-run order — collect, then the
+// executor's own teardown — and collects again with every herdr call
+// erroring: the verdict must come from the archive, the branch and the
+// settlement record, and nothing may dial herdr to get it.
+func TestCollectAfterTeardownAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.doWork(t, handle, "STATUS: DONE")
+	local, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The ordinary end-of-run order: collect first, while the worktree is
+	// still there — the verdict is minted and persisted, and the report is
+	// archived beside the attempt record — then the executor's own teardown
+	// removes the worktree, keeping the branch (its commits are on no remote
+	// yet).
+	if _, err := h.ex.CollectDetail(handle); err != nil {
+		t.Fatalf("the first collect failed: %v", err)
+	}
+	if err := h.ex.Dispose(handle, subprocess.DisposeOptions{KeepBranch: true}); err != nil {
+		t.Fatalf("teardown: %v", err)
+	}
+	if _, err := os.Stat(local.Worktree); !os.IsNotExist(err) {
+		t.Fatalf("the worktree still exists after teardown: %v", err)
+	}
+	// The fixture must be honest about which read the collect below makes:
+	// the worktree copy is GONE, so the only report left is the archive.
+	if _, err := os.Stat(local.ResultPath); !os.IsNotExist(err) {
+		t.Fatalf("the worktree's report copy is still at %s: the collect below would read the worktree, not the archive", local.ResultPath)
+	}
+	if _, err := os.Stat(filepath.Join(local.State, fileReportArchive)); err != nil {
+		t.Fatalf("the report was not archived beside the attempt record: %v", err)
+	}
+
+	// herdr goes wrong for EVERY call: up, listening, erroring everything.
+	h.failEveryHerdrCall()
+	assertEveryCallErrors(t, h)
+
+	// Collect after teardown. The verdict must come from the durable layer
+	// alone — the archive, the branch, the settlement record.
+	callsBefore := len(h.server.Methods())
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("collect after teardown failed with herdr erroring every call: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictReadyToMerge {
+		t.Errorf("verdict = %s with every herdr call erroring after teardown, want ready-to-merge: the post-"+
+			"teardown report read is archive work, and the verdict comes from the report and the branch, never "+
+			"from the substrate", collected.Verdict)
+	}
+	if collected.Result.Outcome != subprocess.OutcomeSucceeded {
+		t.Errorf("outcome = %s, want succeeded", collected.Result.Outcome)
+	}
+	if !collected.HasReport || collected.Report.Status != "DONE" {
+		t.Errorf("the archived report did not reach the collection (has=%t status=%q): the worktree copy is "+
+			"gone, so this is the archive read or nothing", collected.HasReport, collected.Report.Status)
+	}
+	if collected.Result.RoleResult == nil || collected.Result.RoleResult.Status != "DONE" {
+		t.Errorf("the archived report's status did not reach the role-result envelope: %+v", collected.Result.RoleResult)
+	}
+	if collected.Result.Source.Commits != 1 {
+		t.Errorf("commits = %d, want the one the worker made beyond the recorded base", collected.Result.Source.Commits)
+	}
+
+	// THE GUARANTEE, mechanically, on the post-teardown path too: collect
+	// made zero herdr calls. This is the assertion the reviewer's mutation
+	// — a substrate call on the archived-report branch of readReport — rode
+	// past: no fixture counted calls there. It does now.
+	if got := len(h.server.Methods()); got != callsBefore {
+		t.Errorf("collect after teardown made %d herdr call(s) (%v): the archived report is this executor's "+
+			"own durable copy, and no herdr answer — error or success — belongs anywhere in the read of it",
 			got-callsBefore, h.server.Methods()[callsBefore:])
 	}
 }
