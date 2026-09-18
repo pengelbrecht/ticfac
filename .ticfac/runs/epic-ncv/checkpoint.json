@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 20,
-  "state": "publishing",
-  "reason": "closing l9n behind the integrated gate on 02dd7f7fd619",
-  "updated_at": "2026-09-18T16:19:57Z",
+  "sequence": 21,
+  "state": "running",
+  "reason": "l9n is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T16:20:03Z",
   "ticks": [
     {
       "tick_id": "l9n",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 1
     },
     {
