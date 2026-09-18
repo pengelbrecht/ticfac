@@ -43,10 +43,19 @@ import (
 // is created BEFORE the dispatch, because a marker written afterwards guards
 // nothing.
 type attemptHandle struct {
-	Executor  string `json:"executor"`
-	JobID     string `json:"job_id"`
-	Attempt   int    `json:"attempt"`
-	TickID    string `json:"tick_id"`
+	Executor string `json:"executor"`
+	JobID    string `json:"job_id"`
+	Attempt  int    `json:"attempt"`
+	TickID   string `json:"tick_id"`
+
+	// Try is which try of its own tick this dispatch is (tick vw0). It rides
+	// the marker for the same reason Tier and Touch do: a later leg — an
+	// adopt that finds the marker landed but nothing started — rebuilds the
+	// dispatch and can still START the attempt, and the try it was dispatched
+	// as is a fact about the dispatch, not something the next incarnation
+	// should re-derive from a run-wide counter that has since moved. Zero on
+	// markers written before the field existed.
+	Try       int    `json:"try"`
 	Role      string `json:"role"`
 	Repo      string `json:"-"`
 	Remote    string `json:"remote"`
@@ -128,6 +137,7 @@ type resumedFrom struct {
 func (a attemptHandle) asMap() map[string]any {
 	return map[string]any{
 		"executor": a.Executor, "job_id": a.JobID, "attempt": a.Attempt, "tick_id": a.TickID,
+		"try":  a.Try,
 		"role": a.Role, "remote": a.Remote, "write_ref": a.WriteRef,
 		"base_sha": a.BaseSHA,
 		"model":    a.Model, "prompt_digest": a.PromptDigest, "tier": a.Tier, "touch": a.Touch,
@@ -178,6 +188,16 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	case int:
 		substrateProtocol = value
 	}
+	// Try rides the marker like Attempt does, so it arrives the same way — as
+	// a JSON number — and is absent on markers written before the field
+	// existed, which read as the zero value.
+	try := 0
+	switch value := raw["try"].(type) {
+	case float64:
+		try = int(value)
+	case int:
+		try = value
+	}
 	// ResumedFrom arrives as the nested object the marker stores it as —
 	// JSON on origin — or as nil for a dispatch that resumed from nothing.
 	var resumed *resumedFrom
@@ -196,6 +216,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 	}
 	return attemptHandle{
 		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
+		Try:  try,
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
 		Model:   get("model"), PromptDigest: get("prompt_digest"), Tier: get("tier"),
@@ -533,7 +554,13 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
-		dispatch, marker, err := r.planDispatch(entry, number, failed, carry)
+		// The tick's own try for this dispatch (tick vw0): the same number the
+		// feed lines say, computed once here so the dispatch, the marker and
+		// the record all name one number. The run-wide `number` above is the
+		// attempt's identity; this one is its ordinal among the tick's own
+		// tries, and the two only coincide when nothing was dispatched first.
+		try := tryOf(attempts, tick, number)
+		dispatch, marker, err := r.planDispatch(entry, number, try, failed, carry)
 		if err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
@@ -637,7 +664,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		r.noteAlive(dispatch.JobID)
 		r.setTick(tick, "dispatched")
 		r.record(tick, StageDispatched, "attempt %d started as %s (%s try %d; attempt numbers count this run's dispatches)",
-			number, dispatch.JobID, tick, tryOf(attempts, tick, number))
+			number, dispatch.JobID, tick, try)
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
 		}
@@ -963,7 +990,7 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 // It runs BEFORE the marker is written and the tick is claimed, so a refusal
 // here (a tier label the config cannot honour, say) spends nothing and
 // claims nothing.
-func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *carriedWork) (Dispatch, attemptHandle, error) {
+func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carry *carriedWork) (Dispatch, attemptHandle, error) {
 	// Where the orchestrator stops choosing and starts deriving: the tier is
 	// a pure function of the tick's facts, this attempt's durable state and
 	// the declared policy — never a per-dispatch judgement, never a hunch.
@@ -1029,7 +1056,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *ca
 	}
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
-		JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
+		Try: try, JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
 		ResumedFrom: resumed,
@@ -1051,6 +1078,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, failed int, carry *ca
 	}
 	marker := attemptHandle{
 		Executor: dispatchProfile.Executor, JobID: jobID, Attempt: number, TickID: entry.TickID,
+		Try:  try,
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
@@ -1241,6 +1269,7 @@ func (r *Reconciler) replayClaim(ctx context.Context, tick string) {
 func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
+		Try:   marker.Try,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		Tier: marker.Tier,
@@ -2148,6 +2177,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			SupervisorArgv: supervisor,
 			Remote:         d.Remote,
 			Attempt:        d.Attempt,
+			Try:            d.Try,
 			PushInterval:   pushInterval,
 			PriorReports:   d.PriorReports,
 			PriorSnapshots: d.PriorSnapshots,

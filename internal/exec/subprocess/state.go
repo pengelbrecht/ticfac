@@ -63,6 +63,13 @@ type attemptRecord struct {
 	Attempt       int    `json:"attempt"`
 	TickID        string `json:"tick_id"`
 
+	// Try is which try of its own tick this attempt is (tick vw0): 1 for the
+	// first, whatever the run-wide number is. Recorded for the same reason
+	// the runner env is: the two numbers answer different questions, and an
+	// attempt read back after the fact must not have its "first try" inferred
+	// from a number that counts the whole run's dispatches.
+	Try int `json:"try"`
+
 	Branch   string `json:"branch"`
 	WriteRef string `json:"write_ref"`
 	BaseSHA  string `json:"base_sha"`

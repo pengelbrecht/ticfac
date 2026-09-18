@@ -178,8 +178,17 @@ func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T
 	if err != nil {
 		t.Fatalf("the restart did not finish: %v", err)
 	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the restart ended %s: %s", result.State, result.Reason)
+	// blocked-first keys on the tick's OWN first try (tick vw0), so the
+	// restart settles a1's redispatch — the half under test — and then
+	// dispatches a2 for the first time, whose own first try blocks exactly as
+	// a1's did and refuses the run again. a1's redispatch is asserted off
+	// the markers that landed; the restart completing was never among them.
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the restart ended %s, want a2's own first try to refuse it after a1's redispatch: %s",
+			result.State, result.Reason)
+	}
+	if result.Failure == nil || result.Failure.TickID != "a2" {
+		t.Fatalf("the restart's refusal is %+v, want a2's first try", result.Failure)
 	}
 	if got := restarted.Stages("a1"); !contains(got, StageRedispatched) {
 		t.Errorf("the restart did not redispatch the spent attempt: %v", got)
@@ -209,6 +218,18 @@ func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T
 	}
 	if current.Status != "closed" {
 		t.Errorf("a1 is %s after the restart", current.Status)
+	}
+
+	// a2's refused first try left nothing, so one more run in plain report
+	// mode settles the rest of the epic and proves nothing the redispatch
+	// left behind is in the way.
+	f.Runner = fakeRunnerArgv(t, "report")
+	_, done, err := f.run(clone, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the settling run did not finish: %v", err)
+	}
+	if done.State != runstate.StateCompleted {
+		t.Fatalf("the settling run ended %s: %s", done.State, done.Reason)
 	}
 }
 

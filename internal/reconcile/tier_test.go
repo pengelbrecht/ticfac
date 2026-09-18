@@ -277,8 +277,17 @@ func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the restart ended %s: %s", result.State, result.Reason)
+	// blocked-first keys on the tick's OWN first try (tick vw0), so the
+	// restart settles a1's redispatch — the ladder under test — and then
+	// dispatches a2 for the first time, whose own first try blocks exactly as
+	// a1's did and refuses the run again. The assertions below read the
+	// markers that landed; the restart completing was never one of them.
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the restart ended %s, want a2's own first try to refuse it after a1's redispatch: %s",
+			result.State, result.Reason)
+	}
+	if result.Failure == nil || result.Failure.TickID != "a2" {
+		t.Fatalf("the restart's refusal is %+v, want a2's first try", result.Failure)
 	}
 
 	if got := markerTierOfTry(t, restarted, "a1", 1); got != "balanced" {
@@ -304,9 +313,19 @@ func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 	if got := markerTierOfTry(t, restarted, "a2", 1); got != "balanced" {
 		t.Errorf("a2's first attempt recorded tier %q, want balanced: a rung is earned, never assumed", got)
 	}
-	// And the role jobs ran at base values: no route was declared for them,
-	// and a process role is never loaned the work default.
-	if got := markerTierOfTry(t, restarted, "rv", 1); got != "" {
+	// a2's refused first try left nothing, so one more run in plain report
+	// mode settles the rest of the epic. The role jobs ran at base values:
+	// no route was declared for them, and a process role is never loaned the
+	// work default.
+	f.Runner = fakeRunnerArgv(t, "report")
+	settled, done, err := f.run(clone, fixtureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.State != runstate.StateCompleted {
+		t.Fatalf("the settling run ended %s: %s", done.State, done.Reason)
+	}
+	if got := markerTierOfTry(t, settled, "rv", 1); got != "" {
 		t.Errorf("the review job recorded tier %q, want none: no route is declared for it", got)
 	}
 }

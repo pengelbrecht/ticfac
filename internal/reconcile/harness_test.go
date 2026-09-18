@@ -536,6 +536,7 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		SupervisorArgv: []string{executorBin, "supervise"},
 		Remote:         d.Remote,
 		Attempt:        d.Attempt,
+		Try:            d.Try,
 		PushInterval:   time.Second,
 		// What the tick's earlier attempts found (tick nvn), forwarded the
 		// way the production factories forward it.
