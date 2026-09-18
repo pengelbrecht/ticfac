@@ -10,11 +10,8 @@
   "target": "",
   "tick_id": "h0f",
   "attempt": 14,
-  "status": "fixed",
-  "proposed_at": "2026-09-16T12:21:48Z",
-  "triaged_at": "2026-09-16T13:01:24Z",
-  "triaged_by": "claude:orchestrator",
-  "fixed_as": "48f844d",
+  "status": "proposed",
+  "proposed_at": "2026-09-18T08:50:56Z",
   "provenance": {
     "run_id": "epic-9pd",
     "tick_id": "h0f",
@@ -30,7 +27,7 @@
     "tier": null,
     "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
     "model": "opus",
-    "context_manifest_digest": "sha256:109e71290f31b56d32a065c52d976260",
+    "context_manifest_digest": "sha256:ce17a87f5eb09521e51e2225573ebb66181e172b1228190e91c75effe244f2c0",
     "substrate_protocol": 22,
     "substrate_server_version": "0.9.0"
   }
