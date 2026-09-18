@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-9pd",
   "epic_id": "9pd",
-  "sequence": 278,
-  "state": "publishing",
-  "reason": "closing sqx behind the integrated gate on da1c9d547647",
-  "updated_at": "2026-09-18T06:06:05Z",
+  "sequence": 279,
+  "state": "running",
+  "reason": "sqx is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-18T06:06:11Z",
   "ticks": [
     {
       "tick_id": "0z0",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "sqx",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 28
     },
     {
