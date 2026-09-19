@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 26,
-  "state": "integrating",
-  "reason": "integrating 4sb attempt 1 into epic/dha",
-  "updated_at": "2026-09-19T22:46:06Z",
+  "sequence": 27,
+  "state": "gating",
+  "reason": "running the integrated gate for 4sb on 1cf471992a2b",
+  "updated_at": "2026-09-19T22:46:13Z",
   "ticks": [
     {
       "tick_id": "4sb",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 1
     },
     {
