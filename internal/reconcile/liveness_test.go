@@ -207,6 +207,22 @@ func TestTheStallWarningFiresForAWorktreeThatNeverChanged(t *testing.T) {
 // of two, a1's gate takes long enough that a2 crosses its threshold entirely
 // inside it, and the gate then REFUSES — so the run stops with a2 live and
 // has exactly one remaining chance to say what it last saw.
+//
+// # What tick 9pz changed about it, and what it did not
+//
+// The gap this test was written around is GONE at the source. The finish is no
+// longer a blocking call the loop disappears into: it is a state machine the
+// loop advances one step per round, so pollWindow runs through a gate and the
+// warning lands from a poll WHILE a1 is being gated — 28 minutes earlier than
+// ncv managed, and with the whole of a2's remaining wall clock still to spend.
+// That is what dh1 wanted, and it is why the assertion below is now "the
+// warning landed inside the finish" rather than "the warning landed only when
+// the run walked away".
+//
+// What has NOT changed, and is still asserted, is the last look itself: the run
+// stopping is the moment its account of a live attempt stops being added to, so
+// that account is made current before it walks away, and the reader is never
+// told an attempt is out there before being told what it was last seen doing.
 func TestAnAbandonedAttemptIsMeasuredBeforeTheRunWalksAway(t *testing.T) {
 	t.Parallel()
 	// The gate takes five seconds and then refuses. Both numbers matter: the
@@ -235,13 +251,17 @@ tree = { command = "sleep 5; exit 3", description = "refuses, slowly" }
 		t.Fatalf("closed %v behind a gate that refuses: %+v", result.Closed, result.Failure)
 	}
 
-	gateFailed, warned, abandoned := -1, -1, -1
+	settled, warned, abandoned := -1, -1, -1
 	for i, event := range r.Journal() {
 		switch {
-		case event.Stage == StageGateFailed && event.Tick == "a1":
-			gateFailed = i
+		case event.Stage == StageWaiting && event.Tick == "a1" && strings.Contains(event.Detail, "settled as"):
+			if settled < 0 {
+				settled = i
+			}
 		case event.Stage == StageStallWarned && event.Tick == "a2":
-			warned = i
+			if warned < 0 {
+				warned = i
+			}
 		case event.Stage == StageWaiting && event.Tick == "a2" && strings.Contains(event.Detail, "still running"):
 			abandoned = i
 		}
@@ -255,9 +275,12 @@ tree = { command = "sleep 5; exit 3", description = "refuses, slowly" }
 			"a2 had been eligible for a stall warning for the whole of a1's gate, and the only place left to " +
 			"write one was the moment the run walked away")
 	}
-	if gateFailed >= 0 && warned < gateFailed {
-		t.Fatalf("a2's stall warning landed at %d, before a1's gate refused at %d: this run warned from a POLL, "+
-			"so it does not exercise the gap the test is for — lengthen the gate or the threshold", warned, gateFailed)
+	if settled < 0 {
+		t.Fatalf("a1 never settled, so a2 never waited through a finish at all: %v", stagesOf(r.Journal(), "a1"))
+	}
+	if warned < settled {
+		t.Errorf("a2's stall warning landed at %d, before a1 even settled at %d: it is not the warning this test "+
+			"is about — the one that has to cross a threshold while another tick is being finished", warned, settled)
 	}
 	if warned > abandoned {
 		t.Errorf("a2 was announced abandoned at %d and only measured at %d: the reader is told the attempt is out "+

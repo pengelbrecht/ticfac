@@ -192,7 +192,7 @@ func TestAFailingGateStopsTheCloseAndSaysWhichCheckRefused(t *testing.T) {
 		t.Errorf("the teardown after the failing gate deleted %s, which carries the work",
 			branchOf(spec.Source.WriteRef))
 	}
-	assertOneWorktree(t, f.Repo.Dir)
+	assertTornDown(t, f.Repo.Dir, "a1")
 	if !strings.Contains(result.Reason, "a1") {
 		t.Errorf("the run's reason does not name the tick that failed: %q", result.Reason)
 	}

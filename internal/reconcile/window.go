@@ -30,11 +30,67 @@ import (
 // a per-run peek ref) written by two parties at once — and a window that polls
 // from one goroutine cannot produce a fourth.
 
+// held is everything the window is holding at one moment: the workers still
+// thinking, the ones that have settled and are waiting their turn to be
+// finished, and the one attempt actually being finished.
+//
+// The three are kept apart because they answer two different questions
+// differently (tick 9pz). For the GRAPH they are all the same thing: a tick
+// that has not closed yet, whose wave the window may not run past and whose
+// dependents may not start. For the declared WIDTH only the first two count —
+// max_parallel bounds live workers, a model and a pane and CPU, and the
+// attempt being finished has had its worker torn down at the collect precisely
+// so that it stops being one.
+type held struct {
+	live    []*inflightAttempt
+	settled []*settledAttempt
+	finish  *finishing
+}
+
+// settledAttempt is an attempt that has settled while another was being
+// finished. Finishing is serial, so it waits — with its status, because that is
+// the answer the collect is about and re-polling a terminal attempt to get it
+// again would say "settled as succeeded" to the feed twice.
+type settledAttempt struct {
+	fl     *inflightAttempt
+	status *subprocess.JobStatus
+}
+
+// holders is every attempt the window has not closed yet, in the order it took
+// them on: what the graph boundaries are read against.
+func (h *held) holders() []*inflightAttempt {
+	out := make([]*inflightAttempt, 0, len(h.live)+len(h.settled)+1)
+	out = append(out, h.live...)
+	for _, s := range h.settled {
+		out = append(out, s.fl)
+	}
+	if h.finish != nil {
+		out = append(out, h.finish.fl)
+	}
+	return out
+}
+
+// workers is how many of them still HAVE a worker: the number the declared
+// width bounds. The attempt being finished counts only until its collect lets
+// its worker go, which is what keeps the width honest across the moment the
+// slot frees.
+func (h *held) workers() int {
+	n := len(h.live) + len(h.settled)
+	if h.finish != nil && !h.finish.released {
+		n++
+	}
+	return n
+}
+
 // runPlan works the plan and reports the ticks that were rejected.
 func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, error) {
 	var failed []string
-	var live []*inflightAttempt
+	var window held
 	queue := plan
+	// When the window was last polled. The excuse a finish owes the attempts
+	// that waited through it is measured from here rather than from the
+	// finish's own start, because a finish no longer stops the polling.
+	polledAt := r.now()
 	// A refusal STOPS the run — it does not finish the rest of the window
 	// first.
 	//
@@ -76,12 +132,30 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		return cErr
 	}
 
+	// stop is what a refusal raised about an attempt the window was HOLDING
+	// does: record it, say which attempts the run is walking away from, and
+	// end the run. The refused attempt is out of the window by the time this
+	// is called — a run does not announce as abandoned the tick it is stopping
+	// for.
+	stop := func(tick string, err error) ([]string, error) {
+		var refusal *Refusal
+		if !asRefusal(err, &refusal) {
+			return nil, err
+		}
+		stopped = true
+		if cErr := reject(tick, refusal); cErr != nil {
+			return nil, cErr
+		}
+		r.announceAbandonedWindow(&window)
+		return failed, nil
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		for !stopped && len(queue) > 0 && r.mayAdmit(queue[0], live, plan) {
+		for !stopped && len(queue) > 0 && r.mayAdmit(queue[0], &window, plan) {
 			entry := queue[0]
 			queue = queue[1:]
 			fl, err := r.admit(ctx, entry)
@@ -97,64 +171,99 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				break
 			}
 			if fl != nil {
-				live = append(live, fl)
+				window.live = append(window.live, fl)
 			}
 		}
 
 		if stopped {
-			r.announceAbandoned(live)
+			r.announceAbandonedWindow(&window)
 			return failed, nil
 		}
-		if len(live) == 0 {
-			if len(queue) == 0 {
+
+		// Finishing is SERIAL, so the next finish starts only once the last one
+		// is over — and it starts from the attempt that settled FIRST, which is
+		// the order the queue holds them in.
+		if window.finish == nil && len(window.settled) > 0 {
+			next := window.settled[0]
+			window.settled = window.settled[1:]
+			window.finish = r.beginFinish(next.fl, next.status)
+		}
+
+		// ONE step of the finish, and then the window's own turn. This is the
+		// whole of tick 9pz's second half: the step that used to be a
+		// multi-minute blocking call is a step like any other, so the admission
+		// above and the poll below happen through a gate instead of after it.
+		if window.finish != nil {
+			f := window.finish
+			done, err := r.advanceFinish(ctx, f)
+			if err != nil {
+				window.finish = nil
+				return stop(f.fl.entry.TickID, err)
+			}
+			if done {
+				window.finish = nil
+				// The gap the run really caused. It used to be the whole
+				// finish, because nothing was polled through one; now the
+				// window is polled every round of it, so what is forgiven is
+				// what actually happened — which on a window with nothing live
+				// to poll is still the whole finish.
+				r.excuseWindow(window.live, r.now().Sub(polledAt))
+
+				// An attempt has closed, which is the only moment the
+				// readiness of any OTHER tick of this epic can have changed —
+				// so it is the moment the plan is asked whether it still
+				// describes the graph it came from.
+				plan, queue, err = r.replan(ctx, plan, queue)
+				if err != nil {
+					return nil, err
+				}
+				continue
+			}
+		}
+
+		if len(window.live) == 0 {
+			holders := window.holders()
+			if len(queue) == 0 && len(holders) == 0 {
 				return failed, nil
+			}
+			// Nothing to poll, and something still to do: a finish mid-gate
+			// with no worker left beside it. Resting is the honest answer —
+			// spinning on it would spend the host on asking — and it rests at
+			// the same beat a window of live attempts rests at, the shortest
+			// cadence any attempt it is holding asked for (tick u9l). A sleep
+			// of the run's own invention here would be the one interval in this
+			// loop that no executor chose.
+			if len(holders) > 0 {
+				if err := r.restWindow(holders); err != nil {
+					return nil, err
+				}
 			}
 			continue
 		}
 
-		settled, status, err := r.pollWindow(ctx, live)
+		settled, status, err := r.pollWindow(ctx, window.live)
+		polledAt = r.now()
 		if settled < 0 {
 			if err != nil {
 				return nil, err
 			}
-			if err := r.restWindow(live); err != nil {
+			if err := r.restWindow(window.live); err != nil {
 				return nil, err
 			}
 			continue
 		}
 
-		// The attempt leaves the window whichever way it ends. A refusal
+		// The attempt leaves the LIVE half whichever way it ends. A refusal
 		// raised while ADDRESSING it — unaddressed, wiped, past its wall
 		// clock — is the tick's refusal exactly as a refusal from its gate is,
 		// and reaches the feed the same way; the difference is only where the
 		// run was standing when it learned.
-		fl := live[settled]
-		live = append(live[:settled], live[settled+1:]...)
-		if err == nil {
-			startedFinishing := r.now()
-			err = r.finishTick(ctx, fl, status)
-			r.excuseWindow(live, r.now().Sub(startedFinishing))
-		}
+		fl := window.live[settled]
+		window.live = append(window.live[:settled], window.live[settled+1:]...)
 		if err != nil {
-			var refusal *Refusal
-			if !asRefusal(err, &refusal) {
-				return nil, err
-			}
-			stopped = true
-			if cErr := reject(fl.entry.TickID, refusal); cErr != nil {
-				return nil, cErr
-			}
-			r.announceAbandoned(live)
-			return failed, nil
+			return stop(fl.entry.TickID, err)
 		}
-
-		// An attempt has settled, which is the only moment the readiness of
-		// any OTHER tick of this epic can have changed — so it is the moment
-		// the plan is asked whether it still describes the graph it came from.
-		plan, queue, err = r.replan(ctx, plan, queue)
-		if err != nil {
-			return nil, err
-		}
+		window.settled = append(window.settled, &settledAttempt{fl: fl, status: status})
 	}
 }
 
@@ -404,6 +513,34 @@ func (r *Reconciler) adoptTicks(durable []runstate.TickState, live []*inflightAt
 // later had nothing to read. A run stopping is the moment its account of a
 // live attempt stops being added to, so the account should be current when it
 // does.
+// announceAbandonedWindow is announceAbandoned for a window that can now hold
+// attempts in three states rather than one (tick 9pz).
+//
+// A worker still thinking gets the sentence it always got. An attempt that
+// SETTLED and was not finished — one waiting its turn, or the one the run was
+// mid-finish on when something else refused — gets one of its own, because
+// "still running" would be false about it and the first move it asks for is
+// different: nothing is out there to look at, and what a resumed run does with
+// it is collect it, not wait for it.
+func (r *Reconciler) announceAbandonedWindow(w *held) {
+	r.announceAbandoned(w.live)
+	unfinished := make([]*inflightAttempt, 0, len(w.settled)+1)
+	for _, s := range w.settled {
+		unfinished = append(unfinished, s.fl)
+	}
+	if w.finish != nil {
+		unfinished = append(unfinished, w.finish.fl)
+	}
+	for _, fl := range unfinished {
+		r.record(fl.entry.TickID, StageWaiting,
+			"attempt %d of %s had settled and was not finished when the run stopped for another tick's refusal: "+
+				"nothing about it is lost — its marker is on the remote and its commits are on its own branch, and "+
+				"running the epic again under this run id adopts it by identity and finishes it rather than "+
+				"dispatching over it",
+			fl.marker.Attempt, fl.marker.TickID)
+	}
+}
+
 func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 	for _, fl := range live {
 		r.probeProgress(fl)
@@ -445,14 +582,22 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 // reports no dependency edges at all; the blocker list is the reason behind
 // the number, and it still holds when a layering is stale — which, between two
 // settlements, is exactly what a layering is.
-func (r *Reconciler) mayAdmit(next planEntry, live []*inflightAttempt, plan []planEntry) bool {
-	if len(live) == 0 {
+// The three boundaries are read against everything the window is HOLDING —
+// the live workers, the settled attempts waiting their turn, and the one being
+// finished — because all three are ticks this run has not closed. The declared
+// width is the one that reads something narrower: a worker that has been
+// collected and torn down is not a live worker, and counting it would be the
+// defect this tick is about (9pz), where a run held a slot for a party that had
+// already gone home for the whole of a gate.
+func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bool {
+	holders := window.holders()
+	if len(holders) == 0 {
 		return true
 	}
 	if isRoleJob(next.Role) {
 		return false
 	}
-	for _, fl := range live {
+	for _, fl := range holders {
 		if isRoleJob(fl.entry.Role) {
 			return false
 		}
@@ -467,7 +612,7 @@ func (r *Reconciler) mayAdmit(next planEntry, live []*inflightAttempt, plan []pl
 			return false
 		}
 	}
-	return len(live) < r.widthForWave(plan, next.Wave)
+	return window.workers() < r.widthForWave(plan, next.Wave)
 }
 
 // widthForWave is the width this wave may run at: the host's declared number,

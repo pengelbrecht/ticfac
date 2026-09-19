@@ -327,58 +327,6 @@ func (r *Reconciler) beginTick(ctx context.Context, entry planEntry) (*inflightA
 	return r.newInflight(entry, handle, executor, marker), nil
 }
 
-// finishTick is everything a settled attempt still owes: collect, integrate,
-// gate, close, clean up.
-//
-// This half is deliberately NOT concurrent, whatever the window's width. There
-// is one integration branch, and a gate that ran on a tree other than the one
-// being closed proves nothing about it — so attempts queue here and go through
-// one at a time, in the order they settled.
-func (r *Reconciler) finishTick(ctx context.Context, fl *inflightAttempt, status *subprocess.JobStatus) error {
-	entry, handle, executor, marker := fl.entry, fl.handle, fl.executor, fl.marker
-	tick := marker.TickID
-
-	// A resumed run does not collect an attempt it has already MERGED. The
-	// refusal that stopped the previous incarnation — the gate, or the
-	// freshness check after it — tore the attempt down, so its worktree is
-	// gone, and a second collect would report a missing report this run
-	// removed itself instead of the verdict the attempt really had. Nothing is
-	// merged on the strength of this: integrate reports "already contained"
-	// and merges nothing, and what decides the close is the gate, which does
-	// run again.
-	var collected *subprocess.Collection
-	integrated, err := r.integratedHead(marker)
-	if err != nil {
-		return err
-	}
-	if integrated != "" {
-		r.record(tick, StageCollected,
-			"attempt %d is already merged into %s at %s; it is not collected a second time",
-			marker.Attempt, r.branch, short(integrated))
-	} else {
-		collected, err = r.collect(ctx, handle, executor, marker, status)
-		if err != nil {
-			return err
-		}
-	}
-
-	merged, err := r.integrate(marker, collected)
-	if err != nil {
-		r.disposeRefused(handle, executor, marker, err)
-		return err
-	}
-
-	if err := r.gateAndClose(ctx, entry, marker, collected, merged); err != nil {
-		r.disposeRefused(handle, executor, marker, err)
-		return err
-	}
-
-	// Cleanup is LAST, and only after the close. A cleanup before the close
-	// throws away the only copy of what was closed.
-	r.cleanUp(handle, executor, marker)
-	return nil
-}
-
 // claimDispatch is the dispatch, and the compare-and-swap in front of it.
 //
 // The order is the contract's: create the marker on origin, and only then
