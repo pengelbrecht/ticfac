@@ -3,7 +3,7 @@
   "title": "Move run, attempt and decision records from D1 into .ticfac/ on the run branch",
   "description": "SPEC 12 Phase 4 item 6. Move run/attempt/decision records out of D1 and into .ticfac/ on the run branch, pushed to origin at once (SPEC 10.4); leave D1 as a rebuildable index, or remove it.\n\nREAD 9da BEFORE STARTING. This item makes that defect worse, not better: 9da is the close-out deadlocking because the run's checkpoint writes move the PR head it gates CI on, and this item moves MORE records onto that same branch. Phase 3 hit it with checkpoints alone; with attempts and decisions there too, every record written during a close-out re-invalidates the CI it is waiting for.\n\nSo this tick does not start with a migration. It starts by establishing how run-state writes and the PR + CI gate coexist - whether records go to a ref that is not the PR's head, whether CI is asked about the last non-run-state commit, or whether the close-out stops writing while it waits. Then migrate.\n\nThe prize is real and worth the care: records in git are readable by a resumed run with no database, which is what makes a Workflow restart recoverable.",
   "notes": "2026-09-19 12:21 - ticfac run epic-ncv: attempt 6 reported a finding drafted for triage — proposed-tick \"TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt is load-flaky under the full gate\" (key f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109, severity low, for this repository). Triage with `ticfac finding ncv f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-19 12:21 - ticfac run epic-ncv: attempt 6 reported a finding drafted for triage — proposed-tick \"Workflow-hosted reconciler has no skeleton hold-back and redispatches a review that reports done with zero commits\" (key be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f, severity medium, for this repository). Triage with `ticfac finding ncv be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-19 14:19 - ticfac run epic-ncv: attempt 6 merged into epic/ncv as 97e81037b183; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "Run, attempt and decision records live in .ticfac/ on the run branch and a resumed run reads them with no D1 access. D1 is either rebuildable from them or gone. An epic close-out still reaches a CI verdict with these writes happening - the 9da interaction is demonstrated as resolved, not assumed.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:45.162719Z",
-  "updated_at": "2026-09-19T12:19:50.719191Z",
-  "started_at": "2026-09-18T16:50:48.213299Z"
+  "updated_at": "2026-09-19T12:19:56.063804Z",
+  "closed_at": "2026-09-19T12:19:56.063804Z"
 }
