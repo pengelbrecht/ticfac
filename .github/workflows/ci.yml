@@ -116,9 +116,10 @@ jobs:
           git checkout -- contracts/message-context.json
           go run ./cmd/contracts check
 
-  # cloud/sandbox is the sandbox image's build context — ticks owns the tree
-  # (its internal/sandbox suite runs those scripts) and this repository
-  # vendors it as the factory's embedded image context. Two repositories, one
+  # image/ is the sandbox image's build context (moved there from cloud/sandbox
+  # by SPEC §12 Phase 4 item 4) — ticks owns the tree (its internal/sandbox
+  # suite runs those scripts from its own copy) and this repository vendors it
+  # as the factory's embedded image context. Two repositories, one
   # tree: without this job nothing stops the copies drifting while ticks' tests
   # guard ITS copy and ticfac's cold-start budget bounds a container built from
   # THIS one. sandbox.pin.json is the pin; cmd/sandbox is the check.
@@ -215,11 +216,11 @@ jobs:
       # be a check.
       - name: A deliberately broken vendored script fails
         run: |
-          printf '\n' >> cloud/sandbox/worker.sh
+          printf '\n' >> image/worker.sh
           if go run ./cmd/sandbox check; then
             echo "FAIL: the check passed with an edited vendored file — it is not a check"
             exit 1
           fi
           echo "refused, as it must be"
-          git checkout -- cloud/sandbox/worker.sh
+          git checkout -- image/worker.sh
           go run ./cmd/sandbox check

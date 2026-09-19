@@ -197,7 +197,7 @@ func load(t *testing.T) contract {
 //
 // Files under cloud/** are the embedded payload (the factory Worker bundle,
 // at cloudflare since the SPEC §12 Phase 4 item 1 move, and the
-// orchestrator image context at cloud/sandbox), which landed with ticks
+// orchestrator image context, at image since the item 4 move), which landed with ticks
 // tick b3a ("Factory move B") together with the trees the contract points
 // into. Now that it is here, a named cloud/** file that is absent IS drift:
 // the vendored contract moves by bundle bump (CONTRACTS.md), never by a
@@ -226,19 +226,27 @@ func requireContractSources(t *testing.T, files ...string) {
 
 // contractSourcePath maps a file the pinned lifecycle contract names onto
 // where it lives in this repository. The bundle predates the SPEC §12 Phase 4
-// item 1 move: its `today` sites and threshold sources say
+// moves: its `today` sites and threshold sources say
 // "cloud/factory/..." for the worker bundle this repository now ships at
-// cloudflare, and the vendored contract moves by bundle bump
+// cloudflare (item 1), and "cloud/sandbox/..." for the image context it now
+// ships at image (item 4). The vendored contract moves by bundle bump
 // (CONTRACTS.md), never by a payload edit behind its back. Until a bundle
-// version names the new location, this reader - and only this reader -
-// carries the translation: every other path in it ("cloud/sandbox/...",
-// "contracts/...", "extensions/...") passes through untouched, and a file
-// the mapping points at that does not exist still fails the checks below,
-// so the "a named cloud/** file that is absent IS drift" rule keeps its
-// teeth.
+// version names the new locations, this reader - and only this reader -
+// carries the translations: every other path in it ("contracts/...",
+// "extensions/...") passes through untouched, and a file the mapping
+// points at that does not exist still fails the checks below, so the
+// "a named cloud/** file that is absent IS drift" rule keeps its teeth.
 func contractSourcePath(file string) string {
 	if after, ok := strings.CutPrefix(file, "cloud/factory/"); ok {
 		return "cloudflare/" + after
+	}
+	// The image context is the second move this reader carries a translation
+	// for (SPEC §12 Phase 4 item 4): the contract still says cloud/sandbox/
+	// for a tree this repository now holds at image/, and the same rule
+	// applies — the vendored contract moves by bundle bump, never by a
+	// payload edit behind its back.
+	if after, ok := strings.CutPrefix(file, "cloud/sandbox/"); ok {
+		return "image/" + after
 	}
 	return file
 }

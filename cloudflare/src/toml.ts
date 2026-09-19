@@ -2,7 +2,7 @@
  * A small, strict TOML reader for `.tick/runners.toml`.
  *
  * A VERBATIM COPY of `extensions/ticks-runner/toml.ts`, and deliberately so:
- * `ticfac factory deploy` stages `ticfac/cloudflare` and `cloud/sandbox` and uploads
+ * `ticfac factory deploy` stages `ticfac/cloudflare` and `image/` and uploads
  * the bundle from there, so a worker source file may not import anything
  * outside those two trees. Keep the two files identical — a fix to one is a
  * fix to both, and `test/toml.test.ts` pins the behaviour this bundle needs.
@@ -16,7 +16,7 @@
  * `[sandbox].setup` list above all — is deliberately left to the container,
  * through the Go reader `tk` owns. That is also what makes an unreadable file
  * safe here: the boot the control plane could not inform is still checked by
- * the entrypoint against the authoritative reader (`cloud/sandbox/entrypoint.sh`,
+ * the entrypoint against the authoritative reader (`image/entrypoint.sh`,
  * `repo_setup`).
  *
  * The syntax covered is what `runners-config.schema.json` describes: tables,

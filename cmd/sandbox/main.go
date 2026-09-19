@@ -1,5 +1,6 @@
 // Command sandbox is the vendoring gate for the pinned sandbox image context,
-// cloud/sandbox. Three subcommands, and the split between them is the whole
+// image/ (moved there from cloud/sandbox by SPEC §12 Phase 4 item 4). Three
+// subcommands, and the split between them is the whole
 // safety argument (CONTRACTS.md, applied to this tree):
 //
 //	check            every test run, every CI run. NEVER touches the network.
@@ -47,12 +48,12 @@ func main() {
 			fail(err)
 		}
 		if len(problems) > 0 {
-			fmt.Fprintf(os.Stderr, "the vendored cloud/sandbox is not what %s published at %s:\n",
-				pin.Repository, pin.Ref)
+			fmt.Fprintf(os.Stderr, "the vendored image context is not what %s published at %s (%s):\n",
+				pin.Repository, pin.Ref, pin.Directory)
 			for _, p := range problems {
 				fmt.Fprintf(os.Stderr, "  %s\n", p)
 			}
-			fmt.Fprintln(os.Stderr, "\nRun `go run ./cmd/sandbox sync` and commit cloud/sandbox with sandbox.pin.json.")
+			fmt.Fprintln(os.Stderr, "\nRun `go run ./cmd/sandbox sync` and commit image/ with sandbox.pin.json.")
 			os.Exit(1)
 		}
 		fmt.Printf("sandbox: the vendored image context is byte-for-byte %s@%s:%s\n",

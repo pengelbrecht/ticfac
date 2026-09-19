@@ -114,7 +114,7 @@ export function carriedTraceID(value?: unknown): string {
  * container, and that is the point: the container is the thing being
  * diagnosed. A banner a crashed container never got far enough to print is a
  * banner missing from exactly the log anyone is reading. The container prints
- * its own line too (`cloud/sandbox/worker.sh`), which is corroboration, not
+ * its own line too (`image/worker.sh`), which is corroboration, not
  * the record.
  */
 export function traceBanner(input: {

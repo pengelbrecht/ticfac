@@ -15,8 +15,9 @@ import (
 )
 
 // The embedded payload — cloudflare (the Worker bundle, moved there
-// from cloud/factory by SPEC §12 Phase 4 item 1) and cloud/sandbox (the
-// orchestrator image's build context) — moved repository with this code
+// from cloud/factory by SPEC §12 Phase 4 item 1) and image (the
+// orchestrator image's build context, moved there from cloud/sandbox by
+// SPEC §12 Phase 4 item 4) — moved repository with this code
 // (ticks tick b3a, "Factory move B"), because //go:embed cannot reach across
 // modules: the payload and the deploy code that ships it live in one module.
 // payload.go wires the module-root embeds into the two seams below at init.
@@ -30,7 +31,7 @@ var (
 	// repository root: its paths carry the "cloudflare" prefix.
 	factoryFS fs.FS
 	// sandboxFS is the embedded orchestrator image context, rooted at the
-	// repository root: its paths carry the "cloud/sandbox" prefix.
+	// repository root: its paths carry the "image" prefix.
 	sandboxFS fs.FS
 )
 
@@ -50,8 +51,11 @@ func missingPayload(which string) error {
 const bundleRoot = "cloudflare"
 
 // sandboxRoot is the prefix the embedded FS uses for the orchestrator image's
-// build context.
-const sandboxRoot = "cloud/sandbox"
+// build context: image/, where SPEC §12 Phase 4 item 4 moved it from
+// cloud/sandbox (a move and nothing else — every path RELATIVE to this root is
+// unchanged, so the staged build context and the digests in sandbox.pin.json
+// are byte-identical across the move).
+const sandboxRoot = "image"
 
 // sandboxHashDir is the directory name the bundle SHA records the image
 // context's files under. It is the name the image's build context carried
@@ -66,13 +70,12 @@ const sandboxHashDir = "sandbox"
 // path in the committed wrangler.toml says the same thing, and the deploy
 // stages the image context so the committed path resolves there too — the
 // staging mirrors the repository layout (the bundle sits at
-// cloudflare under the staging root, the image context at
-// cloud/sandbox), so one relative path is true in both places and the
-// committed config is the deployed config. When SPEC §12 Phase 4 item 4
-// moves the image context to ticfac/image, this constant and the committed
-// path move together, and the guard in bundle_test fails first if they do
-// not.
-const sandboxRelativeToBundle = "../cloud/sandbox"
+// cloudflare under the staging root, the image context at image),
+// so one relative path is true in both places and the committed config is
+// the deployed config. When a move relocates either half, this constant and
+// the committed path move together, and the guard in bundle_test fails first
+// if they do not.
+const sandboxRelativeToBundle = "../image"
 
 // placeholderDatabaseID is the database_id committed in wrangler.toml. It
 // keeps `wrangler dev` and the vitest harness working out of the box; a real
@@ -187,7 +190,7 @@ func ReadBundleFile(p string) ([]byte, error) {
 }
 
 // SandboxPaths returns every file in the embedded orchestrator image context,
-// as slash-separated paths relative to cloud/sandbox, sorted. Empty when this
+// as slash-separated paths relative to image, sorted. Empty when this
 // build carries no payload.
 func SandboxPaths() []string {
 	sandboxPathsOnce.Do(func() {

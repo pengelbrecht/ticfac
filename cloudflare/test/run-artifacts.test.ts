@@ -477,7 +477,7 @@ describe("the deadline a sleep may not run past", () => {
 describe("the image contract", () => {
   it("treats the entrypoint's configuration exits as terminal", () => {
     // 2 config, 3 clone, 4 tk version, 5 pre-flight, 6 the repository's own
-    // [sandbox] setup — see cloud/sandbox. A setup command that fails fails
+    // [sandbox] setup — see image/. A setup command that fails fails
     // identically in a fresh container: it is tracked config, not weather.
     for (const code of [2, 3, 4, 5, 6]) expect(isTerminalExit(code)).toBe(true);
     // A crashed harness is a reboot, not a verdict.

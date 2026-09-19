@@ -88,7 +88,7 @@
  *     plane, identity taken from the run's own gateway token rather than
  *     claimed in a body. `branch-ownership.ts` is the same shape — a container
  *     records the branch it just created, for its own run's project and epic
- *     and no other. `cloud/sandbox/entrypoint.sh` and `worker.sh` call it at
+ *     and no other. `image/entrypoint.sh` and `worker.sh` call it at
  *     the moment they create a branch, so the record is written by the
  *     substrate rather than asked of an agent's prompt (`.tick/learnings.md`,
  *     tick dxk).
@@ -428,7 +428,7 @@ export type FactoryOwnedBranch = string & { readonly [FACTORY_OWNED_BRAND]: true
  * The epic a factory-owned branch belongs to: the first segment after the
  * namespace.
  *
- * `tick/<epic>/<tick>` (what `cloud/sandbox/worker.sh` pushes) and `tick/<id>`
+ * `tick/<epic>/<tick>` (what `image/worker.sh` pushes) and `tick/<id>`
  * (what the local herd pushes) both answer with their first segment, and both
  * answers are the right one. No GitHub round trip: a remediation run must be
  * decidable from the delivery, because the alternative is a network call in

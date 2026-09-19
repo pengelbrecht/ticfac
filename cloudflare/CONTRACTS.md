@@ -49,7 +49,8 @@ deliberate pin bump fail — never make a test run lie.
 
 ### Why the module proxy, and why a pin
 
-`cloud/sandbox/Dockerfile` already consumes ticks as a published,
+`image/Dockerfile` (moved there from `cloud/sandbox` with SPEC §12 Phase 4
+item 4) already consumes ticks as a published,
 version-pinned artifact: it `go install`s `tk` at `TK_SOURCE_REF` through the
 public Go module proxy, and the checksum database verifies what it got. The
 image is *already* a downstream consumer of a pinned ticks version.

@@ -10,7 +10,7 @@
  *
  * THE PROBE MARKER IS NOT A GUESS. The green-start trap only works if the
  * dispatcher checks the probe's CONTENT, and content it can check for is
- * content the container has to promise. `cloud/sandbox/worker.sh` makes that
+ * content the container has to promise. `image/worker.sh` makes that
  * promise — `ticks-worker --probe` proves tk, git and the harness binary
  * answer and then prints {@link WORKER_PROBE_MARKER} — and this module is
  * where the control plane reads it rather than inventing a second spelling.
@@ -99,7 +99,7 @@ export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
  * it prints anything is exactly the one being read.
  *
  * Pinned across the three readers by `contracts/worker-boot-contract.json`
- * — `internal/sandbox.EnvTraceID` and `cloud/sandbox/common.sh` are the other
+ * — `internal/sandbox.EnvTraceID` and `image/common.sh` are the other
  * two.
  */
 export const WORKER_TRACE_ID_ENV = "TICKS_TRACE_ID";
@@ -297,7 +297,7 @@ export function waveWaitTimeoutMs(harnessBudgetMs: number): number {
 
 /**
  * A worker container's own default harness — cross-provider, unlike `claude`
- * (`cloud/sandbox/common.sh` refuses `claude` outright against a non-Anthropic
+ * (`image/common.sh` refuses `claude` outright against a non-Anthropic
  * provider, by design).
  */
 export const WORKER_DEFAULT_HARNESS = "omp";

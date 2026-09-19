@@ -55,7 +55,7 @@ func requireDocker(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", &PrerequisiteError{
 			Missing: "Docker",
-			Detail: "`ticfac factory deploy` builds the orchestrator sandbox image (cloud/sandbox) and\n" +
+			Detail: "`ticfac factory deploy` builds the orchestrator sandbox image (image/) and\n" +
 				"pushes it to your own Cloudflare registry before it uploads the Worker.\n" +
 				"Install Docker Desktop, OrbStack, or another Docker-compatible engine — or set\n" +
 				dockerEnvVar + " to one — then run `ticfac factory deploy` again.",

@@ -50,6 +50,7 @@ import {
   type TickState,
   terminalState,
 } from "./run-state-store";
+import { sandboxExecutorFromEnv } from "./sandbox-executor";
 import { type Graph, type GraphTask, TrackerClient } from "./tracker-client";
 
 // ----------------------------------------------------------- the executor ---
@@ -547,7 +548,7 @@ export class EpicReconciler {
     // the tick is claimed and before any record says a dispatch happened".
     if (executor === undefined) {
       const reason =
-        "no attempt executor is configured on this Workflow (the sandbox compatibility executor is this phase's item 4); " +
+        "no attempt executor is configured on this Workflow (the sandbox compatibility executor exists — a missing container binding, epic base or factory URL is what is missing, and the deploy log names which); " +
         "refusing to dispatch rather than recording a dispatch nobody would run";
       await this.#checkpoint("failed", reason, rows);
       return { terminal: true, state: "failed", reason, dispatched: dispatchedThisPass };
@@ -838,6 +839,14 @@ export type EpicReconcilerParams = {
   project: string;
   /** The run branch: where `.tick/` records and `.ticfac/` state are pushed. */
   branch: string;
+  /**
+   * The epic base: the commit every worker container clones at and every
+   * collect compares its branch against (tick k4s). The submitter names it
+   * the way RunWorkflow's does — a reconciler without it cannot dispatch,
+   * and the executor wiring refuses naming this field rather than booting
+   * workers on nothing.
+   */
+  base_sha?: string;
   /** The dispatch window; 0 or absent for the repository's own declaration. */
   max_parallel?: number;
   /** The Workflow's poll cadence in ms; defaults to a keepalive beat. */
@@ -921,7 +930,17 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       maxParallel: params.max_parallel,
     });
 
-    const executor = env.TICFAC_EXECUTOR; // undefined refuses dispatches, by design
+    // The executor the run dispatches through: the test seam first, then the
+    // deployment's own wiring (tick k4s). A missing wiring — no container
+    // binding, no epic base, no factory URL — still refuses dispatches, by
+    // design; `sandboxExecutorFromEnv` names what is missing on its way out
+    // so the refusal a pass records is a stated gap, not a shrug.
+    const executor =
+      env.TICFAC_EXECUTOR ??
+      sandboxExecutorFromEnv(env, {
+        project: params.project,
+        ...(params.base_sha === undefined ? {} : { base_sha: params.base_sha }),
+      });
 
     const reconciler = new EpicReconciler({
       client,

@@ -138,7 +138,7 @@ export const GITHUB_GIT_HOST = "https://github.com";
  * Shaped like a git remote (`.../api/git/owner/repo.git`) so nothing in the
  * container needs to know it is talking to a proxy — the entrypoint's
  * `credential.helper` answers for any host, so the run token in `GITHUB_TOKEN`
- * authenticates the clone with no change to `cloud/sandbox/common.sh`.
+ * authenticates the clone with no change to `image/common.sh`.
  */
 export function runGitEndpoint(factoryURL: string, project: string): string {
   return `${factoryURL.replace(/\/+$/, "")}${GIT_PATH_PREFIX}/${project}.git`;
@@ -432,7 +432,7 @@ export async function proxyGitRequest(
  *
  * `token_source` is the whole grade, reduced to the one decision that has
  * teeth: which secret ends up in the container's `GITHUB_TOKEN` — the variable
- * `cloud/sandbox/common.sh` installs a `credential.helper` from.
+ * `image/common.sh` installs a `credential.helper` from.
  *
  *  - `operator`: the operator's GitHub credential and a github.com remote.
  *    Exactly what every run held before tick pzf.

@@ -61,7 +61,7 @@ declare namespace Cloudflare {
     };
     /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
-     * tick from Phase 2 (see cloud/sandbox).
+     * tick from Phase 2 (see image/).
      *
      * On a deployment this is the Durable Object namespace `[[containers]]`
      * binds the Sandbox SDK's own class to; in a test it is the structural seam
@@ -443,10 +443,13 @@ declare namespace Cloudflare {
     };
     /**
      * The attempt executor the EpicReconciler Workflow dispatches through
-     * (tick z23): the job-protocol four operations. Unset on a deployment
-     * until the sandbox compatibility executor (this phase's item 4) is
-     * wired — the Workflow then refuses dispatches naming this binding
-     * rather than recording attempts nobody started.
+     * (tick z23): the job-protocol four operations. A deployment now wires
+     * the sandbox compatibility executor itself when the pieces exist (tick
+     * k4s, `sandboxExecutorFromEnv` in src/sandbox-executor.ts) — the
+     * binding remains the seam a test injects its own executor through, and
+     * a deployment missing a piece (no container binding, no epic base, no
+     * factory URL) still refuses dispatches, naming what is missing rather
+     * than recording attempts nobody started.
      */
     TICFAC_EXECUTOR?: import("./epic-reconciler").AttemptExecutor;
     /**

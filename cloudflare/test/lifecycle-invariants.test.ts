@@ -465,7 +465,7 @@ describe("SPEC Appendix A", () => {
    * settled looking finished, and by tick ehy: a fully successful boot chain
    * that printed 271 bytes, pushed no branch, and was recorded COMPLETED.
    *
-   * Lives today in cloud/sandbox/entrypoint.sh (start_keeper,
+   * Lives today in image/entrypoint.sh (start_keeper,
    * TICKS_KEEPER_INTERVAL) for the timer, with src/progress.ts and
    * run-workflow.ts's assessProgress for "the exit status only decides whether
    * to reboot".
