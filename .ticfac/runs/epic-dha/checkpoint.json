@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 18,
-  "state": "collecting",
-  "reason": "collecting 4sb attempt 1",
-  "updated_at": "2026-09-19T22:36:27Z",
+  "sequence": 19,
+  "state": "integrating",
+  "reason": "integrating 4sb attempt 1 into epic/dha",
+  "updated_at": "2026-09-19T22:36:42Z",
   "ticks": [
     {
       "tick_id": "4sb",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
