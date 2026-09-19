@@ -2,6 +2,7 @@
   "id": "53s",
   "title": "SandboxExecutor boot must not revoke its siblings' gateway tokens",
   "description": "sandbox-executor.ts:533 calls issueRunToken per boot, and issueRunToken revokes ALL live tokens for the run_id (gateway.ts:309). With max_parallel \u003e 1 the second worker starting cuts the first off with 403 run_token_revoked. adopt (:255) and cancel (:417) do the same.\n\nrun-workflow.ts:2615-2620 already documents this hazard and avoids it — so this is a known trap that the new executor walked into, not a novel discovery. The tests stub boot, which is why it is green.\n\nThis makes parallel dispatch on the cloud host impossible, and parallel dispatch is most of why the window work exists.\n\nFrom pxc, finding 9b7001b1.",
+  "notes": "2026-09-20 00:47 - ticfac run epic-dha: attempt 2 reported a finding drafted for triage — proposed-tick \"Adoption boots mint gateway tokens nobody will ever present\" (key 3e64fdbee6f06a82e5562de6f8237b8e55f6a118871df8bdb498a8683ca68574, severity low, for this repository). Triage with `ticfac finding dha 3e64fdbee6f06a82e5562de6f8237b8e55f6a118871df8bdb498a8683ca68574 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "Two workers dispatched under one run id both hold usable gateway tokens for their lifetimes, with a test that boots a second worker and then exercises the first's token",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:03.984654Z",
-  "updated_at": "2026-09-19T21:38:30.789642Z",
+  "updated_at": "2026-09-19T22:47:31.121481Z",
   "started_at": "2026-09-19T21:38:30.789641Z"
 }
