@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "4sb",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T22:36:35Z",
+  "triaged_at": "2026-09-19T22:44:57Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "b50",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "4sb",
