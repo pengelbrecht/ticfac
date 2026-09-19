@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 113,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-19T12:42:31Z",
+  "sequence": 114,
+  "state": "integrating",
+  "reason": "integrating k4s attempt 8 into epic/ncv",
+  "updated_at": "2026-09-19T12:42:51Z",
   "ticks": [
     {
       "tick_id": "l9n",
