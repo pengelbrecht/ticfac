@@ -1,0 +1,13 @@
+{
+  "id": "b4r",
+  "title": "The read-only grade lets GIT_CONFIG_PARAMETERS through, which can override its push pins",
+  "description": "Found by mel. The read-only source grade scrubs the runner's environment and pins git config (via GIT_CONFIG_COUNT) so a read-only worker cannot push. isSourceCredential in grade.go lets GIT_CONFIG_PARAMETERS through the scrub — and git applies GIT_CONFIG_PARAMETERS AFTER GIT_CONFIG_COUNT, so an inherited value can OVERRIDE the push pins.\n\nThat makes the read-only grade's central guarantee depend on the parent environment not setting a variable the grade does not look at. It is a boundary bug, not a style one: the grade exists precisely so a review job cannot write.\n\nWork: scrub GIT_CONFIG_PARAMETERS (and check for any other config-injection variable git honours after COUNT) in the read-only grade, and add a test that sets it in the parent environment and proves a push is still refused.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A read-only-grade runner cannot push even when its parent environment sets GIT_CONFIG_PARAMETERS, proven by a test",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:02:52.410335Z",
+  "updated_at": "2026-09-19T20:02:52.410335Z"
+}

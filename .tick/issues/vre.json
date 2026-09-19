@@ -1,0 +1,13 @@
+{
+  "id": "vre",
+  "title": "Nothing repacks a checkout only ticfac uses: run git maintenance at run end",
+  "description": "mel turned off git's automatic maintenance for every git command a run starts, because on git 2.55 its background repack deleted object directories mid-write and failed tracker writes (proven 8/8 in a git 2.55 container). The setting is per INVOCATION, not written to the repository.\n\nConsequence mel was candid about: in a checkout a person also works in, their own git commands still trigger maintenance, so growth stays bounded. In a checkout ONLY ticfac touches — a dedicated factory host, back-to-back runs, no human git — nothing ever runs maintenance again, and loose objects grow with every run (hundreds per run: records, tracker commits, merges, fetched worker commits). That unlimited growth is mel's doing; before it, ticfac's own fetches repacked, but in the background, racing its own writes.\n\nProposal: at run END — after the last write, after every attempt has settled — run 'git maintenance run --auto' in the FOREGROUND (no --detach, so it finishes before ticfac exits; --auto keeps it a no-op below git's threshold).\n\nTwo cautions:\n(a) 'Safe' is only safe from THIS run. Two epics can be reconciled in one checkout (git.go's pruneWorktrees comment), and another run's writes race this repack exactly as before. A shared repository has no truly safe moment without runs coordinating — e.g. a per-repository lock the maintenance takes. Between waves is worse: this run's own supervisors may still be pushing.\n(b) A killed run never reaches run end. Acceptable if the next run's end catches up — say so.\n\nDecide how failures of the maintenance step are reported: it must not turn a completed run into a failed one.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A checkout only ticfac uses has bounded loose objects across many runs, maintenance never runs concurrently with a run's own writes, and a maintenance failure is reported without failing the run",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:02:52.304098Z",
+  "updated_at": "2026-09-19T20:02:52.304098Z"
+}

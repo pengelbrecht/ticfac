@@ -1,0 +1,13 @@
+{
+  "id": "uwb",
+  "title": "Two tests still trust a bare PID; one can SIGKILL an unrelated process group",
+  "description": "Found by the rmc fix (which removed bare-PID liveness from the executor and both harnesses) and left out of its scope deliberately.\n\n1. internal/reconcile/gate_kill_unix_test.go:58-62 (TestAGateThatTimesOutTakesItsChildrenWithIt) waits on processAlive(pid) for a pid its child wrote to a file, and if the pid is still alive, calls syscallKillGroup on it. The child should already be dead, so under PID reuse this can both fail falsely AND SIGKILL an unrelated process group. It is the LAST bare-pid group signal left in the test suites — and after 2026-09-19 we know PIDs wrap every ~2.5 minutes on this host during a test run (measured ~700/s).\n2. internal/exec/subprocess/executor_test.go:275 (TestKillingTheExecutorMidJobLeavesAReconcilableHandle) checks processAlive(starter.pid) after starter.reap(). No signal, so no hazard, but a reused pid gives a false 'the executor survived kill -9'. The check is also redundant: a reaped process is gone.\n\nFix 1 needs an identity proof, e.g. the child holds a lock the way rmc's supervisor and runner now do. Fix 2 can simply drop the check.\n\nRelated: rmc (the fix this was found by).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "No test signals a process group on the strength of a saved PID, and no test asserts liveness from a PID it has already reaped",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T19:05:16.244851Z",
+  "updated_at": "2026-09-19T19:05:16.244851Z"
+}

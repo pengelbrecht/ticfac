@@ -1,0 +1,14 @@
+{
+  "id": "rmc",
+  "title": "Liveness by saved PID is fooled by PID reuse; a dead attempt reads as running",
+  "description": "The local subprocess executor decides whether an attempt is alive with kill(pid, 0) on PIDs saved at start (supervisor.pid, runner.pid, the record's SupervisorPID). Nothing checks that the process holding that PID now is the one that was saved.\n\nMEASURED on the operator's host during a reconcile test run: PIDs advance ~700/second (samples 47302 -\u003e 55155 -\u003e 62017 at 10s intervals). macOS wraps PIDs at 99999, so the whole space is reused every ~2.5 minutes under that load.\n\nConsequences:\n1. A dead attempt reads as RUNNING whenever its old PID has been reassigned. Settle then refuses to release it ('a live attempt is cancelled, never released'), so a run can stay stuck on an attempt that is gone. This is what failed TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne twice on 2026-09-19 in epic ncv's close-out gate: the run found a1 lost, and moments later Settle found it 'running'.\n2. The TEST HARNESS is dangerous: stopEverything calls syscallKillGroup on every saved PID that processAlive reports alive — so on a busy host it can kill the process group of an UNRELATED process that inherited the number.\n\nCI rarely sees it because a fresh runner has not wrapped its PID space.\n\nFix: make liveness something the kernel ties to the process's life, not to a reusable number. The supervisor holds an exclusive flock on a lock file in the attempt's state dir for its whole life; liveness = 'the lock is held' (LOCK_NB fails). The kernel drops the lock the instant the holder dies and it cannot be confused by reuse. Keep PID only where a PID is genuinely needed (signalling the supervisor's OWN live child group), and make the harness stop by lock/ownership rather than by bare PID.",
+  "notes": "2026-09-19 21:05 - Also known limits of the lock design, documented in lock.go stopProven and worth keeping visible:\n- A runner descendant that leaves the runner's process group (setsid, e.g. a detached git gc) and outlives the runner keeps the runner lock held, so the attempt reads alive until it exits, and cancel's group signal to the runner's old pid is no longer proven.\n- A just-started process's lock may not have its pid stamped yet; cancel waits up to 2s for the stamp, otherwise signals nothing.\n- internal/exec/herdr has its own liveness path and was not audited here.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Liveness of a local attempt cannot be fooled by PID reuse, proven by a test that reassigns the dead supervisor's PID to a live unrelated process; the harness never signals a process it did not start",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T18:33:19.903199Z",
+  "updated_at": "2026-09-19T19:05:16.411341Z"
+}

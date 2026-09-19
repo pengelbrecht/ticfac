@@ -1,0 +1,13 @@
+{
+  "id": "mel",
+  "title": "A tracker write failed mid-run: git write-tree could not create a temporary file",
+  "description": "CI, epic/ncv @ 4ff4b041, 2026-09-19 19:10 UTC, TestAnUnreadableRemoteIsNotAnAnswerAboutWhatIsIntegrated failed at repair_test.go:1266 — the test's FIRST, ORDINARY run, before it touches the remote at all:\n\n    note the gate evidence on b1: note b1 reached the tracker and not origin:\n    a tracker record that is not pushed is a record the next wave's worker\n    cannot read: git write-tree: exit status 128: error: unable to create\n    temporary file: No such file or directory\n\nFirst occurrence in the last 40 CI runs. Passed in two local uncached runs of the package and the full gate on the same tree.\n\nPer the operator's standing rule this is a BUG until proven otherwise, not a flake.\n\nWORKING HYPOTHESIS, not proven: the tracker's write-tree runs with cwd = t.dir, a throwaway worktree (repoGit.tempWorktree / removeWorktree, internal/reconcile/git.go). If that directory is removed while git is running inside it, git loses its cwd; paths it resolves relative to cwd for new object files then fail with exactly ENOENT on 'unable to create temporary file'. That would mean two parts of one run share a worktree's lifetime without coordinating — plausibly introduced by the dispatch window (5fx), where attempts settle concurrently.\n\nThings to check, in order:\n- Who else can call remove() on the tracker's worktree, and can it run while a tracker write is in flight.\n- Whether removeWorktree's unconditional 'git worktree prune' can remove the admin entry of a worktree another goroutine is still using.\n- Whether the rmc change (commit 4ff4b041, the tree this failed on) touches any of this. It is not believed to — it changes process liveness, not directories — but that is an assumption to verify, not a finding.\n\nReproduce deterministically before fixing (a seam that removes the worktree between read-tree and write-tree should give the same message).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The cause of the missing directory is identified and reproduced deterministically, and the fix is proven by a test that fails with the CI message on the old code",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T19:20:16.026145Z",
+  "updated_at": "2026-09-19T19:20:16.026145Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "g0c",
+  "title": "Close the rest of git's maintenance race: other harness origins, retries, herdr",
+  "description": "mel closed the race for everything ticfac starts. Remaining, found and deliberately left:\n\n1. Maintenance OTHERS start still races: the operator's own commit/fetch mid-run, a scheduled 'git maintenance start', an agent passing its own -c. A further layer: a bounded retry of the IDEMPOTENT plumbing writes (tracker staged/treeOn, the store's private-index commits) on exactly 'unable to create temporary file'. NOT integrate.go, where a failed merge is a merge failure, not a retry.\n2. Other test harnesses' bare origins have the origin-side twin (receive-pack's repack racing a concurrent push: 'unable to migrate objects to permanent storage'): internal/runstate/origin_test.go (heavy concurrent CAS pushes — most exposed), internal/exec/subprocess/harness_test.go, internal/exec/herdr/harness_test.go, internal/cli/cloud_test.go, internal/cli/findings_test.go. Each is one 'git config maintenance.auto false' on the origin.\n3. A real run whose origin is a LOCAL-PATH bare repository has the same origin-side race. Does not apply against a forge.\n4. The herdr executor's runner environment does not get the maintenance setting; how herdr launches agents was not traced.\n\nPer the standing rule, (2) is not a flake-proofing chore: each of those is a race waiting to fail a gate on a git 2.55 runner.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "No test origin and no ticfac-launched environment can start git maintenance concurrently with a run's writes, and idempotent plumbing writes survive a single ENOENT from a concurrent repack",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:02:52.356699Z",
+  "updated_at": "2026-09-19T20:02:52.356699Z"
+}
