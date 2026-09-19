@@ -168,6 +168,30 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		Message:            collectMessage(reason, class, record, allViolations),
 	}
 
+	// The teardown marker, carried (tick rxe). A stop at the wall clock and a
+	// workspace herdr then lost are two facts about ef7 attempt 5, and the
+	// refusal named neither. The bound is in the message already; this adds
+	// the other half, because "the agent was gone when the executor next
+	// looked" is what tells a person the stop was not a clean one.
+	if agentGone && class == subprocess.FailureWallClockExceeded {
+		collected.Message += ", and the agent was already gone when this executor next looked: " +
+			"the stop and the departure are both recorded, so the empty branch is what the bound left behind"
+	}
+
+	// The snapshot, named (tick lj4). 9fc attempt 4 was refused as an empty
+	// branch while this run's own snapshot held four files and 433 lines at a
+	// ref the refusal never mentioned, and the hour was rescued by hand
+	// anyway. The record is read from the attempt's own state, so the note
+	// appears only where something was actually preserved, and only on a
+	// message a person is about to read as a refusal.
+	if collected.Message != "" {
+		if snap, ok := st.wipSnapshot(); ok {
+			if note := subprocess.WIPSnapshotNote(snap); note != "" {
+				collected.Message += ". Its work was not lost: " + note
+			}
+		}
+	}
+
 	// Persisted, and read back before anything acts on it: disposal asks
 	// this file whether the attempt's facts are durable yet.
 	if err := st.writeJSON(fileResult, result); err != nil {
@@ -189,7 +213,21 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // local executor — including the artifact-prefix backstop, which sits where
 // the local executor puts it, after the tracker-record boundary.
 //
-// The no-commits check carries the role's own RECORDED rule (tick 19l,
+// The order is a PRECEDENCE and not an accident of how the facts were
+// gathered: when several true things can be said about one attempt, the check
+// that wins is the one whose fact EXPLAINS the others (tick rxe). A runner
+// failure this executor recorded — a stop at the wall clock, an agent that
+// went without reporting — outranks a structural observation about what the
+// branch looks like, because the empty branch is a CONSEQUENCE of it. ef7
+// attempt 5 of epic ncv is why: stopped at its wall clock, herdr had lost its
+// workspace, and it was refused as "no-commits", which reads as "the worker
+// did nothing" and invites the one repair that walks the tick into the same
+// wall a second time.
+//
+// The no-commits check therefore sits BELOW the report check, and what is
+// left to it is the surprising case worth its own name: the worker left a
+// readable report claiming an outcome, and the branch is still empty. It
+// carries the role's own RECORDED rule (tick 19l,
 // subprocess.NoCommitsIsFailure) — the same one the local executor's
 // classify applies, for the same reason: a review's deliverable is its
 // answer, so its empty branch is what a correct attempt looks like, while
@@ -198,10 +236,12 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 //
 // The wall-clock stop carries the failure class Phase 1 already
 // distinguishes — wall_clock_exceeded, the same word the local executor's
-// collect answers — but it does not by itself decide anything: the checks
-// ahead of it (cancelled, no-commits) outrank it, and a worker that reported
-// before the stop caught it never reaches a failing check at all, because
-// the report and the branch are read the usual way.
+// collect answers. A cancellation still outranks it: a revoked dispatch is a
+// decision somebody made, and it explains the stop rather than the other way
+// round. A worker that got its report written before the stop caught it never
+// reaches a failing check at all, because the report and the branch are then
+// read the usual way — a bound that fired after the answer landed is not a
+// failure of the answer.
 //
 // It is reached only for attempts that carry settlement evidence — the
 // liveness-unknown hold in CollectDetail returned first — so every branch
@@ -217,8 +257,6 @@ func classify(role string, commits int, hasReport bool, report subprocess.Report
 	switch {
 	case cancelled:
 		return subprocess.VerdictMissingResult, subprocess.OutcomeCancelled, "", reasonCancelled
-	case commits == 0 && subprocess.NoCommitsIsFailure(role):
-		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
 	case !hasReport || report.Status == "":
 		// No report, or one nobody can read. Which of the two it is, the
 		// SETTLEMENT evidence has already answered — the hold in
@@ -243,6 +281,12 @@ func classify(role string, commits int, hasReport bool, report subprocess.Report
 		// finished and left an answer nobody can read — its own shape, not
 		// the same sentence as a report that was never written.
 		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportNoStatus
+	case commits == 0 && subprocess.NoCommitsIsFailure(role):
+		// Reached only with a readable report in hand: the worker CLAIMED an
+		// outcome and left the branch as it found it. That is the shape this
+		// verdict is reserved for, and it is worth its own alarm — every other
+		// way a branch ends up empty has a cause above that says so.
+		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
 	case len(violations) > 0:
 		return subprocess.VerdictBoundaryViolation, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictBoundaryViolation
 	case len(artifactViolations) > 0:

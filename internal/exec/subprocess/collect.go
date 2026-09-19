@@ -157,6 +157,21 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 		Message:            e.message(reason, class, record, append(append([]string{}, violations...), artifactViolations...)),
 	}
 
+	// The snapshot, named (tick lj4). A refusal that says nothing about an
+	// attempt's preserved work leaves an operator believing the hour is gone,
+	// and the reflex that follows is to redo it by hand. The record is read
+	// from the attempt's own state, so the note appears only for an attempt
+	// something actually preserved, and only on a message a person is about
+	// to read as a refusal — a ready-to-merge collect has no message to hang
+	// it on and nothing to explain.
+	if collected.Message != "" {
+		if snap, ok := st.wipSnapshot(); ok {
+			if note := WIPSnapshotNote(snap); note != "" {
+				collected.Message += ". Its work was not lost: " + note
+			}
+		}
+	}
+
 	// Persisted, and read back before anything acts on it: disposal asks this
 	// file whether the attempt's facts are durable yet.
 	if err := st.writeJSON(fileResult, result); err != nil {
@@ -176,18 +191,38 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 }
 
 // classify is the verdict, in the order the checks run: the first FAILING
-// check wins. The order is the collect vocabulary's own, and it is why a
-// worker that reports DONE over a branch with no commits is `no-commits`
-// rather than ready to merge.
+// check wins. The order is the collect vocabulary's own, and it is a
+// PRECEDENCE, not an accident of how the facts were gathered — when several
+// true things can be said about one attempt, the check that wins is the one
+// whose fact EXPLAINS the others.
 //
-// The no-commits check carries the role's own RECORDED rule (tick 19l,
-// NoCommitsIsFailure): for a role whose deliverable is its answer rather
-// than a change — the review, dispatched read-only — an empty branch is what
-// a correct attempt looks like, so the check does not fail and the next one
-// decides. For every other role the branch IS the deliverable and the check
-// fails as it always did. A verdict minted here is therefore already the
-// role's rule, which is what lets the reconciler act on it without asking
-// the role's question a second time.
+// That ordering rule was learned the hard way (tick rxe). ef7 attempt 5 of
+// epic ncv was stopped at its wall clock, and it was refused as "no-commits:
+// the attempt branch carries no commit beyond the base it was cut from". Both
+// sentences are true; only one of them is a cause. The empty branch is a
+// CONSEQUENCE of the stop, and the two lead an operator to opposite actions —
+// raise the bound or split the tick, against redispatch the thing unchanged,
+// which walks it into the same wall again. So the settlement checks run AHEAD
+// of the branch check now: a runner failure this executor recorded outranks a
+// structural observation about what the branch looks like.
+//
+// The no-commits check therefore sits BELOW the report check, and what is
+// left to it is the genuinely surprising case worth its own name: the worker
+// left a readable report claiming an outcome, and the branch is still empty.
+// It carries the role's own RECORDED rule (tick 19l, NoCommitsIsFailure): for
+// a role whose deliverable is its answer rather than a change — the review,
+// dispatched read-only — an empty branch is what a correct attempt looks
+// like, so the check does not fail and the next one decides. For every other
+// role the branch IS the deliverable and the check fails as it always did. A
+// verdict minted here is therefore already the role's rule, which is what
+// lets the reconciler act on it without asking the role's question a second
+// time.
+//
+// The wall-clock check stays INSIDE the report case rather than above it, and
+// that is deliberate: a worker that got its report written before the stop
+// caught it answered the question it was asked, and a bound that fired after
+// the answer landed is not a failure of the answer.
+//
 // `reason` is what the MESSAGE is keyed on, and it is not always the verdict:
 // a cancellation and a worker that never reported both leave no report, and
 // telling a person the same sentence about both is Appendix A #9's failure.
@@ -197,13 +232,13 @@ func (e *Executor) classify(st *store, role string, commits int, hasReport bool,
 	switch {
 	case cancelled:
 		return VerdictMissingResult, OutcomeCancelled, "", reasonCancelled
-	case commits == 0 && NoCommitsIsFailure(role):
-		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case !hasReport || report.Status == "":
 		if st.wallClockExceeded() {
 			return VerdictMissingResult, OutcomeFailed, FailureWallClockExceeded, VerdictMissingResult
 		}
 		return VerdictMissingResult, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictMissingResult
+	case commits == 0 && NoCommitsIsFailure(role):
+		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case len(violations) > 0:
 		return VerdictBoundaryViolation, OutcomeFailed, FailureRunnerError, VerdictBoundaryViolation
 	case len(artifactViolations) > 0:
