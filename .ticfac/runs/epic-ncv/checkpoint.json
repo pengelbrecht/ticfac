@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 163,
-  "state": "running",
-  "reason": "CI on the epic PR #11 is pending on the head that includes the close-out's own commits; the close-out of ncv is held",
-  "updated_at": "2026-09-19T15:57:50Z",
+  "sequence": 164,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-19T17:08:48Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -53,7 +53,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ncv",
-    "source_sha": "35f6e9feb50a843df3a98fa93b9e4af4aa94e3bb",
+    "source_sha": "525636a614da1baaf761e020a2544dd7cfef11c2",
     "integration_ref": "refs/heads/epic/ncv",
     "phase": "worker",
     "executor": null,
