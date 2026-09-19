@@ -3,7 +3,7 @@
   "title": "A repository Durable Object with one slot and one serialized publisher",
   "description": "SPEC 12 Phase 4 item 3. Introduce the repository Durable Object: one slot, one serialized publisher, preserving the current RunRoom lease behaviour behind it.\n\nThis is the cloud host's answer to the problem this project keeps meeting on the local host: two parties writing one name. Phase 3 found it three times (FETCH_HEAD, refs/remotes, the shared peek ref) and each fix was a narrower private namespace. A Durable Object is the other answer - not disjoint namespaces but a single serialized writer - and it is worth stating which of the two each future write relies on.\n\nPreserve RunRoom's lease semantics rather than reinventing them: the lease is what stops two runs of one epic, and it already works.",
   "notes": "2026-09-19 14:20 - ticfac run epic-ncv: attempt 7 reported a finding drafted for triage — defect \"epic-reconciler/env.d.ts comments still name the serialized publisher as future work\" (key 5863849f347092fe51b4da3ba722cd53fc2fab22e67cff275687d93ed3e575d5, severity low, for this repository). Triage with `ticfac finding ncv 5863849f347092fe51b4da3ba722cd53fc2fab22e67cff275687d93ed3e575d5 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-19 14:20 - ticfac run epic-ncv: attempt 7 reported a finding drafted for triage — proposed-tick \"Route the SignalInbox's .tick/ commits through the repository publisher, or prove the disjointness\" (key b52c82739554e7b29faf3a6317216ee8a23ef4c68ca8ca7818dc94fe11376707, severity low, for this repository). Triage with `ticfac finding ncv b52c82739554e7b29faf3a6317216ee8a23ef4c68ca8ca7818dc94fe11376707 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-19 14:31 - ticfac run epic-ncv: attempt 7 merged into epic/ncv as 3175ce45ab04; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "Every publish to a repository goes through one serialized publisher, and two concurrent runs of the same epic cannot both write. RunRoom's existing lease behaviour is preserved, proven by its existing tests running against the DO-backed implementation.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:27.042589Z",
-  "updated_at": "2026-09-19T12:31:59.504884Z",
-  "started_at": "2026-09-18T16:51:18.742997Z"
+  "updated_at": "2026-09-19T12:32:04.958123Z",
+  "closed_at": "2026-09-19T12:32:04.958123Z"
 }
