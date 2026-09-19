@@ -28,6 +28,7 @@ orchestrator sandbox, watches it, enforces the budgets and finalizes — see
 | `src/run-room.ts` | `RunRoom` DO — one per project: the dispatch lease, the pending-question (gate) store, the submission queue and the stop record. Reconcile alarms land later. |
 | `src/run-workflow.ts` | `RunWorkflow` — one durable instance per run: boot, watch, budgets, clean stop, finalize. Everything below it is disposable; this is not. |
 | `src/sandbox.ts` | The orchestrator sandbox seam: what a container has to be, and the environment the image context's (`image/`) entrypoint is started with. |
+| `src/sandbox-executor.ts` | The sandbox compatibility executor (Phase 4 item 4): the `AttemptExecutor` the EpicReconciler Workflow dispatches through, built over the `SANDBOXES` binding — start, inspect, collect, cancel, the same four operations the local executors implement. |
 | `src/artifacts.ts` | The R2 artifact tree, and the harness log stream written *during* the run. |
 | `src/observe.ts` | `GET /api/observe` — one read-only frame for `tk factory dashboard`: the listing, a focused run's phase/image/boot/gates, the `dispatch_log` refusals, and the `run_event` tail the room keeps. |
 | `src/env.d.ts` | Hand-written `Cloudflare.Env` (what `wrangler types` would generate). Keep in sync with `wrangler.toml`. |
