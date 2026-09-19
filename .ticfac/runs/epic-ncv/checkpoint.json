@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 114,
-  "state": "integrating",
-  "reason": "integrating k4s attempt 8 into epic/ncv",
-  "updated_at": "2026-09-19T12:42:51Z",
+  "sequence": 115,
+  "state": "gating",
+  "reason": "running the integrated gate for k4s on 89492e32fbdc",
+  "updated_at": "2026-09-19T12:42:58Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "k4s",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 8
     },
     {
