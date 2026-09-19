@@ -26,8 +26,8 @@
  * started in the wrong one.
  */
 
-import type { ProbeSpec, WorkSpec } from "./worker-dispatch";
 import type { WorkerTask } from "./worker-collect";
+import type { ProbeSpec, WorkSpec } from "./worker-dispatch";
 
 // ------------------------------------------------------------ the commands ---
 
@@ -270,7 +270,7 @@ export const MIN_WORKER_HARNESS_BUDGET_MS = 5 * 60_000;
  * licence to hand ONE tick the whole run.
  */
 export function workerHarnessBudgetMs(
-  input: { remaining_wall_clock_ms?: number; cap_ms?: number } = {}
+  input: { remaining_wall_clock_ms?: number; cap_ms?: number } = {},
 ): number {
   const cap =
     input.cap_ms !== undefined && Number.isFinite(input.cap_ms) && input.cap_ms > 0
@@ -373,10 +373,7 @@ function configured(value: string | null | undefined): string | null {
  *
  * @see workerModel for the precedence, which is the same for both.
  */
-export function workerHarness(
-  run?: string | null,
-  deployment?: string | null
-): string {
+export function workerHarness(run?: string | null, deployment?: string | null): string {
   return configured(run) ?? configured(deployment) ?? WORKER_DEFAULT_HARNESS;
 }
 

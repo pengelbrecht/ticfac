@@ -70,9 +70,8 @@
  * makes "deterministic" a property a test can hold rather than a claim.
  */
 
-import { parseToml } from "./toml";
-
 import type { Env } from "./index";
+import { parseToml } from "./toml";
 
 // ------------------------------------------------------------- the errors ---
 
@@ -188,7 +187,7 @@ function refuseUnknownKeys(table: object, allowed: readonly string[], where: str
     if (!allowed.includes(key)) {
       throw new SweepConfigError(
         `${where}.${key} is not a key this reader knows (a typo'd key is an error, never ` +
-          `silently ignored); known keys: ${allowed.join(", ")}`
+          `silently ignored); known keys: ${allowed.join(", ")}`,
       );
     }
   }
@@ -219,7 +218,7 @@ function optionalEnum<T extends string>(
   key: string,
   where: string,
   allowed: readonly T[],
-  fallback: T
+  fallback: T,
 ): T {
   const value = own(table, key);
   if (value === undefined) return fallback;
@@ -229,7 +228,7 @@ function optionalEnum<T extends string>(
   const text = value.trim();
   if (!(allowed as readonly string[]).includes(text)) {
     throw new SweepConfigError(
-      `${where}.${key} is ${JSON.stringify(text)}; known values: ${allowed.join(", ")}`
+      `${where}.${key} is ${JSON.stringify(text)}; known values: ${allowed.join(", ")}`,
     );
   }
   return text as T;
@@ -257,7 +256,7 @@ export function declaredSweeps(source: string): SweepPolicy[] {
   const names = Object.keys(sweeps).sort();
   if (names.length > MAX_DECLARED_SWEEPS) {
     throw new SweepConfigError(
-      `${names.length} sweeps declared, past the ${MAX_DECLARED_SWEEPS} this reader accepts`
+      `${names.length} sweeps declared, past the ${MAX_DECLARED_SWEEPS} this reader accepts`,
     );
   }
 
@@ -268,7 +267,7 @@ export function declaredSweeps(source: string): SweepPolicy[] {
     if (!SWEEP_NAME_PATTERN.test(name)) {
       throw new SweepConfigError(
         `[sweeps.${name}] is not a usable sweep name — lowercase letters, digits, \`-\` and ` +
-          "`_`, starting with a letter or digit; it is what an operator reads in the record"
+          "`_`, starting with a letter or digit; it is what an operator reads in the record",
       );
     }
     const table = own(sweeps, name);
@@ -288,14 +287,14 @@ function parseOneSweep(name: string, table: object): SweepPolicy {
   } catch (error) {
     throw new SweepConfigError(
       `${where}.cron ${JSON.stringify(cron)} is not a schedule this reader understands: ` +
-        `${error instanceof Error ? error.message : String(error)}`
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   const filter = requiredString(table, "filter", where);
   if (filter.length > MAX_SWEEP_FILTER_LENGTH) {
     throw new SweepConfigError(
-      `${where}.filter is ${filter.length} characters, past the ${MAX_SWEEP_FILTER_LENGTH} this reader accepts`
+      `${where}.filter is ${filter.length} characters, past the ${MAX_SWEEP_FILTER_LENGTH} this reader accepts`,
     );
   }
   let terms: SweepFilter;
@@ -304,21 +303,21 @@ function parseOneSweep(name: string, table: object): SweepPolicy {
   } catch (error) {
     throw new SweepConfigError(
       `${where}.filter ${JSON.stringify(filter)} is not a filter this reader understands: ` +
-        `${error instanceof Error ? error.message : String(error)}`
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   const maxTicks = requiredNumber(table, "max_ticks", where);
   if (!Number.isSafeInteger(maxTicks) || maxTicks < 1 || maxTicks > SWEEP_TICKS_LIMIT) {
     throw new SweepConfigError(
-      `${where}.max_ticks must be an integer between 1 and ${SWEEP_TICKS_LIMIT}, got ${maxTicks}`
+      `${where}.max_ticks must be an integer between 1 and ${SWEEP_TICKS_LIMIT}, got ${maxTicks}`,
     );
   }
 
   const budget = requiredNumber(table, "budget_usd", where);
   if (!(budget > 0) || budget > MAX_SWEEP_BUDGET_USD) {
     throw new SweepConfigError(
-      `${where}.budget_usd must be a positive number no greater than ${MAX_SWEEP_BUDGET_USD}, got ${budget}`
+      `${where}.budget_usd must be a positive number no greater than ${MAX_SWEEP_BUDGET_USD}, got ${budget}`,
     );
   }
 
@@ -383,7 +382,8 @@ function parseCronField(text: string, min: number, max: number, name: string): S
     if (rest.length > 0) throw new Error(`${name} ${JSON.stringify(piece)} has more than one step`);
     let step = 1;
     if (stepPart !== undefined) {
-      if (!/^[0-9]+$/.test(stepPart)) throw new Error(`${name} step ${JSON.stringify(stepPart)} is not a number`);
+      if (!/^[0-9]+$/.test(stepPart))
+        throw new Error(`${name} step ${JSON.stringify(stepPart)} is not a number`);
       step = Number(stepPart);
       if (step < 1) throw new Error(`${name} step must be at least 1`);
     }
@@ -479,7 +479,10 @@ const PRIORITY_TERM = /^priority(<=|>=|<|>|=|:)([0-9]+)$/;
 /** Parses a filter expression. Throws on any term it does not know. */
 export function parseSweepFilter(expression: string): SweepFilter {
   const filter: SweepFilter = { types: [], labels: [], priority: null, unblocked: false };
-  const terms = expression.trim().split(/\s+/).filter((term) => term !== "");
+  const terms = expression
+    .trim()
+    .split(/\s+/)
+    .filter((term) => term !== "");
   if (terms.length === 0) throw new Error("a filter must name at least one term");
   for (const term of terms) {
     if (term === "unblocked") {
@@ -497,7 +500,7 @@ export function parseSweepFilter(expression: string): SweepFilter {
     if (match === null) {
       throw new Error(
         `${JSON.stringify(term)} is not a term this reader knows; known terms: type:<type>, ` +
-          "label:<label>, priority<=<n> (also <, =, >=, >), unblocked"
+          "label:<label>, priority<=<n> (also <, =, >=, >), unblocked",
       );
     }
     if (match[1] === "type") filter.types.push(match[2]!);
@@ -555,9 +558,10 @@ export function parseSweepCandidate(text: string): SweepCandidate | null {
     id: record.id,
     type: typeof record.type === "string" ? record.type : "",
     status: typeof record.status === "string" ? record.status : "",
-    priority: typeof record.priority === "number" && Number.isFinite(record.priority)
-      ? record.priority
-      : Number.MAX_SAFE_INTEGER,
+    priority:
+      typeof record.priority === "number" && Number.isFinite(record.priority)
+        ? record.priority
+        : Number.MAX_SAFE_INTEGER,
     created_at: typeof record.created_at === "string" ? record.created_at : "",
     labels: strings(record.labels),
     blocked_by: strings(record.blocked_by),
@@ -614,7 +618,7 @@ function positiveVar(env: Env, name: keyof Env, fallback: number, integer: boole
   const usable = integer ? Number.isSafeInteger(parsed) : Number.isFinite(parsed);
   if (!usable || parsed <= 0) {
     console.error(
-      `factory sweeps: ${String(name)} must be a positive number; ignoring "${raw}" and using ${fallback}`
+      `factory sweeps: ${String(name)} must be a positive number; ignoring "${raw}" and using ${fallback}`,
     );
     return fallback;
   }
@@ -632,7 +636,7 @@ function positiveVar(env: Env, name: keyof Env, fallback: number, integer: boole
 export function sweepCeilings(env: Env): SweepCeilings {
   const maxTicks = Math.min(
     positiveVar(env, "SWEEP_MAX_TICKS", DEFAULT_MAX_SWEEP_TICKS, true),
-    SWEEP_TICKS_LIMIT
+    SWEEP_TICKS_LIMIT,
   );
   const budget = positiveVar(env, "RUN_MAX_COST_USD", DEFAULT_MAX_RUN_COST_USD, false);
   const declaredTier = typeof env.SWEEP_MAX_TIER === "string" ? env.SWEEP_MAX_TIER.trim() : "";
@@ -643,7 +647,7 @@ export function sweepCeilings(env: Env): SweepCeilings {
     } else {
       console.error(
         `factory sweeps: SWEEP_MAX_TIER must be one of ${SWEEP_TIERS.join(", ")}; ignoring ` +
-          `"${declaredTier}" and using ${DEFAULT_MAX_SWEEP_TIER}`
+          `"${declaredTier}" and using ${DEFAULT_MAX_SWEEP_TIER}`,
       );
     }
   }
@@ -667,7 +671,7 @@ function clampNumber(requested: number, ceiling: number): ClampedNumber {
 /** The policy after every deployment ceiling has been applied to it. */
 export function effectiveSweepPolicy(
   policy: SweepPolicy,
-  ceilings: SweepCeilings
+  ceilings: SweepCeilings,
 ): EffectiveSweepPolicy {
   const requestedTier = SWEEP_TIERS.indexOf(policy.tier);
   const ceilingTier = SWEEP_TIERS.indexOf(ceilings.tier);
@@ -764,7 +768,7 @@ export type SweepSelection = {
 export function filterVerdict(
   filter: SweepFilter,
   candidate: SweepCandidate,
-  closed: (id: string) => boolean
+  closed: (id: string) => boolean,
 ): string | null {
   if (candidate.status === CLOSED_STATUS) return "closed";
   if (candidate.awaiting_human) return "awaiting_human";
@@ -776,11 +780,15 @@ export function filterVerdict(
     const { op, value } = filter.priority;
     const p = candidate.priority;
     const ok =
-      op === "<" ? p < value
-      : op === "<=" ? p <= value
-      : op === "=" ? p === value
-      : op === ">=" ? p >= value
-      : p > value;
+      op === "<"
+        ? p < value
+        : op === "<="
+          ? p <= value
+          : op === "="
+            ? p === value
+            : op === ">="
+              ? p >= value
+              : p > value;
     if (!ok) return "priority";
   }
   if (filter.unblocked && candidate.blocked_by.some((id) => !closed(id))) return "blocked";
@@ -817,7 +825,7 @@ export function compareCandidates(a: SweepCandidate, b: SweepCandidate): number 
 export function selectSweep(
   policy: SweepPolicy,
   effective: EffectiveSweepPolicy,
-  frontier: SweepCandidate[]
+  frontier: SweepCandidate[],
 ): SweepSelection {
   const byID = new Map(frontier.map((candidate) => [candidate.id, candidate]));
   // A blocker the frontier does not contain is not evidence it is closed: the

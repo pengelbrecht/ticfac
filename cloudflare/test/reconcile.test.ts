@@ -4,22 +4,22 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   listWorkerManifests,
   readWorkerManifest,
-  writeWorkerManifest,
-  workerManifestKey,
   type WorkerManifest,
+  workerManifestKey,
+  writeWorkerManifest,
 } from "../src/artifacts";
 import {
-  NOT_ASKED,
   adoptions,
   classifyWorker,
   dispatchable,
+  type Liveness,
   manifestRecorder,
+  NOT_ASKED,
   probeLiveness,
   reconcileWave,
   settled,
   settledOutcome,
   summarizeReconcile,
-  type Liveness,
   type WorkerEvidence,
 } from "../src/reconcile";
 import type {
@@ -54,7 +54,7 @@ class FakeProcess {
   exit_code: number | null = null;
   constructor(
     readonly id: string,
-    readonly command: string
+    readonly command: string,
   ) {}
   get view(): SandboxProcessView {
     return { id: this.id, state: this.state, exit_code: this.exit_code, command: this.command };
@@ -164,7 +164,11 @@ function noCommits(tickID: string): WorkerReport {
   });
 }
 
-function manifest(runID: string, tickID: string, overrides: Partial<WorkerManifest> = {}): WorkerManifest {
+function manifest(
+  runID: string,
+  tickID: string,
+  overrides: Partial<WorkerManifest> = {},
+): WorkerManifest {
   return {
     run_id: runID,
     epic: EPIC,
@@ -230,7 +234,7 @@ describe("a live worker is never redispatched, whatever its branch looks like", 
       evidence({
         liveness: live(),
         report: report("s7f", { verdict: "no-commits", branch_exists: true, commits: 0 }),
-      })
+      }),
     );
 
     expect(item.class).toBe("live-worker");
@@ -250,8 +254,14 @@ describe("a live worker is never redispatched, whatever its branch looks like", 
   it("refuses to redispatch a container it could not ask", () => {
     const item = classifyWorker(
       evidence({
-        liveness: { known: false, live: false, work_process_id: null, running: [], detail: "timed out" },
-      })
+        liveness: {
+          known: false,
+          live: false,
+          work_process_id: null,
+          running: [],
+          detail: "timed out",
+        },
+      }),
     );
 
     expect(item.class).toBe("unknown");
@@ -264,7 +274,7 @@ describe("a live worker is never redispatched, whatever its branch looks like", 
     const item = classifyWorker(
       evidence({
         liveness: live({ work_process_id: null, running: [WORKER_PROBE_COMMAND] }),
-      })
+      }),
     );
 
     expect(item.class).toBe("unknown");
@@ -281,7 +291,7 @@ describe("a live worker is never redispatched, whatever its branch looks like", 
       evidence({
         liveness: live({ work_process_id: null, running: [WORKER_PROBE_COMMAND] }),
         report: report("s7f"),
-      })
+      }),
     );
 
     expect(item.class).toBe("already-landed");
@@ -296,7 +306,7 @@ describe("a live worker is never redispatched, whatever its branch looks like", 
 describe("classifying a tick whose container is gone", () => {
   it("redispatches ONTO THE BRANCH when the dead worker pushed commits", () => {
     const item = classifyWorker(
-      evidence({ report: report("s7f", { verdict: "missing-result", commits: 2 }) })
+      evidence({ report: report("s7f", { verdict: "missing-result", commits: 2 }) }),
     );
 
     expect(item.class).toBe("dead-with-work");
@@ -325,7 +335,7 @@ describe("classifying a tick whose container is gone", () => {
     // "Cannot tell" is not zero commits. Redispatching on an unreadable remote
     // is how a reconcile overwrites work nobody has looked at.
     const item = classifyWorker(
-      evidence({ report: report("s7f", { verdict: "unknown", detail: "GitHub said 503" }) })
+      evidence({ report: report("s7f", { verdict: "unknown", detail: "GitHub said 503" }) }),
     );
 
     expect(item.class).toBe("unknown");
@@ -344,9 +354,7 @@ describe("classifying a tick whose container is gone", () => {
   });
 
   it("still dispatches a tick with no manifest when the remote is unreadable", () => {
-    const item = classifyWorker(
-      evidence({ manifest: null, liveness: NOT_ASKED, report: null })
-    );
+    const item = classifyWorker(evidence({ manifest: null, liveness: NOT_ASKED, report: null }));
 
     expect(item.class).toBe("never-dispatched");
     expect(item.action).toBe("dispatch");
@@ -522,7 +530,7 @@ describe("the manifest store", () => {
     const runID = "run_manifests";
     await env.ARTIFACTS.put(
       `runs/${PROJECT}/${runID}/artifacts/orchestrator/reconcile/001.json`,
-      "{}"
+      "{}",
     );
     for (const tick of ["ccc", "aaa", "bbb"]) {
       await writeWorkerManifest(env.ARTIFACTS, PROJECT, manifest(runID, tick));
@@ -532,7 +540,7 @@ describe("the manifest store", () => {
 
     expect(listed.map((m) => m.tick_id)).toEqual(["aaa", "bbb", "ccc"]);
     expect((await readWorkerManifest(env.ARTIFACTS, PROJECT, runID, "aaa"))!.branch).toBe(
-      workerBranch(EPIC, "aaa")
+      workerBranch(EPIC, "aaa"),
     );
     expect(workerManifestKey(PROJECT, runID, "aaa")).toContain(`/${runID}/artifacts/aaa/`);
   });
@@ -574,7 +582,8 @@ describe("the manifest store", () => {
     await recorder.probeFailed!(task, name, {
       ok: false,
       reason: "wrong-output",
-      detail: "the probe exited 0 without producing \"ticks-worker-probe-ok\": PATH resolved but tk did not",
+      detail:
+        'the probe exited 0 without producing "ticks-worker-probe-ok": PATH resolved but tk did not',
       output: "8.19.2\n",
     });
     const manifest_ = (await readWorkerManifest(env.ARTIFACTS, PROJECT, runID, "3nh"))!;
@@ -600,7 +609,7 @@ describe("summarizeReconcile", () => {
         "stale-no-work": 0,
         "never-dispatched": 0,
         unknown: 0,
-      })
+      }),
     ).toBe("1 already-landed, 2 live-worker");
   });
 });

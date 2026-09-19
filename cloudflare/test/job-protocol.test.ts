@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-
-import contract from "../../contracts/job-protocol.json";
-import credentialOwnership from "../../contracts/credential-ownership.json";
 import collectVocabulary from "../../contracts/collect-vocabulary.json";
-import { parseDefs, parseSchema, validate, type Defs, type Schema } from "./json-schema";
+import credentialOwnership from "../../contracts/credential-ownership.json";
+import contract from "../../contracts/job-protocol.json";
+import { type Defs, parseDefs, parseSchema, type Schema, validate } from "./json-schema";
 
 /**
  * The TypeScript reader for `contracts/job-protocol.json` — the record schemas
@@ -130,12 +129,18 @@ describe("the job protocol contract is what a consumer can pin", () => {
     collect(contract.records);
     collect((contract as { $defs: unknown }).$defs);
 
-    expect(refs.length, "the contract uses no $ref at all — have the $defs been inlined away?").toBeGreaterThan(0);
+    expect(
+      refs.length,
+      "the contract uses no $ref at all — have the $defs been inlined away?",
+    ).toBeGreaterThan(0);
     for (const ref of refs) {
-      expect(ref, `${ref} is not a local #/$defs/<name> reference`).toMatch(/^#\/\$defs\/[A-Za-z0-9_]+$/);
-      expect(Object.hasOwn(defs, ref.slice("#/$defs/".length)), `${ref} points at a $def that does not exist`).toBe(
-        true,
+      expect(ref, `${ref} is not a local #/$defs/<name> reference`).toMatch(
+        /^#\/\$defs\/[A-Za-z0-9_]+$/,
       );
+      expect(
+        Object.hasOwn(defs, ref.slice("#/$defs/".length)),
+        `${ref} points at a $def that does not exist`,
+      ).toBe(true);
     }
   });
 });
@@ -176,7 +181,10 @@ describe("the golden examples validate", () => {
     const illustration = golden.find(
       (example) => example.record === "job_spec" && example.source.startsWith(ILLUSTRATION_SOURCE),
     );
-    expect(illustration, "no golden example is sourced from SPEC §4.3 — the illustration is unchecked").toBeDefined();
+    expect(
+      illustration,
+      "no golden example is sourced from SPEC §4.3 — the illustration is unchecked",
+    ).toBeDefined();
 
     const document = illustration!.document as Record<string, unknown>;
     expect(validate(schemas.job_spec, defs, document)).toEqual([]);
@@ -203,10 +211,16 @@ describe("the negative examples are refused", () => {
     it(`refuses: ${example.name}`, () => {
       expect(schemas[example.record], `unknown record ${example.record}`).toBeDefined();
       expect(example.why, "a negative example must say what it is testing").toBeTruthy();
-      expect(example.expect_error_contains, "a negative example must pin the refusal it expects").toBeTruthy();
+      expect(
+        example.expect_error_contains,
+        "a negative example must pin the refusal it expects",
+      ).toBeTruthy();
 
       const errors = validate(schemas[example.record], defs, example.document);
-      expect(errors.length, `${example.name} VALIDATED — the schema does not refuse it`).toBeGreaterThan(0);
+      expect(
+        errors.length,
+        `${example.name} VALIDATED — the schema does not refuse it`,
+      ).toBeGreaterThan(0);
       expect(
         errors.join("\n"),
         `${example.name}: no error contains ${JSON.stringify(example.expect_error_contains)}`,
@@ -272,7 +286,9 @@ describe("the credential grant is part of the protocol", () => {
     // one-value enums, because a validator can refuse a wrong value and cannot
     // refuse a wrong clock.
     const ack = resolved("cancel_ack");
-    expect(ack.required).toEqual(expect.arrayContaining(["credentials_revoked", "order", "reissue"]));
+    expect(ack.required).toEqual(
+      expect.arrayContaining(["credentials_revoked", "order", "reissue"]),
+    );
     expect(ack.properties?.credentials_revoked.enum).toEqual([true]);
     expect(ack.properties?.order.enum).toEqual(["revoke-then-stop"]);
     expect(ack.properties?.reissue.enum).toEqual(["refused"]);
@@ -352,7 +368,9 @@ describe("the evidence record carries SPEC §10.1's minimum", () => {
     expect(Object.keys(ref.properties ?? {})).not.toContain("evidence_id");
 
     for (const holder of ["job_result", "role_result"]) {
-      expect(resolved(holder).properties?.evidence.items?.$ref, holder).toBe("#/$defs/evidence_ref");
+      expect(resolved(holder).properties?.evidence.items?.$ref, holder).toBe(
+        "#/$defs/evidence_ref",
+      );
     }
   });
 
@@ -378,7 +396,9 @@ describe("the validator both readers share actually refuses things", () => {
   // ignored a keyword would make every golden example pass and every negative
   // example depend on luck.
   it("refuses a keyword it cannot enforce", () => {
-    expect(() => parseSchema({ type: "string", minLength: 3 })).toThrow(/unsupported keyword "minLength"/);
+    expect(() => parseSchema({ type: "string", minLength: 3 })).toThrow(
+      /unsupported keyword "minLength"/,
+    );
   });
 
   it("refuses a type it does not know", () => {
@@ -386,6 +406,8 @@ describe("the validator both readers share actually refuses things", () => {
   });
 
   it("refuses a remote $ref", () => {
-    expect(() => parseSchema({ $ref: "https://example.invalid/schema.json" })).toThrow(/only #\/\$defs\//);
+    expect(() => parseSchema({ $ref: "https://example.invalid/schema.json" })).toThrow(
+      /only #\/\$defs\//,
+    );
   });
 });

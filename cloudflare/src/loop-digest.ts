@@ -118,15 +118,10 @@
  * schedule is a second schedule to keep correct.
  */
 
-import {
-  CI_BRANCHES_PATH,
-  listUnrecordedBranches,
-  type UnrecordedBranch,
-} from "./branch-registry";
+import { CI_BRANCHES_PATH, listUnrecordedBranches, type UnrecordedBranch } from "./branch-registry";
+import type { Env } from "./index";
 import { sendTelegramReport } from "./telegram";
 import { sanitizeUntrustedLine } from "./untrusted-text";
-
-import type { Env } from "./index";
 
 // ------------------------------------------------------------- the policy ---
 
@@ -307,7 +302,7 @@ export function digestHour(env: Env): number {
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 23) {
     console.error(
       `factory digest: DIGEST_HOUR must be an hour 0-23; ignoring "${raw}" and using ` +
-        `${DIGEST_HOUR_UTC}`
+        `${DIGEST_HOUR_UTC}`,
     );
     return DIGEST_HOUR_UTC;
   }
@@ -392,7 +387,8 @@ export function assessReviews(reviews: InFlightReview[], now: Date): LoopFinding
       measure:
         (hours === null
           ? `claimed at an unreadable time (${sanitizeUntrustedLine(review.claimed_at, 60)})`
-          : `${hours}h in flight`) + `, state ${sanitizeUntrustedLine(review.state, 40)}, no comment posted`,
+          : `${hours}h in flight`) +
+        `, state ${sanitizeUntrustedLine(review.state, 40)}, no comment posted`,
       since: review.claimed_at,
       detail:
         review.run_id === null
@@ -481,8 +477,7 @@ export function assessUnrecordedBranches(rows: UnrecordedBranch[]): LoopFinding[
     loop: "branch_record" as const,
     subject: `${row.project} ${row.branch}`,
     project: row.project,
-    measure:
-      `${row.refusals} refusal${row.refusals === 1 ? "" : "s"}, most recently ${row.last_seen_at}`,
+    measure: `${row.refusals} refusal${row.refusals === 1 ? "" : "s"}, most recently ${row.last_seen_at}`,
     since: row.first_seen_at,
     detail:
       `${sanitizeUntrustedLine(row.check_name, DETAIL_MAX_CHARS)} is failing on ` +
@@ -509,7 +504,7 @@ export async function readSweepFirings(env: Env, now: Date): Promise<SweepFiring
        FROM sweep_selection
       WHERE fired_at >= ?
       ORDER BY fired_at DESC
-      LIMIT ?`
+      LIMIT ?`,
   )
     .bind(since, SWEEP_FIRING_LIMIT)
     .all<SweepFiring>();
@@ -538,7 +533,7 @@ export async function readInFlightReviews(env: Env, now: Date): Promise<InFlight
        FROM pr_reviews
       WHERE comment_id IS NULL AND expired_at IS NULL AND claimed_at <= ?
       ORDER BY claimed_at ASC
-      LIMIT ?`
+      LIMIT ?`,
   )
     .bind(cutoff, MAX_DIGEST_FINDINGS + 1)
     .all<InFlightReview>();
@@ -553,15 +548,13 @@ export async function readInFlightReviews(env: Env, now: Date): Promise<InFlight
  * the timestamp is what the room's conditional UPDATE actually claimed.
  */
 export async function readExpiredReviews(env: Env, now: Date): Promise<ExpiredReview[]> {
-  const cutoff = new Date(
-    now.getTime() - REVIEW_EXPIRY_LOOKBACK_HOURS * 3_600_000
-  ).toISOString();
+  const cutoff = new Date(now.getTime() - REVIEW_EXPIRY_LOOKBACK_HOURS * 3_600_000).toISOString();
   const rows = await env.DB.prepare(
     `SELECT project, pr_number, run_id, claimed_at, expired_at, expiry_comment_id, detail
        FROM pr_reviews
       WHERE expired_at IS NOT NULL AND expired_at >= ?
       ORDER BY expired_at DESC
-      LIMIT ?`
+      LIMIT ?`,
   )
     .bind(cutoff, MAX_DIGEST_FINDINGS + 1)
     .all<ExpiredReview>();
@@ -576,9 +569,7 @@ export async function readExpiredReviews(env: Env, now: Date): Promise<ExpiredRe
  * {@link UNRECORDED_BRANCH_ACTIVE_DAYS}.
  */
 export async function readUnrecordedBranches(env: Env, now: Date): Promise<UnrecordedBranch[]> {
-  const since = new Date(
-    now.getTime() - UNRECORDED_BRANCH_ACTIVE_DAYS * 86_400_000
-  ).toISOString();
+  const since = new Date(now.getTime() - UNRECORDED_BRANCH_ACTIVE_DAYS * 86_400_000).toISOString();
   return listUnrecordedBranches(env, since, MAX_DIGEST_FINDINGS + 1);
 }
 
@@ -664,7 +655,7 @@ export function renderDigest(findings: LoopFinding[], day: string): string {
       `  since ${finding.since}`,
       ...(finding.detail === "" ? [] : [`  ${finding.detail}`]),
       `  run: ${finding.command}`,
-      ""
+      "",
     );
   }
   if (findings.length > shown.length) {
@@ -677,7 +668,7 @@ export function renderDigest(findings: LoopFinding[], day: string): string {
       "so it is reported once and ages out. Nothing here was retried and nothing was " +
       "escalated. A sweep that refuses, a review that never comments, a review that never " +
       "ran and a branch the factory will not touch all stop quietly, which is why this " +
-      "message exists."
+      "message exists.",
   );
   return lines.join("\n");
 }
@@ -742,7 +733,7 @@ export async function runDailyDigest(env: Env, at: Date): Promise<DigestOutcome>
   try {
     const result = await env.DB.prepare(
       `INSERT OR IGNORE INTO loop_digest (digest_date, built_at, findings, detail, sent_at)
-       VALUES (?, ?, ?, ?, NULL)`
+       VALUES (?, ?, ?, ?, NULL)`,
     )
       .bind(day, at.toISOString(), findings.length, report)
       .run();
@@ -762,7 +753,7 @@ export async function runDailyDigest(env: Env, at: Date): Promise<DigestOutcome>
   } catch (error) {
     console.error(
       `factory digest: ${day} found ${findings.length} problem(s) but could not be delivered: ` +
-        String(error)
+        String(error),
     );
     return {
       state: "undeliverable",

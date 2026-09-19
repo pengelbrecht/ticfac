@@ -147,7 +147,7 @@ function message(
   epicID: string,
   taskID: string | null,
   event: RunEventData,
-  traceID?: string
+  traceID?: string,
 ): RunEventMessage {
   return {
     type: "run_event",
@@ -185,7 +185,7 @@ export function epicStarted(input: {
       status: input.status,
       message: `run ${input.run_id} started`,
     },
-    input.trace_id
+    input.trace_id,
   );
 }
 
@@ -220,7 +220,7 @@ export function epicCompleted(input: {
       success: input.state === "completed",
       ...(metrics === null ? {} : { metrics }),
     },
-    input.trace_id
+    input.trace_id,
   );
 }
 
@@ -243,7 +243,7 @@ export function tickStarted(input: {
       iteration: input.batch,
       message: `worker container dispatched for ${input.tick}`,
     },
-    input.trace_id
+    input.trace_id,
   );
 }
 
@@ -279,7 +279,7 @@ export function tickCompleted(input: {
           ? input.detail
           : `${input.status}${input.detail === "" ? "" : ` — ${input.detail}`}`,
     },
-    input.trace_id
+    input.trace_id,
   );
 }
 
@@ -372,7 +372,7 @@ export function runEventSink(env: Env): RunEventSink | null {
 export async function publishRunEvents(
   env: Env,
   project: string,
-  events: RunEventMessage[]
+  events: RunEventMessage[],
 ): Promise<RunEventDelivery[]> {
   if (events.length === 0) return [];
   try {
@@ -380,7 +380,7 @@ export async function publishRunEvents(
     return await room.publishRunEvents(project, events);
   } catch (error) {
     const detail = `run_event publish failed: ${String(
-      error instanceof Error ? error.message : error
+      error instanceof Error ? error.message : error,
     )}`;
     // One log line for the batch, not one per event: a board that is down for
     // an hour must not be able to fill the Worker's log with a run's own

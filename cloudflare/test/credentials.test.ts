@@ -1,23 +1,23 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { GIT_PREFIX, isAuthExempt } from "../src/auth";
-import { getRun, insertRun, type Run } from "../src/db";
 import {
-  DEFAULT_RUN_CREDENTIAL_GRADE,
-  GIT_AUTH_CHALLENGE,
-  GIT_PATH_PREFIX,
   containerGitToken,
   credentialGrade,
+  DEFAULT_RUN_CREDENTIAL_GRADE,
   extractGitToken,
+  GIT_AUTH_CHALLENGE,
+  GIT_PATH_PREFIX,
   gitServiceRequested,
   planSandboxGit,
   proxyGitRequest,
   runGitEndpoint,
 } from "../src/credentials";
+import { getRun, insertRun, type Run } from "../src/db";
 import { issueRunToken, revokeRunTokens } from "../src/gateway";
-import { orchestratorEnv, repoURL } from "../src/sandbox";
 import { parseSubmission, submitRun } from "../src/runs";
+import { orchestratorEnv, repoURL } from "../src/sandbox";
 import { workerBootEnv } from "../src/worker-boot";
 
 /**
@@ -61,7 +61,7 @@ beforeEach(() => {
 /** A run in the index at a given grade, with a live credential in its sandbox. */
 async function liveRun(
   grade: string,
-  overrides: Partial<Run> = {}
+  overrides: Partial<Run> = {},
 ): Promise<{ run: Run; token: string }> {
   const run: Run = {
     run_id: `run_cred_${++counter}`,
@@ -147,7 +147,7 @@ describe("the grade is a property of the run record", () => {
     // (`.tick/learnings.md`: end every run a test starts).
     const project = "example-org/grade-record";
     await env.DB.prepare(
-      "INSERT OR REPLACE INTO enrolled_project (project, enrolled_at, enrolled_by) VALUES (?, ?, ?)"
+      "INSERT OR REPLACE INTO enrolled_project (project, enrolled_at, enrolled_by) VALUES (?, ?, ?)",
     )
       .bind(project, new Date().toISOString(), "operator@example.com")
       .run();
@@ -190,7 +190,7 @@ describe("the grade is a property of the run record", () => {
   it("records write for a submission that names no grade", async () => {
     const project = "example-org/grade-default";
     await env.DB.prepare(
-      "INSERT OR REPLACE INTO enrolled_project (project, enrolled_at, enrolled_by) VALUES (?, ?, ?)"
+      "INSERT OR REPLACE INTO enrolled_project (project, enrolled_at, enrolled_by) VALUES (?, ?, ?)",
     )
       .bind(project, new Date().toISOString(), "operator@example.com")
       .run();
@@ -287,7 +287,7 @@ describe("the credential a sandbox is handed", () => {
         gateway_base_url: `${FACTORY}/api/gateway`,
         gateway_token: "tkr_run",
         github_token: "",
-      }).GITHUB_TOKEN
+      }).GITHUB_TOKEN,
     ).toBeUndefined();
   });
 
@@ -363,23 +363,23 @@ describe("the git door", () => {
   it("classifies the two halves of smart HTTP", () => {
     const advert = (service: string): URLSearchParams => new URLSearchParams({ service });
     expect(gitServiceRequested("GET", ["info", "refs"], advert("git-upload-pack"))).toBe(
-      "git-upload-pack"
+      "git-upload-pack",
     );
     expect(gitServiceRequested("GET", ["info", "refs"], advert("git-receive-pack"))).toBe(
-      "git-receive-pack"
+      "git-receive-pack",
     );
     expect(gitServiceRequested("POST", ["git-receive-pack"], new URLSearchParams())).toBe(
-      "git-receive-pack"
+      "git-receive-pack",
     );
     // Not on the allowlist: refused, never forwarded.
     expect(gitServiceRequested("POST", ["objects", "info", "packs"], new URLSearchParams())).toBe(
-      null
+      null,
     );
   });
 
   it("builds a remote a git client can clone", () => {
     expect(runGitEndpoint(`${FACTORY}/`, PROJECT)).toBe(
-      `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git`
+      `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git`,
     );
   });
 });
@@ -399,10 +399,10 @@ describe("a read-only run attempting to push", () => {
       env,
       new Request(
         `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-receive-pack`,
-        { headers: { authorization: gitBasic(token) } }
+        { headers: { authorization: gitBasic(token) } },
       ),
       [...PROJECT.split("/").slice(0, 1), `${PROJECT.split("/")[1]}.git`, "info", "refs"],
-      { fetcher }
+      { fetcher },
     );
     const push = await proxyGitRequest(
       env,
@@ -415,7 +415,7 @@ describe("a read-only run attempting to push", () => {
         body: "0000",
       }),
       ["example-org", "example-repo.git", "git-receive-pack"],
-      { fetcher }
+      { fetcher },
     );
 
     expect(advertisement.status).toBe(403);
@@ -439,7 +439,7 @@ describe("a read-only run attempting to push", () => {
           "content-type": "application/x-git-receive-pack-request",
         },
         body: "0000",
-      }
+      },
     );
 
     expect(response.status).toBe(403);
@@ -459,18 +459,17 @@ describe("a read-only run attempting to push", () => {
 
     const response = await proxyGitRequest(
       env,
-      new Request(
-        `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`,
-        { headers: { authorization: gitBasic(token) } }
-      ),
+      new Request(`${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`, {
+        headers: { authorization: gitBasic(token) },
+      }),
       ["example-org", "example-repo.git", "info", "refs"],
-      { fetcher }
+      { fetcher },
     );
 
     expect(response.status).toBe(200);
     expect(seen).toHaveLength(1);
     expect(seen[0]!.url).toBe(
-      `https://github.com/${PROJECT}.git/info/refs?service=git-upload-pack`
+      `https://github.com/${PROJECT}.git/info/refs?service=git-upload-pack`,
     );
     // The run's own token never travels to GitHub; the operator's never
     // travels to the run.
@@ -495,7 +494,7 @@ describe("a read-only run attempting to push", () => {
           upstreamCalls += 1;
           return new Response("", { status: 200 });
         },
-      }
+      },
     );
 
     expect(push.status).toBe(403);
@@ -507,15 +506,18 @@ describe("a read-only run attempting to push", () => {
 
     const response = await proxyGitRequest(
       env,
-      new Request(`${FACTORY}${GIT_PATH_PREFIX}/other-org/secrets.git/info/refs?service=git-upload-pack`, {
-        headers: { authorization: gitBasic(token) },
-      }),
+      new Request(
+        `${FACTORY}${GIT_PATH_PREFIX}/other-org/secrets.git/info/refs?service=git-upload-pack`,
+        {
+          headers: { authorization: gitBasic(token) },
+        },
+      ),
       ["other-org", "secrets.git", "info", "refs"],
       {
         fetcher: async () => {
           throw new Error("upstream must not be called");
         },
-      }
+      },
     );
 
     expect(response.status).toBe(403);
@@ -528,16 +530,15 @@ describe("a read-only run attempting to push", () => {
 
     const response = await proxyGitRequest(
       env,
-      new Request(
-        `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`,
-        { headers: { authorization: gitBasic(token) } }
-      ),
+      new Request(`${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`, {
+        headers: { authorization: gitBasic(token) },
+      }),
       ["example-org", "example-repo.git", "info", "refs"],
       {
         fetcher: async () => {
           throw new Error("upstream must not be called");
         },
-      }
+      },
     );
 
     expect(response.status).toBe(403);
@@ -547,15 +548,13 @@ describe("a read-only run attempting to push", () => {
   it("refuses an unauthenticated caller before it looks at anything else", async () => {
     const response = await proxyGitRequest(
       env,
-      new Request(
-        `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`
-      ),
+      new Request(`${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`),
       ["example-org", "example-repo.git", "info", "refs"],
       {
         fetcher: async () => {
           throw new Error("upstream must not be called");
         },
-      }
+      },
     );
 
     expect(response.status).toBe(401);
@@ -585,7 +584,7 @@ describe("the challenge the door must send", () => {
   const advertisement = (init?: RequestInit) =>
     new Request(
       `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`,
-      init
+      init,
     );
   const noUpstream = {
     fetcher: async () => {
@@ -598,7 +597,7 @@ describe("the challenge the door must send", () => {
       env,
       advertisement(),
       ["example-org", "example-repo.git", "info", "refs"],
-      noUpstream
+      noUpstream,
     );
 
     expect(response.status).toBe(401);
@@ -611,7 +610,7 @@ describe("the challenge the door must send", () => {
 
   it("challenges through the deployed route too — the one a container reaches", async () => {
     const response = await SELF.fetch(
-      `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`
+      `${FACTORY}${GIT_PATH_PREFIX}/${PROJECT}.git/info/refs?service=git-upload-pack`,
     );
 
     expect(response.status).toBe(401);
@@ -621,9 +620,11 @@ describe("the challenge the door must send", () => {
   it("challenges a credential it does not recognise, so a stale helper can answer again", async () => {
     const response = await proxyGitRequest(
       env,
-      advertisement({ headers: { authorization: gitBasic("tkr_not_a_token_this_factory_issued") } }),
+      advertisement({
+        headers: { authorization: gitBasic("tkr_not_a_token_this_factory_issued") },
+      }),
       ["example-org", "example-repo.git", "info", "refs"],
-      noUpstream
+      noUpstream,
     );
 
     expect(response.status).toBe(401);
@@ -639,7 +640,7 @@ describe("the challenge the door must send", () => {
       env,
       advertisement({ headers: { authorization: gitBasic(token) } }),
       ["example-org", "example-repo.git", "info", "refs"],
-      noUpstream
+      noUpstream,
     );
 
     expect(response.status).toBe(403);
@@ -677,7 +678,7 @@ describe("the request the door forwards", () => {
         body: "0000",
       }),
       ["example-org", "example-repo.git", "git-upload-pack"],
-      { fetcher }
+      { fetcher },
     );
 
     expect(response.status).toBe(200);
@@ -686,6 +687,8 @@ describe("the request the door forwards", () => {
     expect(forwarded!.get("git-protocol")).toBe("version=2");
     // The run's own credential is still replaced by the operator's, exactly as
     // on the advertisement path.
-    expect(forwarded!.get("authorization")).toBe(`Basic ${btoa(`x-access-token:${OPERATOR_TOKEN}`)}`);
+    expect(forwarded!.get("authorization")).toBe(
+      `Basic ${btoa(`x-access-token:${OPERATOR_TOKEN}`)}`,
+    );
   });
 });

@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import contract from "../../contracts/credential-ownership.json";
-
-import { parseSchema, validate, type Schema } from "./json-schema";
-
 import {
   DEFAULT_RUN_CREDENTIAL_GRADE,
+  gradeMayWrite,
   LEAST_RUN_CREDENTIAL_GRADE,
   RUN_CREDENTIAL_GRADES,
-  gradeMayWrite,
 } from "../src/credentials";
+import { parseSchema, type Schema, validate } from "./json-schema";
 
 /**
  * The TypeScript reader for `contracts/credential-ownership.json`.
@@ -111,7 +109,9 @@ describe("the declared keys and the ownership table agree", () => {
       seen.add(key.name);
       expect(key.credential_type, `key ${key.name} has no credential type`).not.toBe("");
       expect(key.stored_in.length, `key ${key.name} is stored nowhere`).toBeGreaterThan(0);
-      expect(typeof key.secret, `key ${key.name} does not say whether it is secret`).toBe("boolean");
+      expect(typeof key.secret, `key ${key.name} does not say whether it is secret`).toBe(
+        "boolean",
+      );
     }
   });
 
@@ -120,10 +120,13 @@ describe("the declared keys and the ownership table agree", () => {
     for (const entry of ownership) {
       expect(entry.credential_type, "an ownership entry has no credential type").not.toBe("");
       // The whole point of the document: ticfac owns credentials, ticks does not.
-      expect(entry.owner, `credential type ${entry.credential_type} is not owned by ticfac`).toBe("ticfac");
-      expect(owned.has(entry.credential_type), `duplicate ownership entry for ${entry.credential_type}`).toBe(
-        false,
+      expect(entry.owner, `credential type ${entry.credential_type} is not owned by ticfac`).toBe(
+        "ticfac",
       );
+      expect(
+        owned.has(entry.credential_type),
+        `duplicate ownership entry for ${entry.credential_type}`,
+      ).toBe(false);
       const fileKeys = new Set(entry.file_keys);
       expect(fileKeys.size, `ownership entry ${entry.credential_type} repeats a key`).toBe(
         entry.file_keys.length,
@@ -205,7 +208,10 @@ describe("and the schema is watched refusing something", () => {
       ).toBeTruthy();
 
       const errors = validate(schema, noDefs, bad.document);
-      expect(errors.length, `invalid[${i}] VALIDATED — the schema does not refuse it`).toBeGreaterThan(0);
+      expect(
+        errors.length,
+        `invalid[${i}] VALIDATED — the schema does not refuse it`,
+      ).toBeGreaterThan(0);
       // The pin is what makes the case about its own subject: without it a
       // negative that starts failing for an unrelated reason stays green.
       // `./json-schema.ts` matches Go's refusal text character for character,
@@ -248,7 +254,9 @@ describe("the lifecycle rules bind to the Worker that implements them", () => {
     // run token. `src/credentials.ts` is the code that has to be true of.
     expect(contract.lifecycle.security.read_only_grade.git_write).toBe("refused");
     expect(contract.lifecycle.security.read_only_grade.credential).toBe("run_token");
-    expect(contract.lifecycle.security.read_only_grade.operator_github_token_never_issued).toBe(true);
+    expect(contract.lifecycle.security.read_only_grade.operator_github_token_never_issued).toBe(
+      true,
+    );
 
     expect(RUN_CREDENTIAL_GRADES).toContain(LEAST_RUN_CREDENTIAL_GRADE);
     expect(LEAST_RUN_CREDENTIAL_GRADE).toBe("read_only");
@@ -281,9 +289,10 @@ describe("the ~/.ticksrc migration", () => {
     // this contract knows about, or the migration invents keys the schema
     // (additionalProperties: false) then rejects.
     for (const key of keys) {
-      expect(key.name.startsWith("factory_"), `key ${key.name} is outside the migration's factory_* match`).toBe(
-        true,
-      );
+      expect(
+        key.name.startsWith("factory_"),
+        `key ${key.name} is outside the migration's factory_* match`,
+      ).toBe(true);
     }
   });
 });

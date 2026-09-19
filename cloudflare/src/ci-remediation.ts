@@ -199,24 +199,19 @@
  */
 
 import {
-  CI_BRANCHES_PATH,
-  branchRecord,
-  noteUnrecordedBranch,
   type BranchRecord,
+  branchRecord,
+  CI_BRANCHES_PATH,
+  noteUnrecordedBranch,
 } from "./branch-registry";
 import { credentialGrade, type RunCredentialGrade } from "./credentials";
-import {
-  getEnrolledProject,
-  insertDispatchLog,
-  type DispatchReason,
-} from "./db";
+import { type DispatchReason, getEnrolledProject, insertDispatchLog } from "./db";
+import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
+import { newRunID, type RunSubmission, submitRun } from "./runs";
 import { sendTelegramReport } from "./telegram";
 import { newTraceID } from "./trace";
 import { sanitizeUntrustedLine } from "./untrusted-text";
-import { newRunID, submitRun, type RunSubmission } from "./runs";
-
-import type { Env } from "./index";
 
 // ------------------------------------------------------------- ownership ---
 
@@ -407,7 +402,7 @@ export type BranchOwnershipVerdict =
 export async function branchOwnership(
   env: Env,
   project: string,
-  branch: string
+  branch: string,
 ): Promise<BranchOwnershipVerdict> {
   const record = await branchRecord(env, project, branch);
   if (record === null) return { state: "unrecorded" };
@@ -449,7 +444,7 @@ export type FactoryOwnedBranch = string & { readonly [FACTORY_OWNED_BRAND]: true
 export function epicOfBranch(branch: FactoryOwnedBranch): string {
   const name = branch as string;
   const namespace = FACTORY_BRANCH_NAMESPACES.find(
-    (candidate) => name.startsWith(candidate) && name.length > candidate.length
+    (candidate) => name.startsWith(candidate) && name.length > candidate.length,
   );
   const rest = namespace === undefined ? name : name.slice(namespace.length);
   const [first] = rest.split("/");
@@ -555,7 +550,11 @@ export function classifyCheckEvent(payload: unknown): CheckClassification {
 
   const checkRun = record(body.check_run);
   if (checkRun === null) {
-    return { state: "ignored", reason: "invalid_payload", detail: "the payload carries no check_run" };
+    return {
+      state: "ignored",
+      reason: "invalid_payload",
+      detail: "the payload carries no check_run",
+    };
   }
 
   const repository = record(body.repository);
@@ -604,7 +603,11 @@ export function classifyCheckEvent(payload: unknown): CheckClassification {
 
   const headSha = str(checkRun.head_sha).toLowerCase() || str(suite?.head_sha).toLowerCase();
   if (!SHA_PATTERN.test(headSha)) {
-    return { state: "ignored", reason: "invalid_payload", detail: "the check run names no head sha" };
+    return {
+      state: "ignored",
+      reason: "invalid_payload",
+      detail: "the check run names no head sha",
+    };
   }
 
   const externalRef = str(checkRun.node_id);
@@ -625,8 +628,7 @@ export function classifyCheckEvent(payload: unknown): CheckClassification {
 
   const pulls = Array.isArray(checkRun.pull_requests) ? checkRun.pull_requests : [];
   const firstPull = record(pulls[0]);
-  const baseBranch =
-    str(record(firstPull?.base)?.ref) || str(repository?.default_branch) || "main";
+  const baseBranch = str(record(firstPull?.base)?.ref) || str(repository?.default_branch) || "main";
 
   const detailsURL = str(checkRun.details_url);
   const facts: CheckFailureFacts = {
@@ -635,15 +637,14 @@ export function classifyCheckEvent(payload: unknown): CheckClassification {
     head_sha: headSha,
     base_branch: baseBranch,
     check_name: checkName,
-    check_run_id: typeof checkRun.id === "number" && Number.isSafeInteger(checkRun.id) ? checkRun.id : 0,
+    check_run_id:
+      typeof checkRun.id === "number" && Number.isSafeInteger(checkRun.id) ? checkRun.id : 0,
     external_ref: externalRef,
     conclusion: checkConclusion(checkRun.conclusion),
     details_url: detailsURL.startsWith("https://") ? detailsURL : null,
   };
 
-  return facts.conclusion === "failure"
-    ? { state: "failure", facts }
-    : { state: "outcome", facts };
+  return facts.conclusion === "failure" ? { state: "failure", facts } : { state: "outcome", facts };
 }
 
 // --------------------------------------------------------- the GitHub port ---
@@ -696,7 +697,7 @@ export function githubCheckHistory(env: Env): CheckHistoryReader {
       if (response.status === 404 || response.status === 422) return null;
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} reading check runs for ${project}@${ref}`
+          `GitHub answered HTTP ${response.status} reading check runs for ${project}@${ref}`,
         );
       }
       const body = (await response.json()) as unknown;
@@ -709,10 +710,10 @@ export function githubCheckHistory(env: Env): CheckHistoryReader {
 
     async rerun(project, checkRunID) {
       if (checkRunID <= 0) return false;
-      const response = await fetch(
-        `${base}/repos/${project}/check-runs/${checkRunID}/rerequest`,
-        { method: "POST", headers }
-      );
+      const response = await fetch(`${base}/repos/${project}/check-runs/${checkRunID}/rerequest`, {
+        method: "POST",
+        headers,
+      });
       return response.ok || response.status === 201 || response.status === 202;
     },
   };
@@ -763,7 +764,7 @@ async function recordObservation(env: Env, facts: CheckFailureFacts): Promise<bo
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO ci_check_observation
        (external_ref, project, branch, head_sha, check_name, conclusion, observed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       facts.external_ref,
@@ -772,7 +773,7 @@ async function recordObservation(env: Env, facts: CheckFailureFacts): Promise<bo
       facts.head_sha,
       facts.check_name,
       facts.conclusion,
-      new Date().toISOString()
+      new Date().toISOString(),
     )
     .run();
   return (result.meta.changes ?? 0) > 0;
@@ -780,13 +781,13 @@ async function recordObservation(env: Env, facts: CheckFailureFacts): Promise<bo
 
 async function observedConclusions(
   env: Env,
-  facts: CheckFailureFacts
+  facts: CheckFailureFacts,
 ): Promise<{ failures: number; successes: number }> {
   const rows = await env.DB.prepare(
     `SELECT conclusion, COUNT(*) AS n
        FROM ci_check_observation
       WHERE project = ? AND head_sha = ? AND check_name = ?
-      GROUP BY conclusion`
+      GROUP BY conclusion`,
   )
     .bind(facts.project, facts.head_sha, facts.check_name)
     .all<{ conclusion: string; n: number }>();
@@ -809,7 +810,7 @@ async function observedConclusions(
 export async function flakeGate(
   env: Env,
   facts: CheckFailureFacts,
-  reader: CheckHistoryReader
+  reader: CheckHistoryReader,
 ): Promise<FlakeVerdict> {
   const observed = await observedConclusions(env, facts);
 
@@ -835,7 +836,7 @@ export async function flakeGate(
       detail: `could not read ${facts.check_name}'s history on ${facts.head_sha}: ${String(error)}`,
     };
   }
-  if (headHistory !== null && headHistory.includes("success")) {
+  if (headHistory?.includes("success")) {
     return {
       state: "flaky",
       detail:
@@ -877,7 +878,7 @@ export async function flakeGate(
   } catch (error) {
     console.error(
       `factory ci: could not ask GitHub to re-run check ${facts.check_run_id} on ` +
-        `${facts.project}: ${String(error)}`
+        `${facts.project}: ${String(error)}`,
     );
   }
   return { state: "unconfirmed", failures: observed.failures, rerun_requested: requested };
@@ -934,13 +935,13 @@ export type EscalationRecord = {
 export async function escalationFor(
   env: Env,
   project: string,
-  branch: string
+  branch: string,
 ): Promise<EscalationRecord | null> {
   const row = await env.DB.prepare(
     `SELECT project, branch, head_sha, check_name, strikes, opened_at, notified_at,
             state, cleared_at, cleared_by
        FROM ci_escalation
-      WHERE project = ? AND branch = ?`
+      WHERE project = ? AND branch = ?`,
   )
     .bind(project, branch)
     .first<EscalationRecord>();
@@ -954,7 +955,7 @@ export async function listOpenEscalations(env: Env): Promise<EscalationRecord[]>
             state, cleared_at, cleared_by
        FROM ci_escalation
       WHERE state = 'open'
-      ORDER BY opened_at DESC`
+      ORDER BY opened_at DESC`,
   ).all<EscalationRecord>();
   return rows.results ?? [];
 }
@@ -989,7 +990,7 @@ export async function listOpenEscalations(env: Env): Promise<EscalationRecord[]>
 export async function strikeBudget(
   env: Env,
   facts: CheckFailureFacts,
-  now = new Date()
+  now = new Date(),
 ): Promise<StrikeVerdict> {
   const escalation = await escalationFor(env, facts.project, facts.branch);
   if (escalation !== null && escalation.state === "open") {
@@ -1003,7 +1004,7 @@ export async function strikeBudget(
     `SELECT run_id, head_sha, check_name, dispatched_at
        FROM ci_remediation_attempt
       WHERE project = ? AND branch = ? AND dispatched_at >= ?
-      ORDER BY dispatched_at ASC`
+      ORDER BY dispatched_at ASC`,
   )
     .bind(facts.project, facts.branch, since)
     .all<RemediationAttempt>();
@@ -1034,18 +1035,18 @@ export async function strikeBudget(
 export async function clearEscalation(
   env: Env,
   release: { project: string; branch: string; cleared_by?: string },
-  now = new Date()
+  now = new Date(),
 ): Promise<boolean> {
   const cleared = await env.DB.prepare(
     `UPDATE ci_escalation
         SET state = 'cleared', cleared_at = ?, cleared_by = ?
-      WHERE project = ? AND branch = ? AND state = 'open'`
+      WHERE project = ? AND branch = ? AND state = 'open'`,
   )
     .bind(
       now.toISOString(),
       sanitizeUntrustedLine(release.cleared_by ?? "", 120) || null,
       release.project,
-      release.branch
+      release.branch,
     )
     .run();
   return (cleared.meta.changes ?? 0) > 0;
@@ -1068,7 +1069,7 @@ export async function clearEscalation(
 export async function escalate(
   env: Env,
   facts: CheckFailureFacts,
-  verdict: { strikes: number; history: RemediationAttempt[] }
+  verdict: { strikes: number; history: RemediationAttempt[] },
 ): Promise<boolean> {
   const opened = await env.DB.prepare(
     `INSERT INTO ci_escalation
@@ -1081,7 +1082,7 @@ export async function escalate(
        opened_at   = excluded.opened_at,
        notified_at = NULL,
        state       = 'open'
-     WHERE ci_escalation.state = 'cleared'`
+     WHERE ci_escalation.state = 'cleared'`,
   )
     .bind(
       facts.project,
@@ -1089,7 +1090,7 @@ export async function escalate(
       facts.head_sha,
       facts.check_name,
       verdict.strikes,
-      new Date().toISOString()
+      new Date().toISOString(),
     )
     .run();
   if ((opened.meta.changes ?? 0) === 0) return false;
@@ -1100,14 +1101,14 @@ export async function escalate(
   try {
     await sendTelegramReport(env, escalationReport(facts, verdict));
     await env.DB.prepare(
-      `UPDATE ci_escalation SET notified_at = ? WHERE project = ? AND branch = ?`
+      `UPDATE ci_escalation SET notified_at = ? WHERE project = ? AND branch = ?`,
     )
       .bind(new Date().toISOString(), facts.project, facts.branch)
       .run();
   } catch (error) {
     console.error(
       `factory ci: escalation for ${facts.project} ${facts.branch} was recorded but could not ` +
-        `be delivered: ${String(error)}`
+        `be delivered: ${String(error)}`,
     );
   }
   return true;
@@ -1124,10 +1125,12 @@ export async function escalate(
  */
 export function escalationReport(
   facts: CheckFailureFacts,
-  verdict: { strikes: number; history: RemediationAttempt[] }
+  verdict: { strikes: number; history: RemediationAttempt[] },
 ): string {
   const attempts = verdict.history
-    .map((a, i) => `  ${i + 1}. run ${a.run_id} on ${a.head_sha.slice(0, 12)} at ${a.dispatched_at}`)
+    .map(
+      (a, i) => `  ${i + 1}. run ${a.run_id} on ${a.head_sha.slice(0, 12)} at ${a.dispatched_at}`,
+    )
     .join("\n");
   return (
     `CI remediation struck out on ${facts.project} ${facts.branch}.\n` +
@@ -1176,13 +1179,13 @@ export const REMEDIATION_CREDENTIAL_GRADE: RunCredentialGrade = credentialGrade(
 export async function dispatchRemediation(
   env: Env,
   facts: CheckFailureFacts,
-  verdict: { strikes: number }
+  verdict: { strikes: number },
 ): Promise<RemediationDecision> {
   if (branchOwner(facts.branch) !== "factory") {
     throw new Error(
       `factory ci: refusing to dispatch against ${String(facts.branch)}, which is not a ` +
         "factory-owned branch; this is unreachable through classifyCheckEvent and means a caller " +
-        "cast past FactoryOwnedBranch"
+        "cast past FactoryOwnedBranch",
     );
   }
   // And the record, re-read here for the same reason the name is (tick t4y).
@@ -1194,11 +1197,10 @@ export async function dispatchRemediation(
     throw new Error(
       `factory ci: refusing to dispatch against ${String(facts.branch)}, which no record says ` +
         "this factory created; this is unreachable through remediateCheckFailure and means a " +
-        `caller skipped the ownership door (answer it at POST ${CI_BRANCHES_PATH})`
+        `caller skipped the ownership door (answer it at POST ${CI_BRANCHES_PATH})`,
     );
   }
 
-  const runID = newRunID();
   const traceID = newTraceID();
   const submission: RunSubmission = {
     project: facts.project,
@@ -1225,7 +1227,7 @@ export async function dispatchRemediation(
   await env.DB.prepare(
     `INSERT INTO ci_remediation_attempt
        (run_id, project, branch, head_sha, check_name, trace_id, dispatched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       result.started.run.run_id,
@@ -1234,7 +1236,7 @@ export async function dispatchRemediation(
       facts.head_sha,
       facts.check_name,
       traceID,
-      new Date().toISOString()
+      new Date().toISOString(),
     )
     .run();
 
@@ -1251,7 +1253,7 @@ export const REMEDIATION_ACTOR = "ci-remediation";
 
 async function logCIDispatch(
   env: Env,
-  entry: { epic: string; decision: string; reason: DispatchReason | null }
+  entry: { epic: string; decision: string; reason: DispatchReason | null },
 ): Promise<void> {
   await insertDispatchLog(env.DB, {
     // A refusal has no run behind it, so the decision gets its own id — the
@@ -1277,7 +1279,7 @@ async function logCIDispatch(
 export async function remediateCheckFailure(
   env: Env,
   payload: unknown,
-  reader?: CheckHistoryReader
+  reader?: CheckHistoryReader,
 ): Promise<RemediationDecision> {
   const classified = classifyCheckEvent(payload);
 

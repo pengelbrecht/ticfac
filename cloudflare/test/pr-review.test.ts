@@ -1,41 +1,41 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { REVIEW_PREFIX, isAuthExempt } from "../src/auth";
+import { isAuthExempt, REVIEW_PREFIX } from "../src/auth";
+import { DEFAULT_CONSENT_LABEL } from "../src/consent";
 import {
-  GIT_PATH_PREFIX,
   containerGitToken,
   credentialGrade,
+  GIT_PATH_PREFIX,
   planSandboxGit,
   proxyGitRequest,
 } from "../src/credentials";
 import { enrolProject, getRun } from "../src/db";
 import { issueRunToken } from "../src/gateway";
-import { DEFAULT_CONSENT_LABEL } from "../src/consent";
 import { GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
 import {
-  FACTORY_LINE_PREFIX,
-  REVIEW_BUDGET_PER_DAY,
-  REVIEW_BUDGET_WINDOW_MS,
-  REVIEW_PATH,
-  WRITE_ACCESS_ASSOCIATIONS,
-  classifyPullRequestEvent,
   claimPullRequestReview,
+  classifyPullRequestEvent,
+  FACTORY_LINE_PREFIX,
   getReviewByNode,
   getReviewForRun,
   hasWriteAccess,
   ingestPullRequestEvent,
+  type PullRequestFacts,
+  REVIEW_BUDGET_PER_DAY,
+  REVIEW_BUDGET_WINDOW_MS,
+  REVIEW_PATH,
+  type ReviewCommenter,
   renderReviewComment,
   reviewBudget,
   reviewConsent,
   reviewEpic,
   reviewGradeComplaint,
   reviewRunSubmission,
-  type PullRequestFacts,
-  type ReviewCommenter,
+  WRITE_ACCESS_ASSOCIATIONS,
 } from "../src/pr-review";
 import { orchestratorEnv, repoURL } from "../src/sandbox";
-import { UNTRUSTED_LINE_PREFIX, TRUNCATION_MARKER } from "../src/untrusted-text";
+import { TRUNCATION_MARKER, UNTRUSTED_LINE_PREFIX } from "../src/untrusted-text";
 
 /**
  * Read-only pull request review runs (UC5, tick v7g) — the first autonomous
@@ -196,7 +196,7 @@ function factsOf(payload: unknown): PullRequestFacts {
 /** A dispatched review run, from a real ingestion, with a live sandbox credential. */
 async function dispatched(
   project: string,
-  payload?: unknown
+  payload?: unknown,
 ): Promise<{ run_id: string; token: string; pr: number }> {
   const result = await ingestPullRequestEvent(env, payload ?? prPayload(project));
   expect(result.state).toBe("dispatched");
@@ -237,7 +237,9 @@ function lineKinds(body: string): { factory: number; untrusted: number; other: s
 
 describe("what a pull_request delivery is", () => {
   it("reviews an opened pull request, from structural fields only", () => {
-    const verdict = classifyPullRequestEvent(prPayload("acme/widgets"), { label: DEFAULT_CONSENT_LABEL });
+    const verdict = classifyPullRequestEvent(prPayload("acme/widgets"), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     expect(verdict.verdict).toBe("review");
     if (verdict.verdict !== "review") throw new Error("unreachable");
     expect(verdict.facts.project).toBe("acme/widgets");
@@ -250,36 +252,54 @@ describe("what a pull_request delivery is", () => {
   });
 
   it("ignores a draft, a closed pull request, and every non-reviewing action", () => {
-    const draft = classifyPullRequestEvent(prPayload("acme/widgets", {}, { draft: true }), { label: DEFAULT_CONSENT_LABEL });
+    const draft = classifyPullRequestEvent(prPayload("acme/widgets", {}, { draft: true }), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     expect(draft).toMatchObject({ verdict: "ignored", reason: "draft" });
 
-    const closed = classifyPullRequestEvent(prPayload("acme/widgets", {}, { state: "closed" }), { label: DEFAULT_CONSENT_LABEL });
+    const closed = classifyPullRequestEvent(prPayload("acme/widgets", {}, { state: "closed" }), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     expect(closed).toMatchObject({ verdict: "ignored", reason: "pull_request_closed" });
 
     // A push to the branch: fires on every commit, so it is not a review
     // trigger — an unbounded spend lever is not an autonomous loop.
-    const pushed = classifyPullRequestEvent(prPayload("acme/widgets", { action: "synchronize" }), { label: DEFAULT_CONSENT_LABEL });
+    const pushed = classifyPullRequestEvent(prPayload("acme/widgets", { action: "synchronize" }), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     expect(pushed).toMatchObject({ verdict: "ignored", reason: "not_a_reviewing_action" });
 
-    const closing = classifyPullRequestEvent(prPayload("acme/widgets", { action: "closed" }), { label: DEFAULT_CONSENT_LABEL });
+    const closing = classifyPullRequestEvent(prPayload("acme/widgets", { action: "closed" }), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     expect(closing).toMatchObject({ verdict: "ignored", reason: "not_a_reviewing_action" });
   });
 
   it("refuses a payload it cannot key or clone", () => {
-    expect(classifyPullRequestEvent(prPayload("acme/widgets", {}, { node_id: "" }), { label: DEFAULT_CONSENT_LABEL })).toMatchObject({
+    expect(
+      classifyPullRequestEvent(prPayload("acme/widgets", {}, { node_id: "" }), {
+        label: DEFAULT_CONSENT_LABEL,
+      }),
+    ).toMatchObject({
       verdict: "refused",
       reason: "invalid_payload",
     });
     expect(
-      classifyPullRequestEvent(prPayload("acme/widgets", {}, { base: { sha: "not-a-sha" } }), { label: DEFAULT_CONSENT_LABEL })
+      classifyPullRequestEvent(prPayload("acme/widgets", {}, { base: { sha: "not-a-sha" } }), {
+        label: DEFAULT_CONSENT_LABEL,
+      }),
     ).toMatchObject({ verdict: "refused", reason: "invalid_payload" });
-    expect(classifyPullRequestEvent("a pull request, honest", { label: DEFAULT_CONSENT_LABEL })).toMatchObject({
+    expect(
+      classifyPullRequestEvent("a pull request, honest", { label: DEFAULT_CONSENT_LABEL }),
+    ).toMatchObject({
       verdict: "refused",
     });
   });
 
   it("submits the review read-only, at the base commit, never the head", () => {
-    const verdict = classifyPullRequestEvent(prPayload("acme/widgets"), { label: DEFAULT_CONSENT_LABEL });
+    const verdict = classifyPullRequestEvent(prPayload("acme/widgets"), {
+      label: DEFAULT_CONSENT_LABEL,
+    });
     if (verdict.verdict !== "review") throw new Error("unreachable");
     const submission = reviewRunSubmission(verdict.facts);
     expect(submission.credential_grade).toBe("read_only");
@@ -341,9 +361,9 @@ describe("who may buy a review run", () => {
 
     // A head repository GitHub could not name (the fork was deleted before
     // delivery) reads as a fork, which is the conservative direction.
-    expect(factsOf(prPayload("acme/widgets", {}, { head: { sha: "a".repeat(40) } })).from_fork).toBe(
-      true
-    );
+    expect(
+      factsOf(prPayload("acme/widgets", {}, { head: { sha: "a".repeat(40) } })).from_fork,
+    ).toBe(true);
 
     // A payload with no association at all is a stranger, not a default.
     const bare = factsOf(prPayload("acme/widgets", {}, { author_association: undefined }));
@@ -351,11 +371,11 @@ describe("who may buy a review run", () => {
 
     // The label is matched case-insensitively, as GitHub's own uniqueness is.
     expect(factsOf(prPayload("acme/widgets", {}, withConsent())).consented).toBe(true);
+    expect(factsOf(prPayload("acme/widgets", {}, { labels: [{ name: "TK" }] })).consented).toBe(
+      true,
+    );
     expect(
-      factsOf(prPayload("acme/widgets", {}, { labels: [{ name: "TK" }] })).consented
-    ).toBe(true);
-    expect(
-      factsOf(prPayload("acme/widgets", {}, { labels: [{ name: "tkx" }, "bug"] })).consented
+      factsOf(prPayload("acme/widgets", {}, { labels: [{ name: "tkx" }, "bug"] })).consented,
     ).toBe(false);
   });
 
@@ -405,7 +425,7 @@ describe("who may buy a review run", () => {
     const project = await enrolled();
     const result = await ingestPullRequestEvent(
       env,
-      strangerPayload(project, {}, { author_association: "CONTRIBUTOR" })
+      strangerPayload(project, {}, { author_association: "CONTRIBUTOR" }),
     );
     expect(result).toMatchObject({ state: "ignored", reason: "author_not_trusted" });
   });
@@ -420,7 +440,11 @@ describe("who may buy a review run", () => {
     // because somebody applied a label afterwards.
     const consented = await ingestPullRequestEvent(
       env,
-      strangerPayload(project, { action: "labeled", label: { name: DEFAULT_CONSENT_LABEL } }, withConsent())
+      strangerPayload(
+        project,
+        { action: "labeled", label: { name: DEFAULT_CONSENT_LABEL } },
+        withConsent(),
+      ),
     );
     expect(consented.state).toBe("dispatched");
     if (consented.state !== "dispatched") throw new Error("unreachable");
@@ -433,7 +457,11 @@ describe("who may buy a review run", () => {
     const project = await enrolled();
     const result = await ingestPullRequestEvent(
       env,
-      strangerPayload(project, { action: "unlabeled", label: { name: DEFAULT_CONSENT_LABEL } }, withConsent())
+      strangerPayload(
+        project,
+        { action: "unlabeled", label: { name: DEFAULT_CONSENT_LABEL } },
+        withConsent(),
+      ),
     );
     expect(result).toMatchObject({ state: "ignored", reason: "not_a_reviewing_action" });
   });
@@ -444,13 +472,13 @@ describe("who may buy a review run", () => {
 
     const wrongLabel = await ingestPullRequestEvent(
       env,
-      strangerPayload(project, {}, withConsent())
+      strangerPayload(project, {}, withConsent()),
     );
     expect(wrongLabel).toMatchObject({ state: "ignored", reason: "author_not_trusted" });
 
     const right = await ingestPullRequestEvent(
       env,
-      strangerPayload(project, {}, { labels: [{ name: "review-me" }] })
+      strangerPayload(project, {}, { labels: [{ name: "review-me" }] }),
     );
     expect(right.state).toBe("dispatched");
   });
@@ -570,7 +598,7 @@ describe("a pull request opened against an enrolled repository", () => {
     const result = await ingestPullRequestEvent(env, payload);
     expect(result).toMatchObject({ state: "ignored", reason: "project_not_enrolled" });
     // And no claim row either: an unenrolled repository cannot fill this table.
-    const node = ((payload as { pull_request: { node_id: string } }).pull_request.node_id);
+    const node = (payload as { pull_request: { node_id: string } }).pull_request.node_id;
     expect(await getReviewByNode(env.DB, node)).toBeNull();
   });
 
@@ -630,22 +658,24 @@ describe("the review run attempting to push", () => {
     // Exactly what `git push` sends: the advertisement, then the RPC.
     const advertisement = await proxyGitRequest(
       env,
-      new Request(
-        `${BASE}${GIT_PATH_PREFIX}/${project}.git/info/refs?service=git-receive-pack`,
-        { headers: { authorization: gitBasic } }
-      ),
+      new Request(`${BASE}${GIT_PATH_PREFIX}/${project}.git/info/refs?service=git-receive-pack`, {
+        headers: { authorization: gitBasic },
+      }),
       [owner, `${repo}.git`, "info", "refs"],
-      { fetcher }
+      { fetcher },
     );
     const push = await proxyGitRequest(
       env,
       new Request(`${BASE}${GIT_PATH_PREFIX}/${project}.git/git-receive-pack`, {
         method: "POST",
-        headers: { authorization: gitBasic, "content-type": "application/x-git-receive-pack-request" },
+        headers: {
+          authorization: gitBasic,
+          "content-type": "application/x-git-receive-pack-request",
+        },
         body: "0000",
       }),
       [owner, `${repo}.git`, "git-receive-pack"],
-      { fetcher }
+      { fetcher },
     );
 
     expect(advertisement.status).toBe(403);
@@ -715,7 +745,7 @@ describe("the review run attempting to push", () => {
         headers: { authorization: `Basic ${btoa(`x-access-token:${token}`)}` },
       }),
       [owner, `${repo}.git`, "info", "refs"],
-      { fetcher }
+      { fetcher },
     );
     expect(read.status).toBe(200);
     expect(target).toContain(`https://github.com/${project}.git/info/refs`);

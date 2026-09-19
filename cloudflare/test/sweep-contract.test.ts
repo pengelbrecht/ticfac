@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
-
-import contract from "../../contracts/sweep-selection-contract.json";
 import parityCases from "../../contracts/sweep-policy-cases.json";
+import contract from "../../contracts/sweep-selection-contract.json";
 import {
   CLOSED_STATUS,
-  SWEEP_GATES,
-  SWEEP_ORDER,
-  SWEEP_TIERS,
   declaredSweeps,
   effectiveSweepPolicy,
   parseSweepCandidate,
-  selectSweep,
+  SWEEP_GATES,
+  SWEEP_ORDER,
+  SWEEP_TIERS,
   type SweepCandidate,
+  selectSweep,
 } from "../src/sweeps";
 
 /**
@@ -44,7 +43,7 @@ describe("sweep selection contract", () => {
         [FIELDS.labels]: ["sweep"],
         [FIELDS.blocked_by]: ["aaa"],
         [FIELDS.requires]: "approval",
-      })
+      }),
     );
     expect(candidate).toEqual({
       id: "swp",
@@ -64,7 +63,7 @@ describe("sweep selection contract", () => {
       const value = field === FIELDS.manual ? true : "input";
       const candidate = parseSweepCandidate(goRecord({ [FIELDS.id]: "swp", [field]: value }));
       expect(candidate!.awaiting_human, field).toBe(
-        field === FIELDS.manual ? contract.awaiting_human.manual_true_means_awaiting : true
+        field === FIELDS.manual ? contract.awaiting_human.manual_true_means_awaiting : true,
       );
     }
     // Both are omitempty in Go, so absent is the common case and must read as
@@ -105,7 +104,7 @@ budget_usd = 1
       [
         { ...base, id: "aaa", created_at: "2026-08-01T00:00:00Z" },
         { ...base, id: "bbb", created_at: "2020-01-01T00:00:00Z" },
-      ]
+      ],
     );
     expect(contract.order.age_is_oldest_first).toBe(true);
     expect(selection.selected).toEqual(["bbb", "aaa"]);
@@ -117,9 +116,11 @@ budget_usd = 1
 
     const example = contract.declaration.example as Record<string, unknown>;
     const lines = Object.entries(example).map(([key, value]) =>
-      typeof value === "string" ? `${key} = ${JSON.stringify(value)}` : `${key} = ${value}`
+      typeof value === "string" ? `${key} = ${JSON.stringify(value)}` : `${key} = ${value}`,
     );
-    const [policy] = declaredSweeps(`[${contract.declaration.table}.parity]\n${lines.join("\n")}\n`);
+    const [policy] = declaredSweeps(
+      `[${contract.declaration.table}.parity]\n${lines.join("\n")}\n`,
+    );
     expect(policy!.name).toBe("parity");
     expect(policy!.cron).toBe(example.cron);
     expect(policy!.max_ticks).toBe(example.max_ticks);
@@ -130,7 +131,7 @@ budget_usd = 1
       const without = lines.filter((line) => !line.startsWith(`${required} `));
       expect(
         () => declaredSweeps(`[${contract.declaration.table}.parity]\n${without.join("\n")}\n`),
-        required
+        required,
       ).toThrow(new RegExp(`${required} is required`));
     }
   });
@@ -139,8 +140,8 @@ budget_usd = 1
     expect(() =>
       declaredSweeps(
         `[${contract.declaration.table}.parity]\ncron = "0 4 * * *"\nfilter = "type:bug"\n` +
-          "max_ticks = 1\nbudget_usd = 1\nnot_a_key = 1\n"
-      )
+          "max_ticks = 1\nbudget_usd = 1\nnot_a_key = 1\n",
+      ),
     ).toThrow(/not a key this reader knows/);
     expect(contract.declaration.keys).not.toContain("not_a_key");
   });
@@ -168,7 +169,10 @@ describe("sweep policy parity with the tk reader", () => {
         return;
       }
       const declared = declaredSweeps(testCase.toml);
-      expect(declared.map((policy) => policy.name), testCase.why).toEqual(testCase.sweeps ?? []);
+      expect(
+        declared.map((policy) => policy.name),
+        testCase.why,
+      ).toEqual(testCase.sweeps ?? []);
     });
   }
 });

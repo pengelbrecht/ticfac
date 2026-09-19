@@ -70,7 +70,7 @@ function normalizeNewlines(text: string): string {
  */
 export function sanitizeUntrusted(
   raw: unknown,
-  bounds: { maxChars?: number; maxLines?: number } = {}
+  bounds: { maxChars?: number; maxLines?: number } = {},
 ): string {
   if (typeof raw !== "string") return "";
   const maxChars = bounds.maxChars ?? MAX_UNTRUSTED_CHARS;
@@ -79,7 +79,10 @@ export function sanitizeUntrusted(
   let text = normalizeNewlines(raw).replace(INVISIBLE, "");
   // Lone surrogates survive JSON but not a round trip through TextEncoder;
   // dropping them here keeps the committed record byte-stable.
-  text = text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  text = text.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    "",
+  );
   // Trailing whitespace per line, then runs of blank lines: a body padded with
   // 4,000 empty lines is a way to push the real content out of a message.
   text = text
@@ -111,10 +114,7 @@ export function sanitizeUntrusted(
  */
 export function sanitizeUntrustedLine(raw: unknown, maxChars: number): string {
   if (typeof raw !== "string") return "";
-  const text = normalizeNewlines(raw)
-    .replace(INVISIBLE, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const text = normalizeNewlines(raw).replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
   return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
 }
 

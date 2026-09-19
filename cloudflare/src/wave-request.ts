@@ -69,7 +69,7 @@
  * naming the ticks.
  */
 
-import { readWaveRequest, writeWaveRequest, type WaveRequest } from "./artifacts";
+import { readWaveRequest, type WaveRequest, writeWaveRequest } from "./artifacts";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor, tickIDsField } from "./runs";
@@ -134,7 +134,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
     return refuse(
       400,
       "invalid_request",
-      `epic must be ${JSON.stringify(run.epic)}, the epic run ${run.run_id} is working on`
+      `epic must be ${JSON.stringify(run.epic)}, the epic run ${run.run_id} is working on`,
     );
   }
 
@@ -144,7 +144,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       400,
       "invalid_request",
       "pass must be the positive integer this container was booted with (TICKS_PASS); " +
-        "a container booted without one is not a dispatching pass"
+        "a container booted without one is not a dispatching pass",
     );
   }
   if (pass > MAX_RUN_WAVES) {
@@ -152,7 +152,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       429,
       "wave_limit",
       `run ${run.run_id} has already reached its ceiling of ${MAX_RUN_WAVES} container wave(s); ` +
-        "finish the epic on what is dispatched, or submit the remainder as a new run"
+        "finish the epic on what is dispatched, or submit the remainder as a new run",
     );
   }
 
@@ -164,7 +164,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       400,
       "invalid_request",
       "base_sha must be the full 40-character commit the wave's containers clone at — " +
-        "the run branch head this pass pushed, not the run's original base"
+        "the run branch head this pass pushed, not the run's original base",
     );
   }
 
@@ -176,7 +176,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       400,
       "invalid_request",
       "tick_ids must name at least one tick; a pass with nothing ready does not request a " +
-        "wave at all — it finishes the epic and exits"
+        "wave at all — it finishes the epic and exits",
     );
   }
 
@@ -190,7 +190,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       409,
       "lease_lost",
       `run ${run.run_id} no longer holds the dispatch lease for ${run.project} — it expired, ` +
-        "which means this run is no longer the project's arbiter and must not boot containers"
+        "which means this run is no longer the project's arbiter and must not boot containers",
     );
   }
   if (lease.run_id !== run.run_id) {
@@ -198,7 +198,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       409,
       "lease_held_by",
       `the dispatch lease for ${run.project} is held by ${lease.run_id}, not ${run.run_id}; ` +
-        "one arbiter per project (D4), and this run is not it"
+        "one arbiter per project (D4), and this run is not it",
     );
   }
 
@@ -220,7 +220,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
     run.project,
     run.epic,
     raw.base_sha,
-    tickIDs
+    tickIDs,
   );
   if (membership.state === "outside") {
     return refuse(400, "tick_outside_epic", membership.detail);
@@ -228,7 +228,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
   if (membership.state === "unreadable") {
     console.error(
       `factory wave: run ${run.run_id} dispatching ${tickIDs.length} tick(s) unverified — ` +
-        `the tracker for epic ${run.epic} could not be read at ${raw.base_sha}: ${membership.detail}`
+        `the tracker for epic ${run.epic} could not be read at ${raw.base_sha}: ${membership.detail}`,
     );
   }
 
@@ -252,7 +252,7 @@ export async function requestWave(env: Env, request: Request): Promise<WaveReque
       503,
       "wave_not_recorded",
       `the wave for run ${run.run_id} could not be stored; do not exit this pass — retry, and ` +
-        "if it keeps failing, finish the epic on what is already dispatched"
+        "if it keeps failing, finish the epic on what is already dispatched",
     );
   }
   return { ok: true, request: recorded };

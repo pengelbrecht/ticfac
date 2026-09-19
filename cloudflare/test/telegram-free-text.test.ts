@@ -79,7 +79,8 @@ function fakeBotAPI() {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith("https://telegram.test/")) return original(input as RequestInfo, init);
     const method = url.slice(url.lastIndexOf("/") + 1);
-    const body = init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
+    const body =
+      init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
     return Response.json({
       ok: true,
@@ -108,7 +109,9 @@ function post(path: string, body?: unknown) {
 let counter = 0;
 async function enrol(name: string): Promise<string> {
   const project = `ticks-freetext/${name}-${counter++}`;
-  expect((await post("/api/projects", { project, requested_by: "operator@example.com" })).status).toBe(201);
+  expect(
+    (await post("/api/projects", { project, requested_by: "operator@example.com" })).status,
+  ).toBe(201);
   return project;
 }
 
@@ -168,10 +171,9 @@ function replyText(text: string, replyTo: number, messageID = 901) {
 }
 
 async function resolutionOf(project: string, id: string) {
-  const res = await SELF.fetch(
-    `${BASE}/api/projects/${project}/pending?include_resolved=true`,
-    { headers: auth() }
-  );
+  const res = await SELF.fetch(`${BASE}/api/projects/${project}/pending?include_resolved=true`, {
+    headers: auth(),
+  });
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
     pending: { id: string; resolution?: { outcome: { text?: string }; answered_by: string } }[];

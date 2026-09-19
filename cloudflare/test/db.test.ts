@@ -2,23 +2,23 @@ import { applyD1Migrations, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
   DISPATCH_REASONS,
+  type DispatchLog,
+  type DispatchReason,
+  type EnrolledProject,
   enrolProject,
   getEnrolledProject,
   getRun,
-  listEnrolledProjects,
-  listRuns,
-  removeEnrolledProject,
-  updateRunState,
   getSignal,
   insertDispatchLog,
   insertRun,
   insertSignal,
   listDispatchLogs,
-  type DispatchReason,
-  type DispatchLog,
-  type EnrolledProject,
+  listEnrolledProjects,
+  listRuns,
   type Run,
+  removeEnrolledProject,
   type Signal,
+  updateRunState,
 } from "../src/db";
 
 describe("factory D1 query layer", () => {
@@ -27,16 +27,12 @@ describe("factory D1 query layer", () => {
     await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 
     const tables = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?) ORDER BY name"
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?) ORDER BY name",
     )
       .bind("dispatch_log", "runs", "signals")
       .all<{ name: string }>();
 
-    expect(tables.results.map(({ name }) => name)).toEqual([
-      "dispatch_log",
-      "runs",
-      "signals",
-    ]);
+    expect(tables.results.map(({ name }) => name)).toEqual(["dispatch_log", "runs", "signals"]);
   });
 
   it("round-trips a run through the migrated D1 table", async () => {
@@ -123,7 +119,7 @@ describe("factory D1 query layer", () => {
 
     await expect(listRuns(env.DB, { project: "ticks/state" })).resolves.toHaveLength(1);
     await expect(listRuns(env.DB, { project: "ticks/state", state: "starting" })).resolves.toEqual(
-      []
+      [],
     );
     // A state change for a run that does not exist is not an error, it is null.
     await expect(updateRunState(env.DB, "run-missing", "failed")).resolves.toBeNull();
@@ -156,16 +152,16 @@ describe("factory D1 query layer", () => {
   it("rejects a dispatch reason outside the policy vocabulary", async () => {
     await expect(
       env.DB.prepare(
-        'INSERT INTO dispatch_log (run_id, tick_id, decision, reason, "at") VALUES (?, ?, ?, ?, ?)'
+        'INSERT INTO dispatch_log (run_id, tick_id, decision, reason, "at") VALUES (?, ?, ?, ?, ?)',
       )
         .bind(
           "run-invalid-reason",
           "tick-invalid-reason",
           "refused",
           "unknown",
-          "2026-08-19T12:03:00.000Z"
+          "2026-08-19T12:03:00.000Z",
         )
-        .run()
+        .run(),
     ).rejects.toThrow();
   });
 });

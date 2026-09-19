@@ -59,21 +59,22 @@
  * column 0 with `<b>`, and the invariant holds over the composed message.
  */
 
-import { getEnrolledProject, listEnrolledProjects, type EnrolledProject } from "./db";
+import { type EnrolledProject, getEnrolledProject, listEnrolledProjects } from "./db";
+import type { Env } from "./index";
 import { contextLine, type MessageContext } from "./message-context";
 import { parseSubmission, submitRun } from "./runs";
 import {
   DRAFT_ACTIONS,
-  inboxFor,
   type Draft,
   type DraftAction,
   type DraftDecision,
+  inboxFor,
 } from "./signal-inbox";
 import {
   editTelegramHTML,
   escapeHTML,
-  sendTelegramHTML,
   type InlineButton,
+  sendTelegramHTML,
   type TelegramRuntimeEnv,
 } from "./telegram";
 // Straight from the shared module rather than through `github-issues.ts`'s
@@ -81,8 +82,6 @@ import {
 // generic sanitiser through one source's module is how the next reader learns
 // the wrong thing about who owns it.
 import { sanitizeUntrustedLine } from "./untrusted-text";
-
-import type { Env } from "./index";
 
 /** The callback namespace for a decision. `q:`/`r:` are the RunRoom's; this is not one. */
 export const DRAFT_CALLBACK_PREFIX = "d";
@@ -231,7 +230,7 @@ function fallbackBlock(draft: Draft): string {
     "<b>Draft tick — nothing runs until a human says so</b>",
     `<b>Project:</b> ${escapeHTML(draft.project)}`,
     `<b>Source:</b> ${escapeHTML(draft.source)} — ${escapeHTML(
-      sanitizeUntrustedLine(draft.external_ref, MAX_RENDERED_EXTERNAL_REF)
+      sanitizeUntrustedLine(draft.external_ref, MAX_RENDERED_EXTERNAL_REF),
     )}`,
     `<b>Title:</b> ${escapeHTML(sanitizeUntrustedLine(draft.title, 180))}`,
   ].join("\n");
@@ -280,9 +279,7 @@ export function draftKeyboard(draft: Draft): InlineButton[][] {
 
 /** Which topic this project's messages go into, from its enrolment record. */
 function routingFor(enrolment: EnrolledProject): { topic_id?: string } {
-  return enrolment.telegram_topic_id === undefined
-    ? {}
-    : { topic_id: enrolment.telegram_topic_id };
+  return enrolment.telegram_topic_id === undefined ? {} : { topic_id: enrolment.telegram_topic_id };
 }
 
 /**
@@ -295,7 +292,7 @@ function routingFor(enrolment: EnrolledProject): { topic_id?: string } {
 export async function deliverDraft(
   env: Env,
   enrolment: EnrolledProject,
-  draft: Draft
+  draft: Draft,
 ): Promise<Draft> {
   const ref = await sendTelegramHTML(env as TelegramRuntimeEnv, renderDraft(draft), {
     ...routingFor(enrolment),
@@ -319,9 +316,14 @@ async function refreshDraft(env: Env, draft: Draft): Promise<void> {
 /** Settles a proposal's message: the decision, and no buttons left to press. */
 async function settleDraftMessage(env: Env, draft: Draft, footer: string): Promise<void> {
   if (draft.message === null) return;
-  await editTelegramHTML(env as TelegramRuntimeEnv, draft.message, renderDecidedDraft(draft, footer), {
-    keyboard: [],
-  });
+  await editTelegramHTML(
+    env as TelegramRuntimeEnv,
+    draft.message,
+    renderDecidedDraft(draft, footer),
+    {
+      keyboard: [],
+    },
+  );
 }
 
 // ------------------------------------------------------------- the decision ---
@@ -359,10 +361,10 @@ export type DraftLookup =
 export async function findDraft(
   env: Env,
   projectHandleWanted: string,
-  draftID: string
+  draftID: string,
 ): Promise<DraftLookup> {
   const candidates = (await listEnrolledProjects(env.DB)).filter(
-    (enrolment) => projectHandle(enrolment.project) === projectHandleWanted
+    (enrolment) => projectHandle(enrolment.project) === projectHandleWanted,
   );
   const found: { enrolment: EnrolledProject; draft: Draft }[] = [];
   for (const enrolment of candidates) {
@@ -391,7 +393,7 @@ export type DraftPressResult = {
 export async function handleDraftPress(
   env: Env,
   callback: DraftCallback,
-  decidedBy: string
+  decidedBy: string,
 ): Promise<DraftPressResult> {
   const found = await findDraft(env, callback.project_handle, callback.draft_id);
   if (found.state === "unknown") {
@@ -407,7 +409,7 @@ export async function handleDraftPress(
     // pair exists to prevent.
     console.error(
       `factory drafts: press ${callback.project_handle}:${callback.draft_id} names ` +
-        `${found.projects.join(" and ")}; nothing was decided`
+        `${found.projects.join(" and ")}; nothing was decided`,
     );
     return {
       toast: "That press names more than one proposal. Nothing was decided.",
@@ -427,7 +429,7 @@ export async function handleDraftPress(
     const edit = await inboxFor(env, found.draft.project).setDraftType(
       found.draft.id,
       callback.type,
-      decidedBy
+      decidedBy,
     );
     if (!edit.ok) {
       return {
@@ -439,7 +441,7 @@ export async function handleDraftPress(
       };
     }
     await refreshDraft(env, edit.draft).catch((error) =>
-      console.error(`factory drafts: retype render failed for ${edit.draft.id}: ${String(error)}`)
+      console.error(`factory drafts: retype render failed for ${edit.draft.id}: ${String(error)}`),
     );
     return {
       toast: `This would be filed as a ${callback.type}.`,
@@ -450,7 +452,7 @@ export async function handleDraftPress(
   const decision = await inboxFor(env, found.draft.project).decide(
     found.draft.id,
     callback.action,
-    decidedBy
+    decidedBy,
   );
   return await presentDecision(env, enrolment, callback.action, decision, decidedBy);
 }
@@ -460,7 +462,7 @@ async function presentDecision(
   enrolment: EnrolledProject,
   action: DraftAction,
   decision: DraftDecision,
-  decidedBy: string
+  decidedBy: string,
 ): Promise<DraftPressResult> {
   if (decision.state === "unknown_draft") {
     return {
@@ -509,9 +511,9 @@ async function presentDecision(
       env,
       draft,
       `<b>Discarded by ${escapeHTML(decidedBy)}.</b> Nothing was filed. The signal is settled, ` +
-        "so its source will not propose it again."
+        "so its source will not propose it again.",
     ).catch((error) =>
-      console.error(`factory drafts: discard render failed for ${draft.id}: ${String(error)}`)
+      console.error(`factory drafts: discard render failed for ${draft.id}: ${String(error)}`),
     );
     return {
       toast: "Discarded. Nothing was filed.",
@@ -538,9 +540,9 @@ async function presentDecision(
       draft,
       `<b>Already filed as tick ${escapeHTML(decision.tick_id)}</b> in ${escapeHTML(draft.project)}. ` +
         "An earlier press committed it and this factory was interrupted before it could say so; " +
-        "the tracker has been checked and nothing was filed twice."
+        "the tracker has been checked and nothing was filed twice.",
     ).catch((error) =>
-      console.error(`factory drafts: reconcile render failed for ${draft.id}: ${String(error)}`)
+      console.error(`factory drafts: reconcile render failed for ${draft.id}: ${String(error)}`),
     );
     return {
       toast: `Already filed as tick ${decision.tick_id}.`,
@@ -565,7 +567,7 @@ async function presentDecision(
 
   if (action === "create") {
     await settleDraftMessage(env, draft, filed).catch((error) =>
-      console.error(`factory drafts: create render failed for ${draft.id}: ${String(error)}`)
+      console.error(`factory drafts: create render failed for ${draft.id}: ${String(error)}`),
     );
     return {
       toast: `Created tick ${decision.tick_id}.`,
@@ -589,7 +591,7 @@ async function presentDecision(
       ? `${filed}\n<b>The run did not start:</b> ${escapeHTML(ignition.detail)}`
       : `${filed}\n<b>Run ${escapeHTML(ignition.run_id)} started.</b>`;
   await settleDraftMessage(env, ignition.draft, decided).catch((error) =>
-    console.error(`factory drafts: dispatch render failed for ${draft.id}: ${String(error)}`)
+    console.error(`factory drafts: dispatch render failed for ${draft.id}: ${String(error)}`),
   );
   void enrolment;
   return {
@@ -633,7 +635,7 @@ async function igniteDraft(
   draft: Draft,
   tickID: string,
   commitSHA: string,
-  requestedBy: string
+  requestedBy: string,
 ): Promise<{ run_id: string | null; detail: string; draft: Draft }> {
   const parent = draft.signal.parent;
   const parsed = parseSubmission({
@@ -681,7 +683,11 @@ async function igniteDraft(
  * moment `submit` returns, and a Telegram outage must not turn a settled
  * ingestion into a redelivery that proposes it a second time.
  */
-export async function announceDraft(env: Env, project: string, draftID: string): Promise<Draft | null> {
+export async function announceDraft(
+  env: Env,
+  project: string,
+  draftID: string,
+): Promise<Draft | null> {
   const enrolment = await getEnrolledProject(env.DB, project);
   if (enrolment === null) return null;
   const draft = await inboxFor(env, project).getDraft(draftID);
@@ -689,7 +695,9 @@ export async function announceDraft(env: Env, project: string, draftID: string):
   try {
     return await deliverDraft(env, enrolment, draft);
   } catch (error) {
-    console.error(`factory drafts: could not post draft ${draftID} for ${project}: ${String(error)}`);
+    console.error(
+      `factory drafts: could not post draft ${draftID} for ${project}: ${String(error)}`,
+    );
     return draft;
   }
 }

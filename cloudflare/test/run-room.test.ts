@@ -63,7 +63,7 @@ describe("RunRoom addressing and status", () => {
     await runInDurableObject(room("owner/repo-sqlite"), (_instance: RunRoom, state) => {
       const tables = [
         ...state.storage.sql.exec<{ name: string }>(
-          "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+          "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
         ),
       ].map((r) => r.name);
 
@@ -85,7 +85,7 @@ describe("dispatch lease", () => {
     expect(result.lease).toMatchObject({ run_id: "run_1", epic: "ko8", origin: "cloud" });
     expect(result.lease.token).toMatch(/^[0-9a-f-]{20,}$/i);
     expect(Date.parse(result.lease.expires_at) - Date.parse(result.lease.acquired_at)).toBe(
-      DEFAULT_LEASE_TTL_MS
+      DEFAULT_LEASE_TTL_MS,
     );
 
     await expect(stub.leaseStatus()).resolves.toMatchObject({ run_id: "run_1" });
@@ -185,7 +185,8 @@ describe("dispatch lease", () => {
     await wait(MIN_LEASE_TTL_MS + 20);
     const lapsed = await stub.renewDispatchLease({ run_id: "run_mine", token: mine.lease.token });
     expect(lapsed.ok).toBe(false);
-    if (lapsed.ok !== false || lapsed.error !== "lease_lost") throw new Error("expected lease_lost");
+    if (lapsed.ok !== false || lapsed.error !== "lease_lost")
+      throw new Error("expected lease_lost");
     expect(lapsed.lost).toBe("expired");
     expect(lapsed.holder).toBeNull();
     expect(lapsed.detail).toContain("expired");
@@ -559,14 +560,14 @@ describe("pending entry serialization", () => {
         "ref",
         "resolution",
         "tick_id",
-      ].sort()
+      ].sort(),
     );
     expect(Object.keys(entry.resolution!).sort()).toEqual(
-      ["answered_at", "answered_by", "applied_at", "outcome", "telegram_user_id"].sort()
+      ["answered_at", "answered_by", "applied_at", "outcome", "telegram_user_id"].sort(),
     );
     expect(Object.keys(entry.question).sort()).toEqual(["header", "id", "options", "text"].sort());
     expect(Object.keys(entry.resolution!.outcome).sort()).toEqual(
-      ["option_ids", "status", "text"].sort()
+      ["option_ids", "status", "text"].sort(),
     );
     // Timestamps are RFC 3339 UTC, like the Go entry's.
     expect(entry.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
@@ -610,7 +611,8 @@ describe("submission queue (D22)", () => {
     const again = await stub.queueSubmission({ ...PARKED, run_id: "run_second" });
 
     expect(again.ok).toBe(false);
-    if (again.ok !== false || again.error !== "already_queued") throw new Error("expected a refusal");
+    if (again.ok !== false || again.error !== "already_queued")
+      throw new Error("expected a refusal");
     expect(again.queued.run_id).toBe("run_first");
     await expect(stub.listQueuedSubmissions()).resolves.toHaveLength(1);
   });

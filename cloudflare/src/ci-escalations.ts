@@ -21,16 +21,12 @@
  * it struck out, which the next three failures can undo again.
  */
 
-import {
-  clearWebhookFault,
-  listOpenFaults,
-  type WebhookFault,
-} from "./ci-fault";
+import { clearWebhookFault, listOpenFaults, type WebhookFault } from "./ci-fault";
 import {
   CI_ESCALATIONS_PATH,
   clearEscalation,
-  listOpenEscalations,
   type EscalationRecord,
+  listOpenEscalations,
 } from "./ci-remediation";
 
 import type { Env } from "./index";
@@ -86,7 +82,7 @@ function faultView(row: WebhookFault): Record<string, unknown> {
 export async function ciEscalationsRoute(
   request: Request,
   env: Env,
-  segments: readonly string[]
+  segments: readonly string[],
 ): Promise<Response> {
   if (segments.length === 0) {
     if (request.method !== "GET") {
@@ -101,7 +97,7 @@ export async function ciEscalationsRoute(
         escalations: escalations.map(escalationView),
         faults: faults.map(faultView),
       },
-      200
+      200,
     );
   }
 
@@ -115,7 +111,12 @@ export async function ciEscalationsRoute(
     } catch {
       return json({ error: "invalid_request", detail: "the body is not JSON" }, 400);
     }
-    const input = body as { project?: unknown; branch?: unknown; fault?: unknown; cleared_by?: unknown };
+    const input = body as {
+      project?: unknown;
+      branch?: unknown;
+      fault?: unknown;
+      cleared_by?: unknown;
+    };
     const clearedBy = typeof input.cleared_by === "string" ? input.cleared_by : undefined;
 
     if (typeof input.fault === "string" && input.fault !== "") {
@@ -132,7 +133,7 @@ export async function ciEscalationsRoute(
           error: "invalid_request",
           detail: "name what to release: {project, branch} for an escalation, or {fault}",
         },
-        400
+        400,
       );
     }
     if (typeof input.branch !== "string" || input.branch === "") {
@@ -152,11 +153,9 @@ export async function ciEscalationsRoute(
         cleared,
         project: input.project,
         branch: input.branch,
-        ...(cleared
-          ? {}
-          : { detail: "no open escalation for that branch; nothing was released" }),
+        ...(cleared ? {} : { detail: "no open escalation for that branch; nothing was released" }),
       },
-      cleared ? 200 : 404
+      cleared ? 200 : 404,
     );
   }
 

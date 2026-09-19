@@ -1,21 +1,20 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
+import contract from "../../contracts/runners-config-contract.json";
+import cases from "../../contracts/sandbox-image-cases.json";
 import {
-  IMAGE_PATTERN,
-  MAX_CONFIG_BYTES,
-  MAX_IMAGE_LENGTH,
-  RUNNERS_CONFIG_PATH,
   declaredMaxParallel,
   declaredSandboxImage,
   githubRepoConfig,
+  IMAGE_PATTERN,
+  MAX_CONFIG_BYTES,
+  MAX_IMAGE_LENGTH,
+  type RepoConfigReader,
+  RUNNERS_CONFIG_PATH,
   readDeclaredMaxParallel,
   readDeclaredSandboxImage,
   repoConfig,
-  type RepoConfigReader,
 } from "../src/repo-config";
-import cases from "../../contracts/sandbox-image-cases.json";
-import contract from "../../contracts/runners-config-contract.json";
 
 /**
  * The control plane's reader of a repository's tracked `[sandbox].image`.
@@ -33,9 +32,11 @@ const PROJECT = "example-org/example-repo";
 const SHA = "c".repeat(40);
 
 /** Stands in for GitHub's contents API on the global fetch. */
-function stubGitHub(
-  answer: (url: URL) => Response
-): { urls: URL[]; headers: Headers[]; restore: () => void } {
+function stubGitHub(answer: (url: URL) => Response): {
+  urls: URL[];
+  headers: Headers[];
+  restore: () => void;
+} {
   const urls: URL[] = [];
   const headers: Headers[] = [];
   const original = globalThis.fetch;
@@ -108,7 +109,7 @@ describe("the declared wave width, read from the tracked config (tick b6e)", () 
 
   it("reads nothing declared as null", () => {
     expect(declaredMaxParallel("version = 2\n")).toBeNull();
-    expect(declaredMaxParallel("[orchestration]\ndetect = \"env\"\n")).toBeNull();
+    expect(declaredMaxParallel('[orchestration]\ndetect = "env"\n')).toBeNull();
   });
 
   // Mirrors `internal/herd/config/load.go`'s own bound: `max_parallel` must be
@@ -137,13 +138,17 @@ describe("what an unreadable wave width does", () => {
     const declared = await readDeclaredMaxParallel(
       reader(async () => "[orchestration]\nmax_parallel = 2\n"),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared).toEqual({ max_parallel: 2, unread: null });
   });
 
   it("reads no config as no declaration, conclusively", async () => {
-    const declared = await readDeclaredMaxParallel(reader(async () => null), PROJECT, SHA);
+    const declared = await readDeclaredMaxParallel(
+      reader(async () => null),
+      PROJECT,
+      SHA,
+    );
     expect(declared).toEqual({ max_parallel: null, unread: null });
   });
 
@@ -153,7 +158,7 @@ describe("what an unreadable wave width does", () => {
         throw new Error("GitHub answered HTTP 503");
       }),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared.max_parallel).toBeNull();
     expect(declared.unread).toContain("HTTP 503");
@@ -163,7 +168,7 @@ describe("what an unreadable wave width does", () => {
     const declared = await readDeclaredMaxParallel(
       reader(async () => "[orchestration\nmax_parallel = broken\n"),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared.max_parallel).toBeNull();
     expect(declared.unread).toContain("could not be parsed here");
@@ -196,7 +201,9 @@ describe("reading it from the repository", () => {
   it("reads a missing file as a repository that declares nothing", async () => {
     const stub = stubGitHub(() => new Response("Not Found", { status: 404 }));
     try {
-      const reader = githubRepoConfig({ GITHUB_API_BASE_URL: "https://api.github.example" } as never);
+      const reader = githubRepoConfig({
+        GITHUB_API_BASE_URL: "https://api.github.example",
+      } as never);
       expect(await reader.read(PROJECT, SHA)).toBeNull();
     } finally {
       stub.restore();
@@ -206,7 +213,9 @@ describe("reading it from the repository", () => {
   it("refuses a file past the bound it will read into a Worker", async () => {
     const stub = stubGitHub(() => new Response("x".repeat(MAX_CONFIG_BYTES + 1)));
     try {
-      const reader = githubRepoConfig({ GITHUB_API_BASE_URL: "https://api.github.example" } as never);
+      const reader = githubRepoConfig({
+        GITHUB_API_BASE_URL: "https://api.github.example",
+      } as never);
       await expect(reader.read(PROJECT, SHA)).rejects.toThrow(/bytes/);
     } finally {
       stub.restore();
@@ -214,7 +223,11 @@ describe("reading it from the repository", () => {
   });
 
   it("uses the injected reader when a deployment has one", () => {
-    const injected: RepoConfigReader = { async read() { return null; } };
+    const injected: RepoConfigReader = {
+      async read() {
+        return null;
+      },
+    };
     expect(repoConfig({ REPO_CONFIG: injected } as never)).toBe(injected);
     expect(repoConfig(env)).not.toBe(injected);
   });
@@ -227,13 +240,17 @@ describe("what an unreadable declaration does", () => {
     const declared = await readDeclaredSandboxImage(
       reader(async () => '[sandbox]\nimage = "acme/orchestrator:1.0"\n'),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared).toEqual({ image: "acme/orchestrator:1.0", unread: null });
   });
 
   it("reads no config as no declaration, conclusively", async () => {
-    const declared = await readDeclaredSandboxImage(reader(async () => null), PROJECT, SHA);
+    const declared = await readDeclaredSandboxImage(
+      reader(async () => null),
+      PROJECT,
+      SHA,
+    );
     expect(declared).toEqual({ image: null, unread: null });
   });
 
@@ -246,7 +263,7 @@ describe("what an unreadable declaration does", () => {
         throw new Error("GitHub answered HTTP 503");
       }),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared.image).toBeNull();
     expect(declared.unread).toContain("HTTP 503");
@@ -258,7 +275,7 @@ describe("what an unreadable declaration does", () => {
     const declared = await readDeclaredSandboxImage(
       reader(async () => "[sandbox\nimage = broken\n"),
       PROJECT,
-      SHA
+      SHA,
     );
     expect(declared.image).toBeNull();
     expect(declared.unread).toContain("could not be parsed here");
@@ -306,7 +323,7 @@ describe("the runners.toml rules this Worker mirrors from Go", () => {
     expect(declaredSandboxImage(`[sandbox]\nimage = ${JSON.stringify(at)}\n`)).toBe(at);
     const over = at + contract.image.boundary_char;
     expect(() => declaredSandboxImage(`[sandbox]\nimage = ${JSON.stringify(over)}\n`)).toThrow(
-      new RegExp(String(contract.image.max_length))
+      new RegExp(String(contract.image.max_length)),
     );
   });
 
@@ -315,7 +332,7 @@ describe("the runners.toml rules this Worker mirrors from Go", () => {
   it("refuses a malformed reference in the words the contract states", () => {
     const bad = contract.image.refused[contract.image.refused.length - 1];
     expect(() => declaredSandboxImage(`[sandbox]\nimage = ${JSON.stringify(bad)}\n`)).toThrow(
-      contract.image.refusal_message
+      contract.image.refusal_message,
     );
   });
 
@@ -328,7 +345,7 @@ describe("the runners.toml rules this Worker mirrors from Go", () => {
   for (const width of contract.max_parallel.refused) {
     it(`refuses a width of ${width}`, () => {
       expect(() => declaredMaxParallel(`[orchestration]\nmax_parallel = ${width}\n`)).toThrow(
-        contract.max_parallel.refusal_message
+        contract.max_parallel.refusal_message,
       );
     });
   }

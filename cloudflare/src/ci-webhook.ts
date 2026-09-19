@@ -32,9 +32,9 @@
 
 import { recordWebhookFault } from "./ci-fault";
 import {
-  remediateCheckFailure,
   type CheckHistoryReader,
   type RemediationDecision,
+  remediateCheckFailure,
 } from "./ci-remediation";
 
 import type { Env } from "./index";
@@ -56,9 +56,14 @@ function json(body: unknown, status: number): Response {
  */
 function faultContext(payload: unknown): { project: string | null; branch: string | null } {
   try {
-    const body = payload as { repository?: { full_name?: unknown }; check_run?: { head_branch?: unknown } };
-    const project = typeof body?.repository?.full_name === "string" ? body.repository.full_name : null;
-    const branch = typeof body?.check_run?.head_branch === "string" ? body.check_run.head_branch : null;
+    const body = payload as {
+      repository?: { full_name?: unknown };
+      check_run?: { head_branch?: unknown };
+    };
+    const project =
+      typeof body?.repository?.full_name === "string" ? body.repository.full_name : null;
+    const branch =
+      typeof body?.check_run?.head_branch === "string" ? body.check_run.head_branch : null;
     return { project, branch };
   } catch {
     return { project: null, branch: null };
@@ -74,7 +79,7 @@ function faultContext(payload: unknown): { project: string | null; branch: strin
 export async function checkRunWebhookRoute(
   env: Env,
   raw: string,
-  reader?: CheckHistoryReader
+  reader?: CheckHistoryReader,
 ): Promise<Response> {
   let payload: unknown;
   try {
@@ -112,14 +117,14 @@ export async function checkRunWebhookRoute(
           "this delivery could not be handled; a fault record was written and the operator " +
           "has been told",
       },
-      500
+      500,
     );
   }
 
   if (decision.state === "deferred") {
     return json(
       { ok: false, dispatched: false, reason: decision.code, detail: decision.detail },
-      503
+      503,
     );
   }
   if (decision.state === "dispatched") {
@@ -131,7 +136,7 @@ export async function checkRunWebhookRoute(
         trace_id: decision.trace_id,
         strikes: decision.strikes,
       },
-      201
+      201,
     );
   }
   if (decision.state === "escalated") {
@@ -146,11 +151,8 @@ export async function checkRunWebhookRoute(
         strikes: decision.strikes,
         detail: decision.detail,
       },
-      200
+      200,
     );
   }
-  return json(
-    { ok: true, dispatched: false, reason: decision.code, detail: decision.detail },
-    200
-  );
+  return json({ ok: true, dispatched: false, reason: decision.code, detail: decision.detail }, 200);
 }

@@ -25,8 +25,8 @@
  * A test assigns an in-memory store; a deployment gets the GitHub one below.
  */
 
-import { GITHUB_API_BASE_URL } from "./progress";
 import type { Env } from "./index";
+import { GITHUB_API_BASE_URL } from "./progress";
 
 // ------------------------------------------------------------- the seam ---
 
@@ -76,7 +76,11 @@ export interface ContentsStore {
    * compare-and-swap on both the ref and the blob: a ref that moved OR a blob
    * that changed under the write is a refusal, never a lost update.
    */
-  update(path: string, sha: string, input: { content: string; message: string }): Promise<StoreWrite>;
+  update(
+    path: string,
+    sha: string,
+    input: { content: string; message: string },
+  ): Promise<StoreWrite>;
 }
 
 // -------------------------------------------------------- the deployment ---
@@ -121,11 +125,7 @@ function decodeBase64Utf8(text: string, encoding: string): string {
  *  - 404 on an update: the path the caller believes in is not on this ref.
  *  - anything else: thrown, because it is not an answer about this write.
  */
-export function githubContentsStore(
-  env: Env,
-  project: string,
-  ref: string
-): ContentsStore {
+export function githubContentsStore(env: Env, project: string, ref: string): ContentsStore {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
@@ -144,10 +144,7 @@ export function githubContentsStore(
     return fetch(url, { method, headers });
   }
 
-  async function put(
-    path: string,
-    body: Record<string, unknown>
-  ): Promise<StoreWrite> {
+  async function put(path: string, body: Record<string, unknown>): Promise<StoreWrite> {
     const response = await fetch(entryURL(path), {
       method: "PUT",
       headers,
@@ -167,7 +164,7 @@ export function githubContentsStore(
     }
     if (!response.ok) {
       throw new Error(
-        `GitHub answered HTTP ${response.status} writing ${path} to ${project} at ${ref}`
+        `GitHub answered HTTP ${response.status} writing ${path} to ${project} at ${ref}`,
       );
     }
     const payload = (await response.json()) as {
@@ -181,9 +178,7 @@ export function githubContentsStore(
       // marker into the run's durable state for a dispatch that did not land
       // — and the retry that would have fixed it is exactly what the marker
       // then suppresses.
-      throw new Error(
-        `GitHub accepted ${path} in ${project} at ${ref} but named no commit`
-      );
+      throw new Error(`GitHub accepted ${path} in ${project} at ${ref} but named no commit`);
     }
     return { state: "written", commit_sha: commitSHA, content_sha: contentSHA };
   }
@@ -191,12 +186,12 @@ export function githubContentsStore(
   return {
     async list(prefix) {
       const response = await getJSON(
-        `${base}/repos/${project}/contents/${prefix}?ref=${encodeURIComponent(ref)}`
+        `${base}/repos/${project}/contents/${prefix}?ref=${encodeURIComponent(ref)}`,
       );
       if (response.status === 404) return [];
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} listing ${prefix} in ${project} at ${ref}`
+          `GitHub answered HTTP ${response.status} listing ${prefix} in ${project} at ${ref}`,
         );
       }
       const entries = (await response.json()) as Array<{
@@ -217,7 +212,7 @@ export function githubContentsStore(
       if (response.status === 404) return null;
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} reading ${path} in ${project} at ${ref}`
+          `GitHub answered HTTP ${response.status} reading ${path} in ${project} at ${ref}`,
         );
       }
       const payload = (await response.json()) as {
@@ -261,7 +256,7 @@ export function contentsStore(env: Env, project: string, ref: string): ContentsS
     if (injected.project === project && injected.ref === ref) return injected.store;
     throw new Error(
       `the injected contents store serves ${injected.project} at ${injected.ref}, ` +
-        `not ${project} at ${ref}`
+        `not ${project} at ${ref}`,
     );
   }
   return githubContentsStore(env, project, ref);

@@ -61,9 +61,7 @@ export const TRACE_ID_HEX_LENGTH = 32;
  * accepted a near-miss would let two spellings of one causal chain exist,
  * which is the join failure this module exists to prevent.
  */
-export const TRACE_ID_PATTERN = new RegExp(
-  `^${TRACE_ID_PREFIX}[0-9a-f]{${TRACE_ID_HEX_LENGTH}}$`
-);
+export const TRACE_ID_PATTERN = new RegExp(`^${TRACE_ID_PREFIX}[0-9a-f]{${TRACE_ID_HEX_LENGTH}}$`);
 
 /**
  * Mints a trace id.

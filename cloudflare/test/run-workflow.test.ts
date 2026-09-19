@@ -2,26 +2,33 @@ import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  type RunRecord,
   readHarnessOutput,
   readRunRecord,
   readWaveRequest,
   reconcileKey,
-  type RunRecord,
 } from "../src/artifacts";
-import { enrolProject, getRun, getRunProgress, listDispatchLogs, listRunGatewayTokens } from "../src/db";
+import {
+  enrolProject,
+  getRun,
+  getRunProgress,
+  listDispatchLogs,
+  listRunGatewayTokens,
+} from "../src/db";
 import { GATEWAY_PATH_PREFIX, proxyModelRequest } from "../src/gateway";
 import type { RepoRefs } from "../src/progress";
 import type { RepoConfigReader } from "../src/repo-config";
+import type { RunEventMessage, RunEventSink } from "../src/run-events";
 import {
-  MAX_SANDBOX_BOOTS,
   applyProgress,
   chunkWave,
-  resolveDispatchWidth,
-  summarizeCloudWave,
   cloudWaveLoss,
   describeCloudWaveLoss,
   leaseLostTrip,
+  MAX_SANDBOX_BOOTS,
   type RunOutcome,
+  resolveDispatchWidth,
+  summarizeCloudWave,
 } from "../src/run-workflow";
 import { roomFor, runStatus, startRun, stopRun, submitRun } from "../src/runs";
 import {
@@ -33,6 +40,7 @@ import {
   type SandboxProcessState,
   type SandboxProcessView,
 } from "../src/sandbox";
+import { EPIC_TYPE, type TrackerReader } from "../src/tick-membership";
 import {
   WORKER_CANCEL_COMMAND,
   WORKER_CANCEL_MARKER,
@@ -41,10 +49,8 @@ import {
   WORKER_PROBE_MARKER,
   WORKER_PUSH_MARGIN_MS,
 } from "../src/worker-boot";
-import { EPIC_TYPE, type TrackerReader } from "../src/tick-membership";
 import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
 import { workerSandboxName } from "../src/worker-dispatch";
-import type { RunEventMessage, RunEventSink } from "../src/run-events";
 
 /**
  * The Run Workflow: boot one orchestrator sandbox, watch it, enforce the
@@ -69,7 +75,7 @@ class FakeProcess {
   constructor(
     readonly id: string,
     readonly command: string,
-    readonly env: Record<string, string>
+    readonly env: Record<string, string>,
   ) {}
 
   /** Print something, as a harness would while it works. */
@@ -116,7 +122,7 @@ class FakeSandbox implements OrchestratorSandbox {
 
   async startProcess(
     command: string,
-    options: { env: Record<string, string> }
+    options: { env: Record<string, string> },
   ): Promise<SandboxProcessView> {
     const process = new FakeProcess(`${this.name}-p${++this.#next}`, command, options.env);
     this.processes.push(process);
@@ -440,8 +446,8 @@ function pushedFor(tickID: string): boolean {
     (sandbox) =>
       sandbox.name.endsWith(`-tick-${tickID}`) &&
       sandbox.processes.some(
-        (process) => process.command === WORKER_COMMAND && process.state !== "running"
-      )
+        (process) => process.command === WORKER_COMMAND && process.state !== "running",
+      ),
   );
 }
 
@@ -511,7 +517,9 @@ function set(name: string, value: unknown): void {
  * only attempt regardless. Returns the attempt counter so a test can assert
  * on it directly rather than on a state a retry could still reach eventually.
  */
-function failEveryDispatchLogInsert(matches: (decision: string) => boolean): { attempts(): number } {
+function failEveryDispatchLogInsert(matches: (decision: string) => boolean): {
+  attempts(): number;
+} {
   const db = env.DB as D1Database;
   let attempts = 0;
   set(
@@ -533,7 +541,7 @@ function failEveryDispatchLogInsert(matches: (decision: string) => boolean): { a
               }
               return (...args: unknown[]) => {
                 const bound = (stmtTarget.bind as (...a: unknown[]) => D1PreparedStatement)(
-                  ...args
+                  ...args,
                 );
                 const decision = args[2];
                 if (typeof decision !== "string" || !matches(decision)) return bound;
@@ -554,7 +562,7 @@ function failEveryDispatchLogInsert(matches: (decision: string) => boolean): { a
           });
         };
       },
-    })
+    }),
   );
   return { attempts: () => attempts };
 }
@@ -620,7 +628,7 @@ async function ignite(
      * test can arm a seam that has to be in place before the very first step.
      */
     beforeStart?: (runID: string) => void;
-  } = {}
+  } = {},
 ) {
   const project = overrides.project ?? `${PROJECT}-${++counter}`;
   const epic = overrides.epic ?? "ko8";
@@ -649,7 +657,7 @@ async function ignite(
 async function waitFor<T>(
   what: string,
   probe: () => Promise<T | null | undefined | false>,
-  timeoutMs = 15_000
+  timeoutMs = 15_000,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -682,7 +690,7 @@ const LOGS_API = "https://api.cloudflare.example/client/v4";
 function stubLogsAPI(
   cost: number,
   refuse?: { status: number; message: string },
-  calls = 1
+  calls = 1,
 ): {
   filters: { key: string; operator: string; value: unknown[] }[][];
   restore: () => void;
@@ -709,7 +717,7 @@ function stubLogsAPI(
             errors: [{ code: 7001, message: `Invalid enum value. received "${filter.key}"` }],
             result: null,
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -721,13 +729,13 @@ function stubLogsAPI(
           errors: [{ code: 7003, message: "Number must be less than or equal to 50" }],
           result: null,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
     if (refuse !== undefined) {
       return Response.json(
         { success: false, errors: [{ message: refuse.message }], result: null },
-        { status: refuse.status }
+        { status: refuse.status },
       );
     }
     const runID = String((sent[1]?.value ?? [])[0] ?? "");
@@ -810,7 +818,7 @@ async function wavePass(pass = 1): Promise<FakeProcess> {
  */
 async function requestNextWave(
   process: FakeProcess,
-  body: { epic: string; pass: number; base_sha: string; tick_ids: string[] }
+  body: { epic: string; pass: number; base_sha: string; tick_ids: string[] },
 ): Promise<Response> {
   return SELF.fetch("https://factory.example.com/api/wave", {
     method: "POST",
@@ -829,7 +837,7 @@ async function firstProcess(): Promise<FakeProcess> {
   return waitFor("the orchestrator to start", async () =>
     sandboxes.booted.length > 0 && sandboxes.booted[0]!.processes.length > 0
       ? sandboxes.booted[0]!.current
-      : null
+      : null,
   );
 }
 
@@ -1069,7 +1077,7 @@ describe("exit 0 is not completion (tick ehy)", () => {
 
     process.say(
       "The dispatch substrate for this run is subagents.\n" +
-        'I will record: run-state: substrate=subagents\n'
+        "I will record: run-state: substrate=subagents\n",
     );
     process.exit(0);
 
@@ -1166,7 +1174,7 @@ describe("exit 0 is not completion (tick ehy)", () => {
     await stopRun(env, runID, "operator");
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     repo.push(`epic/${epic}`, PUSHED_SHA);
     closeout.exit(0);
@@ -1193,7 +1201,7 @@ describe("harness output streams to R2 during the run", () => {
 
     process.say("orchestrator: wave 1 merged\n");
     await waitFor("the second flush", async () =>
-      (await readHarnessOutput(env.ARTIFACTS, project, runID)).includes("wave 1 merged")
+      (await readHarnessOutput(env.ARTIFACTS, project, runID)).includes("wave 1 merged"),
     );
 
     process.exit(0);
@@ -1208,14 +1216,14 @@ describe("harness output streams to R2 during the run", () => {
     const process = await firstProcess();
     process.say("orchestrator: about to be killed\n");
     await waitFor("the output to reach R2", async () =>
-      (await readHarnessOutput(env.ARTIFACTS, project, runID)).includes("about to be killed")
+      (await readHarnessOutput(env.ARTIFACTS, project, runID)).includes("about to be killed"),
     );
 
     sandboxes.booted[0]!.vanished = true;
 
     // The dead sandbox's output survives it — that is the point of streaming.
     const second = await waitFor("a replacement sandbox", async () =>
-      sandboxes.booted.length > 1 ? sandboxes.booted[1]! : null
+      sandboxes.booted.length > 1 ? sandboxes.booted[1]! : null,
     );
     expect(await readHarnessOutput(env.ARTIFACTS, project, runID)).toContain("about to be killed");
 
@@ -1233,12 +1241,12 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     sandboxes.booted[0]!.vanished = true;
 
     const replacement = await waitFor("a replacement sandbox", async () =>
-      sandboxes.booted.length > 1 ? sandboxes.booted[1]! : null
+      sandboxes.booted.length > 1 ? sandboxes.booted[1]! : null,
     );
     // A FRESH container, not the broken one reused.
     expect(replacement.name).not.toBe(sandboxes.booted[0]!.name);
     const process = await waitFor("the replacement orchestrator", async () =>
-      replacement.processes.length > 0 ? replacement.current : null
+      replacement.processes.length > 0 ? replacement.current : null,
     );
     expect(process.env.TICKS_PHASE).toBe("reconcile");
     expect(process.env.TICKS_RUN_ID).toBe(runID);
@@ -1257,14 +1265,14 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     const replacement = await waitFor("a replacement sandbox", async () =>
       sandboxes.booted.length > 1 && sandboxes.booted[1]!.processes.length > 0
         ? sandboxes.booted[1]!.current
-        : null
+        : null,
     );
     expect(replacement.env.TICKS_PHASE).toBe("reconcile");
 
     // One reconcile.json per reboot: what the dead orchestrator looked like
     // when it was written off (D20's artifact tree).
     const written = await waitFor("the reconcile record", async () =>
-      env.ARTIFACTS.get(reconcileKey(project, runID, 1))
+      env.ARTIFACTS.get(reconcileKey(project, runID, 1)),
     );
     const record = JSON.parse(await written.text()) as {
       previous: { state: string; exit_code: number | null };
@@ -1297,7 +1305,7 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
       const sandbox = await waitFor(`sandbox ${boot + 1}`, async () =>
         sandboxes.booted.length > boot && sandboxes.booted[boot]!.processes.length > 0
           ? sandboxes.booted[boot]!
-          : null
+          : null,
       );
       sandbox.current.exit(1);
     }
@@ -1318,7 +1326,7 @@ describe("a run that outlives what one instance can watch", () => {
     process.say("orchestrator: still working\n");
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     expect(process.killed).toBe(true);
     // Exactly two sandboxes: the one that was watched out, and the closeout.
@@ -1340,7 +1348,7 @@ describe("a clean stop runs review and closeout", () => {
     expect(stopped.outcome).toBe("stopping");
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     // The work orchestrator was given its grace window and then killed — the
     // in-flight tick's evidence is on the run branch either way.
@@ -1364,13 +1372,10 @@ describe("a clean stop runs review and closeout", () => {
     // A last known ground-truth value remains enforceable when a later
     // telemetry read fails. The default budget is $25 because this test does
     // not opt into an explicit budget without a readable gateway.
-    await env.DB
-      .prepare("UPDATE runs SET cost_usd = ? WHERE run_id = ?")
-      .bind(25.5, runID)
-      .run();
+    await env.DB.prepare("UPDATE runs SET cost_usd = ? WHERE run_id = ?").bind(25.5, runID).run();
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     expect(process.killed).toBe(true);
     expect(closeout.env.TICKS_STOP_REASON ?? "").toMatch(/budget|cost/i);
@@ -1388,7 +1393,7 @@ describe("a clean stop runs review and closeout", () => {
     const { runID } = await ignite();
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     expect(closeout.env.TICKS_STOP_REASON ?? "").toMatch(/wall|time/i);
 
@@ -1402,7 +1407,7 @@ describe("a clean stop runs review and closeout", () => {
     await stopRun(env, runID, "operator");
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(1);
 
@@ -1436,7 +1441,7 @@ async function modelCall(token: string, fetcher: typeof fetch): Promise<Response
       body: "{}",
     }),
     ["anthropic", "v1", "messages"],
-    { fetcher }
+    { fetcher },
   );
 }
 
@@ -1453,7 +1458,7 @@ describe("the run's gateway credential is the kill switch", () => {
 
     await stopRun(env, runID, "operator");
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
 
     // The orchestrator that was stopped cannot spend another cent, whether or
@@ -1508,7 +1513,7 @@ describe("the run's gateway credential is the kill switch", () => {
       // The unwind still happens: a stop must reach review and closeout (D15),
       // and a budget trip leaves no stop record, so closeout is credentialled.
       const closeout = await waitFor("the closeout orchestrator", async () =>
-        sandboxes.phase("closeout")
+        sandboxes.phase("closeout"),
       );
       closeout.exit(0);
       expect((await settled(runID)).state).toBe("stopped");
@@ -1531,7 +1536,7 @@ describe("the run's gateway credential is the kill switch", () => {
     // closeout and is credentialled again, and the spend continues.
     await stopRun(env, runID, "operator");
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     const closeoutToken = closeout.env.AI_GATEWAY_TOKEN!;
     expect(closeoutToken).not.toBe(work.env.AI_GATEWAY_TOKEN);
@@ -1633,10 +1638,7 @@ describe("the run's gateway credential is the kill switch", () => {
       // Every query the run made asked for metadata the way the API models it.
       expect(logs.filters.length).toBeGreaterThan(0);
       for (const filters of logs.filters) {
-        expect(filters.map((filter) => filter.key)).toEqual([
-          "metadata.key",
-          "metadata.value",
-        ]);
+        expect(filters.map((filter) => filter.key)).toEqual(["metadata.key", "metadata.value"]);
         expect(filters[0]!.value).toEqual(["run_id"]);
         expect(filters[1]!.value).toEqual([runID]);
       }
@@ -1664,7 +1666,7 @@ describe("the run's gateway credential is the kill switch", () => {
       const process = await firstProcess();
 
       const closeout = await waitFor("the closeout orchestrator", async () =>
-        sandboxes.phase("closeout")
+        sandboxes.phase("closeout"),
       );
       expect(process.killed).toBe(true);
       // The COST budget specifically: a wall-clock trip would satisfy a looser
@@ -1692,7 +1694,10 @@ describe("the run's gateway credential is the kill switch", () => {
     set("CLOUDFLARE_API_TOKEN", "cf-api-token");
     set("CLOUDFLARE_API_BASE_URL", LOGS_API);
     set("RUN_MAX_COST_USD", "1");
-    const logs = stubLogsAPI(0, { status: 400, message: "Number must be less than or equal to 50" });
+    const logs = stubLogsAPI(0, {
+      status: 400,
+      message: "Number must be less than or equal to 50",
+    });
 
     try {
       const { runID, project } = await ignite();
@@ -1886,7 +1891,7 @@ describe("cloudWaveLoss: a cancellation says what it destroyed", () => {
       commits?: number;
       salvaged?: boolean;
       launched?: boolean;
-    } = {}
+    } = {},
   ) => ({
     tick_id: tickID,
     sandbox_name: `s-${tickID}`,
@@ -2344,7 +2349,7 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
     // A continuation pass that died takes the run down the closeout leg it
     // always had — the wave ran, the ending did not.
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(3);
 
@@ -2463,7 +2468,7 @@ function onReconcileWrite(hook: () => Promise<void>): void {
             const put = await (target.put as (...args: unknown[]) => Promise<unknown>)(
               key,
               value,
-              options
+              options,
             );
             if (!fired && typeof key === "string" && key.includes("/reconcile/")) {
               fired = true;
@@ -2475,7 +2480,7 @@ function onReconcileWrite(hook: () => Promise<void>): void {
         const value = Reflect.get(target, property, receiver);
         return typeof value === "function" ? value.bind(target) : value;
       },
-    })
+    }),
   );
 }
 
@@ -2558,7 +2563,7 @@ describe("a cloud wave in flight answers to a stop and to a budget", () => {
       const names = ["aaa", "bbb"].map((tick) => workerSandboxName(runID, tick));
       try {
         const found = names.map((name) =>
-          sandboxes.named(name).processes.find((p) => p.command === WORKER_COMMAND)
+          sandboxes.named(name).processes.find((p) => p.command === WORKER_COMMAND),
         );
         return found.every((p) => p !== undefined && p.state === "running") ? found : null;
       } catch {
@@ -2583,7 +2588,7 @@ describe("a cloud wave in flight answers to a stop and to a budget", () => {
       working.every((p) => p!.state !== "running") &&
       ["aaa", "bbb"].every((tick) => sandboxes.named(workerSandboxName(runID, tick)).destroyed)
         ? true
-        : null
+        : null,
     );
     // And each was asked before it was destroyed — the door run_f7bd5a36 did
     // not have.
@@ -2691,7 +2696,7 @@ describe("a wave outlives one Workflow step instead of killing its supervisor", 
         return names.every((name) =>
           sandboxes
             .named(name)
-            .processes.some((p) => p.command === WORKER_COMMAND && p.state === "running")
+            .processes.some((p) => p.command === WORKER_COMMAND && p.state === "running"),
         )
           ? true
           : null;
@@ -2709,7 +2714,7 @@ describe("a wave outlives one Workflow step instead of killing its supervisor", 
     await waitFor(
       "the wave to be re-established from the durable layer across several legs",
       async () => (names.every((name) => sandboxes.named(name).listed >= 3) ? true : null),
-      20_000
+      20_000,
     );
 
     // And it adopted, every time: not one tick got a second container, a
@@ -2727,7 +2732,10 @@ describe("a wave outlives one Workflow step instead of killing its supervisor", 
     // its next leg, tears them down and hands off — with its supervisor still
     // alive, which is the whole point.
     for (const name of names) {
-      sandboxes.named(name).processes.find((p) => p.command === WORKER_COMMAND)!.exit(0);
+      sandboxes
+        .named(name)
+        .processes.find((p) => p.command === WORKER_COMMAND)!
+        .exit(0);
     }
 
     const integrate = await wavePass(1);
@@ -2790,7 +2798,7 @@ describe("a wave outlives one Workflow step instead of killing its supervisor", 
     await waitFor(
       "the wave to run past its first leg",
       async () => (sandboxes.named(name).listed >= 3 ? true : null),
-      20_000
+      20_000,
     );
 
     await stopRun(env, runID, "operator", "hard");
@@ -2798,7 +2806,7 @@ describe("a wave outlives one Workflow step instead of killing its supervisor", 
     await waitFor(
       "the container to be stopped and destroyed",
       async () => (working.state !== "running" && sandboxes.named(name).destroyed ? true : null),
-      20_000
+      20_000,
     );
 
     const run = await settled(runID);
@@ -2869,7 +2877,7 @@ describe("a container wave outlives the lease its run was ignited with", () => {
     await waitFor(
       "the wave to run well past the lease it was ignited with",
       async () => (sandboxes.named(name).listed >= 4 ? true : null),
-      20_000
+      20_000,
     );
 
     // THE ASSERTION THIS TICK EXISTS FOR. Before it, this read null: the run
@@ -2881,13 +2889,14 @@ describe("a container wave outlives the lease its run was ignited with", () => {
     // Renewed, not merely re-read: the deadline has moved past what ignition
     // bought, and `acquired_at` is unchanged, so this is the SAME lease.
     expect(held!.acquired_at).toBe(acquired!.acquired_at);
-    expect(Date.parse(held!.expires_at)).toBeGreaterThan(
-      Date.parse(held!.acquired_at) + LEASE_MS
-    );
+    expect(Date.parse(held!.expires_at)).toBeGreaterThan(Date.parse(held!.acquired_at) + LEASE_MS);
 
     // The container finishes — an hour later in a real run — and the wave pass
     // boots to integrate it, holding the lease it needs.
-    sandboxes.named(name).processes.find((p) => p.command === WORKER_COMMAND)!.exit(0);
+    sandboxes
+      .named(name)
+      .processes.find((p) => p.command === WORKER_COMMAND)!
+      .exit(0);
     const integrate = await wavePass(1);
     expect((await room.leaseStatus())?.run_id).toBe(runID);
 
@@ -2989,7 +2998,7 @@ describe("a run streams run_event to the board", () => {
     const { runID, epic } = await ignite({ tickIDs: ["aaa", "bbb"] });
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     expect((await settled(runID)).state).toBe("stopped");
@@ -3040,7 +3049,7 @@ describe("a run streams run_event to the board", () => {
     const { runID } = await ignite({ tickIDs: ["aaa"] });
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     await settled(runID);
@@ -3062,7 +3071,7 @@ describe("a run streams run_event to the board", () => {
     try {
       const { runID } = await ignite({ tickIDs: ["aaa"] });
       const closeout = await waitFor("the closeout orchestrator", async () =>
-        sandboxes.phase("closeout")
+        sandboxes.phase("closeout"),
       );
       closeout.exit(0);
       const run = await settled(runID);
@@ -3085,7 +3094,7 @@ describe("a run streams run_event to the board", () => {
     // Cloudflare API token, so this is the unreadable case.
     const { runID } = await ignite({ tickIDs: ["aaa"] });
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     await settled(runID);
@@ -3102,7 +3111,7 @@ describe("a run streams run_event to the board", () => {
     const { runID, project } = await ignite({ tickIDs: ["aaa", "bbb"] });
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     const run = await settled(runID);
@@ -3181,7 +3190,7 @@ describe("a supervisor that dies mid-wave adopts live workers instead of redispa
     await waitFor("the replacement to read the live sandbox list", async () => {
       try {
         return ["aaa", "bbb"].every(
-          (tick) => sandboxes.named(workerSandboxName(runID, tick)).listed > 0
+          (tick) => sandboxes.named(workerSandboxName(runID, tick)).listed > 0,
         )
           ? true
           : null;
@@ -3213,7 +3222,7 @@ describe("a supervisor that dies mid-wave adopts live workers instead of redispa
     const closeout = await waitFor(
       "the closeout orchestrator",
       async () => sandboxes.phase("closeout"),
-      30_000
+      30_000,
     );
     closeout.exit(0);
     const run = await settled(runID);
@@ -3262,7 +3271,7 @@ describe("a supervisor that dies mid-wave adopts live workers instead of redispa
     });
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     const run = await settled(runID);
@@ -3292,7 +3301,7 @@ describe("a supervisor that dies mid-wave adopts live workers instead of redispa
     });
 
     const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout")
+      sandboxes.phase("closeout"),
     );
     closeout.exit(0);
     expect((await settled(runID)).state).toBe("stopped");

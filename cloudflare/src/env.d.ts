@@ -66,9 +66,7 @@ declare namespace Cloudflare {
      * fails the run naming this binding rather than looping on boots that
      * cannot happen.
      */
-    SANDBOXES?:
-      | import("./sandbox").SandboxBinding
-      | import("./sandbox").SandboxNamespace;
+    SANDBOXES?: import("./sandbox").SandboxBinding | import("./sandbox").SandboxNamespace;
     /**
      * The orchestrator image this deployment's container application serves,
      * for a deployment that pushed it into its own registry. Unset means the

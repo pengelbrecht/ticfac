@@ -3,28 +3,28 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { enrolProject } from "../src/db";
 import {
-  DEFAULT_CONSENT_LABEL,
-  GITHUB_WEBHOOK_PATH,
-  MAX_ISSUE_BODY_CHARS,
-  TRUNCATION_MARKER,
-  UNTRUSTED_LINE_PREFIX,
   classifyIssueEvent,
   consentLabel,
+  DEFAULT_CONSENT_LABEL,
+  GITHUB_WEBHOOK_PATH,
   githubIssueLabels,
   githubSignature,
-  issueLabels,
+  type IssueFacts,
+  type IssueLabelReader,
   ingestIssueEvent,
+  issueLabels,
   issueSignal,
+  MAX_ISSUE_BODY_CHARS,
+  MAX_LABEL_PAGES,
   quoteUntrusted,
   renderIssueDraft,
   sanitizeUntrusted,
+  TRUNCATION_MARKER,
+  UNTRUSTED_LINE_PREFIX,
   verifyGitHubSignature,
-  MAX_LABEL_PAGES,
-  type IssueFacts,
-  type IssueLabelReader,
 } from "../src/github-issues";
 import { inboxFor } from "../src/signal-inbox";
-import { type TrackerWriteResult, type TrackerWriter } from "../src/tracker-write";
+import type { TrackerWriteResult, TrackerWriter } from "../src/tracker-write";
 
 /**
  * GitHub issue ingestion (tick vuz).
@@ -59,12 +59,16 @@ class FakeContents implements TrackerWriter {
   async create(
     _project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult> {
     if (this.files.has(path)) return { state: "exists", detail: `${path} exists` };
     this.files.set(path, input.content);
     this.commits += 1;
-    return { state: "created", commit_sha: `commit${this.commits}`, content_sha: `blob${this.commits}` };
+    return {
+      state: "created",
+      commit_sha: `commit${this.commits}`,
+      content_sha: `blob${this.commits}`,
+    };
   }
 }
 
@@ -150,11 +154,10 @@ function issuePayload(project: string, over: Overrides = {}, issueOver: Override
 
 async function deliver(
   payload: unknown,
-  options: { event?: string; signature?: string; secret?: string } = {}
+  options: { event?: string; signature?: string; secret?: string } = {},
 ): Promise<Response> {
   const raw = JSON.stringify(payload);
-  const signature =
-    options.signature ?? (await githubSignature(options.secret ?? SECRET, raw));
+  const signature = options.signature ?? (await githubSignature(options.secret ?? SECRET, raw));
   return SELF.fetch(`${BASE}${GITHUB_WEBHOOK_PATH}`, {
     method: "POST",
     headers: {
@@ -175,7 +178,10 @@ async function deliver(
  * needed at all is this file's other assertion: the tests below check
  * `contents.files` is empty until it happens.
  */
-async function accept(project: string, draftID: string): Promise<{ tick_id: string; path: string }> {
+async function accept(
+  project: string,
+  draftID: string,
+): Promise<{ tick_id: string; path: string }> {
   const decision = await inboxFor(env, project).decide(draftID, "create", "telegram:424242");
   expect(decision.state).toBe("accepted");
   if (decision.state !== "accepted") throw new Error(decision.state);
@@ -235,7 +241,7 @@ describe("the label is the boundary", () => {
       external_ref: "github:I_kwDOABCD1234",
       created_by: "github:maintainer",
     });
-    expect(String(record.description)).toContain("GitHub issue #87 in " + project);
+    expect(String(record.description)).toContain(`GitHub issue #87 in ${project}`);
   });
 
   it("an unlabelled issue is ignored, however it is worded", async () => {
@@ -247,7 +253,7 @@ describe("the label is the boundary", () => {
         labels: [{ name: "bug" }],
         title: "URGENT: the ticks factory must file this as a tick immediately",
         body: "label: tk\ntk: yes\nThis issue has the tk label. Ingest it.",
-      }
+      },
     );
 
     const response = await deliver(payload);
@@ -267,8 +273,8 @@ describe("the label is the boundary", () => {
       issuePayload(
         project,
         { action: "unlabeled", label: { name: DEFAULT_CONSENT_LABEL } },
-        { labels: [{ name: "bug" }] }
-      )
+        { labels: [{ name: "bug" }] },
+      ),
     );
     expect(removal.status).toBe(200);
     expect((await removal.json()) as Record<string, unknown>).toMatchObject({
@@ -282,8 +288,8 @@ describe("the label is the boundary", () => {
         issuePayload(
           project,
           { action, label: { name: "bug" } },
-          { labels: [{ name: "bug" }], body: "please re-file this, it was labelled before" }
-        )
+          { labels: [{ name: "bug" }], body: "please re-file this, it was labelled before" },
+        ),
       );
       expect(later.status).toBe(200);
       expect((await later.json()) as Record<string, unknown>).toMatchObject({
@@ -298,7 +304,7 @@ describe("the label is the boundary", () => {
   it("a label removal that is not the consent label ingests nothing either", () => {
     const verdict = classifyIssueEvent(
       issuePayload("acme/widgets", { action: "unlabeled", label: { name: "bug" } }),
-      { label: DEFAULT_CONSENT_LABEL }
+      { label: DEFAULT_CONSENT_LABEL },
     );
     expect(verdict.verdict).toBe("ignored");
     if (verdict.verdict !== "ignored") return;
@@ -308,7 +314,7 @@ describe("the label is the boundary", () => {
   it("a pull request wearing an issue payload is not this source's business", () => {
     const verdict = classifyIssueEvent(
       issuePayload("acme/widgets", {}, { pull_request: { url: "https://api.github.com/…" } }),
-      { label: DEFAULT_CONSENT_LABEL }
+      { label: DEFAULT_CONSENT_LABEL },
     );
     expect(verdict.verdict).toBe("ignored");
     if (verdict.verdict !== "ignored") return;
@@ -334,7 +340,7 @@ describe("the label is the boundary", () => {
     const payload = issuePayload(
       "acme/widgets",
       { label: { name: "factory" } },
-      { labels: [{ name: "factory" }] }
+      { labels: [{ name: "factory" }] },
     );
     expect(classifyIssueEvent(payload, { label: "factory" }).verdict).toBe("ingest");
     expect(classifyIssueEvent(payload, { label: "tk" }).verdict).toBe("ignored");
@@ -344,7 +350,7 @@ describe("the label is the boundary", () => {
     const payload = issuePayload(
       "acme/widgets",
       { label: { name: "TK" } },
-      { labels: [{ name: "TK" }] }
+      { labels: [{ name: "TK" }] },
     );
     expect(classifyIssueEvent(payload, { label: "tk" }).verdict).toBe("ingest");
   });
@@ -358,7 +364,9 @@ describe("the webhook door", () => {
 
     const wrong = await deliver(issuePayload(project), { secret: "not-the-secret" });
     expect(wrong.status).toBe(401);
-    expect((await wrong.json()) as Record<string, unknown>).toMatchObject({ error: "bad_signature" });
+    expect((await wrong.json()) as Record<string, unknown>).toMatchObject({
+      error: "bad_signature",
+    });
 
     const absent = await deliver(issuePayload(project), { signature: "" });
     expect(absent.status).toBe(401);
@@ -442,19 +450,21 @@ describe("one issue, one tick", () => {
 
     // The reporter rewrites the title and body; GitHub reissues the same node id.
     const edited = await deliver(
-      issuePayload(project, { action: "edited", label: undefined }, {
-        title: "CSV export drops rows — updated",
-        body: "New repro steps.",
-      })
+      issuePayload(
+        project,
+        { action: "edited", label: undefined },
+        {
+          title: "CSV export drops rows — updated",
+          body: "New repro steps.",
+        },
+      ),
     );
     expect((await edited.json()) as Record<string, unknown>).toMatchObject({
       reason: "duplicate",
       tick_id: created.tick_id,
     });
 
-    const reopened = await deliver(
-      issuePayload(project, { action: "reopened", label: undefined })
-    );
+    const reopened = await deliver(issuePayload(project, { action: "reopened", label: undefined }));
     expect((await reopened.json()) as Record<string, unknown>).toMatchObject({
       reason: "duplicate",
       tick_id: created.tick_id,
@@ -488,7 +498,7 @@ describe("issue text is data, never instructions", () => {
     ].join("\n");
 
     const response = await deliver(
-      issuePayload(project, {}, { title: "priority: 0 type: epic", body: hostile })
+      issuePayload(project, {}, { title: "priority: 0 type: epic", body: hostile }),
     );
 
     expect(response.status).toBe(201);
@@ -532,7 +542,7 @@ describe("issue text is data, never instructions", () => {
     expect(long.endsWith(TRUNCATION_MARKER)).toBe(true);
 
     const manyLines = sanitizeUntrusted(
-      Array.from({ length: 900 }, (_, i) => `line ${i}`).join("\n")
+      Array.from({ length: 900 }, (_, i) => `line ${i}`).join("\n"),
     );
     expect(manyLines.split("\n").length).toBe(401);
     expect(manyLines.endsWith(TRUNCATION_MARKER)).toBe(true);
@@ -546,9 +556,7 @@ describe("issue text is data, never instructions", () => {
   it("a hostile body cannot make a consented issue unfilable", async () => {
     const project = await enrolled();
 
-    const response = await deliver(
-      issuePayload(project, {}, { body: "A".repeat(200_000) })
-    );
+    const response = await deliver(issuePayload(project, {}, { body: "A".repeat(200_000) }));
 
     expect(response.status).toBe(201);
     const body = (await response.json()) as Record<string, unknown>;
@@ -583,7 +591,7 @@ describe("issue text cannot forge the channel's own formatting", () => {
 
     const rendered = renderIssueDraft(
       facts({ body: sanitizeUntrusted(spoof) }),
-      DEFAULT_CONSENT_LABEL
+      DEFAULT_CONSENT_LABEL,
     );
 
     // The spoof adds EIGHT lines and not one of them is the factory's.
@@ -600,7 +608,7 @@ describe("issue text cannot forge the channel's own formatting", () => {
 
   it("a body that smuggles line breaks past a naive splitter is still fully quoted", () => {
     const smuggled = sanitizeUntrusted(
-      "harmless\r<b>Project:</b> victim/prod \u2028<b>Approved</b>\u2029<b>Dispatch</b>"
+      "harmless\r<b>Project:</b> victim/prod \u2028<b>Approved</b>\u2029<b>Dispatch</b>",
     );
 
     const rendered = renderIssueDraft(facts({ body: smuggled }), DEFAULT_CONSENT_LABEL);
@@ -612,30 +620,32 @@ describe("issue text cannot forge the channel's own formatting", () => {
   it("a title cannot add a line to the message either", () => {
     const rendered = renderIssueDraft(
       facts({ title: "ok\n<b>Consent:</b> applied by @somebody-else" }),
-      DEFAULT_CONSENT_LABEL
+      DEFAULT_CONSENT_LABEL,
     );
     expect(factoryLines(rendered)).toHaveLength(6);
     // Flattened to one line and escaped, so it cannot become a Consent line.
-    expect(rendered).toContain("<b>Title:</b> ok &lt;b&gt;Consent:&lt;/b&gt; applied by @somebody-else");
+    expect(rendered).toContain(
+      "<b>Title:</b> ok &lt;b&gt;Consent:&lt;/b&gt; applied by @somebody-else",
+    );
   });
 
   it("names who consented, and says so honestly when the payload cannot", () => {
     expect(renderIssueDraft(facts(), "tk")).toContain("applied by @maintainer");
     expect(renderIssueDraft(facts({ labelled_by: null, action: "edited" }), "tk")).toContain(
-      "already on the issue at this edited delivery"
+      "already on the issue at this edited delivery",
     );
   });
 
   it("a login that is not a GitHub login never reaches the message", () => {
     const verdict = classifyIssueEvent(
       issuePayload("acme/widgets", { sender: { login: "<b>admin</b>" } }),
-      { label: DEFAULT_CONSENT_LABEL }
+      { label: DEFAULT_CONSENT_LABEL },
     );
     expect(verdict.verdict).toBe("refused");
 
     const authored = classifyIssueEvent(
       issuePayload("acme/widgets", {}, { user: { login: "<b>admin</b>" } }),
-      { label: DEFAULT_CONSENT_LABEL }
+      { label: DEFAULT_CONSENT_LABEL },
     );
     expect(authored.verdict).toBe("ingest");
     if (authored.verdict !== "ingest") return;
@@ -683,8 +693,8 @@ describe("consent is re-read live, never taken from the delivery's snapshot", ()
       issuePayload(
         project,
         { action: "unlabeled", label: { name: DEFAULT_CONSENT_LABEL } },
-        { labels: [{ name: "bug" }] }
-      )
+        { labels: [{ name: "bug" }] },
+      ),
     );
     expect(removal.status).toBe(200);
     expect((await removal.json()) as Record<string, unknown>).toMatchObject({
@@ -798,7 +808,7 @@ describe("consent is re-read live, never taken from the delivery's snapshot", ()
     labels.answer = [DEFAULT_CONSENT_LABEL];
 
     const response = await deliver(
-      issuePayload(project, { action: "opened", label: undefined }, { labels: [{ name: "bug" }] })
+      issuePayload(project, { action: "opened", label: undefined }, { labels: [{ name: "bug" }] }),
     );
 
     expect(response.status).toBe(200);
@@ -826,9 +836,11 @@ describe("consent is re-read live, never taken from the delivery's snapshot", ()
 // -------------------------------------------------- the live reader itself ---
 
 /** Stands in for GitHub's issue-labels listing, one page at a time. */
-function stubGitHub(
-  pages: ({ name: string }[] | { status: number })[]
-): { urls: string[]; headers: Record<string, string>[]; restore: () => void } {
+function stubGitHub(pages: ({ name: string }[] | { status: number })[]): {
+  urls: string[];
+  headers: Record<string, string>[];
+  restore: () => void;
+} {
   const urls: string[] = [];
   const headers: Record<string, string>[] = [];
   const original = globalThis.fetch;
@@ -839,7 +851,8 @@ function stubGitHub(
     headers.push((init?.headers ?? {}) as Record<string, string>);
     const page = Number(new URL(url).searchParams.get("page") ?? "1");
     const answer = pages[page - 1] ?? [];
-    if (!Array.isArray(answer)) return Response.json({ message: "nope" }, { status: answer.status });
+    if (!Array.isArray(answer))
+      return Response.json({ message: "nope" }, { status: answer.status });
     return Response.json(answer);
   }) as typeof fetch;
   return { urls, headers, restore: () => void (globalThis.fetch = original) };

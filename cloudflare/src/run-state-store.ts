@@ -29,7 +29,7 @@
  * are validated against the contract's own schemas here.
  */
 
-import { contentsStore, type ContentsStore } from "./git-contents";
+import { type ContentsStore, contentsStore } from "./git-contents";
 
 import type { Env } from "./index";
 
@@ -92,12 +92,7 @@ export type Provenance = {
   source_ref: string;
   source_sha: string;
   integration_ref: string | null;
-  phase:
-    | "worker"
-    | "post-wave"
-    | "integrated"
-    | "review"
-    | "closeout";
+  phase: "worker" | "post-wave" | "integrated" | "review" | "closeout";
   executor: string | null;
   workspace_id: string | null;
   backend: string | null;
@@ -235,7 +230,7 @@ export class RunStateStore {
       /** updated_at is taken from here, injected for deterministic tests. */
       now?: () => string;
       provenance: Provenance;
-    }
+    },
   ) {
     this.store = store;
     this.runID = input.run_id;
@@ -251,7 +246,9 @@ export class RunStateStore {
     const parsed = JSON.parse(file.content) as Checkpoint;
     const problem = validateCheckpoint(parsed);
     if (problem !== null) {
-      throw new Error(`the run branch holds an unreadable checkpoint for ${this.runID}: ${problem}`);
+      throw new Error(
+        `the run branch holds an unreadable checkpoint for ${this.runID}: ${problem}`,
+      );
     }
     return parsed;
   }
@@ -265,10 +262,13 @@ export class RunStateStore {
    * race a `git push --force-with-lease` refuses on a local host.
    */
   async writeCheckpoint(
-    next: Omit<Checkpoint, "schema_version" | "run_id" | "epic_id" | "sequence" | "updated_at" | "provenance"> & {
+    next: Omit<
+      Checkpoint,
+      "schema_version" | "run_id" | "epic_id" | "sequence" | "updated_at" | "provenance"
+    > & {
       sequence: number;
       provenance?: Provenance;
-    }
+    },
   ): Promise<RunWriteOutcome> {
     const path = checkpointPath(this.runID);
     const record: Checkpoint = {
@@ -327,7 +327,7 @@ export class RunStateStore {
     const parsed = JSON.parse(file.content) as AttemptRecord;
     if (parsed.schema_version !== RUN_STATE_SCHEMA_VERSION) {
       throw new Error(
-        `attempt ${attempt} of ${this.runID} is schema_version ${parsed.schema_version}, not ${RUN_STATE_SCHEMA_VERSION}`
+        `attempt ${attempt} of ${this.runID} is schema_version ${parsed.schema_version}, not ${RUN_STATE_SCHEMA_VERSION}`,
       );
     }
     return parsed;
@@ -354,9 +354,11 @@ export class RunStateStore {
    * same attempt number — the idempotency rule a resumed run relies on to
    * adopt an in-flight attempt rather than pay for it twice.
    */
-  async recordAttempt(record: Omit<AttemptRecord, "schema_version" | "provenance"> & {
-    provenance?: Provenance;
-  }): Promise<RunWriteOutcome> {
+  async recordAttempt(
+    record: Omit<AttemptRecord, "schema_version" | "provenance"> & {
+      provenance?: Provenance;
+    },
+  ): Promise<RunWriteOutcome> {
     const full: AttemptRecord = {
       schema_version: RUN_STATE_SCHEMA_VERSION,
       provenance: record.provenance ?? this.provenance,
@@ -426,7 +428,7 @@ export function runStateStore(
   env: Env,
   project: string,
   ref: string,
-  input: { run_id: string; epic_id: string; now?: () => string; provenance: Provenance }
+  input: { run_id: string; epic_id: string; now?: () => string; provenance: Provenance },
 ): RunStateStore {
   return new RunStateStore(contentsStore(env, project, ref), input);
 }

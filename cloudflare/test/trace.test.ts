@@ -1,39 +1,32 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import layout from "../../contracts/tracker-layout.json";
+import contract from "../../contracts/worker-boot-contract.json";
 import { readWorkerLogTail, readWorkerManifest, type WorkerManifest } from "../src/artifacts";
 import { enrolProject, getRun } from "../src/db";
 import { draftCallbackData } from "../src/drafts";
 import { GATEWAY_METADATA_KEYS, gatewayMetadata } from "../src/gateway";
+import { DEFAULT_CONSENT_LABEL, GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
 import { manifestRecorder } from "../src/reconcile";
-import {
-  epicCompleted,
-  epicStarted,
-  tickCompleted,
-  tickStarted,
-} from "../src/run-events";
+import { epicCompleted, epicStarted, tickCompleted, tickStarted } from "../src/run-events";
 import { parseSubmission, type RunWorkflowInstance, type RunWorkflowParams } from "../src/runs";
 import { inboxFor, submitSignal } from "../src/signal-inbox";
-import { encodeTickRecord } from "../src/tracker-write";
-import {
-  DEFAULT_CONSENT_LABEL,
-  GITHUB_WEBHOOK_PATH,
-  githubSignature,
-} from "../src/github-issues";
 import { TELEGRAM_WEBHOOK_PATH } from "../src/telegram";
-import { type TrackerWriteResult, type TrackerWriter } from "../src/tracker-write";
 import {
-  TRACE_BANNER_MARKER,
-  TRACE_ID_PATTERN,
   carriedTraceID,
   isTraceID,
   newTraceID,
   parseTraceID,
+  TRACE_BANNER_MARKER,
+  TRACE_ID_PATTERN,
   traceBanner,
 } from "../src/trace";
-import { workerBootEnv, WORKER_TRACE_ID_ENV } from "../src/worker-boot";
-import layout from "../../contracts/tracker-layout.json";
-import contract from "../../contracts/worker-boot-contract.json";
+import {
+  encodeTickRecord,
+  type TrackerWriteResult,
+  type TrackerWriter,
+} from "../src/tracker-write";
+import { WORKER_TRACE_ID_ENV, workerBootEnv } from "../src/worker-boot";
 
 /**
  * Trace ids from the front door (D20, tick hyi).
@@ -73,7 +66,7 @@ class FakeContents implements TrackerWriter {
   async create(
     _project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult> {
     if (this.files.has(path)) return { state: "exists", detail: `${path} exists` };
     this.files.set(path, input.content);
@@ -253,8 +246,8 @@ describe("the trace id's format", () => {
     // dropping a usable id and minting beside it leaves two ids for one chain,
     // which is the same missing join with more records in it.
     expect(carriedTraceID(layout.trace_id.example)).toBe(layout.trace_id.example);
-    expect(carriedTraceID("  " + layout.trace_id.example.toUpperCase() + " ")).toBe(
-      layout.trace_id.example
+    expect(carriedTraceID(`  ${layout.trace_id.example.toUpperCase()} `)).toBe(
+      layout.trace_id.example,
     );
     for (const unusable of [undefined, null, "", "nonsense", "tr_zzzz", 42, {}]) {
       expect(isTraceID(carriedTraceID(unusable))).toBe(true);
@@ -281,7 +274,7 @@ describe("the trace id's format", () => {
     // same order from the other side.
     const names = Object.keys(record);
     expect(names.indexOf(layout.fields.external_ref)).toBeLessThan(
-      names.indexOf(layout.fields.trace_id)
+      names.indexOf(layout.fields.trace_id),
     );
     expect(names.indexOf(layout.fields.trace_id)).toBeLessThan(names.indexOf("created_by"));
 
@@ -295,7 +288,7 @@ describe("the trace id's format", () => {
         external_ref: "github:I_kwDOABCD5678",
         created_by: "operator@example.com",
         at: "2026-08-23T10:00:00.000Z",
-      })
+      }),
     ) as Record<string, unknown>;
     expect(layout.fields.trace_id in bare).toBe(layout.trace_id.omitted_when_empty === false);
   });
@@ -403,7 +396,7 @@ describe("what carries the id", () => {
         cost_usd: 0,
         trace_id: layout.trace_id.example,
         credential_grade: "write",
-      }
+      },
     );
     expect(metadata.trace_id).toBe(layout.trace_id.example);
     // Typed as a total record over the key list, so a name added to one and
@@ -444,7 +437,12 @@ describe("what carries the id", () => {
   it("puts it on every run event, so the picture and the records share an identifier", () => {
     const spend = { ok: false, detail: "not read" } as never;
     for (const event of [
-      epicStarted({ epic: "1vn", run_id: "run_9", status: "one container", trace_id: layout.trace_id.example }),
+      epicStarted({
+        epic: "1vn",
+        run_id: "run_9",
+        status: "one container",
+        trace_id: layout.trace_id.example,
+      }),
       epicCompleted({
         epic: "1vn",
         run_id: "run_9",
@@ -481,7 +479,7 @@ describe("what carries the id", () => {
     });
     await recorder.dispatched(
       { tick_id: "tap", branch: "tick/1vn/tap", base_sha: "b".repeat(40) },
-      "sandbox-tap"
+      "sandbox-tap",
     );
 
     // The banner is in the container's OWN stream, written by the control
@@ -496,7 +494,7 @@ describe("what carries the id", () => {
         run_id: runID,
         epic: "1vn",
         tick_id: "tap",
-      })
+      }),
     );
     expect(TRACE_BANNER_MARKER).toBe(contract.trace.banner_marker);
 
@@ -506,11 +504,10 @@ describe("what carries the id", () => {
       env.ARTIFACTS,
       project,
       runID,
-      "tap"
+      "tap",
     )) as WorkerManifest;
     expect(manifest.trace_id).toBe(layout.trace_id.example);
   });
-
 });
 
 // ------------------------------------------------------------- the whole chain ---
@@ -569,7 +566,7 @@ describe("the acceptance criterion", () => {
     const tickID = decided!.tick_id!;
     await recorder.dispatched(
       { tick_id: tickID, branch: `tick/${run!.epic}/${tickID}`, base_sha: COMMIT_SHA },
-      `sandbox-${tickID}`
+      `sandbox-${tickID}`,
     );
     const logs = await readWorkerLogTail(env.ARTIFACTS, project, runID, tickID);
     expect(logs.text).toContain(trace);

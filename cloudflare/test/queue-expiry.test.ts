@@ -1,26 +1,25 @@
 import { env, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
 import {
-  FACTORY_LINE_PREFIX,
-  REVIEW_EXPIRY_HEADING,
-  claimReviewExpiry,
-  getReviewByNode,
-  recordReviewComment,
-  renderExpiredReviewComment,
-  type ReviewCommenter,
-} from "../src/pr-review";
-import { announceQueueExpiry } from "../src/queue-expiry";
-import {
-  MAX_DIGEST_FINDINGS,
-  REVIEW_EXPIRY_LOOKBACK_HOURS,
   assessExpiredReviews,
   collectFindings,
-  renderDigest,
   type ExpiredReview,
+  MAX_DIGEST_FINDINGS,
+  REVIEW_EXPIRY_LOOKBACK_HOURS,
+  renderDigest,
 } from "../src/loop-digest";
-import { MIN_QUEUE_TTL_MS } from "../src/runs";
+import {
+  claimReviewExpiry,
+  FACTORY_LINE_PREFIX,
+  getReviewByNode,
+  REVIEW_EXPIRY_HEADING,
+  type ReviewCommenter,
+  recordReviewComment,
+  renderExpiredReviewComment,
+} from "../src/pr-review";
+import { announceQueueExpiry } from "../src/queue-expiry";
 import type { QueuedSubmission, RunRoom } from "../src/run-room";
+import { MIN_QUEUE_TTL_MS } from "../src/runs";
 
 /**
  * A review that never runs says so, and says why (tick 6tx).
@@ -107,7 +106,7 @@ async function boundReview(options: {
     `INSERT INTO pr_reviews
        (pr_node_id, project, pr_number, head_sha, base_sha, run_id, state, detail, posted_at,
         comment_id, claimed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)`,
   )
     .bind(
       nodeID,
@@ -118,7 +117,7 @@ async function boundReview(options: {
       options.runID,
       options.state ?? "queued",
       `${options.project}#${options.number} is queued behind run run_epic`,
-      new Date().toISOString()
+      new Date().toISOString(),
     )
     .run();
   return nodeID;
@@ -334,7 +333,7 @@ describe("the digest tells an expired review from a stalled one", () => {
   it("stops reporting an expiry once it is no longer news", () => {
     const stale = expiredRow({
       expired_at: new Date(
-        NOW.getTime() - (REVIEW_EXPIRY_LOOKBACK_HOURS + 1) * 3_600_000
+        NOW.getTime() - (REVIEW_EXPIRY_LOOKBACK_HOURS + 1) * 3_600_000,
       ).toISOString(),
     });
 
@@ -357,7 +356,7 @@ describe("the digest tells an expired review from a stalled one", () => {
       env.DB,
       "run_review_collect",
       "acme/collect#9 was never reviewed: it parked behind run run_epic",
-      new Date(NOW.getTime() - 3_600_000).toISOString()
+      new Date(NOW.getTime() - 3_600_000).toISOString(),
     );
 
     const findings = await collectFindings(env, NOW);

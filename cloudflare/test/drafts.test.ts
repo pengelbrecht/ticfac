@@ -1,6 +1,6 @@
 import { env, runInDurableObject, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import layout from "../../contracts/tracker-layout.json";
 import { enrolProject, getRun } from "../src/db";
 import {
   DRAFT_TYPE_CHOICES,
@@ -14,14 +14,13 @@ import {
 import {
   DEFAULT_CONSENT_LABEL,
   GITHUB_WEBHOOK_PATH,
-  UNTRUSTED_LINE_PREFIX,
   githubSignature,
+  UNTRUSTED_LINE_PREFIX,
 } from "../src/github-issues";
-import { inboxFor, type Draft, type Signal, type SignalInbox } from "../src/signal-inbox";
+import type { RunWorkflowInstance, RunWorkflowParams } from "../src/runs";
+import { type Draft, inboxFor, type Signal, type SignalInbox } from "../src/signal-inbox";
 import { TELEGRAM_WEBHOOK_PATH } from "../src/telegram";
-import { type TrackerWriteResult, type TrackerWriter } from "../src/tracker-write";
-import { type RunWorkflowInstance, type RunWorkflowParams } from "../src/runs";
-import layout from "../../contracts/tracker-layout.json";
+import type { TrackerWriteResult, TrackerWriter } from "../src/tracker-write";
 
 /**
  * Draft-tick triage (tick la9): the human gate between "something arrived" and
@@ -59,7 +58,7 @@ class FakeContents implements TrackerWriter {
   async create(
     _project: string,
     path: string,
-    input: { content: string; message: string; branch?: string }
+    input: { content: string; message: string; branch?: string },
   ): Promise<TrackerWriteResult> {
     if (this.conflicts > 0) {
       this.conflicts -= 1;
@@ -131,7 +130,8 @@ function fakeBotAPI(): { calls: BotCall[]; restore: () => void } {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.startsWith("https://telegram.test/")) return original(input as RequestInfo, init);
     const method = url.slice(url.lastIndexOf("/") + 1);
-    const body = init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
+    const body =
+      init?.body === undefined ? {} : (JSON.parse(String(init.body)) as Record<string, unknown>);
     calls.push({ method, body });
     messageID += 1;
     return Response.json({
@@ -186,7 +186,7 @@ async function enrolled(topic?: string): Promise<string> {
       enrolled_at: new Date().toISOString(),
       ...(topic === undefined ? {} : { telegram_topic_id: topic }),
     },
-    topic
+    topic,
   );
   return project;
 }
@@ -279,8 +279,9 @@ describe("a signal arrives as a proposal, not as a tick", () => {
     const keyboard = (send.body.reply_markup as { inline_keyboard: { text: string }[][] })
       .inline_keyboard;
     expect(keyboard[0]!.map((button) => button.text)).toEqual(["Create", "Dispatch", "Discard"]);
-    const data = (send.body.reply_markup as { inline_keyboard: { callback_data: string }[][] })
-      .inline_keyboard[0]!.map((button) => button.callback_data);
+    const data = (
+      send.body.reply_markup as { inline_keyboard: { callback_data: string }[][] }
+    ).inline_keyboard[0]!.map((button) => button.callback_data);
     // Every callback names the PAIR it decides — this project's handle and
     // this draft's id — so a press in a shared chat routes to exactly one
     // proposal in exactly one project, structurally and not by keyspace odds.
@@ -463,7 +464,7 @@ describe("the type is the one thing a human may change before filing", () => {
     const edit = calls("editMessageText")[0]!;
     expect(String(edit.body.text)).toContain("<b>Type:</b> feature");
     expect(
-      (edit.body.reply_markup as { inline_keyboard: unknown[][] }).inline_keyboard[0]
+      (edit.body.reply_markup as { inline_keyboard: unknown[][] }).inline_keyboard[0],
     ).toHaveLength(3);
 
     const created = await press(draftCallbackData(project, draft.id, "create"));
@@ -573,7 +574,7 @@ describe("the callback vocabulary", () => {
       }
     }
     expect(draftKeyboard(draft)[1]!.map((b) => b.callback_data)).toEqual(
-      DRAFT_TYPE_CHOICES.map((type) => `y:${projectHandle(draft.project)}:${draft.id}:${type}`)
+      DRAFT_TYPE_CHOICES.map((type) => `y:${projectHandle(draft.project)}:${draft.id}:${type}`),
     );
   });
 
@@ -617,10 +618,10 @@ describe("a button under a forged message would be a forged button", () => {
     ].join("\n");
 
     const response = await deliver(
-      issuePayload(project, {}, { body: hostile, title: "<b>Type:</b> epic" })
+      issuePayload(project, {}, { body: hostile, title: "<b>Type:</b> epic" }),
     );
     const draft = (await inboxFor(env, project).getDraft(
-      ((await response.json()) as { draft_id: string }).draft_id
+      ((await response.json()) as { draft_id: string }).draft_id,
     ))!;
 
     const rendered = renderDraft(draft);
@@ -635,7 +636,9 @@ describe("a button under a forged message would be a forged button", () => {
     expect(rendered).toContain("&lt;b&gt;");
     // And the one line that could have been mistaken for the gate's own is the
     // gate's own: exactly one unquoted line says nothing has been filed.
-    expect(factoryLines(rendered).filter((l) => l.includes("Nothing has been filed yet."))).toHaveLength(1);
+    expect(
+      factoryLines(rendered).filter((l) => l.includes("Nothing has been filed yet.")),
+    ).toHaveLength(1);
   });
 
   it("posts what it rendered, so the message carrying the buttons is the checked one", async () => {
@@ -684,7 +687,7 @@ describe("a button under a forged message would be a forged button", () => {
     // folded onto the factory's Source line, where it cannot be mistaken for a
     // line the factory wrote. Column 0 is the whole of the invariant.
     expect(
-      rendered.split("\n").filter((l) => l.startsWith("<b>Nothing has been filed yet.</b>"))
+      rendered.split("\n").filter((l) => l.startsWith("<b>Nothing has been filed yet.</b>")),
     ).toHaveLength(1);
   });
 });
@@ -727,18 +730,18 @@ describe("a proposal an eviction left mid-commit is not a dead button", () => {
           [
             ...state.storage.sql.exec<{ candidates: string | null }>(
               "SELECT candidates FROM signal_draft WHERE id = ?",
-              draft.id
+              draft.id,
             ),
-          ][0]!.candidates ?? "[]"
+          ][0]!.candidates ?? "[]",
         ) as string[];
-      }
+      },
     );
     try {
       await runInDurableObject(
         inboxFor(env, project) as DurableObjectStub<SignalInbox>,
         (_instance, state) => {
           (state as unknown as { abort(reason?: string): void }).abort("evicted mid-commit");
-        }
+        },
       );
     } catch {
       // The abort breaks its own caller. That IS the eviction.
@@ -856,9 +859,9 @@ describe("a press names the project it decides, not just the draft", () => {
             title: "a proposal in the second project",
             created_by: "operator@example.com",
           }),
-          Date.now()
+          Date.now(),
         );
-      }
+      },
     );
 
     const response = await press(`d:${projectHandle(first)}:${admitted.draft_id}:create`);
@@ -890,4 +893,3 @@ describe("a press names the project it decides, not just the draft", () => {
     expect(projectHandle(long)).toBe(projectHandle(long));
   });
 });
-

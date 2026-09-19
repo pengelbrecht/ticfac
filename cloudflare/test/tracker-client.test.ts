@@ -22,18 +22,17 @@ import { describe, expect, it } from "vitest";
 
 import manifestJSON from "../../contracts/tk-json-manifest.json";
 import trackerLayout from "../../contracts/tracker-layout.json";
-
+import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
 import {
   encodeTick,
   MANIFEST_CONTRACT,
   MANIFEST_MIN_TK_VERSION,
   parseTick,
   TICK_REQUIRED_FIELDS,
-  TrackerClient,
   type Tick,
+  TrackerClient,
 } from "../src/tracker-client";
-import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
-import { parseDefs, parseSchema, validate, type Defs } from "./json-schema";
+import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // ----------------------------------------------------------- the fixtures ---
 
@@ -113,7 +112,7 @@ class MemoryContents implements ContentsStore {
   async update(
     path: string,
     sha: string,
-    input: { content: string; message: string }
+    input: { content: string; message: string },
   ): Promise<StoreWrite> {
     const file = this.files.get(path);
     if (file === undefined) {
@@ -165,7 +164,15 @@ function seedTracker(): Record<string, string> {
   // Wave 1 work, three priorities/orders to pin the sort.
   add(tick({ id: "t01", title: "First", priority: 1, parent: EPIC }));
   add(tick({ id: "t02", title: "Second", priority: 2, parent: EPIC }));
-  add(tick({ id: "t03", title: "Third", priority: 2, parent: EPIC, created_at: "2026-09-18T09:05:00Z" }));
+  add(
+    tick({
+      id: "t03",
+      title: "Third",
+      priority: 2,
+      parent: EPIC,
+      created_at: "2026-09-18T09:05:00Z",
+    }),
+  );
 
   // Blocked children.
   add(tick({ id: "t04", title: "After first", parent: EPIC, blocked_by: ["t01"] }));
@@ -182,15 +189,19 @@ function seedTracker(): Record<string, string> {
       parent: EPIC,
       requires: "review",
       description: "gate: the provider choice needs human taste",
-    })
+    }),
   );
 
   // Deferred.
   add(tick({ id: "t10", title: "Deferred", parent: EPIC, defer_until: "2027-01-01T00:00:00Z" }));
 
   // The skeleton.
-  add(tick({ id: "rev1", title: "Final review", parent: EPIC, role: "review", blocked_by: ["t01"] }));
-  add(tick({ id: "clo1", title: "Close out", parent: EPIC, role: "closeout", blocked_by: ["rev1"] }));
+  add(
+    tick({ id: "rev1", title: "Final review", parent: EPIC, role: "review", blocked_by: ["t01"] }),
+  );
+  add(
+    tick({ id: "clo1", title: "Close out", parent: EPIC, role: "closeout", blocked_by: ["rev1"] }),
+  );
 
   // The cross-epic open blocker.
   add(tick({ id: "zz9", title: "Another epic's tick", type: "task" }));
@@ -212,9 +223,9 @@ describe("the record encoder, through the tracker-layout fixture", () => {
     for (const field of layout.written_by_the_control_plane.required_fields) {
       expect(parsed[field], `field ${field} is required by the fixture`).not.toBeUndefined();
     }
-    expect(
-      JSON.stringify(parsed, null, layout.written_by_the_control_plane.json_indent)
-    ).toBe(encoded);
+    expect(JSON.stringify(parsed, null, layout.written_by_the_control_plane.json_indent)).toBe(
+      encoded,
+    );
   });
 
   it("round-trips a record byte for byte, and omits the empties", () => {
@@ -260,12 +271,9 @@ describe("the reads, against the pinned manifest schemas", () => {
     expectValid("list", listed);
     expect((listed.ticks as Tick[]).length).toBe(14);
 
-    const empty = new TrackerClient(
-      new MemoryContents({}),
-      "example/owner",
-      BRANCH,
-      { now: () => NOW }
-    );
+    const empty = new TrackerClient(new MemoryContents({}), "example/owner", BRANCH, {
+      now: () => NOW,
+    });
     expectValid("list", await empty.list());
     expect((await empty.list()).ticks).toBeNull();
   });
@@ -301,7 +309,7 @@ describe("the reads, against the pinned manifest schemas", () => {
 
     const childless = seededClient({
       [`${layout.record_dir}/${EPIC}.json`]: encodeTick(
-        tick({ id: EPIC, title: "Childless", type: "epic" })
+        tick({ id: EPIC, title: "Childless", type: "epic" }),
       ),
     });
     const plan = await childless.next();
@@ -403,7 +411,7 @@ describe("the reads, against the pinned manifest schemas", () => {
   it("a childless epic answers needs_planning, with Go's zero values", async () => {
     const client = seededClient({
       [`${layout.record_dir}/${EPIC}.json`]: encodeTick(
-        tick({ id: EPIC, title: "Childless", type: "epic" })
+        tick({ id: EPIC, title: "Childless", type: "epic" }),
       ),
     });
     const graph = await client.graph(EPIC);
@@ -417,7 +425,7 @@ describe("the reads, against the pinned manifest schemas", () => {
     // An epic that is gated or blocked is not plannable now.
     const gated = seededClient({
       [`${layout.record_dir}/${EPIC}.json`]: encodeTick(
-        tick({ id: EPIC, title: "Gated epic", type: "epic", awaiting: "input" })
+        tick({ id: EPIC, title: "Gated epic", type: "epic", awaiting: "input" }),
       ),
     });
     expect((await gated.graph(EPIC))!.needs_planning).toBe(false);
@@ -507,7 +515,7 @@ describe("the controlled writes, as tk's", () => {
     clock.setUTCMinutes(45);
     const second = await client.note("t01", "direction from the operator", { from: "human" });
     expect((second as { tick: Tick }).tick.notes).toBe(
-      "2026-09-19 10:30 - PR ready\n2026-09-19 10:45 - [human] direction from the operator"
+      "2026-09-19 10:30 - PR ready\n2026-09-19 10:45 - [human] direction from the operator",
     );
     expectValid("note", (second as { tick: Tick }).tick);
 
@@ -551,7 +559,20 @@ describe("the controlled writes, as tk's", () => {
     expect((refused as { detail: string }).detail).toContain("open children");
 
     const seed = seedTracker();
-    for (const id of ["t01", "t02", "t03", "t04", "t05", "t06", "t07", "t08", "t09", "t10", "rev1", "clo1"]) {
+    for (const id of [
+      "t01",
+      "t02",
+      "t03",
+      "t04",
+      "t05",
+      "t06",
+      "t07",
+      "t08",
+      "t09",
+      "t10",
+      "rev1",
+      "clo1",
+    ]) {
       const record = JSON.parse(seed[`${layout.record_dir}/${id}.json`]) as Tick;
       record.status = "closed";
       seed[`${layout.record_dir}/${id}.json`] = encodeTick(record);
@@ -599,8 +620,14 @@ describe("the fixtures enforce, not decorate (negative controls)", () => {
     // new required field the client does not know about.
     const brokenDefs = parseDefs(manifest.$defs);
     brokenDefs.tick = parseSchema(
-      { ...(manifest.$defs as Record<string, unknown>).tick as Record<string, unknown>, required: [...(manifest.$defs as { tick: { required: string[] } }).tick.required, "a_field_nobody_writes"] },
-      "$"
+      {
+        ...((manifest.$defs as Record<string, unknown>).tick as Record<string, unknown>),
+        required: [
+          ...(manifest.$defs as { tick: { required: string[] } }).tick.required,
+          "a_field_nobody_writes",
+        ],
+      },
+      "$",
     );
     const errors = validate(commandSchema("show"), brokenDefs, { id: "t01" });
     expect(errors.length).toBeGreaterThan(0);

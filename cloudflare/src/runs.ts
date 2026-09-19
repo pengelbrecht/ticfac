@@ -29,30 +29,29 @@
  */
 
 import {
+  DEFAULT_RUN_CREDENTIAL_GRADE,
+  isRunCredentialGrade,
+  RUN_CREDENTIAL_GRADES,
+  type RunCredentialGrade,
+} from "./credentials";
+import {
+  type DeploymentImage,
+  type DispatchReason,
   deleteRun,
   getDeploymentImage,
   getEnrolledProject,
   getRun,
   getRunImage,
+  getRunProgress,
   insertDispatchLog,
   insertRun,
   insertRunImage,
   listRuns,
-  updateRunState,
-  getRunProgress,
-  type DeploymentImage,
-  type DispatchReason,
   type Run,
   type RunProgressRecord,
+  updateRunState,
 } from "./db";
-import {
-  DEFAULT_RUN_CREDENTIAL_GRADE,
-  RUN_CREDENTIAL_GRADES,
-  isRunCredentialGrade,
-  type RunCredentialGrade,
-} from "./credentials";
 import { modelRoutingComplaint, revokeRunTokens } from "./gateway";
-import { carriedTraceID, parseTraceID } from "./trace";
 import type { Env } from "./index";
 import type {
   DispatchLeaseView,
@@ -63,6 +62,7 @@ import type {
   StopMode,
   StopRequest,
 } from "./run-room";
+import { carriedTraceID, parseTraceID } from "./trace";
 
 /**
  * Run lifecycle states written to the `runs` index.
@@ -387,7 +387,7 @@ export function parseSubmission(body: unknown): SubmissionParse {
     raw.max_wall_clock_ms,
     "max_wall_clock_ms",
     true,
-    (v) => (maxWallClock = v)
+    (v) => (maxWallClock = v),
   );
   if (clockComplaint !== null) return { ok: false, detail: clockComplaint };
 
@@ -413,7 +413,7 @@ export function parseSubmission(body: unknown): SubmissionParse {
   if (raw.trace_id !== undefined && raw.trace_id !== null && parseTraceID(raw.trace_id) === null) {
     console.error(
       `factory runs: submission for ${project} carried an unusable trace_id ` +
-        `${JSON.stringify(raw.trace_id)}; minted ${traceID} instead`
+        `${JSON.stringify(raw.trace_id)}; minted ${traceID} instead`,
     );
   }
 
@@ -424,7 +424,10 @@ export function parseSubmission(body: unknown): SubmissionParse {
   let origin: LeaseOrigin | undefined;
   if (raw.origin !== undefined && raw.origin !== null) {
     if (raw.origin !== "local" && raw.origin !== "cloud") {
-      return { ok: false, detail: `origin must be "local" or "cloud", got ${JSON.stringify(raw.origin)}` };
+      return {
+        ok: false,
+        detail: `origin must be "local" or "cloud", got ${JSON.stringify(raw.origin)}`,
+      };
     }
     origin = raw.origin;
   }
@@ -456,7 +459,8 @@ export function parseSubmission(body: unknown): SubmissionParse {
   if (raw.queue === true && tickIDs !== undefined) {
     return {
       ok: false,
-      detail: "tick_ids cannot be combined with queue: true yet — a queued cloud-wave submission " +
+      detail:
+        "tick_ids cannot be combined with queue: true yet — a queued cloud-wave submission " +
         "would lose its wave on ignition; submit without queue or without tick_ids",
     };
   }
@@ -523,7 +527,7 @@ function budgetField(
   value: unknown,
   field: string,
   integer: boolean,
-  into: (v: number) => void
+  into: (v: number) => void,
 ): string | null {
   if (value === undefined || value === null) return null;
   const usable =
@@ -551,7 +555,7 @@ export function queueTtlMs(env: Env, requested?: number): number {
     }
     console.error(
       `factory runs: RUN_QUEUE_TTL_MS must be an integer between ${MIN_QUEUE_TTL_MS} and ` +
-        `${MAX_QUEUE_TTL_MS} ms; ignoring "${configured}" and using ${DEFAULT_QUEUE_TTL_MS}`
+        `${MAX_QUEUE_TTL_MS} ms; ignoring "${configured}" and using ${DEFAULT_QUEUE_TTL_MS}`,
     );
   }
   return DEFAULT_QUEUE_TTL_MS;
@@ -722,7 +726,7 @@ export async function logDispatch(
     decision: string;
     /** From the closed policy vocabulary the D1 CHECK constraint enforces. */
     reason: DispatchReason | null;
-  }
+  },
 ): Promise<void> {
   await insertDispatchLog(env.DB, {
     run_id: entry.run_id,
@@ -944,7 +948,7 @@ export async function stopRun(
   env: Env,
   runID: string,
   requestedBy: string,
-  mode: StopMode = "clean"
+  mode: StopMode = "clean",
 ): Promise<StopResult> {
   if (typeof runID !== "string" || runID.trim() === "") {
     return { outcome: "invalid", detail: "run id is required" };
@@ -973,17 +977,18 @@ export async function stopRun(
   // is what keeps it dead — no later boot of this run may mint another.
   const tokensRevoked =
     requested.stop.mode === "hard"
-      ? await revokeRunTokens(env, runID, `stopped:hard:${requestedBy}`).catch(
-          (error: unknown) => {
-            console.error(
-              `factory runs: ${runID} could not revoke its gateway tokens on a hard stop: ${String(error)}`
-            );
-            return 0;
-          }
-        )
+      ? await revokeRunTokens(env, runID, `stopped:hard:${requestedBy}`).catch((error: unknown) => {
+          console.error(
+            `factory runs: ${runID} could not revoke its gateway tokens on a hard stop: ${String(error)}`,
+          );
+          return 0;
+        })
       : 0;
 
-  const updated = (await updateRunState(env.DB, runID, "stopping")) ?? { ...run, state: "stopping" };
+  const updated = (await updateRunState(env.DB, runID, "stopping")) ?? {
+    ...run,
+    state: "stopping",
+  };
 
   let notified = false;
   const workflow = runWorkflowBinding(env);
@@ -999,7 +1004,7 @@ export async function stopRun(
       // already durable; the Workflow reads it at its next step boundary.
       console.error(
         `factory runs: could not deliver the stop event to workflow ${runID} ` +
-          `(the stop record stands): ${String(error)}`
+          `(the stop record stands): ${String(error)}`,
       );
     }
   }
@@ -1071,10 +1076,7 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
   };
 }
 
-async function workflowPhase(
-  env: Env,
-  run: Run
-): Promise<{ id: string; status: string } | null> {
+async function workflowPhase(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
   const workflow = runWorkflowBinding(env);
   if (workflow === null) return null;
   try {
@@ -1105,7 +1107,7 @@ export type RunListing = { runs: Run[]; projects: ProjectStatus[] };
  */
 export async function listRunStatus(
   env: Env,
-  filter: { project?: string; state?: string; limit?: number }
+  filter: { project?: string; state?: string; limit?: number },
 ): Promise<RunListing> {
   const runs = await listRuns(env.DB, filter);
 
@@ -1115,12 +1117,9 @@ export async function listRunStatus(
   const statuses = await Promise.all(
     [...projects].sort().map(async (project): Promise<ProjectStatus> => {
       const room = roomFor(env, project);
-      const [lease, queued] = await Promise.all([
-        room.leaseStatus(),
-        room.listQueuedSubmissions(),
-      ]);
+      const [lease, queued] = await Promise.all([room.leaseStatus(), room.listQueuedSubmissions()]);
       return { project, lease, queued };
-    })
+    }),
   );
 
   return { runs, projects: statuses };

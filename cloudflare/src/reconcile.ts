@@ -56,17 +56,17 @@
 import {
   listWorkerManifests,
   readWorkerManifest,
+  type WorkerManifest,
   writeWorkerLogHeader,
   writeWorkerManifest,
-  type WorkerManifest,
 } from "./artifacts";
-import { traceBanner } from "./trace";
 import type { OrchestratorSandbox, SandboxBinding } from "./sandbox";
+import { traceBanner } from "./trace";
 import { WORKER_COMMAND } from "./worker-boot";
 import type { WorkerCollector, WorkerReport, WorkerTask } from "./worker-collect";
 import {
-  NOT_ADDRESSED,
   type Adoption,
+  NOT_ADDRESSED,
   type ProbeOutcome,
   type WorkerRecorder,
   type WorkerWaveOutcome,
@@ -195,7 +195,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
     cls: WorkerClass,
     action: WorkerAction,
     reason: string,
-    extra: { redispatch?: boolean; adopt?: string | null; contradictions?: string[] } = {}
+    extra: { redispatch?: boolean; adopt?: string | null; contradictions?: string[] } = {},
   ): ReconcileItem => ({
     tick_id: evidence.tick_id,
     class: cls,
@@ -213,23 +213,18 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
   // check comes first because every branch below it would otherwise be
   // reasoning from an absence it has no right to treat as a fact.
   if (!liveness.known) {
-    return item(
-      "unknown",
-      "inspect",
-      "the container could not be asked what is running in it",
-      {
-        contradictions: [
-          `the manifest records container ${evidence.sandbox_name} for this tick, but its ` +
-            `process list could not be read (${liveness.detail}); a worker that cannot be ` +
-            "proved dead is never redispatched",
-        ],
-      }
-    );
+    return item("unknown", "inspect", "the container could not be asked what is running in it", {
+      contradictions: [
+        `the manifest records container ${evidence.sandbox_name} for this tick, but its ` +
+          `process list could not be read (${liveness.detail}); a worker that cannot be ` +
+          "proved dead is never redispatched",
+      ],
+    });
   }
 
   if (liveness.live && liveness.work_process_id !== null) {
     const branch =
-      report !== null && report.branch_exists && report.commits === 0
+      report?.branch_exists && report.commits === 0
         ? `. Its branch has no commits yet — that is not evidence of a dead worker`
         : "";
     return item(
@@ -237,7 +232,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
       "adopt",
       `a worker process is running in ${evidence.sandbox_name} — adopt it and wait; never ` +
         `redispatch a live worker, whatever its branch looks like${branch}`,
-      { adopt: liveness.work_process_id }
+      { adopt: liveness.work_process_id },
     );
   }
 
@@ -254,17 +249,22 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
         `${evidence.branch} already carries ${report.commits} commit(s) and ${report.result_path}: ` +
           `the work is in git, and a reconcile never redoes work that landed — ${evidence.sandbox_name} ` +
           "is still busy with something other than the work command, but durable evidence is " +
-          "unambiguous, so it is left alone rather than escalated"
+          "unambiguous, so it is left alone rather than escalated",
       );
     }
-    return item("unknown", "inspect", "the container is busy with something that is not the work command", {
-      contradictions: [
-        `${evidence.sandbox_name} has ${liveness.running.length} running process(es) ` +
-          `(${liveness.running.join(", ")}) and none of them is ${WORKER_COMMAND}: the ` +
-          "dispatch was in flight when the supervisor died. Nothing is adopted and nothing " +
-          "is redispatched — a second container here would put two workers on one tick",
-      ],
-    });
+    return item(
+      "unknown",
+      "inspect",
+      "the container is busy with something that is not the work command",
+      {
+        contradictions: [
+          `${evidence.sandbox_name} has ${liveness.running.length} running process(es) ` +
+            `(${liveness.running.join(", ")}) and none of them is ${WORKER_COMMAND}: the ` +
+            "dispatch was in flight when the supervisor died. Nothing is adopted and nothing " +
+            "is redispatched — a second container here would put two workers on one tick",
+        ],
+      },
+    );
   }
 
   // Nothing is running. Now, and only now, git decides.
@@ -278,16 +278,21 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
         "never-dispatched",
         "dispatch",
         `no manifest, so no container was ever booted for this tick; the remote could not be ` +
-          `read (${why}) but that cannot make a first dispatch unsafe`
+          `read (${why}) but that cannot make a first dispatch unsafe`,
       );
     }
-    return item("unknown", "inspect", "the remote could not be read for a tick that was dispatched", {
-      contradictions: [
-        `container ${evidence.sandbox_name} was dispatched and is no longer running, but ` +
-          `${evidence.branch} could not be read (${why}); "cannot tell" is not zero commits, ` +
-          "and redispatching on it would overwrite work nobody has looked at",
-      ],
-    });
+    return item(
+      "unknown",
+      "inspect",
+      "the remote could not be read for a tick that was dispatched",
+      {
+        contradictions: [
+          `container ${evidence.sandbox_name} was dispatched and is no longer running, but ` +
+            `${evidence.branch} could not be read (${why}); "cannot tell" is not zero commits, ` +
+            "and redispatching on it would overwrite work nobody has looked at",
+        ],
+      },
+    );
   }
 
   if (report.verdict === "ready-to-merge") {
@@ -295,7 +300,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
       "already-landed",
       "skip",
       `${evidence.branch} already carries ${report.commits} commit(s) and ${report.result_path}: ` +
-        "the work is in git, and a reconcile never redoes work that landed"
+        "the work is in git, and a reconcile never redoes work that landed",
     );
   }
 
@@ -306,7 +311,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
       `nothing is running and ${evidence.branch} carries ${report.commits} commit(s) beyond the ` +
         "base: dispatch a fresh container that CONTINUES that branch. One tick never gets a " +
         "second branch",
-      { redispatch: true }
+      { redispatch: true },
     );
   }
 
@@ -314,7 +319,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
     return item(
       "never-dispatched",
       "dispatch",
-      "no manifest and no pushed work: this tick has not been dispatched in this run"
+      "no manifest and no pushed work: this tick has not been dispatched in this run",
     );
   }
 
@@ -323,7 +328,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
     "dispatch",
     `container ${evidence.sandbox_name} was dispatched, nothing is running in it, and ` +
       `${evidence.branch} carries no commits: there is nothing to recover, so dispatch it again`,
-    { redispatch: true }
+    { redispatch: true },
   );
 }
 
@@ -340,7 +345,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
 export async function probeLiveness(
   binding: SandboxBinding,
   sandboxName: string,
-  workCommand: string = WORKER_COMMAND
+  workCommand: string = WORKER_COMMAND,
 ): Promise<Liveness> {
   let sandbox: OrchestratorSandbox;
   try {
@@ -354,7 +359,7 @@ export async function probeLiveness(
       detail: `the container could not be addressed: ${String(error)}`,
     };
   }
-  let processes;
+  let processes: Awaited<ReturnType<typeof sandbox.listProcesses>>;
   try {
     processes = await sandbox.listProcesses();
   } catch (error) {
@@ -452,7 +457,7 @@ export async function reconcileWave(input: ReconcileInput): Promise<ReconcilePla
         report = await input.collector.collect(task);
       } catch (error) {
         console.error(
-          `factory reconcile: ${input.run_id} could not read ${task.branch}: ${String(error)}`
+          `factory reconcile: ${input.run_id} could not read ${task.branch}: ${String(error)}`,
         );
       }
 
@@ -471,7 +476,7 @@ export async function reconcileWave(input: ReconcileInput): Promise<ReconcilePla
         branch: task.branch,
         sandbox_name,
       });
-    })
+    }),
   );
 
   return plan(input, items);
@@ -510,7 +515,7 @@ export function summarizeReconcile(counts: Record<WorkerClass, number>): string 
 /** The ticks a wave may boot a container for — and only those. */
 export function dispatchable(plan: ReconcilePlan): ReconcileItem[] {
   return plan.items.filter(
-    (item) => item.action === "dispatch" || item.action === "redispatch-from-branch"
+    (item) => item.action === "dispatch" || item.action === "redispatch-from-branch",
   );
 }
 
@@ -602,9 +607,10 @@ export function settledOutcome(item: ReconcileItem, task: WorkerTask): WorkerWav
 export function manifestRecorder(
   bucket: R2Bucket,
   project: string,
-  run: { run_id: string; epic: string; batch: number; trace_id?: string }
+  run: { run_id: string; epic: string; batch: number; trace_id?: string },
 ): WorkerRecorder {
-  const traced = run.trace_id === undefined || run.trace_id === "" ? {} : { trace_id: run.trace_id };
+  const traced =
+    run.trace_id === undefined || run.trace_id === "" ? {} : { trace_id: run.trace_id };
   return {
     async dispatched(task: WorkerTask, sandboxName: string): Promise<void> {
       await writeWorkerManifest(bucket, project, {
@@ -642,12 +648,12 @@ export function manifestRecorder(
             run_id: run.run_id,
             epic: run.epic,
             tick_id: task.tick_id,
-          })
+          }),
         );
       } catch (error) {
         console.error(
           `factory reconcile: ${run.run_id} could not head ${task.tick_id}'s log stream ` +
-            `with its trace id: ${String(error)}`
+            `with its trace id: ${String(error)}`,
         );
       }
     },
@@ -671,14 +677,14 @@ export function manifestRecorder(
       } catch (error) {
         console.error(
           `factory reconcile: ${run.run_id} could not record the work process of ` +
-            `${task.tick_id}: ${String(error)}`
+            `${task.tick_id}: ${String(error)}`,
         );
       }
     },
     async probeFailed(
       task: WorkerTask,
       sandboxName: string,
-      probe: Extract<ProbeOutcome, { ok: false }>
+      probe: Extract<ProbeOutcome, { ok: false }>,
     ): Promise<void> {
       try {
         const existing = await readWorkerManifest(bucket, project, run.run_id, task.tick_id);
@@ -703,7 +709,7 @@ export function manifestRecorder(
       } catch (error) {
         console.error(
           `factory reconcile: ${run.run_id} could not record the probe failure of ` +
-            `${task.tick_id}: ${String(error)}`
+            `${task.tick_id}: ${String(error)}`,
         );
       }
     },
