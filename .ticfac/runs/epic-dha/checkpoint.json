@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 45,
-  "state": "running",
-  "reason": "b50 is running as attempt 6",
-  "updated_at": "2026-09-19T23:05:13Z",
+  "sequence": 46,
+  "state": "integrating",
+  "reason": "integrating 6na attempt 3 into epic/dha",
+  "updated_at": "2026-09-19T23:05:31Z",
   "ticks": [
     {
       "tick_id": "4sb",
