@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "53s",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T22:47:27Z",
+  "triaged_at": "2026-09-19T23:01:14Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "vmq",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "53s",
