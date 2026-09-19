@@ -1,0 +1,14 @@
+{
+  "id": "oen",
+  "title": "A run whose lease merely lapsed stops itself instead of reclaiming a lease nobody holds",
+  "description": "Found chasing the second CI failure of run-workflow.test.ts \u003e 'renews the project lease while its containers work, so the wave pass dispatches wave 2':\n\n    afternoon:  expected undefined to be 'run_wf_121'        (lease holder read back empty)\n    evening:    timed out waiting for wave 1's container to be mid-tick\n\nBoth fit one mechanism. lease.ts renew() answers a LAPSED lease — expired, and no other run holds it — with ok:false, error lease_lost, lost 'expired', holder null. The run then treats that as a trip and stops itself. But in that state the project is simply free: nobody else is running, nobody is queued (a queued run ignited by the expiry alarm would show as a LIVE lease under another holder, i.e. lost 'taken').\n\nrun-workflow.ts's own comment admits the gap: 'a slow boot outlives any fixed acquire ttl'. Production mitigates it with a 10-minute acquire and a renewal immediately after boot, which covers a ~1-minute boot. It does not cover any boot, stall or step longer than the lease. The test's 200ms lease against a boot that takes longer than 200ms on a 2-vCPU runner is the same arithmetic in miniature, and it fails exactly as a slow production boot would.\n\nPer the operator's standing rule this is a bug, not a flake, and the fix is NOT lengthening the test's lease — that would hide the one case the test can see.\n\nFix: when renewal finds the lease lapsed AND unheld, reclaim it by compare-and-swap (acquire only if still unheld), and report that it did so. 'Taken' remains a real loss and a real stop. Keep the distinction visible in the feed and the step's return value.\n\nTests: (a) a run whose lease lapses unheld mid-wave reclaims it and continues; (b) a run whose lease was TAKEN by another run still stops; (c) the reclaim is a CAS — a lease taken between the read and the reclaim is not overwritten.",
+  "notes": "2026-09-19 22:36 - Known limit, written into reclaim's comment: a run that acquired AND released entirely inside the lapse leaves the same empty row as the alarm sweep, so the reclaim cannot see it happened. Also a test-harness gotcha: runInDurableObject caches the worker's DO namespaces on first call and asserts each is real; run-workflow.test replaces env.SANDBOXES, so a beforeAll now warms that cache first.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run whose lease lapsed with no other holder reclaims it and continues; a lease taken by another run still stops the run; the reclaim cannot overwrite a lease another run took in between; the wave-2 test passes on the 2-vCPU runner",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:16:38.806673Z",
+  "updated_at": "2026-09-19T20:36:53.376512Z"
+}

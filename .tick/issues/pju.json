@@ -1,0 +1,13 @@
+{
+  "id": "pju",
+  "title": "The same lapsed-lease defect in two more places: wave requests and the publish slot",
+  "description": "Found by oen's fix and deliberately left out of it.\n\n1. cloudflare/src/wave-request.ts (~187) refuses with 409 lease_lost whenever leaseStatus() is null. Between a lapse and the run's next reclaim, a container asking for its next wave is told 'this run is no longer the project's arbiter' — the same mistake oen fixed in the run itself: treating 'expired, nobody holds it' as 'lost'. Since oen rewrote the wave-refusal test to hand the lease to a successor atomically, NO test covers this branch any more.\n\n2. cloudflare/src/epic-reconciler.ts (~970) re-derives a lapsed publish slot with acquireSlot. That also takes a slot a LATER run acquired and then let lapse — exactly the case oen's reclaim refuses, because the later run has the newer claim. This is the opposite error from (1): taking what is not yours rather than giving up what is.\n\nBoth should use oen's reclaim semantics: take back only your own lapsed claim, by compare-and-swap, never another run's.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "wave-request and the publish slot both distinguish 'lapsed and unheld' from 'taken', using reclaim semantics, each with a test covering the lapse",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:36:53.257584Z",
+  "updated_at": "2026-09-19T20:36:53.257584Z"
+}

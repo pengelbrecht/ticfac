@@ -1,0 +1,13 @@
+{
+  "id": "5jk",
+  "title": "A failed run-workflow test leaves its run going, and it writes into the next test",
+  "description": "Found by oen. When a test in cloudflare/test/run-workflow.test.ts fails, its run is not stopped, and that run keeps publishing into the shared RUN_EVENTS sink — so the NEXT test sees events it did not cause. On 2026-09-19 this turned one real failure into two: 'shows a cloud run live, with per-tick state' failed with an extra epic-started event (length 2) because the previous test's run was still going.\n\nThat is the worst kind of test failure to diagnose: the red test is innocent, and the guilty one may be green or already reported. Under the operator's 'flaky = bug' rule, the second failure cost an investigation of the wrong test.\n\nFix: every run a test starts is stopped in its afterEach whether the test passed or not, and the event sink is per-test (or cleared and asserted empty at the start of each test).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run-workflow test that fails cannot affect the outcome of any other test, proven by a test that deliberately leaves a run going and asserts the next test's sink is clean",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T20:36:53.323939Z",
+  "updated_at": "2026-09-19T20:36:53.323939Z"
+}
