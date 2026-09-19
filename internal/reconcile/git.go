@@ -28,6 +28,10 @@ type repoGit struct {
 	// enough, because two of these can live in one process (tick emk's third
 	// layer — see internal/runstate.newFetchID).
 	fetchID string
+	// retry bounds how long a transient remote failure is waited through
+	// (tick enj). It is the reconciler's, so the retries it reports land in
+	// the run's feed.
+	retry runstate.RemoteRetry
 }
 
 func (g *repoGit) run(dir string, args ...string) (string, error) {
@@ -43,7 +47,27 @@ func (g *repoGit) try(dir string, args ...string) (stdout, stderr string, err er
 // package uses is GIT_INDEX_FILE: the tracker's commits are assembled in a
 // throwaway index, so a worktree a run is using never has its own index
 // rewritten under it.
+//
+// A subcommand that reaches the network is run through the retry bound (tick
+// enj), exactly as the run-state store's runner is: the reset that killed run
+// epic-ncv landed on a fetch, but the same reset lands on the pushes below
+// and on the ls-remote remoteHead reads origin with, so the bound is wired
+// here rather than at the one call site that was observed failing. A push the
+// remote REFUSED is untouched by it — a rejected lease is not a transient
+// failure, and integrate's CAS reads that refusal out of stderr.
 func (g *repoGit) tryEnv(dir string, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	if sub, remote := runstate.RemoteSubcommand(args); remote {
+		retryErr := g.retry.Do("git "+sub, func() error {
+			stdout, stderr, err = g.onceEnv(dir, extraEnv, args...)
+			return err
+		})
+		return stdout, stderr, retryErr
+	}
+	return g.onceEnv(dir, extraEnv, args...)
+}
+
+// onceEnv is one invocation: no retry, no classification, just the process.
+func (g *repoGit) onceEnv(dir string, extraEnv []string, args ...string) (stdout, stderr string, err error) {
 	if dir == "" {
 		dir = g.dir
 	}
