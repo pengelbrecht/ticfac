@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "3q0",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T15:28:56Z",
+  "triaged_at": "2026-09-19T17:38:56Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "w1i",
   "provenance": {
     "run_id": "epic-ncv",
     "tick_id": "3q0",
