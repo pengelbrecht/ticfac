@@ -874,3 +874,4 @@
 {"ts":"2026-09-19T21:38:03.50076Z","tick":"4sb","action":"start","actor":"ticfac","epic":"dha","data":{"title":"The forge cannot write to a PR at all, so nothing can be carried onto it"}}
 {"ts":"2026-09-19T21:38:30.789887Z","tick":"53s","action":"start","actor":"ticfac","epic":"dha","data":{"title":"SandboxExecutor boot must not revoke its siblings' gateway tokens"}}
 {"ts":"2026-09-19T21:38:58.047575Z","tick":"6na","action":"start","actor":"ticfac","epic":"dha","data":{"title":"rerere silently resolves the reconciler's merges using a human's recorded resolutions"}}
+{"ts":"2026-09-19T21:39:25.41745Z","tick":"80x","action":"start","actor":"ticfac","epic":"dha","data":{"title":"A triaged review tick re-dispatches instead of closing behind its recorded decision"}}

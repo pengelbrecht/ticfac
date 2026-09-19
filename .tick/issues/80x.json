@@ -2,13 +2,14 @@
   "id": "80x",
   "title": "A triaged review tick re-dispatches instead of closing behind its recorded decision",
   "description": "findings.go tells the operator that after triage 'the close is the only step left'. That is not what happens. closeRoleTick (rolejob.go) marks the tick REJECTED, and on resume processRoleJob -\u003e claimDispatch never reads the recorded role decision, so a zero-commit review is dispatched again.\n\nMeasured, on this epic: pxc ran attempts 9, 10 and 11 on BYTE-IDENTICAL SOURCE. Three full frontier reviews of the same diff.\n\nThe loop's termination condition is the alarming part. Each re-dispatch pays for a new review, a new review can raise new findings, new findings raise a new hold — so THE LOOP ENDS ONLY WHEN A REVIEWER REPORTS NOTHING. The system is structurally biased toward the review that finds least, and it pays frontier-tier money to get there. A thorough reviewer is punished with another round; an incurious one ends the epic.\n\nIt also corrupts the record. recordDecision's role+tick dedup leaves decisions/ holding ATTEMPT 9's answer while a later attempt's close is what ends the tick. So the durable decision belongs to one review and the close belongs to another — and attempt 9's answer is the NOT READY one that b50 says is already spelled 'ready-to-merge'.\n\nNo test resumes a triaged role tick, which is why none of this was caught.\n\nWork:\n- On resume, a role tick whose decision is recorded and whose findings are triaged CLOSES behind that decision. It is not re-dispatched.\n- The recorded decision and the close must belong to the same attempt, or the record says one thing happened and another did.\n- Test: triage a review's findings, resume, and assert the review is NOT dispatched again and the tick closes behind the recorded answer.\n\nRelated: aqm (which removes most of the occasions this fires), b50 (the verdict it mis-records).\n\nFrom pxc, third pass — the review found its own loop.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "Resuming after triaging a role tick's findings closes it behind its recorded decision without re-dispatching, with the decision and the close belonging to one attempt, covered by a test",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T14:27:12.585978Z",
-  "updated_at": "2026-09-19T21:37:10.516606Z"
+  "updated_at": "2026-09-19T21:39:25.417175Z",
+  "started_at": "2026-09-19T21:39:25.417175Z"
 }
