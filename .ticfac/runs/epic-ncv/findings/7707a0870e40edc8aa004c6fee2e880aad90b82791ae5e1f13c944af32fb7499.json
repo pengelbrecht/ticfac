@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pxc",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T12:51:28Z",
+  "triaged_at": "2026-09-19T13:52:22Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "v3q",
   "provenance": {
     "run_id": "epic-ncv",
     "tick_id": "pxc",
