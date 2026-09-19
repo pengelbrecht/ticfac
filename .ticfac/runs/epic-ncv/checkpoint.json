@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 165,
+  "sequence": 166,
   "state": "running",
-  "reason": "the epic PR #11 (epic/ncv → main) is open; close-out of ncv waits on CI",
-  "updated_at": "2026-09-19T17:08:52Z",
+  "reason": "CI is green on the epic PR #11; the close-out of ncv is admitted",
+  "updated_at": "2026-09-19T17:08:57Z",
   "ticks": [
     {
       "tick_id": "l9n",
