@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "3q0",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T15:29:06Z",
+  "triaged_at": "2026-09-19T17:39:11Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "pengelbrecht/ticks:yyi",
   "provenance": {
     "run_id": "epic-ncv",
     "tick_id": "3q0",
