@@ -118,6 +118,43 @@ func PriorSnapshotsSection(prior []PriorSnapshot) string {
 	return b.String()
 }
 
+// WIPSnapshotNote is the sentence a REFUSAL owes an attempt whose work was
+// preserved (tick lj4). It is exported and shared by both executors for the
+// same reason BoundaryRefusal is: one attempt's snapshot must read the same
+// whichever collect found it, and a second copy of the wording is how the two
+// come to describe one ref differently.
+//
+// The occasion for it is a real one. 9fc attempt 4 of epic ncv was refused as
+// "no-commits: the attempt branch carries no commit beyond the base it was cut
+// from", while this very mechanism had already put four files and 433 lines on
+// refs/ticfac/wip/run-epic-ncv/tick-9fc/attempt-4. The operator was told the
+// branch was empty and given no hint that the hour of work sat at a known ref,
+// so they went and rescued it BY HAND — with the snapshot's own record on
+// screen. A safety net nobody is told about is barely a safety net.
+//
+// So the note says three things, and refuses to imply a fourth:
+//
+//   - WHERE it is: the ref and the commit, as facts, not as a place to look;
+//   - WHAT it is: a snapshot of an interrupted worktree — uncommitted,
+//     unreviewed, possibly wrong — never evidence of completion and never
+//     merged, the same framing PriorSnapshotsSection gives the worker;
+//   - HOW to look at it, in one command a person can paste.
+//
+// And it states plainly what a re-dispatch will NOT do: the next attempt is
+// cut from the integration branch, not from this snapshot. That is the
+// question an operator reading a refusal actually has, and leaving it to be
+// inferred is how the refusal misled in the first place.
+func WIPSnapshotNote(snap WIPSnapshot) string {
+	if snap.Ref == "" || snap.Commit == "" {
+		return ""
+	}
+	return fmt.Sprintf("the work it had not committed is preserved at %s (commit %s): a work-in-progress "+
+		"snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff %s^ %s` "+
+		"is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration "+
+		"branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
+		snap.Ref, short(snap.Commit), snap.Ref, snap.Ref)
+}
+
 // ---------------------------------------------------------------------------
 // The mechanics: preserving a worktree on a ref of its own.
 // ---------------------------------------------------------------------------

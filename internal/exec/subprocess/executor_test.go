@@ -339,7 +339,9 @@ func TestSettledWithoutAReportIsItsOwnStatus(t *testing.T) {
 }
 
 // A report over a branch with no commits is `no-commits`, whatever the report
-// says: the first failing check wins, and the branch is checked first.
+// says. This is the shape the verdict is RESERVED for since tick rxe: the
+// worker left a readable report claiming an outcome, and the branch is still
+// empty — nothing above explains it, so the surprise gets its own name.
 func TestAReportOverAnEmptyBranchIsNoCommits(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "nocommit"})
 	handle := f.Start(f.spec("run-9/tick-iii/attempt-1", "iii"))
@@ -362,14 +364,20 @@ func TestAReportOverAnEmptyBranchIsNoCommits(t *testing.T) {
 // rather than the generic runner_error a broken route would report. SPEC
 // §4.3: quota exhaustion is never reported as a broken route. The log is the
 // golden fixture testdata/codex-usage-limit.log, captured 2026-09-02.
+//
+// The VERDICT is missing-result, not no-commits (tick rxe): a runner that died
+// at its quota never reported, and the empty branch is a consequence of that.
+// The failure class is what carries the runner's own words forward.
 func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "quota_exhausted"})
 	handle := f.Start(f.spec("run-19/tick-ttt/attempt-1", "ttt"))
 	f.waitSettled(handle)
 
 	collected := f.collect(handle)
-	if collected.Verdict != VerdictNoCommits {
-		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	if collected.Verdict != VerdictMissingResult {
+		t.Fatalf("verdict %s, want %s: a runner that died at its quota never reported, and no-commits "+
+			"is reserved for a worker that DID report over an empty branch (tick rxe)",
+			collected.Verdict, VerdictMissingResult)
 	}
 	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureQuotaExhausted {
 		t.Errorf("outcome %s/%s, want %s/%s",
@@ -382,14 +390,20 @@ func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 // of extra usage"), so this is what proves the pattern is a real alternation
 // between two captured phrasings rather than one guess that happens to cover
 // codex.
+//
+// The VERDICT is missing-result, not no-commits (tick rxe): a runner that died
+// at its quota never reported, and the empty branch is a consequence of that.
+// The failure class is what carries the runner's own words forward.
 func TestAPiOutOfUsageRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "pi_out_of_usage"})
 	handle := f.Start(f.spec("run-21/tick-vvv/attempt-1", "vvv"))
 	f.waitSettled(handle)
 
 	collected := f.collect(handle)
-	if collected.Verdict != VerdictNoCommits {
-		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	if collected.Verdict != VerdictMissingResult {
+		t.Fatalf("verdict %s, want %s: a runner that died at its quota never reported, and no-commits "+
+			"is reserved for a worker that DID report over an empty branch (tick rxe)",
+			collected.Verdict, VerdictMissingResult)
 	}
 	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureQuotaExhausted {
 		t.Errorf("outcome %s/%s, want %s/%s",
@@ -400,14 +414,20 @@ func TestAPiOutOfUsageRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 // vcx: a runner invoked with a flag it does not recognise exits 2 before ever
 // reaching the model — this executor's own mistake, not the runner's conduct
 // — so it collects as infrastructure_error rather than runner_error.
+//
+// The VERDICT is missing-result, not no-commits (tick rxe): a runner that
+// exited before it reached the model never reported, and the empty branch is
+// a consequence of that. The failure class carries the real cause.
 func TestAUsageErrorExitCollectsAsInfrastructureError(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "usage_error"})
 	handle := f.Start(f.spec("run-20/tick-uuu/attempt-1", "uuu"))
 	f.waitSettled(handle)
 
 	collected := f.collect(handle)
-	if collected.Verdict != VerdictNoCommits {
-		t.Fatalf("verdict %s, want %s", collected.Verdict, VerdictNoCommits)
+	if collected.Verdict != VerdictMissingResult {
+		t.Fatalf("verdict %s, want %s: an argv this executor got wrong is reported as what it is, and the "+
+			"empty branch behind it is a consequence, not the headline (tick rxe)",
+			collected.Verdict, VerdictMissingResult)
 	}
 	if collected.Result.Outcome != OutcomeFailed || collected.Result.FailureClass != FailureInfrastructure {
 		t.Errorf("outcome %s/%s, want %s/%s",
