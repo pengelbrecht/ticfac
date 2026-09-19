@@ -3,6 +3,7 @@ package factory
 import (
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -11,7 +12,9 @@ import (
 	"testing/fstest"
 )
 
-// The embedded payload (cloud/factory, cloud/sandbox) landed with ticks tick
+// The embedded payload (cloudflare — moved there from cloud/factory by
+// SPEC §12 Phase 4 item 1 — and image, moved there from cloud/sandbox by
+// item 4) landed with ticks tick
 // b3a ("Factory move B"), wired into the seams at the top of bundle.go by
 // payload.go's init. The tests here still split in two, and the split stays
 // deliberate:
@@ -33,7 +36,7 @@ import (
 func requireEmbeddedPayload(t *testing.T) {
 	t.Helper()
 	if factoryFS == nil || sandboxFS == nil {
-		t.Skip("the embedded payload (cloud/factory, cloud/sandbox) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
+		t.Skip("the embedded payload (cloudflare, image) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
 	}
 }
 
@@ -46,7 +49,7 @@ func requireEmbeddedPayload(t *testing.T) {
 // payload-guarded tests assert once the payload lands.
 func fakeBundle() fstest.MapFS {
 	return fstest.MapFS{
-		"cloud/factory/wrangler.toml": &fstest.MapFile{Data: []byte(
+		"cloudflare/wrangler.toml": &fstest.MapFile{Data: []byte(
 			`name = "ticks-factory"
 main = "src/index.ts"
 [[d1_databases]]
@@ -55,24 +58,24 @@ database_id = "` + placeholderDatabaseID + `"
 [[containers]]
 class_name = "Sandbox"
 new_sqlite_classes = ["Sandbox"]
-image = "../sandbox/Dockerfile"
+image = "../image/Dockerfile"
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "ticks-factory-artifacts"
 `)},
-		"cloud/factory/src/index.ts":             &fstest.MapFile{Data: []byte("export {};")},
-		"cloud/factory/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
-		"cloud/factory/migrations/0001_init.sql": &fstest.MapFile{Data: []byte("-- fake migration")},
-		"cloud/factory/package.json":             &fstest.MapFile{Data: []byte("{}")},
-		"cloud/sandbox/Dockerfile": &fstest.MapFile{Data: []byte(
+		"cloudflare/src/index.ts":             &fstest.MapFile{Data: []byte("export {};")},
+		"cloudflare/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
+		"cloudflare/migrations/0001_init.sql": &fstest.MapFile{Data: []byte("-- fake migration")},
+		"cloudflare/package.json":             &fstest.MapFile{Data: []byte("{}")},
+		"image/Dockerfile": &fstest.MapFile{Data: []byte(
 			"FROM docker.io/cloudflare/sandbox:fake\n" +
 				"ARG TK_VERSION=0.31.0\n" +
 				"ARG TK_SOURCE_REF=v0.31.0\n" +
 				"ARG TK_MODULE=github.com/pengelbrecht/ticks/cmd/tk\n")},
-		"cloud/sandbox/entrypoint.sh": &fstest.MapFile{Data: []byte("# fake entrypoint\ntk version\n")},
-		"cloud/sandbox/worker.sh":     &fstest.MapFile{Data: []byte("tk sandbox worker-prompt\ntk sandbox environment\n")},
-		"cloud/sandbox/common.sh":     &fstest.MapFile{Data: []byte("exec tk list --awaiting=ask\n# run `tk factory setup` to fix this\necho \"tk ask is not on path\"\n")},
-		"cloud/sandbox/preflight.sh":  &fstest.MapFile{Data: []byte("tk sandbox toolchain\n")},
+		"image/entrypoint.sh": &fstest.MapFile{Data: []byte("# fake entrypoint\ntk version\n")},
+		"image/worker.sh":     &fstest.MapFile{Data: []byte("tk sandbox worker-prompt\ntk sandbox environment\n")},
+		"image/common.sh":     &fstest.MapFile{Data: []byte("exec tk list --awaiting=ask\n# run `tk factory setup` to fix this\necho \"tk ask is not on path\"\n")},
+		"image/preflight.sh":  &fstest.MapFile{Data: []byte("tk sandbox toolchain\n")},
 	}
 }
 
@@ -154,7 +157,7 @@ func TestBundlePathsCoverWhatWranglerNeeds(t *testing.T) {
 }
 
 // node_modules is never committed, but a developer who ran `pnpm install` in
-// cloud/factory must not end up embedding it into the binary.
+// cloudflare must not end up embedding it into the binary.
 func TestBundleExcludesDependenciesAndTests(t *testing.T) {
 	requireEmbeddedPayload(t)
 	for _, p := range BundlePaths() {
@@ -378,6 +381,38 @@ func TestContainerImagePathResolvesAgainstAFakeStagedContext(t *testing.T) {
 	}
 }
 
+// SPEC §12 Phase 4 item 1 moved the bundle to cloudflare and item 4 moved
+// the image context to image, so the committed image path is only true in
+// this repository if it names that cross. This is the half of "one relative path, true in both places" a
+// move breaks SILENTLY: the staged half is covered by the two tests above
+// (they stage through SandboxDir, so they agree with whatever SandboxDir
+// does), and the repository half is this one. It also pins SandboxDir to
+// the committed path: staging mirrors the repository layout, so the
+// committed path and the staging derivation must say the same thing or the
+// deploy resolves a path the repository does not (and a factory built
+// in-repo deploys a different image than `wrangler dev` would boot).
+func TestCommittedImagePathResolvesInTheRepository(t *testing.T) {
+	requireEmbeddedPayload(t)
+	data, err := ReadBundleFile(WranglerConfigFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := containerImagePath(t, string(data))
+	if path.IsAbs(image) {
+		t.Fatalf("the container image path %q is absolute; it has to be relative to the bundle to be true in both places", image)
+	}
+	// The repository copy of the bundle sits at bundleRoot under the
+	// repository root; internal/factory is two directories below that root.
+	repoBundle := filepath.Join("..", "..", filepath.FromSlash(bundleRoot))
+	if _, err := os.Stat(filepath.Join(repoBundle, filepath.FromSlash(image))); err != nil {
+		t.Errorf("the container image path %q does not resolve from the repository's copy of the bundle (%s): %v", image, bundleRoot, err)
+	}
+	// And the staging derivation names the same place the committed path does.
+	if committed := path.Dir(image); committed != sandboxRelativeToBundle {
+		t.Errorf("wrangler.toml's image path puts the context at %q; SandboxDir stages it at %q — the staging mirrors the repository layout, so the two must agree", committed, sandboxRelativeToBundle)
+	}
+}
+
 // containerImagePath reads the single `image = "..."` assignment out of the
 // config. A regex rather than a TOML parser because the assertion is about one
 // literal line, and a parser here would be a second grammar to keep honest.
@@ -434,8 +469,8 @@ func TestMaterializeSandboxStagesTheBuildContext(t *testing.T) {
 		t.Fatalf("MaterializeSandbox: %v", err)
 	}
 
-	if filepath.Dir(dir) != filepath.Dir(bundleDir) {
-		t.Errorf("the image context %q is not a sibling of the bundle %q", dir, bundleDir)
+	if want := SandboxDir(bundleDir); dir != want {
+		t.Errorf("the image context is staged at %q, want SandboxDir (%s) of the bundle %q", dir, sandboxRelativeToBundle, bundleDir)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "Dockerfile"))
 	if err != nil {
@@ -446,9 +481,9 @@ func TestMaterializeSandboxStagesTheBuildContext(t *testing.T) {
 	}
 }
 
-// The staging mechanics against the fake payload: the context lands as the
-// bundle's SIBLING (SandboxDirName), every shipped file is there, and a file
-// an older build wrote is pruned on re-stage.
+// The staging mechanics against the fake payload: the context lands at
+// sandboxRelativeToBundle — mirroring the repository layout — every shipped
+// file is there, and a file an older build wrote is pruned on re-stage.
 func TestMaterializeSandboxMechanicsAgainstAFakePayload(t *testing.T) {
 	stageFakePayload(t)
 	bundleDir := filepath.Join(t.TempDir(), "bundle")
@@ -457,8 +492,8 @@ func TestMaterializeSandboxMechanicsAgainstAFakePayload(t *testing.T) {
 	if err := MaterializeSandbox(dir); err != nil {
 		t.Fatalf("MaterializeSandbox: %v", err)
 	}
-	if filepath.Base(dir) != SandboxDirName || filepath.Dir(dir) != filepath.Dir(bundleDir) {
-		t.Errorf("the image context %q is not the sibling %s of the bundle %q", dir, SandboxDirName, bundleDir)
+	if want := SandboxDir(bundleDir); dir != want {
+		t.Errorf("the image context is staged at %q, want SandboxDir (%s) of the bundle %q", dir, sandboxRelativeToBundle, bundleDir)
 	}
 	for _, p := range []string{"Dockerfile", "entrypoint.sh", "common.sh"} {
 		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {

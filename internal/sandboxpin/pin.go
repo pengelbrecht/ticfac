@@ -1,14 +1,28 @@
-// Package sandboxpin is the drift guard for cloud/sandbox.
+// Package sandboxpin is the drift guard for the sandbox image's build
+// context.
 //
-// cloud/sandbox — the sandbox image's build context, the container a cloud run
-// boots in either role — is owned by ticks. ticks' internal/sandbox suite runs
-// those scripts; this repository carries the same tree as the factory's
-// embedded image context (embedded.go's sandboxFS). Two repositories carrying
-// one tree with nothing between them is how the extraction epic's premise
-// reads in reverse: "extracted" cannot mean "copied". If the copies drift,
-// ticfac's cold-start budget bounds a container built from THIS copy while
-// ticks' tests guard ITS copy, and both keep passing while the thing that ships
-// diverges from the thing that is tested.
+// The tree — the container a cloud run boots in either role — lives here at
+// image/ (moved from cloud/sandbox by SPEC §12 Phase 4 item 4, a move and
+// nothing else: the bytes did not change) and is owned by ticks, whose
+// internal/sandbox suite runs those scripts from its own copy at
+// cloud/sandbox. This repository carries the same tree as the factory's
+// embedded image context (embedded.go's sandboxFS). Two repositories
+// carrying one tree with nothing between them is how the extraction epic's
+// premise reads in reverse: "extracted" cannot mean "copied". If the copies
+// drift, ticfac's cold-start budget bounds a container built from THIS copy
+// while ticks' tests guard ITS copy, and both keep passing while the thing
+// that ships diverges from the thing that is tested.
+//
+// The 5bp ownership decision, restated for the item 4 move because a move is
+// exactly when an ownership claim would otherwise be lost: ticks owns the
+// tree; this repository vendors it at an immutable ref, byte for byte, and
+// the only edits that ever land under image/ here are the ones `go run
+// ./cmd/sandbox sync` adopts from the pinned ticks commit. The move changed
+// WHERE the vendored copy sits in this repository (cloud/sandbox -> image),
+// and changed nothing else: `directory` in sandbox.pin.json still names
+// ticks' own path (cloud/sandbox), DirName below names this repository's
+// (image), and the two names describing one tree is the mapping the sync
+// and the checks both carry.
 //
 // So the tree is vendored and pinned exactly the way the contract bundle is
 // (CONTRACTS.md; the design is ticks' cloud/factory/CONTRACTS.md applied
@@ -46,12 +60,13 @@ const (
 	PinFile = "sandbox.pin.json"
 
 	// DirName is where the vendored image context lives, relative to the
-	// repository root: exactly where ticks' own copy sits, so a reader ported
-	// from ticks resolves the same relative path.
-	DirName = "cloud/sandbox"
+	// repository root. It is image/ since the SPEC §12 Phase 4 item 4 move;
+	// ticks' own copy still sits at cloud/sandbox, which is what the pin's
+	// `directory` names — the upstream path, not this one.
+	DirName = "image"
 )
 
-// Pin is sandbox.pin.json: how ticfac got cloud/sandbox, and what it may be.
+// Pin is sandbox.pin.json: how ticfac got the image context, and what it may be.
 //
 // Its shape mirrors contracts.pin.json, with one addition this tree needs:
 // `modes`. Git carries the exec bit as part of the tree, and a tree digest
@@ -70,8 +85,8 @@ type Pin struct {
 	// Repository is the GitHub repository the copy came from, "owner/name".
 	Repository string `json:"repository"`
 
-	// Ref is the immutable ticks commit whose cloud/sandbox tree the vendored
-	// bytes are. A branch name is refused: a pin to something that moves pins
+	// Ref is the immutable ticks commit whose tree the vendored bytes are.
+	// A branch name is refused: a pin to something that moves pins
 	// nothing.
 	Ref string `json:"ref"`
 
@@ -103,7 +118,7 @@ func LoadPin(root string) (*Pin, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("%s is unreadable: %w\n"+
-			"It is the pin: without it the vendored cloud/sandbox is an unversioned copy that\n"+
+			"It is the pin: without it the vendored image context is an unversioned copy that\n"+
 			"nothing verifies. Restore it from git rather than removing the check.", path, err)
 	}
 	var p Pin
@@ -185,7 +200,7 @@ func LoadPin(root string) (*Pin, error) {
 //  1. the pin parses and names a known mode;
 //  2. every pinned file hashes to the digest recorded in the pin;
 //  3. every pinned file's exec bit matches the mode recorded in the pin;
-//  4. every file in cloud/sandbox is pinned — no unverified file in a
+//  4. every file in the vendored tree is pinned — no unverified file in a
 //     verified directory, in either direction.
 func VerifyPin(root string) error {
 	p, err := LoadPin(root)
@@ -250,7 +265,7 @@ func VerifyPin(root string) error {
 			PinFile, strings.Join(problems, "\n  "),
 			"A vendored tree file is never edited in this repository. Change it in ticks,\n"+
 				"move `ref` in "+PinFile+" to the commit that changed it, and run\n"+
-				"`go run ./cmd/sandbox sync` — then commit cloud/sandbox and "+PinFile+" together.")
+				"`go run ./cmd/sandbox sync` — then commit "+DirName+" and "+PinFile+" together.")
 	}
 	return nil
 }

@@ -110,10 +110,23 @@ func (r *Reconciler) ciFromAnAncestor(ctx context.Context, pr *forge.PullRequest
 		if err != nil {
 			return "", forge.CIReport{}, false, err
 		}
-		if report.State == forge.CINone {
+		// PENDING IS NOT A VERDICT, it is the absence of one, and taking it
+		// ends the walk with the very answer the walk exists to get past
+		// (tick tk3). Measured closing Phase 4: the walk stopped at an
+		// ancestor whose checks had been CANCELLED — which forge reads as
+		// pending, permanently, because nothing ever re-runs on a superseded
+		// commit (tick 5ob) — while a fully green ancestor sat ONE COMMIT
+		// further on and every change between it and the head was under
+		// .ticfac/.
+		//
+		// Walking past pending is sound for the same reason the walk is sound
+		// at all: onlyRunState below proves the ancestor's code IS this tree's
+		// code, so a conclusive older verdict describes this tree whatever a
+		// newer commit's CI happens to be doing at this moment.
+		if report.State == forge.CINone || report.State == forge.CIPending {
 			continue
 		}
-		// A verdict. It describes this tree only if nothing outside run state
+		// A CONCLUSIVE verdict. It describes this tree only if nothing outside run state
 		// changed since — and a diff this cannot read counts as "changed",
 		// because a gate that cannot prove the tree is unchanged does not get
 		// to assume it.

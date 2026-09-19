@@ -727,7 +727,7 @@ func TestDeployStopsWhenDockerIsNotInstalled(t *testing.T) {
 	if !errors.As(err, &prerequisite) {
 		t.Fatalf("Deploy error = %v, want a PrerequisiteError", err)
 	}
-	if !strings.Contains(prerequisite.Error(), "cloud/sandbox") {
+	if !strings.Contains(prerequisite.Error(), "image/") {
 		t.Errorf("the stop does not say what the image is for:\n%s", prerequisite.Error())
 	}
 	if countLines(h.logLines(), "deploy") != 0 {

@@ -10,7 +10,7 @@
 //
 // The suite ships as part of the versioned contract bundle
 // (contracts/bundle.json), so ticfac inherits it unchanged. The TypeScript
-// half is cloud/factory/test/lifecycle-invariants.test.ts, reading the same
+// half is cloudflare/test/lifecycle-invariants.test.ts, reading the same
 // fixture through its own copy of the fake — a rule with one implementation
 // detects nothing (contracts/README.md).
 //

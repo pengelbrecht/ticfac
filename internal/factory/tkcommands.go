@@ -38,7 +38,7 @@ import (
 // RequiredTkCommandsFile is the derived list, shipped in the image build
 // context so the image build itself can assert the same thing against the tk
 // it actually produced. It is committed rather than generated at deploy time
-// so a plain `docker build cloud/sandbox` proves the same property, and
+// so a plain `docker build image` proves the same property, and
 // TestRequiredTkCommandsFileMatchesTheEntrypoint keeps it from drifting.
 const RequiredTkCommandsFile = "required-tk-commands"
 

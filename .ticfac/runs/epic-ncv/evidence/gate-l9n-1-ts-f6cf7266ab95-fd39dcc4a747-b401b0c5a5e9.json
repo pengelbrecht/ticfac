@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-l9n-1-ts-f6cf7266ab95-fd39dcc4a747-b401b0c5a5e9",
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "l9n",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "e77ef587c1f7068d27752a16152581d8989afc94",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:f6cf7266ab9519d1464248a45d7e16c4b0ffbb4159c28778a5083ebd0b8d6421",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloud/factory && pnpm install --frozen-lockfile --prefer-offline && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-09-18T16:05:56Z",
+  "finished_at": "2026-09-18T16:05:56Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "",
+    "stderr": "sh: line 0: cd: cloud/factory: No such file or directory\n",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:91ad652cb516a48a86a759f9b301636487b89d9bde69843d42e5272ad5dc35f1",
+  "persistence_uri": "git:refs/heads/epic/ncv:.ticfac/runs/epic-ncv/evidence/gate-l9n-1-ts-f6cf7266ab95-fd39dcc4a747-b401b0c5a5e9.json"
+}

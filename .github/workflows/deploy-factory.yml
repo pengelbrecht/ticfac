@@ -1,0 +1,164 @@
+name: Deploy factory
+
+# CI deploys the factory from ticfac (SPEC §12 Phase 4 item 7). The factory is
+# a deployable in the operator's own Cloudflare account (D16), and this
+# workflow is that operator's release cadence: it runs the same installer an
+# operator runs by hand — `ticfac factory deploy`, from the bundle embedded in
+# the exact commit being released — so there is ONE deploy path, not a CI one
+# and a laptop one. First deployment is by hand (`ticfac factory setup`, the
+# credential ladder: it verifies every rung against the live service, and its
+# device-flow rung needs a browser); releases then upgrade the deployment.
+#
+# Credential ownership, stated so a secret never becomes a thing that only
+# works on one machine (the Phase 3 split, ticks 9hu's ~/.ticfacrc, is the
+# precedent):
+#
+#   ticfac's — the factory's own credential file ~/.ticfacrc and its
+#   write-only mirrors as Worker secrets: factory_url, factory_token,
+#   factory_github_token, factory_gateway_url/provider/key,
+#   factory_cloudflare_api_token, factory_workers_ai_billing_mode. Every rung
+#   is walked and verified by `ticfac factory setup` and re-checked live by
+#   `ticfac factory status`; none is ever committed here.
+#
+#   The operator's, mirrored into this repository's Actions secrets so a deploy
+#   from CI is the same deployment identity a deploy from the laptop is:
+#     CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID — the operator's Cloudflare
+#       account (wrangler auth). ticfac never owns these.
+#     TICFAC_FACTORY_TOKEN — the ~/.ticfacrc `factory_token` value. The
+#       repository secret and ~/.ticfacrc must hold the same token: the deploy
+#       reuses a stored token and never mints one, so a stale mirror would
+#       re-push the old token's hash and strand the laptop's newer token.
+#       Rotating is a two-place operation — rotate on the laptop (the deploy's
+#       rotation flag), then update this secret with the new token.
+#   The GitHub refresh token is deliberately not among the mirrors: it renews
+#   the GitHub credential without a browser and stays on the operator's
+#   machine (D11) — a CI deploy needs no renewal and must not hold the key to
+#   one.
+#
+# Two pieces of open work in the ticks tracker are explicitly deferred, with
+# reasons:
+#
+#   s70 (configure release secrets for a deploy workflow) does not block and
+#   its lesson is applied here: that release run skipped its deploy on an
+#   unconfigured secret and the skip was found by inspection. This workflow
+#   names every missing secret as a warning annotation, and skips — rather
+#   than fails — because the factory is the operator's opt-in (D16) and a
+#   contributor with no Cloudflare account must not see red releases. The
+#   ticks-side work s70 names stays in ticks with the board worker it deploys;
+#   its ticfac-side shape is the secrets block above, an operator action.
+#
+#   zkq (the sandbox image's required-tk-commands cannot express the tk
+#   subcommands tk itself invokes) does not block: the factory's own list
+#   (cloudflare/required-tk-commands) is a separate file, derived from the
+#   factory's tk call sites, and it already declares `show` and `list` with
+#   their flags. The structural gap zkq names belongs to the ticks-owned
+#   vendored tree it is filed against — recorded at the top of that file.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One deploy at a time: two tag pushes racing one Cloudflare account is the
+  # two-writers-one-name problem, and an upgrade must not cancel a deploy that
+  # is mid-push (cancel-in-progress is false so a queued release waits its
+  # turn instead of tearing down the previous one's image build).
+  group: deploy-factory
+  cancel-in-progress: false
+
+jobs:
+  deploy-factory:
+    name: deploy-factory
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      # The credential check is the whole gate: it names every secret the
+      # deploy needs, warns per missing one (s70: a skip nobody can see is a
+      # skip nobody configures), and hands the verdict to every later step.
+      - name: Check the deploy credentials are configured
+        id: deploy-credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TICFAC_FACTORY_TOKEN: ${{ secrets.TICFAC_FACTORY_TOKEN }}
+        run: |
+          status=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TICFAC_FACTORY_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::warning::secret $name is not configured; the factory deploy is skipped. Configure it under this repository's Actions secrets."
+              status=1
+            fi
+          done
+          if [ "$status" -eq 0 ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Factory deploy skipped: releases upgrade the factory only when CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and TICFAC_FACTORY_TOKEN are all configured."
+          fi
+
+      - uses: actions/setup-go@v6
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        with:
+          go-version-file: go.mod
+          # No dependency cache for the Go build itself: the module is
+          # stdlib-only plus a handful of TUI dependencies, and the cache is
+          # not worth the plumbing here. ci.yml has the same comment.
+          cache: false
+
+      - uses: pnpm/action-setup@v4
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        with:
+          version: 12.3.4
+
+      - uses: actions/setup-node@v4
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cloudflare/pnpm-lock.yaml
+
+      # The factory package's own devDependency (cloudflare/package.json) is
+      # the wrangler `ticfac factory deploy` drives. Installing it here and
+      # putting its bin directory on PATH gives the deploy the same CLI the
+      # laptop uses, without a global install and without the deploy reaching
+      # for npx.
+      - name: Install the factory package's dependencies
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        working-directory: cloudflare
+        run: |
+          pnpm install --frozen-lockfile
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Build ticfac
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        run: go build -o ./ticfac ./cmd/ticfac
+
+      # The deploy reads ~/.ticfacrc, and a CI runner has none. Staging the
+      # operator's token here is what makes the deploy REUSE it instead of
+      # minting a fresh one — a minted token would push a new hash to the
+      # Worker (invalidating the laptop's token) and then die with the runner.
+      # The file is owner-only, as it is on the laptop.
+      - name: Stage the factory credential file
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        env:
+          TICFAC_FACTORY_TOKEN: ${{ secrets.TICFAC_FACTORY_TOKEN }}
+        run: |
+          umask 077
+          printf 'factory_token=%s\n' "$TICFAC_FACTORY_TOKEN" > ~/.ticfacrc
+
+      # The deploy itself, with no flags: it builds and pushes the sandbox
+      # image from this build's embedded context, applies migrations, deploys
+      # the Worker, verifies the endpoint and waits for the container rollout.
+      - name: Deploy the factory
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ./ticfac factory deploy

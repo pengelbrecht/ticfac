@@ -1,0 +1,112 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "ncv",
+    "job_id": "run-epic-ncv/tick-3q0/attempt-13",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:7686400225bbb2c0ed810fb884c0bf6c6cca7ad271e82c5131f42478eac9d0bf",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "d3d9c491e58c0f7e708584846dc86bbe642c9e1f",
+    "tick_id": "3q0"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Every promoted_as id in .ticfac/runs/epic-ncv/findings (nu9, cxk, t5p, 53s, us2, e9n, sz0, aqm, b50, 80x, 4sb, s2n, 2lz, 4g4, v3q, ohs, 2jw, 5px, 9a8), plus dha, 6na, lan, ox0, ufz and w1j, is absent from main, origin/main and epic/ncv, and exists only uncommitted in the operator checkout. The run's records therefore point at ticks no committed tracker contains, and the next epic cannot be run. Commit them, and consider making triage refuse to record promoted_as until the tick is committed.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Commit Phase 4's triage: dha and ~25 promoted ticks exist only as untracked files"
+      },
+      {
+        "body": "yvi's gate repeats a Phase 4 gate run that never happened, and djo's gate needs an epic completed on the cloud host. Both depend on what dha delivers, but both are blocked only on ncv, so they would read as ready once ncv closes. Block both on dha. Rename either dha or yvi so the ladder has one Phase 5 (for example yvi becomes Phase 6 and djo becomes 5b).",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Make dha the next epic: re-block yvi and djo on dha, and renumber the two 'Phase 5' epics"
+      },
+      {
+        "body": "ncv built every component and no tick owned the run, so the gate was never performed and the review was the first to notice. dha should carry an explicit gate-run tick, blocked on nu9, t5p, cxk, 53s, us2 and e9n. It runs a real small epic through EpicReconcilerWorkflow on a deployed Factory with max_parallel > 1, restarts the Workflow while an attempt is in flight, and reports the intervention count mechanically.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "dha needs a tick that PERFORMS its gate run on a deployed Factory, with a mid-run Workflow restart"
+      },
+      {
+        "body": "Of ncv's 17 stops, 8 were untriaged-findings holds (aqm, which depends on 4sb), 3 were review re-dispatches on identical source (80x), 1 was a premature 'CI absent' refusal (ox0) and 1 was a rerere-poisoned merge (6na). The NOT READY review was recorded as ready-to-merge (b50). None of these is parented to or blocking dha, so dha's own gate run would stop for the same reasons. v3q also carries ncv's unmet criterion that the tracker client passes the 3.2 fixtures. cxk's 'PR carries the review' requires 4sb.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Block dha on the local-host stop causes that made ncv supervised: 4sb, aqm, b50, 80x, ox0, 6na, v3q"
+      },
+      {
+        "body": "dha's children are component ticks only. Add a review-epic tick blocked on every dha child, and a closeout-epic tick blocked on the review, as ncv had with pxc and 3q0. Without them the run cannot reach the reviewed, CI-verified hand-over that dha's definition of done names.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "dha has no final-review or close-out tick"
+      },
+      {
+        "body": "ncv's acceptance says to count interventions and report the number, but no record counts them. This retro had to reconstruct 17 stops, 9 hand commits on the integration branch and 33 hand triages from checkpoint history and first-parent git log. Record each resume (who, after which stop) and flag every integration-branch commit that did not come from an attempt merge or the run itself, so the gate's one-intervention rule can be checked rather than argued.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Count interventions mechanically: record every operator resume and hand commit in .ticfac/"
+      },
+      {
+        "body": "epic-ncv's checkpoint went from sequence 39 ('z23 is running', 2026-09-18 16:39) straight to 40 ('admitted', 16:50) with no failed or stopped state in between. Whatever ended that incarnation, whether a kill, a crash or a deliberate restart, left no record, so it is invisible to any count of interventions or restarts. A new incarnation should record that its predecessor ended without a terminal state.",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "A run incarnation ended with no terminal checkpoint: seq 39 running, then seq 40 admitted"
+      },
+      {
+        "body": "ticfac's Phase 4 delivered the host's components but no run driven by them, and the operator split that out as its own epic (dha) ahead of the Computer executor (yvi) and subscription seats (djo). SPEC 12 still goes from Phase 4 straight to the Computer executor as Phase 5, and it is the ladder the ticfac trackers cite. Amend it, or record the divergence alongside ticks:35t.",
+        "kind": "upstream-tick",
+        "severity": "low",
+        "target": "pengelbrecht/ticks",
+        "title": "SPEC 12 phase ladder: insert 'drive a run from the Cloudflare host' before the Computer executor"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-ncv/tick-3q0/attempt-13",
+      "commits": 1,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-ncv/3q0/RESULT-3q0.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the Phase 4 gate was NOT met (at least 17 interventions, no run on the Cloudflare host, NOT READY review not on PR #11), the next epic dha and ~25 promoted ticks exist only uncommitted in the operator checkout, and CI must be re-derived on the head that includes 3fcec99"
+  },
+  "validated": true,
+  "requested_at": "2026-09-19T15:29:19Z",
+  "answered_at": "2026-09-19T15:29:19Z",
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "3q0",
+    "attempt": 13,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "d3d9c491e58c0f7e708584846dc86bbe642c9e1f",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:7686400225bbb2c0ed810fb884c0bf6c6cca7ad271e82c5131f42478eac9d0bf",
+    "model": "opus",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}

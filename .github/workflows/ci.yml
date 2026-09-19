@@ -116,9 +116,10 @@ jobs:
           git checkout -- contracts/message-context.json
           go run ./cmd/contracts check
 
-  # cloud/sandbox is the sandbox image's build context — ticks owns the tree
-  # (its internal/sandbox suite runs those scripts) and this repository
-  # vendors it as the factory's embedded image context. Two repositories, one
+  # image/ is the sandbox image's build context (moved there from cloud/sandbox
+  # by SPEC §12 Phase 4 item 4) — ticks owns the tree (its internal/sandbox
+  # suite runs those scripts from its own copy) and this repository vendors it
+  # as the factory's embedded image context. Two repositories, one
   # tree: without this job nothing stops the copies drifting while ticks' tests
   # guard ITS copy and ticfac's cold-start budget bounds a container built from
   # THIS one. sandbox.pin.json is the pin; cmd/sandbox is the check.
@@ -129,7 +130,7 @@ jobs:
       - uses: actions/checkout@v6
 
       # The version is named here rather than by a `packageManager` field in
-      # cloud/factory/package.json: adding that field makes pnpm record
+      # cloudflare/package.json: adding that field makes pnpm record
       # packageManagerDependencies in the lockfile, so `--frozen-lockfile`
       # refuses until the lockfile is regenerated. This says the same thing
       # without rewriting the lockfile in a tick about gating.
@@ -141,11 +142,26 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cloud/factory/pnpm-lock.yaml
+          cache-dependency-path: cloudflare/pnpm-lock.yaml
 
       - name: Install
-        working-directory: cloud/factory
+        working-directory: cloudflare
         run: pnpm install --frozen-lockfile
+
+      # Biome (tick ncr). The go job already runs `gofmt -l` here even though
+      # the Go gate does not, on the reasoning that main's copy must be the
+      # formatted one whatever a tick host did; this is that reasoning applied
+      # to the other language.
+      #
+      # Unlike vitest, this is NOT a case of CI taking what the gate cannot
+      # afford - the gate runs `pnpm lint` too. It runs in both because the
+      # gate is what a tick must pass and this is what main takes, and the two
+      # are not the same claim: a tick can be amended, rebased or landed by a
+      # route that never re-ran the gate. It costs ~1.5s in a job whose next
+      # step is the 82s suite.
+      - name: biome
+        working-directory: cloudflare
+        run: pnpm lint
 
       # The whole TypeScript suite, and the reason this job exists (tick odc).
       # Until it, NOTHING ran these tests - not the gate, not CI - and the cost
@@ -162,7 +178,7 @@ jobs:
       # The split, stated so neither side can quietly claim the other's work:
       # the GATE covers contracts and types, THIS covers behaviour.
       - name: pnpm test
-        working-directory: cloud/factory
+        working-directory: cloudflare
         run: pnpm test
 
   sandbox:
@@ -200,11 +216,11 @@ jobs:
       # be a check.
       - name: A deliberately broken vendored script fails
         run: |
-          printf '\n' >> cloud/sandbox/worker.sh
+          printf '\n' >> image/worker.sh
           if go run ./cmd/sandbox check; then
             echo "FAIL: the check passed with an edited vendored file — it is not a check"
             exit 1
           fi
           echo "refused, as it must be"
-          git checkout -- cloud/sandbox/worker.sh
+          git checkout -- image/worker.sh
           go run ./cmd/sandbox check

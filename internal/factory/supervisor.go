@@ -49,7 +49,7 @@ import (
 // needed, and no secret.
 
 // RunWorkflowName is the Workflow a run's supervisor is an instance of. It
-// matches `[[workflows]] name` in cloud/factory/wrangler.toml; the instance id
+// matches `[[workflows]] name` in cloudflare/wrangler.toml; the instance id
 // is the run id, which is why status needs no extra column to find it.
 const RunWorkflowName = "ticks-run"
 
