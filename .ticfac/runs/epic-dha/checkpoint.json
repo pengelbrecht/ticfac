@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 30,
-  "state": "dispatching",
-  "reason": "dispatching aqm as attempt 5",
-  "updated_at": "2026-09-19T22:46:55Z",
+  "sequence": 31,
+  "state": "running",
+  "reason": "aqm is running as attempt 5",
+  "updated_at": "2026-09-19T22:47:12Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -29,7 +29,8 @@
     },
     {
       "tick_id": "aqm",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "b50",
