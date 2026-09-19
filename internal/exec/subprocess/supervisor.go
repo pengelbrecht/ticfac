@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The supervisor: the process that owns one runner, pushes its work on a
@@ -135,7 +137,12 @@ func Supervise(stateDir string) error {
 
 	runner := exec.Command(record.RunnerArgv[0], record.RunnerArgv[1:]...)
 	runner.Dir = record.Worktree
-	runner.Env = append(box.Env, record.RunnerEnv...)
+	// Whatever the grade, the runner's git starts no maintenance: its worktree
+	// shares the object store the reconciler is writing records into, and a
+	// commit here that started a background repack there races those writes
+	// (tick mel, gitbin.NoAutoMaintenance). Last, so it is numbered after
+	// every pin the grade made.
+	runner.Env = gitbin.WithNoAutoMaintenance(append(box.Env, record.RunnerEnv...))
 	runner.Stdout = log
 	runner.Stderr = log
 	runner.SysProcAttr = newProcessGroup()

@@ -71,11 +71,14 @@ func (g *repoGit) onceEnv(dir string, extraEnv []string, args ...string) (stdout
 	if dir == "" {
 		dir = g.dir
 	}
-	cmd := exec.Command(gitbin.Path(), append([]string{
+	// gitbin.NoAutoMaintenance: this repository is the one the run writes its
+	// trees, blobs and commits into, and a fetch or a merge that started a
+	// background repack of it would race those writes (tick mel).
+	cmd := exec.Command(gitbin.Path(), append(append([]string{
 		"-c", "user.name=" + g.name,
 		"-c", "user.email=" + g.email,
 		"-c", "commit.gpgsign=false",
-	}, args...)...)
+	}, gitbin.NoAutoMaintenance...), args...)...)
 	cmd.Dir = dir
 	// GIT_TERMINAL_PROMPT=0 bounds the prompt; runstate.TransportEnv bounds the
 	// network, which is the one that stopped a run for two and a half hours.

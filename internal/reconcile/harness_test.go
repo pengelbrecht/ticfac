@@ -325,6 +325,16 @@ func newRepo(t *testing.T, root, name, gate string) *testRepo {
 	origin := filepath.Join(root, name+"-origin.git")
 
 	mustRun(t, root, "git", "init", "--quiet", "--bare", "-b", "main", origin)
+	// The origin is a forge's stand-in, and a forge does not repack a
+	// repository under the pushes it is receiving. A bare repository on disk
+	// does: every receive-pack ends by starting a detached `git maintenance
+	// run --auto`, which on a git with the geometric default repacks, and its
+	// prune-packed removes an object fan-out directory another push is
+	// migrating its objects into — "unable to migrate objects to permanent
+	// storage", the origin-side twin of tick mel. A single run starts dozens
+	// of these. It is the harness's origin that does that, not the run, and
+	// the run cannot say otherwise from the pushing end.
+	mustRun(t, origin, "git", "config", "maintenance.auto", "false")
 	mustRun(t, root, "git", "init", "--quiet", "-b", "main", dir)
 	configure(t, dir)
 	if err := os.MkdirAll(filepath.Join(dir, ".tick"), 0o755); err != nil {
