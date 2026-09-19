@@ -62,6 +62,20 @@
 import { DurableObject } from "cloudflare:workers";
 import { isRunCredentialGrade, type RunCredentialGrade } from "./credentials";
 import type { Env } from "./index";
+import {
+  type AcquireLeaseRequest,
+  type AcquireLeaseResult,
+  badText,
+  DEFAULT_LEASE_TTL_MS,
+  type DispatchLeaseView,
+  type HolderCredentials,
+  invalidRequest,
+  type LeaseRecord,
+  LeaseTable,
+  type RenewLeaseResult,
+  type RequestInvalid,
+  stamp,
+} from "./lease";
 import { announceQueueExpiry } from "./queue-expiry";
 import {
   RUN_EVENT_SOURCES,
@@ -72,68 +86,33 @@ import {
 } from "./run-events";
 import { MAX_QUEUE_TTL_MS, MIN_QUEUE_TTL_MS, startRun } from "./runs";
 
+export type {
+  AcquireLeaseRequest,
+  AcquireLeaseResult,
+  DispatchLease,
+  DispatchLeaseView,
+  HolderCredentials,
+  LeaseGranted,
+  LeaseLostReason,
+  LeaseOrigin,
+  LeaseRefused,
+  RenewLeaseResult,
+  RequestInvalid,
+} from "./lease";
 /**
- * Lease lifetime, mirroring `DEFAULT_CONTROLLER_LEASE_MS` in the Pi extension's
- * file lease so an enrolled and an un-enrolled project behave the same. A run
- * outlives it many times over and renews on a heartbeat; the ttl bounds how
- * long an *abandoned* run wedges the project, not how long a run may take.
+ * The dispatch lease's SEMANTICS live in one implementation, `src/lease.ts`,
+ * shared with the repository Durable Object's publish slot (tick ef7, SPEC
+ * §12 Phase 4 item 3) — preserved by construction rather than by copy,
+ * because a copy of a rule is the one place a rule drifts. The constants and
+ * types are re-exported unchanged so every existing import —
+ * `DEFAULT_LEASE_TTL_MS` in the tests, `LeaseLostReason` in run-workflow —
+ * keeps naming RunRoom, the room that made them a contract. RunRoom's own
+ * lease tests predate the extraction and still pass unmodified; that is the
+ * proof the extraction changed nothing.
  */
-export const DEFAULT_LEASE_TTL_MS = 60_000;
-/** Same floor as the file lease: below this, clock skew alone expires a live lease. */
-export const MIN_LEASE_TTL_MS = 100;
-/** A ceiling so a bad caller cannot wedge a project for a day on one typo. */
-export const MAX_LEASE_TTL_MS = 3_600_000;
+export { DEFAULT_LEASE_TTL_MS, MAX_LEASE_TTL_MS, MIN_LEASE_TTL_MS } from "./lease";
 
-/** Where the orchestrator holding the lease runs (D19). */
-export type LeaseOrigin = "local" | "cloud";
-
-/** The lease as its holder sees it — `token` is the release credential. */
-export type DispatchLease = {
-  run_id: string;
-  /** Opaque fencing token. Only the acquirer ever receives it. */
-  token: string;
-  epic: string;
-  origin: LeaseOrigin;
-  requested_by?: string;
-  acquired_at: string;
-  expires_at: string;
-};
-
-/**
- * The lease as everyone else sees it. The token is withheld: handing a refused
- * caller the holder's token would let it release a lease it does not hold,
- * which is the one thing compare-and-delete exists to prevent.
- */
-export type DispatchLeaseView = Omit<DispatchLease, "token">;
-
-export type AcquireLeaseRequest = {
-  run_id: string;
-  epic: string;
-  origin?: LeaseOrigin;
-  requested_by?: string;
-  ttl_ms?: number;
-};
-
-/**
- * A malformed call. Every RunRoom method returns its failures rather than
- * throwing: a thrown RPC error reaches the caller as an opaque rejection and
- * is *also* logged as an uncaught DO exception, so a typed refusal keeps both
- * the contract and the logs honest.
- */
-export type RequestInvalid = { ok: false; error: "invalid_request"; detail: string };
-
-export type LeaseGranted = { ok: true; lease: DispatchLease; renewed: boolean };
-export type LeaseRefused = {
-  ok: false;
-  error: "lease_held";
-  /** The dispatch-log refusal reason (see docs/design/cloud-factory.md). */
-  reason: string;
-  holder: DispatchLeaseView;
-  detail: string;
-};
-export type AcquireLeaseResult = LeaseGranted | LeaseRefused | RequestInvalid;
-
-export type HolderCredentials = { run_id: string; token: string };
+/** The lease as its holder sees it, and as everyone else sees it — see `src/lease.ts`. */
 
 export type ReleaseLeaseResult =
   | { ok: true; released: DispatchLeaseView; ignited: QueuedSubmission | null }
@@ -142,33 +121,10 @@ export type ReleaseLeaseResult =
 
 /**
  * HOW a renewal failed, because the two are opposite problems and the fixes
- * for them point in opposite directions (tick 7n7).
- *
- * - `taken`: a live lease exists and it is not this run's. Somebody else is
- *   the project's arbiter now, and this run must stop rather than race it.
- * - `expired`: nobody holds the lease. It lapsed — either because nothing
- *   renewed it on the run's behalf, or because it was already released.
- *
- * `POST /api/wave` has always told these apart (`lease_lost` vs
- * `lease_held_by`, see wave-request.ts). The renewal path collapsed both into
- * one message, so an operator reading a Workflow instance was told the lease
- * "was lost to another run" when nobody had taken it — the fourth time this
- * epic has hit `.tick/learnings.md`'s never-collapse-failure-classes rule.
+ * for them point in opposite directions — see `src/lease.ts` (tick 7n7's
+ * `expired` vs `taken`, which `POST /api/wave` has always told apart in
+ * wave-request.ts).
  */
-export type LeaseLostReason = "expired" | "taken";
-
-export type RenewLeaseResult =
-  | { ok: true; lease: DispatchLease }
-  | {
-      ok: false;
-      error: "lease_lost";
-      /** Which of the two ways it was lost. Never inferred from the message. */
-      lost: LeaseLostReason;
-      /** Set only when `lost` is `taken`: an expired lease has no holder. */
-      holder: DispatchLeaseView | null;
-      detail: string;
-    }
-  | RequestInvalid;
 
 /**
  * A submission parked behind a live lease (D22).
@@ -407,16 +363,8 @@ export const MAX_RECENT_EVENTS = 50;
 
 /** Single-row table: the lease is one per project, and the room *is* the project. */
 const LEASE_ROW = "dispatch";
-
-type LeaseRecord = {
-  run_id: string;
-  token: string;
-  epic: string;
-  origin: string;
-  requested_by: string | null;
-  acquired_at: number;
-  expires_at: number;
-};
+/** The one table the dispatch lease lives in — same name since the room's first day. */
+const LEASE_TABLE = "dispatch_lease";
 
 type QueuedRecord = {
   run_id: string;
@@ -467,8 +415,6 @@ type RunEventRecord = {
   delivered: number;
 };
 
-const stamp = (ms: number): string => new Date(ms).toISOString();
-
 /**
  * Returns a complaint when the message is not a `run_event` the schema
  * describes, else null.
@@ -506,26 +452,11 @@ function badRunEvent(event: unknown): string | null {
   return null;
 }
 
-/** Returns a complaint when the field is not a non-empty string, else null. */
-function badText(value: unknown, field: string): string | null {
-  return typeof value === "string" && value.trim() !== "" ? null : `${field} is required`;
-}
-
 /**
- * Returns a complaint when the ttl is outside the pinned bounds, else null.
- * The bounds are named constants with this guard so a limit change has to pass
- * a test rather than only a review.
+ * Returns a complaint when the ttl is outside the queue's own bounds, else
+ * null. The same shape of guard as the lease's `badTtl` (src/lease.ts), for a
+ * different pinned pair of constants.
  */
-function badTtl(ttl: unknown): string | null {
-  if (ttl === undefined) return null;
-  return Number.isSafeInteger(ttl) &&
-    (ttl as number) >= MIN_LEASE_TTL_MS &&
-    (ttl as number) <= MAX_LEASE_TTL_MS
-    ? null
-    : `lease ttl must be an integer between ${MIN_LEASE_TTL_MS} and ${MAX_LEASE_TTL_MS} ms, got ${String(ttl)}`;
-}
-
-/** The same shape of guard as badTtl, for the queue window's own bounds. */
 function badQueueTtl(ttl: unknown): string | null {
   if (ttl === undefined) return null;
   return Number.isSafeInteger(ttl) &&
@@ -535,13 +466,24 @@ function badQueueTtl(ttl: unknown): string | null {
     : `queue ttl must be an integer between ${MIN_QUEUE_TTL_MS} and ${MAX_QUEUE_TTL_MS} ms, got ${String(ttl)}`;
 }
 
+/** The room's own prefix on every typed refusal — see `invalidRequest` in lease.ts. */
 function invalid(complaint: string): RequestInvalid {
-  return { ok: false, error: "invalid_request", detail: `RunRoom: ${complaint}` };
+  return invalidRequest("RunRoom", complaint);
 }
 
 export class RunRoom extends DurableObject<Env> {
+  /** The dispatch lease: one row, RunRoom's exact semantics, one implementation. */
+  readonly #lease: LeaseTable;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.#lease = new LeaseTable(ctx.storage.sql, {
+      table: LEASE_TABLE,
+      row: LEASE_ROW,
+      noun: "dispatch lease",
+      scope: "RunRoom",
+      domain: "project",
+    });
     // Synchronous, so it is complete before any request or alarm is delivered
     // — DO storage SQL does not yield.
     ctx.storage.sql.exec(`
@@ -634,109 +576,24 @@ export class RunRoom extends DurableObject<Env> {
   // ---------------------------------------------------------------- lease ---
 
   /**
-   * Takes the project's dispatch lease, or reports who holds it.
-   *
-   * Never blocks and never queues: a caller that cannot have the lease is told
-   * the holding run's id so the refusal is actionable (UC1 step 2). A second
-   * acquire by the *same* run is a renewal, so a retried submission is
-   * idempotent rather than a self-conflict.
+   * Takes the project's dispatch lease, or reports who holds it. The
+   * acquire/renew/release vocabulary is the shared `src/lease.ts` core's —
+   * never blocks, never queues, names the holder in every refusal, and
+   * treats a re-acquire by the same run as a renewal.
    */
   async acquireDispatchLease(request: AcquireLeaseRequest): Promise<AcquireLeaseResult> {
-    const complaint =
-      badText(request?.run_id, "run_id") ??
-      badText(request?.epic, "epic") ??
-      badTtl(request?.ttl_ms);
-    if (complaint !== null) return invalid(complaint);
-    const runID = request.run_id;
-    const epic = request.epic;
-    const ttl = request.ttl_ms ?? DEFAULT_LEASE_TTL_MS;
-    const now = Date.now();
-
-    // Read and write with no `await` in between: DO storage SQL is
-    // synchronous, so nothing can interleave and observe the same free lease.
-    // This is what the file lease needed flock for.
-    const current = this.#readLease();
-    const live = current !== null && current.expires_at > now;
-
-    if (live && current!.run_id !== runID) {
-      const holder = this.#leaseView(current!);
-      return {
-        ok: false,
-        error: "lease_held",
-        reason: `lease_held_by:${current!.run_id}`,
-        holder,
-        detail: `the dispatch lease is held by run ${current!.run_id} (epic ${holder.epic}, ${holder.origin}) until ${holder.expires_at}`,
-      };
-    }
-
-    const renewed = live && current!.run_id === runID;
-    const record: LeaseRecord = {
-      run_id: runID,
-      // A renewal keeps the holder's token: it is the release credential, and
-      // rotating it under a live holder would lock it out of its own lease.
-      token: renewed ? current!.token : crypto.randomUUID(),
-      epic,
-      origin: request.origin ?? "cloud",
-      requested_by: request.requested_by ?? null,
-      acquired_at: renewed ? current!.acquired_at : now,
-      expires_at: now + ttl,
-    };
-    this.#writeLease(record);
-    await this.#armAlarm();
-
-    return { ok: true, lease: this.#lease(record), renewed };
+    const result = this.#lease.acquire(request);
+    if (result.ok) await this.#armAlarm();
+    return result;
   }
 
   /** Extends the lease for its holder. A lost or taken-over lease cannot be renewed. */
   async renewDispatchLease(
     request: HolderCredentials & { ttl_ms?: number },
   ): Promise<RenewLeaseResult> {
-    const complaint =
-      badText(request?.run_id, "run_id") ??
-      badText(request?.token, "token") ??
-      badTtl(request?.ttl_ms);
-    if (complaint !== null) return invalid(complaint);
-    const runID = request.run_id;
-    const token = request.token;
-    const ttl = request.ttl_ms ?? DEFAULT_LEASE_TTL_MS;
-    const now = Date.now();
-
-    const current = this.#readLease();
-    const live = current !== null && current.expires_at > now;
-    if (!live || current!.run_id !== runID || current!.token !== token) {
-      // A LIVE lease that is not this run's was taken; anything else lapsed.
-      // The two are told apart here, at the only place that can see both the
-      // row and the clock, rather than guessed at by every caller.
-      if (live) {
-        return {
-          ok: false,
-          error: "lease_lost",
-          lost: "taken",
-          holder: this.#leaseView(current!),
-          detail:
-            current!.run_id === runID
-              ? `run ${runID}'s dispatch lease was re-acquired under a different token`
-              : `the dispatch lease is held by run ${current!.run_id}, not ${runID}`,
-        };
-      }
-      return {
-        ok: false,
-        error: "lease_lost",
-        lost: "expired",
-        holder: null,
-        detail:
-          current === null
-            ? `run ${runID}'s dispatch lease has expired or been released — no lease is held ` +
-              "for this project, and no other run has taken it"
-            : `run ${runID}'s dispatch lease expired at ${new Date(current.expires_at).toISOString()} ` +
-              "and no other run has taken it",
-      };
-    }
-
-    const record: LeaseRecord = { ...current!, expires_at: now + ttl };
-    this.#writeLease(record);
-    await this.#armAlarm();
-    return { ok: true, lease: this.#lease(record) };
+    const result = this.#lease.renew(request);
+    if (result.ok) await this.#armAlarm();
+    return result;
   }
 
   /**
@@ -745,30 +602,8 @@ export class RunRoom extends DurableObject<Env> {
    * over cannot free its successor's lease on the way out.
    */
   async releaseDispatchLease(request: HolderCredentials): Promise<ReleaseLeaseResult> {
-    const complaint = badText(request?.run_id, "run_id") ?? badText(request?.token, "token");
-    if (complaint !== null) return invalid(complaint);
-    const runID = request.run_id;
-    const token = request.token;
-
-    const current = this.#readLease();
-    if (current === null || current.run_id !== runID || current.token !== token) {
-      return {
-        ok: false,
-        error: "not_holder",
-        holder: current === null ? null : this.#leaseView(current),
-        detail:
-          current === null
-            ? "no dispatch lease is held"
-            : `the dispatch lease is held by run ${current.run_id}, not ${runID}`,
-      };
-    }
-
-    this.ctx.storage.sql.exec(
-      "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
-      LEASE_ROW,
-      runID,
-      token,
-    );
+    const result = this.#lease.release(request);
+    if (!result.ok) return result;
     // The lease is free for exactly as long as it takes to hand it to the next
     // parked submission — the release is what ignites a queued run (D22).
     const { ignited, expired } = await this.#igniteNextQueued();
@@ -776,7 +611,7 @@ export class RunRoom extends DurableObject<Env> {
     // After the room's own state is settled: the announcement is best effort
     // and must never be able to leave the lease or the alarm half-written.
     await this.#reportExpired(expired);
-    return { ok: true, released: this.#leaseView(current), ignited };
+    return { ok: true, released: result.released, ignited };
   }
 
   /**
@@ -784,9 +619,7 @@ export class RunRoom extends DurableObject<Env> {
    * alarm deletes it, so a missed alarm cannot wedge the project.
    */
   async leaseStatus(): Promise<DispatchLeaseView | null> {
-    const current = this.#readLease();
-    if (current === null || current.expires_at <= Date.now()) return null;
-    return this.#leaseView(current);
+    return this.#lease.status();
   }
 
   /**
@@ -810,14 +643,8 @@ export class RunRoom extends DurableObject<Env> {
     // announced once the room's state is settled below.
     const expired = this.#pruneExpiredQueued();
 
-    const current = this.#readLease();
-    if (current !== null && current.expires_at <= Date.now()) {
-      this.ctx.storage.sql.exec(
-        "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
-        LEASE_ROW,
-        current.run_id,
-        current.token,
-      );
+    const sweptLease = this.#lease.expireDue();
+    if (sweptLease !== null) {
       // An abandoned run must not strand the queue behind it: the expiry is a
       // release like any other.
       const swept = await this.#igniteNextQueued();
@@ -1330,54 +1157,6 @@ export class RunRoom extends DurableObject<Env> {
 
   // ------------------------------------------------------------- internals ---
 
-  #readLease(): LeaseRecord | null {
-    const rows = [
-      ...this.ctx.storage.sql.exec<LeaseRecord>(
-        "SELECT run_id, token, epic, origin, requested_by, acquired_at, expires_at FROM dispatch_lease WHERE id = ?",
-        LEASE_ROW,
-      ),
-    ];
-    return rows[0] ?? null;
-  }
-
-  #writeLease(record: LeaseRecord): void {
-    this.ctx.storage.sql.exec(
-      `INSERT INTO dispatch_lease (id, run_id, token, epic, origin, requested_by, acquired_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         run_id = excluded.run_id,
-         token = excluded.token,
-         epic = excluded.epic,
-         origin = excluded.origin,
-         requested_by = excluded.requested_by,
-         acquired_at = excluded.acquired_at,
-         expires_at = excluded.expires_at`,
-      LEASE_ROW,
-      record.run_id,
-      record.token,
-      record.epic,
-      record.origin,
-      record.requested_by,
-      record.acquired_at,
-      record.expires_at,
-    );
-  }
-
-  #lease(record: LeaseRecord): DispatchLease {
-    return { ...this.#leaseView(record), token: record.token };
-  }
-
-  #leaseView(record: LeaseRecord): DispatchLeaseView {
-    return {
-      run_id: record.run_id,
-      epic: record.epic,
-      origin: record.origin as LeaseOrigin,
-      ...(record.requested_by === null ? {} : { requested_by: record.requested_by }),
-      acquired_at: stamp(record.acquired_at),
-      expires_at: stamp(record.expires_at),
-    };
-  }
-
   /**
    * Arms the single DO alarm at the earliest live deadline.
    *
@@ -1387,8 +1166,8 @@ export class RunRoom extends DurableObject<Env> {
    */
   async #armAlarm(): Promise<void> {
     const deadlines: number[] = [];
-    const lease = this.#readLease();
-    if (lease !== null) deadlines.push(lease.expires_at);
+    const lease = this.#lease.deadline();
+    if (lease !== null) deadlines.push(lease);
     const soonest = [
       ...this.ctx.storage.sql.exec<{ expires_at: number }>(
         "SELECT MIN(expires_at) AS expires_at FROM queued_submission",
@@ -1480,10 +1259,10 @@ export class RunRoom extends DurableObject<Env> {
 
     const next = this.#liveQueue(now)[0];
     if (next === undefined) return { ignited: null, expired };
-    if (this.#readLease() !== null) return { ignited: null, expired };
+    if (this.#lease.read() !== null) return { ignited: null, expired };
 
     const token = crypto.randomUUID();
-    this.#writeLease({
+    const record: LeaseRecord = {
       run_id: next.run_id,
       token,
       epic: next.epic,
@@ -1491,7 +1270,8 @@ export class RunRoom extends DurableObject<Env> {
       requested_by: next.requested_by,
       acquired_at: now,
       expires_at: now + DEFAULT_LEASE_TTL_MS,
-    });
+    };
+    this.#lease.write(record);
 
     try {
       await startRun(this.env, {
@@ -1515,12 +1295,7 @@ export class RunRoom extends DurableObject<Env> {
         lease_token: token,
       });
     } catch (error) {
-      this.ctx.storage.sql.exec(
-        "DELETE FROM dispatch_lease WHERE id = ? AND run_id = ? AND token = ?",
-        LEASE_ROW,
-        next.run_id,
-        token,
-      );
+      this.#lease.deleteHeld(record);
       console.error(
         `RunRoom: queued submission ${next.run_id} (epic ${next.epic}) could not ignite; ` +
           `it stays queued until ${stamp(next.expires_at)}: ${String(error)}`,

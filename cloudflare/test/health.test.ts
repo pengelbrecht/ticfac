@@ -83,6 +83,10 @@ describe("worker module shape", () => {
   it("exports the RunRoom durable object class", () => {
     expect(Object.keys(worker)).toContain("RunRoom");
   });
+
+  it("exports the RepoRoom durable object class", () => {
+    expect(Object.keys(worker)).toContain("RepoRoom");
+  });
 });
 
 // Final-review finding 2 (tick e1d). `auth.configured` used to come from

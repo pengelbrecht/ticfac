@@ -78,6 +78,7 @@ import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
 import { runDailyDigest } from "./loop-digest";
 import { observeRoute } from "./observe";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
+import { RepoRoom } from "./repo-room";
 import {
   type MessageRef,
   type Outcome,
@@ -1427,4 +1428,4 @@ export { Sandbox } from "@cloudflare/sandbox";
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
-export { EpicReconcilerWorkflow, RunRoom, RunWorkflow, SignalInbox };
+export { EpicReconcilerWorkflow, RepoRoom, RunRoom, RunWorkflow, SignalInbox };

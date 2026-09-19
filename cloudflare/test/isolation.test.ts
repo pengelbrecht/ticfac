@@ -81,4 +81,14 @@ describe("required bindings are declared for deploy", () => {
     expect(wranglerToml).toMatch(/class_name\s*=\s*"RunRoom"/);
     expect(wranglerToml).toMatch(/new_sqlite_classes\s*=\s*\["RunRoom"\]/);
   });
+
+  // The repository Durable Object (tick ef7): one publish slot and one
+  // serialized publisher per repository — every publish to a repository on
+  // this host goes through it, so a deployment that forgot to declare it
+  // would refuse every run at its first publish.
+  it("binds the RepoRoom durable object", () => {
+    expect(wranglerToml).toMatch(/name\s*=\s*"REPO_ROOMS"/);
+    expect(wranglerToml).toMatch(/class_name\s*=\s*"RepoRoom"/);
+    expect(wranglerToml).toMatch(/new_sqlite_classes\s*=\s*\["RepoRoom"\]/);
+  });
 });

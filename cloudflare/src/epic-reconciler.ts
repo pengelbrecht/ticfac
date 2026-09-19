@@ -38,6 +38,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 
 import { contentsStore } from "./git-contents";
 import type { Env } from "./index";
+import { DEFAULT_LEASE_TTL_MS, type HolderCredentials, MAX_LEASE_TTL_MS } from "./lease";
 import {
   type Checkpoint,
   provenance,
@@ -849,6 +850,15 @@ export const DEFAULT_RECONCILE_POLL_MS = 60_000;
  * steps and the next pass resumes from `.ticfac/` — the checkpoint names
  * where the run stopped, the attempt markers name what is in flight, and no
  * step trusts anything else it holds.
+ *
+ * Every pass writes as THE repository's one writer: the run takes the
+ * repository Durable Object's publish slot first (tick ef7, SPEC §12 Phase 4
+ * item 3) and its `contentsStore` publishes through the room's one
+ * serialized publisher, so two concurrent Workflows of one repository
+ * cannot both write — the second stops naming the holder. The slot is a
+ * heartbeat, like the RunRoom lease: renewed every pass, re-acquired (under
+ * the room's own compare-and-swap) when a restart outlived its ttl, and
+ * released on the way out so a finished run never wedges the repository.
  */
 export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcilerParams> {
   async run(event: WorkflowEvent<EpicReconcilerParams>, step: WorkflowStep) {
@@ -857,7 +867,38 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
     const pollMs =
       params.poll_interval_ms ?? env.TICFAC_RECONCILE_POLL_MS ?? DEFAULT_RECONCILE_POLL_MS;
 
-    const store = new RunStateStore(contentsStore(env, params.project, params.branch), {
+    const room = () => env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(params.project));
+    // The slot outlives a poll beat threefold so one slow pass cannot lose it,
+    // and stays inside the lease's own pinned bounds.
+    const slotTtlMs = Math.min(MAX_LEASE_TTL_MS, Math.max(DEFAULT_LEASE_TTL_MS, pollMs * 3));
+
+    // The slot is taken as its own step so its token is DURABLE: a restarted
+    // isolate replays this step and re-reads the slot it already holds,
+    // instead of re-acquiring blind.
+    const acquired = await step.do("publish-slot", async () =>
+      room().acquireSlot({
+        run_id: params.run_id,
+        epic: params.epic_id,
+        origin: "cloud",
+        ttl_ms: slotTtlMs,
+      }),
+    );
+    if (!acquired.ok) {
+      // The tick's acceptance, answered: two concurrent runs cannot both
+      // write, and the loser stops naming the holder. It cannot even record
+      // its own failure — a checkpoint write would be a publish too.
+      const reason =
+        acquired.error === "lease_held"
+          ? `the publish slot for ${params.project} is held by run ${acquired.holder.run_id} ` +
+            `(epic ${acquired.holder.epic}); this run stops rather than write around it`
+          : `the publish slot for ${params.project} refused this run: ${acquired.detail}`;
+      return { terminal: true, state: "failed", reason, dispatched: [] };
+    }
+    let holder: HolderCredentials = { run_id: params.run_id, token: acquired.lease.token };
+
+    // The run's one repository view: reads direct, publishes through the room.
+    const repository = contentsStore(env, params.project, params.branch, () => holder);
+    const store = new RunStateStore(repository, {
       run_id: params.run_id,
       epic_id: params.epic_id,
       // The checkpoint is a reconciler-side record: executor stays null —
@@ -869,12 +910,9 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         phase: "worker",
       }),
     });
-    const client = new TrackerClient(
-      contentsStore(env, params.project, params.branch),
-      params.project,
-      params.branch,
-      { maxParallel: params.max_parallel },
-    );
+    const client = new TrackerClient(repository, params.project, params.branch, {
+      maxParallel: params.max_parallel,
+    });
 
     const executor = env.TICFAC_EXECUTOR; // undefined refuses dispatches, by design
 
@@ -890,15 +928,83 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
     let pass = 0;
     for (;;) {
       const result = await step.do(pass === 0 ? "plan" : `reconcile-pass-${pass}`, async () => {
+        // The slot's heartbeat, renewed INSIDE the step so a pass never writes
+        // under a slot it has not just confirmed — and so a token the room
+        // rotated (a re-acquire after a lapse) is carried in the step's durable
+        // result, where a restarted isolate re-reads it.
+        const renewal = await room().renewSlot({
+          run_id: holder.run_id,
+          token: holder.token,
+          ttl_ms: slotTtlMs,
+        });
+        let token = holder.token;
+        let slotFailure: string | null = null;
+        if (renewal.ok) {
+          token = renewal.lease.token;
+        } else if (renewal.error === "lease_lost" && renewal.lost === "expired") {
+          // Lapsed, not taken: re-derive, under the room's own CAS — another
+          // run may have taken the slot in the gap, and then this acquire
+          // refuses naming it, which is the run stopping, below.
+          const again = await room().acquireSlot({
+            run_id: params.run_id,
+            epic: params.epic_id,
+            origin: "cloud",
+            ttl_ms: slotTtlMs,
+          });
+          if (again.ok) token = again.lease.token;
+          else
+            slotFailure =
+              again.error === "lease_held"
+                ? `the publish slot for ${params.project} was taken over by run ${again.holder.run_id} while this run lapsed`
+                : `the publish slot for ${params.project} refused this run: ${again.detail}`;
+        } else if (renewal.error === "lease_lost") {
+          // Taken: another run is this repository's writer now.
+          slotFailure =
+            `the publish slot for ${params.project} was lost to run ${renewal.holder?.run_id ?? "unknown"}: ` +
+            renewal.detail;
+        } else {
+          slotFailure = `the publish slot for ${params.project} refused the heartbeat: ${renewal.detail}`;
+        }
+        if (slotFailure !== null) {
+          return {
+            terminal: true,
+            state: "failed",
+            reason: slotFailure,
+            dispatched: [],
+            slot_token: token,
+          };
+        }
+
         const outcome = await reconciler.reconcilePass();
         return {
           terminal: outcome.terminal,
           state: outcome.state,
           reason: outcome.reason,
           dispatched: outcome.dispatched,
+          slot_token: token,
         };
       });
-      if (result.terminal) return result;
+      holder = { run_id: params.run_id, token: result.slot_token };
+      if (result.terminal) {
+        // Best effort and its own step: a release that fails (the slot already
+        // lapsed, or was taken over) must not turn a terminal verdict into a
+        // wedged Workflow — the room's alarm sweeps what it leaves behind.
+        await step.do("release-publish-slot", async () => {
+          try {
+            await room().releaseSlot(holder);
+          } catch (error) {
+            console.error(
+              `run ${params.run_id} could not release the publish slot for ${params.project}: ${String(error)}`,
+            );
+          }
+        });
+        return {
+          terminal: result.terminal,
+          state: result.state,
+          reason: result.reason,
+          dispatched: result.dispatched,
+        };
+      }
       await step.sleep(`settle-${pass}`, pollMs);
       pass += 1;
       if (pass > 10_000) {

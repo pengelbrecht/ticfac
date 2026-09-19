@@ -26,7 +26,9 @@
  */
 
 import type { Env } from "./index";
+import type { HolderCredentials } from "./lease";
 import { GITHUB_API_BASE_URL } from "./progress";
+import type { PublishWrite } from "./repo-room";
 
 // ------------------------------------------------------------- the seam ---
 
@@ -247,8 +249,71 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
   };
 }
 
+/**
+ * The repository Durable Object's publisher, reached as a `ContentsStore`
+ * (tick ef7, SPEC §12 Phase 4 item 3).
+ *
+ * Every WRITE goes through the room's one serialized publisher, under the
+ * one slot the holder presents: two concurrent runs of the same epic cannot
+ * both write, because only one can hold the slot, and no two writes are ever
+ * in flight at once. Reads go straight to GitHub, not through the room — the
+ * room is a lock, not a store (SPEC §9.1), and reading one name needs no
+ * writer.
+ *
+ * `holder` is a GETTER, not a value: the slot's token is a fencing credential
+ * that a run re-acquires after an expiry, and a captured value would go stale
+ * where a getter is re-read at each write.
+ *
+ * A `not_holder` refusal is thrown, not returned: the `ContentsStore`
+ * vocabulary (`written | exists | conflict | missing`) is the repository's own
+ * answers about one ref, and "you are not this repository's writer right
+ * now" is not one of them — it is a run-stopping condition the caller
+ * re-derives from, exactly as it does a lease_lost renewal.
+ */
+export function repoContentsStore(
+  env: Env,
+  project: string,
+  ref: string,
+  holder: () => HolderCredentials,
+): ContentsStore {
+  const readSide = githubContentsStore(env, project, ref);
+  const room = () => env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(project));
+
+  const publish = async (write: PublishWrite): Promise<StoreWrite> => {
+    const result = await room().publish({ holder: holder(), ref, write });
+    if (result.ok) return result.write;
+    if (result.error === "invalid_request") {
+      throw new Error(`the repository publisher refused the write: ${result.detail}`);
+    }
+    throw new Error(
+      `the repository publisher refused the write: ${result.detail} ` +
+        `(the publish slot is held by run ${result.holder?.run_id ?? "nobody"})`,
+    );
+  };
+
+  return {
+    async list(prefix) {
+      return readSide.list(prefix);
+    },
+    async read(path) {
+      return readSide.read(path);
+    },
+    async create(path, input) {
+      return publish({ op: "create", path, ...input });
+    },
+    async update(path, sha, input) {
+      return publish({ op: "update", path, sha, ...input });
+    },
+  };
+}
+
 /** The store this deployment uses for `ref`: a test's fake, or GitHub's. */
-export function contentsStore(env: Env, project: string, ref: string): ContentsStore {
+export function contentsStore(
+  env: Env,
+  project: string,
+  ref: string,
+  holder?: () => HolderCredentials,
+): ContentsStore {
   const injected = env.TICK_CONTENTS;
   if (injected !== undefined && injected !== null) {
     // A test's fake stands in for ONE (project, ref); make a mismatch loud
@@ -259,5 +324,10 @@ export function contentsStore(env: Env, project: string, ref: string): ContentsS
         `not ${project} at ${ref}`,
     );
   }
+  // A caller that names its slot holder is a run: its publishes go through
+  // the repository Durable Object's one serialized publisher. A caller that
+  // does not keeps today's direct path — the surfaces that predate the room
+  // (the signal inbox's own queue, collect) and every read.
+  if (holder !== undefined) return repoContentsStore(env, project, ref, holder);
   return githubContentsStore(env, project, ref);
 }

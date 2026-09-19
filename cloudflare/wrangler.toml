@@ -24,6 +24,20 @@ tag = "v1"
 # SQLite-backed storage — requires the recent compatibility_date above.
 new_sqlite_classes = ["RunRoom"]
 
+# One RepoRoom per repository (idFromName("owner/name")) — the repository
+# Durable Object (tick ef7, SPEC §12 Phase 4 item 3): ONE publish slot with
+# RunRoom's lease semantics and ONE serialized publisher, so every publish
+# to a repository goes through a single writer and two concurrent runs of
+# the same epic cannot both write. A lock, not a store — every fact it
+# acts on is read from `.ticfac/` and the tracker.
+[[durable_objects.bindings]]
+name = "REPO_ROOMS"
+class_name = "RepoRoom"
+
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["RepoRoom"]
+
 # One SignalInbox per project (idFromName(project)) — the funnel a signal
 # becomes a tick through (tick 8sm). Per project rather than per source,
 # because what has to be serialised is writes to ONE project's `.tick/`: two
