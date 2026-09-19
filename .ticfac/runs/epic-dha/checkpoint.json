@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 21,
-  "state": "publishing",
-  "reason": "closing 4sb behind the integrated gate on d8dfa0c1d895",
-  "updated_at": "2026-09-19T22:44:26Z",
+  "sequence": 22,
+  "state": "running",
+  "reason": "4sb is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-19T22:44:32Z",
   "ticks": [
     {
       "tick_id": "4sb",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 1
     },
     {
