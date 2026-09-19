@@ -2,6 +2,7 @@
   "id": "3q0",
   "title": "Close out Phase 4: retro, then flesh out Phase 5 into ticks",
   "description": "Run the epic-close retro, then plan the next feasible epic into child ticks.\n\nThe next in soft order is yvi (Phase 5: the Cloudflare Computer executor), with djo (Phase 4b: subscription seats as flat-rate credentials) also unblocked by this phase - pick by feasibility, not by number, and say which and why.\n\nThe retro must answer the question Phase 3's could not: can ticfac run an epic unattended? Phase 3 said no and named 9da as the blocker. If this phase's gate was met, say what changed; if it was met only with help, say exactly where the help was needed. A retro that records a pass the run did not earn is worse than no retro.",
+  "notes": "2026-09-19 17:27 - ticfac run epic-ncv: attempt 13 reported a finding drafted for triage — proposed-tick \"Commit Phase 4's triage: dha and ~25 promoted ticks exist only as untracked files\" (key c49d91b277df01a407bc944e0cf317812165768dfce404d0d0a18fd9112c401c, severity high, for this repository). Triage with `ticfac finding ncv c49d91b277df01a407bc944e0cf317812165768dfce404d0d0a18fd9112c401c --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -13,6 +14,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:25:07.946856Z",
-  "updated_at": "2026-09-19T15:22:30.880571Z",
+  "updated_at": "2026-09-19T15:27:59.557556Z",
   "started_at": "2026-09-19T15:22:30.88057Z"
 }
