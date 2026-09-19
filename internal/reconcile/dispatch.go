@@ -1626,15 +1626,56 @@ type inflightAttempt struct {
 	// EXECUTOR's, not one global constant (tick u9l, epic av8), so a window
 	// holding a local and a cloud attempt addresses each at its own beat.
 	interval time.Duration
+
+	// progress is the last liveness measurement of this attempt and probedAt
+	// when it was taken (tick dh1). They live on the attempt rather than in
+	// the measurement because the walk is the expensive part: one probe
+	// serves the liveness record AND the stall warning, so the two can never
+	// report different numbers for the same attempt at the same moment, and
+	// the worktree is walked once instead of twice.
+	progress *runprogress.Attempt
+	probedAt time.Time
+	// baseline is the mtime the run's FIRST look at this worktree found —
+	// taken when the attempt joins the window, so the first probe already
+	// carries a count — and what every probe counts files newer than.
+	//
+	// The obvious baseline — the attempt's dispatch stamp — cannot be used,
+	// and finding out why is what this field is. The durable marker records
+	// DispatchedAt as RFC3339 at SECOND resolution, and the worktree is
+	// checked out on the other side of the claim: on epic ncv the marker for
+	// ef7 sits between 16:51:23 and 16:51:29 while the checkout stamped its
+	// files at 16:51:25.15. Counting "files newer than the dispatch stamp"
+	// would therefore have counted the whole checkout — every file in the
+	// repository — as work the agent did, which is the opposite of the answer
+	// and would have been worse than no answer at all.
+	//
+	// So the run calibrates on a look it took itself, in this worktree,
+	// against no clock at all: what the newest file's mtime was when the
+	// attempt joined the window. For a fresh dispatch that look is taken
+	// seconds after the checkout, so the baseline IS the checkout and the
+	// count is "since dispatch" in everything but name; for an ADOPTED
+	// attempt it is honestly "since this incarnation first looked", which is
+	// the only thing a run that did not dispatch it can claim.
+	baseline time.Time
 }
 
 func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
-	return &inflightAttempt{
+	fl := &inflightAttempt{
 		entry: entry, handle: handle, executor: executor, marker: marker,
 		step:     r.OpenStep(r.stepCap),
 		deadline: r.settlementDeadline(marker),
 		interval: r.pollIntervalFor(marker.Executor),
 	}
+	// The baseline the liveness count is measured against is taken HERE, not
+	// at the first probe (tick dh1). The worktree exists by now — the
+	// executor's Start created it, and an adopted attempt's has stood since
+	// its own dispatch — so the run can calibrate before it has ever waited,
+	// and the very first probe then carries a count instead of a null. A
+	// first look that answers "not measured" is one whole probe interval in
+	// which the wedged attempt and the working one still read alike, which is
+	// the interval this tick exists to remove.
+	r.calibrateProgress(fl)
+	return fl
 }
 
 // addressOnce takes exactly ONE poll of one in-flight attempt.
@@ -1661,10 +1702,32 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		fl.cursor = *status.Cursor
 	}
 	if status.Terminal {
+		// How long it outlived its bound, if it had one and had passed it
+		// (tick dh1). Neither ncv attempt honoured the wall-clock interrupt:
+		// both were sent it every five seconds for about ninety seconds,
+		// ignored it, and had to be stopped by closing the pane — and nothing
+		// ticfac kept said so, which made "the grace period works" and "the
+		// grace period is theatre" the same run. The run states the half it
+		// can observe itself, the overrun, and carries the executor's last
+		// sentence for the half only the executor can write.
+		if overran := r.recordStop(fl, status.State, lastObservation(status)); overran != nil {
+			r.record(marker.TickID, StageWaiting,
+				"settled as %s, %s after the wall clock of %ds fired: the stop was not instant, and how long it took "+
+					"is the honest measure of whether the interrupt was honoured — %s",
+				status.State, overran.Round(time.Second), r.opts.WallSeconds, lastObservation(status))
+			return status, nil
+		}
 		r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
 		return status, nil
 	}
 	{
+		// What the attempt has actually PRODUCED, measured from the worktree
+		// that is already on disk and recorded where it can be read
+		// afterwards (tick dh1, liveness.go). It is taken before the two
+		// announcements below because the stall warning reads this probe
+		// rather than walking the worktree a second time.
+		r.probeProgress(fl)
+
 		if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
 				"attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, "+
@@ -1692,7 +1755,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		// it is getting anywhere, and the two facts that answer it honestly
 		// are read out of the repo itself. The wall clock is the bound; this
 		// is the reason to look while there is still an attempt to look at.
-		r.announceStall(marker)
+		r.announceStall(fl)
 
 		// The reconciler's OWN deadline. The job's wall clock is the
 		// supervisor's to enforce, and a supervisor that died without settling
@@ -1840,10 +1903,21 @@ func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobSt
 // restarted run that adopts the attempt again re-warns, which is correct in
 // the feed's own terms — a watcher joining a stalled run needs the hint as
 // much as the first watcher did.
-func (r *Reconciler) announceStall(marker attemptHandle) {
+//
+// It now also says WHICH kind of quiet it found, from the liveness probe's
+// count of files written since the run first looked (tick dh1). The gaps
+// alone could
+// not: a worktree nobody has touched carries the mtimes its checkout stamped,
+// so "the newest thing here happened at dispatch" is what a wedged agent and
+// a thinking one both measure, and the line read the same for 9fc — which
+// went on to produce 433 lines — and for ef7, which produced an empty commit.
+// Zero files written is a different sentence from eleven, and it is the one an
+// operator can act on.
+func (r *Reconciler) announceStall(fl *inflightAttempt) {
 	if r.opts.StallWarnAfter <= 0 {
 		return
 	}
+	marker := fl.marker
 	for i := len(r.journal) - 1; i >= 0; i-- {
 		if r.journal[i].Tick == marker.TickID && r.journal[i].Stage == StageStallWarned {
 			return
@@ -1852,28 +1926,49 @@ func (r *Reconciler) announceStall(marker attemptHandle) {
 	// Nothing the attempt has done can be older than the attempt: the gap
 	// counts from the newest worktree file, and the worktree is created at
 	// dispatch, so before issued+threshold the gap is under the threshold by
-	// construction and the measurement is skipped. On an executor whose
-	// attempts have no local worktree this gate also keeps the per-poll cost
-	// at zero for the whole first threshold of the wait.
+	// construction and the warning is skipped.
 	if issued, ok := r.dispatchedAt(marker); ok && r.now().Before(issued.Add(r.opts.StallWarnAfter)) {
 		return
 	}
-	gap, ok, err := runprogress.AttemptOf(r.opts.Repo, marker.WriteRef, r.now())
-	if err != nil || !ok {
-		// A measurement that cannot be made is not a run event: the hint is
-		// only worth a feed line when it is a fact, and the attempt falls to
-		// the wall clock and the settlement deadline as before.
+	// The latest probe, never a second walk of the same worktree. It can be
+	// up to one probe interval stale, and that is safe in the only direction
+	// that matters: an idle gap only grows, so a stale measurement
+	// UNDER-reports and the warning can be late by at most a probe — a minute
+	// against a fifteen-minute threshold — never early.
+	//
+	// A measurement that could not be made is not a run event: the hint is
+	// only worth a feed line when it is a fact, and the attempt falls to the
+	// wall clock and the settlement deadline as before.
+	if fl.progress == nil {
 		return
 	}
+	gap := *fl.progress
 	idle, ok := gap.Idle()
 	if !ok || idle < r.opts.StallWarnAfter {
 		return
 	}
 	r.record(marker.TickID, StageStallWarned,
-		"attempt %d of %s is alive but has produced nothing durable for %s: its branch last moved %s ago and its "+
-			"worktree last changed %s ago — a reason to look, not a verdict; the wall clock of %ds is still the bound",
+		"attempt %d of %s is alive but has produced nothing durable for %s: its branch last moved %s ago, its "+
+			"worktree last changed %s ago, and %s — a reason to look, not a verdict; the wall clock of %ds is "+
+			"still the bound",
 		marker.Attempt, marker.TickID, idle,
-		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), r.opts.WallSeconds)
+		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), writtenOf(gap.ChangedFiles), r.opts.WallSeconds)
+}
+
+// writtenOf renders the liveness count for the warning's prose, and says
+// "not measured" rather than zero when nobody could count: a run that could
+// not read the worktree must not be heard saying the agent wrote nothing.
+func writtenOf(n *int) string {
+	switch {
+	case n == nil:
+		return "how much it has written was not measured"
+	case *n == 0:
+		return "it has written NOTHING into its worktree since the run first looked at it"
+	case *n == 1:
+		return "it has written 1 file into its worktree since the run first looked at it"
+	default:
+		return fmt.Sprintf("it has written %d files into its worktree since the run first looked at it", *n)
+	}
 }
 
 // idleOf renders one measured gap for the feed line, naming the fact rather

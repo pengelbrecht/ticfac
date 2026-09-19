@@ -200,10 +200,15 @@ func TestTheWalkSkipsGit(t *testing.T) {
 	}
 	setMtime(t, filepath.Join(dir, ".git", "objects", "pack"), now)
 
-	at, ok := worktreeChangedAt(dir)
+	at, changed, ok := worktreeChangedAt(dir, now.Add(-2*fileAge))
 	if !ok || now.Sub(at) < fileAge {
 		t.Fatalf("the newest file counted is under .git: the gap measured %s, want the work file at %s before now",
 			now.Sub(at), fileAge)
+	}
+	// The count skips .git for the same reason the gap does: a pack file
+	// written by the plumbing is not a file the agent wrote (tick dh1).
+	if changed == nil || *changed != 1 {
+		t.Fatalf("the count of files written since the reference is %v, want 1: the .git pack was counted as work", changed)
 	}
 }
 

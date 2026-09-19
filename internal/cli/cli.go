@@ -448,6 +448,13 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	if result.FeedError != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, feedFailureLine(result.RunID, result.FeedError))
 	}
+	// The same shape, about the other file in that directory (tick dh1): the
+	// per-poll account of what each attempt was doing. Also not a verdict,
+	// also never silent — a run whose liveness record is missing is a run
+	// nobody can ask afterwards why an attempt produced nothing.
+	if result.LivenessError != nil {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, livenessFailureLine(result.RunID, result.LivenessError))
+	}
 	if result.State != "completed" {
 		return 1
 	}
@@ -475,6 +482,15 @@ func feedFailureLine(runID string, err error) string {
 	return fmt.Sprintf("the run's event feed could not be written (%v): this is not a verdict about the work — "+
 		"the run's records and the report above are the evidence — but nothing will appear under "+
 		".ticfac/logs/%s/, so `ticfac events %s --follow` has nothing to follow", err, runID, runID)
+}
+
+// livenessFailureLine is feedFailureLine's other half: the record that says
+// what each attempt was DOING could not be written, so the run's own answer
+// to "was it working or wedged" is missing for this run (tick dh1).
+func livenessFailureLine(runID string, err error) string {
+	return fmt.Sprintf("the run's liveness record could not be written (%v): this is not a verdict about the work "+
+		"— the run's records and the report above are the evidence — but nothing was written to "+
+		".ticfac/logs/%s/liveness.jsonl, so there is no per-poll account of what each attempt produced", err, runID)
 }
 
 // budgetLine is the one sentence A12 is about. It says the effective number

@@ -128,6 +128,20 @@ type Attempt struct {
 	// stamped the probe with, so a reader never has to do clock arithmetic.
 	BranchIdle   *Duration `json:"branch_idle"`
 	WorktreeIdle *Duration `json:"worktree_idle"`
+
+	// ChangedFiles is how many files under the worktree have been written
+	// since the moment the caller named. It is the fact the two gaps above
+	// could not supply (tick dh1): a gap says how long ago the newest thing
+	// happened, and "the newest thing happened at dispatch" is what a
+	// CHECKOUT looks like, so a wedged agent and an agent that has been
+	// thinking since its first minute produce the same gap and the same log.
+	// A count says which one it is — zero files is an agent that has written
+	// nothing at all, and nothing is what ef7 had written for sixty minutes.
+	//
+	// Null when the caller named no moment to count from, or when the
+	// worktree could not be read: an unmeasured count and a count of zero
+	// are different claims, and only one of them is evidence.
+	ChangedFiles *int `json:"changed_files"`
 }
 
 // Idle is the gap: how long since the attempt last produced anything
@@ -179,7 +193,14 @@ func Standing(repo, runID string, now time.Time) ([]Attempt, error) {
 		if !ok || refRun != runID {
 			continue
 		}
-		a, _, err := measure(repo, reg, tick, attempt, now)
+		// No count here: the census is taken from OUTSIDE the run — `ticfac
+		// status`, a watcher, a run that died — and a count needs a moment to
+		// count from that the counter itself observed in this worktree.
+		// Nothing out there has one, and inventing one would be a number that
+		// looks like evidence. The run holds that moment, because it looked
+		// when it took the attempt in, and it is the run that counts
+		// (reconcile's liveness probe, tick dh1).
+		a, _, err := measure(repo, reg, tick, attempt, time.Time{}, now)
 		if err != nil {
 			return nil, err
 		}
@@ -199,6 +220,18 @@ func Standing(repo, runID string, now time.Time) ([]Attempt, error) {
 // `ticfac status` reads. The ok answer is false only when the ref names no
 // attempt of this vocabulary or no branch the repo carries.
 func AttemptOf(repo, writeRef string, now time.Time) (Attempt, bool, error) {
+	return AttemptSince(repo, writeRef, time.Time{}, now)
+}
+
+// AttemptSince is AttemptOf with the count the gaps cannot give: how many
+// files under the worktree have been written since `since` — for the caller
+// watching a live attempt, the moment it last looked (tick dh1).
+//
+// It is the SAME walk. The newest mtime and the number of files newer than a
+// moment come out of one traversal, so asking for the count costs a
+// comparison per file and no second pass over the worktree; a zero `since`
+// asks for no count and the field stays null.
+func AttemptSince(repo, writeRef string, since, now time.Time) (Attempt, bool, error) {
 	_, tick, attempt, ok := ParseAttempt(writeRef)
 	if !ok {
 		return Attempt{}, false, nil
@@ -211,20 +244,20 @@ func AttemptOf(repo, writeRef string, now time.Time) (Attempt, bool, error) {
 		if reg.branch != writeRef {
 			continue
 		}
-		return measure(repo, reg, tick, attempt, now)
+		return measure(repo, reg, tick, attempt, since, now)
 	}
 	// No registration: a branch with no standing worktree still has a
 	// measurable branch fact, and that is the honest half-answer.
 	if at, ok := branchMovedAt(repo, writeRef); ok {
-		return filled(writeRef, "", tick, attempt, now, at, time.Time{}), true, nil
+		return filled(writeRef, "", tick, attempt, now, at, time.Time{}, nil), true, nil
 	}
 	return Attempt{TickID: tick, Attempt: attempt, Branch: writeRef}, false, nil
 }
 
 // filled assembles one Attempt from its measured facts. A zero time is no
 // fact: it stays null rather than being reported as the epoch.
-func filled(branch, worktree, tick string, attempt int, now, movedAt, changedAt time.Time) Attempt {
-	a := Attempt{TickID: tick, Attempt: attempt, Branch: branch, Worktree: worktree}
+func filled(branch, worktree, tick string, attempt int, now, movedAt, changedAt time.Time, changed *int) Attempt {
+	a := Attempt{TickID: tick, Attempt: attempt, Branch: branch, Worktree: worktree, ChangedFiles: changed}
 	if !movedAt.IsZero() {
 		moved := movedAt
 		idle := Duration(now.Sub(moved))
@@ -241,13 +274,13 @@ func filled(branch, worktree, tick string, attempt int, now, movedAt, changedAt 
 // measure reads one registration's two facts. A registration whose directory
 // is gone keeps its branch fact and loses its worktree fact, which is the
 // teardown shape a killed run leaves behind.
-func measure(repo string, reg registration, tick string, attempt int, now time.Time) (Attempt, bool, error) {
-	movedAt, _ := branchMovedAt(repo, reg.branch)
-	changedAt, _ := worktreeChangedAt(reg.worktree)
-	a := filled(reg.branch, reg.worktree, tick, attempt, now, movedAt, changedAt)
+func measure(repo string, reg registration, tick string, attempt int, since, now time.Time) (Attempt, bool, error) {
+	movedAt, changed, _ := worktreeChangedAt(reg.worktree, since)
+	movedBranchAt, _ := branchMovedAt(repo, reg.branch)
+	a := filled(reg.branch, reg.worktree, tick, attempt, now, movedBranchAt, movedAt, changed)
 	// An attempt with neither fact measurable is not one this repo can say
 	// anything about.
-	if movedAt.IsZero() && changedAt.IsZero() {
+	if movedBranchAt.IsZero() && movedAt.IsZero() {
 		return Attempt{TickID: tick, Attempt: attempt, Branch: reg.branch, Worktree: reg.worktree}, false, nil
 	}
 	return a, true, nil
@@ -305,15 +338,23 @@ func branchMovedAt(repo, ref string) (time.Time, bool) {
 // plumbing's bookkeeping (the .git name, wherever it appears: a file in a
 // linked worktree, a directory anywhere else) is not work. An unreadable or
 // empty worktree answers false rather than a guess.
-func worktreeChangedAt(dir string) (time.Time, bool) {
+//
+// It also counts the files newer than `since`, in the same traversal, for the
+// caller that needs the COUNT rather than the gap (tick dh1). A zero `since`
+// asks for no count and gets a nil one: "nobody counted" and "nothing was
+// written" are different claims, and the caller that reports them must not be
+// handed a zero that means either.
+func worktreeChangedAt(dir string, since time.Time) (time.Time, *int, bool) {
 	if dir == "" {
-		return time.Time{}, false
+		return time.Time{}, nil, false
 	}
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return time.Time{}, false
+		return time.Time{}, nil, false
 	}
 	var newest time.Time
+	counting := !since.IsZero()
+	count := 0
 	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// A file the worker removed mid-walk is a change; a walk that
@@ -337,12 +378,22 @@ func worktreeChangedAt(dir string) (time.Time, bool) {
 		if info.ModTime().After(newest) {
 			newest = info.ModTime()
 		}
+		// Strictly After, and the caller passes a moment it OBSERVED in this
+		// same worktree: a checkout stamps every file it writes at once, and
+		// a boundary on the inclusive side of that instant would report a
+		// wedged agent as having written the whole repository.
+		if counting && info.ModTime().After(since) {
+			count++
+		}
 		return nil
 	})
 	if err != nil || newest.IsZero() {
-		return time.Time{}, false
+		return time.Time{}, nil, false
 	}
-	return newest, true
+	if !counting {
+		return newest, nil, true
+	}
+	return newest, &count, true
 }
 
 // git runs one command in the repo and hands back its stdout, with the
