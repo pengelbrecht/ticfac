@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 131,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-19T14:24:00Z",
+  "sequence": 132,
+  "state": "dispatching",
+  "reason": "dispatching pxc as attempt 11",
+  "updated_at": "2026-09-19T14:24:12Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "pxc",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 10
     },
     {
