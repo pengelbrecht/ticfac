@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 112,
-  "state": "failed",
-  "reason": "k4s did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: k4s reported 3 finding(s) nobody has triaged — \"Decide whether a LOCAL dispatch through 'cloudflare-sandbox' is wanted, or document that the name is cloud-host-only\" (proposed-tick, for this repository); \"Makefile's ts-gate still carries a `|| cd cloud/factory` fallback to a directory that no longer exists\" (proposed-tick, for this repository); \"ticks must fix cloud/sandbox's stale cloud/factory references so ticfac can re-pin and re-sync the vendored image context\" (upstream-tick, for pengelbrecht/ticks) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding ncv 3541db4cbc111cc856dd411f84a6df0373d5ebfdeded432354c4f82956b5e333|4d4c355018800be9d22a0d262fa76f0fcf95e1599f6e85f11bbc4ee1128cd5ae|e4b058592849d38a8bc3f6b69aa29f7e3234c6e1c3fe845a6bde2ed3fdf6a012 --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding ncv 3541db4cbc111cc856dd411f84a6df0373d5ebfdeded432354c4f82956b5e333|4d4c355018800be9d22a0d262fa76f0fcf95e1599f6e85f11bbc4ee1128cd5ae|e4b058592849d38a8bc3f6b69aa29f7e3234c6e1c3fe845a6bde2ed3fdf6a012 --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding ncv 3541db4cbc111cc856dd411f84a6df0373d5ebfdeded432354c4f82956b5e333|4d4c355018800be9d22a0d262fa76f0fcf95e1599f6e85f11bbc4ee1128cd5ae|e4b058592849d38a8bc3f6b69aa29f7e3234c6e1c3fe845a6bde2ed3fdf6a012 --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 3541db4cbc111cc856dd411f84a6df0373d5ebfdeded432354c4f82956b5e333, 4d4c355018800be9d22a0d262fa76f0fcf95e1599f6e85f11bbc4ee1128cd5ae, e4b058592849d38a8bc3f6b69aa29f7e3234c6e1c3fe845a6bde2ed3fdf6a012 under .ticfac/runs/epic-ncv/findings/ on origin",
-  "updated_at": "2026-09-19T12:40:59Z",
+  "sequence": 113,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-19T12:42:31Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -51,7 +51,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ncv",
-    "source_sha": "f1203701c4e6b7366bec834f76657496c503c63c",
+    "source_sha": "8b5a4bf0b9809acfad2bb5c363b002e08aad3198",
     "integration_ref": "refs/heads/epic/ncv",
     "phase": "worker",
     "executor": null,
