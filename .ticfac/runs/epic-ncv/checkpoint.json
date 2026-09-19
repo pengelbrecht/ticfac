@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 176,
-  "state": "publishing",
-  "reason": "closing 3q0 behind the integrated gate on 5abaa8f30cac",
-  "updated_at": "2026-09-19T17:36:40Z",
+  "sequence": 177,
+  "state": "running",
+  "reason": "3q0 is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-19T17:36:46Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "3q0",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 13
     }
   ],
