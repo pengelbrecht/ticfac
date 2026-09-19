@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "6na",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T22:25:49Z",
+  "triaged_at": "2026-09-19T22:35:31Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "hhv",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "6na",
