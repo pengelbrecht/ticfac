@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 189,
-  "state": "running",
-  "reason": "CI is green on the epic PR #11; the close-out of ncv is admitted",
-  "updated_at": "2026-09-19T18:24:49Z",
+  "sequence": 190,
+  "state": "integrating",
+  "reason": "integrating 3q0 attempt 13 into epic/ncv",
+  "updated_at": "2026-09-19T18:25:06Z",
   "ticks": [
     {
       "tick_id": "l9n",
