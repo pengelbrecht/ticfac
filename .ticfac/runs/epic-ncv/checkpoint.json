@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 71,
-  "state": "dispatching",
-  "reason": "dispatching k4s as attempt 8",
-  "updated_at": "2026-09-19T10:21:02Z",
+  "sequence": 72,
+  "state": "running",
+  "reason": "k4s is running as attempt 8",
+  "updated_at": "2026-09-19T10:21:18Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -29,7 +29,8 @@
     },
     {
       "tick_id": "k4s",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     },
     {
       "tick_id": "vyg",
