@@ -56,9 +56,12 @@ func declareCloseoutRule(t *testing.T, repo *testRepo) {
 }
 
 // fakeForge is the code-hosting surface a test controls: what Find answers,
-// whether Open succeeds, and what CI says — in sequence, because the SEQUENCE
-// is part of what the admission is. Every call is recorded, so "the PR was
-// opened before the close-out was dispatched" is a list, not an impression.
+// whether Open succeeds, what CI says — in sequence, because the SEQUENCE
+// is part of what the admission is — and whether the body can be rewritten
+// at all (tick 4sb). Every call is recorded, so "the PR was opened before
+// the close-out was dispatched" is a list, not an impression, and every
+// body written is kept, so "a resumed close-out carried the findings once"
+// is a count over strings, not an impression either.
 type fakeForge struct {
 	mu      sync.Mutex
 	exists  bool  // Find's answer: does the PR already exist?
@@ -66,6 +69,14 @@ type fakeForge struct {
 	ci      []forge.CIReport
 	calls   []string
 	pr      *forge.PullRequest
+
+	// bodies is every body the run ever put on the PR, through Open or
+	// UpdateBody, in order: the resumed-close-out tests read the SEQUENCE,
+	// because "rewritten, not appended to" is a fact about two writes.
+	bodies []string
+	// updateErr is UpdateBody's failure, when a test wants the typed
+	// refusal the body's absence produces.
+	updateErr error
 
 	// bySHA answers per commit rather than per call, which is what the
 	// close-out's real problem needs: CI exists on one commit and not on the
@@ -98,7 +109,40 @@ func (f *fakeForge) Open(_ context.Context, headRef, baseRef, title, body string
 		HeadRef: headRef, HeadSHA: "fake-head-sha", BaseRef: baseRef,
 	}
 	f.exists = true
+	f.bodies = append(f.bodies, body)
 	return f.pr, nil
+}
+
+func (f *fakeForge) UpdateBody(_ context.Context, pr forge.PullRequest, body string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "update_body")
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.bodies = append(f.bodies, body)
+	return nil
+}
+
+// body is the body the PR carries now: the last one written, which is the
+// whole point of owning the body — the last write is the state, not one more
+// entry in a pile.
+func (f *fakeForge) body() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.bodies) == 0 {
+		return ""
+	}
+	return f.bodies[len(f.bodies)-1]
+}
+
+// allBodies is every body the PR was ever given, in order: the rewrite
+// tests read the SEQUENCE, because "rewritten, not appended to" is a fact
+// about two writes.
+func (f *fakeForge) allBodies() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.bodies...)
 }
 
 func (f *fakeForge) CI(_ context.Context, pr forge.PullRequest) (forge.CIReport, error) {

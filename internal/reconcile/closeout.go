@@ -160,8 +160,18 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 
 	// The PR half. Find before open, so a resumed run cut between the two
 	// finds the PR the previous incarnation opened rather than opening a
-	// second one.
+	// second one. The body the PR carries is composed BEFORE the branch: the
+	// same record composes it either way, and the open hands it to the PR the
+	// moment it exists while the found branch rewrites it — the write is an
+	// overwrite, so the two paths are one idempotence argument (tick 4sb).
 	head, base := r.branch, r.prBase()
+	body, findings, err := r.closeoutPRBody()
+	if err != nil {
+		return r.refuse(RefusedCloseoutPRBody, tick,
+			"the epic PR cannot carry the final review's verdict and the run's findings: the run's own record "+
+				"could not be read to compose them: %v. The rule the repository declares is: %s",
+			err, r.closeoutRule.Stated)
+	}
 	pr, err := r.opts.PullRequests.Find(ctx, head, base)
 	if err != nil {
 		return r.refuse(RefusedCloseoutPR, tick,
@@ -170,9 +180,6 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 	}
 	if pr == nil {
 		title := fmt.Sprintf("epic %s: integrate %s", r.opts.EpicID, head)
-		body := fmt.Sprintf("ticfac run %s opened this PR because the repository declares the PR + CI close-out rule "+
-			"in .tick/config.md: the epic close-out may not complete until CI (%s) is green on this PR.", r.runID,
-			r.closeoutRule.CIWorkflow)
 		opened, openErr := r.opts.PullRequests.Open(ctx, head, base, title, body)
 		if openErr != nil {
 			return r.refuse(RefusedCloseoutPR, tick,
@@ -182,7 +189,19 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 		}
 		pr = opened
 		r.record(tick, StagePROpened, "the epic PR #%d (%s → %s) is open: %s", pr.Number, head, base, pr.URL)
+		// The composed body went to the PR with its open, so the write and
+		// the existence are one call: no window where the PR exists and
+		// carries nothing. The stage is the same one the rewrite records,
+		// because the invariant is the same one (tick 4sb).
+		r.recordPRBody(tick, pr.Number, findings)
 	} else {
+		// The PR exists — this run's earlier incarnation, or an older
+		// ticfac, opened it — so the body it carries is REWRITTEN from the
+		// record: the found path is the resumed-close-out half of the write,
+		// and the rewrite is what keeps a resume from appending.
+		if err := r.carryOntoThePR(ctx, tick, *pr, body, findings); err != nil {
+			return err
+		}
 		r.record(tick, StagePROpened, "the epic PR #%d (%s → %s) already exists: %s", pr.Number, head, base, pr.URL)
 	}
 	// The PR fact lands in the checkpoint the moment it is known, so a
@@ -338,6 +357,25 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 		}
 		switch report.State {
 		case forge.CIGreen:
+			// The last write the run owns (tick 4sb): the close gate is the last
+			// moment the run holds the PR, and the close-out's OWN attempt —
+			// dispatched since the admission — can have drafted a finding the
+			// admission's body predated, or a person can have triaged one since.
+			// The body the person merges behind is recomposed from the FINAL
+			// records, and a forge that cannot take it refuses the close: green
+			// CI beside an empty body is the silent merge this write exists to
+			// remove. The write is an overwrite, so a resumed close-out that
+			// reaches this gate again rewrites the same view and adds nothing.
+			body, findings, bodyErr := r.closeoutPRBody()
+			if bodyErr != nil {
+				return r.refuse(RefusedCloseoutPRBody, tick,
+					"the epic PR #%d cannot carry the final review's verdict and the run's findings at the close-out's "+
+						"close: the run's own record could not be read to compose them: %v. The rule the repository "+
+						"declares is: %s", pr.Number, bodyErr, r.closeoutRule.Stated)
+			}
+			if err := r.carryOntoThePR(ctx, tick, *pr, body, findings); err != nil {
+				return err
+			}
 			r.record(tick, StageCloseoutCloseGated,
 				"CI is green on %s, which carries the close-out's own commits; the close proceeds",
 				ciSubject(ciSHA, ciIsHead, pr))

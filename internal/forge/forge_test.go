@@ -160,6 +160,71 @@ func TestAnAPIRefusalCarriesItsCause(t *testing.T) {
 	}
 }
 
+// UpdateBody rewrites the PR's body in place — the write half of the
+// close-out rule (tick 4sb), and the one thing this seam could not do until
+// now: put the run's record where the person merging reads it. The verb is
+// EDIT, deliberately: a body written twice leaves the PR in the state one
+// write left it in, which is what makes a resumed close-out safe — see the
+// interface.
+func TestUpdateBodyRewritesThePRBody(t *testing.T) {
+	t.Parallel()
+	g, seen := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/repos/example/example/pulls/7" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			writeJSON(t, w, http.StatusNotFound, map[string]string{"message": "nope"})
+			return
+		}
+		if auth := r.Header.Get("Authorization"); auth != "Bearer test-token" {
+			t.Errorf("Authorization = %q", auth)
+		}
+		var asked map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+			t.Fatal(err)
+		}
+		if asked["body"] != "the composed body" {
+			t.Errorf("the body sent was %q", asked["body"])
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"number": 7})
+	})
+	pr := PullRequest{Number: 7, HeadRef: "epic/9pd", HeadSHA: "abc123", BaseRef: "main"}
+	if err := g.UpdateBody(context.Background(), pr, "the composed body"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*seen) == 0 || (*seen)[0] != "PATCH /repos/example/example/pulls/7" {
+		t.Errorf("the calls seen were %v", *seen)
+	}
+}
+
+// A rewrite the forge refuses is an error carrying the status and the API's
+// own message, the same way every other answer is: the typed close-out refusal
+// that forwards it names its cause rather than "could not write".
+func TestUpdateBodyRefusalCarriesItsCause(t *testing.T) {
+	t.Parallel()
+	g, _ := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusForbidden, map[string]string{"message": "Resource not accessible by integration"})
+	})
+	err := g.UpdateBody(context.Background(), PullRequest{Number: 7, HeadSHA: "abc123"}, "body")
+	if err == nil {
+		t.Fatal("the forbidden rewrite was accepted")
+	}
+	for _, want := range []string{"403", "not accessible"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal %q does not say %q", err, want)
+		}
+	}
+}
+
+// A PR naming no number addresses nothing, and the surface says so locally
+// rather than asking the API about "/pulls/0".
+func TestUpdateBodyRefusesAPRNamingNoNumber(t *testing.T) {
+	t.Parallel()
+	g := GitHub{Token: "t", Repo: "example/example"}
+	err := g.UpdateBody(context.Background(), PullRequest{HeadSHA: "abc123"}, "body")
+	if err == nil || !strings.Contains(err.Error(), "no number") {
+		t.Fatalf("the no-number refusal = %v", err)
+	}
+}
+
 // CI classifies the check runs the forge recorded for the head: the four
 // states each send the next repair somewhere different, and the names of the
 // failing jobs are the whole point of the report.

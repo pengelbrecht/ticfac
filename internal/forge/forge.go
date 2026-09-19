@@ -1,18 +1,21 @@
 // Package forge is the code-hosting surface behind the PR + CI close-out
-// rule a target repository may declare in its `.tick/config.md`: the three
-// questions the reconciler asks of the forge the code lives on — is there an
-// open PR for the epic branch, open one if not, and what does CI say on its
-// head.
+// rule a target repository may declare in its `.tick/config.md`: the four
+// questions and one answer the reconciler puts to the forge the code lives
+// on — is there an open PR for the epic branch, open one if not, what does
+// CI say on its head, and carry this body onto the PR so the person merging
+// reads the run's record beside its CI status.
 //
 // It exists as a package of its own for the same reason the executor seam
 // does: the reconciler names the QUESTIONS (the interface) and the host
 // supplies the answers (this implementation), so a run against a repository
 // whose code is hosted somewhere else is a new implementation of the seam
-// rather than a fork of the reconciler. The interface is deliberately three
+// rather than a fork of the reconciler. The interface is deliberately four
 // methods wide — everything a close-out needs and nothing a future caller
 // could abuse into a general GitHub client: this package never merges, never
-// comments and never writes anything but a pull request the run's own
-// configuration demands.
+// comments, and never writes anything but the epic pull request the run's
+// own configuration demands — its existence, and the body that carries the
+// review's verdict and the run's findings to the person the merge belongs
+// to.
 //
 // The GitHub implementation is stdlib-only: net/http, encoding/json, and a
 // bearer token the operator's environment holds. Third-party tooling (a `gh`
@@ -28,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -85,23 +89,38 @@ type CIReport struct {
 }
 
 // PullRequests is the seam the close-out rule needs: find the PR for the
-// epic branch, open one if it does not exist, and ask what CI says on it.
+// epic branch, open one if it does not exist, ask what CI says on it, and
+// write the body the PR carries (tick 4sb).
 //
 // Find answers nil (and no error) when no open PR exists for headRef: "no PR
 // yet" is the state the rule is about, not a failure. Open is idempotent
 // against Find in the way the forge enforces it (GitHub allows one open PR
 // per head branch), so a resumed run that was cut between the Find and the
 // Open finds the one the previous incarnation opened.
+//
+// UpdateBody is the write half, and it is an EDIT of the body rather than a
+// comment on purpose (tick 4sb). The durable record is the run's own state —
+// the decisions and the findings drafts — and the PR's body is a VIEW of
+// that record, recomposed and overwritten every time the close-out writes
+// it. A comment would APPEND, and appending is a shape no resume can survive
+// honestly: a run cut after one write and resumed into a second would post
+// the findings twice, and the second copy would be as authoritative-looking
+// as the first while being pure noise. An overwrite makes the write
+// idempotent by construction — the same record composes the same body, and
+// writing it twice leaves the PR carrying each fact exactly once — so the
+// seam needs no "did I already post this" bookkeeping the durable record
+// would then have to agree with.
 type PullRequests interface {
 	Find(ctx context.Context, headRef, baseRef string) (*PullRequest, error)
 	Open(ctx context.Context, headRef, baseRef, title, body string) (*PullRequest, error)
+	UpdateBody(ctx context.Context, pr PullRequest, body string) error
 	CI(ctx context.Context, pr PullRequest) (CIReport, error)
 }
 
 // GitHub speaks the seam against GitHub's REST API.
 //
 // Repo is the `owner/name` the API addresses; ParseRepo resolves it from a
-// git remote URL. Token is required by the API for every one of the three
+// git remote URL. Token is required by the API for every one of the four
 // operations. Client is optional (http.DefaultClient with a timeout when
 // nil); API is optional (DefaultAPI).
 type GitHub struct {
@@ -280,6 +299,20 @@ func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) 
 		Number: created.Number, URL: created.HTMLURL, HeadRef: created.Head.Ref, HeadSHA: created.Head.SHA,
 		BaseRef: created.Base.Ref,
 	}, nil
+}
+
+// UpdateBody rewrites the PR's body — the write half of the close-out rule
+// (tick 4sb), and the one thing this seam could not do until now: put the
+// run's record where the person merging reads it. The body is a VIEW of the
+// run's durable state, recomposed by the close-out on every admission and
+// again at its close, so this method is a pure overwrite: see the interface
+// for why it is an edit and not a comment.
+func (g GitHub) UpdateBody(ctx context.Context, pr PullRequest, body string) error {
+	if pr.Number == 0 {
+		return fmt.Errorf("the PR to rewrite names no number to address")
+	}
+	return g.call(ctx, http.MethodPatch, "/repos/"+g.Repo+"/pulls/"+strconv.Itoa(pr.Number),
+		map[string]string{"body": body}, nil)
 }
 
 // CI answers what CI says on the PR's head, from the check runs the forge
