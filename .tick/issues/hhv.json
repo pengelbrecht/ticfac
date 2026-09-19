@@ -1,0 +1,13 @@
+{
+  "id": "hhv",
+  "title": "A worker agent's own git still inherits the operator's rerere cache",
+  "description": "6na disabled rerere on every git the RECONCILER runs. A worker agent's own git — a pull, merge or rebase it runs inside its worktree — shares the same .git/rr-cache and inherits the host's global rerere.enabled=true. So an operator's hand-recorded conflict resolution can be replayed into a worker's tree without the worker choosing it, and without anyone seeing it happen.\n\nThat is the same hazard 6na was filed for, one layer out: the tree a worker gates and hands over would be something nobody chose — not the worker's, not the base's, not a reviewer's.\n\ngitbin.WithNoAutoMaintenance already pins agent environments through GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n (tick mel), so the rerere pair can ride the same mechanism in one place rather than becoming a second list of pins.\n\nWatch the interaction with b4r while doing this: the read-only grade lets GIT_CONFIG_PARAMETERS through, and git applies it AFTER GIT_CONFIG_COUNT — so a pin added here can be overridden by an inherited value until b4r is fixed.\n\nReported by 6na, run epic-dha, finding e4676545.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A worker agent's git cannot read or write the host's rerere cache, pinned through the same environment mechanism as the maintenance settings, with a test that sets rerere.enabled globally and proves a worker's merge still conflicts",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T22:35:20.262427Z",
+  "updated_at": "2026-09-19T22:35:20.262427Z"
+}

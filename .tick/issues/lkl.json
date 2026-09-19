@@ -1,0 +1,13 @@
+{
+  "id": "lkl",
+  "title": "The liveness probe reports a NEGATIVE idle time",
+  "description": "Observed live in epic dha, 2026-09-19, .ticfac/logs/epic-dha/liveness.jsonl:\n\n    22:07:01 80x files=3 idle=-1.007534391s probe\n\nA negative idle is impossible: it means the worktree's newest mtime is AHEAD of the clock the probe compared it to. It is small, and it is the same signature that caught two real defects today (a cancel ack claiming a later time than the record it acknowledged; an attempt reported lost because settlement was read before liveness) — a value that cannot happen means two clocks or two reads disagree.\n\nCandidates, in order:\n- The probe reads the newest mtime, then takes 'now' from an earlier captured time (or the reverse), so a file written between the two reads is in the future relative to the comparison.\n- The baseline taken at admission (dh1's calibration) is stamped after the walk rather than before it.\n- Filesystem mtime granularity or a clock adjustment while the probe runs.\n\nWork: find which, make the impossible case impossible rather than clamping it to zero, and record what the probe compares. If clamping is the right answer after all, say why in a comment — a clamp that hides a disagreement between two clocks is how this class of bug survives.\n\nRelated: dh1 (the probe), ufz (the adopted-attempt baseline, which is the other thing wrong with this line's inputs).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The liveness probe cannot report a negative idle, and the reason it could is named in a comment rather than clamped away",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T22:08:03.67476Z",
+  "updated_at": "2026-09-19T22:08:03.67476Z"
+}
