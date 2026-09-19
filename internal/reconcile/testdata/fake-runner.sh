@@ -78,6 +78,27 @@ stall-then-report)
 	commit
 	report
 	;;
+linger-until)
+	# g50's shape: one worker keeps thinking while another tick's attempt
+	# settles and closes, so that whatever the run dispatches next is
+	# dispatched BESIDE a live attempt or not at all. $LINGER_TICK names the
+	# worker that lingers and $LINGER_UNTIL the file the test touches when the
+	# dispatch it is watching for happens.
+	#
+	# It waits on the event rather than on a duration: a sleep long enough to
+	# be safe is a slow test, and one short enough to be fast is a flaky one.
+	# The bound is only so that a run which never makes that dispatch still
+	# ends, and fails the test on its assertion rather than on a timeout.
+	if [ "$TICFAC_TICK" = "${LINGER_TICK:-}" ] && [ -n "${LINGER_UNTIL:-}" ]; then
+		waited=0
+		while [ ! -e "$LINGER_UNTIL" ] && [ "$waited" -lt 60 ]; do
+			sleep 1
+			waited=$((waited + 1))
+		done
+	fi
+	commit
+	report
+	;;
 silent)
 	# Settled and incomplete: work committed, nothing said.
 	commit

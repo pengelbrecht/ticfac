@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -576,6 +577,14 @@ const (
 	// claimed, so "why was this expensive" is a question the run's own
 	// record answers.
 	StageTierDerived = "tier_derived"
+	// StageReplanned is the line a run owes an operator when the plan it is
+	// working stops matching the graph it came from (tick g50): an attempt
+	// settled, the tracker was read again, and a tick that was sequenced
+	// behind it — or behind something that closed elsewhere while the run was
+	// going — is no longer blocked and moves up. Without it the feed shows a
+	// tick from "a later wave" being dispatched beside wave 1 and nothing
+	// anywhere says why.
+	StageReplanned = "replanned"
 
 	// The findings channel (tick 7vn): one stage for the first draft of a
 	// finding, one for every repeat — a repeat proposes nothing new, and the
@@ -1254,6 +1263,21 @@ type planEntry struct {
 	Labels   []string
 	// Blocks is how many ticks this one blocks: the graph-position fact.
 	Blocks int
+
+	// BlockedBy is the other direction, and the one the window's boundary is
+	// made of: the ticks this one is sequenced behind that the graph did NOT
+	// report closed. A wave number says where the tracker layered a tick at
+	// one moment; this says WHY, and a reason survives a graph that has moved
+	// while a number does not (tick g50). A blocker the graph does not carry
+	// at all is kept rather than dropped — it is outside this epic, so it is
+	// never something this run is holding, and guessing it closed would be
+	// guessing about a tracker nobody read.
+	BlockedBy []string
+}
+
+// blockedBy reports whether this entry is sequenced behind one named tick.
+func (e planEntry) blockedBy(tick string) bool {
+	return slices.Contains(e.BlockedBy, tick)
 }
 
 // planFrom turns the graph into the order this run dispatches in.
@@ -1263,30 +1287,60 @@ type planEntry struct {
 // rather than trusting the wave numbers is deliberate: a skeleton tick that
 // landed in the wrong wave would otherwise review an epic that is not finished.
 func planFrom(graph tk.Graph) []planEntry {
+	closed := map[string]bool{}
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.Status == "closed" {
+				closed[task.ID] = true
+			}
+		}
+	}
 	var out []planEntry
 	seen := map[string]bool{}
 	for _, wave := range graph.Waves {
 		for _, task := range wave.Tasks {
-			if seen[task.ID] || task.Status == "closed" {
+			if seen[task.ID] || closed[task.ID] {
 				continue
 			}
 			seen[task.ID] = true
 			out = append(out, planEntry{
 				TickID: task.ID, Title: task.Title, Wave: wave.Wave, Role: RoleOf(task),
 				Priority: task.Priority, Type: task.Type, Labels: task.Labels, Blocks: len(task.Blocks),
+				BlockedBy: openBlockers(task.BlockedBy, closed),
 			})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := skeletonRank(out[i].Role), skeletonRank(out[j].Role); a != b {
-			return a < b
-		}
-		return out[i].Wave < out[j].Wave
-	})
+	sortPlan(out)
 	for i := range out {
 		out[i].Order = i + 1
 	}
 	return out
+}
+
+// openBlockers is a task's blockers with the ones the graph itself reports
+// closed taken out, because a closed blocker blocks nothing.
+func openBlockers(blockedBy []string, closed map[string]bool) []string {
+	var open []string
+	for _, id := range blockedBy {
+		if !closed[id] {
+			open = append(open, id)
+		}
+	}
+	return open
+}
+
+// sortPlan puts a plan in the order the run dispatches it: the skeleton's
+// rank first, then the wave. It is a function rather than two copies of one
+// comparison because the plan is sorted twice — once when it is derived and
+// again whenever it is re-derived (window.go) — and a run that ordered the two
+// differently would dispatch in an order nothing stated.
+func sortPlan(entries []planEntry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		if a, b := skeletonRank(entries[i].Role), skeletonRank(entries[j].Role); a != b {
+			return a < b
+		}
+		return entries[i].Wave < entries[j].Wave
+	})
 }
 
 // skeletonRank is the ONE place the EPIC-SKELETON's ordering lives: work
