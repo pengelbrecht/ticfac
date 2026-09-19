@@ -178,6 +178,11 @@ type harnessWorkspace struct {
 }
 
 type harnessOptions struct {
+	// now, when set, is the executor's clock. Nil is time.Now. A test that
+	// needs every stamp to be a DIFFERENT second sets a clock that advances
+	// on each call, which turns a race that needs a loaded host into one
+	// that fails every time.
+	now        func() time.Time
 	spawnAgent bool
 	agentMode  string
 	kind       string
@@ -568,6 +573,10 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 
 	h.server = s
 	stateDir := filepath.Join(root, "state")
+	clock := opts.now
+	if clock == nil {
+		clock = time.Now
+	}
 	ex, err := New(Options{
 		Repo:       repo.Dir,
 		StateDir:   stateDir,
@@ -576,7 +585,7 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		Args:       opts.args,
 		Remote:     "origin",
 		Attempt:    1,
-		Now:        time.Now,
+		Now:        clock,
 	})
 	if err != nil {
 		t.Fatal(err)
