@@ -73,7 +73,7 @@ gate:
 # optional-chain misses — is warning severity. Without the flag this is a gate
 # that cannot refuse the things it was added to catch.
 ts-gate:
-	{ cd cloudflare 2>/dev/null || cd cloud/factory; } && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
+	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:

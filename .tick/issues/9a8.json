@@ -2,12 +2,14 @@
   "id": "9a8",
   "title": "Delete the two-layout gate fallback once Phase 4 reaches main",
   "description": "The gate's ts command carries a transition measure from defect 19q:\n\n    { cd cloudflare 2\u003e/dev/null || cd cloud/factory; } \u0026\u0026 ...\n\nin BOTH .tick/runners.toml and the Makefile's ts-gate (they must stay byte-identical; a drift test enforces it).\n\nk4s filed this as stale, and it is stale IN THE MERGED TREE — l9n deleted cloud/factory and k4s deleted cloud/sandbox, so the fallback arm names nothing there. But it is NOT yet safe to delete, and the distinction is the whole reason the fallback exists: the gate command is read from the RUN'S CHECKOUT, which is main, and main still has cloud/factory because epic/ncv has not merged. Verified 2026-09-19: origin/main has cloud/factory and has no cloudflare/.\n\nSo this tick is a TRIGGER, not a task to do now. The moment epic/ncv lands on main, delete the fallback from both files in one commit and confirm the drift test still passes. Doing it earlier breaks the gate for every tick still running against main.\n\nThe comment in runners.toml already says 'DELETE the fallback once the move has reached main'. This tick exists so that instruction has an owner instead of relying on someone reading a comment at the right moment.\n\nReported by k4s, run epic-ncv, finding 4d4c3550 — correct about the smell, early about the timing.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "After epic/ncv merges to main, neither .tick/runners.toml nor the Makefile mentions cloud/factory, the two remain byte-identical, and the gate passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T12:41:36.563435Z",
-  "updated_at": "2026-09-19T12:41:36.563435Z"
+  "updated_at": "2026-09-19T21:35:28.638259Z",
+  "closed_at": "2026-09-19T21:35:28.638259Z",
+  "closed_reason": "Phase 4 merged to main as 1934c86; neither cloud/factory nor cloud/sandbox exists there any more, so the fallback arm named nothing. Removed from both .tick/runners.toml and the Makefile in one commit, byte-identical as the drift test requires; drift tests and the ts gate pass."
 }
