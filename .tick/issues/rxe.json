@@ -1,0 +1,13 @@
+{
+  "id": "rxe",
+  "title": "A refusal reports the shallowest true fact, not the most useful one",
+  "description": "ef7 attempt 5 was refused as:\n\n    no-commits: the attempt branch carries no commit beyond the base it was cut from\n\nTrue. Also the least informative sentence available. The executor had already written the real answer to result.json:\n\n    outcome: failed\n    failure_class: runner_error\n    source.commits: 0\n\nand the state root held a `wall_clock_exceeded` marker stamped 2026-09-18T17:51:25Z, plus an `agent-gone` file and this observation:\n\n    herdr holds no workspace for this attempt, but the worktree ... is still on\n    disk: a workspace herdr lost left its worktree behind\n\nSo the truth is 'the worker hit its wall-clock bound and herdr then lost the workspace'. The operator was told 'no commits'. Those lead to completely different next actions: the first says raise the bound or split the tick, the second says the worker did nothing and should be redispatched unchanged — which is what will now happen, and it will hit the same bound again.\n\nThis is the same shape as 44q (a merge refusal that dropped git's own explanation) and lj4 (a no-commits refusal that hid uncommitted work). Three instances of one rule being broken: WHEN SEVERAL TRUE THINGS CAN BE SAID, THE RUN SAYS THE ONE IT COMPUTED LAST RATHER THAN THE ONE THAT EXPLAINS THE OTHERS.\n\nWork:\n- Give refusals a precedence order and make it explicit. A recorded runner failure_class outranks a structural observation like no-commits, because the structural fact is a CONSEQUENCE of it.\n- The refusal must carry the executor's own failure_class and any wall-clock or teardown marker, not restate what the branch looks like.\n- no-commits should be reserved for the case where the runner reports SUCCESS and the branch is still empty — which is the genuinely surprising case worth its own name.\n- Test: an attempt whose result.json says runner_error with a wall-clock marker must be refused as a runner failure naming the bound, never as no-commits.\n\nObserved 2026-09-18, epic ncv. Related: 44q, lj4.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A refusal names the executor's recorded failure class and wall-clock marker when one exists; no-commits is reported only when the runner claimed success, with a test for each case",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T18:22:56.778661Z",
+  "updated_at": "2026-09-18T18:22:56.778661Z"
+}

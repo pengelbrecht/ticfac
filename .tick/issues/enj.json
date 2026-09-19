@@ -1,0 +1,13 @@
+{
+  "id": "enj",
+  "title": "A transient network failure kills the run; it should be waited through, not stopped for",
+  "description": "Run epic-ncv died outright on:\n\n    read tick 9fc: fetch epic/ncv from origin: git fetch ... :\n    exit status 128: Connection reset by 140.82.121.3 port 22\n    fatal: Could not read from remote repository.\n\nThat is GitHub resetting one SSH connection. The repository exists, the credentials are right, and the next attempt succeeded immediately. The run still died, with two workers in flight, and needed a person to restart it.\n\nThis is the exact gap epic 9pd's retro named as the blocker for unattended operation: 'ticfac cannot yet tell a failure it should wait through from one it should stop for. It stops for both, correctly, and a person decides.' Here the distinction is not subtle — a connection reset mid-fetch is the textbook retryable error, and treating it as fatal is what makes the tool need a babysitter.\n\nNothing was lost, because attempts are durable and a resumed run adopts them. The cost is purely that a person must be watching: the run sat dead until someone noticed.\n\nWork:\n- Classify remote git failures. Connection reset, timeout, DNS failure, HTTP 5xx and 'Could not read from remote repository' after a successful handshake are TRANSIENT. Authentication failure, unknown ref and 'repository not found' are TERMINAL.\n- Retry the transient class with bounded backoff, and SAY SO in the feed — a silent retry is how a real outage looks healthy. A run that retried four times and gave up must report that, not just the last error.\n- Cap it: retrying forever recreates the hang the SSH ConnectTimeout work (pul) exists to prevent. The bound is what makes this safe.\n- Test: a fetch that fails once and succeeds on retry must not kill the run; one that fails past the cap must stop with a message naming the attempts.\n\nObserved 2026-09-18 in epic ncv. Related: the 'external calls with no deadline' class in 9pd's retro.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A transient remote git failure is retried with bounded backoff and reported in the feed; the run survives a single connection reset, and stops with an attempt count when the bound is exhausted",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T18:21:46.566481Z",
+  "updated_at": "2026-09-18T18:21:46.566481Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "44q",
+  "title": "A merge refusal must carry git's reason; z23's was empty",
+  "description": "z23's attempt was refused with:\n\n    merge_failed: attempt 2 of z23 does not merge onto epic/ncv:\n\nNote the trailing colon with NOTHING after it. The refusal names no file, no conflict, no cause.\n\ngit's own output was precise and actionable — six 'file location' conflicts, each naming the source path, the rename, AND the suggested destination:\n\n    CONFLICT (file location): cloud/factory/src/epic-reconciler.ts added in\n    origin/z23a2 inside a directory that was renamed in HEAD, suggesting it\n    should perhaps be moved to cloudflare/src/epic-reconciler.ts.\n\nThat is a diagnosis and a repair instruction in one line, and the reconciler threw it away. An operator reading the feed sees a dead end; an operator who re-runs the merge by hand sees the answer immediately. The gap between those two experiences is the defect.\n\nWorse for unattended operation: a resolve-conflict job dispatched from this refusal would be handed a message with no information in it. The refusal is the ONLY durable record — the worktree is torn down on cleanup.\n\nWork:\n- Capture the merge command's stderr and carry it in the refusal, not just the exit status.\n- Truncate rather than drop: a long conflict list is still worth its first N lines.\n- Cover the empty-reason case with a test that FAILS if the detail is blank — an error message that can be empty will be.\n\nFound on 2026-09-18 resolving z23 in epic ncv.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A merge refusal carries the underlying git conflict output, and a test fails if the reason is empty",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:32:52.8263Z",
+  "updated_at": "2026-09-18T16:32:52.8263Z"
+}

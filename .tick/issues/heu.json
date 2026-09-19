@@ -1,0 +1,13 @@
+{
+  "id": "heu",
+  "title": "Quiet the workerd stderr noise in a green vitest run",
+  "description": "A fully GREEN vitest run in cloudflare/ emits a wall of workerd stderr: 'evicted mid-commit', 'Engine was never started', \"Worker's code had hung\". Found by tick ncr (Biome), which lost time distinguishing 'hung' from 'slow' while reading it.\n\nThese look like deliberate negative-path scenarios leaking their noise rather than real faults — the suite passes. The cost is not correctness, it is READABILITY OF A FAILURE: a CI log where a green run already prints alarming stderr is a log where a real failure does not stand out. That is the same class as the five load-sensitive tests in cy2 — a signal that cries wolf stops being read.\n\nWork:\n- Identify which tests produce each message, and confirm each is an intended negative path.\n- Suppress or capture the expected stderr at its source (vitest onConsoleLog / per-test capture), NOT globally — a genuinely unexpected workerd message must still reach the log.\n- Prove it: a green run is quiet, and an injected real fault still prints.\n\nRun: cd cloudflare \u0026\u0026 pnpm exec vitest run",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A fully passing vitest run emits no workerd stderr; an injected genuine workerd fault still surfaces its message in the output",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:19:24.02813Z",
+  "updated_at": "2026-09-18T16:19:24.02813Z"
+}

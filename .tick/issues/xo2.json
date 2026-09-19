@@ -2,12 +2,16 @@
   "id": "xo2",
   "title": "Execution is still half in tk: the cloud and herd drivers are the reference implementation Phase 4 has to port, not delete",
   "description": "The factory half of the extraction landed (tick 1ya): tk factory is gone from ticks source, and so are tk cloud run/stop/logs/trace/supervisor. What 1ya never scoped is the execution DRIVERS, and they are all still in ticks:\n\n- tk cloud spawn / wait / collect / reconcile, plus internal/cloud, internal/sandbox, internal/wave\n- tk herd spawn / wait / reconcile / collect / cleanup\n- tk sandbox\n\ncloud.go's own summary now reads 'Drive cloud workers directly from a local checkout'. That is execution, in tk, today - a second working implementation of what this reconciler does.\n\nTHE ORDER MATTERS AND IT IS NOT 'RIP OUT'. This code is the only working example of driving Cloudflare worker containers - spawn a wave, wait on it, collect and verify each pushed branch, reconcile after the orchestrator dies. ticfac Phase 4 (ncv) has to build exactly that as a cloud executor, and much of it will be reconstructed here. Deleting it before ticfac can do the same thing destroys the reference and leaves no way back. 1ya said this in its own words - 'do this only once the ticfac side actually works end to end' - and that condition still is not met.\n\nSo the sequence is: ncv ports the behaviour into a ticfac cloud executor, ncv's gate proves it (an epic completes unattended and merges its own PR through the new reconciler), and only then does a retirement tick delete the tk side. Until that lands, 'extracted' still means 'copied' for this half, and the two implementations can drift - which is the same drift 5bp had to settle for cloud/sandbox.\n\nRelated: the installed tk binary is stale (its help still advertises tk factory and tk cloud run), so what an operator sees and what source ships already disagree.",
+  "notes": "2026-09-19 09:25 - 2026-09-19 — now blocked by k4s (edge reversed; see k4s's note).\n\nThis tick was blocking k4s, a child of ncv, while its own description requires ncv to be finished first. That is a cycle, and it was stalling Phase 4 at the end of wave 2.\n\nNothing about this tick's content changes: it is still 'port or explicitly declare, never rip out', and still must not delete a path before its ticfac equivalent passes a gate. What changed is that it is correctly placed AFTER the porting work rather than in front of it.",
   "status": "open",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "k4s"
+  ],
   "acceptance_criteria": "Every execution path in ticks is either ported into a ticfac executor and proven by ticfac's own gate, or explicitly declared as staying in ticks with the reason recorded. No path is deleted before its ticfac equivalent passes a gate. A test or check fails if tk grows a new execution verb after the cutover.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-17T19:18:02.045401Z",
-  "updated_at": "2026-09-17T19:18:02.045401Z"
+  "updated_at": "2026-09-19T07:25:23.123418Z"
 }

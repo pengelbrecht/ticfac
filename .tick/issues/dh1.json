@@ -1,0 +1,13 @@
+{
+  "id": "dh1",
+  "title": "Worker telemetry cannot distinguish a working agent from a wedged one",
+  "description": "Two attempts in epic ncv, same wave, same 3600s bound. One produced 433 lines and passing tests; the other produced an empty commit. THEIR OBSERVATION LOGS ARE THE SAME SHAPE.\n\n9fc attempt 4 (productive) and ef7 attempt 5 (produced nothing), both:\n\n    16:5x:xx started    agent ... started in pane ...\n    16:5x:xx heartbeat  the agent entered working: the dispatch is confirmed\n    \u003csixty minutes of nothing\u003e\n    17:5x:xx exited     stopped at its wall clock of 3600s\n\nOne heartbeat, at second one, and then silence until the kill. There is no per-step activity record, so 'the agent is thinking hard' and 'the agent wedged in its first minute' are the same log. That is why ad4 cannot be answered from the evidence ticfac already has: I went looking for the root cause of ef7 producing nothing and found that the instrumentation cannot tell me.\n\nThis is the same failure as heu from the other end — there, a green run looks like a broken one; here, a working agent looks like a dead one. In both cases the signal that would distinguish them is not recorded.\n\nAlso common to both attempts and worth a look while here: NEITHER honoured the interrupt. Both were sent the wall-clock interrupt every 5s for ~90s, ignored it, and had to be stopped by closing the pane. An agent that ignores SIGINT for 90 seconds is either wedged or has no handler; if the latter, the grace period is theatre.\n\nWork:\n- Record periodic liveness with something the agent actually produces: tokens emitted, tool calls made, bytes written to the worktree. The worktree is already on disk and already polled for the stall warning — a per-poll 'files changed since dispatch' count would have answered this immediately.\n- Make the stall warning able to fire on it. Today it watches branch and worktree mtime; ef7's worktree never changed, so a 900s stall warning should have fired at 17:06 and did not appear in the feed. Find out why, because that warning existing and not firing is worse than not having it.\n- Record whether the interrupt was honoured, distinctly from whether the pane was closed.\n\nFound 2026-09-18 investigating ad4. Related: heu, ad4, rxe.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A wedged agent is distinguishable from a working one in the recorded observations within one poll interval, and the stall warning fires for an attempt whose worktree has not changed",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T22:24:04.103131Z",
+  "updated_at": "2026-09-18T22:24:04.103131Z"
+}

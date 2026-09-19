@@ -2,6 +2,7 @@
   "id": "9fc",
   "title": "Move run, attempt and decision records from D1 into .ticfac/ on the run branch",
   "description": "SPEC 12 Phase 4 item 6. Move run/attempt/decision records out of D1 and into .ticfac/ on the run branch, pushed to origin at once (SPEC 10.4); leave D1 as a rebuildable index, or remove it.\n\nREAD 9da BEFORE STARTING. This item makes that defect worse, not better: 9da is the close-out deadlocking because the run's checkpoint writes move the PR head it gates CI on, and this item moves MORE records onto that same branch. Phase 3 hit it with checkpoints alone; with attempts and decisions there too, every record written during a close-out re-invalidates the CI it is waiting for.\n\nSo this tick does not start with a migration. It starts by establishing how run-state writes and the PR + CI gate coexist - whether records go to a ref that is not the PR's head, whether CI is asked about the last non-run-state commit, or whether the close-out stops writing while it waits. Then migrate.\n\nThe prize is real and worth the care: records in git are readable by a resumed run with no database, which is what makes a Workflow restart recoverable.",
+  "notes": "2026-09-18 19:54 - Attempt 4 (run epic-ncv, 2026-09-18) did the work and never committed it. The reconciler refused it as no-commits; the worktree held 433 lines across four files.\n\nRESCUED to branch `rescue/9fc-attempt-4` (commit 3b9200f, pushed to origin).\n\nVerified at rescue time, and no more than this:\n  - cloudflare/test/epic-reconciler.test.ts — 17 passed\n  - TestTheCloseoutSeesCIPastEveryRunStateRecord — ok\n\nIt is NOT certified against this tick's acceptance. A next attempt should START FROM THAT BRANCH rather than from scratch — the work covers run-state-store.ts, epic-reconciler.ts, their suite, and the closeout CI test that this tick's acceptance asks for by name ('the 9da interaction is demonstrated as resolved, not assumed').\n\nThe loss mechanism is filed as lj4.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -13,5 +14,5 @@
   "acceptance_criteria": "Run, attempt and decision records live in .ticfac/ on the run branch and a resumed run reads them with no D1 access. D1 is either rebuildable from them or gone. An epic close-out still reaches a CI verdict with these writes happening - the 9da interaction is demonstrated as resolved, not assumed.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:45.162719Z",
-  "updated_at": "2026-09-18T11:24:45.162719Z"
+  "updated_at": "2026-09-18T17:54:47.597957Z"
 }

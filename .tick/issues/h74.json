@@ -1,0 +1,13 @@
+{
+  "id": "h74",
+  "title": "Same-wave file safety must treat a directory MOVE as touching everything under it",
+  "description": "Phase 4 put l9n and z23 in the same wave. l9n moved cloud/factory to cloudflare. z23 wrote 3,929 new lines INTO cloud/factory. Both succeeded; the merge then failed as six 'file location' conflicts, because git renamed the directory and z23's brand-new files had nowhere to follow it to.\n\nNothing either worker did was wrong. The PLAN was wrong: it scheduled a tick that renames a tree alongside a tick whose whole deliverable lands inside that tree.\n\nThe planner already validates 'same-wave file safety'. It did not catch this, and the likely reason is the shape of the check: a tick that MOVES a directory touches every path under it, including paths that do not exist yet. Comparing declared file lists cannot see that — l9n's list names cloud/factory/**, z23's names files nobody had created when the plan was made.\n\nThe repair cost a person: relocating six files, then fixing three imports that still counted ../../../ from the old depth (tsc refused all three), then two stale doc comments. That is the SAME encoded-depth trap that cost l9n eleven fixes inside its own tick.\n\nWork:\n- Treat a declared move/rename of a directory as a claim on the whole subtree, present and future. A tick that creates anything under a subtree another same-wave tick is moving is a hard dependency, not a parallel peer.\n- Say so at PLAN time, where it is free, not at merge time, where it costs a hand-resolution.\n- The check belongs where waves are computed, and needs a test with exactly this shape: mover and writer in one wave.\n\nFound on 2026-09-18 in epic ncv wave 1. Related: 44q (the refusal that reported this carried no reason at all).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A plan placing a directory-moving tick in the same wave as a tick that writes under that directory is refused at planning time, with a test covering the mover/writer pair",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:33:05.781454Z",
+  "updated_at": "2026-09-18T16:33:05.781454Z"
+}
