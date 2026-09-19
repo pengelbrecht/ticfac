@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 140,
-  "state": "running",
-  "reason": "pxc is running as attempt 12",
-  "updated_at": "2026-09-19T14:33:37Z",
+  "sequence": 141,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for pxc",
+  "updated_at": "2026-09-19T14:34:24Z",
   "ticks": [
     {
       "tick_id": "l9n",
