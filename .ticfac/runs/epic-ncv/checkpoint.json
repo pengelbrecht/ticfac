@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 130,
-  "state": "failed",
-  "reason": "pxc did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: pxc reported 2 finding(s) nobody has triaged — \"Go close-out opens the epic PR without the review verdict or findings; forge cannot post them\" (defect, for this repository); \"Give review-epic a structured verdict; a NOT READY review answered DONE_WITH_CONCERNS closes and releases the close-out\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b, b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d under .ticfac/runs/epic-ncv/findings/ on origin",
-  "updated_at": "2026-09-19T13:57:09Z",
+  "sequence": 131,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-19T14:24:00Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -52,7 +52,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ncv",
-    "source_sha": "b8e6d0ca491209deb19df655db2426ee885dd5db",
+    "source_sha": "fd240bb9d2fce78eb23dea77d62f1819bd844fa7",
     "integration_ref": "refs/heads/epic/ncv",
     "phase": "worker",
     "executor": null,
