@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 199,
-  "state": "publishing",
-  "reason": "closing 3q0 behind the integrated gate on 9769aeb8a8ef",
-  "updated_at": "2026-09-19T20:50:54Z",
+  "sequence": 200,
+  "state": "running",
+  "reason": "3q0 is closed",
+  "updated_at": "2026-09-19T20:51:11Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "3q0",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 13
     }
   ],
