@@ -1080,7 +1080,26 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
       .first<{ run_id: string }>();
     expect(indexed).toBeNull();
     expect(instance.id).toBe(runID);
-    const status = (await instance.status()) as { status?: string };
+    // The ENGINE's instance status is a second clock, and it lags the run's
+    // own record: the checkpoint above already says completed, and on a fast
+    // host the engine has caught up by the next line. On a 2-vCPU CI runner it
+    // has not, and this assertion read it ONCE and failed — twice, on identical
+    // source, while the durable evidence said the run had finished (tick lan).
+    //
+    // So wait for it, the way the sibling test below already does. What is
+    // being asserted is that the engine eventually agrees with the record, not
+    // that it agrees within one tick of the scheduler.
+    const statusDeadline = Date.now() + 20_000;
+    let status: { status?: string } = {};
+    for (;;) {
+      status = (await instance.status()) as { status?: string };
+      const state = String(status.status);
+      if (state !== "running" && state !== "queued") break;
+      if (Date.now() > statusDeadline) {
+        throw new Error(`timed out waiting for the Workflow engine; status: ${state}`);
+      }
+      await scheduler.wait(20);
+    }
     expect(String(status.status)).toContain("complete");
     // The run released the publish slot on its way out (tick ef7): a finished
     // run must not wedge the repository behind its own slot.
