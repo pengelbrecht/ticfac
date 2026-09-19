@@ -2,10 +2,10 @@
   "id": "3q0",
   "title": "Close out Phase 4: retro, then flesh out Phase 5 into ticks",
   "description": "Run the epic-close retro, then plan the next feasible epic into child ticks.\n\nThe next in soft order is yvi (Phase 5: the Cloudflare Computer executor), with djo (Phase 4b: subscription seats as flat-rate credentials) also unblocked by this phase - pick by feasibility, not by number, and say which and why.\n\nThe retro must answer the question Phase 3's could not: can ticfac run an epic unattended? Phase 3 said no and named 9da as the blocker. If this phase's gate was met, say what changed; if it was met only with help, say exactly where the help was needed. A retro that records a pass the run did not earn is worse than no retro.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "pxc"
   ],
@@ -13,5 +13,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:25:07.946856Z",
-  "updated_at": "2026-09-18T11:25:07.946856Z"
+  "updated_at": "2026-09-19T15:22:30.880571Z",
+  "started_at": "2026-09-19T15:22:30.88057Z"
 }
