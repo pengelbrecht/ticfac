@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 74,
-  "state": "integrating",
-  "reason": "integrating 9fc attempt 6 into epic/ncv",
-  "updated_at": "2026-09-19T10:21:52Z",
+  "sequence": 75,
+  "state": "failed",
+  "reason": "attempt 6 of 9fc does not merge onto epic/ncv: Recorded preimage for 'cloudflare/src/epic-reconciler.ts'",
+  "updated_at": "2026-09-19T10:22:06Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "9fc",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 6
     },
     {
