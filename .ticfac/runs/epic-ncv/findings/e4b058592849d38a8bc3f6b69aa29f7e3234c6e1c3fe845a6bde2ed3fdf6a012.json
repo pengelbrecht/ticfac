@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "k4s",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T12:32:25Z",
+  "triaged_at": "2026-09-19T12:42:07Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "pengelbrecht/ticks:tl5",
   "provenance": {
     "run_id": "epic-ncv",
     "tick_id": "k4s",
