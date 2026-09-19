@@ -296,16 +296,16 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
-		// The close's other gate (tick 7vn), same rule as the integrated
-		// close: a role job's findings are discoveries its answer made, and a
-		// tick whose findings are untriaged is not closed — behind a validated
-		// envelope or anything else.
-		if refusal, err := r.gateOnFindings(tick); err != nil {
-			return err
-		} else if refusal != nil {
-			r.setTick(tick, "rejected")
-			r.record(tick, StageRejected, "%s: %s", refusal.Reason, firstLine(refusal.Message))
-			return refusal
+		// The findings gate is GONE from the role tick's close too (tick aqm):
+		// a review's discoveries are drafted exactly as a worker's are, the tick
+		// closes, and the hold moved to the close-out — which is where a
+		// finding reported by the FINAL REVIEW rides as well, the one place a
+		// person is already being asked to look. The close keeps the RECORD of
+		// what is riding.
+		if carried := r.carriedUntriaged(tick); carried > 0 {
+			r.record(tick, StageClosedCarrying,
+				"%d untriaged finding(s) ride to the close-out: the tick closes and the hold is the close-out's",
+				carried)
 		}
 		note := fmt.Sprintf("ticfac run %s: the %s job (attempt %d) returned a validated %s envelope at %s — %s: %s",
 			r.runID, answer.Role, marker.Attempt, answer.SchemaID, short(marker.BaseSHA), answer.Status, answer.Summary)

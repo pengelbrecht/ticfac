@@ -77,6 +77,11 @@ type fakeForge struct {
 	// updateErr is UpdateBody's failure, when a test wants the typed
 	// refusal the body's absence produces.
 	updateErr error
+	// dropFromReadback is removed from the body the forge READS BACK on
+	// Find (tick aqm): the lying-surface shape the carried check exists to
+	// catch — the write "succeeded" and the PR still does not say the
+	// finding, so only a round trip through the forge's own answer finds it.
+	dropFromReadback string
 
 	// bySHA answers per commit rather than per call, which is what the
 	// close-out's real problem needs: CI exists on one commit and not on the
@@ -92,9 +97,26 @@ func (f *fakeForge) Find(_ context.Context, headRef, baseRef string) (*forge.Pul
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "find")
 	if f.exists && f.pr != nil {
-		return f.pr, nil
+		// The PR as the forge reads it (tick aqm): the body it carries NOW —
+		// the last write, less whatever a test made this surface drop — and
+		// never a copy of what the caller believes it wrote.
+		pr := *f.pr
+		pr.Body = f.readbackLocked()
+		return &pr, nil
 	}
 	return nil, nil
+}
+
+// readbackLocked is the body the PR carries as this forge answers for it.
+func (f *fakeForge) readbackLocked() string {
+	if len(f.bodies) == 0 {
+		return ""
+	}
+	body := f.bodies[len(f.bodies)-1]
+	if f.dropFromReadback != "" {
+		body = strings.Replace(body, f.dropFromReadback, "", 1)
+	}
+	return body
 }
 
 func (f *fakeForge) Open(_ context.Context, headRef, baseRef, title, body string) (*forge.PullRequest, error) {
@@ -106,7 +128,7 @@ func (f *fakeForge) Open(_ context.Context, headRef, baseRef, title, body string
 	}
 	f.pr = &forge.PullRequest{
 		Number: 7, URL: "https://example.example/pull/7",
-		HeadRef: headRef, HeadSHA: "fake-head-sha", BaseRef: baseRef,
+		HeadRef: headRef, HeadSHA: "fake-head-sha", BaseRef: baseRef, Body: body,
 	}
 	f.exists = true
 	f.bodies = append(f.bodies, body)

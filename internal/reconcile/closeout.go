@@ -314,6 +314,16 @@ func (r *Reconciler) prBase() string {
 func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle, merged merge) error {
 	tick := marker.TickID
 	if !r.closeoutRule.Declared {
+		// No PR, no CI — but the findings gate still runs (tick aqm): the hold
+		// the per-tick close carried moved HERE, not away, and a repository
+		// that declares no rule hands over through the same close-out this
+		// gate protects. The durable record under .ticfac/ is the view the
+		// person reads, listed by `ticfac findings`.
+		if refusal, err := r.gateCloseoutOnFindings(tick, 0); err != nil {
+			return err
+		} else if refusal != nil {
+			return refusal
+		}
 		return nil
 	}
 	if r.opts.PullRequests == nil {
@@ -376,6 +386,27 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 			if err := r.carryOntoThePR(ctx, tick, *pr, body, findings); err != nil {
 				return err
 			}
+			// The integrity check that replaces the per-tick hold (tick aqm): a
+			// finding the run filed that does not appear on the PR it is about
+			// to hand over is a finding on the floor whatever the write just
+			// claimed — so the PR is READ BACK from the forge and checked against
+			// every filed finding before the hand-over. This, not a hold per tick,
+			// is what stops one falling on the floor — and it belongs at the one
+			// gate a person actually reads.
+			if err := r.gateCloseoutCarriesFindings(ctx, tick, head, base); err != nil {
+				return err
+			}
+			// The hold the per-tick gate became (tick aqm): the close-out does
+			// not hand over while any finding of the run is untriaged. The body
+			// was rewritten from the final records immediately above, so the
+			// person this hold asks for reads every finding's full text on the
+			// PR they are about to judge — one decision point, at the end,
+			// instead of one per tick mid-run.
+			if refusal, err := r.gateCloseoutOnFindings(tick, pr.Number); err != nil {
+				return err
+			} else if refusal != nil {
+				return refusal
+			}
 			r.record(tick, StageCloseoutCloseGated,
 				"CI is green on %s, which carries the close-out's own commits; the close proceeds",
 				ciSubject(ciSHA, ciIsHead, pr))
@@ -435,4 +466,91 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 // beside the runners.toml the gate reads, in the same `.tick/`.
 func repoConfigPath(repo string) string {
 	return filepath.Join(repo, ".tick", "config.md")
+}
+
+// ------------------------------------------------- the findings gates (aqm) ---
+
+// The per-tick untriaged-findings hold (tick 7vn) is gone, and these two
+// gates at the close-out are what replaced it (tick aqm — the operator's
+// 2026-09-19 decision, after epic-ncv stopped five times for nothing but
+// untriaged findings):
+//
+//   - a tick whose findings are untriaged CLOSES, the run continues, and the
+//     finding rides — durably, under .ticfac/runs/<run-id>/findings/, and on
+//     the epic PR when the repository declares the rule;
+//   - the CLOSE-OUT does not hand over while any finding of the run is
+//     untriaged, naming them: one decision point at the end, where a person
+//     is already being asked to look, instead of one per tick mid-run —
+//     and unlike the old hold it cannot re-dispatch the review that reported
+//     the finding, so a thorough reviewer is never punished with another
+//     round;
+//   - the close-out REFUSES the hand-over when a filed finding does not
+//     appear on the PR, read back from the forge: the PR is the one gate a
+//     person actually reads, and a filed finding missing from it is a
+//     finding on the floor whatever green CI says beside it.
+
+// filedFindings is every finding the run drafted, whatever its triage state.
+// Read from ORIGIN, fetched first, for the same reason the untriaged read
+// is: the carried check is a comparison between the durable record and the
+// PR as it stands NOW, not between a memory and a write.
+func (r *Reconciler) filedFindings() ([]runstate.Finding, error) {
+	if r.store == nil {
+		return nil, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return nil, err
+	}
+	return r.store.Findings()
+}
+
+// gateCloseoutCarriesFindings is the integrity check that replaces the
+// per-tick hold (tick aqm): every finding the run filed must appear on the
+// epic PR the close-out is about to hand over. The PR is read BACK from the
+// forge — the body the forge answers with, never the body this process
+// believes it wrote — because the check exists to catch the write that lied,
+// the composition that omitted, and the PR body somebody stripped a finding
+// from; checking the run's own memory of the write would catch none of them.
+//
+// A run that filed no findings checks nothing and touches the forge not at
+// all: the gate is about findings, and a run that found nothing must not pay
+// a round trip to prove it.
+func (r *Reconciler) gateCloseoutCarriesFindings(ctx context.Context, tick, head, base string) error {
+	findings, err := r.filedFindings()
+	if err != nil {
+		return fmt.Errorf("read the run's findings to check the epic PR carries them: %w", err)
+	}
+	if len(findings) == 0 {
+		return nil
+	}
+	pr, err := r.opts.PullRequests.Find(ctx, head, base)
+	if err != nil {
+		return r.refuse(RefusedCloseoutPRFindings, tick,
+			"the close-out cannot say whether the epic PR carries every filed finding, so it does not hand "+
+				"over: the code-hosting surface could not read the PR for %s (→ %s) back: %v. The rule the repository "+
+				"declares is: %s", head, base, err, r.closeoutRule.Stated)
+	}
+	if pr == nil {
+		return r.refuse(RefusedCloseoutPRFindings, tick,
+			"the epic PR for %s (→ %s) is gone between the close gate's write and the check that the findings it "+
+				"carries are on it, so the close-out does not hand over behind a PR it cannot read: re-run the epic and "+
+				"the admission re-opens the PR. The rule the repository declares is: %s", head, base, r.closeoutRule.Stated)
+	}
+	var missing []string
+	for _, finding := range findings {
+		if !strings.Contains(pr.Body, finding.Title) {
+			missing = append(missing, fmt.Sprintf("%q (key %s, %s, severity %s, tick %s)",
+				finding.Title, finding.Key, finding.Kind, finding.Severity, finding.TickID))
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return r.refuse(RefusedCloseoutPRFindings, tick,
+		"the epic PR #%d (%s) does not carry %d finding(s) the run filed — %s — and the close-out does not hand "+
+				"over behind a PR a filed finding is missing from: the PR is the one gate a person actually reads, and a "+
+				"finding that is not on it is a finding on the floor whatever green CI says beside it. The close gate just "+
+				"wrote the body, so the repair is whatever dropped the finding — the forge's write, the body's composition, "+
+				"or a PR body somebody stripped — and re-running the epic under this run id recomposes and rewrites the "+
+				"body from the record before checking again. The rule the repository declares is: %s",
+		pr.Number, pr.URL, len(missing), strings.Join(missing, "; "), r.closeoutRule.Stated)
 }

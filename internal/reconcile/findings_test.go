@@ -7,23 +7,30 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
-// The findings channel end to end (tick 7vn), against a real repository, a
-// real origin, the real run-state store and the real tracker-tree publishing
-// path — the same harness every other run-level guarantee here is pinned with.
+// The findings channel end to end (tick 7vn, reshaped by tick aqm), against
+// a real repository, a real origin, the real run-state store and the real
+// tracker-tree publishing path — the same harness every other run-level
+// guarantee here is pinned with.
 //
-// THE THREE ACCEPTANCE CASES, and the routing and fail-closed halves:
+// THE FIVE CASES, and the routing and fail-closed halves:
 //
 //  1. a finding becomes a DRAFT — durably, on origin, stamped with the
-//     attempt that discovered it — and the tick that reported it is refused
-//     its close while the draft waits for a person;
+//     attempt that discovered it — the tick that reported it CLOSES and the
+//     run continues, and the CLOSE-OUT holds while the draft waits for a
+//     person: the per-tick hold moved to the close-out (tick aqm), one
+//     decision point at the end instead of one per tick mid-run;
 //  2. a finding repeated on a later attempt of the same tick is deduplicated
 //     against the original proposal and proposes nothing new, including when
-//     the original was discarded;
+//     the original was discarded — and a discarded finding holds nothing,
+//     so the run completes over it;
 //  3. a malformed findings block refuses the attempt rather than closing the
 //     tick behind findings nobody could read;
 //  4. a finding triaged as FIXED — repaired inside this epic, the commit named
 //     — unblocks the tick, and a later report of the same finding is NOT
-//     suppressed: the fix did not hold, and the run hears it again.
+//     suppressed: the fix did not hold, the run hears it again, and what the
+//     re-report reaches is the close-out's hold;
+//  5. a role job's (the final review's) findings ride the same way: the review
+//     tick closes behind its validated answer and the close-out holds.
 
 // draftsStore is the run's finding drafts, read and triaged the way the CLI
 // does it: a store over the same repo, remote, branch and run the reconciler
@@ -62,24 +69,57 @@ func proposedCount(t *testing.T, s *runstate.Store) int {
 	return n
 }
 
-// 1. A finding becomes a draft and blocks the close.
-func TestAFindingBecomesADraftAndRefusesTheClose(t *testing.T) {
+// 1. A finding becomes a draft; the tick CLOSES, the run continues, and the
+// close-out holds. This is tick aqm's first acceptance, in full: a tick with
+// untriaged findings closes, the run continues past it, and the one decision
+// point is the close-out's — naming the findings and where to triage them.
+func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, fixtureOptions{mode: "finding"})
 	repo := f.Repo
-	_, result, err := f.run(repo, fixtureOptions{mode: "finding"})
+	reconciler, result, err := f.run(repo, fixtureOptions{mode: "finding"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if result.State != runstate.StateFailed {
-		t.Fatalf("run state %s, want failed: the untriaged finding must stop the run before the close", result.State)
+		t.Fatalf("run state %s, want failed: the close-out must hold the run over untriaged findings", result.State)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
 		t.Fatalf("failure %+v, want %s", result.Failure, RefusedFindingUntriaged)
 	}
-	if got := f.Tracker.count("close:a1"); got != 0 {
-		t.Fatalf("a1 was closed %d times: a tick whose findings are untriaged cannot be closed", got)
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the hold moved to the close-out (tick aqm), not the tick that reported",
+			result.Failure.TickID)
+	}
+	for _, want := range []string{
+		"A finding the fake runner proposes",
+		"An upstream finding routed to another repository",
+		"tick a1",
+		"close-out does not hand over",
+	} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",
+				want, result.Failure.Message)
+		}
+	}
+
+	// THE RUN CONTINUED: the tick that reported the findings closed, and so did
+	// every tick after it — the run reached the close-out, which is where it
+	// stopped. a1's close SAID what it was carrying rather than closing
+	// silently.
+	for _, id := range []string{"a1", "a2", "b1", "rv"} {
+		if got := f.Tracker.count("close:" + id); got != 1 {
+			t.Fatalf("%s was closed %d times, want 1: a tick with untriaged findings closes and the run continues",
+				id, got)
+		}
+	}
+	if got := f.Tracker.count("close:co"); got != 0 {
+		t.Fatalf("co was closed %d times, want 0: the close-out is the one tick the hold stops", got)
+	}
+	if !contains(reconciler.Stages("a1"), StageClosedCarrying) {
+		t.Errorf("a1's close did not say it was carrying untriaged findings: %v — a close behind findings "+
+			"nobody triaged must not read as nothing found", reconciler.Stages("a1"))
 	}
 
 	// The drafts are on origin: two findings, both proposed, both discovered
@@ -146,11 +186,11 @@ func TestAFindingBecomesADraftAndRefusesTheClose(t *testing.T) {
 		t.Fatal("both drafts should be triaged")
 	}
 
-	// The next run of the same run id resumes at the close: the gate has
-	// already passed, the drafts are triaged, and a1 CLOSES. Every later tick
-	// reports the SAME two findings in this fixture mode, so what the rest of
-	// the run proves is the dedup across ticks: the subjects were decided, the
-	// duplicates propose nothing new, and nothing is blocked by them.
+	// The next run of the same run id resumes at the close-out's close: the
+	// gate has already passed, the drafts are triaged, and co CLOSES — the
+	// hold lifted without re-dispatching a single work tick or the review,
+	// which is the loop the old per-tick hold bought (epic-ncv's three
+	// byte-identical reviews).
 	_, result, err = f.run(repo, fixtureOptions{mode: "finding"})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
@@ -158,12 +198,9 @@ func TestAFindingBecomesADraftAndRefusesTheClose(t *testing.T) {
 	if result.State != runstate.StateCompleted {
 		t.Fatalf("run state %s (%+v), want completed after triage", result.State, result.Failure)
 	}
-	if got := f.Tracker.count("close:a1"); got != 1 {
-		t.Fatalf("a1 was closed %d times after triage, want 1", got)
-	}
-	for _, id := range []string{"a2", "b1", "rv", "co"} {
+	for _, id := range []string{"a1", "a2", "b1", "rv", "co"} {
 		if got := f.Tracker.count("close:" + id); got != 1 {
-			t.Fatalf("%s was closed %d times, want 1", id, got)
+			t.Fatalf("%s was closed %d times after triage, want 1", id, got)
 		}
 	}
 }
@@ -211,16 +248,20 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 
 	// The next attempt of the same tick commits, answers DONE, and reports the
 	// SAME finding — the shape a recurring discovery has until it is fixed.
+	// A DISCARDED finding holds nothing (tick aqm): a1 closes behind its
+	// discarded originals, every later tick's re-report deduplicates against
+	// them, and the run completes.
 	reconciler, result, err := f.run(repo, opts)
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 	if result.State != runstate.StateCompleted {
-		t.Fatalf("run state %s (%+v), want completed: a discarded finding does not block the close", result.State, result.Failure)
+		t.Fatalf("run state %s (%+v), want completed: a discarded finding does not hold the close-out", result.State, result.Failure)
 	}
 
 	// The dedup, as the run's own record: duplicates naming the original and
-	// proposing nothing new.
+	// proposing nothing new — on a1 for its own re-report, and on every later
+	// tick this fixture mode re-reports from.
 	var duplicates int
 	for _, event := range reconciler.Journal() {
 		if event.Stage == StageFindingDuplicate {
@@ -229,14 +270,13 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 				t.Errorf("duplicate event %q does not name the human's decision", event.Detail)
 			}
 		}
-	}
-	if duplicates != 2 {
-		t.Fatalf("%d duplicate events recorded, want 2: the two findings the later attempt re-reported", duplicates)
-	}
-	for _, event := range reconciler.Journal() {
-		if event.Stage == StageFindingFiled && event.Tick == "a1" {
+		if event.Stage == StageFindingFiled {
 			t.Errorf("a finding was FILED on the resume run — the dedup key is not deduplicating: %+v", event)
 		}
+	}
+	if duplicates < 2 {
+		t.Fatalf("%d duplicate events recorded, want at least 2: the findings a1's second attempt re-reported",
+			duplicates)
 	}
 
 	// One record per finding, still carrying the FIRST attempt as the
@@ -291,7 +331,7 @@ func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 // triaged as fixed, naming the commit — the verdict unblocks the tick the way
 // promote and discard do, and a later report of the same finding is NOT
 // suppressed: the re-report re-opens the draft, discovered by the attempt that
-// re-found it, and the run refuses the close again. The proof the verdict
+// re-found it, and the close-out holds over it again. The proof the verdict
 // unblocked anything is the run getting as far as dispatching a1's second
 // attempt — a gate that had not lifted would have failed the run before the
 // attempt, with the draft still discovered by attempt 1.
@@ -345,23 +385,32 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 
 	// The resume run: attempt 2 of a1 commits, answers DONE, and reports the
 	// SAME two findings — and because the standing verdict was FIXED, the
-	// re-report is not a duplicate: the drafts are re-proposed and a1 is
-	// refused its close again. THE ACCEPTANCE CASE of tick her.
+	// re-report is not a duplicate: the drafts are re-proposed, a1 CLOSES
+	// carrying them, and the run continues to the close-out, which holds —
+	// the re-report surfaces at the one decision point (tick aqm), not as a
+	// per-tick refusal. THE ACCEPTANCE CASE of tick her, moved by aqm.
 	reconciler, result, err := f.run(repo, opts)
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 	if result.State != runstate.StateFailed {
-		t.Fatalf("run state %s, want failed: the re-reported finding must stop the run before the close", result.State)
+		t.Fatalf("run state %s, want failed: the re-reported finding must hold the close-out", result.State)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
 		t.Fatalf("failure %+v, want %s: the re-report must surface, not dedup", result.Failure, RefusedFindingUntriaged)
 	}
-	if result.Failure.TickID != "a1" {
-		t.Fatalf("failure tick %s, want a1", result.Failure.TickID)
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the hold over a re-opened finding is the close-out's", result.Failure.TickID)
 	}
-	if got := f.Tracker.count("close:a1"); got != 0 {
-		t.Fatalf("a1 was closed %d times behind a finding whose fix did not hold", got)
+	if !strings.Contains(result.Failure.Message, "tick a1") {
+		t.Errorf("the hold does not name a1, the tick whose finding re-opened: %s", result.Failure.Message)
+	}
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Fatalf("a1 was closed %d times, want 1: a tick carrying a finding whose fix did not hold "+
+			"closes, and the finding rides to the close-out", got)
+	}
+	if got := f.Tracker.count("close:co"); got != 0 {
+		t.Fatalf("co was closed %d times, want 0: the close-out is what the re-opened finding holds", got)
 	}
 	// The run got as far as dispatching attempt 2 — the fixed verdict had
 	// unblocked the tick — and the draft is re-proposed with attempt 2 as the
@@ -415,10 +464,13 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 }
 
 // The role-job path: a review's findings are drafted from its validated
-// answer's report the same way, and its tick is refused the close while one
-// waits — the 604 shape, upstream findings that reached the tracker only
-// because an orchestrator read prose that far.
-func TestAReviewJobsFindingBlocksItsOwnClose(t *testing.T) {
+// answer's report the same way — the 604 shape, upstream findings that reached
+// the tracker only because an orchestrator read prose that far. Under tick
+// aqm the review tick CLOSES behind its validated answer (a review re-held
+// for its own findings was the loop that re-dispatched byte-identical
+// reviews until one found nothing), and the close-out holds over the
+// findings, naming the review as the tick that reported them.
+func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, fixtureOptions{mode: "review_finding"})
@@ -429,10 +481,22 @@ func TestAReviewJobsFindingBlocksItsOwnClose(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
-		t.Fatalf("failure %+v, want the review tick's own untriaged finding", result.Failure)
+		t.Fatalf("failure %+v, want the review's untriaged finding holding the close-out", result.Failure)
 	}
-	if result.Failure != nil && result.Failure.TickID != "rv" {
-		t.Fatalf("failure tick %s, want rv", result.Failure.TickID)
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the review closed and its finding rides to the close-out",
+			result.Failure.TickID)
+	}
+	if !strings.Contains(result.Failure.Message, "tick rv") {
+		t.Errorf("the hold does not name rv, the tick whose review reported the finding: %s", result.Failure.Message)
+	}
+	if got := f.Tracker.count("close:rv"); got != 1 {
+		t.Fatalf("rv was closed %d times, want 1: a review whose findings wait for a person closes; "+
+			"the hold is the close-out's (tick aqm), and re-holding the review is the loop that "+
+			"punishes a thorough reviewer with another round", got)
+	}
+	if got := f.Tracker.count("close:co"); got != 0 {
+		t.Fatalf("co was closed %d times, want 0: the close-out is what the review's finding holds", got)
 	}
 	s := draftsStore(t, f.Repo)
 	findings, err := s.Findings()

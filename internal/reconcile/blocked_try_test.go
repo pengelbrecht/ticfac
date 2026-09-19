@@ -96,8 +96,9 @@ func TestFindingBlockedTriggersOnTheTicksOwnFirstTryNotTheRunWideNumber(t *testi
 		t.Fatalf("the refusal is for %s, want a1", result.Failure.TickID)
 	}
 	// The verdict itself, not merely that the run stopped: in this mode a1's
-	// later answers also carry findings, and a run that settled DONE over
-	// untriaged findings refuses too (RefusedFindingUntriaged). The fixture's
+	// later answers also carry findings, and since tick aqm those findings ride
+	// to the close-out rather than refusing the attempt's close — so the
+	// refusal this run owes is a1's own BLOCKED answer. The fixture's
 	// contract is that the FIRST TRY answers BLOCKED with nothing committed —
 	// which the collect vocabulary honestly calls no-commits, exactly as it
 	// does for the blocked-first shape.

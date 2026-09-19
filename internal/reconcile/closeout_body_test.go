@@ -29,23 +29,72 @@ import (
 
 // The PR the run OPENS carries the final review's verdict and every finding
 // the run drafted — each exactly once, whatever triage state it is in, with
-// the finding's own text.
+// the finding's own text — and since tick aqm the UNTRIAGED ones ride there
+// too: the tick that reported them closed, the run continued, and the PR is
+// where a person triaging at the close-out's one decision point reads them.
 func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 	t.Parallel()
 
-	// The findings run: a1 reports two findings, nobody has triaged them, and
-	// the run stops at a1's close — before the close-out, so no PR exists
-	// behind findings a person has not seen.
-	pulls := &fakeForge{}
-	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: pulls})
+	// The findings run with the rule declared: a1 reports two findings, every
+	// tick closes, and the run reaches the close-out — which OPENS the epic
+	// PR and then holds over the untriaged findings, naming the PR that
+	// carries them.
+	forge := &fakeForge{}
+	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
 	repo := f.Repo
-	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: pulls})
+	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
-		t.Fatalf("failure %+v, want the untriaged finding", result.Failure)
+		t.Fatalf("failure %+v, want the untriaged finding holding the close-out", result.Failure)
+	}
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the hold is the close-out's (tick aqm)", result.Failure.TickID)
+	}
+	if !strings.Contains(result.Failure.Message, "#7") {
+		t.Errorf("the hold does not name the epic PR that carries the findings it is about: %s",
+			result.Failure.Message)
+	}
+
+	body := forge.body()
+	if body == "" {
+		t.Fatal("the epic PR was opened with no body at all")
+	}
+	// The rule's own sentence stays the opening: the PR says WHY it exists
+	// before it says what the run found.
+	if !strings.Contains(body, "PR + CI close-out rule") {
+		t.Errorf("the body does not state the rule the PR exists under:\n%s", body)
+	}
+	// The final review's verdict: the review ran in THIS run, answered DONE,
+	// and its answer is on the PR.
+	if !strings.Contains(body, "The final review") || !strings.Contains(body, "DONE") {
+		t.Errorf("the body does not carry the final review's verdict:\n%s", body)
+	}
+	// THE aqm ACCEPTANCE: the body carries every UNTRIAGED finding's full
+	// text — grouped by tick, severity carried with each, the finding's own
+	// body indented under its identity — because the PR is where a person
+	// sees a finding at all. A count would not do; a link nobody opens is a
+	// finding on the floor.
+	if !strings.Contains(body, "### Tick a1") {
+		t.Errorf("the findings are not grouped by the tick that reported them:\n%s", body)
+	}
+	for _, want := range []string{
+		"A finding the fake runner proposes",
+		"Discovered beside the work, reported mechanically.",
+		"An upstream finding routed to another repository",
+		"pengelbrecht/ticks",
+	} {
+		if got := strings.Count(body, want); got != 1 {
+			t.Errorf("the body carries %q %d times, want exactly 1:\n%s", want, got, body)
+		}
+	}
+	if !strings.Contains(body, "high") || !strings.Contains(body, "low") {
+		t.Errorf("the body does not carry each finding's severity:\n%s", body)
+	}
+	if got := strings.Count(body, "triaged proposed"); got != 2 {
+		t.Errorf("the body carries the triage state %d times, want once per untriaged finding:\n%s", got, body)
 	}
 
 	// A person triages both drafts, promoting each into the repository it
@@ -70,9 +119,8 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 		}
 	}
 
-	// The resumed run reaches the close-out and OPENS the epic PR, whose
-	// body must now carry the review's verdict and both findings.
-	forge := &fakeForge{}
+	// The resumed run closes the close-out behind the same PR, whose body now
+	// carries each finding with its triage state.
 	r, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
@@ -80,58 +128,45 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 	if result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %s (%+v)", result.State, result.Failure)
 	}
-	body := forge.body()
-	if body == "" {
-		t.Fatal("the epic PR was opened with no body at all")
-	}
-	// The rule's own sentence stays the opening: the PR says WHY it exists
-	// before it says what the run found.
-	if !strings.Contains(body, "PR + CI close-out rule") {
-		t.Errorf("the body does not state the rule the PR exists under:\n%s", body)
-	}
-	// The final review's verdict: the review ran in THIS resume (the first
-	// run never reached it), answered DONE, and its answer is on the PR.
-	if !strings.Contains(body, "The final review") || !strings.Contains(body, "DONE") {
-		t.Errorf("the body does not carry the final review's verdict:\n%s", body)
-	}
-	// Every finding's identity and text — each exactly ONCE: the count is
-	// the idempotence property, stated as a number — and the triage state
-	// carried with each one.
-	for _, want := range []string{
-		"A finding the fake runner proposes",
-		"Discovered beside the work, reported mechanically.",
-		"An upstream finding routed to another repository",
-		"pengelbrecht/ticks",
-	} {
-		if got := strings.Count(body, want); got != 1 {
-			t.Errorf("the body carries %q %d times, want exactly 1:\n%s", want, got, body)
-		}
-	}
+	body = forge.body()
 	if got := strings.Count(body, "triaged promoted"); got != 2 {
 		t.Errorf("the body carries the triage state %d times, want once per finding:\n%s", got, body)
+	}
+	for _, want := range []string{"A finding the fake runner proposes", "An upstream finding routed to another repository"} {
+		if got := strings.Count(body, want); got != 1 {
+			t.Errorf("the body carries %q %d times after the rewrite, want exactly 1:\n%s", want, got, body)
+		}
 	}
 	if !contains(r.Stages("co"), StagePRBodyWritten) {
 		t.Errorf("stages %v do not record the body the PR carries", r.Stages("co"))
 	}
 }
 
-// A resumed close-out REWRITES the body rather than appending to it: cut
-// right after the PR is opened, the next incarnation finds the PR, writes the
-// body again — the same body, byte for byte — and the PR carries each
-// finding exactly once across both incarnations.
+// A resumed close-out REWRITES the body rather than appending to it: run
+// one holds at the close-out's own close gate over untriaged findings (the
+// PR is already open and carrying them), a person triages, the next
+// incarnation finds the PR and writes the body again — the same body, byte
+// for byte, composed from the same records — and the PR carries each finding
+// exactly once across every incarnation.
 func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 	t.Parallel()
 
-	pulls := &fakeForge{}
-	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: pulls})
+	forge := &fakeForge{}
+	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
 	repo := f.Repo
-	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: pulls})
+	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
-		t.Fatalf("failure %+v, want the untriaged finding", result.Failure)
+		t.Fatalf("failure %+v, want the untriaged finding holding the close-out", result.Failure)
+	}
+	// The held run already wrote the body twice — the admission's open and
+	// the close gate's rewrite — and both carry the untriaged findings; that
+	// is the view a person triages against.
+	if got := len(forge.allBodies()); got != 2 {
+		t.Fatalf("the held run wrote %d bodies, want the admission's and the close gate's", got)
 	}
 	s := draftsStore(t, repo)
 	findings, err := s.Findings()
@@ -146,15 +181,15 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 		}
 	}
 
-	// The resumed run opens the PR, and is cut the moment the PR exists.
-	forge := &fakeForge{}
+	// The resumed run finds the PR the held incarnation opened, and is cut
+	// the moment the body is rewritten at the admission.
 	_, _, err = f.run(repo, fixtureOptions{
 		mode: "finding", pullRequests: forge, stopAfter: stopAt("co", StagePROpened),
 	})
 	killedAfter(t, err, "co", StagePROpened)
 
 	// The restarted run reads everything from origin, on a fresh clone, and
-	// finds the PR the killed incarnation opened.
+	// finds the PR the killed incarnation found — never opening a second one.
 	restart := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restart"))
 	_, result, err = f.run(restart, fixtureOptions{mode: "finding", pullRequests: forge})
 	if err != nil {
@@ -164,21 +199,25 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 		t.Fatalf("the restarted run ended %s (%+v)", result.State, result.Failure)
 	}
 	if got := forge.count("open"); got != 1 {
-		t.Errorf("the PR was opened %d times across two incarnations, want 1", got)
+		t.Errorf("the PR was opened %d times across three incarnations, want 1", got)
 	}
 	if got := forge.count("update_body"); got < 1 {
 		t.Errorf("the resumed close-out rewrote the PR body %d times, want at least 1", got)
 	}
-	// The rewrite is the same body: the records it is composed from did not
-	// change between the incarnations, and a VIEW recomposed from unchanged
-	// records is unchanged — that is what makes writing twice safe.
+	// The rewrite is the same body: every write made AFTER the triage is
+	// composed from unchanged records — the killed resume's, and the
+	// restarted run's admission and close gate — and a VIEW recomposed from
+	// unchanged records is unchanged, which is what makes writing more than
+	// once safe. The held incarnation's bodies differ only in the triage
+	// state, which is the record changing, not the view drifting.
 	bodies := forge.allBodies()
-	if len(bodies) < 2 {
-		t.Fatalf("the PR was written %d times across two incarnations, want at least 2", len(bodies))
+	if len(bodies) < 5 {
+		t.Fatalf("the PR was written %d times across three incarnations, want at least 5", len(bodies))
 	}
-	if bodies[0] != bodies[len(bodies)-1] {
-		t.Errorf("the resumed close-out wrote a different body:\nfirst:  %s\nsecond: %s",
-			bodies[0], bodies[len(bodies)-1])
+	for i := 2; i < len(bodies); i++ {
+		if bodies[i] != bodies[2] {
+			t.Errorf("write %d after the triage composed a different body:\n%s\n%s", i, bodies[2], bodies[i])
+		}
 	}
 	// And each finding still appears exactly once: no incarnation appended.
 	body := bodies[len(bodies)-1]
@@ -189,6 +228,51 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 		if got := strings.Count(body, want); got != 1 {
 			t.Errorf("the body carries %q %d times across two incarnations, want exactly 1", want, got)
 		}
+	}
+}
+
+// Tick aqm's REPLACEMENT for the per-tick hold: the close-out refuses to
+// hand over when a finding the run filed is missing from the PR. The PR is
+// read BACK from the forge — the body it carries now — so the refusal fires
+// on the lying surface (a write that claimed success and dropped the
+// finding) as well as on a body somebody stripped, and the message names
+// the finding that is on the floor. The untriaged hold never gets its turn:
+// the integrity check is what refuses, which is the order the close gate
+// keeps — a PR that does not carry the record is the more fundamental
+// failure, whatever the drafts' triage state.
+func TestTheCloseOutRefusesWhenAFiledFindingIsMissingFromThePR(t *testing.T) {
+	t.Parallel()
+
+	forge := &fakeForge{dropFromReadback: "An upstream finding routed to another repository"}
+	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
+	declareCloseoutRule(t, f.Repo)
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding", pullRequests: forge})
+	if err != nil {
+		t.Fatalf("the run should have finished with a failed state, not an error: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the run ended %s, want failed", result.State)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutPRFindings {
+		t.Fatalf("the failure is %+v, want a %s refusal", result.Failure, RefusedCloseoutPRFindings)
+	}
+	if result.Failure.TickID != "co" {
+		t.Fatalf("the refusal is for %s, want co: the close-out is what does not hand over", result.Failure.TickID)
+	}
+	for _, want := range []string{"#7", "An upstream finding routed to another repository"} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the refusal does not say %q: %q", want, result.Failure.Message)
+		}
+	}
+	// The write itself HONESTLY carried the finding — the forge's read-back
+	// dropped it — which is exactly the lie only a round trip catches: the
+	// run's own memory of the write says the body was written.
+	if !strings.Contains(forge.body(), "An upstream finding routed to another repository") {
+		t.Errorf("the body the run wrote does not carry the finding the read-back dropped:\n%s", forge.body())
+	}
+	// And the close-out did not close behind the refusal.
+	if got := f.Tracker.count("close:co"); got != 0 {
+		t.Fatalf("co was closed %d times behind a PR missing a filed finding", got)
 	}
 }
 
