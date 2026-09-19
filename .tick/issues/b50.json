@@ -2,6 +2,7 @@
   "id": "b50",
   "title": "A review that says NOT READY records as ready-to-merge and releases the close-out",
   "description": "pxc attempt 9 answered NOT READY. The run closed the review tick and recorded, in decisions/1.json, verdict 'ready-to-merge' — the collect vocabulary's word — beside a NOT READY summary. Only the untriaged-findings hold stopped the close-out from proceeding.\n\nTwo separate problems, and the second is the dangerous one:\n\n1. ticfac.job-result.review-epic.v1 has NO review-verdict field. rolejob.go holds a role tick only on needsHuman (BLOCKED / NEEDS_CONTEXT), so a review's actual judgement has nowhere to live and no effect.\n2. The durable record therefore says 'ready-to-merge' about a review that said the opposite. That record is what a later reader, or an auditor, or a future close-out trusts. It can be read as an approval that was never given.\n\nTHIS BLOCKS aqm. The operator decided to stop holding runs for untriaged findings and carry them to the PR instead. The findings hold is currently the ONLY thing that stopped a NOT READY review from releasing the close-out. Remove it before fixing this, and an epic whose review says it is not ready hands itself over with a record that reads as approval.\n\nWork:\n- Add a review-verdict to the review-epic result contract, distinct from the collect vocabulary's merge verdict. They answer different questions and sharing one word is how this happened.\n- Decide, and state, whether NOT READY holds the close-out or is carried to the PR. Either is defensible; silence is not.\n- The recorded decision must never spell a NOT READY review as ready-to-merge, whatever is decided about holding.\n\nFrom pxc, its own second-pass finding — the review found this about itself.",
+  "notes": "2026-09-20 00:44 - 2026-09-19 — 4sb hit this from the other side while giving the forge a way to write to a PR (finding 2e8794fe).\n\nIt could not put the review's JUDGEMENT on the PR, because the role_result envelope has no typed verdict field: the closest durable thing is the review's status and summary, so that is what closeoutPRBody composes from today.\n\nSo this tick now has a second consumer, and a concrete follow-through: when the typed review-verdict lands, closeoutPRBody must compose from it rather than from status+summary. Until then the PR carries prose where a person needs a verdict — which is the same gap that let a NOT READY review be recorded as ready-to-merge.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "A review answering NOT READY produces a durable record that cannot be read as approval, and either holds the close-out or is carried to the PR by a stated rule",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:57:48.192521Z",
-  "updated_at": "2026-09-19T21:37:10.490071Z"
+  "updated_at": "2026-09-19T22:44:54.021301Z"
 }
