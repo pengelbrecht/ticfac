@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The epic PR's body (tick 4sb): the write half of the PR + CI close-out rule.
@@ -93,11 +94,12 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 		body.WriteString("No review decision is recorded for this run: the epic reached its " +
 			"close-out without a review whose validated answer landed in the run's state.\n")
 	} else {
-		review := decisions[final]
-		status, _ := review.Response["status"].(string)
-		summary, _ := review.Response["summary"].(string)
-		fmt.Fprintf(&body, "The final review (decision %d) answered %s: %s\n",
-			review.Decision, status, summary)
+		// The typed verdict first (tick b50): a person merging reads a
+		// verdict, not prose — and the record this paragraph composes from can
+		// no longer spell a NOT READY review as ready-to-merge, because the
+		// review's answer carries its own review_verdict and not the collect
+		// vocabulary's word.
+		reviewVerdict(&body, decisions[final])
 	}
 
 	body.WriteString("\n## Findings this run drafted\n\n")
@@ -120,6 +122,17 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			"close-out carries these facts once, however many times it writes.\n",
 		r.runID, r.branch)
 	return body.String(), len(findings), nil
+}
+
+// reviewVerdict writes the PR body's statement of the final review's
+// verdict: the typed verdict first — a person merging reads a verdict, not
+// prose — then the stated rule for a NOT READY (see reviewverdict.go for
+// why the carry, not the hold, is the rule), then the review's own summary.
+// A decision recorded before the typed field existed states what it has
+// rather than nothing, because a PR that says nothing about the review reads
+// as "no review found anything", which is a verdict nobody gave.
+func reviewVerdict(b *strings.Builder, decision runstate.Decision) {
+	b.WriteString(reviewVerdictParagraph(decision))
 }
 
 // carryOntoThePR writes the composed body onto the epic PR: the record the

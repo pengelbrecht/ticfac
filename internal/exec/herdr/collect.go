@@ -137,21 +137,12 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			SchemaID:      record.Spec.OutputSchema,
 			Role:          record.Spec.Role,
 			Status:        report.Status,
-			Summary:       summaryOf(report, verdict),
-			Result: map[string]any{
-				"verdict":             verdict,
-				"commits":             commits,
-				"branch":              record.Branch,
-				"report_path":         report.Path,
-				"boundary_violations": violationsOrEmpty(allViolations),
-				"needs_human":         report.NeedsHuman(),
-				// The findings channel (tick 7vn) rides FIRST-CLASS in the
-				// envelope since bundle 4.0.0 (Findings, below) — the open payload
-				// keeps only the problem, the one thing the closed record has no
-				// field for: a block that would not parse is stated as a problem,
-				// never as an empty list, whichever executor collected it.
-				"findings_problem": report.FindingsProblem,
-			},
+			// The payload and summary are minted through the one shared
+			// implementation (subprocess/rolepayload.go, tick b50): the two
+			// executors cannot disagree about what a review's answer says.
+			Summary: subprocess.RoleSummary(record.Spec.Role, report, verdict),
+			Result: subprocess.RoleResultPayload(record.Spec.Role, report, verdict, commits, record.Branch,
+				allViolations),
 			Findings: report.Findings,
 		}
 	}
@@ -366,13 +357,6 @@ func headOrNil(head string, commits int) *string {
 	}
 	value := head
 	return &value
-}
-
-func summaryOf(report subprocess.Report, verdict string) string {
-	if report.Detail != "" {
-		return report.Detail
-	}
-	return fmt.Sprintf("%s (%s)", report.Status, verdict)
 }
 
 // violationsOrEmpty states the empty boundary as [] rather than nil, the way
