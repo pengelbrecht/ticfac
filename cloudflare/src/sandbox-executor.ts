@@ -39,8 +39,11 @@
  * a resumed pass adopts one by identity either way. It deliberately carries
  * NO credential: the handle is what the run's marker stores on the run
  * branch, and a secret in a committed record is a leak by construction.
- * The boot inputs are re-derived from the seam at every use, the same way
- * every orchestrator boot rotates its credential.
+ * The boot inputs are re-derived from the seam at every use, each boot
+ * minting a fresh per-worker gateway credential that revokes nothing
+ * (tick 53s): a run holds SEVERAL workers at once, so one worker's boot
+ * must never cost a sibling its token the way an orchestrator's rotating
+ * boot would.
  */
 
 import { containerGitToken, planSandboxGit } from "./credentials";
@@ -51,7 +54,7 @@ import type {
   AttemptSpec,
   AttemptStatus,
 } from "./epic-reconciler";
-import { factoryBaseURL, issueRunToken, runGatewayEndpoint } from "./gateway";
+import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
 import type { Env } from "./index";
 import {
   deploymentImage,
@@ -474,13 +477,23 @@ export type SandboxExecutorEnvInput = {
  * dispatch on a stated gap rather than on an executor nobody configured.
  *
  * The boot inputs are composed the way the orchestrator's boots are
- * (`run-workflow.ts`): a run-scoped gateway token minted per dispatch
- * (rotation is the existing rule), and git access through
- * `planSandboxGit`'s write grade — the repository itself on github.com with
- * the operator's credential, exactly what a write run has always been
- * handed. A deployment missing any piece (the container binding, the
- * factory's own base URL, the epic base) gets no executor and the
- * reconciler's own refusal names it.
+ * (`run-workflow.ts`): a run-scoped gateway token minted per dispatch, and
+ * git access through `planSandboxGit`'s write grade — the repository itself
+ * on github.com with the operator's credential, exactly what a write run
+ * has always been handed. A deployment missing any piece (the container
+ * binding, the factory's own base URL, the epic base) gets no executor and
+ * the reconciler's own refusal names it.
+ *
+ * The token is minted per boot WITHOUT revocation (tick 53s):
+ * `issueWorkerRunToken`, not the orchestrator's rotating `issueRunToken`.
+ * A run holds several of this executor's workers at once
+ * (`max_parallel > 1`), and the rotating issue revoked every live token the
+ * run held — so the second worker's boot cut the first off mid-tick with
+ * 403 run_token_revoked, and even this executor's own ADOPTION and CANCEL
+ * boots (which re-derive their inputs the same way) killed the very worker
+ * they were adopting or leaving running. Rotation is the orchestrator's
+ * rule because a run holds ONE orchestrator; a worker's lifetime ends at
+ * the run's kill switch (revokeRunTokens), never at a sibling's boot.
  */
 export function sandboxExecutorFromEnv(
   env: Env,
@@ -527,10 +540,13 @@ export function sandboxExecutorFromEnv(
     binding: binding as SandboxBinding,
     collector: workerCollector(env, input.project),
     boot: async (spec) => {
-      // Minted per dispatch: the rotation rule every orchestrator boot
-      // already follows — a credential shared across attempts is one
-      // revocation cannot take back from just this attempt.
-      const credential = await issueRunToken(env, {
+      // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
+      // are parallel spenders, so a boot that rotated would cut every live
+      // sibling off at the next worker's start — including this executor's
+      // own adoption and cancel boots, which arrive while other workers are
+      // mid-tick. The credential is still per worker, never shared across
+      // attempts: one revocation cannot take it back from just this attempt.
+      const credential = await issueWorkerRunToken(env, {
         run_id: spec.run_id,
         tick_id: spec.tick_id,
         attempt: spec.attempt,

@@ -5,8 +5,11 @@
  * worker-dispatch's own suite exercises spawn/wait/teardown — a lifecycle
  * only provable by starting a real container is a lifecycle nobody tests.
  */
-import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
+import { afterEach, describe, expect, it } from "vitest";
+import { insertRun, type Run } from "../src/db";
 import type { AttemptSpec } from "../src/epic-reconciler";
+import { authorizeRunCredential, revokeRunTokens } from "../src/gateway";
 import type {
   OrchestratorSandbox,
   SandboxBinding,
@@ -20,6 +23,7 @@ import {
   type SandboxAttemptHandle,
   type SandboxExecutorDeps,
   sandboxExecutor,
+  sandboxExecutorFromEnv,
 } from "../src/sandbox-executor";
 import type { WorkerBootInput } from "../src/worker-boot";
 import {
@@ -486,5 +490,172 @@ describe("the four operations, end to end", () => {
     expect(record.resumed_from).toBeNull();
     expect(record.remote).toBe("origin");
     expect(JSON.stringify(handle)).not.toContain("tkr_testtoken");
+  });
+});
+
+// ------------------------------------------ the deployment wiring (tick 53s) ---
+
+/**
+ * The wiring the deployable actually runs: `sandboxExecutorFromEnv`, with the
+ * REAL D1 token tables behind it and the `SANDBOXES` seam faked, so the
+ * credential a boot mints is the credential the gateway will judge.
+ *
+ * The fakes above stub `boot`, so they are green no matter what minting it
+ * does; these are the tests that do not stub it. A run with `max_parallel > 1`
+ * holds SEVERAL workers at once, and every one of them spends and pushes
+ * through the run token its boot handed it — so a boot that revokes the run's
+ * live tokens (what D17's rotation does for the ONE orchestrator a run
+ * holds) cuts its own siblings off with 403 run_token_revoked, and parallel
+ * dispatch becomes impossible (tick 53s).
+ */
+describe("the deployment wiring's boot credential", () => {
+  const saved: Record<string, unknown> = {};
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete (env as unknown as Record<string, unknown>)[name];
+      else (env as unknown as Record<string, unknown>)[name] = value;
+      delete saved[name];
+    }
+  });
+
+  /** Sets a deployment variable for this describe, restored after each test. */
+  function set(name: string, value: unknown): void {
+    if (!(name in saved)) saved[name] = (env as unknown as Record<string, unknown>)[name];
+    if (value === undefined) delete (env as unknown as Record<string, unknown>)[name];
+    else (env as unknown as Record<string, unknown>)[name] = value;
+  }
+
+  /** A run in the index, live enough that its tokens can spend. */
+  async function liveRun(): Promise<Run> {
+    const run: Run = {
+      run_id: `run_53s_${crypto.randomUUID()}`,
+      project: "example-org/example-repo",
+      epic: "ncv",
+      base_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      requested_by: "operator",
+      state: "running",
+      started_at: new Date().toISOString(),
+      ended_at: null,
+      cost_usd: 0,
+      trace_id: null,
+      credential_grade: "write",
+    };
+    await insertRun(env.DB, run);
+    return run;
+  }
+
+  /** The executor the deployment would dispatch through, over fake containers. */
+  function deployedExecutor(run: Run, binding: FakeSandboxes) {
+    set("SANDBOXES", binding);
+    set("FACTORY_BASE_URL", "https://factory.example.com");
+    set("GITHUB_TOKEN", "gh-operator-test-token");
+    return sandboxExecutorFromEnv(env, {
+      project: run.project,
+      base_sha: run.base_sha,
+    });
+  }
+
+  /** The gateway token one worker's boot handed its work process. */
+  function workerToken(binding: FakeSandboxes, run: Run, tick: string, attempt: number): string {
+    const work = binding.named(attemptSandboxName(run.run_id, tick, attempt)).workProcess();
+    const token = work?.env.AI_GATEWAY_TOKEN ?? "";
+    expect(token, `${tick}'s work process must hold a gateway token`).not.toBe("");
+    return token;
+  }
+
+  it("a second worker's boot leaves the first's token usable (parallel dispatch)", async () => {
+    const run = await liveRun();
+    const binding = new FakeSandboxes();
+    const executor = deployedExecutor(run, binding);
+    expect(executor).toBeDefined();
+
+    // max_parallel in miniature: two ticks of one run. Booted one after
+    // the other — the deterministic ordering of what production interleaves —
+    // because the defect is order-INVARIANT: a boot that revokes kills its
+    // siblings whether it lands before or after them.
+    const spec = (tick: string): AttemptSpec => ({
+      ...SPEC,
+      run_id: run.run_id,
+      tick_id: tick,
+      attempt: 1,
+      write_ref: `refs/heads/tick-${run.run_id}/${tick}`,
+    });
+    await executor!.start(spec("k4s"));
+    await executor!.start(spec("m9x"));
+
+    const first = workerToken(binding, run, "k4s", 1);
+    const second = workerToken(binding, run, "m9x", 1);
+    // Per worker, not shared: a credential two attempts share is one a
+    // revocation cannot take back from just one of them.
+    expect(second).not.toBe(first);
+
+    // THE acceptance: the FIRST worker's token still authorizes after the
+    // second worker booted. This is the exact 403 run_token_revoked the old
+    // per-boot revocation produced on the second worker's first boot.
+    await expect(authorizeRunCredential(env, first)).resolves.toMatchObject({
+      ok: true,
+      token: { run_id: run.run_id, tick_id: "k4s", revoked_at: null },
+    });
+    await expect(authorizeRunCredential(env, second)).resolves.toMatchObject({
+      ok: true,
+      token: { run_id: run.run_id, tick_id: "m9x" },
+    });
+
+    // Their lifetimes end at the run's kill switch, not at each other's
+    // boots: one revoke is what ends BOTH, and it is the run that holds it.
+    expect(await revokeRunTokens(env, run.run_id, "stopped:hard")).toBe(2);
+    await expect(authorizeRunCredential(env, first)).resolves.toMatchObject({
+      ok: false,
+      denial: { error: "run_token_revoked" },
+    });
+  });
+
+  it("an adoption boot leaves the adopted worker's own token live", async () => {
+    const run = await liveRun();
+    const binding = new FakeSandboxes();
+    const executor = deployedExecutor(run, binding);
+    expect(executor).toBeDefined();
+    const spec: AttemptSpec = {
+      ...SPEC,
+      run_id: run.run_id,
+      tick_id: "k4s",
+      attempt: 1,
+      write_ref: `refs/heads/tick-${run.run_id}/k4s`,
+    };
+
+    const first = asHandle(await executor!.start(spec));
+    const token = workerToken(binding, run, "k4s", 1);
+
+    // A Workflow step replay: the same spec asked again ADOPTS the running
+    // work process — and must not kill the credential that process is
+    // spending with, which is what the boot the old adoption path took did.
+    const replay = asHandle(await executor!.start(spec));
+    expect(replay.detail).toContain("adopted");
+    expect(replay.process_id).toBe(first.process_id);
+    await expect(authorizeRunCredential(env, token)).resolves.toMatchObject({ ok: true });
+  });
+
+  it("cancelling one worker leaves its sibling's token live", async () => {
+    const run = await liveRun();
+    const binding = new FakeSandboxes();
+    const executor = deployedExecutor(run, binding);
+    expect(executor).toBeDefined();
+    const spec = (tick: string): AttemptSpec => ({
+      ...SPEC,
+      run_id: run.run_id,
+      tick_id: tick,
+      attempt: 1,
+      write_ref: `refs/heads/tick-${run.run_id}/${tick}`,
+    });
+    await executor!.start(spec("k4s"));
+    const cancelled = await executor!.start(spec("m9x"));
+    const survivor = workerToken(binding, run, "k4s", 1);
+
+    // Cancel composes a boot to re-derive the salvage door — and that boot
+    // must not spend the sibling's credential to do it.
+    await executor!.cancel(cancelled);
+    expect(binding.named(attemptSandboxName(run.run_id, "m9x", 1)).destroyed).toBe(true);
+    await expect(authorizeRunCredential(env, survivor)).resolves.toMatchObject({ ok: true });
   });
 });

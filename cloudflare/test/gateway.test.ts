@@ -15,6 +15,7 @@ import {
   gatewayConfig,
   gatewayMetadata,
   issueRunToken,
+  issueWorkerRunToken,
   LOG_PAGE_SIZE,
   MAX_LOG_PAGES,
   metadataFilters,
@@ -910,6 +911,51 @@ describe("revoking a run's token stops its model traffic", () => {
     );
     expect(fresh.status).toBe(200);
     expect(gateway.metadata().attempt).toBe("2");
+  });
+
+  /**
+   * Tick 53s: rotation is the ORCHESTRATOR's rule — one per run at a time —
+   * and it is fatal for workers, of which a run holds SEVERAL at once. A
+   * worker boot mints a sibling-sparing credential; only the run's kill
+   * switch (revokeRunTokens) ends one.
+   */
+  it("issues a worker's token without revoking its siblings", async () => {
+    const run = await liveRun();
+    const first = await issueWorkerRunToken(env, {
+      run_id: run.run_id,
+      tick_id: "k4s",
+      attempt: 1,
+    });
+    const second = await issueWorkerRunToken(env, {
+      run_id: run.run_id,
+      tick_id: "m9x",
+      attempt: 1,
+    });
+    expect(second.token).not.toBe(first.token);
+    const gateway = new FakeGateway();
+
+    for (const issued of [first, second]) {
+      const spent = await proxyModelRequest(
+        env,
+        modelRequest(undefined, { authorization: `Bearer ${issued.token}` }),
+        ["anthropic", "v1", "messages"],
+        { fetcher: gateway.fetcher },
+      );
+      expect(spent.status).toBe(200);
+      expect(gateway.metadata().tick_id).toBe(issued.record.tick_id);
+    }
+
+    // A re-boot of the SAME tick (the redispatch case) is no different: the
+    // old container's token dies with the run's kill switch, never at a
+    // sibling's boot.
+    await issueWorkerRunToken(env, { run_id: run.run_id, tick_id: "k4s", attempt: 2 });
+    const stillLive = await proxyModelRequest(
+      env,
+      modelRequest(undefined, { authorization: `Bearer ${first.token}` }),
+      ["anthropic", "v1", "messages"],
+      { fetcher: gateway.fetcher },
+    );
+    expect(stillLive.status).toBe(200);
   });
 
   it("refuses a token whose run is over, even if revocation never ran", async () => {
