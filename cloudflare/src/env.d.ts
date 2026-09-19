@@ -11,6 +11,13 @@ declare namespace Cloudflare {
     /** One RunRoom per project: dispatch lease + pending questions. */
     RUN_ROOMS: DurableObjectNamespace<import("./run-room").RunRoom>;
     /**
+     * One RepoRoom per repository (tick ef7, SPEC §12 Phase 4 item 3): the
+     * one publish slot (RunRoom's lease semantics, one implementation —
+     * `src/lease.ts`) and the one serialized publisher every publish to a
+     * repository goes through. A lock, not a store (SPEC §9.1).
+     */
+    REPO_ROOMS: DurableObjectNamespace<import("./repo-room").RepoRoom>;
+    /**
      * One SignalInbox per project: the funnel a signal becomes a tick through
      * (tick 8sm). It serialises this control plane's writes to a project's
      * `.tick/` and dedups redeliveries on `(source, external_ref)`.

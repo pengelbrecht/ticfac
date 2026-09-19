@@ -1082,6 +1082,63 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     expect(instance.id).toBe(runID);
     const status = (await instance.status()) as { status?: string };
     expect(String(status.status)).toContain("complete");
+    // The run released the publish slot on its way out (tick ef7): a finished
+    // run must not wedge the repository behind its own slot.
+    await expect(
+      env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT)).slotStatus(),
+    ).resolves.toBeNull();
+  });
+
+  it("refuses to run a second Workflow that cannot take the publish slot, and writes nothing", async () => {
+    const contents = sharedContents();
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    // Pre-hold the repository's one publish slot with a run that is not this
+    // one — the shape two concurrent runs of one epic actually take.
+    const room = env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT));
+    const held = await room.acquireSlot({ run_id: "run_other", epic: EPIC_ID });
+    if (!held.ok) throw new Error("expected to pre-hold the publish slot");
+
+    const runID = `${RUN_ID}-slot-refused`;
+    const instance = await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the Workflow's own terminal status —
+    // never on a guessed sleep.
+    const deadline = Date.now() + 20_000;
+    let status: { status?: string; output?: unknown } = {};
+    for (;;) {
+      status = (await instance.status()) as { status?: string; output?: unknown };
+      const state = String(status.status);
+      if (state !== "running" && state !== "queued") break;
+      if (Date.now() > deadline) {
+        throw new Error(`timed out waiting for the Workflow; status: ${state}`);
+      }
+      await scheduler.wait(20);
+    }
+
+    expect(String(status.status)).toContain("complete");
+    const output = status.output as { state?: string; reason?: string };
+    expect(output.state).toBe("failed");
+    expect(output.reason).toContain("run_other");
+    // It stopped BEFORE anything was published: the repository holds no run
+    // state for a run that never held its slot — writing the failure would
+    // itself have been the publish it was refused.
+    expect(await contents.read(checkpointPath(runID))).toBeNull();
+    // And the pre-held slot is untouched: the refused run released nothing.
+    await expect(room.slotStatus()).resolves.toMatchObject({ run_id: "run_other" });
+    await room.releaseSlot({ run_id: "run_other", token: held.lease.token });
   });
 });
 
