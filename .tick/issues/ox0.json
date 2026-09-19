@@ -6,8 +6,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
   "acceptance_criteria": "A close-out that opens a PR waits a bounded time for check runs to appear before refusing, distinguishes 'not yet' from 'never', and names what it checked rather than guessing a cause",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T14:35:54.345851Z",
-  "updated_at": "2026-09-19T14:35:54.345851Z"
+  "updated_at": "2026-09-19T21:37:10.540514Z"
 }

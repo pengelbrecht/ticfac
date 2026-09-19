@@ -6,8 +6,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
   "acceptance_criteria": "A review answering NOT READY produces a durable record that cannot be read as approval, and either holds the close-out or is carried to the PR by a stated rule",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:57:48.192521Z",
-  "updated_at": "2026-09-19T13:57:48.192521Z"
+  "updated_at": "2026-09-19T21:37:10.490071Z"
 }

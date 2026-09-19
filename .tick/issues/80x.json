@@ -6,8 +6,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
   "acceptance_criteria": "Resuming after triaging a role tick's findings closes it behind its recorded decision without re-dispatching, with the decision and the close belonging to one attempt, covered by a test",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T14:27:12.585978Z",
-  "updated_at": "2026-09-19T14:27:12.585978Z"
+  "updated_at": "2026-09-19T21:37:10.516606Z"
 }

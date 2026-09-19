@@ -6,8 +6,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
   "acceptance_criteria": "The epic PR carries the final review's verdict and every finding's text, written idempotently across a resumed close-out",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:57:36.089006Z",
-  "updated_at": "2026-09-19T13:57:36.089006Z"
+  "updated_at": "2026-09-19T21:37:10.436955Z"
 }
