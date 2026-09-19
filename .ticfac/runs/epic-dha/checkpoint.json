@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 44,
-  "state": "dispatching",
-  "reason": "dispatching b50 as attempt 6",
-  "updated_at": "2026-09-19T23:04:30Z",
+  "sequence": 45,
+  "state": "running",
+  "reason": "b50 is running as attempt 6",
+  "updated_at": "2026-09-19T23:05:13Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "b50",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "cxk",
