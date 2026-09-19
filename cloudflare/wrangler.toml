@@ -34,7 +34,8 @@ new_sqlite_classes = ["RunRoom"]
 name = "SIGNAL_INBOXES"
 class_name = "SignalInbox"
 
-# The orchestrator sandbox a run boots (cloud/sandbox, Phase 1). The binding is
+# The orchestrator sandbox a run boots (the image context, at image/ since
+# SPEC §12 Phase 4 item 4). The binding is
 # a Durable Object binding because that is what a container IS on this platform:
 # one Durable Object per container, addressed by name, whose class is the
 # Sandbox SDK's — re-exported from src/index.ts and put behind the seam in
@@ -54,10 +55,10 @@ tag = "v3"
 new_sqlite_classes = ["SignalInbox"]
 
 # The container application the Sandbox class runs. `image` is a path to the
-# Dockerfile of cloud/sandbox, relative to this bundle's directory
-# (ticfac/cloudflare — SPEC §12 Phase 4 item 1 moved the bundle there;
-# cloud/sandbox moves to ticfac/image in item 4, and this path moves with
-# it). `ticfac factory deploy` stages that tree so the same relative path is
+# Dockerfile of the image context (ticfac/image — SPEC §12 Phase 4 item 4
+# moved it there from cloud/sandbox), relative to this bundle's directory
+# (ticfac/cloudflare — SPEC §12 Phase 4 item 1 moved the bundle there).
+# `ticfac factory deploy` stages that tree so the same relative path is
 # true in this repository and in the staged copy. Wrangler builds it and pushes it to
 # the operator's own managed registry before it uploads the Worker (D16 — the
 # factory runs in the operator's account or not at all), so a deploy without a
@@ -65,7 +66,7 @@ new_sqlite_classes = ["SignalInbox"]
 [[containers]]
 class_name = "Sandbox"
 name = "ticks-orchestrator"
-image = "../cloud/sandbox/Dockerfile"
+image = "../image/Dockerfile"
 # Phase 1 boots one container per run. The headroom is for the overlap a reboot
 # creates (the replacement is addressed before the dead one is destroyed) and
 # for a second project's run holding its own lease. Raising it is a deployment

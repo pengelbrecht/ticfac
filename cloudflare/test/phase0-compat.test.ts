@@ -1,8 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import WORKER_SH from "../../cloud/sandbox/worker.sh?raw";
 import collectContract from "../../contracts/collect-vocabulary.json";
 import bootContract from "../../contracts/worker-boot-contract.json";
+import WORKER_SH from "../../image/worker.sh?raw";
 import {
   CONTROL_PLANE_LOG_EPOCH,
   harnessLogKey,
@@ -37,11 +37,11 @@ import { effectiveRunBudget } from "../src/run-workflow";
 // The two deployable files this suite pins strings out of. Vite inlines a
 // `?raw` import at transform time, which is what makes reading them possible
 // at all in a suite that executes inside workerd with no filesystem — and it
-// is the difference between pinning `cloud/sandbox/worker.sh` and pinning a
+// is the difference between pinning `image/worker.sh` and pinning a
 // copy of what it said once. A literal here drifts silently; these cannot.
 // (The path is from this bundle's moved location, ticfac/cloudflare —
-// SPEC §12 Phase 4 item 1 — to the image context, which still lives at
-// cloud/sandbox until item 4 moves it.)
+// SPEC §12 Phase 4 item 1 — to the image context, which item 4 moved to
+// ticfac/image.)
 import RUN_WORKFLOW_TS from "../src/run-workflow.ts?raw";
 import type {
   OrchestratorSandbox,
@@ -860,7 +860,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
   });
 
   /**
-   * The three fallback reports `cloud/sandbox/worker.sh` writes when the agent
+   * The three fallback reports `image/worker.sh` writes when the agent
    * wrote none — READ OUT OF THE SCRIPT, not transcribed from it.
    *
    * The literals below are the pin; the script is the source. An earlier

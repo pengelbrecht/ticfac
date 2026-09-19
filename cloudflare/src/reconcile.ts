@@ -7,7 +7,7 @@
  * reconcile`, src/run-workflow.ts). This module is what makes the replacement
  * *correct*, and it lives in the durable layer for the same reason the budgets
  * do: a prompt can be talked out of a rule, and a Workflow step cannot. The
- * container is still told to reconcile — `cloud/sandbox/entrypoint.sh` words
+ * container is still told to reconcile — `image/entrypoint.sh` words
  * it — but nothing depends on it having listened.
  *
  * # The evidence order
@@ -46,7 +46,7 @@
  * restorable, or on any in-memory state of the supervisor that died. A
  * container that came back empty simply produces no live process, the plan
  * falls through to the git evidence, and the tick is redispatched onto its
- * EXISTING branch — which `cloud/sandbox/worker.sh` adopts from origin. That
+ * EXISTING branch — which `image/worker.sh` adopts from origin. That
  * is the same recovery, only slower: the work the dead container had not
  * pushed is the work that gets redone.
  *
@@ -273,7 +273,7 @@ export function classifyWorker(evidence: WorkerEvidence): ReconcileItem {
     if (manifest === null) {
       // The manifest's absence is decisive on its own: no container was ever
       // booted for this tick, so booting one cannot double up — and
-      // `cloud/sandbox/worker.sh` adopts any branch it finds at this base.
+      // `image/worker.sh` adopts any branch it finds at this base.
       return item(
         "never-dispatched",
         "dispatch",

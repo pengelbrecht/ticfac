@@ -54,7 +54,7 @@ declare namespace Cloudflare {
     };
     /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
-     * tick from Phase 2 (see cloud/sandbox).
+     * tick from Phase 2 (see image/).
      *
      * On a deployment this is the Durable Object namespace `[[containers]]`
      * binds the Sandbox SDK's own class to; in a test it is the structural seam

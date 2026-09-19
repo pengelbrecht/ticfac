@@ -9,7 +9,7 @@
  *    refuses submissions and refuses proxying, and every refusal names
  *    `tk factory setup`. A base URL pointed straight at a vendor is a
  *    misconfiguration, not a gateway, and is refused the same way — the same
- *    rule `cloud/sandbox/entrypoint.sh` enforces inside the container.
+ *    rule `image/entrypoint.sh` enforces inside the container.
  * 2. **The sandbox never holds a vendor key.** It holds a token scoped to one
  *    run, minted per orchestrator boot. This Worker exchanges it for the
  *    operator's provider credential, so a leaked container environment leaks a
@@ -141,7 +141,7 @@ function isProviderSlug(value: string): value is ProviderSlug {
 /**
  * Hosts that are a vendor, not a gateway.
  *
- * Stated here as well as in `cloud/sandbox/entrypoint.sh` on purpose: the
+ * Stated here as well as in `image/entrypoint.sh` on purpose: the
  * container checks what it was handed, and the control plane checks what it
  * hands out. A silent fall back to a vendor default is the one outcome D17
  * forbids, so both ends refuse it.

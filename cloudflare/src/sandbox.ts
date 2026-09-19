@@ -11,7 +11,7 @@
  * six methods. Nothing below is Cloudflare-specific, which is also what keeps
  * the door open for the substrate to grow a second implementation (D19).
  *
- * The environment builder is the other half of the seam. `cloud/sandbox`
+ * The environment builder is the other half of the seam. `image/`
  * (README, "Entrypoint contract") states the variables the image reads; this
  * module is the only place the Workflow spells them, and the names are the ones
  * `internal/sandbox` declares in Go so one value has one spelling from
@@ -154,7 +154,7 @@ export const ORCHESTRATOR_COMMAND = "/usr/local/bin/ticks-orchestrator";
 
 /**
  * Entrypoint exit codes that are a *configuration* verdict, not a crash
- * (`cloud/sandbox/README.md`). Rebooting on one of these burns money to reach
+ * (`image/README.md`). Rebooting on one of these burns money to reach
  * the identical answer: the SHA still will not check out, `tk` is still the
  * wrong version, the pre-flight still fails. They end the run.
  */
@@ -479,7 +479,7 @@ export type OrchestratorEnvInput = {
    *
    * Absent means the container's own default — `harness`, its subagents in
    * this container — which is the load-bearing default
-   * (`cloud/sandbox/entrypoint.sh`): left to infer, an orchestrator booted on
+   * (`image/entrypoint.sh`): left to infer, an orchestrator booted on
    * a checkout that declares `substrate = "cloud"` would read "my workers are
    * cloud sandboxes" and "I am one of them" as the same statement, and
    * dispatch containers from inside a container with nothing arbitrating it.
@@ -549,7 +549,7 @@ export const REVIEW_HEAD_SHA_ENV = "TICKS_REVIEW_HEAD_SHA";
 /**
  * The environment `ticks-orchestrator` is started with.
  *
- * Every name here is in `cloud/sandbox/README.md`'s entrypoint contract and in
+ * Every name here is in `image/README.md`'s entrypoint contract and in
  * `internal/sandbox`'s Go constants. Optional values are omitted rather than
  * set empty: the script distinguishes "unset" from "set to nothing" for the
  * harness kind and the model, and an empty `GITHUB_TOKEN` would install a

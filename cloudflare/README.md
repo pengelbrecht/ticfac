@@ -27,7 +27,7 @@ orchestrator sandbox, watches it, enforces the budgets and finalizes — see
 | `migrations/` | D1 migrations, applied by `tk factory deploy` before it deploys. |
 | `src/run-room.ts` | `RunRoom` DO — one per project: the dispatch lease, the pending-question (gate) store, the submission queue and the stop record. Reconcile alarms land later. |
 | `src/run-workflow.ts` | `RunWorkflow` — one durable instance per run: boot, watch, budgets, clean stop, finalize. Everything below it is disposable; this is not. |
-| `src/sandbox.ts` | The orchestrator sandbox seam: what a container has to be, and the environment `cloud/sandbox`'s entrypoint is started with. |
+| `src/sandbox.ts` | The orchestrator sandbox seam: what a container has to be, and the environment the image context's (`image/`) entrypoint is started with. |
 | `src/artifacts.ts` | The R2 artifact tree, and the harness log stream written *during* the run. |
 | `src/observe.ts` | `GET /api/observe` — one read-only frame for `tk factory dashboard`: the listing, a focused run's phase/image/boot/gates, the `dispatch_log` refusals, and the `run_event` tail the room keeps. |
 | `src/env.d.ts` | Hand-written `Cloudflare.Env` (what `wrangler types` would generate). Keep in sync with `wrangler.toml`. |
@@ -243,7 +243,7 @@ matter more than the labels:
 Cold reconstruction always works (axiom 1). Nothing depends on a container
 surviving or a snapshot restoring: an evicted container reports no live
 process, the plan falls through to the git evidence, and the tick is dispatched
-again onto its **existing** branch, which `cloud/sandbox/worker.sh` adopts from
+again onto its **existing** branch, which `image/worker.sh` adopts from
 origin. That is the same recovery, only slower — paid for in whatever the dead
 container had not pushed. Each batch's verdict is recorded in the dispatch log
 as `cloud_reconcile:<batch>:<counts>`.
@@ -266,7 +266,7 @@ work into a false negative.
 
 `wrangler.toml` binds `SANDBOXES` to the Cloudflare Sandbox SDK's own Durable
 Object class (re-exported from `src/index.ts`), and a `[[containers]]`
-application attaches the orchestrator image (`cloud/sandbox`) to that class. On
+application attaches the orchestrator image (`image/`) to that class. On
 a deployment the binding is therefore a Durable Object namespace;
 `sandboxBinding()` in `src/sandbox.ts` is what puts the SDK's `getSandbox`
 behind the seam's five methods, and what accepts a fake in its place.
@@ -408,10 +408,10 @@ half-works: a logged-in **wrangler**, a running **Docker** (the image), and
 from the embedded lockfile before it is bundled).
 
 The bundle is staged in `~/.tick/factory/ticfac/cloudflare` (override with
-`--bundle-dir`) and the image's build context at `~/.tick/factory/cloud/sandbox`
+`--bundle-dir`) and the image's build context at `~/.tick/factory/ticfac/image`
 — the staging mirrors the repository layout, so the `[[containers]]` image path
-(`../../cloud/sandbox/Dockerfile`) means the same thing there as it does in
-this repository. Both directories are tk's, rewritten on every deploy, and are
+(`../image/Dockerfile`, the image context having moved to `image/` with SPEC
+§12 Phase 4 item 4) means the same thing there as it does in this repository. Both directories are tk's, rewritten on every deploy, and are
 where to look to see exactly what was uploaded. The Go side of the deploy lives in
 `internal/factory`; `scripts/verify-factory-deploy.sh` exercises it end to end
 against a stateful wrangler stand-in, since CI has no Cloudflare account.
@@ -425,7 +425,7 @@ pnpm install --prod --frozen-lockfile     # the Worker imports @cloudflare/sandb
 npx wrangler r2 bucket create ticks-factory-artifacts
 npx wrangler d1 create ticks-factory      # paste the printed database_id into wrangler.toml
 npx wrangler d1 migrations apply ticks-factory --remote
-npx wrangler deploy                       # builds and pushes ../../cloud/sandbox as the container image
+npx wrangler deploy                       # builds and pushes ../image as the container image
 pnpm mint-token --hash-only | npx wrangler secret put FACTORY_TOKEN_HASH
 curl https://ticks-factory.<your-subdomain>.workers.dev/health   # auth.configured: true
 ```

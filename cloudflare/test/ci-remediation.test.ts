@@ -208,7 +208,7 @@ async function enrolled(): Promise<string> {
   });
   // Ownership is a positive record since tick t4y, so a test about the flake
   // gate or the strike budget has to say that the factory created the branch
-  // it is failing on — the same sentence `cloud/sandbox/worker.sh` says
+  // it is failing on — the same sentence `image/worker.sh` says
   // through `tk cloud branch` the moment it creates one. The block that tests
   // the record itself uses `unrecordedProject()` instead.
   await recorded(project, OWNED);

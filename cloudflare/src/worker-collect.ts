@@ -61,7 +61,7 @@ export const WORKER_VERDICTS = {
 } as const satisfies Record<string, WorkerVerdict>;
 
 /**
- * The line `cloud/sandbox/worker.sh` prepends to `RESULT-<tick>.md` when its
+ * The line `image/worker.sh` prepends to `RESULT-<tick>.md` when its
  * boundary guard caught the agent trying to write tracker state (tick dxk).
  *
  * The guard exists because a real container ignored the prompt's Boundaries

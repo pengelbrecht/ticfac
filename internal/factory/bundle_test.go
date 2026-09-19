@@ -13,7 +13,8 @@ import (
 )
 
 // The embedded payload (cloudflare — moved there from cloud/factory by
-// SPEC §12 Phase 4 item 1 — and cloud/sandbox) landed with ticks tick
+// SPEC §12 Phase 4 item 1 — and image, moved there from cloud/sandbox by
+// item 4) landed with ticks tick
 // b3a ("Factory move B"), wired into the seams at the top of bundle.go by
 // payload.go's init. The tests here still split in two, and the split stays
 // deliberate:
@@ -35,7 +36,7 @@ import (
 func requireEmbeddedPayload(t *testing.T) {
 	t.Helper()
 	if factoryFS == nil || sandboxFS == nil {
-		t.Skip("the embedded payload (cloudflare, cloud/sandbox) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
+		t.Skip("the embedded payload (cloudflare, image) is not wired into this test binary; these assertions run only when payload.go's init has assigned the module-root embeds")
 	}
 }
 
@@ -57,7 +58,7 @@ database_id = "` + placeholderDatabaseID + `"
 [[containers]]
 class_name = "Sandbox"
 new_sqlite_classes = ["Sandbox"]
-image = "../cloud/sandbox/Dockerfile"
+image = "../image/Dockerfile"
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "ticks-factory-artifacts"
@@ -66,15 +67,15 @@ bucket_name = "ticks-factory-artifacts"
 		"cloudflare/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
 		"cloudflare/migrations/0001_init.sql": &fstest.MapFile{Data: []byte("-- fake migration")},
 		"cloudflare/package.json":             &fstest.MapFile{Data: []byte("{}")},
-		"cloud/sandbox/Dockerfile": &fstest.MapFile{Data: []byte(
+		"image/Dockerfile": &fstest.MapFile{Data: []byte(
 			"FROM docker.io/cloudflare/sandbox:fake\n" +
 				"ARG TK_VERSION=0.31.0\n" +
 				"ARG TK_SOURCE_REF=v0.31.0\n" +
 				"ARG TK_MODULE=github.com/pengelbrecht/ticks/cmd/tk\n")},
-		"cloud/sandbox/entrypoint.sh": &fstest.MapFile{Data: []byte("# fake entrypoint\ntk version\n")},
-		"cloud/sandbox/worker.sh":     &fstest.MapFile{Data: []byte("tk sandbox worker-prompt\ntk sandbox environment\n")},
-		"cloud/sandbox/common.sh":     &fstest.MapFile{Data: []byte("exec tk list --awaiting=ask\n# run `tk factory setup` to fix this\necho \"tk ask is not on path\"\n")},
-		"cloud/sandbox/preflight.sh":  &fstest.MapFile{Data: []byte("tk sandbox toolchain\n")},
+		"image/entrypoint.sh": &fstest.MapFile{Data: []byte("# fake entrypoint\ntk version\n")},
+		"image/worker.sh":     &fstest.MapFile{Data: []byte("tk sandbox worker-prompt\ntk sandbox environment\n")},
+		"image/common.sh":     &fstest.MapFile{Data: []byte("exec tk list --awaiting=ask\n# run `tk factory setup` to fix this\necho \"tk ask is not on path\"\n")},
+		"image/preflight.sh":  &fstest.MapFile{Data: []byte("tk sandbox toolchain\n")},
 	}
 }
 
@@ -380,10 +381,9 @@ func TestContainerImagePathResolvesAgainstAFakeStagedContext(t *testing.T) {
 	}
 }
 
-// SPEC §12 Phase 4 item 1 moved the bundle to cloudflare while
-// cloud/sandbox stays at cloud/sandbox until item 4 takes it, so the
-// committed image path is only true in this repository if it names that
-// cross. This is the half of "one relative path, true in both places" a
+// SPEC §12 Phase 4 item 1 moved the bundle to cloudflare and item 4 moved
+// the image context to image, so the committed image path is only true in
+// this repository if it names that cross. This is the half of "one relative path, true in both places" a
 // move breaks SILENTLY: the staged half is covered by the two tests above
 // (they stage through SandboxDir, so they agree with whatever SandboxDir
 // does), and the repository half is this one. It also pins SandboxDir to

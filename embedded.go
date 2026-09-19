@@ -49,7 +49,7 @@ var TkJSONManifestJSON []byte
 
 // SourcePinJSON is factory.pin.json: which ticks ref the orchestrator image
 // builds its tk from (ARG TK_SOURCE_REF / ARG TK_VERSION in the staged
-// cloud/sandbox Dockerfile). Embedded for the reason every pin here is — a
+// image/ Dockerfile). Embedded for the reason every pin here is — a
 // pin read off disk at run time could disagree with the binary beside it —
 // and for the reason it is a committed file at all: which ticks built a
 // deployment's sandbox is a property of the deployment, reviewable in a
@@ -93,34 +93,36 @@ func FactoryFS() embed.FS {
 	return factoryFS
 }
 
-// sandboxFS holds the sandbox image's build context (cloud/sandbox) — the
-// container a cloud run boots, in either of its two roles: the orchestrator
-// entrypoint, the per-tick worker entrypoint, and the common half both source.
+// sandboxFS holds the sandbox image's build context (image/, moved there
+// from cloud/sandbox by SPEC §12 Phase 4 item 4) — the container a cloud run
+// boots, in either of its two roles: the orchestrator entrypoint, the per-tick
+// worker entrypoint, and the common half both source.
 // It ships in the binary for the same reason the worker bundle does:
 // `ticfac factory deploy` builds and pushes this image into the operator's
 // own registry, so the image a deployment runs is the one that shipped with
 // this ticfac build.
 //
-// The tree is VENDORED, not authored here: ticks owns cloud/sandbox (its
-// internal/sandbox suite runs those scripts), and sandbox.pin.json pins the
-// immutable ticks commit these bytes came from. internal/sandboxpin verifies
-// every embedded file against that pin on every test run, so the tree below
-// is never edited in this repository — change it in ticks, move the pin's
-// `ref`, and run `go run ./cmd/sandbox sync`.
+// The tree is VENDORED, not authored here: ticks owns the tree (its
+// internal/sandbox suite runs those scripts; its copy sits at cloud/sandbox),
+// and sandbox.pin.json pins the immutable ticks commit these bytes came
+// from. internal/sandboxpin verifies every embedded file against that pin on
+// every test run, so the tree below is never edited in this repository —
+// change it in ticks, move the pin's `ref`, and run `go run ./cmd/sandbox
+// sync`.
 //
 // Enumerated, not wildcarded, matching the factory bundle above: the build
 // context is exactly the Dockerfile and what it copies. A file added to the
 // tree must be listed here too, and TestThePinnedTreeIsWhatTheBinaryShips
 // fails until it is.
 //
-//go:embed cloud/sandbox/Dockerfile cloud/sandbox/entrypoint.sh cloud/sandbox/preflight.sh
-//go:embed cloud/sandbox/worker.sh cloud/sandbox/common.sh
-//go:embed cloud/sandbox/build.sh cloud/sandbox/README.md
-//go:embed cloud/sandbox/required-tk-commands
+//go:embed image/Dockerfile image/entrypoint.sh image/preflight.sh
+//go:embed image/worker.sh image/common.sh
+//go:embed image/build.sh image/README.md
+//go:embed image/required-tk-commands
 var sandboxFS embed.FS
 
 // SandboxFS returns the embedded orchestrator image context. Paths inside it
-// are rooted at "cloud/sandbox", e.g. "cloud/sandbox/Dockerfile".
+// are rooted at "image", e.g. "image/Dockerfile".
 func SandboxFS() embed.FS {
 	return sandboxFS
 }

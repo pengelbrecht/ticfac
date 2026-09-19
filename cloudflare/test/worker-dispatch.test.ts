@@ -1796,7 +1796,7 @@ describe("a worker container's own output is streamed while it runs", () => {
  * everything right — revoke first, then tear down, exactly the ordering tick
  * gyl argued for — and the run kept nothing: `no-commits`, `branch_exists:
  * false`, three times. The salvage that would have rescued them already
- * existed in `cloud/sandbox/worker.sh` and already had live proof behind it
+ * existed in `image/worker.sh` and already had live proof behind it
  * (tick 5fg, run 3, commit adfedff5); what it did not have was a door the
  * SUPERVISOR could knock on. These cases are that door.
  *

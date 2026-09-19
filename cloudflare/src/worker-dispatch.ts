@@ -995,7 +995,7 @@ export const NOT_SALVAGED: SalvageOutcome = {
 /**
  * Asks one cancelled container to stop and push, and waits, bounded, for it.
  *
- * THE ASYMMETRY THIS CLOSES. `cloud/sandbox/worker.sh` already salvages
+ * THE ASYMMETRY THIS CLOSES. `image/worker.sh` already salvages
  * uncommitted work into its own commit, writes a report and pushes when the
  * WORKER's own bound fires — tick 5fg, proven live on run 3, where tick 5qj's
  * four dirty paths survived as commit adfedff5. None of it ran when the

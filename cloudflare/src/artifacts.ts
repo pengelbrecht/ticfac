@@ -570,7 +570,7 @@ export async function listWorkerManifests(
  * (tick 0fg).
  *
  * `tk cloud logs <run>` served the ORCHESTRATOR sandbox's stream and nothing
- * else, so a worker container that booted, ran `cloud/sandbox/worker.sh` and
+ * else, so a worker container that booted, ran `image/worker.sh` and
  * died on `die $EXIT_MODEL` left a message naming the exact gateway route and
  * HTTP body — and that message went nowhere durable. Diagnosing that cost
  * seven paid runs. This is the container's TEXT; `WorkerManifest` (and its
@@ -645,7 +645,7 @@ export const CONTROL_PLANE_LOG_EPOCH = 0;
  * first `say`, prints nothing at all — and those are exactly the containers
  * anyone reads a log for. A banner that depends on the container getting far
  * enough to print it is missing from every log that matters. The container
- * prints its own line too (`cloud/sandbox/worker.sh`), which corroborates this
+ * prints its own line too (`image/worker.sh`), which corroborates this
  * one rather than replacing it.
  *
  * Best effort by construction, like every other write in this module that a

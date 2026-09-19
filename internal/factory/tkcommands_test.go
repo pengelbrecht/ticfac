@@ -9,7 +9,7 @@ import (
 
 // The scanner is the whole mechanism: a hand-written list is what went stale
 // and produced a container that boots and then dies. These are the commands
-// the REAL cloud/sandbox scripts run; the payload that carries them landed
+// the REAL image-context scripts run; the payload that carries them landed
 // with tick b3a and is wired at init, so the assertion runs for real — and
 // skips loudly (requireEmbeddedPayload) rather than passing silently if the
 // seams are ever unwired. The scanner itself is exercised against a fake
@@ -95,7 +95,7 @@ func TestEntrypointTkCommandsScanAFakePayload(t *testing.T) {
 }
 
 // The image build reads the same list from the build context, so a plain
-// `docker build cloud/sandbox` asserts the same property the deploy does. One
+// `docker build image` asserts the same property the deploy does. One
 // derivation, two readers — this test is what keeps the committed file from
 // becoming the stale hand-written list all over again.
 func TestRequiredTkCommandsFileMatchesTheEntrypoint(t *testing.T) {

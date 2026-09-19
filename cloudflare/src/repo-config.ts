@@ -10,7 +10,7 @@
  * on the tick claim inside each worker, read here so the two never disagree
  * without saying so. Everything else in `.tick/runners.toml` — the setup
  * commands above all — is read INSIDE the container by the `tk` that owns the
- * format, and deliberately nowhere else (`cloud/sandbox/README.md`, *Where
+ * format, and deliberately nowhere else (`image/README.md`, *Where
  * setup may come from*).
  *
  * Where the value comes from is the whole security argument, and it is the

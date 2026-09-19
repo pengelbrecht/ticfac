@@ -8,10 +8,10 @@ package factory
 // things they asserted in ticks.
 //
 // One difference from the originals, and it is locational only: in ticks the
-// container was this repo's own cloud/sandbox and the door was a foreign
+// container was this repo's own image context and the door was a foreign
 // checkout (cloud/factory/src, read across the boundary), so the tests went
 // through internal/sandbox's payload locators. Here both halves ship from this
-// repository — cloudflare is the embedded Worker bundle and cloud/sandbox
+// repository — cloudflare is the embedded Worker bundle and image
 // the embedded image context (see bundle.go) — so each check reads both sides
 // straight off the repository root, the way internal/gatewaytrace's Go/TS
 // parity check already does.
@@ -42,7 +42,7 @@ func payloadPath(t *testing.T, parts ...string) string {
 
 // The two ends of this contract are written in different languages and neither
 // imports the other: the door is TypeScript in cloudflare/src, the container
-// is bash in cloud/sandbox. `.tick/learnings.md` already has the rule — a
+// is bash in image/. `.tick/learnings.md` already has the rule — a
 // constant crossing that boundary needs a test that reads both sides — and
 // this one had no test at all, which is how a door that parsed Basic without
 // ever asking for it shipped.
@@ -67,12 +67,12 @@ func TestTheDoorAndTheContainerAgreeAboutTheChallenge(t *testing.T) {
 		}
 	}
 
-	common, err := os.ReadFile(payloadPath(t, "cloud", "sandbox", "common.sh"))
+	common, err := os.ReadFile(payloadPath(t, "image", "common.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(common), "www-authenticate") {
-		t.Error("cloud/sandbox/common.sh no longer looks for the challenge, so a door that stops sending one would again be reported as `Authentication failed`")
+		t.Error("image/common.sh no longer looks for the challenge, so a door that stops sending one would again be reported as `Authentication failed`")
 	}
 }
 

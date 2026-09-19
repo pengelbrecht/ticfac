@@ -37,8 +37,8 @@ type UpstreamFile struct {
 // bit.
 //
 // Files are staged in memory and returned only when the whole archive has been
-// read, so a network drop mid-fetch cannot leave a half-updated cloud/sandbox
-// behind — the half-updated state this pin exists to prevent.
+// read, so a network drop mid-fetch cannot leave a half-updated image
+// context behind — the half-updated state this pin exists to prevent.
 func Extract(r io.Reader, directory string) (map[string]UpstreamFile, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -49,8 +49,8 @@ func Extract(r io.Reader, directory string) (map[string]UpstreamFile, error) {
 	// The archive is rooted at one directory (GitHub names it <repo>-<sha>),
 	// and the tree is exactly `<root>/<directory>/`. Anchoring on the root
 	// rather than searching for the segment anywhere is what keeps a Go
-	// package that happens to be called cloud/sandbox from being mistaken
-	// for it.
+	// package that happens to be named like the pinned directory from being
+	// mistaken for it.
 	want := strings.Trim(directory, "/") + "/"
 	files := map[string]UpstreamFile{}
 

@@ -103,7 +103,7 @@ func TestA4PollingIsTheKeepalive(t *testing.T) {
 // chain printed 271 bytes, dispatched no wave, pushed no branch, left the
 // epic's ticks open — and was recorded COMPLETED and charged for.
 //
-// Lives today in cloud/sandbox/entrypoint.sh (start_keeper, keeper_interval,
+// Lives today in image/entrypoint.sh (start_keeper, keeper_interval,
 // TICKS_KEEPER_INTERVAL) for the timer, and in cloudflare/src/progress.ts
 // (snapshotRefs, compareSnapshots) with run-workflow.ts's assessProgress /
 // applyProgress / isTerminalExit for "the exit status only decides whether to
