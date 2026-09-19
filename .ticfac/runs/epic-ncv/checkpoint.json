@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 97,
-  "state": "publishing",
-  "reason": "closing ef7 behind the integrated gate on 771d037dac70",
-  "updated_at": "2026-09-19T12:28:54Z",
+  "sequence": 98,
+  "state": "running",
+  "reason": "ef7 is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-19T12:29:00Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "ef7",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 7
     },
     {
