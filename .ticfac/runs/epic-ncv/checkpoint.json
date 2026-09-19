@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 115,
-  "state": "gating",
-  "reason": "running the integrated gate for k4s on 89492e32fbdc",
-  "updated_at": "2026-09-19T12:42:58Z",
+  "sequence": 116,
+  "state": "publishing",
+  "reason": "closing k4s behind the integrated gate on 89492e32fbdc",
+  "updated_at": "2026-09-19T12:43:11Z",
   "ticks": [
     {
       "tick_id": "l9n",
