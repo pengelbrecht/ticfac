@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
@@ -303,5 +304,145 @@ func TestACollectedWorkerIsReleasedBeforeItsGateRuns(t *testing.T) {
 	if retired < gated {
 		t.Errorf("a1's attempt was retired at %d, before its gate passed at %d: a clean-up before the close "+
 			"throws away the only copy of what was closed", retired, gated)
+	}
+}
+
+// gateOf is the declared gate for the heartbeat tests: one command, whatever
+// the test needs it to do, at an undeclared width so exactly one worker is ever
+// held and the gate runs with nothing live beside it.
+func gateOf(command string) string {
+	return `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = "` + command + `", description = "the check under test" }
+`
+}
+
+// gateLines is the feed's account of one tick's gate: the stages, in order,
+// between its integration and its verdict.
+func gateLines(r *Reconciler, tick string) (started, running, stalled int, firstRunning, released int) {
+	for i, event := range r.Journal() {
+		if event.Tick != tick {
+			continue
+		}
+		switch event.Stage {
+		case StageGateStarted:
+			started++
+		case StageGateRunning:
+			running++
+			if firstRunning == 0 {
+				firstRunning = i + 1
+			}
+		case StageGateStalled:
+			stalled++
+		case StageCleanedUp:
+			if released == 0 && strings.Contains(event.Detail, "is collected") {
+				released = i + 1
+			}
+		}
+	}
+	return started, running, stalled, firstRunning, released
+}
+
+// TestARunningGateSaysSoWithNoLiveWorkerBeside is tick 9pz's second acceptance.
+//
+// Both things a run emitted — feed lines and liveness probes — were driven off
+// polling LIVE attempts, and the gate itself said nothing at all between
+// `integrated` and `gate_passed`. So a run whose last live worker had settled,
+// sitting inside a multi-minute gate, produced exactly the same feed as a
+// process that had died: observed live at 32 minutes of total silence.
+//
+// The fixture is the worst case on purpose. At an undeclared width the run
+// holds ONE worker, and since this tick that worker is released at its collect
+// — so while a1's gate runs there is provably nothing live to poll, and every
+// line the feed carries has to come from the gate itself.
+func TestARunningGateSaysSoWithNoLiveWorkerBeside(t *testing.T) {
+	t.Parallel()
+	gate := gateOf("sleep 3; test -f README.md")
+	f := newFixture(t, fixtureOptions{gate: gate})
+	opts := fixtureOptions{gate: gate, gateHeartbeat: 200 * time.Millisecond}
+
+	r, result, err := f.run(f.Repo, opts)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(result.Closed) != 5 {
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %s",
+			result.Closed, result.State, result.Reason)
+	}
+
+	started, running, _, firstRunning, released := gateLines(r, "a1")
+	if started != 1 {
+		t.Errorf("a1's gate announced its start %d times, want once: %v", started, r.Stages("a1"))
+	}
+	if running < 2 {
+		t.Errorf("a1's three-second gate wrote %d heartbeats at a 200ms cadence: a run inside a gate is "+
+			"indistinguishable from a run that has died, which is what 9pz's second half is about", running)
+	}
+	// And the heartbeats really did come with nothing live beside them: a1's
+	// own worker was released before the first of them, and at this width it
+	// was the only worker there was.
+	if released == 0 {
+		t.Fatalf("a1's worker was never released: %v", r.Stages("a1"))
+	}
+	if firstRunning < released {
+		t.Errorf("a1's first gate heartbeat is at %d, before its worker was released at %d: the fixture is not "+
+			"exercising the case this test is for", firstRunning, released)
+	}
+}
+
+// TestAQuietGateIsWarnedAboutAndATalkativeOneIsNot.
+//
+// dh1's rule, pointed at a check: alive was never the question, and what a
+// person needs to know is whether it is getting anywhere. The warning must fire
+// on a gate that has produced nothing for longer than the threshold — and must
+// NOT fire on one that is printing as it goes, however long it takes, because a
+// warning that cries wolf on every healthy long check is one nobody reads.
+//
+// Neither case refuses anything: both runs close every tick.
+func TestAQuietGateIsWarnedAboutAndATalkativeOneIsNot(t *testing.T) {
+	t.Parallel()
+
+	quiet := gateOf("sleep 3; test -f README.md")
+	f := newFixture(t, fixtureOptions{gate: quiet})
+	r, result, err := f.run(f.Repo, fixtureOptions{
+		gate: quiet, gateHeartbeat: 200 * time.Millisecond, stallWarn: 900 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("the quiet run: %v", err)
+	}
+	if len(result.Closed) != 5 {
+		t.Fatalf("the quiet gate closed %v: a warning refused something, which it must never do", result.Closed)
+	}
+	_, _, stalled, _, _ := gateLines(r, "a1")
+	if stalled != 1 {
+		t.Errorf("a1's silent three-second gate was warned about %d times under a 900ms threshold, want exactly "+
+			"one: %v", stalled, r.Stages("a1"))
+	}
+
+	talkative := gateOf("i=0; while [ $i -lt 30 ]; do echo working; sleep 0.1; i=$((i+1)); done; test -f README.md")
+	g := newFixture(t, fixtureOptions{gate: talkative})
+	gr, gResult, err := g.run(g.Repo, fixtureOptions{
+		gate: talkative, gateHeartbeat: 200 * time.Millisecond, stallWarn: 900 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("the talkative run: %v", err)
+	}
+	if len(gResult.Closed) != 5 {
+		t.Fatalf("the talkative gate closed %v", gResult.Closed)
+	}
+	_, running, stalled, _, _ := gateLines(gr, "a1")
+	if running < 2 {
+		t.Fatalf("the talkative gate wrote %d heartbeats, so it did not run long enough to be a test of the "+
+			"warning at all", running)
+	}
+	if stalled != 0 {
+		t.Errorf("a gate that printed every 100ms for three seconds was warned about %d times: a stall warning "+
+			"that fires on a check which is plainly working is noise, and noise is how a real one gets ignored",
+			stalled)
 	}
 }

@@ -186,6 +186,17 @@ func (r *Reconciler) stepGate(ctx context.Context, marker attemptHandle, merged 
 
 	if g.running != nil {
 		if !g.running.shell.settled() {
+			// The gate's own bound is the ONE bound on a gate, and this is
+			// where a second one was deliberately not added (tick 9pz). The
+			// shell already carries GateTimeout and kills its process group at
+			// it; a bound in the loop could only fire earlier, which refuses a
+			// gate that is merely slow — the false refusals cy2 is about, on a
+			// host where a 3m26s check has been measured taking 37 minutes
+			// under someone else's load — or later, which is decoration. What
+			// a second bound would have been a clumsy proxy for is the
+			// INFORMATION, and that is what the heartbeat carries instead:
+			// elapsed, output, and how much of the real bound is left.
+			r.announceGate(g.running, marker, merged)
 			return false, nil
 		}
 		record, err := r.finishGateCommand(g.running, marker, merged, g.fingerprint)
@@ -304,6 +315,14 @@ type gateCommand struct {
 	remove  func()
 	shell   *gateShell
 	started string
+
+	// began is when this check started, beat is when it last said so, and
+	// stalled records that it has already been warned about — once per check,
+	// for the reason the attempt's own stall warning is written once: a
+	// warning repeated every minute is a warning nobody reads.
+	began   time.Time
+	beat    time.Time
+	stalled bool
 }
 
 // startGateCommand begins one declared check, or reports the record that
@@ -335,10 +354,68 @@ func (r *Reconciler) startGateCommand(command GateCommand, key string,
 		remove()
 		return nil, nil, err
 	}
+	now := r.now()
+	r.record(marker.TickID, StageGateStarted,
+		"the %s gate is running on %s, bounded at %s: %s",
+		command.Name, short(merged.GateSHA), r.opts.GateTimeout, command.Description)
 	return &gateCommand{
 		command: command, key: key, dir: dir, remove: remove, shell: shell,
-		started: r.now().UTC().Format(time.RFC3339),
+		started: now.UTC().Format(time.RFC3339),
+		began:   now, beat: now,
 	}, nil, nil
+}
+
+// announceGate is what a running gate says about itself, and it is the answer
+// to the second half of tick 9pz: a run whose window has nothing live left to
+// poll must still not look dead.
+//
+// It is driven from stepGate, which the run loop calls every round whether or
+// not any worker is alive — that is the whole point. Before this, the two
+// things a run emitted (feed lines and liveness probes) were both driven off
+// polling LIVE attempts, so "the last tick of a wave is gating" produced
+// exactly the same feed as a process that had died.
+//
+// Everything it writes is an observation, never a verdict. It does not stop,
+// refuse or hold anything: the gate's own timeout is the only bound, and see
+// the note in stepGate for why a second one would be worse than none.
+func (r *Reconciler) announceGate(g *gateCommand, marker attemptHandle, merged merge) {
+	if r.gateHeartbeat < 0 {
+		return
+	}
+	now := r.now()
+	if now.Sub(g.beat) < r.gateHeartbeat {
+		return
+	}
+	g.beat = now
+
+	elapsed := now.Sub(g.began).Round(time.Second)
+	left := (r.opts.GateTimeout - now.Sub(g.began)).Round(time.Second)
+	bytes, at := g.shell.written()
+	produced := fmt.Sprintf("%d bytes of output", bytes)
+	idle := elapsed
+	if bytes > 0 && !at.IsZero() {
+		idle = now.Sub(at).Round(time.Second)
+		produced = fmt.Sprintf("%d bytes of output, last %s ago", bytes, idle)
+	}
+	r.record(marker.TickID, StageGateRunning,
+		"the %s gate has been running for %s on %s and has written %s; %s of its bound is left",
+		g.command.Name, elapsed, short(merged.GateSHA), produced, left)
+
+	// dh1's rule, pointed at a check instead of a worker: alive was never the
+	// question, and what a person needs to know is whether it is getting
+	// anywhere. Said once, and only about a gate that has BOTH outlived the
+	// threshold and produced nothing in that time — a long check that is
+	// printing as it goes is working, however long it takes.
+	if g.stalled || r.opts.StallWarnAfter <= 0 || elapsed < r.opts.StallWarnAfter || idle < r.opts.StallWarnAfter {
+		return
+	}
+	g.stalled = true
+	r.record(marker.TickID, StageGateStalled,
+		"the %s gate has been running for %s on %s and has produced nothing for %s — longer than this run's stall "+
+			"threshold of %s. It is NOT refused and nothing about it is decided: a check that prints only at the end "+
+			"legitimately looks like this, and the gate's own bound of %s is what spends it. It is a reason to look "+
+			"at this host — at load, at the command, at what it is waiting on",
+		g.command.Name, elapsed, short(merged.GateSHA), idle, r.opts.StallWarnAfter, r.opts.GateTimeout)
 }
 
 // finishGateCommand collects one started check's answer and records its
@@ -974,6 +1051,30 @@ func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
 	default:
 		return stdout, stderr, -1, waitErr
 	}
+}
+
+// written is how much output the command has produced so far and when it last
+// produced any: the gate's equivalent of the branch tip and worktree mtime that
+// dh1 reads off a worker (liveness.go).
+//
+// It is available for free because the output goes to FILES — one stat, no
+// read, nothing consumed that the record needs later — and it is the only
+// evidence a run has about whether a gate is getting anywhere. A command that
+// has written nothing for twenty minutes may be perfectly healthy (a single
+// long Go package prints at the end, not during), which is exactly why this
+// feeds a line that says LOOK and never a bound that refuses.
+func (s *gateShell) written() (bytes int64, at time.Time) {
+	for _, path := range []string{s.outPath, s.errPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		bytes += info.Size()
+		if mod := info.ModTime(); mod.After(at) {
+			at = mod
+		}
+	}
+	return bytes, at
 }
 
 func readGateOutput(path string) string {
