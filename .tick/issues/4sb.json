@@ -3,7 +3,7 @@
   "title": "The forge cannot write to a PR at all, so nothing can be carried onto it",
   "description": "internal/forge/forge.go offers only Find, Open and CI. There is no comment, no body update — no way to put anything on a pull request after it is opened. internal/reconcile/closeout.go opens the epic PR with a FIXED 'PR + CI rule' body.\n\nSo a person merging an epic sees CI status and nothing else. Not the review's verdict, not its findings. On this epic that means they would not see a review that said NOT READY.\n\nTHIS IS A HARD PREREQUISITE FOR aqm. The operator decided on 2026-09-19 that untriaged findings stop holding the run and are carried to the epic PR instead. That decision cannot be implemented at all until the forge can write, and shipping the first half alone — dropping the hold without gaining the PR text — removes a safety net and puts nothing in its place.\n\nWork:\n- Give forge a way to write: update the PR body, or post a comment, or both. Pick one and say why, since 'append a comment' and 'own the body' behave differently when a run resumes and writes twice.\n- Make it idempotent. A resumed close-out must not post the findings again; the durable record is the findings themselves, and the PR is a view of them.\n- The close-out then composes the body from the review decision and the run's findings.\n\nFrom pxc, finding (Go host, distinct from cxk which covers the TypeScript port).",
   "notes": "2026-09-20 00:36 - ticfac run epic-dha: attempt 1 reported a finding drafted for triage — defect \"The review's judgement is still not a typed field: the PR body carries status+summary, not a review verdict like NOT READY\" (key 2e8794feb5a6488fa026f77879d5c210b0c320746d901298557c5075256c3e94, severity medium, for this repository). Triage with `ticfac finding dha 2e8794feb5a6488fa026f77879d5c210b0c320746d901298557c5075256c3e94 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-20 00:46 - ticfac run epic-dha: attempt 1 merged into epic/dha as 1cf471992a2b; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "The epic PR carries the final review's verdict and every finding's text, written idempotently across a resumed close-out",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:57:36.089006Z",
-  "updated_at": "2026-09-19T22:46:32.370522Z",
-  "started_at": "2026-09-19T21:38:03.500497Z"
+  "updated_at": "2026-09-19T22:46:37.808279Z",
+  "closed_at": "2026-09-19T22:46:37.808279Z"
 }
