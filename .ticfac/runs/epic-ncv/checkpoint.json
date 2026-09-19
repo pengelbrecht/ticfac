@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 86,
-  "state": "running",
-  "reason": "9fc is refused its close: a drafted finding is untriaged",
-  "updated_at": "2026-09-19T11:58:47Z",
+  "sequence": 87,
+  "state": "failed",
+  "reason": "9fc reported 2 finding(s) nobody has triaged — \"Workflow-hosted reconciler has no skeleton hold-back and redispatches a review that reports done with zero commits\" (proposed-tick, for this repository); \"TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt is load-flaky under the full gate\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding ncv be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f|f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109 --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding ncv be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f|f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109 --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding ncv be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f|f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109 --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key be3ef7ac2ada97566f06d96d00c95f347240bfa0c6fe206e75b275c23e3d431f, f2bac39d3d99f175ccd42d1d4817968e62f05c4861a643faf6cee0783d7e1109 under .ticfac/runs/epic-ncv/findings/ on origin",
+  "updated_at": "2026-09-19T11:58:52Z",
   "ticks": [
     {
       "tick_id": "l9n",
