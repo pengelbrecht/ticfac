@@ -1,9 +1,11 @@
 package reconcile
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -451,4 +453,200 @@ func TestAReviewJobsFindingBlocksItsOwnClose(t *testing.T) {
 			t.Errorf("discovered_from %q, want the review job's own attempt named", finding.DiscoveredFrom)
 		}
 	}
+}
+
+// The resume half of the same story (tick 80x): a review whose findings
+// stopped its close is a role tick whose VALIDATED ANSWER is already
+// recorded — the model was paid for it once. Triaging the findings is the
+// person's step, and the resume then CLOSES behind that recorded decision:
+// a re-dispatch would pay for the same review of the same source again, and
+// the loop it makes ends only when a reviewer reports nothing — a system
+// structurally biased toward the review that finds least.
+func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
+		t.Fatalf("failure %+v, want the review tick's own untriaged finding", result.Failure)
+	}
+
+	// The answer is already recorded — the decision the close will stand
+	// behind — and it names the attempt that gave it.
+	s := draftsStore(t, f.Repo)
+	decision, ok := reviewDecision(t, s, "rv")
+	if !ok {
+		t.Fatal("the review's validated answer was never recorded as a decision: the close would have " +
+			"nothing to stand behind")
+	}
+	attempt := decisionAttempt(t, decision)
+	if attempt < 1 {
+		t.Fatalf("the recorded decision names no attempt it belongs to")
+	}
+
+	// A person triages every draft the review reported.
+	findings, err := s.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if _, _, err := s.TriageFinding(finding.Key, runstate.Triage{
+			Status: runstate.FindingDiscarded, By: "the operator",
+		}); err != nil {
+			t.Fatalf("discard the review's finding: %v", err)
+		}
+	}
+	if proposedCount(t, s) != 0 {
+		t.Fatal("the review's findings were not all triaged")
+	}
+
+	// The resume: the review closes behind its recorded decision.
+	_, result, err = f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("run state %s (%+v), want completed after triage: a triaged role tick closes behind "+
+			"its recorded decision instead of stopping the run", result.State, result.Failure)
+	}
+
+	// The review was NOT dispatched again. The feed spans both runs, so one
+	// dispatched line for rv is the whole story: the first run's dispatch,
+	// and no second one paid for on the resume.
+	events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
+	if err != nil {
+		t.Fatalf("the run left no feed a non-participant can read: %v", err)
+	}
+	dispatched := 0
+	for _, event := range events {
+		if event.Stage == StageDispatched && event.TickID != nil && *event.TickID == "rv" {
+			dispatched++
+		}
+	}
+	if dispatched != 1 {
+		t.Fatalf("the review was dispatched %d times across both runs, want 1: a resume replays a "+
+			"recorded decision, it never buys the same review again", dispatched)
+	}
+
+	// The tick closed behind the recorded answer, and the close and the
+	// decision belong to the SAME attempt — the note names the attempt the
+	// decision was recorded for, so the record does not say one review
+	// answered and another was closed behind.
+	if got := f.Tracker.count("close:rv"); got != 1 {
+		t.Fatalf("rv was closed %d times, want 1", got)
+	}
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := fmt.Sprintf("attempt %d", attempt)
+	if !strings.Contains(state.Ticks["rv"].Notes, note) {
+		t.Errorf("rv's close note does not name attempt %d, the attempt the recorded decision belongs "+
+			"to: %q", attempt, state.Ticks["rv"].Notes)
+	}
+
+	// And the durable record still says the same thing: one decision for this
+	// review, unchanged by the resume — not a second answer paid for and
+	// deduplicated away, and not a close behind a different attempt's record.
+	s = draftsStore(t, f.Repo)
+	count := 0
+	for _, existing := range decisions(t, s) {
+		if existing.Role == "review-epic" {
+			if tick, _ := existing.Request["tick_id"].(string); tick == "rv" {
+				count++
+				if decisionAttempt(t, &existing) != attempt {
+					t.Errorf("a later decision for rv belongs to attempt %d, not the recorded %d",
+						decisionAttempt(t, &existing), attempt)
+				}
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("rv carries %d review decisions across both runs, want 1", count)
+	}
+}
+
+// The hold half (tick 80x): a resume while the findings are STILL untriaged
+// refuses at the same gate, again — and buys nothing. The recorded decision is
+// what the run owes the person; the hold that waits for them is free.
+func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
+		t.Fatalf("failure %+v, want the review tick's own untriaged finding", result.Failure)
+	}
+
+	// Nobody triages. The resume stops at the same gate — and the review is
+	// not dispatched again: the answer it would re-buy is already recorded.
+	_, result, err = f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
+		t.Fatalf("failure %+v, want the same untriaged finding to hold the run again", result.Failure)
+	}
+	events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
+	if err != nil {
+		t.Fatalf("the run left no feed a non-participant can read: %v", err)
+	}
+	dispatched := 0
+	for _, event := range events {
+		if event.Stage == StageDispatched && event.TickID != nil && *event.TickID == "rv" {
+			dispatched++
+		}
+	}
+	if dispatched != 1 {
+		t.Fatalf("the review was dispatched %d times across both runs, want 1: the hold is free, not "+
+			"a re-paid review of the same source", dispatched)
+	}
+	if got := f.Tracker.count("close:rv"); got != 0 {
+		t.Fatalf("rv was closed %d times, want 0: the finding is still waiting for a person", got)
+	}
+}
+
+// reviewDecision is the recorded role decision for one review tick, if the
+// run recorded one.
+func reviewDecision(t *testing.T, s *runstate.Store, tick string) (*runstate.Decision, bool) {
+	t.Helper()
+	all, err := s.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range all {
+		if all[i].Role == "review-epic" {
+			if tickID, _ := all[i].Request["tick_id"].(string); tickID == tick {
+				return &all[i], true
+			}
+		}
+	}
+	return nil, false
+}
+
+// decisions is every decision the run recorded, for a test that counts them.
+func decisions(t *testing.T, s *runstate.Store) []runstate.Decision {
+	t.Helper()
+	all, err := s.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return all
+}
+
+// decisionAttempt is the attempt a recorded decision belongs to, from the
+// attempt identity the record carries.
+func decisionAttempt(t *testing.T, decision *runstate.Decision) int {
+	t.Helper()
+	if decision.Provenance.Attempt != nil {
+		return *decision.Provenance.Attempt
+	}
+	t.Fatalf("decision %d carries no attempt", decision.Decision)
+	return 0
 }

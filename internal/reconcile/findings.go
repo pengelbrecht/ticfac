@@ -203,8 +203,9 @@ func (r *Reconciler) gateOnFindings(tick string) (*Refusal, error) {
 			"on the floor is the failure this gate exists to stop. Triage each with `ticfac finding %s %s "+
 			"--promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding %s "+
 			"%s --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding %s "+
-			"%s --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already "+
-			"passed, so the close is the only step left. The drafts are key %s under .ticfac/runs/%s/findings/ on %s",
+			"%s --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has "+
+			"already passed, so the close is the only step left — and the resume closes behind the recorded "+
+			"decision, it does not dispatch the job again. The drafts are key %s under .ticfac/runs/%s/findings/ on %s",
 		tick, len(untriaged), strings.Join(titles, "; "), r.opts.EpicID, strings.Join(keys, "|"), r.opts.EpicID,
 		strings.Join(keys, "|"), r.opts.EpicID, strings.Join(keys, "|"), strings.Join(keys, ", "), r.runID,
 		r.opts.Remote), nil
