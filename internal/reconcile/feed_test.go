@@ -240,6 +240,29 @@ func TestALostFeedSignalChangesNoVerdict(t *testing.T) {
 // executor states none. What is refused everywhere is a cadence that is not a
 // keepalive under the substrate's wipe threshold, because the poll IS the
 // keepalive wherever a substrate wipes.
+// KNOWN LOAD-SENSITIVE (tick cy2, sixth occurrence, 2026-09-19). This test
+// refused tick 9fc of epic ncv — a tick whose change was TypeScript and one
+// closeout test, nothing to do with poll cadence — with:
+//
+//	feed_test.go: the wait never slept; the executor's cadence never applied
+//
+// What was established before filing it, so nobody redoes the work: it fails
+// only inside the full package at -parallel 12, where ~80 tests each fork git
+// and worker processes; internal/reconcile took 845s in the failing gate
+// against 410s for a clean run of the SAME tree. It passes 3/3 alone and 6/6
+// under synthetic CPU load at load average 13-29, so the trigger is process
+// and fd contention rather than a starved CPU.
+//
+// The failure is stronger than a missed deadline and that is the clue worth
+// keeping: holdingInspector forces two holds, so Inspect should report
+// `running` twice and the wait should sleep twice DETERMINISTICALLY. An empty
+// `slept` means the wait never polled a held job at all. Suspects, in order:
+// the attempt settling before the first poll despite the hold, the wrap not
+// reaching the attempt that ran, or the run returning before dispatch under
+// contention.
+//
+// It is not a regression from the liveness probe (tick dh1): the same tree
+// passes this test repeatedly in isolation.
 func TestTheWaitUsesTheExecutorsCadenceNotTheRuns(t *testing.T) {
 	t.Parallel()
 
