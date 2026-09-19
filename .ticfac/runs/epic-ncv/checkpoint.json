@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 128,
-  "state": "publishing",
-  "reason": "closing pxc behind its validated review-epic answer",
-  "updated_at": "2026-09-19T13:57:00Z",
+  "sequence": 129,
+  "state": "failed",
+  "reason": "pxc reported 2 finding(s) nobody has triaged — \"Go close-out opens the epic PR without the review verdict or findings; forge cannot post them\" (defect, for this repository); \"Give review-epic a structured verdict; a NOT READY review answered DONE_WITH_CONCERNS closes and releases the close-out\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding ncv ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b|b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key ac641819c52f720d7f1f1c235746905e64f690bed64ce5737d2b4052d87d1f1b, b3848359bb7a3a513900037f4afa77e9af09eb6866ebfa67f9884024f8f5eb6d under .ticfac/runs/epic-ncv/findings/ on origin",
+  "updated_at": "2026-09-19T13:57:05Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "pxc",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 10
     },
     {
