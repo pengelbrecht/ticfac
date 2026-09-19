@@ -138,6 +138,34 @@ closeout_nocommit)
 		report
 	fi
 	;;
+closeout_finding)
+	# The 4sb shape: the close-out's OWN attempt reports a finding that did
+	# not exist when the admission composed the PR body — the fact that makes
+	# the close gate REWRITE the body from the final records rather than trust
+	# the admission's view. Only the close-out reports; every other tick is the
+	# plain report mode, so the finding on the PR is provably the close-out's.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The close-out also found something outside its tick.\n\n'
+			printf '%s\n' '```findings'
+			printf '%s\n' '[{'
+			printf '%s\n' '  "kind": "proposed-tick",'
+			printf '%s\n' '  "title": "A finding the close-out itself proposes",'
+			printf '%s\n' '  "body": "Found by the close-out, after the admission wrote the PR body.",'
+			printf '%s\n' '  "severity": "medium",'
+			printf '%s\n' '  "target": ""'
+			printf '%s\n' '}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	else
+		commit
+		report
+	fi
+	;;
 finding_bad)
 	# A findings block that does not parse: collect carries the problem, and
 	# the reconciler refuses the attempt rather than closing the tick behind

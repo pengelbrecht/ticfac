@@ -661,6 +661,15 @@ const (
 	// diligence.
 	StagePROpened = "pr_opened"
 
+	// StagePRBodyWritten is the line the close-out leaves when the epic PR
+	// carries the record a person merging reads (tick 4sb): the final
+	// review's verdict and every finding the run drafted, composed from the
+	// run's own state and written through the forge. It is recorded at the
+	// close-out tick's scope, at the admission and again at the close gate —
+	// the last moment the run owns the PR — because the close-out's own
+	// attempt can draft a finding the admission's body predated.
+	StagePRBodyWritten = "pr_body_written"
+
 	// StageCloseoutAdmitted is the line the close-out admission leaves when
 	// the precondition the target repo declares is met: the epic PR is open
 	// and CI is green on it, so the close-out phase is admitted (tick 0iz).
@@ -1707,10 +1716,15 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
-	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), and the sixth its
-	// own CLOSE gate adds (tick sqx). The PR + CI rule a target repository
-	// declares in .tick/config.md is a precondition the RUN enforces, and
-	// each refusal names which half of it is unmet, because the halves send
+	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), the sixth its own
+	// CLOSE gate adds (tick sqx), and the seventh the PR's WRITE half adds
+	// (tick 4sb): a body the forge could not put the run's record on — the
+	// FORGE's credential or permission again, but named apart from the PR's
+	// existence, because a PR that exists and carries nothing is the silent
+	// merge this refusal exists to stop. The PR + CI rule a target
+	// repository declares in .tick/config.md is a precondition the RUN
+	// enforces, and each refusal names which half of it is unmet, because the
+	// halves send
 	// the next repair somewhere different: the first at the HOST, which
 	// configured no code-hosting surface for a repo that declares the rule;
 	// the second at the FORGE, which could not open or read the PR (a
@@ -1723,11 +1737,12 @@ const (
 	// head later: CI red on the PR head the close-out's OWN commits made —
 	// the head its admission's green CI is not evidence about — with the
 	// repair aimed at the close-out's writes rather than at the epic's tree.
-	RefusedCloseoutForge     = "closeout_forge_absent" // no surface behind the rule
-	RefusedCloseoutPR        = "closeout_pr_unmet"     // no PR, or one the forge could not open or read
-	RefusedCloseoutCIAbsent  = "closeout_ci_absent"    // CI never ran on the PR head
-	RefusedCloseoutCI        = "closeout_ci_failed"    // CI red; the message names the failing job
-	RefusedCloseoutCIPending = "closeout_ci_pending"   // CI still pending past the run's bound
+	RefusedCloseoutForge     = "closeout_forge_absent"      // no surface behind the rule
+	RefusedCloseoutPR        = "closeout_pr_unmet"          // no PR, or one the forge could not open or read
+	RefusedCloseoutPRBody    = "closeout_pr_body_unwritten" // the PR exists but carries no record
+	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // CI never ran on the PR head
+	RefusedCloseoutCI        = "closeout_ci_failed"         // CI red; the message names the failing job
+	RefusedCloseoutCIPending = "closeout_ci_pending"        // CI still pending past the run's bound
 
 	// RefusedCloseoutCIOnClose is CI red on the PR head that includes the
 	// close-out's OWN commits (tick sqx): the head the admission's green CI
