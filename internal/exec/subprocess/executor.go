@@ -442,7 +442,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 
-	pid, err := e.spawnSupervisor(record)
+	pid, err := e.spawnSupervisor(st, record)
 	if err != nil {
 		return nil, err
 	}
@@ -450,13 +450,14 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err := st.writeAttempt(record, e.guarded("read_back_after_write")); err != nil {
 		return nil, err
 	}
-	// The pid FILE is what a SECOND process reads to stop this attempt —
-	// cancel finds the supervisor through it, and a handle from a restarted
-	// controller carries nothing else that can. So it is written and READ
-	// BACK, and a write that did not land stops the supervisor it could not
-	// record rather than leaving a process no later cancel can reach.
+	// The pid FILE is what a SECOND process reads to name this attempt's
+	// supervisor. It is no longer what anything signals or trusts for liveness
+	// on its own — the supervisor's lock is (tick rmc) — but it is still the
+	// record every person and every older reader looks for, so it is written
+	// and READ BACK, and a write that did not land stops the supervisor it
+	// could not record rather than leaving one nobody can name.
 	if err := e.writePID(st, pid); err != nil {
-		stopTree(pid)
+		e.stopTree(st)
 		return nil, err
 	}
 
@@ -499,7 +500,7 @@ func (e *Executor) makeWorktree(record *attemptRecord) error {
 	return nil
 }
 
-func (e *Executor) spawnSupervisor(record *attemptRecord) (int, error) {
+func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error) {
 	argv := append([]string{}, e.opts.SupervisorArgv...)
 	argv = append(argv, "--state", record.State)
 	cmd := exec.Command(argv[0], argv[1:]...)
@@ -513,10 +514,32 @@ func (e *Executor) spawnSupervisor(record *attemptRecord) (int, error) {
 	}
 	defer devnull.Close()
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = devnull, devnull, devnull
+
+	// The supervisor's liveness lock is taken HERE, before the supervisor
+	// exists, and handed to it as its fd 3 (tick rmc, lock.go). Taken by the
+	// supervisor itself, it would leave a window between "started" and
+	// "holding" in which an inspect finds the lock free and calls a
+	// just-started attempt lost. This process closes its own copy on return;
+	// the supervisor's copy is the same open file description, so the lock is
+	// the supervisor's from then on and this process — a controller that may
+	// live for hours — never keeps an attempt alive by holding it.
+	lock, err := st.newLock(lockSupervisor)
+	if err != nil {
+		return 0, fmt.Errorf("take the supervisor's liveness lock: %w", err)
+	}
+	defer lock.Close()
+	cmd.ExtraFiles = []*os.File{lock}
+
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("start the supervisor: %w", err)
 	}
 	pid := cmd.Process.Pid
+	if err := stampLock(lock, pid); err != nil {
+		// Still this process's unreaped child, so the pid is still its own.
+		_ = signalGroup(pid, sigKill())
+		_ = cmd.Wait()
+		return 0, fmt.Errorf("write the supervisor's pid into its liveness lock: %w", err)
+	}
 
 	// Reap it when it eventually exits. The supervisor is a child of THIS
 	// process, and an unreaped child is a zombie — which answers kill(pid, 0)

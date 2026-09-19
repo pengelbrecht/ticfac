@@ -180,6 +180,21 @@ func (e *Executor) alive(st *store, record *attemptRecord) bool {
 	if st.settled() {
 		return false
 	}
+	if st.byLock() {
+		// A held lock is a live process of THIS attempt, and nothing that
+		// merely inherited a dead one's pid can hold it (tick rmc, lock.go).
+		// A lock directory that cannot be read is not evidence that nothing is
+		// alive: a live attempt is cancelled, never released, so the
+		// unanswerable case errs towards alive.
+		live, err := st.liveLocks()
+		return err != nil || len(live) > 0
+	}
+	// LEGACY, and only for an attempt started before liveness moved to locks:
+	// it has no lock to ask about, and "no lock, so nothing is alive" would
+	// release an old supervisor still running across an upgrade. This is the
+	// check tick rmc is about — a saved pid is a number the kernel hands out
+	// again, so a dead attempt reads as alive once it has been — and it is
+	// kept for exactly the attempts that can offer nothing better.
 	for _, pid := range []int{st.supervisorPID(), record.SupervisorPID, st.runnerPID()} {
 		if processAlive(pid) {
 			return true

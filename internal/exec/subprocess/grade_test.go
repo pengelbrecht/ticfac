@@ -245,13 +245,12 @@ func TestASignalledSupervisorSettlesTheAttemptItStops(t *testing.T) {
 	handle := f.Start(f.spec("run-grade/tick-tm/attempt-1", "tm"))
 	st := f.store(handle)
 	waitFor(t, "the runner to start", 20*time.Second, func() bool { return st.runnerPID() > 0 })
-	runner := st.runnerPID()
 
-	if err := signalGroup(st.supervisorPID(), sigTerm()); err != nil {
+	if err := signalGroup(provenPID(t, st, lockSupervisor), sigTerm()); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "the stopped supervisor to settle the attempt", 20*time.Second, st.settled)
-	waitFor(t, "the runner to stop with its supervisor", 20*time.Second, func() bool { return !processAlive(runner) })
+	waitFor(t, "the runner to stop with its supervisor", 20*time.Second, func() bool { return !liveOf(st, lockRunner) })
 
 	if code, ok := st.exitCode(); !ok || code != 128+int(sigTerm()) {
 		t.Errorf("the stopped attempt settled with exit %d (read %v), want %d", code, ok, 128+int(sigTerm()))
