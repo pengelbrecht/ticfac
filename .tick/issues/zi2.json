@@ -1,0 +1,13 @@
+{
+  "id": "zi2",
+  "title": "Count interventions mechanically: record every resume and every hand commit",
+  "description": "ncv's acceptance says to count interventions and report the number. Nothing records them. The close-out had to RECONSTRUCT the count from checkpoint history and the first-parent log: 17 stops, 9 hand commits on the integration branch, 33 hand triages.\n\nA number that has to be reconstructed can be argued with, and the Phase 4 gate's rule is 'one intervention is failure' — so the number decides the verdict.\n\nWork:\n- Record each resume in .ticfac/: who, when, and which stop it followed.\n- Flag every integration-branch commit that came neither from an attempt merge nor from the run itself. Those are the hand commits, and on ncv I made nine of them.\n- Record each triage with its actor (the finding record already carries 'by'; count it).\n- Report the three numbers in the close-out, from the records, with no inference.\n\nFrom ncv close-out finding 4a76698a.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The close-out reports resumes, hand commits and hand triages from recorded data, and each number can be traced to the records that produced it",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T17:38:00.516372Z",
+  "updated_at": "2026-09-19T17:38:00.516372Z"
+}

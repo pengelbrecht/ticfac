@@ -1,0 +1,13 @@
+{
+  "id": "5px",
+  "title": "Decide whether a local dispatch through 'cloudflare-sandbox' is wanted, or say the name is cloud-host-only",
+  "description": "k4s made 'cloudflare-sandbox' an executor the Workflow-hosted reconciler dispatches through. A local `ticfac run-epic` whose profile names it is still refused: internal/cli/executor.go builds only local-subprocess and herdr.\n\nThat refusal is HONEST today — the Go build genuinely cannot reach a Cloudflare sandbox — but nothing states the boundary as a decision, so it reads as an omission. A reader cannot tell whether local dispatch through that name is unimplemented, unwanted, or forgotten.\n\nDecide, and make the decision visible where someone would hit it:\n (a) a later item adds a Go executor that proxies dispatches through a deployment's factory, or\n (b) internal/cli's refusal says the name is honoured by the cloud host only.\n\nEither way the refusal message should name the reason, so a profile that asks for it gets an answer rather than a list of what is supported.\n\nReported by k4s, run epic-ncv, finding 3541db4c.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A local run whose profile names cloudflare-sandbox is refused with a message that states the boundary as a decision, or is dispatched through a proxying executor",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T12:41:36.672448Z",
+  "updated_at": "2026-09-19T12:41:36.672448Z"
+}

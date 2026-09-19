@@ -1,0 +1,13 @@
+{
+  "id": "s2n",
+  "title": "Close-out CI verdict names its commit only on green, and a cancelled ancestor run parks it",
+  "description": "Two gaps in the close-out's CI read:\n\n1. It names the commit its verdict is about only when CI is GREEN. On red or pending the operator is told a verdict with no subject — the one case where knowing which commit was judged matters most.\n2. A cancelled ancestor run parks the close-out rather than being treated as no-verdict-here and walked past.\n\nThe ancestor walk was added by 9da precisely so a run-state commit cannot strand the close-out. A cancelled run is the same situation wearing a different label.\n\nFrom pxc, finding 4e06d8d8.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Every close-out CI verdict names the commit it is about whatever its colour, and a cancelled ancestor is walked past rather than parking the run",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T13:50:58.164103Z",
+  "updated_at": "2026-09-19T13:50:58.164103Z"
+}

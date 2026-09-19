@@ -1,0 +1,14 @@
+{
+  "id": "sz0",
+  "title": "Record the Workflow host's reconciler semantics changes as decisions",
+  "description": "The Workflow port changed reconciler semantics in places without recording those changes as decisions, so the two implementations can diverge with nothing stating which is intended.\n\nThis is the same drift 5bp had to settle for cloud/sandbox and b9w had to settle for the contract bundle: two implementations of one thing, and no written statement of where they are allowed to differ.\n\nFrom pxc, finding f8ef8154.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
+  "acceptance_criteria": "Every intentional semantic difference between the Go reconciler and the Workflow reconciler is recorded as a decision, and a check fails when one side changes a recorded behaviour without a matching decision",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T13:50:20.169794Z",
+  "updated_at": "2026-09-19T13:50:20.169794Z"
+}

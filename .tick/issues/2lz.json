@@ -1,0 +1,13 @@
+{
+  "id": "2lz",
+  "title": "Reword the stale 'future work' boundary now the serialized publisher has landed",
+  "description": "src/epic-reconciler.ts's module header and src/env.d.ts's TICFAC_INTEGRATION doc both say integration waits on 'the serialized publisher (this phase's item 3) and the sandbox executor (item 4)'.\n\nef7 landed the publisher, so that recorded boundary is stale: integration now waits on the executor only.\n\nef7 deliberately did NOT edit these two sites, and its reasoning is worth preserving: the sentence cites a decision recorded by z23, and rewording someone else's recorded decision is a reviewer's call rather than an implementer's. That is the right instinct and the reason this is a tick and not a drive-by edit.\n\nWork: reword both sites to say integration waits on the sandbox executor, and make clear that the publisher arrived in ef7 — the history should read as a boundary that moved, not one that was never there.\n\nFound by ef7, run epic-ncv, finding 5863849f.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Neither comment site names the serialized publisher as outstanding, and both attribute its arrival to ef7",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T12:30:20.213023Z",
+  "updated_at": "2026-09-19T12:30:20.213023Z"
+}
