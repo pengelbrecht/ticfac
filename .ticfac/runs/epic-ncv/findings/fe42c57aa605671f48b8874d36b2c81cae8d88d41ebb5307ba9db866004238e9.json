@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "pxc",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-19T12:52:42Z",
+  "triaged_at": "2026-09-19T13:52:56Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "pengelbrecht/ticks:35t",
   "provenance": {
     "run_id": "epic-ncv",
     "tick_id": "pxc",
