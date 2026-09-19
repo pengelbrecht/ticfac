@@ -94,6 +94,13 @@ func kindFor(state string) string {
 	}
 }
 
+// observeBeforeLiveness is a test seam and nothing else: nil in every real
+// build. It runs between observe's evidence reads and its liveness check,
+// which is exactly where a supervisor settling and exiting used to be misread
+// as a lost attempt. A test uses it to settle the attempt at that instant and
+// prove the answer is still 'failed', never 'lost'.
+var observeBeforeLiveness func()
+
 // observe answers the state and the sentence that says WHY, in the order the
 // evidence has to be read.
 func (e *Executor) observe(st *store, record *attemptRecord) (state, detail string) {
@@ -103,7 +110,6 @@ func (e *Executor) observe(st *store, record *attemptRecord) (state, detail stri
 	}
 
 	report, hasReport := e.readReport(record)
-	settled := st.settled()
 
 	// Durable evidence first, and only then anything about a process. A
 	// worker that wrote its report and whose supervisor was then killed has
@@ -117,10 +123,27 @@ func (e *Executor) observe(st *store, record *attemptRecord) (state, detail stri
 			record.ResultPath, report.Status, commits, short(record.BaseSHA))
 	}
 
+	if observeBeforeLiveness != nil {
+		observeBeforeLiveness()
+	}
 	if e.alive(st, record) {
 		return StateRunning, ""
 	}
 
+	// Settlement is read AFTER liveness, never before it. The supervisor
+	// writes runner.exit atomically and only then exits, so once no process is
+	// alive the marker is final — whereas a value read before the liveness
+	// check can be stale by the time it is used.
+	//
+	// It used to be read at the top of this function. That opened a window:
+	// read settled=false, the supervisor then settles and exits, alive()
+	// re-reads the marker and correctly answers 'not alive' BECAUSE it is
+	// settled — and this function, still holding the stale false, reported a
+	// cleanly finished attempt as LOST. Lost makes the run refuse and stop.
+	// The window is microseconds on a fast machine and real on a 2-vCPU CI
+	// runner, where it failed TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt
+	// three times in one day as 'nobody can say whether it is running'.
+	settled := st.settled()
 	if settled {
 		if !e.guarded("settle_from_evidence") {
 			// With the guard off, nothing settles an attempt but the claimer
