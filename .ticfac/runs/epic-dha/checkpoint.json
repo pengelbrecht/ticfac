@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 14,
-  "state": "running",
-  "reason": "6na is refused its close: a drafted finding is untriaged",
-  "updated_at": "2026-09-19T22:34:59Z",
+  "sequence": 15,
+  "state": "failed",
+  "reason": "6na reported 1 finding(s) nobody has triaged — \"A worker agent's git still shares the operator's rerere cache; its pinned environment does not disable it\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding dha e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding dha e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding dha e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd under .ticfac/runs/epic-dha/findings/ on origin",
+  "updated_at": "2026-09-19T22:35:04Z",
   "ticks": [
     {
       "tick_id": "4sb",
