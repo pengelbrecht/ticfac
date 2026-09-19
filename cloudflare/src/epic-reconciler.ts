@@ -16,7 +16,11 @@
  * evidence (an attempt's marker on the run branch and the executor's own
  * four operations — never a claim's word for its own progress), same
  * refusals (a wave-full claim is a retry; a human gate is a hold, not a
- * failure of the work). `planFrom`, the window and the settle loop below are
+ * failure of the work). A role job's answer is durable evidence too, the
+ * same way it is locally: the review and closeout exchanges land on the run
+ * branch as the contract's decision records, so a restart re-reads them
+ * instead of re-asking a model it already paid. `planFrom`, the window and
+ * the settle loop below are
  * ports of those pieces, re-expressed for a host that cannot run tk
  * (tracker access goes through `tracker-client.ts`, the contract-held
  * implementation of §3.1).
@@ -41,7 +45,6 @@ import type { Env } from "./index";
 import {
   type Checkpoint,
   provenance,
-  type ROLES,
   RunStateStore,
   type TickState,
   terminalState,
@@ -227,6 +230,17 @@ export function tryOf(
 }
 
 /**
+ * Whether a tick's deliverable is an ANSWER rather than a change — the port
+ * of `internal/reconcile`'s `isRoleJob` (profiles.go): review and closeout
+ * run through the same executor as any implementation tick, but what the
+ * reconciler acts on is the answer they return, and that answer is what the
+ * run-state contract's decision record exists to hold.
+ */
+export function isRoleJob(role: string): boolean {
+  return role === "review-epic" || role === "closeout-epic";
+}
+
+/**
  * The number a new recorded exchange takes. Decision numbers are run-wide
  * identity, the same rule attempt numbers answer to: a number names its
  * record and every citation of the exchange.
@@ -239,7 +253,7 @@ export function nextDecisionNumber(decisions: Array<{ decision: number }>): numb
   return number;
 }
 
-/** The minimal shape a decision is adopted by: its number, role and request. */
+/** The minimal shape a recorded exchange is adopted by. */
 type DecisionKey = {
   decision: number;
   role: string;
@@ -268,10 +282,11 @@ function decisionFor(
 }
 
 /**
- * Whether an executor report carries the shape the settle acts on. An answer
- * outside the closed vocabulary is not recorded as a decision — an
- * unvalidated response landing as one is how a hallucinated wave gets
- * dispatched — and settles as an attempt that left nothing.
+ * Whether an executor report carries the shape the settle acts on. The
+ * collect of a role job IS the answer this host records — an answer outside
+ * the closed vocabulary is not recorded as a decision, and settles as an
+ * attempt that left nothing, the same closed-envelope rule the local
+ * `collectRole` holds a role result to.
  */
 function reportIsShaped(report: {
   outcome?: unknown;
@@ -288,14 +303,12 @@ function reportIsShaped(report: {
 }
 
 /**
- * The phase a recorded exchange names: the review and closeout roles name
- * their own phases, everything else was settled after the wave that
- * dispatched it. The closed vocabulary is `$defs.phase`'s.
+ * The phase a recorded exchange names — the same mapping the local
+ * reconciler's `phaseFor` makes, and the same closed vocabulary
+ * `$defs.phase` pins.
  */
-function decisionPhase(role: string): "review" | "closeout" | "post-wave" {
-  if (role === "review-epic") return "review";
-  if (role === "closeout-epic") return "closeout";
-  return "post-wave";
+function decisionPhase(role: string): "review" | "closeout" {
+  return role === "review-epic" ? "review" : "closeout";
 }
 
 // ----------------------------------------------------------- the reconciler ---
@@ -541,7 +554,7 @@ export class EpicReconciler {
 
     // ---- settle: every in-flight attempt, from durable evidence.
     let stateChanged = false; // any row mutation this pass — settle or dispatch
-    const decisions: DecisionKey[] = await store.decisions();
+    const decisions = (await store.decisions()) as DecisionKey[]; // recorded exchanges, read once and shadowed below
     for (const [tickID, row] of [...rows]) {
       if (row.state === "reported") {
         // Reported by an earlier pass (or an earlier incarnation): the work
@@ -582,34 +595,34 @@ export class EpicReconciler {
           dispatched: dispatchedThisPass,
         };
       }
-      // The exchange's role is the plan's: on the local host review and
-      // closeout run as role jobs whose validated answers are recorded as
-      // decisions; on this host they are plan entries dispatched as attempts,
-      // and the collect of such an attempt is the same exchange.
-      const role = (plan.find((entry) => entry.tick_id === tickID)?.role ??
-        "implement-tick") as (typeof ROLES)[number];
-      const recorded = decisionFor(decisions, role, tickID, attempt);
+      // The exchange's role is the plan's: a review or closeout attempt's
+      // collect is the role-job EXCHANGE — the answer the local reconciler
+      // records as a decision before it decides anything on it. Here that
+      // answer lands on the run branch too, so a restart re-reads it instead
+      // of re-asking a model it already paid.
+      const role = plan.find((entry) => entry.tick_id === tickID)?.role ?? "implement-tick";
+      const recorded = isRoleJob(role) ? decisionFor(decisions, role, tickID, attempt) : null;
       let report: AttemptReport;
       if (recorded !== null && reportIsShaped(recorded.response)) {
         // A decision already names this exact exchange: re-READ it, never
         // re-ask it. This is what makes a Workflow restart recoverable with
-        // no database and a wiped executor — the answer is on the branch.
+        // a wiped executor — the answer is on the branch (SPEC §10.4).
         report = recorded.response;
       } else {
         const status = await executor.inspect(marker.job_handle); // adopted by identity
         if (status.state === "running") continue;
         report = await executor.collect(marker.job_handle);
-        if (reportIsShaped(report)) {
+        if (isRoleJob(role) && reportIsShaped(report)) {
           // The request and the validated response land together, with
-          // provenance — the contract's decision record, so a resumed run
-          // re-reads the answer instead of paying for it twice. A refused
-          // create is another incarnation's record standing: a decision is
-          // never rewritten, and this pass proceeds on the answer it already
-          // collected either way.
+          // provenance — the contract's decision record, create-if-absent:
+          // a refused create is another incarnation's record standing, a
+          // decision is never rewritten, and this pass proceeds on the
+          // answer it already collected either way. A shadow keeps later
+          // numbers in this pass honest against what the ref may hold.
           const number = nextDecisionNumber(decisions);
-          await store.recordDecision({
+          const outcome = await store.recordDecision({
             decision: number,
-            role,
+            role: role as "review-epic" | "closeout-epic",
             request: {
               tick_id: tickID,
               epic_id: store.epicID,
@@ -625,20 +638,14 @@ export class EpicReconciler {
             answered_at: new Date().toISOString(),
             provenance: { ...marker.provenance, phase: decisionPhase(role) },
           });
-          // A shadow either way, so the numbers of later decisions in this
-          // pass stay honest against what the ref may already hold.
-          decisions.push({
-            decision: number,
-            role,
-            request: {
-              tick_id: tickID,
-              epic_id: store.epicID,
-              attempt,
-              write_ref: writeRefFor(store.runID, tickID, attempt),
-              role,
-            },
-            response: { outcome: report.outcome, commits: report.commits, detail: report.detail },
-          });
+          if (outcome.state === "created" || outcome.state === "conflict_exists") {
+            decisions.push({
+              decision: number,
+              role: role as "review-epic" | "closeout-epic",
+              request: { tick_id: tickID, attempt },
+              response: { outcome: report.outcome, commits: report.commits, detail: report.detail },
+            });
+          }
         }
       }
       if (report.outcome === "done" && report.commits > 0) {

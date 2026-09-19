@@ -72,7 +72,12 @@ export const TICK_STATES = [
   "closed",
 ] as const;
 
-/** The closed role vocabulary (`$defs.role`): every LLM call is a bounded job. */
+/**
+ * The closed role vocabulary (`$defs.role`), the contract's order: every LLM
+ * call is a bounded job. Mirrors `internal/runstate.Roles`; the tests assert
+ * this equals the pinned bundle's enum, so a bundle bump that does not pass
+ * through this file fails the build.
+ */
 export const ROLES = [
   "plan-epic",
   "implement-tick",
@@ -154,7 +159,10 @@ export type AttemptRecord = {
 /**
  * One role-job exchange, at `decisions/<n>.json`: the request that was made
  * and the VALIDATED response that came back, with provenance — the record a
- * restart re-reads rather than re-asking a model for.
+ * restart re-reads rather than re-asking a model for. The same shape
+ * `internal/runstate`'s `Decision` writes for a local run; `response`'s
+ * fields are owned by the role-result contract, which is why this module
+ * pins the envelope rather than the answer's shape.
  */
 export type DecisionRecord = {
   schema_version: number;
@@ -444,14 +452,14 @@ export class RunStateStore {
   }
 
   /** One recorded exchange, by number — null when the ref holds none. */
-  async decision(n: number): Promise<DecisionRecord | null> {
-    const file = await this.store.read(decisionPath(this.runID, n));
+  async decision(decision: number): Promise<DecisionRecord | null> {
+    const file = await this.store.read(decisionPath(this.runID, decision));
     if (file === null) return null;
     const parsed = JSON.parse(file.content) as DecisionRecord;
     const problem = validateDecision(parsed);
     if (problem !== null) {
       throw new Error(
-        `the run branch holds an unreadable decision ${n} for ${this.runID}: ${problem}`,
+        `the run branch holds an unreadable decision ${decision} for ${this.runID}: ${problem}`,
       );
     }
     return parsed;
@@ -474,7 +482,8 @@ export class RunStateStore {
   /**
    * Records one exchange, create-if-absent: a validated decision is a thing a
    * model was paid for once, so `conflict_exists` is another incarnation's
-   * record standing, never an error — and never overwritten.
+   * record standing — reported, never an error, and never overwritten. The
+   * same create-if-absent rule `PutDecision` answers to in the Go store.
    */
   async recordDecision(
     record: Omit<DecisionRecord, "schema_version" | "provenance"> & { provenance?: Provenance },
@@ -486,8 +495,7 @@ export class RunStateStore {
     };
     const problem = validateDecision(full);
     if (problem !== null) throw new Error(problem);
-    const path = decisionPath(this.runID, full.decision);
-    const result = await this.store.create(path, {
+    const result = await this.store.create(decisionPath(this.runID, full.decision), {
       content: encodeRecord(full),
       message: `ticfac run ${this.runID}: record decision ${full.decision} (${full.role})`,
     });

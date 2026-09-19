@@ -75,12 +75,12 @@ func TestTheCloseoutSeesCIPastItsOwnCheckpointCommits(t *testing.T) {
 
 // TestTheCloseoutSeesCIPastEveryRunStateRecord is tick 9fc's half of the
 // 9da demonstration. 9da proved the fix for checkpoint writes alone; 9fc
-// moves attempt and decision records onto the same branch, so a close-out
+// moves attempt and decision records onto the same branch too, so a close-out
 // now writes MORE run state while it waits for the CI it gates on — every
 // record kind it can produce, not just the checkpoint. The demonstration the
-// tick demands, not an assumption: a head whose entire recent history is run
-// state of every kind, CI green one commit before any of it, and the
-// close-out still reaches a verdict about this tree's code.
+// tick demands, not an assumption: a head whose recent history is run state of
+// every kind, CI green one commit before any of it, and the close-out still
+// reaches a verdict about this tree's code.
 func TestTheCloseoutSeesCIPastEveryRunStateRecord(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
