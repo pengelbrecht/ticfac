@@ -2,13 +2,14 @@
   "id": "4sb",
   "title": "The forge cannot write to a PR at all, so nothing can be carried onto it",
   "description": "internal/forge/forge.go offers only Find, Open and CI. There is no comment, no body update — no way to put anything on a pull request after it is opened. internal/reconcile/closeout.go opens the epic PR with a FIXED 'PR + CI rule' body.\n\nSo a person merging an epic sees CI status and nothing else. Not the review's verdict, not its findings. On this epic that means they would not see a review that said NOT READY.\n\nTHIS IS A HARD PREREQUISITE FOR aqm. The operator decided on 2026-09-19 that untriaged findings stop holding the run and are carried to the epic PR instead. That decision cannot be implemented at all until the forge can write, and shipping the first half alone — dropping the hold without gaining the PR text — removes a safety net and puts nothing in its place.\n\nWork:\n- Give forge a way to write: update the PR body, or post a comment, or both. Pick one and say why, since 'append a comment' and 'own the body' behave differently when a run resumes and writes twice.\n- Make it idempotent. A resumed close-out must not post the findings again; the durable record is the findings themselves, and the PR is a view of them.\n- The close-out then composes the body from the review decision and the run's findings.\n\nFrom pxc, finding (Go host, distinct from cxk which covers the TypeScript port).",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "The epic PR carries the final review's verdict and every finding's text, written idempotently across a resumed close-out",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:57:36.089006Z",
-  "updated_at": "2026-09-19T21:37:10.436955Z"
+  "updated_at": "2026-09-19T21:38:03.500497Z",
+  "started_at": "2026-09-19T21:38:03.500497Z"
 }
