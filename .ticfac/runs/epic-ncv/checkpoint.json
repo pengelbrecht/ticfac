@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 92,
-  "state": "publishing",
-  "reason": "closing 9fc behind the integrated gate on 97e81037b183",
-  "updated_at": "2026-09-19T12:19:44Z",
+  "sequence": 93,
+  "state": "running",
+  "reason": "9fc is closed",
+  "updated_at": "2026-09-19T12:19:59Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "9fc",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
