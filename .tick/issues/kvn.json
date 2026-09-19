@@ -1,0 +1,13 @@
+{
+  "id": "kvn",
+  "title": "Attempt disposal deletes the branch before removing the worktree that holds it, so neither goes",
+  "description": "Observed live on z23, epic ncv, 2026-09-18:\n\n    cleaned_up z23 the attempt was not disposed: delete the attempt branch:\n    git branch -D ticfac/run-epic-ncv/tick-z23/attempt-2: exit status 1:\n    error: cannot delete branch '...' used by worktree at\n    '/Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-ncv-tick-z23-attempt-2'\n\nThe order is backwards. git refuses to delete a branch a worktree has checked out, so the branch delete fails, disposal reports 'not disposed', and BOTH the branch and the worktree survive. Every attempt leaks one of each.\n\nThis is not theoretical accumulation. Right now this checkout carries eleven worktrees from epic 9pd — an epic that merged and closed days ago — plus four stale gate/tracker trees under /var/folders. Each pins its branch, and each branch pins its objects, so this compounds with qqy (leaked refs pinning deleted branches against gc): qqy explains why deleted branches' objects survive, and this explains why the branches are not deleted in the first place.\n\nWork:\n- Remove the worktree FIRST (git worktree remove, or --force when the tree is dirty and the attempt is settled), then delete the branch.\n- A failure to remove the worktree must not silently leave the branch: report which step failed and what is left behind, by path.\n- Prune what is already leaked: a disposal pass that removes worktrees for attempts of CLOSED runs. Do not touch a live run's trees.\n- Test: dispose an attempt whose worktree still exists, and assert both are gone.\n\nRelated: qqy (leaked refs). Found while running Phase 4.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Disposing a settled attempt removes its worktree and then its branch, leaving neither; a failure names which step failed and what remains",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:41:59.054889Z",
+  "updated_at": "2026-09-18T16:41:59.054889Z"
+}

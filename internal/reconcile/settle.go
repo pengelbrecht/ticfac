@@ -308,6 +308,7 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,
+		RemoteRetry: r.remoteRetry(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)

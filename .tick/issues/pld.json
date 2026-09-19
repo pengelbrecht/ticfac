@@ -1,0 +1,13 @@
+{
+  "id": "pld",
+  "title": "Decide the canonical spelling of contract file paths after the cloudflare move",
+  "description": "The pinned bundle's lifecycle-invariants.json names cloud/factory/** in its `today` sites and threshold `file` paths. ticfac's copy now lives at ticfac/cloudflare, so l9n added a reader-side mapping (contractSourcePath in internal/factory/lifecycle/contract_test.go) and correctly left the contract itself untouched — a consumer does not get to rewrite a shared contract to suit its own layout.\n\nThat mapping is now an undocumented convention that the NEXT consumer will re-derive independently, which is how two readers end up disagreeing about the same contract.\n\nDecide at the next bundle cut, and write the decision down:\n (a) the cloud/factory/** paths stay canonical-as-ticks, and the reader-side mapping becomes the documented permanent shape, or\n (b) the bundle carries a location-neutral spelling and every consumer drops its mapping.\n\nWhichever wins, the losing option should be impossible to adopt by accident — a test or a bundle-check, not a comment.\n\nFound by l9n, run epic-ncv, finding 0c0654b2.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The bundle documents one canonical spelling; contractSourcePath either matches the documented mapping or is deleted; a check fails if a consumer re-derives its own",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:21:27.533126Z",
+  "updated_at": "2026-09-18T16:21:27.533126Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "ips",
+  "title": "run-epic should refuse a profiles set that cannot adopt the run's own attempts",
+  "description": "Resuming epic-ncv died twice with:\n\n    inspect the adopted attempt of l9n: handle names executor \"herdr\"; this is local-subprocess\n\nCause: the run was originally dispatched with -profiles profiles-herdr (executor: herdr) and resumed WITHOUT the flag, so it loaded profiles/ (executor: local-subprocess). The subprocess executor was then handed a handle herdr had written, and refused it — correctly, at the deepest possible point.\n\nThe refusal is right; its TIMING is wrong. Everything needed to know this resume cannot work is on disk BEFORE the first dial: the run's recorded attempts name their executor, and the profiles set names the one this process will build. Instead the run claims the lock, refreshes the base, adopts, and dies inside inspect — so the operator sees a dead run rather than a refused one, and z23 kept running under an orchestrator that was gone.\n\nThis is the same shape as the errors epic 9pd's retro called 'unreachable because it needed the command to RETURN': the check exists but fires too late to be the thing that prevents the damage.\n\nWork:\n- At run start, compare the executor each live recorded attempt was dispatched under against the executor the loaded profiles resolve to. Disagreement is a REFUSAL that names both, names the flag, and exits before claiming anything.\n- The message must say what to pass, since the fix is one flag and the operator cannot guess the directory name.\n- Consider whether the profiles set belongs in the run's durable state at all: a run that records which profiles dispatched it can refuse a mismatched resume without the operator having to remember.\n\nFound while resuming Phase 4 (epic ncv) on 2026-09-18; cost two run deaths.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Resuming a run with a profiles set whose executor disagrees with the recorded attempts refuses before claiming the run, names both executors and the flag that fixes it, and leaves no run_died in the feed",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T16:27:58.080163Z",
+  "updated_at": "2026-09-18T16:27:58.080163Z"
+}

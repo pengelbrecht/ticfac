@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -79,6 +80,17 @@ const (
 	// enough that a person reading the line still has most of the attempt's
 	// budget to spend.
 	DefaultStallWarnAfter = 15 * time.Minute
+
+	// DefaultProgressProbeEvery is how often a live attempt's worktree is
+	// measured for the liveness record (tick dh1). It is NOT the poll
+	// interval and must not become one: the poll is the keepalive, five
+	// seconds on both local executors so a stop lands within one poll of the
+	// bound, while the probe walks a whole worktree. A minute is far finer
+	// than the question it answers — "has this agent written anything since
+	// it started" against a fifteen-minute stall threshold and an hour-long
+	// bound — and it keeps the walk off the keepalive's cadence, where every
+	// future shortening of the poll would have made it silently dearer.
+	DefaultProgressProbeEvery = time.Minute
 )
 
 // Tracker is the tracker surface the reconciler uses. It is exactly the tk
@@ -395,6 +407,13 @@ type Options struct {
 	// attempt.
 	StallWarnAfter time.Duration
 
+	// ProgressProbeEvery is how often one in-flight attempt's worktree is
+	// measured for the liveness record (tick dh1). Zero is the default
+	// (DefaultProgressProbeEvery). It bounds a WALK, not a verdict: nothing
+	// it measures stops, rejects or holds anything, and a run that probes
+	// less often merely keeps a coarser account of itself.
+	ProgressProbeEvery time.Duration
+
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
 	// reported.
@@ -418,6 +437,14 @@ type Options struct {
 	// a clock advance, so that a cadence measured in minutes is testable in
 	// milliseconds without the cadence itself being a test-only number.
 	Sleep func(time.Duration)
+
+	// RemoteRetry bounds how long a transient remote git failure is waited
+	// through before the run stops for it (tick enj). The zero value is the
+	// default bound. Its Report is IGNORED and replaced with the run's own:
+	// the place a retry has to be said is the run's event feed, and a caller
+	// choosing otherwise would be choosing the silence the bound exists to
+	// break.
+	RemoteRetry runstate.RemoteRetry
 
 	// guardsOff disables one named guard, for the invariants suite's negative
 	// control. Names are contracts/lifecycle-invariants.json's guard names.
@@ -485,6 +512,12 @@ type Reconciler struct {
 	feed         *runfeed.Feed
 	feedErr      error
 	feedPrepared bool
+
+	// progressProbe is how often a live attempt's worktree is walked for the
+	// liveness record, and livenessErr the first error writing it — exhaust
+	// beside the feed, and never fatal for the same reason (liveness.go).
+	progressProbe time.Duration
+	livenessErr   error
 
 	now   func() time.Time
 	sleep func(time.Duration)
@@ -576,6 +609,14 @@ const (
 	// claimed, so "why was this expensive" is a question the run's own
 	// record answers.
 	StageTierDerived = "tier_derived"
+	// StageReplanned is the line a run owes an operator when the plan it is
+	// working stops matching the graph it came from (tick g50): an attempt
+	// settled, the tracker was read again, and a tick that was sequenced
+	// behind it — or behind something that closed elsewhere while the run was
+	// going — is no longer blocked and moves up. Without it the feed shows a
+	// tick from "a later wave" being dispatched beside wave 1 and nothing
+	// anywhere says why.
+	StageReplanned = "replanned"
 
 	// The findings channel (tick 7vn): one stage for the first draft of a
 	// finding, one for every repeat — a repeat proposes nothing new, and the
@@ -670,6 +711,21 @@ const (
 	// had no way to know it had produced nothing for 40 of them; a person
 	// caught it by reading the pane.
 	StageStallWarned = "stall_warned"
+
+	// StageRemoteRetried and StageRemoteExhausted are the two halves of a
+	// transient remote failure's story (tick enj). A connection the remote
+	// reset is waited through instead of killing the run, and the feed says
+	// so as it happens: a silent retry is how a real outage looks healthy,
+	// and a run that went quiet for four minutes must read as a run stuck on
+	// the network rather than as a run that is thinking.
+	//
+	// They are run-level lines, carrying no tick: the fetch that died in run
+	// epic-ncv was a tracker read, and which tick's record it happened to be
+	// reading is not what a person needs told. The exhausted line names the
+	// ATTEMPT COUNT, because "the remote reset us four times" and "the remote
+	// reset us" are the same sentence about two different remotes.
+	StageRemoteRetried   = "remote_retried"
+	StageRemoteExhausted = "remote_exhausted"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -730,6 +786,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.StallWarnAfter == 0 {
 		opts.StallWarnAfter = DefaultStallWarnAfter
+	}
+	if opts.ProgressProbeEvery <= 0 {
+		opts.ProgressProbeEvery = DefaultProgressProbeEvery
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -858,7 +917,8 @@ func New(opts Options) (*Reconciler, error) {
 		}
 	}
 
-	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote}
+	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote,
+		retry: r.remoteRetry()}
 	if _, err := g.run("", "rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("reconcile: %s is not a git repository: %w", opts.Repo, err)
 	}
@@ -876,6 +936,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.stepCap = opts.StepCap
 	r.executors = theExecutors(opts.Executors)
 	r.feed = runfeed.Open(opts.Repo, opts.RunID)
+	r.progressProbe = opts.ProgressProbeEvery
 	r.now = opts.Now
 	r.sleep = opts.Sleep
 	r.guardsOff = opts.guardsOff
@@ -911,6 +972,30 @@ func (r *Reconciler) Journal() []Event { return append([]Event{}, r.journal...) 
 // nothing ever read it, and a feed failure nobody can see is
 // indistinguishable from a feed with nothing in it.
 func (r *Reconciler) FeedError() error { return r.feedErr }
+
+// remoteRetry is the bound the run waits through a transient remote failure
+// with, reporting into the run's own journal and feed (tick enj).
+//
+// The Report the caller may have set in Options is deliberately discarded
+// here: the run's feed is the ONE place this belongs. A retry that is not in
+// the feed is a run that looks like it stopped emitting, which is exactly
+// what an operator reads as a hang — and a run that gave up after four
+// attempts must be readable as that, not as a run that failed once.
+func (r *Reconciler) remoteRetry() runstate.RemoteRetry {
+	retry := r.opts.RemoteRetry
+	retry.Report = func(n runstate.RemoteRetryNotice) {
+		if n.GaveUp {
+			r.record("", StageRemoteExhausted,
+				"%s failed on all %d attempts, every one a transient remote failure; the run stops rather than "+
+					"waiting past its bound: %v", n.What, n.Of, n.Err)
+			return
+		}
+		r.record("", StageRemoteRetried,
+			"%s failed transiently (attempt %d of %d); waiting %s and trying again: %v",
+			n.What, n.Attempt, n.Of, n.Wait, n.Err)
+	}
+	return retry
+}
 
 func (r *Reconciler) record(tick, stage, format string, args ...any) {
 	event := Event{At: r.now(), Tick: tick, Stage: stage, Detail: fmt.Sprintf(format, args...)}
@@ -1028,6 +1113,15 @@ type Result struct {
 	// file that will never appear. So it is surfaced here rather than
 	// collected and never read, and the run is NOT failed over it.
 	FeedError error
+
+	// LivenessError is the liveness record's own write failure, if it had
+	// one (tick dh1). The same class of fact as FeedError and never a verdict
+	// either: the run settled as it says it did, but nothing was written to
+	// `.ticfac/logs/<run-id>/liveness.jsonl`, so the question this record
+	// exists to answer afterwards — what was each attempt actually doing —
+	// has no evidence behind it for this run. Surfaced rather than collected
+	// and never read, for exactly the reason d6s gives.
+	LivenessError error
 }
 
 // Run reconciles the epic until there is nothing dispatchable left, or until
@@ -1077,6 +1171,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,
+		RemoteRetry: r.remoteRetry(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
@@ -1222,7 +1317,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 func (r *Reconciler) result(state runstate.State, reason string) *Result {
 	out := &Result{RunID: r.runID, EpicID: r.opts.EpicID, State: state, Reason: reason,
-		Ticks: r.ticks, Failure: r.failure, FeedError: r.feedErr}
+		Ticks: r.ticks, Failure: r.failure, FeedError: r.feedErr, LivenessError: r.livenessErr}
 	for _, ts := range r.ticks {
 		switch ts.State {
 		case "closed":
@@ -1254,6 +1349,21 @@ type planEntry struct {
 	Labels   []string
 	// Blocks is how many ticks this one blocks: the graph-position fact.
 	Blocks int
+
+	// BlockedBy is the other direction, and the one the window's boundary is
+	// made of: the ticks this one is sequenced behind that the graph did NOT
+	// report closed. A wave number says where the tracker layered a tick at
+	// one moment; this says WHY, and a reason survives a graph that has moved
+	// while a number does not (tick g50). A blocker the graph does not carry
+	// at all is kept rather than dropped — it is outside this epic, so it is
+	// never something this run is holding, and guessing it closed would be
+	// guessing about a tracker nobody read.
+	BlockedBy []string
+}
+
+// blockedBy reports whether this entry is sequenced behind one named tick.
+func (e planEntry) blockedBy(tick string) bool {
+	return slices.Contains(e.BlockedBy, tick)
 }
 
 // planFrom turns the graph into the order this run dispatches in.
@@ -1263,30 +1373,60 @@ type planEntry struct {
 // rather than trusting the wave numbers is deliberate: a skeleton tick that
 // landed in the wrong wave would otherwise review an epic that is not finished.
 func planFrom(graph tk.Graph) []planEntry {
+	closed := map[string]bool{}
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.Status == "closed" {
+				closed[task.ID] = true
+			}
+		}
+	}
 	var out []planEntry
 	seen := map[string]bool{}
 	for _, wave := range graph.Waves {
 		for _, task := range wave.Tasks {
-			if seen[task.ID] || task.Status == "closed" {
+			if seen[task.ID] || closed[task.ID] {
 				continue
 			}
 			seen[task.ID] = true
 			out = append(out, planEntry{
 				TickID: task.ID, Title: task.Title, Wave: wave.Wave, Role: RoleOf(task),
 				Priority: task.Priority, Type: task.Type, Labels: task.Labels, Blocks: len(task.Blocks),
+				BlockedBy: openBlockers(task.BlockedBy, closed),
 			})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if a, b := skeletonRank(out[i].Role), skeletonRank(out[j].Role); a != b {
-			return a < b
-		}
-		return out[i].Wave < out[j].Wave
-	})
+	sortPlan(out)
 	for i := range out {
 		out[i].Order = i + 1
 	}
 	return out
+}
+
+// openBlockers is a task's blockers with the ones the graph itself reports
+// closed taken out, because a closed blocker blocks nothing.
+func openBlockers(blockedBy []string, closed map[string]bool) []string {
+	var open []string
+	for _, id := range blockedBy {
+		if !closed[id] {
+			open = append(open, id)
+		}
+	}
+	return open
+}
+
+// sortPlan puts a plan in the order the run dispatches it: the skeleton's
+// rank first, then the wave. It is a function rather than two copies of one
+// comparison because the plan is sorted twice — once when it is derived and
+// again whenever it is re-derived (window.go) — and a run that ordered the two
+// differently would dispatch in an order nothing stated.
+func sortPlan(entries []planEntry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		if a, b := skeletonRank(entries[i].Role), skeletonRank(entries[j].Role); a != b {
+			return a < b
+		}
+		return entries[i].Wave < entries[j].Wave
+	})
 }
 
 // skeletonRank is the ONE place the EPIC-SKELETON's ordering lives: work

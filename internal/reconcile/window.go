@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -146,7 +147,138 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			r.announceAbandoned(live)
 			return failed, nil
 		}
+
+		// An attempt has settled, which is the only moment the readiness of
+		// any OTHER tick of this epic can have changed — so it is the moment
+		// the plan is asked whether it still describes the graph it came from.
+		plan, queue, err = r.replan(ctx, plan, queue)
+		if err != nil {
+			return nil, err
+		}
 	}
+}
+
+// replan re-derives what the run has left to do from a fresh read of the epic
+// graph, and reports the plan and the remaining queue to work from.
+//
+// The plan a run is handed is a SNAPSHOT: `tk` assigns wave numbers by
+// layering the dependency graph at the moment it is asked, so a tick whose
+// blocker was still open at run start is recorded in a later wave and carries
+// that number for the rest of the run. When the blocker closes — by this run,
+// or by a person while it is going — the dependent does not move up. It stays
+// stranded in a wave describing a graph that no longer exists, and the window
+// refuses to admit it because the number says so.
+//
+// That is not a small inefficiency. Measured on epic ncv (tick g50): three
+// free slots, two ticks whose only blocker had closed eighteen minutes
+// earlier, and zero dispatches — the ticks appear ZERO times in the run's
+// hundred-event feed, while a fresh read of the same graph put all three in
+// one wave. The run drains, finishes, and a person restarts it to re-plan. The
+// cost is one whole run incarnation per dependency edge, which is what "we
+// have gone very sequential" was.
+//
+// So the tracker is asked again. It is the authority on what is closed —
+// settleBeforeDispatch already re-reads it per tick for exactly that reason —
+// and the wave numbers it layers now are about the graph as it now is. What is
+// re-derived is only the two facts that go stale, the wave and the open
+// blockers; everything the tier derivation is a function of is left exactly as
+// PLANNING recorded it, because a derivation that changed under a tick between
+// one attempt and the next would be a routing decision nothing recorded.
+//
+// A graph the tracker cannot answer for stops the run rather than being
+// guessed at, the same way settleBeforeDispatch's read does: the alternative
+// is dispatching against a readiness nobody confirmed.
+func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]planEntry, []planEntry, error) {
+	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reconcile: re-read the epic graph of %s: %w", r.opts.EpicID, err)
+	}
+	fresh := map[string]planEntry{}
+	for _, entry := range planFrom(graph) {
+		fresh[entry.TickID] = entry
+	}
+
+	rederived := resequence(plan, fresh)
+	moved := movedTicks(plan, rederived)
+	if len(moved) == 0 {
+		return plan, queue, nil
+	}
+
+	// The composition check the admitted plan passed says nothing about this
+	// one: two ticks that declare the same file and were sequenced into
+	// different waves can now land in the SAME wave, which is precisely the
+	// wave that cannot merge.
+	//
+	// What happens then is a refusal of the RE-DERIVATION, not of the run. The
+	// run was admitted against a plan that sequences those two ticks one after
+	// the other, and working that plan dispatches nothing the composition rule
+	// objects to — so it keeps it, and says so. Refusing the run here would
+	// kill live work over a wave the run had already decided not to dispatch
+	// together, which is a worse answer than the sequencing it already has;
+	// refusing SILENTLY would be the quiet deferral composition.go refuses to
+	// make. The loud refusal still belongs at admission, where it costs
+	// nothing and where a person can re-wave the ticks.
+	if refusal := r.checkWaveComposition(rederived); refusal != nil {
+		r.record("", StageReplanned,
+			"%s is no longer blocked and would join wave %d, but the re-derived plan cannot merge, so the run "+
+				"keeps the sequencing it was admitted with and dispatches them one after the other: %s",
+			moved[0].TickID, moved[0].Wave, refusal.Message)
+		return plan, queue, nil
+	}
+
+	for _, entry := range moved {
+		r.record(entry.TickID, StageReplanned,
+			"the tracker now layers %s in wave %d rather than the wave %d it was planned into: what it was "+
+				"sequenced behind has closed since this run started, so it is admissible now and does not wait "+
+				"for a restart to be re-planned",
+			entry.TickID, entry.Wave, waveOf(plan, entry.TickID))
+	}
+	r.recordWaveCompositionDecision(rederived)
+	return rederived, resequence(queue, fresh), nil
+}
+
+// resequence refreshes a plan's graph-derived facts from a fresh reading of
+// the graph and puts it back in dispatch order.
+//
+// An entry the fresh graph does not carry keeps what it had. The tracker
+// dropping a tick means it closed it, and a closed tick is settled by
+// settleBeforeDispatch out of the tracker's own answer when the queue reaches
+// it — dropping it here instead would leave its checkpoint row reading ready
+// for a tick that is done, which is the disagreement settleClosedTicks exists
+// to repair.
+func resequence(entries []planEntry, fresh map[string]planEntry) []planEntry {
+	out := append([]planEntry{}, entries...)
+	for i := range out {
+		if now, ok := fresh[out[i].TickID]; ok {
+			out[i].Wave, out[i].BlockedBy = now.Wave, now.BlockedBy
+		}
+	}
+	sortPlan(out)
+	return out
+}
+
+// movedTicks is the ticks the re-derivation placed in a different wave — the
+// whole reason to promote a re-derived plan, and the only thing worth saying
+// about one.
+func movedTicks(before, after []planEntry) []planEntry {
+	var moved []planEntry
+	for _, entry := range after {
+		if was := waveOf(before, entry.TickID); was != 0 && was != entry.Wave {
+			moved = append(moved, entry)
+		}
+	}
+	return moved
+}
+
+// waveOf is the wave a plan places one tick in, or zero for a tick it does not
+// carry.
+func waveOf(plan []planEntry, tick string) int {
+	for _, entry := range plan {
+		if entry.TickID == tick {
+			return entry.Wave
+		}
+	}
+	return 0
 }
 
 // excuseWindow forgives the polling gap that the run itself just caused.
@@ -171,8 +303,32 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 // on that evidence instead. And a gap that exceeded the threshold is said out
 // loud, because on a substrate that really does reclaim, a 45-minute gate is
 // a thing an operator needs to know happened.
+//
+// # And it is where the stall warning was lost (tick dh1)
+//
+// The warning lives in addressOnce, so it is only ever evaluated at a POLL —
+// and pollWindow does not run while finishTick does. That gap is not small
+// and not rare: it is one tick's whole collect, integrate, gate and close.
+//
+// Measured on epic ncv, 2026-09-18. ef7 was dispatched at 16:51:29 against a
+// 900s stall threshold, so the earliest its warning could fire was 17:06:29.
+// The run's last poll before that was at 17:02:50, when vyg settled; from
+// there it was inside finishTick(vyg) — the integrated gate alone ran from
+// 17:03:24 to 17:10:08 — and at 17:10:19 vyg was refused for untriaged
+// findings, which STOPS the run. ef7 was therefore never once polled while it
+// was eligible to be warned about, and the feed carried no stall line for it
+// in that incarnation at all. The next incarnation resumed at 17:33:35 and
+// warned at its very first poll, 17:34:05: the machinery was correct the
+// whole time and simply never got a turn, 28 minutes late, with 16 of the
+// attempt's 60 minutes left to spend.
+//
+// So the moment the serial half hands the window back is a moment to look at
+// the attempts that waited through it — the same moment, and the same loop,
+// that already forgives the polling gap it caused.
 func (r *Reconciler) excuseWindow(live []*inflightAttempt, gap time.Duration) {
 	for _, fl := range live {
+		r.probeProgress(fl)
+		r.announceStall(fl)
 		if gap > r.wipeThreshold {
 			r.record(fl.entry.TickID, StageWaiting,
 				"attempt %d of %s went unpolled for %s while another tick was being integrated and gated — "+
@@ -239,8 +395,19 @@ func (r *Reconciler) adoptTicks(durable []runstate.TickState, live []*inflightAt
 // be told they are out there, and that resuming adopts them rather than
 // dispatching over them. Silence here would look exactly like the run having
 // finished with them.
+//
+// It is also the run's LAST look at them (tick dh1), which is why the probe
+// and the warning are taken here too. On epic ncv the stop came at 17:10 for
+// two attempts that had been eligible for a stall warning since 17:06 and had
+// not been polled since 17:02; the run walked away from both without ever
+// saying what it had last seen, and the person who resumed it half an hour
+// later had nothing to read. A run stopping is the moment its account of a
+// live attempt stops being added to, so the account should be current when it
+// does.
 func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 	for _, fl := range live {
+		r.probeProgress(fl)
+		r.announceStall(fl)
 		r.record(fl.entry.TickID, StageWaiting,
 			"attempt %d of %s is still running and the run is stopping for another tick's refusal: "+
 				"nothing about this attempt is lost — its marker is on the remote and its commits are on "+
@@ -265,6 +432,19 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 //   - A role job. Review and close-out are about a FINISHED epic, so they run
 //     alone: nothing else is admitted while one is in flight, and one is not
 //     admitted while anything else is.
+//
+// The boundary is read against the plan AS IT NOW STANDS — the one replan
+// re-derives when an attempt settles — and never against the wave number a
+// tick carried at run start. The rule it enforces is the semantic one, "do not
+// start work that depends on unfinished work", and a tick whose blockers have
+// all closed does not depend on anything unfinished whatever number it was
+// planned into (tick g50).
+//
+// It is stated twice because the two statements fail differently. The wave is
+// the tracker's own layering, and it is all there is to go on for a graph that
+// reports no dependency edges at all; the blocker list is the reason behind
+// the number, and it still holds when a layering is stale — which, between two
+// settlements, is exactly what a layering is.
 func (r *Reconciler) mayAdmit(next planEntry, live []*inflightAttempt, plan []planEntry) bool {
 	if len(live) == 0 {
 		return true
@@ -273,7 +453,17 @@ func (r *Reconciler) mayAdmit(next planEntry, live []*inflightAttempt, plan []pl
 		return false
 	}
 	for _, fl := range live {
-		if isRoleJob(fl.entry.Role) || fl.entry.Wave != next.Wave {
+		if isRoleJob(fl.entry.Role) {
+			return false
+		}
+		// The holder's wave as the CURRENT plan has it, not as its own entry
+		// recorded it at dispatch: that entry is what its tier was derived
+		// from and it is deliberately left alone, so the live attempt's place
+		// in the graph is asked of the plan instead.
+		if holder := waveOf(plan, fl.entry.TickID); holder != 0 && next.Wave > holder {
+			return false
+		}
+		if next.blockedBy(fl.entry.TickID) {
 			return false
 		}
 	}

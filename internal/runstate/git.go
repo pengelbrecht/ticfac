@@ -19,13 +19,18 @@ type git struct {
 	dir string
 	env []string
 
+	// retry is the bound on waiting through a transient remote failure (tick
+	// enj). It applies to the subcommands that reach the network and to
+	// nothing else — see try.
+	retry RemoteRetry
+
 	// reader is the held-open object reader (see batch.go). Nil is valid
 	// and means every read spawns its own process, which is what this store
 	// did before.
 	reader *objectReader
 }
 
-func newGit(dir, authorName, authorEmail string) *git {
+func newGit(dir, authorName, authorEmail string, retry RemoteRetry) *git {
 	env := append(os.Environ(),
 		"GIT_AUTHOR_NAME="+authorName,
 		"GIT_AUTHOR_EMAIL="+authorEmail,
@@ -40,7 +45,7 @@ func newGit(dir, authorName, authorEmail string) *git {
 	// read must not cost a process). They are independent and the store wants
 	// both.
 	env = append(env, TransportEnv()...)
-	g := &git{dir: dir, env: env}
+	g := &git{dir: dir, env: env, retry: retry}
 	g.reader = newObjectReader(dir, env)
 	return g
 }
@@ -95,7 +100,42 @@ var safeArgs = []string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}
 
 // try is run without the error wrapping: it hands back stderr so a caller that
 // must classify a refusal (a push the lease rejected) can read it.
+//
+// A subcommand that reaches the network is run through the retry bound (tick
+// enj): a connection the remote reset is waited through rather than stopping
+// the run, and everything else — a lease the remote refused, a ref that is
+// not there, a credential that is wrong — comes back on the first attempt,
+// untouched, because that is what the callers below are written against.
+//
+// A retried PUSH has one narrow seam worth stating rather than discovering.
+// If the remote accepted the push and the connection died before git read the
+// response, the retry re-pushes the same commit against a lease naming the
+// OLD head — which the remote now refuses, because the ref has moved to this
+// writer's own commit. The CAS loop above then re-examines the per-path guard
+// against origin, finds the path already written, and reports a conflict: a
+// true statement about origin, attributed to the wrong writer. It is a
+// strictly smaller failure than the one this retry removes — the run stops
+// with a typed conflict instead of dying on a transport error — and it is
+// narrower than it looks, because it needs the reset to land in the window
+// between the remote's commit and the client's read of it. Telling the two
+// apart means asking whether origin's head is this writer's own commit, which
+// is a change to the CAS and belongs with the CAS, not here.
 func (g *git) try(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	if sub, remote := RemoteSubcommand(args); remote {
+		retryErr := g.retry.Do("git "+sub, func() error {
+			stdout, stderr, err = g.once(stdin, extraEnv, args...)
+			return err
+		})
+		// The last attempt's stdout and stderr are what a caller reading a
+		// refusal out of stderr should see; the error is the bound's, which
+		// wraps that attempt's and names how many there were.
+		return stdout, stderr, retryErr
+	}
+	return g.once(stdin, extraEnv, args...)
+}
+
+// once is one invocation: no retry, no classification, just the process.
+func (g *git) once(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, err error) {
 	cmd := exec.Command(gitbin.Path(), append(append([]string{}, safeArgs...), args...)...)
 	cmd.Dir = g.dir
 	cmd.Env = append(append([]string{}, g.env...), extraEnv...)

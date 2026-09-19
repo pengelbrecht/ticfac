@@ -41,6 +41,13 @@ type Options struct {
 
 	// Now stamps records that carry no time of their own. Default time.Now.
 	Now func() time.Time
+
+	// RemoteRetry bounds how long a transient remote failure is waited
+	// through, and says where a retry is reported (tick enj). The zero value
+	// is the default bound reporting to nobody, which is right for a store
+	// opened outside a run; a run passes one whose Report writes the run's
+	// feed, because a retry nobody can see makes an outage look healthy.
+	RemoteRetry RemoteRetry
 }
 
 // Store reads and writes one run's `.ticfac/` records against origin.
@@ -100,7 +107,7 @@ func Open(o Options) (*Store, error) {
 	if s.now == nil {
 		s.now = time.Now
 	}
-	s.git = newGit(o.Repo, or(o.AuthorName, "ticfac"), or(o.AuthorEmail, "ticfac@example.com"))
+	s.git = newGit(o.Repo, or(o.AuthorName, "ticfac"), or(o.AuthorEmail, "ticfac@example.com"), o.RemoteRetry)
 	if _, err := s.git.run("rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("runstate: %s is not a git repository: %w", o.Repo, err)
 	}

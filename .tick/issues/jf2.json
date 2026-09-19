@@ -1,0 +1,13 @@
+{
+  "id": "jf2",
+  "title": "Retire the 'tk' label from factory deploy's output and its D1 column",
+  "description": "Found by vyg (run epic-ncv, finding ad7a1b78).\n\nThe deploying binary is ticfac, but three places still call its version tk:\n\n- internal/factory/deploy.go prints \"bundle \u003csha\u003e (tk \u003cversion\u003e)\" while staging — operator-facing, and wrong about which tool is speaking.\n- recordDeployment stores opts.Version (the TICFAC version) into a D1 column named tk_version, carried unchanged from the ticks-era worker in migrations/0002.\n- cloudflare/wrangler.toml's comment still says \"`tk factory deploy` rewrites database_id\".\n\nLow impact on its own. It earns a tick because this is precisely the legacy naming Phase 4 exists to retire, and the column name is DEPLOY-VISIBLE — an operator reading the deployments table is told the wrong tool shipped the bundle.\n\nThe column is the only part with a cost: renaming it needs a migration, and the old column may have rows. Decide whether to rename with a migration or to add the correctly-named column and leave the old one to die; do not leave both live and ambiguous.\n\nThe print line and the comment are free.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "No deploy path prints or stores 'tk' for the ticfac version; the D1 column's name matches what it holds, with a migration if renamed",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T17:33:09.962528Z",
+  "updated_at": "2026-09-18T17:33:09.962528Z"
+}

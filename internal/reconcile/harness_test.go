@@ -101,6 +101,14 @@ type trackerState struct {
 	// tick blocks. The real tk derives it from the tick files; the fake has no
 	// files to derive it from, so a test that cares states it.
 	Blocks map[string][]string `json:"blocks,omitempty"`
+
+	// BlockedBy is the same edge read the other way, and the one tk LAYERS by.
+	// A fixture that sets it gets tk's own behaviour instead of the declared
+	// Waves: every read re-layers the graph from what is still open, so a
+	// blocker closing moves its dependents up a wave exactly as the tracker
+	// would — which is the fact tick g50 is about. A fixture that leaves it
+	// unset keeps the fixed Waves it declared.
+	BlockedBy map[string][]string `json:"blocked_by,omitempty"`
 }
 
 func newTracker(t *testing.T, dir string) *fakeTracker {
@@ -180,6 +188,52 @@ func (f *fakeTracker) tally(name string) {
 	f.mu.Unlock()
 }
 
+// waves is the layering this tracker answers with: the declared Waves, unless
+// the fixture stated dependency edges, in which case the graph is LAYERED on
+// every read the way tk layers it — a tick sits one wave behind the latest
+// blocker of its that is still open, and a closed blocker holds nothing back.
+//
+// This is the fixture's half of tick g50. A tracker whose waves are a constant
+// cannot show the defect at all: the whole failure is that wave numbers are a
+// reading of a graph at one moment, and a fake that never re-layers agrees
+// with a stale plan forever.
+func (s trackerState) waves() [][]string {
+	if len(s.BlockedBy) == 0 {
+		return s.Waves
+	}
+	wave := map[string]int{}
+	for _, id := range s.Order {
+		wave[id] = 1
+	}
+	// One relaxation per tick settles any acyclic graph, and a cycle — which
+	// tk does not produce — simply stops moving rather than looping.
+	for range s.Order {
+		for _, id := range s.Order {
+			for _, blocker := range s.BlockedBy[id] {
+				if s.Ticks[blocker].Status == "closed" {
+					continue
+				}
+				if behind := wave[blocker] + 1; behind > wave[id] {
+					wave[id] = behind
+				}
+			}
+		}
+	}
+	var out [][]string
+	for depth := 1; depth <= len(s.Order); depth++ {
+		var layer []string
+		for _, id := range s.Order {
+			if wave[id] == depth {
+				layer = append(layer, id)
+			}
+		}
+		if len(layer) > 0 {
+			out = append(out, layer)
+		}
+	}
+	return out
+}
+
 func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) {
 	f.tally("graph")
 	state, err := f.load()
@@ -187,14 +241,15 @@ func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) 
 		return tk.Graph{}, err
 	}
 	graph := tk.Graph{Epic: tk.GraphEpic{ID: epicID, Title: "the fixture epic"}}
-	for i, wave := range state.Waves {
+	for i, wave := range state.waves() {
 		w := tk.GraphWave{Wave: i + 1, Parallel: len(wave), Ready: i == 0}
 		for _, id := range wave {
 			tick := state.Ticks[id]
 			w.Tasks = append(w.Tasks, tk.GraphTask{
 				ID: id, Title: tick.Title, Status: tick.Status, Priority: tick.Priority,
 				Type: tick.Type, Labels: tick.Labels, Role: state.Roles[id],
-				Blocks: state.Blocks[id], AgentReady: tick.Status != "closed",
+				Blocks: state.Blocks[id], BlockedBy: state.BlockedBy[id],
+				AgentReady: tick.Status != "closed",
 			})
 		}
 		graph.Waves = append(graph.Waves, w)
@@ -442,6 +497,13 @@ type fixtureOptions struct {
 	// testable in milliseconds without the number being a test-only one.
 	// Zero leaves the default.
 	stallWarn time.Duration
+
+	// progressProbe overrides how often a live attempt's worktree is walked
+	// for the liveness record (tick dh1). The fixture's default is the
+	// harness's own cadence rather than the production minute: a probe that
+	// never comes round twice in a test's lifetime would make the count the
+	// record exists for permanently null.
+	progressProbe time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -494,29 +556,39 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 	if runID == "" {
 		runID = "r-fixture"
 	}
+	// Fine against every threshold a test declares and still far coarser than
+	// the 20ms poll: the probe walks a worktree and shells out to git, and
+	// tying it to the poll here would put twelve parallel fixtures' worth of
+	// git processes on the machine and lose races that belong to other tests
+	// (settle_identity_test.go has one it already documents).
+	progressProbe := opts.progressProbe
+	if progressProbe <= 0 {
+		progressProbe = 200 * time.Millisecond
+	}
 	return Options{
-		Repo:           repo.Dir,
-		Remote:         "origin",
-		EpicID:         "qeu",
-		RunID:          runID,
-		BaseRef:        "HEAD",
-		Owner:          "ticfac-test",
-		Tracker:        f.Tracker,
-		ExecStateRoot:  f.StateRoot,
-		GateConfig:     filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:    gateTimeout,
-		PollInterval:   20 * time.Millisecond,
-		WipeThreshold:  10 * time.Second,
-		StepCap:        60 * time.Millisecond,
-		WallSeconds:    120,
-		BudgetUSD:      opts.budget,
-		CeilingUSD:     opts.ceiling,
-		PullRequests:   opts.pullRequests,
-		StallWarnAfter: opts.stallWarn,
-		Sleep:          func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:      opts.guardsOff,
-		stopAfter:      opts.stopAfter,
-		NewExecutor:    f.newExecutor,
+		Repo:               repo.Dir,
+		Remote:             "origin",
+		EpicID:             "qeu",
+		RunID:              runID,
+		BaseRef:            "HEAD",
+		Owner:              "ticfac-test",
+		Tracker:            f.Tracker,
+		ExecStateRoot:      f.StateRoot,
+		GateConfig:         filepath.Join(repo.Dir, ".tick", "runners.toml"),
+		GateTimeout:        gateTimeout,
+		PollInterval:       20 * time.Millisecond,
+		WipeThreshold:      10 * time.Second,
+		StepCap:            60 * time.Millisecond,
+		WallSeconds:        120,
+		BudgetUSD:          opts.budget,
+		CeilingUSD:         opts.ceiling,
+		PullRequests:       opts.pullRequests,
+		StallWarnAfter:     opts.stallWarn,
+		ProgressProbeEvery: progressProbe,
+		Sleep:              func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:          opts.guardsOff,
+		stopAfter:          opts.stopAfter,
+		NewExecutor:        f.newExecutor,
 	}
 }
 

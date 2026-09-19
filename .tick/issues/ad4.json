@@ -1,0 +1,13 @@
+{
+  "id": "ad4",
+  "title": "ef7 burned its full 60-minute bound and produced zero lines",
+  "description": "Attempt 5 of ef7 (repository Durable Object with one slot and one serialized publisher) ran from 16:51:29 to its wall-clock stop at 17:51:25 and wrote NOTHING. This is not inferred from a clean worktree — ticfac's own WIP snapshot at the stop, commit e66c5f03, is an EMPTY commit. Sixty minutes, zero lines.\n\nBy contrast 9fc, dispatched in the same wave against the same bound, hit the same wall clock with 433 lines and passing tests in its snapshot. So the bound is not obviously wrong for this epic; something about THIS tick or THIS worker is.\n\nRedispatching unchanged buys another hour of the same, which is what will happen by default.\n\nWorth checking, roughly in order of cheapness:\n- The prompt: ef7's is 6046 bytes. Is the tick legible, or does it ask for a design decision the worker cannot make and will not stop to ask about?\n- The observations log for attempt 5 — was the agent working and slow, or stuck early? That distinguishes 'too big' from 'cannot start'.\n- Whether the tick wants splitting. 'One slot and one serialized publisher' is two invariants and a storage design; it may simply be more than one attempt's work.\n- Whether the bound should rise for this tick specifically rather than for the whole run.\n\nDo not simply raise -wall for everything and retry: that hides the question rather than answering it, and 9fc shows the bound is survivable for a tick of ordinary size.\n\nRelated: rxe (the refusal said 'no-commits' rather than naming the wall clock), lj4 (the snapshot is never mentioned).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The reason ef7 produced nothing in an hour is identified, and the tick is either split, rescoped, or given a justified bound — not merely retried",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-18T18:36:00.198924Z",
+  "updated_at": "2026-09-18T18:36:00.198924Z"
+}
