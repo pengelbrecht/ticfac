@@ -603,9 +603,17 @@ export function renewalTtl(pollMs: number): number {
  * (`hardStopRecord`, `waveCanceller`), and treating one as a stop would kill
  * runs on a transient. `ok: false` is a verdict, and it carries WHICH of the
  * two ways the lease went.
+ *
+ * `reclaimed` is tick oen: the renewal found the lease lapsed with nobody
+ * else holding it, and the run took it back rather than stopping. It is kept
+ * apart from a plain renewal on purpose — a reclaim means the project WAS
+ * unheld for a while, which is worth an operator's attention even though it
+ * is no longer worth a run — and `detail` is the room's own account of the
+ * state it found.
  */
 export type LeaseRenewal =
-  | { ok: true }
+  | { ok: true; reclaimed?: undefined }
+  | { ok: true; reclaimed: true; detail: string }
   | { ok: false; lost: LeaseLostReason; holder: string | null; detail: string };
 
 /**
@@ -615,6 +623,26 @@ export type LeaseRenewal =
  * watched-orchestrator loop and the container wave — cannot drift into
  * answering the same question differently (`.tick/learnings.md`: if two
  * endpoints answer the same question, they must run the same check).
+ *
+ * ## A lapse is reclaimed, a take is a stop (tick oen)
+ *
+ * A renewal that answers `expired` is followed by a reclaim: the lease lapsed
+ * and no other run holds it, so the project is simply free and this run is
+ * the one that was working on it. Until tick oen that answer was a HARD stop.
+ * The acquire ttl covers a ~1-minute boot and the heartbeats cover the time
+ * after it, but nothing covers a boot, stall or step longer than the lease —
+ * `BOOT_LEASE_TTL_MS`'s own comment says "a slow boot outlives any fixed
+ * acquire ttl" — and when one happened the run stopped itself with nobody
+ * else in sight. Measured on CI (2-vCPU runner, run-workflow.test.ts's wave-2
+ * test, 200ms lease): "could not renew its lease after boot 1: ... has expired
+ * or been released — no dispatch lease is held for this project, and no other
+ * run has taken it", then a hard stop before wave 1's container ever worked.
+ *
+ * The reclaim is the room's compare-and-swap, not a second decision made
+ * here: between the renewal and the reclaim another run may have taken the
+ * lease, and then the reclaim refuses `taken` and this run stops exactly as
+ * it would have on a take — D4 is one arbiter per project, and a run that is
+ * not the arbiter must not keep writing.
  */
 export async function renewRunLease(
   env: Env,
@@ -622,7 +650,8 @@ export async function renewRunLease(
   ttlMs: number,
 ): Promise<LeaseRenewal | null> {
   try {
-    const renewed = await roomFor(env, params.project).renewDispatchLease({
+    const room = roomFor(env, params.project);
+    const renewed = await room.renewDispatchLease({
       run_id: params.run_id,
       token: params.lease_token,
       ttl_ms: ttlMs,
@@ -635,11 +664,44 @@ export async function renewRunLease(
       );
       return null;
     }
+    if (renewed.lost === "taken") {
+      return {
+        ok: false,
+        lost: "taken",
+        holder: renewed.holder?.run_id ?? null,
+        detail: renewed.detail,
+      };
+    }
+
+    const reclaimed = await room.reclaimDispatchLease({
+      run_id: params.run_id,
+      token: params.lease_token,
+      epic: params.epic,
+      origin: "cloud",
+      requested_by: params.requested_by,
+      ttl_ms: ttlMs,
+    });
+    if (reclaimed.ok) {
+      // A lease that was live after all raced a renewal; nothing lapsed.
+      if (!reclaimed.reclaimed) return { ok: true };
+      // Never silent: the project went unheld, and the line says in what
+      // state the room found it, in the room's own words.
+      console.warn(
+        `factory run-workflow: ${params.run_id} reclaimed its lapsed lease: ${reclaimed.detail}`,
+      );
+      return { ok: true, reclaimed: true, detail: reclaimed.detail };
+    }
+    if (reclaimed.error !== "lease_lost") {
+      console.error(
+        `factory run-workflow: ${params.run_id} could not reclaim its lapsed lease: ${reclaimed.detail}`,
+      );
+      return null;
+    }
     return {
       ok: false,
-      lost: renewed.lost,
-      holder: renewed.holder?.run_id ?? null,
-      detail: renewed.detail,
+      lost: "taken",
+      holder: reclaimed.holder.run_id,
+      detail: `${renewed.detail}; then, before it could be reclaimed, ${reclaimed.detail}`,
     };
   } catch (error) {
     console.error(
@@ -659,6 +721,11 @@ export async function renewRunLease(
  * ten-minute lease had simply lapsed under an eighty-eight-minute container
  * wave that renewed nothing. That message sent the diagnosis looking for a
  * competing run for as long as it stood.
+ *
+ * Since tick oen `renewRunLease` reclaims a lapsed, unheld lease instead of
+ * reporting it, so the `expired` branch is no longer reached from a renewal.
+ * It stays, worded as before, because the type still admits it and a stop
+ * that ever does reach it must not say "taken".
  */
 export function leaseLostTrip(renewal: { lost: LeaseLostReason; holder: string | null }): Trip {
   if (renewal.lost === "taken") {
@@ -1064,6 +1131,13 @@ type Observation = {
    * from a reading of zero.
    */
   cost_usd: number | null;
+  /**
+   * The room's account of a lapsed lease this look took back (tick oen).
+   * Absent on every look that renewed normally, so the checkpointed record of
+   * an ordinary look is unchanged, and present on the one that reclaimed —
+   * the watch step's return value is where a later diagnosis will look.
+   */
+  lease_reclaimed?: string;
 };
 
 type ObserveInput = {
@@ -1150,6 +1224,7 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
     trip: checked.trip,
     at_ms: at,
     cost_usd: checked.cost_usd,
+    ...(renewal?.ok === true && renewal.reclaimed ? { lease_reclaimed: renewal.detail } : {}),
   };
 }
 
@@ -1523,9 +1598,18 @@ async function supervisePass(
     // the lease had been taken or had merely lapsed threw the answer away
     // (`.tick/learnings.md`: persist a remote step's return value at its
     // return site, before anything interprets it).
+    //
+    // A boot that outlived the lease is the case tick oen is about: the lease
+    // lapsed with nobody else holding it, `renewRunLease` took it back, and
+    // this step records `reclaimed` with the room's account — never a bare
+    // `{"ok":true}` that would erase the lapse, and never the stop it used to
+    // be.
     await step.do(`${options.label}:lease:${attempt}`, OBSERVE_RETRIES, async () => {
       const renewal = await renewRunLease(env, params, renewalTtl(pollDelay(context.config, 0)));
       if (renewal === null) return { ok: false, unreadable: true };
+      if (renewal.ok && renewal.reclaimed) {
+        return { ok: true, reclaimed: true, detail: renewal.detail };
+      }
       if (renewal.ok) return { ok: true };
       console.error(
         `factory run-workflow: ${params.run_id} could not renew its lease after boot ${boot}: ` +
@@ -1885,6 +1969,9 @@ async function waveLeaseHeartbeat(
 
   const renewal = await renewRunLease(env, params, ttl);
   if (renewal === null) return null;
+  // A reclaim (tick oen) is a renewal as far as the wave is concerned: the
+  // run holds the project again and its containers work on. `renewRunLease`
+  // has already said so in the log; the only loss left to return is `taken`.
   if (renewal.ok) {
     watch.renewed_at_ms = now;
     return null;

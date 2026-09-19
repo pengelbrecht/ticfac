@@ -17,6 +17,9 @@
  *    holder cannot free its successor's lease on the way out;
  *  - **renewal tells the two failure classes apart** (`expired` vs `taken`),
  *    because the fixes for them point in opposite directions;
+ *  - **a lapsed, unheld lease can be reclaimed by its own holder** under its
+ *    own token, by compare-and-swap (tick oen) — offered, not imposed: a host
+ *    exposes `reclaim` only where continuing after a lapse is sound;
  *  - **an abandoned lease expires on a DO alarm**, so a dead writer cannot
  *    wedge the name forever — the safe outcome when a lock-holder dies is
  *    that nobody holds the lock until somebody re-derives who should.
@@ -123,6 +126,39 @@ export type RenewLeaseResult =
       lost: LeaseLostReason;
       /** Set only when `lost` is `taken`: an expired lease has no holder. */
       holder: DispatchLeaseView | null;
+      detail: string;
+    }
+  | RequestInvalid;
+
+/** What a holder presents to take back a lease that lapsed under it (tick oen). */
+export type ReclaimLeaseRequest = HolderCredentials & {
+  /** Used only when the row is already gone; a surviving row keeps its own. */
+  epic: string;
+  origin?: LeaseOrigin;
+  requested_by?: string;
+  ttl_ms?: number;
+};
+
+/**
+ * A reclaim's verdict (tick oen).
+ *
+ * `reclaimed: false` is a lease that was live and this holder's after all — a
+ * renewal that raced the one that reported the lapse — and is extended exactly
+ * as `renew` would. `reclaimed: true` is the case the method exists for, and
+ * `detail` says what state the lease was found in, because "it lapsed and the
+ * alarm had already swept it" and "it lapsed and was still sitting there" are
+ * different facts about how long the project went unheld.
+ *
+ * A refusal is always `taken`: a reclaim never answers `expired`, because an
+ * expired lease nobody else holds is precisely what it takes back.
+ */
+export type ReclaimLeaseResult =
+  | { ok: true; lease: DispatchLease; reclaimed: boolean; detail: string }
+  | {
+      ok: false;
+      error: "lease_lost";
+      lost: "taken";
+      holder: DispatchLeaseView;
       detail: string;
     }
   | RequestInvalid;
@@ -374,6 +410,101 @@ export class LeaseTable {
     const record: LeaseRecord = { ...current, expires_at: now + ttl };
     this.write(record);
     return { ok: true, lease: this.grant(record) };
+  }
+
+  /**
+   * Takes back a lease that lapsed under its holder while NOBODY ELSE holds
+   * it, under the holder's own credentials (tick oen).
+   *
+   * `renew` answers a lapsed lease `lost: expired`, and until tick oen the run
+   * read that as a stop. But a lapsed, unheld lease is a project nobody is
+   * running: no other run holds it, and none is waiting on it — a queued
+   * submission is ignited by the very alarm that sweeps an expired lease, so a
+   * run queued behind this one shows up as a LIVE lease under another holder,
+   * which is `taken`. Stopping in that state hands the project to nobody and
+   * throws the run's work away for it. Measured on CI: a wave run ignited with
+   * a 200ms lease whose boot outlived it answered `expired` at its first
+   * renewal and hard-stopped before its container ever worked — the same
+   * arithmetic as a production boot, stall or step longer than the
+   * ten-minute acquire, which nothing else covers.
+   *
+   * It is a compare-and-swap, not an acquire. The row and the clock are
+   * re-read here with no `await` between the read and the write (DO storage
+   * SQL is synchronous), so a lease another party took between the renewal
+   * that reported the lapse and this call is seen, refused as `taken`, and
+   * left exactly as it is. And it is narrower than an acquire in two ways:
+   *
+   *  - the TOKEN is the caller's own, never a fresh one. A holder's token is
+   *    its release credential and a cloud run carries it immutably in its
+   *    Workflow params, so a reclaim that rotated it would lock the run out of
+   *    every later renewal and out of its own release.
+   *  - an EXPIRED row that is somebody else's is refused, not taken. Somebody
+   *    acquired the lease after this holder's lapsed; theirs has lapsed in
+   *    turn, but it is the newer claim and theirs to reclaim. An acquire would
+   *    take it (an expired row is free to `acquire`), which is right for a
+   *    newcomer and wrong for a holder that was already superseded.
+   *
+   * What it cannot see: a run that acquired AND released inside the lapse
+   * leaves the same empty row the alarm does. The exclusivity that gap broke
+   * was broken while it was open; stopping now would not restore it.
+   */
+  reclaim(request: ReclaimLeaseRequest): ReclaimLeaseResult {
+    const complaint =
+      badText(request?.run_id, "run_id") ??
+      badText(request?.token, "token") ??
+      badText(request?.epic, "epic") ??
+      badTtl(request?.ttl_ms);
+    if (complaint !== null) return this.#invalid(complaint);
+    const runID = request.run_id;
+    const ttl = request.ttl_ms ?? DEFAULT_LEASE_TTL_MS;
+    const now = Date.now();
+
+    const current = this.read();
+    const live = current !== null && current.expires_at > now;
+    const mine = current !== null && current.run_id === runID && current.token === request.token;
+
+    if (current !== null && !mine) {
+      const holder = this.view(current);
+      return {
+        ok: false,
+        error: "lease_lost",
+        lost: "taken",
+        holder,
+        detail: live
+          ? `the ${this.#noun} is held by run ${current.run_id}, not ${runID}`
+          : `run ${current.run_id} acquired the ${this.#noun} after run ${runID}'s lapsed; ` +
+            `its own lapsed at ${holder.expires_at}, but it is the newer claim`,
+      };
+    }
+
+    const record: LeaseRecord =
+      current === null
+        ? {
+            run_id: runID,
+            token: request.token,
+            epic: request.epic,
+            origin: request.origin ?? "cloud",
+            requested_by: request.requested_by ?? null,
+            acquired_at: now,
+            expires_at: now + ttl,
+          }
+        : // Still this holder's row, so nobody has touched it since: the same
+          // lease resumes, `acquired_at` and all.
+          { ...current, expires_at: now + ttl };
+    this.write(record);
+
+    return {
+      ok: true,
+      lease: this.grant(record),
+      reclaimed: !live,
+      detail: live
+        ? `run ${runID}'s ${this.#noun} was live after all and was renewed`
+        : current === null
+          ? `run ${runID}'s ${this.#noun} had lapsed and been swept, and no other run had taken ` +
+            `it; reclaimed under the same credentials`
+          : `run ${runID}'s ${this.#noun} lapsed at ${stamp(current.expires_at)} and no other ` +
+            "run had taken it; reclaimed under the same credentials",
+    };
   }
 
   /** Compare-and-delete release, reporting the released view on success. */

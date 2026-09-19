@@ -302,6 +302,146 @@ describe("dispatch lease release (compare-and-delete)", () => {
   });
 });
 
+/**
+ * Expires the lease NOW, past the public API, instead of racing a real clock:
+ * the row stays exactly as its holder left it, only its deadline has passed —
+ * the state a renewal finds when the alarm has not swept it yet.
+ */
+async function expireLease(stub: DurableObjectStub<RunRoom>): Promise<void> {
+  await runInDurableObject(stub, (_instance, state) => {
+    state.storage.sql.exec("UPDATE dispatch_lease SET expires_at = ?", Date.now() - 1);
+  });
+}
+
+/**
+ * Tick oen. A renewal that finds the lease lapsed with no other holder used to
+ * be the end of the run, although the project was simply free. The holder now
+ * takes it back — but only by compare-and-swap, only under its own token, and
+ * never from a run that took the lease in the meantime.
+ */
+describe("dispatch lease reclaim (tick oen)", () => {
+  const reclaimAs = (run_id: string, token: string) => ({ run_id, token, epic: "ko8" });
+
+  it("takes back a lapsed lease nobody holds, under the same token and tenure", async () => {
+    const stub = room("owner/repo-reclaim-lapsed");
+    const mine = await stub.acquireDispatchLease({ run_id: "run_mine", epic: "ko8" });
+    if (!mine.ok) throw new Error("expected the acquire to win");
+    await expireLease(stub);
+    expect(await stub.leaseStatus()).toBeNull();
+
+    const back = await stub.reclaimDispatchLease(reclaimAs("run_mine", mine.lease.token));
+
+    if (!back.ok) throw new Error(`expected the reclaim to win: ${JSON.stringify(back)}`);
+    expect(back.reclaimed).toBe(true);
+    expect(back.detail).toContain("no other run had taken it");
+    // The SAME lease: the token is still the run's release credential, and
+    // nobody touched the row, so its tenure is unbroken.
+    expect(back.lease.token).toBe(mine.lease.token);
+    expect(back.lease.acquired_at).toBe(mine.lease.acquired_at);
+    await expect(stub.leaseStatus()).resolves.toMatchObject({ run_id: "run_mine" });
+    // And the room will still expire it if the run dies after all.
+    expect(await scheduledAlarm(stub)).toBe(Date.parse(back.lease.expires_at));
+    const released = await stub.releaseDispatchLease({
+      run_id: "run_mine",
+      token: mine.lease.token,
+    });
+    expect(released.ok).toBe(true);
+  });
+
+  it("takes back a lapsed lease the alarm already swept, and says so", async () => {
+    const stub = room("owner/repo-reclaim-swept");
+    const mine = await stub.acquireDispatchLease({ run_id: "run_mine", epic: "ko8" });
+    if (!mine.ok) throw new Error("expected the acquire to win");
+    await expireLease(stub);
+    await runDurableObjectAlarm(stub);
+    expect(await leaseRows(stub)).toEqual([]);
+
+    const back = await stub.reclaimDispatchLease(reclaimAs("run_mine", mine.lease.token));
+
+    if (!back.ok) throw new Error(`expected the reclaim to win: ${JSON.stringify(back)}`);
+    expect(back.reclaimed).toBe(true);
+    expect(back.detail).toContain("swept");
+    expect(back.lease.token).toBe(mine.lease.token);
+    expect(back.lease.epic).toBe("ko8");
+    await expect(stub.leaseStatus()).resolves.toMatchObject({ run_id: "run_mine" });
+  });
+
+  it("is a renewal, not a reclaim, when the lease was live and the caller's after all", async () => {
+    const stub = room("owner/repo-reclaim-live");
+    const mine = await stub.acquireDispatchLease({ run_id: "run_mine", epic: "ko8" });
+    if (!mine.ok) throw new Error("expected the acquire to win");
+
+    const back = await stub.reclaimDispatchLease(reclaimAs("run_mine", mine.lease.token));
+
+    if (!back.ok) throw new Error("expected the reclaim to renew");
+    expect(back.reclaimed).toBe(false);
+    expect(back.lease.token).toBe(mine.lease.token);
+  });
+
+  /**
+   * THE compare-and-swap. The run's renewal reported the lapse; another run
+   * acquired the free lease before the run's reclaim arrived. The reclaim must
+   * see that at the only place that can — the room, with the row and the
+   * clock in one synchronous read — and leave the newcomer's lease alone.
+   */
+  it("does not overwrite a lease another run took between the renewal and the reclaim", async () => {
+    const stub = room("owner/repo-reclaim-cas");
+    const mine = await stub.acquireDispatchLease({ run_id: "run_mine", epic: "ko8" });
+    if (!mine.ok) throw new Error("expected the acquire to win");
+    await expireLease(stub);
+
+    const lapsed = await stub.renewDispatchLease({ run_id: "run_mine", token: mine.lease.token });
+    if (lapsed.ok !== false || lapsed.error !== "lease_lost") throw new Error("expected a lapse");
+    expect(lapsed.lost).toBe("expired");
+
+    // The gap between the two calls, filled by somebody else.
+    const theirs = await stub.acquireDispatchLease({ run_id: "run_theirs", epic: "ko8" });
+    if (!theirs.ok) throw new Error("expected the newcomer to take the free lease");
+
+    const back = await stub.reclaimDispatchLease(reclaimAs("run_mine", mine.lease.token));
+
+    if (back.ok !== false || back.error !== "lease_lost") throw new Error("expected a refusal");
+    expect(back.lost).toBe("taken");
+    expect(back.holder.run_id).toBe("run_theirs");
+    expect(back.holder).not.toHaveProperty("token");
+    // Untouched: the newcomer's own credentials still renew it.
+    await expect(stub.leaseStatus()).resolves.toMatchObject({
+      run_id: "run_theirs",
+      expires_at: theirs.lease.expires_at,
+    });
+    const renewed = await stub.renewDispatchLease({
+      run_id: "run_theirs",
+      token: theirs.lease.token,
+    });
+    expect(renewed.ok).toBe(true);
+  });
+
+  it("does not take a lease back from a run that took it and let it lapse in turn", async () => {
+    const stub = room("owner/repo-reclaim-superseded");
+    const mine = await stub.acquireDispatchLease({ run_id: "run_mine", epic: "ko8" });
+    if (!mine.ok) throw new Error("expected the acquire to win");
+    await expireLease(stub);
+    const theirs = await stub.acquireDispatchLease({ run_id: "run_theirs", epic: "ko8" });
+    if (!theirs.ok) throw new Error("expected the newcomer to take the free lease");
+    await expireLease(stub);
+
+    const back = await stub.reclaimDispatchLease(reclaimAs("run_mine", mine.lease.token));
+
+    if (back.ok !== false || back.error !== "lease_lost") throw new Error("expected a refusal");
+    expect(back.lost).toBe("taken");
+    expect(back.holder.run_id).toBe("run_theirs");
+    expect(back.detail).toContain("newer claim");
+    expect((await leaseRows(stub)).map((row) => row.run_id)).toEqual(["run_theirs"]);
+  });
+
+  it("refuses a malformed reclaim rather than throwing across RPC", async () => {
+    const stub = room("owner/repo-reclaim-invalid");
+    const refused = await stub.reclaimDispatchLease({ run_id: "run_mine", token: "t", epic: "" });
+    expect(refused).toMatchObject({ ok: false, error: "invalid_request" });
+    expect(await leaseRows(stub)).toEqual([]);
+  });
+});
+
 describe("dispatch lease expiry alarm", () => {
   it("schedules the alarm at the lease deadline", async () => {
     const stub = room("owner/repo-alarm-set");

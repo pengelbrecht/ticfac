@@ -72,6 +72,8 @@ import {
   invalidRequest,
   type LeaseRecord,
   LeaseTable,
+  type ReclaimLeaseRequest,
+  type ReclaimLeaseResult,
   type RenewLeaseResult,
   type RequestInvalid,
   stamp,
@@ -96,6 +98,8 @@ export type {
   LeaseLostReason,
   LeaseOrigin,
   LeaseRefused,
+  ReclaimLeaseRequest,
+  ReclaimLeaseResult,
   RenewLeaseResult,
   RequestInvalid,
 } from "./lease";
@@ -592,6 +596,31 @@ export class RunRoom extends DurableObject<Env> {
     request: HolderCredentials & { ttl_ms?: number },
   ): Promise<RenewLeaseResult> {
     const result = this.#lease.renew(request);
+    if (result.ok) await this.#armAlarm();
+    return result;
+  }
+
+  /**
+   * Takes back a dispatch lease that lapsed under its run while no other run
+   * holds it — a compare-and-swap under the run's own token (tick oen, see
+   * `LeaseTable.reclaim`). A lease another run holds is refused `taken` and
+   * left untouched.
+   *
+   * Sound for the dispatch lease because of how this room hands the project
+   * on: the only ways another run comes to hold it are an acquire and the
+   * queue's ignition, and both write a live row before anything awaits — so
+   * "expired and unheld" really does mean nobody else is the arbiter. A
+   * submission queued behind the lapsed run and not yet ignited stays queued
+   * and ignites on this run's release, exactly as it would had the renewal
+   * arrived on time.
+   *
+   * RepoRoom's publish slot does not expose this: its one caller already
+   * re-derives a lapsed slot through `acquireSlot` and carries the rotated
+   * token in its step result, which a cloud run's immutable `lease_token`
+   * cannot do.
+   */
+  async reclaimDispatchLease(request: ReclaimLeaseRequest): Promise<ReclaimLeaseResult> {
+    const result = this.#lease.reclaim(request);
     if (result.ok) await this.#armAlarm();
     return result;
   }

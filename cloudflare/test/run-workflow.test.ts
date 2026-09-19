@@ -1,5 +1,5 @@
-import { env, SELF } from "cloudflare:test";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { env, runInDurableObject, SELF } from "cloudflare:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
   type RunRecord,
@@ -19,6 +19,7 @@ import { GATEWAY_PATH_PREFIX, proxyModelRequest } from "../src/gateway";
 import type { RepoRefs } from "../src/progress";
 import type { RepoConfigReader } from "../src/repo-config";
 import type { RunEventMessage, RunEventSink } from "../src/run-events";
+import type { DispatchLease } from "../src/run-room";
 import {
   applyProgress,
   chunkWave,
@@ -628,6 +629,12 @@ async function ignite(
      * test can arm a seam that has to be in place before the very first step.
      */
     beforeStart?: (runID: string) => void;
+    /**
+     * tick oen: the lease has already lapsed when the Workflow starts — what
+     * a boot longer than the acquire ttl leaves behind, made deterministic
+     * instead of raced against a real clock.
+     */
+    lapsed?: boolean;
   } = {},
 ) {
   const project = overrides.project ?? `${PROJECT}-${++counter}`;
@@ -641,6 +648,7 @@ async function ignite(
     ...(overrides.leaseTtlMs === undefined ? {} : { ttl_ms: overrides.leaseTtlMs }),
   });
   if (!lease.ok) throw new Error(`the lease was refused: ${JSON.stringify(lease)}`);
+  if (overrides.lapsed === true) await expireLease(project);
   overrides.beforeStart?.(runID);
   const started = await startRun(env, {
     run_id: runID,
@@ -651,7 +659,52 @@ async function ignite(
     lease_token: lease.lease.token,
     ...(overrides.tickIDs === undefined ? {} : { tick_ids: overrides.tickIDs }),
   });
-  return { runID, project, epic, started, room, leaseToken: lease.lease.token };
+  return {
+    runID,
+    project,
+    epic,
+    started,
+    room,
+    lease: lease.lease,
+    leaseToken: lease.lease.token,
+  };
+}
+
+/**
+ * `runInDurableObject` finds the worker's own Durable Object namespaces by
+ * reading `env` ONCE, on its first call, and asserts every one of them is a
+ * namespace. Every test here replaces `env.SANDBOXES` (a Durable Object
+ * binding) with a fake before it runs, so a first call from inside a test
+ * fails that assertion. This makes the first call before any test has
+ * replaced anything.
+ */
+beforeAll(async () => {
+  await runInDurableObject(roomFor(env, `${PROJECT}-warm`), () => {});
+});
+
+/**
+ * Expires a project's dispatch lease NOW, past the public API (tick oen). The
+ * row stays exactly as its holder left it and only its deadline has passed —
+ * a lapse with nobody else holding the lease, without racing a real clock.
+ */
+async function expireLease(project: string): Promise<void> {
+  await runInDurableObject(roomFor(env, project), (_instance, state) => {
+    state.storage.sql.exec("UPDATE dispatch_lease SET expires_at = ?", Date.now() - 1);
+  });
+}
+
+/**
+ * Lets a project's lease lapse and hands it to another run in ONE turn of the
+ * room, so a working run's renewal cannot land in between and reclaim it
+ * (tick oen). Two separate calls would race the run's own watch loop.
+ */
+async function handLeaseTo(project: string, runID: string, epic = "ko8"): Promise<DispatchLease> {
+  return runInDurableObject(roomFor(env, project), async (instance, state) => {
+    state.storage.sql.exec("UPDATE dispatch_lease SET expires_at = ?", Date.now() - 1);
+    const taken = await instance.acquireDispatchLease({ run_id: runID, epic });
+    if (!taken.ok) throw new Error(`the lease was refused: ${JSON.stringify(taken)}`);
+    return taken.lease;
+  });
 }
 
 async function waitFor<T>(
@@ -2185,14 +2238,21 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
   // cloud run ends cleanly, so it must not be reachable by accident: a request
   // that was refused must leave the container able to tell.
   it("refuses a wave from a run that no longer holds the project's dispatch lease", async () => {
-    const { runID, project, epic, leaseToken } = await ignite({ tickIDs: ["aaa"] });
+    const { runID, project, epic } = await ignite({ tickIDs: ["aaa"] });
     const integrate = await wavePass(1);
 
-    // The run's lease, gone out from under it — the shape of a container that
-    // kept working after its run stopped being the project's arbiter. D4 is
-    // one arbiter per project, and this endpoint enforces it by REQUIRING the
-    // caller to be the holder rather than by taking a second lease.
-    await roomFor(env, project).releaseDispatchLease({ run_id: runID, token: leaseToken });
+    // The run's lease, gone out from under it to ANOTHER run — the shape of a
+    // container that kept working after its run stopped being the project's
+    // arbiter. D4 is one arbiter per project, and this endpoint enforces it by
+    // REQUIRING the caller to be the holder rather than by taking a second
+    // lease.
+    //
+    // Taken, not merely released: since tick oen a lease that lapses with
+    // nobody holding it is reclaimed by the run's next renewal, so a bare
+    // release here would race the run's own watch loop (every 25ms) against
+    // this request. A lease another run holds is the loss that stays a loss.
+    const room = roomFor(env, project);
+    await handLeaseTo(project, "run_successor", epic);
 
     const refused = await requestNextWave(integrate, {
       epic,
@@ -2201,12 +2261,19 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
       tick_ids: ["bbb"],
     });
     expect(refused.status).toBe(409);
-    expect(((await refused.json()) as { error: string }).error).toBe("lease_lost");
+    expect(((await refused.json()) as { error: string }).error).toBe("lease_held_by");
 
-    // No wave was dispatched for the refusal: the run finishes on wave 1.
+    // No wave was dispatched for the refusal. The pass ends either way — on
+    // its own exit or on the lost-lease trip, whichever the run sees first —
+    // and a trip's closeout is let finish too.
     integrate.exit(0);
-    await settled(runID);
+    await waitFor(`run ${runID} to finish`, async () => {
+      sandboxes.phase("closeout")?.exit(0);
+      const run = await getRun(env.DB, runID);
+      return run !== null && ["completed", "stopped", "failed"].includes(run.state);
+    });
     expect(sandboxes.booted.some((s) => s.name.includes("-tick-bbb"))).toBe(false);
+    await expect(room.leaseStatus()).resolves.toMatchObject({ run_id: "run_successor" });
   });
 
   /**
@@ -2854,10 +2921,18 @@ describe("a container wave outlives the lease its run was ignited with", () => {
   it("renews the project lease while its containers work, so the wave pass dispatches wave 2", async () => {
     sandboxes.holdWork = true;
     const LEASE_MS = 200;
-    const { runID, project, epic } = await ignite({ tickIDs: ["aaa"], leaseTtlMs: LEASE_MS });
+    // The lease as ignition granted it — taken from the grant, not read back.
+    // A read here raced the 200ms ttl against `startRun` and lost on a 2-vCPU
+    // CI runner ("expected undefined to be 'run_wf_121'", tick oen): the lease
+    // had lapsed before the test looked, which says nothing about the run.
+    const {
+      runID,
+      project,
+      epic,
+      lease: acquired,
+    } = await ignite({ tickIDs: ["aaa"], leaseTtlMs: LEASE_MS });
     const room = roomFor(env, project);
-    const acquired = await room.leaseStatus();
-    expect(acquired?.run_id).toBe(runID);
+    expect(acquired.run_id).toBe(runID);
 
     const name = workerSandboxName(runID, "aaa");
     await waitFor("wave 1's container to be mid-tick", async () => {
@@ -2887,8 +2962,13 @@ describe("a container wave outlives the lease its run was ignited with", () => {
     expect(held).not.toBeNull();
     expect(held!.run_id).toBe(runID);
     // Renewed, not merely re-read: the deadline has moved past what ignition
-    // bought, and `acquired_at` is unchanged, so this is the SAME lease.
-    expect(held!.acquired_at).toBe(acquired!.acquired_at);
+    // bought. Whether `acquired_at` moved too depends on the runner — a boot
+    // that outlived the 200ms lease finds it swept by the room's alarm and
+    // reclaims it as a new tenure (tick oen) — so the SAME-lease proof is the
+    // release at the end instead: it only succeeds under the credentials the
+    // run was ignited with.
+    expect(Date.parse(held!.acquired_at)).toBeGreaterThanOrEqual(Date.parse(acquired.acquired_at));
+    expect(Date.parse(held!.expires_at)).toBeGreaterThan(Date.parse(acquired.expires_at));
     expect(Date.parse(held!.expires_at)).toBeGreaterThan(Date.parse(held!.acquired_at) + LEASE_MS);
 
     // The container finishes — an hour later in a real run — and the wave pass
@@ -2937,6 +3017,9 @@ describe("a container wave outlives the lease its run was ignited with", () => {
     expect(record.detail).toContain("2 container waves");
     const log = await listDispatchLogs(env.DB, runID, epic);
     expect(log.some((entry) => entry.decision.startsWith("cloud_wave:next=1:1@"))).toBe(true);
+    // Released by compare-and-delete on the ignition token: had anything
+    // rotated it, the release would have been refused and the lease left.
+    expect(await room.leaseStatus()).toBeNull();
   }, 60_000);
 
   /**
@@ -2957,6 +3040,123 @@ describe("a container wave outlives the lease its run was ignited with", () => {
     expect(expired.detail).not.toContain("another run");
     // The words run_659b7cf2's operator was given, and which were false there.
     expect(expired.detail).not.toContain("lost to another run");
+  });
+});
+
+/**
+ * Tick oen: a lapse is not a loss.
+ *
+ * The wave-2 test above failed twice on a 2-vCPU CI runner. Both times its
+ * 200ms lease lapsed before the run's first renewal and the run's log read
+ * "could not renew its lease after boot 1: ... has expired or been released —
+ * no dispatch lease is held for this project, and no other run has taken it".
+ * In the evening run that was the failure: the run hard-stopped itself before
+ * wave 1's container ever worked. In the afternoon run the test's own read of
+ * the lease lost the same race first. Nobody else held the project either
+ * time. A production boot, stall or step longer than the ten-minute acquire is
+ * the same arithmetic.
+ *
+ * These make the lapse deterministic — the lease is expired explicitly, never
+ * raced against a real clock — and pin both halves: a lapse nobody took is
+ * reclaimed and the run works on; a lease another run TOOK is still a stop.
+ */
+describe("a run whose lease lapsed with nobody holding it (tick oen)", () => {
+  let warned: string[];
+  let restoreWarn: () => void;
+
+  beforeEach(() => {
+    warned = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(args.map(String).join(" "));
+    restoreWarn = () => void (console.warn = original);
+  });
+  afterEach(() => restoreWarn());
+
+  it("reclaims a lease its boot outlived, and works on", async () => {
+    const { runID, project, epic, room, lease } = await ignite({ lapsed: true });
+    expect(await room.leaseStatus()).toBeNull();
+    const process = await firstProcess();
+
+    // The `:lease:` step right after boot found the lapse and took it back —
+    // the SAME lease: nobody touched the row, so its tenure is unbroken.
+    const held = await waitFor("the run to reclaim its lease", async () => room.leaseStatus());
+    expect(held.run_id).toBe(runID);
+    expect(held.acquired_at).toBe(lease.acquired_at);
+    expect(warned.some((line) => line.includes(`${runID} reclaimed its lapsed lease`))).toBe(true);
+
+    // And it did NOT stop: the harness can still spend, the run is running.
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens.filter((token) => token.revoked_at !== null)).toEqual([]);
+    expect((await runStatus(env, runID))?.run.state).toBe("running");
+    expect(process.killed).toBe(false);
+
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+    // Released with the credentials it was ignited with: the reclaim never
+    // rotated the run's token out from under its own release.
+    expect(await roomFor(env, project).leaseStatus()).toBeNull();
+  });
+
+  it("reclaims a lease that lapses mid-run, and works on", async () => {
+    const { runID, project, epic, room, lease } = await ignite();
+    const process = await firstProcess();
+    // Past the run's first renewal, so the lapse below lands on a run that
+    // already held its lease through boot — the watch loop's renewal is the
+    // one that finds it.
+    await waitFor("the run's renewals", async () => {
+      const now = await room.leaseStatus();
+      return now !== null && now.expires_at > lease.expires_at;
+    });
+
+    await expireLease(project);
+    expect(await room.leaseStatus()).toBeNull();
+
+    const held = await waitFor("the run to reclaim its lease", async () => room.leaseStatus());
+    expect(held.run_id).toBe(runID);
+    expect(warned.some((line) => line.includes(`${runID} reclaimed its lapsed lease`))).toBe(true);
+
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens.filter((token) => token.revoked_at !== null)).toEqual([]);
+    expect((await runStatus(env, runID))?.run.state).toBe("running");
+    expect(process.killed).toBe(false);
+
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+    expect(await roomFor(env, project).leaseStatus()).toBeNull();
+  });
+
+  /**
+   * The other half, which a reclaim must never blur: a lease another run holds
+   * is a real loss. D4 is one arbiter per project, and the run that is not it
+   * stops — and says who is.
+   */
+  it("still stops when another run took the lease while it lapsed", async () => {
+    const { runID, project, room, lease } = await ignite();
+    const process = await firstProcess();
+    await waitFor("the run's renewals", async () => {
+      const now = await room.leaseStatus();
+      return now !== null && now.expires_at > lease.expires_at;
+    });
+
+    const theirs = await handLeaseTo(project, "run_theirs");
+
+    const closeout = await waitFor("the closeout orchestrator", async () =>
+      sandboxes.phase("closeout"),
+    );
+    expect(process.killed).toBe(true);
+    expect(closeout.env.TICKS_STOP_REASON ?? "").toContain("taken by another run (run_theirs)");
+    expect(warned.some((line) => line.includes("reclaimed"))).toBe(false);
+
+    closeout.exit(0);
+    expect((await settled(runID)).state).toBe("stopped");
+    // The other run's lease is untouched — neither reclaimed nor released by
+    // the run that lost it.
+    await expect(room.leaseStatus()).resolves.toMatchObject({
+      run_id: "run_theirs",
+      expires_at: theirs.expires_at,
+    });
   });
 });
 
