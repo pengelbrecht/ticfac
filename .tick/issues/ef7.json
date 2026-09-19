@@ -13,6 +13,6 @@
   "acceptance_criteria": "Every publish to a repository goes through one serialized publisher, and two concurrent runs of the same epic cannot both write. RunRoom's existing lease behaviour is preserved, proven by its existing tests running against the DO-backed implementation.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T11:24:27.042589Z",
-  "updated_at": "2026-09-18T16:51:18.742998Z",
+  "updated_at": "2026-09-19T10:20:42.103032Z",
   "started_at": "2026-09-18T16:51:18.742997Z"
 }
