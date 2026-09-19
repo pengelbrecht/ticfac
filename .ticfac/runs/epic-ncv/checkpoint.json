@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-ncv",
   "epic_id": "ncv",
-  "sequence": 109,
-  "state": "publishing",
-  "reason": "closing k4s behind the integrated gate on e149f9ebf9f1",
-  "updated_at": "2026-09-19T12:40:46Z",
+  "sequence": 110,
+  "state": "running",
+  "reason": "k4s is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-19T12:40:52Z",
   "ticks": [
     {
       "tick_id": "l9n",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "k4s",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 8
     },
     {
