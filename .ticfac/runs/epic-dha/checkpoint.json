@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 4sb as attempt 1",
-  "updated_at": "2026-09-19T21:37:55Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "4sb is running as attempt 1",
+  "updated_at": "2026-09-19T21:38:11Z",
   "ticks": [
     {
       "tick_id": "4sb",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "53s",
