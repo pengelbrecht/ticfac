@@ -82,6 +82,33 @@ var NoAutoMaintenance = configArgs(noAutoMaintenance)
 
 var noAutoMaintenance = [][2]string{{"maintenance.auto", "false"}, {"gc.auto", "0"}}
 
+// NoRerere is the configuration every git a run MERGES with is run with: rerere
+// off, so a host's resolution cache cannot reach into the run's merge
+// (tick 6na).
+//
+// rerere records the conflict a PERSON resolves by hand — preimage and
+// resolution both, under .git/rr-cache — and replays that resolution into a
+// later merge that presents the same conflict text. A host that runs git by
+// hand commonly has it enabled globally, and a run's reconciler merges in the
+// operator's checkout, so it shares that cache with a person's own merges.
+// rerere active inside a machine's merge then does two things nobody asked
+// it to: it RECORDS the run's conflicts as preimages into a person's cache,
+// and — the dangerous half — it REPLAYS a person's earlier resolution into the
+// run's merge, staged into the index with the conflict markers gone. The run
+// gates and integrates durable evidence about a tree; a silently re-resolved
+// conflict makes that tree something no party chose: not the worker's, not
+// the base's, and not a reviewer's.
+//
+// This is the same category of rule as GIT_TERMINAL_PROMPT=0: a run states
+// its own git environment rather than inheriting the host's, and `-c` is read
+// above every config file there is, so the host's setting cannot reach the
+// merge. rerere.autoupdate is stated with it: inert while enabled is false,
+// but pinned anyway so the run's posture does not rest on which half of
+// rerere's configuration a given git reads.
+var NoRerere = configArgs(noRerere)
+
+var noRerere = [][2]string{{"rerere.enabled", "false"}, {"rerere.autoupdate", "false"}}
+
 func configArgs(pairs [][2]string) []string {
 	var args []string
 	for _, pair := range pairs {
