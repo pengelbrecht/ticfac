@@ -80,6 +80,17 @@ const (
 	// enough that a person reading the line still has most of the attempt's
 	// budget to spend.
 	DefaultStallWarnAfter = 15 * time.Minute
+
+	// DefaultProgressProbeEvery is how often a live attempt's worktree is
+	// measured for the liveness record (tick dh1). It is NOT the poll
+	// interval and must not become one: the poll is the keepalive, five
+	// seconds on both local executors so a stop lands within one poll of the
+	// bound, while the probe walks a whole worktree. A minute is far finer
+	// than the question it answers — "has this agent written anything since
+	// it started" against a fifteen-minute stall threshold and an hour-long
+	// bound — and it keeps the walk off the keepalive's cadence, where every
+	// future shortening of the poll would have made it silently dearer.
+	DefaultProgressProbeEvery = time.Minute
 )
 
 // Tracker is the tracker surface the reconciler uses. It is exactly the tk
@@ -396,6 +407,13 @@ type Options struct {
 	// attempt.
 	StallWarnAfter time.Duration
 
+	// ProgressProbeEvery is how often one in-flight attempt's worktree is
+	// measured for the liveness record (tick dh1). Zero is the default
+	// (DefaultProgressProbeEvery). It bounds a WALK, not a verdict: nothing
+	// it measures stops, rejects or holds anything, and a run that probes
+	// less often merely keeps a coarser account of itself.
+	ProgressProbeEvery time.Duration
+
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
 	// reported.
@@ -486,6 +504,12 @@ type Reconciler struct {
 	feed         *runfeed.Feed
 	feedErr      error
 	feedPrepared bool
+
+	// progressProbe is how often a live attempt's worktree is walked for the
+	// liveness record, and livenessErr the first error writing it — exhaust
+	// beside the feed, and never fatal for the same reason (liveness.go).
+	progressProbe time.Duration
+	livenessErr   error
 
 	now   func() time.Time
 	sleep func(time.Duration)
@@ -740,6 +764,9 @@ func New(opts Options) (*Reconciler, error) {
 	if opts.StallWarnAfter == 0 {
 		opts.StallWarnAfter = DefaultStallWarnAfter
 	}
+	if opts.ProgressProbeEvery <= 0 {
+		opts.ProgressProbeEvery = DefaultProgressProbeEvery
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -885,6 +912,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.stepCap = opts.StepCap
 	r.executors = theExecutors(opts.Executors)
 	r.feed = runfeed.Open(opts.Repo, opts.RunID)
+	r.progressProbe = opts.ProgressProbeEvery
 	r.now = opts.Now
 	r.sleep = opts.Sleep
 	r.guardsOff = opts.guardsOff
@@ -1037,6 +1065,15 @@ type Result struct {
 	// file that will never appear. So it is surfaced here rather than
 	// collected and never read, and the run is NOT failed over it.
 	FeedError error
+
+	// LivenessError is the liveness record's own write failure, if it had
+	// one (tick dh1). The same class of fact as FeedError and never a verdict
+	// either: the run settled as it says it did, but nothing was written to
+	// `.ticfac/logs/<run-id>/liveness.jsonl`, so the question this record
+	// exists to answer afterwards — what was each attempt actually doing —
+	// has no evidence behind it for this run. Surfaced rather than collected
+	// and never read, for exactly the reason d6s gives.
+	LivenessError error
 }
 
 // Run reconciles the epic until there is nothing dispatchable left, or until
@@ -1231,7 +1268,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 func (r *Reconciler) result(state runstate.State, reason string) *Result {
 	out := &Result{RunID: r.runID, EpicID: r.opts.EpicID, State: state, Reason: reason,
-		Ticks: r.ticks, Failure: r.failure, FeedError: r.feedErr}
+		Ticks: r.ticks, Failure: r.failure, FeedError: r.feedErr, LivenessError: r.livenessErr}
 	for _, ts := range r.ticks {
 		switch ts.State {
 		case "closed":

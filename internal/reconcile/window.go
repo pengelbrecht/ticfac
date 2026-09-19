@@ -303,8 +303,32 @@ func waveOf(plan []planEntry, tick string) int {
 // on that evidence instead. And a gap that exceeded the threshold is said out
 // loud, because on a substrate that really does reclaim, a 45-minute gate is
 // a thing an operator needs to know happened.
+//
+// # And it is where the stall warning was lost (tick dh1)
+//
+// The warning lives in addressOnce, so it is only ever evaluated at a POLL —
+// and pollWindow does not run while finishTick does. That gap is not small
+// and not rare: it is one tick's whole collect, integrate, gate and close.
+//
+// Measured on epic ncv, 2026-09-18. ef7 was dispatched at 16:51:29 against a
+// 900s stall threshold, so the earliest its warning could fire was 17:06:29.
+// The run's last poll before that was at 17:02:50, when vyg settled; from
+// there it was inside finishTick(vyg) — the integrated gate alone ran from
+// 17:03:24 to 17:10:08 — and at 17:10:19 vyg was refused for untriaged
+// findings, which STOPS the run. ef7 was therefore never once polled while it
+// was eligible to be warned about, and the feed carried no stall line for it
+// in that incarnation at all. The next incarnation resumed at 17:33:35 and
+// warned at its very first poll, 17:34:05: the machinery was correct the
+// whole time and simply never got a turn, 28 minutes late, with 16 of the
+// attempt's 60 minutes left to spend.
+//
+// So the moment the serial half hands the window back is a moment to look at
+// the attempts that waited through it — the same moment, and the same loop,
+// that already forgives the polling gap it caused.
 func (r *Reconciler) excuseWindow(live []*inflightAttempt, gap time.Duration) {
 	for _, fl := range live {
+		r.probeProgress(fl)
+		r.announceStall(fl)
 		if gap > r.wipeThreshold {
 			r.record(fl.entry.TickID, StageWaiting,
 				"attempt %d of %s went unpolled for %s while another tick was being integrated and gated — "+
@@ -371,8 +395,19 @@ func (r *Reconciler) adoptTicks(durable []runstate.TickState, live []*inflightAt
 // be told they are out there, and that resuming adopts them rather than
 // dispatching over them. Silence here would look exactly like the run having
 // finished with them.
+//
+// It is also the run's LAST look at them (tick dh1), which is why the probe
+// and the warning are taken here too. On epic ncv the stop came at 17:10 for
+// two attempts that had been eligible for a stall warning since 17:06 and had
+// not been polled since 17:02; the run walked away from both without ever
+// saying what it had last seen, and the person who resumed it half an hour
+// later had nothing to read. A run stopping is the moment its account of a
+// live attempt stops being added to, so the account should be current when it
+// does.
 func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 	for _, fl := range live {
+		r.probeProgress(fl)
+		r.announceStall(fl)
 		r.record(fl.entry.TickID, StageWaiting,
 			"attempt %d of %s is still running and the run is stopping for another tick's refusal: "+
 				"nothing about this attempt is lost — its marker is on the remote and its commits are on "+

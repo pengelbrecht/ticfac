@@ -284,6 +284,50 @@ hang)
 	commit
 	exec sleep 86400
 	;;
+busy-a1)
+	# The 9fc shape (tick dh1): a1 keeps writing into its worktree and
+	# commits NOTHING until the end, so for most of its life it has no
+	# commits, an unmoved branch and — to anything that only measures gaps —
+	# a log indistinguishable from the wedged worker beside it. 9fc's own
+	# snapshot at the wall clock held 433 uncommitted lines. Every other tick
+	# is the plain report mode, so the fixture costs one worker's seconds and
+	# not five.
+	if [ "$TICFAC_TICK" = "a1" ]; then
+		i=0
+		while [ "$i" -lt 3 ]; do
+			printf 'uncommitted line %s\n' "$i" >> "$TICFAC_WORKTREE/scratch-${TICFAC_TICK}.txt"
+			i=$((i + 1))
+			sleep 1
+		done
+	fi
+	commit
+	report
+	;;
+wedged)
+	# The ef7 shape (tick dh1): an agent that writes NOTHING and never
+	# finishes. No commit, no file, no report — the worktree stays exactly as
+	# the checkout left it for the whole of the attempt's bound.
+	#
+	# It is deliberately not `hang` with the commit removed as an
+	# afterthought: `hang` commits first, so its branch MOVES and its worktree
+	# changes, and it is therefore the WORKING half of the pair this mode
+	# exists to be told apart from. On epic ncv the two produced observation
+	# logs of the same three lines, and only the count of files written
+	# separates them.
+	exec sleep 86400
+	;;
+wedged-a2)
+	# The ncv wave, with the roles the run actually saw: a1 does its work and
+	# reports, a2 wedges and never writes anything. Both are live at once
+	# under a declared width, which is what makes a2 an attempt the run is
+	# holding while it spends minutes in another tick's serial half.
+	if [ "$TICFAC_TICK" = "a2" ]; then
+		exec sleep 86400
+	else
+		commit
+		report
+	fi
+	;;
 wallwip)
 	# pbb's shape: attempt 1 of a1 does real work in the tree, commits
 	# nothing and stays alive past the bound, so the wall clock stops it

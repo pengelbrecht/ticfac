@@ -497,6 +497,13 @@ type fixtureOptions struct {
 	// testable in milliseconds without the number being a test-only one.
 	// Zero leaves the default.
 	stallWarn time.Duration
+
+	// progressProbe overrides how often a live attempt's worktree is walked
+	// for the liveness record (tick dh1). The fixture's default is the
+	// harness's own cadence rather than the production minute: a probe that
+	// never comes round twice in a test's lifetime would make the count the
+	// record exists for permanently null.
+	progressProbe time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -549,29 +556,39 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 	if runID == "" {
 		runID = "r-fixture"
 	}
+	// Fine against every threshold a test declares and still far coarser than
+	// the 20ms poll: the probe walks a worktree and shells out to git, and
+	// tying it to the poll here would put twelve parallel fixtures' worth of
+	// git processes on the machine and lose races that belong to other tests
+	// (settle_identity_test.go has one it already documents).
+	progressProbe := opts.progressProbe
+	if progressProbe <= 0 {
+		progressProbe = 200 * time.Millisecond
+	}
 	return Options{
-		Repo:           repo.Dir,
-		Remote:         "origin",
-		EpicID:         "qeu",
-		RunID:          runID,
-		BaseRef:        "HEAD",
-		Owner:          "ticfac-test",
-		Tracker:        f.Tracker,
-		ExecStateRoot:  f.StateRoot,
-		GateConfig:     filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:    gateTimeout,
-		PollInterval:   20 * time.Millisecond,
-		WipeThreshold:  10 * time.Second,
-		StepCap:        60 * time.Millisecond,
-		WallSeconds:    120,
-		BudgetUSD:      opts.budget,
-		CeilingUSD:     opts.ceiling,
-		PullRequests:   opts.pullRequests,
-		StallWarnAfter: opts.stallWarn,
-		Sleep:          func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:      opts.guardsOff,
-		stopAfter:      opts.stopAfter,
-		NewExecutor:    f.newExecutor,
+		Repo:               repo.Dir,
+		Remote:             "origin",
+		EpicID:             "qeu",
+		RunID:              runID,
+		BaseRef:            "HEAD",
+		Owner:              "ticfac-test",
+		Tracker:            f.Tracker,
+		ExecStateRoot:      f.StateRoot,
+		GateConfig:         filepath.Join(repo.Dir, ".tick", "runners.toml"),
+		GateTimeout:        gateTimeout,
+		PollInterval:       20 * time.Millisecond,
+		WipeThreshold:      10 * time.Second,
+		StepCap:            60 * time.Millisecond,
+		WallSeconds:        120,
+		BudgetUSD:          opts.budget,
+		CeilingUSD:         opts.ceiling,
+		PullRequests:       opts.pullRequests,
+		StallWarnAfter:     opts.stallWarn,
+		ProgressProbeEvery: progressProbe,
+		Sleep:              func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:          opts.guardsOff,
+		stopAfter:          opts.stopAfter,
+		NewExecutor:        f.newExecutor,
 	}
 }
 
