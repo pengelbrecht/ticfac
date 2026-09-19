@@ -438,6 +438,14 @@ type Options struct {
 	// milliseconds without the cadence itself being a test-only number.
 	Sleep func(time.Duration)
 
+	// RemoteRetry bounds how long a transient remote git failure is waited
+	// through before the run stops for it (tick enj). The zero value is the
+	// default bound. Its Report is IGNORED and replaced with the run's own:
+	// the place a retry has to be said is the run's event feed, and a caller
+	// choosing otherwise would be choosing the silence the bound exists to
+	// break.
+	RemoteRetry runstate.RemoteRetry
+
 	// guardsOff disables one named guard, for the invariants suite's negative
 	// control. Names are contracts/lifecycle-invariants.json's guard names.
 	guardsOff map[string]bool
@@ -703,6 +711,21 @@ const (
 	// had no way to know it had produced nothing for 40 of them; a person
 	// caught it by reading the pane.
 	StageStallWarned = "stall_warned"
+
+	// StageRemoteRetried and StageRemoteExhausted are the two halves of a
+	// transient remote failure's story (tick enj). A connection the remote
+	// reset is waited through instead of killing the run, and the feed says
+	// so as it happens: a silent retry is how a real outage looks healthy,
+	// and a run that went quiet for four minutes must read as a run stuck on
+	// the network rather than as a run that is thinking.
+	//
+	// They are run-level lines, carrying no tick: the fetch that died in run
+	// epic-ncv was a tracker read, and which tick's record it happened to be
+	// reading is not what a person needs told. The exhausted line names the
+	// ATTEMPT COUNT, because "the remote reset us four times" and "the remote
+	// reset us" are the same sentence about two different remotes.
+	StageRemoteRetried   = "remote_retried"
+	StageRemoteExhausted = "remote_exhausted"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -894,7 +917,8 @@ func New(opts Options) (*Reconciler, error) {
 		}
 	}
 
-	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote}
+	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote,
+		retry: r.remoteRetry()}
 	if _, err := g.run("", "rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("reconcile: %s is not a git repository: %w", opts.Repo, err)
 	}
@@ -948,6 +972,30 @@ func (r *Reconciler) Journal() []Event { return append([]Event{}, r.journal...) 
 // nothing ever read it, and a feed failure nobody can see is
 // indistinguishable from a feed with nothing in it.
 func (r *Reconciler) FeedError() error { return r.feedErr }
+
+// remoteRetry is the bound the run waits through a transient remote failure
+// with, reporting into the run's own journal and feed (tick enj).
+//
+// The Report the caller may have set in Options is deliberately discarded
+// here: the run's feed is the ONE place this belongs. A retry that is not in
+// the feed is a run that looks like it stopped emitting, which is exactly
+// what an operator reads as a hang — and a run that gave up after four
+// attempts must be readable as that, not as a run that failed once.
+func (r *Reconciler) remoteRetry() runstate.RemoteRetry {
+	retry := r.opts.RemoteRetry
+	retry.Report = func(n runstate.RemoteRetryNotice) {
+		if n.GaveUp {
+			r.record("", StageRemoteExhausted,
+				"%s failed on all %d attempts, every one a transient remote failure; the run stops rather than "+
+					"waiting past its bound: %v", n.What, n.Of, n.Err)
+			return
+		}
+		r.record("", StageRemoteRetried,
+			"%s failed transiently (attempt %d of %d); waiting %s and trying again: %v",
+			n.What, n.Attempt, n.Of, n.Wait, n.Err)
+	}
+	return retry
+}
 
 func (r *Reconciler) record(tick, stage, format string, args ...any) {
 	event := Event{At: r.now(), Tick: tick, Stage: stage, Detail: fmt.Sprintf(format, args...)}
@@ -1123,6 +1171,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,
+		RemoteRetry: r.remoteRetry(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
