@@ -1,0 +1,168 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ncv",
+    "job_id": "run-epic-ncv/tick-pxc/attempt-9",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "1af611f2658809edfc30ce682333bf1edf1eecf1",
+    "tick_id": "pxc"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "EpicReconcilerWorkflow is bound (cloudflare/wrangler.toml:291-294) but nothing under cloudflare/src calls EPIC_RECONCILER.create; runs.ts:244/606 still start RUN_WORKFLOW, which boots a container agent (run-workflow.ts:1430). No deployed run is driven by the new reconciler, so the Phase 4 gate cannot be performed.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Wire the run route to EpicReconcilerWorkflow; today only tests create it"
+      },
+      {
+        "body": "epic-reconciler.ts has no CI wait, no hold on red naming the job, no refusal on absent CI, and posts neither verdict nor findings on the PR; a closeout job reporting done is closed like an implement tick (:455). The Go admitCloseout (internal/reconcile/dispatch.go:306) has no TypeScript counterpart, so the epic's gated hand-over cannot happen on the Cloudflare host.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Port the CI-gated close-out and PR-posted review to the Workflow reconciler"
+      },
+      {
+        "body": "epic-reconciler.ts:717-799 records the attempt marker before executor.start and merges start's sandbox/process_id/branch/base_sha only in memory (:798). Every later pass, and every restart, calls namedSandbox(binding, undefined)/getProcess(undefined) (sandbox-executor.ts:312-314). FakeExecutor keys on job_id, which hides it.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Workflow reconciler never persists the sandbox handle, so no real attempt can be re-inspected"
+      },
+      {
+        "body": "sandbox-executor.ts:533 calls issueRunToken per boot, which revokes all live tokens for the run_id (gateway.ts:309). With max_parallel > 1 the second start cuts the first worker off with 403 run_token_revoked; adopt (:255) and cancel (:417) do the same. run-workflow.ts:2615-2620 documents and avoids this hazard; the tests stub boot.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "SandboxExecutor boot revokes every sibling worker's gateway token in the run"
+      },
+      {
+        "body": "epic-reconciler.ts:916,961-1013 puts the renewed/re-acquired token in a local but updates holder, which the contents store reads, only after the step returns. After a lapse every write is refused not_holder, the retry renews with the old token and gets lease_lost, and the run fails.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "A re-acquired publish slot token is not used for that pass's writes, so a lease lapse ends the run"
+      },
+      {
+        "body": "cloudflare/wrangler.toml orders migrations v1, v4, v2, v3 (lines 23/38/64/68). Wrangler applies entries after the last deployed tag, so an existing deployment at v3 never creates RepoRoom and the REPO_ROOMS binding fails at deploy. Move the v4 block after v3 and add an ordering test.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "RepoRoom migration v4 is listed before v2/v3 in wrangler.toml"
+      },
+      {
+        "body": "sandbox-executor.ts:262,277 uses workerBranch(epic, tick) while the handle records spec.write_ref from writeRefFor(run, tick, attempt). On a redispatch collect counts the previous attempt's commits; the Go side moved to one ref per attempt for exactly this (internal/reconcile/dispatch.go:1100-1109).",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Cloud worker pushes a per-tick branch, not the attempt's write_ref"
+      },
+      {
+        "body": "SandboxAttemptHandle (sandbox-executor.ts:125) is flat with no schema_version/issued_at/nested handle and ~15 extra top-level fields against contracts/job-protocol.json's closed job_handle; status uses running|exited|gone. Records also hard-code source_sha to forty zeros and refs/heads/main (epic-reconciler.ts:741-742,794). No test compares against Go-produced records.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Cloud attempt records do not match the job_handle contract or local provenance"
+      },
+      {
+        "body": "rfc3339 uses toISOString (.000Z vs tk's Z) and the test locks it in; encodeTick drops unknown fields; ready lacks tk's limit; next ignores manual/after; close ignores awaiting; claiming an epic is wave-gated; no activity entry. tracker-client.test.ts validates shapes for a hand-picked command list and never iterates manifest.commands, so 'proven against the pinned fixtures' is not yet true.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "TypeScript tracker client writes bytes tk would not, and its fixture test is hand-picked"
+      },
+      {
+        "body": "GateConfig defaults to <repo>/.tick/runners.toml (internal/reconcile/reconcile.go:358), i.e. main. Every ts gate record in epic-ncv ran without `pnpm lint` although epic/ncv's runners.toml carries it, so the epic's TypeScript was never gated by its own config. Decide which config governs, and record the digest of the one used.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Integrated gate reads runners.toml from the controller's checkout, not the integrated head"
+      },
+      {
+        "body": "closeout.go:213/343 name ciSHA only on green; red/pending branches say 'the head that includes the close-out's own commits' even when the verdict was borrowed (:352/356). closeout_ci.go:108-122 stops at the first ancestor with any state and forge.go:323-331 maps cancelled to pending, which ci.yml's cancel-in-progress produces. No test moves the PR head during a close-out.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Close-out CI verdict names its commit only on green, and a cancelled ancestor run parks it"
+      },
+      {
+        "body": "Write-grade workers get the operator's unscoped GITHUB_TOKEN (sandbox-executor.ts:548 -> worker-boot.ts:462) and push directly; sweep-dispatch.ts:499 and signal-inbox.ts:1339 call commitTickRecord, which writes .tick/issues/<id>.json, not the disjoint .tick/signals/ that repo-room.ts:48-53 claims. This widens promoted finding b52c827.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Repository writes bypass the RepoRoom publisher (worker token, sweep-dispatch, SignalInbox)"
+      },
+      {
+        "body": "epic-ncv stopped five times only because a tick reported a finding that needed a person to triage; as designed, a run is unattended only if nothing finds anything. The Phase 4 gate counts one intervention as failure. Choose: carry untriaged findings to the PR (as the epic AC allows for the final review) or keep the hold and say the gate cannot be met.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Decide how the untriaged-finding hold coexists with an unattended gate"
+      },
+      {
+        "body": "The TS reconciler has no wave barrier or review/closeout hold-back and its claim ignores blocked_by (epic-reconciler.ts:678-804, tracker-client.ts:779-818); the slot is per repository not per epic; a lapsed run may re-acquire and continue. These differ from the Go reconciler and are not recorded as decisions anywhere.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Record the Workflow host's reconciler semantics changes as decisions"
+      },
+      {
+        "body": "deploy-factory.yml triggers on v* tags and workflow_dispatch with no needs: on CI and no environment protection, so a tag on a red commit, or a dispatch from any unmerged branch, deploys the factory.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Gate deploy-factory.yml on green CI and a protected environment"
+      },
+      {
+        "body": "ticfac amended its Phase 4 gate on 2026-09-18 so that a person merges. SPEC 12 Phase 4 and w1z A1 still require a merged PR with the laptop offline. Amend the SPEC or record there that ticfac diverges deliberately and why.",
+        "kind": "upstream-tick",
+        "severity": "low",
+        "target": "pengelbrecht/ticks",
+        "title": "SPEC 12 Phase 4 / w1z A1 still say 'merged PR'; ticfac's gate now stops at a reviewed, CI-verified PR"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-ncv/tick-pxc/attempt-9",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-ncv/pxc/RESULT-pxc.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the review is complete and its verdict is NOT READY. The Phase 4 gate run never happened (epic-ncv ran on local herdr with 13+ interventions), and the Workflow host cannot yet run one (defects 1–7)."
+  },
+  "validated": true,
+  "requested_at": "2026-09-19T12:52:54Z",
+  "answered_at": "2026-09-19T12:52:54Z",
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "pxc",
+    "attempt": 9,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "1af611f2658809edfc30ce682333bf1edf1eecf1",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}
