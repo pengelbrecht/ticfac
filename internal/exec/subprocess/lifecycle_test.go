@@ -178,11 +178,7 @@ func TestA2LivenessIsObservedFromOutsideNotSelfReported(t *testing.T) {
 		})
 		// Killed from outside, with no settlement recorded: the log still says
 		// everything it ever said.
-		_ = signalGroup(st.runnerPID(), sigKill())
-		_ = signalGroup(st.supervisorPID(), sigKill())
-		waitFor(t, "the processes to die", 10*time.Second, func() bool {
-			return !processAlive(st.runnerPID()) && !processAlive(st.supervisorPID())
-		})
+		killAttempt(t, st)
 		return f, handle
 	}
 
@@ -206,8 +202,7 @@ func TestA5InProgressWorkIsPushedOnATimer(t *testing.T) {
 		return originHas(f.Repo.Origin, "tick/u1")
 	})
 	st := f.store(handle)
-	_ = signalGroup(st.runnerPID(), sigKill())
-	_ = signalGroup(st.supervisorPID(), sigKill())
+	killAttempt(t, st)
 	if !originHas(f.Repo.Origin, "tick/u1") {
 		t.Fatal("the work left origin when the job was killed")
 	}
@@ -224,8 +219,7 @@ func TestA5InProgressWorkIsPushedOnATimer(t *testing.T) {
 		return headOf(g.Repo.Dir, "tick/u2") != ""
 	})
 	time.Sleep(3 * time.Second)
-	_ = signalGroup(gst.runnerPID(), sigKill())
-	_ = signalGroup(gst.supervisorPID(), sigKill())
+	killAttempt(t, gst)
 	if originHas(g.Repo.Origin, "tick/u2") {
 		t.Fatal("with the timer off, work still reached origin; the timer is not what puts it there")
 	}
@@ -252,11 +246,7 @@ func TestA6ALiveAttemptIsAdoptedAndAnUnansweredOneIsHeld(t *testing.T) {
 	// Unanswerable: killed with nothing recorded. "Nobody can say" is not
 	// "nothing is running", and it is held rather than redispatched.
 	st := f.store(first)
-	_ = signalGroup(st.runnerPID(), sigKill())
-	_ = signalGroup(st.supervisorPID(), sigKill())
-	waitFor(t, "the tree to die", 10*time.Second, func() bool {
-		return !processAlive(st.runnerPID()) && !processAlive(st.supervisorPID())
-	})
+	killAttempt(t, st)
 	_, err = f.Executor.Start(spec)
 	if refusal, ok := AsRefusal(err); !ok || refusal.Reason != RefusedUnknown {
 		t.Fatalf("start over an unanswerable attempt returned %v, want it held", err)

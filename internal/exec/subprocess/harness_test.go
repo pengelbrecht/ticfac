@@ -6,8 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -232,40 +230,7 @@ func (f *fixture) track(handle *JobHandle) *JobHandle {
 	return handle
 }
 
-// runnerStartedPID pulls the runner's pid out of the ObsStarted detail
-// supervisor.go writes: "%s runner, pid %d, worktree %s".
-var runnerStartedPID = regexp.MustCompile(`runner, pid (\d+)`)
-
-// trackedPIDs is every process this fixture launched for one handle: the
-// supervisor pid the handle itself carries — frozen at the moment Start
-// returned it, so a LATER Start over the SAME attempt (a guard-off
-// redispatch) cannot make an earlier handle forget its own supervisor by
-// overwriting the pid file a fresh store read would otherwise see — plus
-// every runner pid the attempt's observation log has ever recorded. The log
-// is read rather than the current runner.pid file for the same reason: a
-// second supervisor's runner overwrites the first's pid FILE, and the log is
-// append-only, so it is the only place the first runner's pid still exists.
-func (f *fixture) trackedPIDs(handle *JobHandle) []int {
-	local, err := handle.Local()
-	if err != nil {
-		return nil
-	}
-	pids := []int{local.PID}
-	st := newStore(local.State)
-	observations, _ := st.observationsFrom("")
-	for _, obs := range observations {
-		m := runnerStartedPID.FindStringSubmatch(obs.Detail)
-		if m == nil {
-			continue
-		}
-		if pid, err := strconv.Atoi(m[1]); err == nil {
-			pids = append(pids, pid)
-		}
-	}
-	return pids
-}
-
-// stopEverything kills every process this fixture ever tracked, and WAITS for
+// stopEverything kills every process this fixture started, and WAITS for
 // each to actually exit, before removing the temp directories it allocated
 // itself. It is registered with t.Cleanup, which runs cleanups in LIFO order:
 // later registrations run first, and newRepo's and newFixture's t.TempDir()
@@ -274,6 +239,16 @@ func (f *fixture) trackedPIDs(handle *JobHandle) []int {
 // fixture constructed afterward in the same test nests the same way around
 // its own pair, never interleaved with this one's.
 //
+// It kills only what an attempt's own LOCKS prove is alive (tick rmc). It used
+// to SIGKILL the process group of every pid it had seen — the one on each
+// handle, every runner pid in the observation logs — that kill(pid, 0) called
+// alive. On a host measured reusing ~700 pids a second, a pid this fixture
+// saw minutes ago is somebody else's by the time a cleanup reads it, and that
+// cleanup then killed an unrelated process group. The locks cover what the
+// pid scraping was there for: a guard-off redispatch's first supervisor and
+// first runner each hold a lock of their own, so overwriting the pid FILES
+// hides neither.
+//
 // A kill signal sent and not waited for is not the same fact as the process
 // being gone: a supervisor still flushing a write when TempDir's RemoveAll
 // starts is "directory not empty", not a passing test. And even a confirmed
@@ -281,29 +256,68 @@ func (f *fixture) trackedPIDs(handle *JobHandle) []int {
 // released in the same instant kill() returned, so the removal below retries
 // rather than leaving that race to t.TempDir()'s own single attempt.
 func (f *fixture) stopEverything() {
-	seen := map[int]bool{}
-	var pids []int
+	seen := map[string]bool{}
+	var states []string
 	for _, handle := range f.handles {
-		for _, pid := range f.trackedPIDs(handle) {
-			if pid > 0 && !seen[pid] {
-				seen[pid] = true
-				pids = append(pids, pid)
-			}
+		local, err := handle.Local()
+		if err != nil || seen[local.State] {
+			continue
 		}
+		seen[local.State] = true
+		states = append(states, local.State)
 	}
-	for _, pid := range pids {
-		if processAlive(pid) {
-			_ = signalGroup(pid, sigKill())
-		}
+	for _, state := range states {
+		_, _ = KillLiveProcesses(state, 0)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for _, pid := range pids {
-		for processAlive(pid) && time.Now().Before(deadline) {
-			time.Sleep(20 * time.Millisecond)
-		}
+	for _, state := range states {
+		_, _ = KillLiveProcesses(state, time.Until(deadline))
 	}
 	removeWithRetry(f.StateRoot)
 	removeWithRetry(f.Repo.Root)
+}
+
+// killAttempt kills an attempt from outside — the whole tree, with no chance
+// to settle, the way kill -9 or an OOM killer would — and waits until nothing
+// of it is left alive. It reaches the attempt's processes through their locks,
+// never through a saved pid.
+func killAttempt(t *testing.T, st *store) {
+	t.Helper()
+	if alive, err := KillLiveProcesses(st.dir, 10*time.Second); err != nil || alive {
+		t.Fatalf("the attempt at %s is still alive after it was killed (%v)", st.dir, err)
+	}
+}
+
+// liveOf is whether any process of this kind holds its lock in this attempt:
+// the question "is the runner gone?" asked of the kernel rather than of a pid
+// that may have been reused since.
+func liveOf(st *store, kind string) bool {
+	live, _ := st.liveLocks()
+	for _, lock := range live {
+		if lock.kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// provenPID is the pid of the live process of this kind, read out of its held
+// lock — for a test that means to signal exactly that process.
+func provenPID(t *testing.T, st *store, kind string) int {
+	t.Helper()
+	live, err := st.liveLocks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lock := range live {
+		if lock.kind == kind {
+			if pid := lock.pid(); pid > 0 {
+				return pid
+			}
+		}
+	}
+	t.Fatalf("no live %s holds a lock in %s", kind, st.dir)
+	return 0
 }
 
 // removeWithRetry removes a directory this fixture allocated with

@@ -177,12 +177,20 @@ func TestTheHonouredSetDecidesWhichExecutorAProfileMayName(t *testing.T) {
 
 	// An executor in the contract's enum that this build cannot build is
 	// refused by name, at construction, before anything is claimed.
-	writeProfile(t, dir, "implement-tick", `"executor": "cloudflare-sandbox", "runner": "claude", "model": "sonnet"`)
+	//
+	// The example is "cloudflare-computer", deliberately NOT the
+	// "cloudflare-sandbox" it used to be: that name became an executor
+	// ticfac actually ships with tick k4s (the sandbox compatibility executor
+	// the Workflow-hosted reconciler dispatches through, cloudflare/src/
+	// sandbox-executor.ts), so it can no longer serve as the example of a
+	// name this repository refuses — the second executor in the enum is the
+	// one name left that nothing builds.
+	writeProfile(t, dir, "implement-tick", `"executor": "cloudflare-computer", "runner": "claude", "model": "sonnet"`)
 	_, err := New(opts)
 	if err == nil {
 		t.Fatal("a profile naming an executor this build cannot build was accepted")
 	}
-	if !strings.Contains(err.Error(), "cloudflare-sandbox") || !strings.Contains(err.Error(), "provenance that lies") {
+	if !strings.Contains(err.Error(), "cloudflare-computer") || !strings.Contains(err.Error(), "provenance that lies") {
 		t.Errorf("the refusal does not name what it refused and why: %v", err)
 	}
 

@@ -3,7 +3,9 @@ package herdr
 import (
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
@@ -258,5 +260,48 @@ func TestCancelWithHerdrDownStillRevokes(t *testing.T) {
 		t.Error("a cancelled attempt accepted a new dispatch after herdr's death")
 	} else if refusal, ok := subprocess.AsRefusal(err); !ok || refusal.Reason != subprocess.RefusedCancelled {
 		t.Errorf("the re-Start refusal was %v, want the cancelled one", err)
+	}
+}
+
+// The acknowledgement of a cancel must carry the time the record carries.
+//
+// Cancel used to stamp twice on the first call — once into the durable record,
+// once for the value it returned — so the first ack reported a time it never
+// wrote, and a second cancel (which reads the record back) reported a
+// different one. The record itself was always written once. That shape only
+// showed when the two stamps happened to straddle a second, which on a quiet
+// laptop is rare and under a loaded gate is not: it refused epic ncv's
+// close-out as '17:09:38 then 17:09:37', an ack that claims a LATER time than
+// the record it acknowledges.
+//
+// A clock that advances a full second on every call makes the straddle
+// certain, so this fails every time against the two-stamp code rather than
+// only on a bad day.
+func TestACancelAcknowledgesTheTimeItRecorded(t *testing.T) {
+	var mu sync.Mutex
+	tick := time.Date(2026, 9, 19, 17, 9, 0, 0, time.UTC)
+	advancing := func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		tick = tick.Add(time.Second)
+		return tick
+	}
+	h := newHarness(t, harnessOptions{now: advancing})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.setStatus("working")
+	first, err := h.ex.Cancel(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.ex.Cancel(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.AcceptedAt != second.AcceptedAt {
+		t.Fatalf("the first cancel acknowledged %s but the record it wrote says %s: the ack must carry "+
+			"the recorded time, not a second stamp taken after it", first.AcceptedAt, second.AcceptedAt)
 	}
 }

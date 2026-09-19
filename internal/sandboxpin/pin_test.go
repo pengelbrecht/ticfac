@@ -34,7 +34,8 @@ func realRoot(t *testing.T) string {
 	return root
 }
 
-// throwaway copies cloud/sandbox and sandbox.pin.json into a temp directory, so
+// throwaway copies the vendored image context and sandbox.pin.json into a temp
+// directory, so
 // a test can break the tree without touching the tree it is running in.
 func throwaway(t *testing.T) string {
 	t.Helper()
@@ -129,7 +130,7 @@ func TestTheVendoredSandboxTreeVerifies(t *testing.T) {
 
 // The tree this repository ships is the one embedded.go embeds, so the pin
 // must cover exactly the bytes that leave in the binary. A file added to
-// cloud/sandbox without being embedded ships nowhere while still passing every
+// the tree without being embedded ships nowhere while still passing every
 // on-disk check — this is the seam that catches it.
 func TestThePinnedTreeIsWhatTheBinaryShips(t *testing.T) {
 	root := realRoot(t)
@@ -194,7 +195,7 @@ func TestAnUnpinnedFileIsRefused(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, DirName, "stray.txt"), []byte("nothing pins this\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	refuses(t, root, "an unpinned file is sitting in cloud/sandbox/")
+	refuses(t, root, "an unpinned file is sitting in the image context/")
 }
 
 // git carries the exec bit as part of the tree, and the Docker build context

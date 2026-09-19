@@ -78,7 +78,7 @@ type Bundle struct {
 
 // ContentDigest is the sha256 of what a bundle version claims to name: the
 // version string and every file's digest, in the canonical line form ticks'
-// generator and cloud/factory/scripts/contracts.mjs both reproduce.
+// generator and cloudflare/scripts/contracts.mjs both reproduce.
 //
 //	<version>\n
 //	<file> <sha256>\n   (one per file, sorted by name)

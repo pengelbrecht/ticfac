@@ -73,12 +73,21 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 	// 1. REVOKE: the durable refusal to reissue, written BEFORE any stop is
 	//    requested, so a cancel that dies halfway still leaves an attempt
 	//    that can never boot again.
+	// ONE stamp for the acceptance, taken once and used for both the durable
+	// record and the acknowledgement returned below. There used to be two:
+	// the record took one here and the ack took another at the bottom, so the
+	// first cancel returned a time it never wrote — and under load the two
+	// straddled a second, so a SECOND cancel (which reads the record) returned
+	// an EARLIER time than the first had (TestCancelIsIdempotent, seen failing
+	// in epic ncv's close-out gate as '17:09:38 then 17:09:37'). The record was
+	// always written once; it was the ack that disagreed with it.
+	acceptedAt := e.stamp()
 	if !alreadyCancelled && !settled {
 		record := &cancelRecord{
 			SchemaVersion: stateSchemaVersion,
 			JobID:         h.JobID,
 			Attempt:       h.Attempt,
-			AcceptedAt:    e.stamp(),
+			AcceptedAt:    acceptedAt,
 			Reissue:       subprocess.ReissueRefused,
 			Order:         subprocess.OrderRevokeThenStop,
 		}
@@ -144,7 +153,6 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 			"interrupted through herdr: %w", settledSentence, stopErr)
 	}
 
-	acceptedAt := e.stamp()
 	if existing != nil {
 		acceptedAt = existing.AcceptedAt
 		stopRequested = stopRequested || existing.StopRequested

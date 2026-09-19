@@ -6,8 +6,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The supervisor: the process that owns one runner, pushes its work on a
@@ -96,6 +99,20 @@ func Supervise(stateDir string) error {
 		return fmt.Errorf("supervise %s: the attempt record names no runner argv", stateDir)
 	}
 
+	// This process's liveness, for as long as it lives (tick rmc, lock.go).
+	// Nothing below may run before it is held: a supervisor nobody can see is
+	// one a reconciler reads as lost, and a person then releases and
+	// redispatches over it.
+	// It settles the attempt when it cannot: failed, rather than unsettled
+	// with nothing alive, which is lost.
+	lock, err := st.supervisorLock()
+	if err != nil {
+		note("the supervisor's liveness lock could not be taken (%v); nothing is started", err)
+		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
+		return fmt.Errorf("supervise %s: hold the supervisor's liveness lock: %w", stateDir, err)
+	}
+	defer lock.Close()
+
 	// A signal aimed at the supervisor takes the runner with it. Cancel kills
 	// both groups itself; this is for every other way a supervisor is asked to
 	// stop, because a runner whose supervisor is gone is a process nothing is
@@ -120,7 +137,12 @@ func Supervise(stateDir string) error {
 
 	runner := exec.Command(record.RunnerArgv[0], record.RunnerArgv[1:]...)
 	runner.Dir = record.Worktree
-	runner.Env = append(box.Env, record.RunnerEnv...)
+	// Whatever the grade, the runner's git starts no maintenance: its worktree
+	// shares the object store the reconciler is writing records into, and a
+	// commit here that started a background repack there races those writes
+	// (tick mel, gitbin.NoAutoMaintenance). Last, so it is numbered after
+	// every pin the grade made.
+	runner.Env = gitbin.WithNoAutoMaintenance(append(box.Env, record.RunnerEnv...))
 	runner.Stdout = log
 	runner.Stderr = log
 	runner.SysProcAttr = newProcessGroup()
@@ -134,16 +156,41 @@ func Supervise(stateDir string) error {
 		}
 	}
 
+	// The runner holds a lock of its own, handed to it as its fd 3, and so
+	// does everything it starts that keeps that fd. That is deliberate: the
+	// runner is what spends and what writes the worktree, and a runner still
+	// running after its supervisor was killed is an attempt still running —
+	// releasing it would let the next attempt race it. The cost is that a
+	// descendant which outlives the runner keeps the attempt alive with it;
+	// that matters only for an attempt that never settled, since a settled one
+	// is not alive whatever holds its locks (alive reads settlement first).
+	runnerLock, err := st.newLock(lockRunner)
+	if err != nil {
+		note("the runner's liveness lock could not be taken (%v); a runner nobody could see is not started", err)
+		observe(ObsExited, "the runner's liveness lock could not be taken: "+err.Error())
+		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
+		return err
+	}
+	runner.ExtraFiles = []*os.File{runnerLock}
+
 	if err := runner.Start(); err != nil {
+		runnerLock.Close()
 		note("the runner could not be started: %v", err)
 		observe(ObsExited, "the runner could not be started: "+err.Error())
 		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
 		return err
 	}
 	runnerPID := runner.Process.Pid
+	if err := stampLock(runnerLock, runnerPID); err != nil {
+		note("the runner's pid could not be written into its lock (%v); it is alive to an observer, "+
+			"but only its supervisor can stop it", err)
+	}
+	// The supervisor's own copy goes: the runner's copy is the same open file
+	// description, and it is the runner's life the lock now describes.
+	runnerLock.Close()
 	if err := atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644); err != nil {
-		note("the runner pid file could not be written (%v); cancel reaches this runner through the "+
-			"observation log's pid instead", err)
+		note("the runner pid file could not be written (%v); cancel reaches this runner through its "+
+			"lock instead", err)
 	}
 	observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, runnerPID, record.Worktree))
 	observe(ObsCredentialIssued, box.note(record))
@@ -160,9 +207,17 @@ func Supervise(stateDir string) error {
 		push.interval = DefaultPushInterval
 	}
 
+	// reaped is the one liveness question about the runner no pid reuse can
+	// fake: until Wait has reaped it, its pid — and so its process group id —
+	// cannot be handed to anybody else, which is what makes stopTree's
+	// signals below this supervisor's own child's and nobody else's.
+	var reaped atomic.Bool
+	runnerAlive := func() bool { return !reaped.Load() }
+
 	waited := make(chan int, 1)
 	go func() {
 		err := runner.Wait()
+		reaped.Store(true)
 		code := 0
 		if err != nil {
 			code = 1
@@ -204,11 +259,11 @@ func Supervise(stateDir string) error {
 		case <-wall:
 			note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
 			_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
-			stopTree(runnerPID)
+			stopTree(runnerPID, runnerAlive)
 
 		case sig := <-stopping:
 			note("supervisor received %s; stopping the runner", sig)
-			stopTree(runnerPID)
+			stopTree(runnerPID, runnerAlive)
 			// A stop is not an exit — but an attempt nobody settles is an
 			// attempt nobody CAN settle. Returning here left no runner.exit
 			// and no live pid, which inspect reads as `lost`; the reconciler
@@ -273,21 +328,31 @@ func (r *attemptRecord) canPush() bool {
 	return r.Remote != "" && !r.readOnly()
 }
 
-// stopTree stops a runner and everything it started: TERM, a moment to write
-// what it has, then KILL.
-func stopTree(pid int) {
-	if pid <= 0 {
+// stopTree stops a process group and everything in it: TERM, a moment to
+// write what it has, then KILL.
+//
+// alive is how the caller knows the group is still the one it means, and it is
+// asked before every signal rather than kill(pid, 0) (tick rmc): a process
+// that exits during the grace period frees its number, and on a host measured
+// reusing ~700 pids a second the KILL that follows could otherwise land on
+// whoever was handed it. The supervisor answers it with "my runner has not
+// been reaped", which no reuse can fake; cancel answers it with the process's
+// own lock.
+func stopTree(pgid int, alive func() bool) {
+	if pgid <= 0 || !alive() {
 		return
 	}
-	_ = signalGroup(pid, sigTerm())
+	_ = signalGroup(pgid, sigTerm())
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if !processAlive(pid) {
+		if !alive() {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	_ = signalGroup(pid, sigKill())
+	if alive() {
+		_ = signalGroup(pgid, sigKill())
+	}
 }
 
 func asExitError(err error, target **exec.ExitError) bool {

@@ -40,19 +40,22 @@ against GitHub at the pinned ref in CI, and every file in it has a Go reader in
 `internal/contracts/parity`. `CONTRACTS.md` says how that works and how to
 adopt a new bundle version. Never edit a file under `contracts/` here.
 
-## cloud/sandbox
+## image
 
-`cloud/sandbox` — the sandbox image's build context, the container a cloud
-run boots in either role — is **vendored and pinned**, like `contracts/`.
-ticks owns the tree: its `internal/sandbox` suite runs those scripts. This
-repository consumes it at the immutable commit recorded in `sandbox.pin.json`,
-verified offline by digest and git mode on every test run
-(`internal/sandboxpin`), and against GitHub at the pinned ref in CI
-(`go run ./cmd/sandbox check` / `verify-upstream` / `sync`). Two repositories
-carrying one tree with no check between them is how the shipped image diverges
-from the tested one. Never edit a file under `cloud/sandbox` here. Change it
-in ticks, move `ref` in `sandbox.pin.json`, and run `go run ./cmd/sandbox sync`
-— then commit `cloud/sandbox` and `sandbox.pin.json` together.
+`image/` — the sandbox image's build context, the container a cloud run
+boots in either role, moved there from `cloud/sandbox` by SPEC §12 Phase 4
+item 4 — is **vendored and pinned**, like `contracts/`. ticks owns the tree:
+its `internal/sandbox` suite runs those scripts from its own copy at
+`cloud/sandbox`, and this repository consumes it at the immutable commit
+recorded in `sandbox.pin.json`, verified offline by digest and git mode on
+every test run (`internal/sandboxpin`), and against GitHub at the pinned ref
+in CI (`go run ./cmd/sandbox check` / `verify-upstream` / `sync`). Two
+repositories carrying one tree with no check between them is how the shipped
+image diverges from the tested one. Never edit a file under `image/` here.
+Change it in ticks, move `ref` in `sandbox.pin.json`, and run
+`go run ./cmd/sandbox sync` — then commit `image/` and `sandbox.pin.json`
+together. The bytes did not change in the move, so the pinned ref is
+unchanged; only where the vendored copy lives here moved.
 
 ## Development
 
@@ -68,4 +71,21 @@ go run ./cmd/sandbox check        # verify the vendored image context, offline
 runs 600-620s even under `-short`, past `go test`'s default 10-minute
 per-package timeout. Use these targets (or pass `-timeout` yourself) rather
 than a bare `go test ./...`.
+
+## Deploying the factory
+
+`ticfac factory deploy` installs or upgrades the factory in the operator's
+own Cloudflare account, from the bundle embedded in the exact binary running
+the deploy — the version pin rides the repository (D16). `ticfac factory
+setup` is the first-run walk: it climbs the credential ladder one rung at a
+time (wrangler, a deployment, a GitHub credential, model access) and verifies
+every rung against the live service before storing it; `ticfac factory status`
+re-checks all of them live.
+
+`.github/workflows/deploy-factory.yml` runs the same installer in CI on a `v*`
+tag, so releases upgrade the factory: configure `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID` and `TICFAC_FACTORY_TOKEN` (the `factory_token` from
+`~/.ticfacrc`) as repository secrets to enable it. A repository without them
+skips the deploy with a warning naming what is missing — the factory is the
+operator's opt-in, not a service this repository runs.
 

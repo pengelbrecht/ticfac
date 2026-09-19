@@ -195,12 +195,15 @@ func load(t *testing.T) contract {
 // requireContractSources proves every file the contract names is present
 // before a test asserts symbols inside those files.
 //
-// Files under cloud/** are the embedded payload (the factory Worker bundle
-// and the orchestrator image context), which landed with ticks tick b3a
-// ("Factory move B") together with the trees the contract points into.
-// Now that it is here, a named cloud/** file that is absent IS drift: the
-// vendored contract moves by bundle bump (CONTRACTS.md), never by a payload
-// edit behind its back, so the test fails hard instead of skipping.
+// Files under cloud/** are the embedded payload (the factory Worker bundle,
+// at cloudflare since the SPEC §12 Phase 4 item 1 move, and the
+// orchestrator image context, at image since the item 4 move), which landed with ticks
+// tick b3a ("Factory move B") together with the trees the contract points
+// into. Now that it is here, a named cloud/** file that is absent IS drift:
+// the vendored contract moves by bundle bump (CONTRACTS.md), never by a
+// payload edit behind its back, so the test fails hard instead of skipping.
+// The contract's own spelling predates the move — contractSourcePath below
+// carries the translation — so what is checked is the tree, not the name.
 //
 // Files under extensions/** are the one exception: they live in the ticks
 // repository (the local runner extension is not part of the payload), so
@@ -215,10 +218,37 @@ func requireContractSources(t *testing.T, files ...string) {
 			continue
 		}
 		seen[f] = true
-		if _, err := os.Stat("../../../" + f); err != nil {
-			t.Errorf("the contract names %s, which this repository does not have: %v", f, err)
+		if _, err := os.Stat("../../../" + contractSourcePath(f)); err != nil {
+			t.Errorf("the contract names %s, which this repository does not have (looked at %s): %v", f, contractSourcePath(f), err)
 		}
 	}
+}
+
+// contractSourcePath maps a file the pinned lifecycle contract names onto
+// where it lives in this repository. The bundle predates the SPEC §12 Phase 4
+// moves: its `today` sites and threshold sources say
+// "cloud/factory/..." for the worker bundle this repository now ships at
+// cloudflare (item 1), and "cloud/sandbox/..." for the image context it now
+// ships at image (item 4). The vendored contract moves by bundle bump
+// (CONTRACTS.md), never by a payload edit behind its back. Until a bundle
+// version names the new locations, this reader - and only this reader -
+// carries the translations: every other path in it ("contracts/...",
+// "extensions/...") passes through untouched, and a file the mapping
+// points at that does not exist still fails the checks below, so the
+// "a named cloud/** file that is absent IS drift" rule keeps its teeth.
+func contractSourcePath(file string) string {
+	if after, ok := strings.CutPrefix(file, "cloud/factory/"); ok {
+		return "cloudflare/" + after
+	}
+	// The image context is the second move this reader carries a translation
+	// for (SPEC §12 Phase 4 item 4): the contract still says cloud/sandbox/
+	// for a tree this repository now holds at image/, and the same rule
+	// applies — the vendored contract moves by bundle bump, never by a
+	// payload edit behind its back.
+	if after, ok := strings.CutPrefix(file, "cloud/sandbox/"); ok {
+		return "image/" + after
+	}
+	return file
 }
 
 // byID finds one invariant. Each of the thirteen named tests below calls this,
@@ -351,6 +381,10 @@ func TestEveryInvariantCrossReferencesWhereItLivesToday(t *testing.T) {
 			if s.Note == "" {
 				t.Errorf("%s: %s carries no note saying what the symbols do about this invariant", inv.ID, s.File)
 			}
+			// The PINNED contract names "cloud/factory/src/run-workflow.ts" — the
+			// bundle predates the SPEC §12 Phase 4 item 1 move, and contractSource
+			// below maps that spelling onto this repository's tree — so the
+			// comparison keeps the contract's own value, not our location.
 			if s.File == "cloud/factory/src/run-workflow.ts" {
 				named = true
 			}
@@ -369,7 +403,7 @@ func TestEveryInvariantCrossReferencesWhereItLivesToday(t *testing.T) {
 	// SPEC says is 3,500 lines BECAUSE of these orderings is caught: that is a
 	// cross-reference rotting, not a rule moving.
 	if runWorkflow < 10 {
-		t.Errorf("only %d of 13 invariants cross-reference cloud/factory/src/run-workflow.ts", runWorkflow)
+		t.Errorf("only %d of 13 invariants cross-reference cloud/factory/src/run-workflow.ts (the contract's spelling for the bundle this repository now holds at cloudflare)", runWorkflow)
 	}
 }
 
@@ -414,7 +448,7 @@ func TestNamedSymbolsExistInTheFilesThatClaimThem(t *testing.T) {
 			}
 			body, ok := sources[s.File]
 			if !ok {
-				data, err := os.ReadFile("../../../" + s.File)
+				data, err := os.ReadFile("../../../" + contractSourcePath(s.File))
 				if err != nil {
 					t.Errorf("%s names %s, which does not exist: %v", inv.ID, s.File, err)
 					sources[s.File] = ""
@@ -592,7 +626,7 @@ func TestPollCadenceIsPinnedUnderTheWipeThreshold(t *testing.T) {
 // substrate's wipe threshold at all — and satisfied every inequality here while
 // describing a substrate that does not exist. So each threshold now names the
 // constant it must equal, and the reader that can reach that constant asserts
-// the equality: cloud/factory/test/lifecycle-invariants.test.ts IMPORTS the
+// the equality: cloudflare/test/lifecycle-invariants.test.ts IMPORTS the
 // three TypeScript ones, and this side takes the shell default it can read and
 // checks that every named symbol is still where the fixture says it is.
 func TestThresholdsNameTheSubstrateConstantTheyPin(t *testing.T) {
@@ -616,7 +650,7 @@ func TestThresholdsNameTheSubstrateConstantTheyPin(t *testing.T) {
 			t.Errorf("threshold %s: substrate source is incomplete: %+v", name, src)
 			continue
 		}
-		body, err := os.ReadFile("../../../" + src.File)
+		body, err := os.ReadFile("../../../" + contractSourcePath(src.File))
 		if err != nil {
 			t.Errorf("threshold %s names %s, which does not exist: %v", name, src.File, err)
 			continue
@@ -631,7 +665,7 @@ func TestThresholdsNameTheSubstrateConstantTheyPin(t *testing.T) {
 
 	// The one substrate value this side can actually READ: the keeper interval
 	// is a shell default, so TypeScript cannot import it and Go can parse it.
-	keeper, err := os.ReadFile("../../../" + th.Substrate["push_interval_ms"].File)
+	keeper, err := os.ReadFile("../../../" + contractSourcePath(th.Substrate["push_interval_ms"].File))
 	if err != nil {
 		t.Fatalf("read the keeper's file: %v", err)
 	}

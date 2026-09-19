@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-3q0-13-go-cf43c73b0b9e-7686400225bb-3c63e20e78e5",
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "3q0",
+    "attempt": 13,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "d83181e384fb65b6a6e8d352f02204c44216f3c6",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:7686400225bbb2c0ed810fb884c0bf6c6cca7ad271e82c5131f42478eac9d0bf",
+    "model": "opus",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-19T18:25:19Z",
+  "finished_at": "2026-09-19T18:31:12Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t52.544s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.407s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.743s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t188.238s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t80.877s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t50.676s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t1.859s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.603s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.333s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.562s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.348s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t1.973s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.038s\n?   \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.648s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.854s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.096s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t2.004s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.076s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t2.015s\n--- FAIL: TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne (132.36s)\n    repair_test.go:234: settle a1's lost attempt: reconcile: attempt 1 of a1 is running — the executor can still address it. A live attempt is cancelled, never released: Appendix A #6 is not an operator's to waive\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t345.537s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t3.150s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.940s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t2.496s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t2.694s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t126.440s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.333s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.531s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.682s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:e4b42aade09da9dc993ed8547f86bacc2f2d2a5010f0e2859bb26e3ec2aafe0d",
+  "persistence_uri": "git:refs/heads/epic/ncv:.ticfac/runs/epic-ncv/evidence/gate-3q0-13-go-cf43c73b0b9e-7686400225bb-3c63e20e78e5.json"
+}

@@ -879,7 +879,7 @@ func prepareCloudSubmission(ctx context.Context, root, epicID string) (baseSHA, 
 // These cloud commands read the tracker through the `tk` CLI's JSON contract
 // rather than through the Go store. That is deliberate (epic 3j4): `tk ...
 // --json` is already a supported, schema-backed interface, and the sandbox
-// image has always reached the tracker this way — `cloud/sandbox/required-tk-
+// image has always reached the tracker this way — `image/required-tk-
 // commands` lists the subcommands the container must have and the image's
 // last build layer install-checks each one. Having the container shell out
 // while the same logic on a laptop imports Go internals would be two answers
@@ -1073,7 +1073,7 @@ var cloudTkBinary = resolveCloudTkBinary
 //
 // PATH is the fallback rather than the primary because it is right in exactly
 // one case: this code running inside something that is not tk. That is how
-// cloud/sandbox/required-tk-commands already thinks — the container declares
+// image/required-tk-commands already thinks — the container declares
 // the tk subcommands it needs and install-checks them against the tk on its
 // PATH, because the caller there (a shell script) is not tk either.
 //

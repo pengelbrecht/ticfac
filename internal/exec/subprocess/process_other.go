@@ -4,6 +4,7 @@ package subprocess
 
 import (
 	"fmt"
+	"os"
 	"syscall"
 )
 
@@ -19,6 +20,16 @@ func processAlive(pid int) bool { return false }
 func signalGroup(pgid int, sig syscall.Signal) error {
 	return fmt.Errorf("the local subprocess executor needs unix process groups")
 }
+
+func holdLock(f *os.File) error {
+	return fmt.Errorf("the local subprocess executor needs unix file locks")
+}
+
+func lockHeld(f *os.File) (bool, error) {
+	return false, fmt.Errorf("the local subprocess executor needs unix file locks")
+}
+
+func inheritedLock(candidates []string) *os.File { return nil }
 
 func sigTerm() syscall.Signal { return syscall.Signal(15) }
 func sigKill() syscall.Signal { return syscall.Signal(9) }

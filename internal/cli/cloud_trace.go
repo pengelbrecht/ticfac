@@ -344,7 +344,7 @@ func cloudTraceOneCall(ctx context.Context, client *gatewaytrace.Client, runID s
 // deliberately talks to the operator's own AI Gateway and to nothing else —
 // the whole reason it can answer for a run whose control plane is unreachable.
 // The gateway stamps the trace id on every proxied request out of the run row
-// (cloud/factory/src/gateway.ts), so the calls carry it.
+// (cloudflare/src/gateway.ts), so the calls carry it.
 //
 // Disagreement is REPORTED, never averaged away: two trace ids on one run id
 // means something stamped the wrong chain, and quietly showing the first would

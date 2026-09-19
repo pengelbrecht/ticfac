@@ -214,7 +214,7 @@ func cloudStepSpan(step factory.SupervisorStep) string {
 }
 
 // stepExecutionCapMs is Cloudflare's per-step EXECUTION cap, in milliseconds —
-// the number in cloud/factory/src/workflow-limits.ts. It is matched on the
+// the number in cloudflare/src/workflow-limits.ts. It is matched on the
 // message rather than inferred from a duration, because the message is what
 // Cloudflare actually returns and a duration would guess.
 const stepExecutionCapMessage = "600000ms"
@@ -234,5 +234,5 @@ func cloudStepCapHint(supervisor *factory.Supervisor) string {
 	}
 	return "  note: 600000ms is Cloudflare's per-step EXECUTION cap (ten minutes), and it fails the whole\n" +
 		"    instance rather than one step. A step that blocks for longer has to be spread across\n" +
-		"    bounded legs — see cloud/factory/src/workflow-limits.ts and repo-wiki/debugging-a-live-cloud-run.md."
+		"    bounded legs — see cloudflare/src/workflow-limits.ts and repo-wiki/debugging-a-live-cloud-run.md."
 }

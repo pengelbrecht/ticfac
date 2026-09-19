@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-3q0-13-go-cf43c73b0b9e-7686400225bb-ac3b87f6e061",
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "3q0",
+    "attempt": 13,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "f0d703769d905aa472bdb3715567d1016570f142",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:7686400225bbb2c0ed810fb884c0bf6c6cca7ad271e82c5131f42478eac9d0bf",
+    "model": "opus",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-19T17:09:22Z",
+  "finished_at": "2026-09-19T17:17:07Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t60.008s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t2.113s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.159s\n--- FAIL: TestCancelIsIdempotent (1.90s)\n    cancel_test.go:74: a second cancel re-accepted the cancellation (2026-09-19T17:09:38Z then 2026-09-19T17:09:37Z): the record is written once\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t197.784s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t86.779s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t61.014s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.535s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.370s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.241s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.686s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.773s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.696s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.038s\n?   \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.660s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t2.097s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.087s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t2.004s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.719s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.615s\n--- FAIL: TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne (134.21s)\n    repair_test.go:234: settle a1's lost attempt: reconcile: attempt 1 of a1 is running — the executor can still address it. A live attempt is cancelled, never released: Appendix A #6 is not an operator's to waive\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t457.206s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t2.817s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.799s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t2.859s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t3.281s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t146.402s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.780s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t1.204s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.715s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:5311932c9cee56ddbc1e4b8ac31b496f226a90b0e8e0c574c4d345d4a5eab257",
+  "persistence_uri": "git:refs/heads/epic/ncv:.ticfac/runs/epic-ncv/evidence/gate-3q0-13-go-cf43c73b0b9e-7686400225bb-ac3b87f6e061.json"
+}

@@ -4,9 +4,10 @@ package reconcile
 
 import "syscall"
 
-// syscallKillGroup stops a process group the fixture left behind. The executor
-// puts each attempt in a group of its own, so a negative pid is what reaches
-// the runner as well as its supervisor.
+// syscallKillGroup stops a process group a test started itself. It is NOT how
+// the fixture stops an attempt: a saved pid is a number the kernel reuses, and
+// the fixture's teardown reaches an attempt's processes through their locks
+// instead (tick rmc).
 func syscallKillGroup(pid int) error {
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
 		return syscall.Kill(pid, syscall.SIGKILL)

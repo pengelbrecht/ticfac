@@ -96,7 +96,11 @@ func (g *git) runInput(stdin []byte, args ...string) (string, error) {
 // terminal: a repository configured to sign commits or tags would stop this
 // store dead on a passphrase prompt, and a run's record is not the place to
 // carry a signature nothing verifies.
-var safeArgs = []string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}
+//
+// Nor may the store's fetch start a background repack of the repository it
+// is about to write records into: gitbin.NoAutoMaintenance says why, and
+// what failing to say it cost (tick mel).
+var safeArgs = append([]string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, gitbin.NoAutoMaintenance...)
 
 // try is run without the error wrapping: it hands back stderr so a caller that
 // must classify a refusal (a push the lease rejected) can read it.

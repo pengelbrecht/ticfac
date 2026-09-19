@@ -49,6 +49,11 @@ const (
 	// rather than an executor internal.
 	FileReportArchive = "report.md"
 	dirWorktree       = "worktree"
+	// dirLocks holds one lock file per process the attempt started, each held
+	// for exactly that process's life. It is what liveness is read from — the
+	// pid files beside it are for an attempt that predates it (tick rmc, and
+	// lock.go).
+	dirLocks = "locks"
 )
 
 // attemptRecord is the durable description of one attempt: enough for the

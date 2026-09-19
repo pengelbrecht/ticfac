@@ -266,10 +266,6 @@ func TestKillingTheExecutorMidJobLeavesAReconcilableHandle(t *testing.T) {
 	})
 	handle := readHandleFile(t, handlePath)
 	f.track(handle)
-	local, err := handle.Local()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	// kill -9 the whole executor process group.
 	if err := signalGroup(starter.pid, sigKill()); err != nil {
@@ -280,7 +276,7 @@ func TestKillingTheExecutorMidJobLeavesAReconcilableHandle(t *testing.T) {
 		t.Fatal("the executor survived kill -9 of its process group")
 	}
 
-	if !processAlive(local.PID) {
+	if !liveOf(f.store(handle), lockSupervisor) {
 		t.Fatal("the supervisor died with the executor; a job must outlive the controller that started it")
 	}
 
@@ -575,12 +571,7 @@ func TestTheTimerPushesInProgressWorkToOrigin(t *testing.T) {
 
 	// Killed without warning: no exit push, no cooperation.
 	st := f.store(handle)
-	if pid := st.runnerPID(); pid > 0 {
-		_ = signalGroup(pid, sigKill())
-	}
-	if pid := st.supervisorPID(); pid > 0 {
-		_ = signalGroup(pid, sigKill())
-	}
+	killAttempt(t, st)
 	if !originHas(f.Repo.Origin, "tick/lll") {
 		t.Fatal("the work is not on origin after the job was killed")
 	}
@@ -614,7 +605,6 @@ func TestCancelRevokesBeforeItStopsAndRefusesEveryLaterBoot(t *testing.T) {
 	waitFor(t, "the runner to start", 20*time.Second, func() bool { return f.store(handle).runnerPID() > 0 })
 
 	st := f.store(handle)
-	runner := st.runnerPID()
 
 	ack, err := f.Executor.Cancel(handle)
 	if err != nil {
@@ -629,7 +619,7 @@ func TestCancelRevokesBeforeItStopsAndRefusesEveryLaterBoot(t *testing.T) {
 	if st.credentialLive() {
 		t.Error("the credential outlived the cancellation")
 	}
-	waitFor(t, "the runner to stop", 15*time.Second, func() bool { return !processAlive(runner) })
+	waitFor(t, "the runner to stop", 15*time.Second, func() bool { return !liveOf(st, lockRunner) })
 
 	again, err := f.Executor.Cancel(handle)
 	if err != nil {
@@ -762,8 +752,14 @@ func startInOwnGroup(t *testing.T, script string, runnerArgv []string) *groupPro
 	pid := cmd.Process.Pid
 	group := &groupProcess{pid: pid, cmd: cmd}
 	t.Cleanup(func() {
-		_ = signalGroup(pid, sigKill())
-		group.reap()
+		// Only while it is unreaped: until then its pid, and so its group id,
+		// cannot have been handed to anybody else. A test that already reaped
+		// it has nothing left here to kill, and a pid it no longer owns is not
+		// one it may signal (tick rmc).
+		if !group.reaped {
+			_ = signalGroup(pid, sigKill())
+			group.reap()
+		}
 	})
 	return group
 }
@@ -869,9 +865,8 @@ func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
 		if _, err := os.Stat(local.ResultPath); err != nil {
 			return false
 		}
-		return st.runnerPID() > 0 && processAlive(st.runnerPID())
+		return liveOf(st, lockRunner)
 	})
-	runner := st.runnerPID()
 
 	ack, err := f.Executor.Cancel(handle)
 	if err != nil {
@@ -883,7 +878,7 @@ func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
 	if !ack.CredentialsRevoked || ack.Order != OrderRevokeThenStop {
 		t.Errorf("acknowledgement %+v", ack)
 	}
-	waitFor(t, "the runner to stop", 15*time.Second, func() bool { return !processAlive(runner) })
+	waitFor(t, "the runner to stop", 15*time.Second, func() bool { return !liveOf(st, lockRunner) })
 
 	// And the cancellation is DURABLE. This is the half that was missing: with
 	// no record written, the next inspect answered from the report instead, and

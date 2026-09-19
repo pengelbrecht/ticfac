@@ -1,0 +1,70 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-ncv",
+  "epic_id": "ncv",
+  "sequence": 201,
+  "state": "completed",
+  "reason": "every tick of ncv is closed behind the integrated gate",
+  "updated_at": "2026-09-19T20:51:16Z",
+  "ticks": [
+    {
+      "tick_id": "l9n",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "z23",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "9fc",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "ef7",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "k4s",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "vyg",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "pxc",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "3q0",
+      "state": "closed",
+      "attempt": 13
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "40737e0f7634d0c82ef2b86633ee23a8e961ca1a",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
+    "model": null,
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

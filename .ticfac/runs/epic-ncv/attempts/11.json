@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 11,
+  "tick_id": "pxc",
+  "dispatched_at": "2026-09-19T14:24:15Z",
+  "job_handle": {
+    "attempt": 11,
+    "base_sha": "7cf72dde17814a6e73357a75ebc54af48bd5e704",
+    "executor": "herdr",
+    "job_id": "run-epic-ncv/tick-pxc/attempt-11",
+    "model": "opus",
+    "prompt_digest": "sha256:8a15cbc5f186ab37b120d225ff85ac1660c6b4c3514f87fbd5c0f13351bede5a",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "review-epic",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1",
+    "tick_id": "pxc",
+    "tier": "",
+    "touch": null,
+    "try": 3,
+    "write_ref": "refs/heads/ticfac/run-epic-ncv/tick-pxc/attempt-11"
+  },
+  "provenance": {
+    "run_id": "epic-ncv",
+    "tick_id": "pxc",
+    "attempt": 11,
+    "source_ref": "refs/heads/epic/ncv",
+    "source_sha": "7cf72dde17814a6e73357a75ebc54af48bd5e704",
+    "integration_ref": "refs/heads/epic/ncv",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:0a585d53a025afafd4217c482fa3b3ee2a5dbd7cc398fe073d7ee0020de8b0c9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:cf43c73b0b9eaf6f8f65b21c67f7cd185196d5bbe4140417854e83f579cf22a2",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}

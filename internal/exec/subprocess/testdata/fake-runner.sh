@@ -49,6 +49,13 @@ echo_prompt)
 	printf '%s' "$prompt" > "$TICFAC_WORKTREE/prompt-seen.txt"
 	report
 	;;
+maintenance_seen)
+	# What the runner's own git is told about automatic maintenance (tick
+	# mel): read through `git config`, so it is the answer git itself acts on.
+	git -C "$TICFAC_WORKTREE" config --get maintenance.auto > "$TICFAC_WORKTREE/maintenance-seen.txt" 2>/dev/null
+	commit
+	report
+	;;
 silent)
 	# Settled and incomplete: work committed, nothing said.
 	commit

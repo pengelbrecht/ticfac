@@ -33,7 +33,7 @@ import "testing"
 // The ordering half is tick gyl's: a cancelled wave torn down before its
 // credential was revoked could spend on the way out.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — hardStopTrip,
+// Lives today in cloudflare/src/run-workflow.ts — hardStopTrip,
 // hardStopRecord, detectTrip, tripRevokeReason, drainAndKill, runWaveBatch —
 // and in src/gateway.ts's issueRunToken / revokeRunTokens.
 func TestA1StopIsADurableRefusalToIssueCredentials(t *testing.T) {
@@ -49,7 +49,7 @@ func TestA1StopIsADurableRefusalToIssueCredentials(t *testing.T) {
 // `running` with the containers orphaned and still spending, because the row
 // said the run was alive and nothing outside was asked.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — observe, renewRunLease,
+// Lives today in cloudflare/src/run-workflow.ts — observe, renewRunLease,
 // LeaseRenewal, leaseLostTrip, updateRunState, finalize — with src/reconcile.ts
 // (probeLiveness, NOT_ASKED, classifyWorker) and src/progress.ts (snapshotRefs,
 // compareSnapshots) supplying the outside view.
@@ -67,7 +67,7 @@ func TestA2ASupervisorCannotReportItsOwnDeath(t *testing.T) {
 // supervisor at minute ten — errored, run record frozen at `running`, lease
 // unrenewed, containers orphaned and still spending.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — WAVE_LEG_MS,
+// Lives today in cloudflare/src/run-workflow.ts — WAVE_LEG_MS,
 // MAX_WAVE_LEGS, runWaveBatch, superviseWaveLoop, waveSpawnBudget — over
 // src/workflow-limits.ts's STEP_WORK_BUDGET_MS, stepBudget and shareStepBudget.
 func TestA3NoStepOutlivesTheHostsCap(t *testing.T) {
@@ -85,7 +85,7 @@ func TestA3NoStepOutlivesTheHostsCap(t *testing.T) {
 // not) and run a1f87597 (a wall-clock ceiling crossed at 11:29:52, the token
 // revoked at 11:31:59, two minutes inside a sleep).
 //
-// Lives today in cloud/factory/src/run-workflow.ts — MIN_POLL_MS, MAX_POLL_MS,
+// Lives today in cloudflare/src/run-workflow.ts — MIN_POLL_MS, MAX_POLL_MS,
 // POLL_BACKOFF, pollDelay, deadlineCap, spendCap, BUDGET_POLL_HEADROOM,
 // renewalTtl, waveLeaseHeartbeat. renewalTtl is the ONE place the cadence and
 // the lease ttl are related, which is this invariant's second sentence.
@@ -103,8 +103,8 @@ func TestA4PollingIsTheKeepalive(t *testing.T) {
 // chain printed 271 bytes, dispatched no wave, pushed no branch, left the
 // epic's ticks open — and was recorded COMPLETED and charged for.
 //
-// Lives today in cloud/sandbox/entrypoint.sh (start_keeper, keeper_interval,
-// TICKS_KEEPER_INTERVAL) for the timer, and in cloud/factory/src/progress.ts
+// Lives today in image/entrypoint.sh (start_keeper, keeper_interval,
+// TICKS_KEEPER_INTERVAL) for the timer, and in cloudflare/src/progress.ts
 // (snapshotRefs, compareSnapshots) with run-workflow.ts's assessProgress /
 // applyProgress / isTerminalExit for "the exit status only decides whether to
 // reboot".
@@ -122,7 +122,7 @@ func TestA5InProgressWorkIsPushedOnATimer(t *testing.T) {
 // lines with its branch settling as finished. Git evidence would have said
 // redispatch while the process was still running.
 //
-// Lives today in cloud/factory/src/reconcile.ts — reconcileWave,
+// Lives today in cloudflare/src/reconcile.ts — reconcileWave,
 // classifyWorker, probeLiveness, NOT_ASKED, dispatchable, adoptable, adoptions,
 // settled — and in run-workflow.ts's runWaveBatch under MAX_WORKER_DISPATCHES.
 // The third answer is the load-bearing one: a container that cannot be ASKED is
@@ -141,7 +141,7 @@ func TestA6ALiveJobIsNeverRedispatched(t *testing.T) {
 // is not versioned by the replay. The general shape is worse — a decision write
 // that quietly did not land leaves an epic that looks finished and is not.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — readWaveRequest,
+// Lives today in cloudflare/src/run-workflow.ts — readWaveRequest,
 // writeRunRecord, recordRunProgress, manifestRecorder, finalize — over
 // src/artifacts.ts's write sites, with src/sandbox.ts's `pass` as the stamp the
 // read-back matches on. contracts/ticfac-run-state.json's compare-and-swap is
@@ -159,7 +159,7 @@ func TestA7ReadBackAfterWrite(t *testing.T) {
 // stuck forever and reported as already decided, and a human button press has
 // no source that retries it.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — finalize (which ALWAYS
+// Lives today in cloudflare/src/run-workflow.ts — finalize (which ALWAYS
 // runs, so the lease is released and the index row reaches a terminal state),
 // updateRunState, superviseRun — with src/reconcile.ts's classifyWorker /
 // settled / settledOutcome for the replacement supervisor's settle, and
@@ -178,7 +178,7 @@ func TestA8AnInFlightStateIsSettledByWhoeverFindsItNext(t *testing.T) {
 // diagnosis looking for a competing run for as long as it stood. Also by a
 // caught exception reported as "record is not valid" when the fault was crypto.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — leaseLostTrip,
+// Lives today in cloudflare/src/run-workflow.ts — leaseLostTrip,
 // LeaseRenewal, renewRunLease, cloudWaveLoss, describeCloudWaveLoss,
 // tripFromCancellation. `null` from renewRunLease means "the renewal could not
 // be made" and is NOT a lost lease; `ok: false` is a verdict that carries WHICH
@@ -197,7 +197,7 @@ func TestA9NeverCollapseDistinctFailureClasses(t *testing.T) {
 // substrate can enforce must not rest on instruction-following.
 //
 // Lives today in extensions/ticks-runner/boundary.ts for the local half, and in
-// cloud/factory/src/run-workflow.ts (acquireContext, planSandboxGit,
+// cloudflare/src/run-workflow.ts (acquireContext, planSandboxGit,
 // orchestratorEnv) with src/credentials.ts's grades for the cloud half — where
 // the enforcement point is the credential a job is booted with, which a prompt
 // cannot argue with.
@@ -213,7 +213,7 @@ func TestA10BoundariesAreEnforcedByTheSubstrate(t *testing.T) {
 // sites and ZERO reads: a rolling window re-opened the branch a day later, it
 // silently resumed spending, and the human paged once was never told again.
 //
-// Lives today in cloud/factory/src/ci-remediation.ts — strikeBudget,
+// Lives today in cloudflare/src/ci-remediation.ts — strikeBudget,
 // escalationFor, clearEscalation, escalate, STRIKE_BUDGET, STRIKE_WINDOW_MS —
 // where one function answers "may this branch buy a run?" and reads the
 // escalation FIRST: an open escalation refuses, full stop, because "time
@@ -234,7 +234,7 @@ func TestA11AStruckOutUnitIsReleasedByAPerson(t *testing.T) {
 // was right and silent: tk cloud run printed nothing about $8, and the first
 // place the real number appeared was the cancellation that ended the run.
 //
-// Lives today in cloud/factory/src/run-workflow.ts — boundedBudget, runConfig,
+// Lives today in cloudflare/src/run-workflow.ts — boundedBudget, runConfig,
 // effectiveRunBudget, EffectiveRunBudget. runConfig is still the one clamp;
 // effectiveRunBudget only reports its result, at the one moment an operator is
 // still reading.
@@ -256,7 +256,7 @@ func TestA12EffectiveBudgetsAreReportedAfterClamping(t *testing.T) {
 //
 // Lives today in contracts/job-protocol.json (records.evidence over
 // $defs.provenance — the bundle's ONE evidence record, which already carries
-// all four fields), with cloud/factory/src/pr-review.ts's reviewEvidence and
+// all four fields), with cloudflare/src/pr-review.ts's reviewEvidence and
 // src/progress.ts's snapshotRefs / compareSnapshots for where the fingerprint
 // is drawn from, and run-workflow.ts's superviseReview / assessProgress for
 // where it is read.

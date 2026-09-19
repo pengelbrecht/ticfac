@@ -176,11 +176,24 @@ func (e *Executor) hasSettled(st *store) bool {
 
 // stopTree stops everything this attempt started, and says whether there was
 // anything to stop.
+//
+// It signals only what the attempt's own locks prove is its own (tick rmc).
+// It used to signal every saved pid that kill(pid, 0) called alive, and a
+// saved pid of a dead attempt is, on a busy host, soon somebody else's: a
+// cancel of a lost attempt — exactly what a person does to one — would TERM
+// and then KILL that somebody's whole process group. A lock directory that
+// cannot be read proves nothing, and so stops nothing.
 func (e *Executor) stopTree(st *store) bool {
+	if st.byLock() {
+		stopped, _ := stopProven(st, stopTree)
+		return stopped
+	}
+	// LEGACY, for an attempt started before liveness moved to locks: its
+	// saved pids are all there is to go on. See alive in inspect.go.
 	stopped := false
 	for _, pid := range []int{st.runnerPID(), st.supervisorPID()} {
 		if pid > 0 && processAlive(pid) {
-			stopTree(pid)
+			stopTree(pid, func() bool { return processAlive(pid) })
 			stopped = true
 		}
 	}

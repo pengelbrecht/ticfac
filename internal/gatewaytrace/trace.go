@@ -49,12 +49,12 @@ import (
 // DefaultAPIBase is Cloudflare's REST root, matching internal/factory.
 const DefaultAPIBase = "https://api.cloudflare.com/client/v4"
 
-// PageSize mirrors GATEWAY_LOG_MAX_PAGE_SIZE in cloud/factory/src/gateway.ts:
+// PageSize mirrors GATEWAY_LOG_MAX_PAGE_SIZE in cloudflare/src/gateway.ts:
 // the logs API answers `per_page=51` with HTTP 400 "Number must be less than or
 // equal to 50". It is the API's limit, not a policy of ours.
 const PageSize = 50
 
-// MaxPages mirrors MAX_LOG_PAGES in cloud/factory/src/gateway.ts. Reaching it
+// MaxPages mirrors MAX_LOG_PAGES in cloudflare/src/gateway.ts. Reaching it
 // is a failure rather than a total: a truncated read presented as a complete
 // trace is the same shape of wrongness that let a truncated cost query pass a
 // budget it had already blown.
@@ -440,7 +440,7 @@ type GatewayLogFilter struct {
 // Metadata is two parallel columns here, not a dotted key: the API knows
 // `metadata.key` and `metadata.value` and answers a `metadata.run_id` filter
 // with error 7001 over an HTTP 400. This is the same pair
-// cloud/factory/src/gateway.ts sends, and trace_test.go pins them together.
+// cloudflare/src/gateway.ts sends, and trace_test.go pins them together.
 func metadataFilters(name, value string) []GatewayLogFilter {
 	return []GatewayLogFilter{
 		{Key: "metadata.key", Operator: "eq", Value: []string{name}},

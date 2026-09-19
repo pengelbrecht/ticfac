@@ -99,7 +99,7 @@ var (
 	// reference with an optional tag and digest. Deliberately narrow — an
 	// image reference is a name, never a place to hide a shell fragment.
 	//
-	// Re-implemented in cloud/factory/src/repo-config.ts, because the control
+	// Re-implemented in cloudflare/src/repo-config.ts, because the control
 	// plane must know which image to boot before a container exists to read
 	// anything. The two are pinned to one file rather than to each other:
 	// contracts/runners-config-contract.json, asserted from

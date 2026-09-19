@@ -83,14 +83,7 @@ func TestLiveRunnerCompletesARealTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	local, _ := handle.Local()
-	t.Cleanup(func() {
-		st := newStore(local.State)
-		for _, pid := range []int{st.runnerPID(), st.supervisorPID()} {
-			if pid > 0 && processAlive(pid) {
-				_ = signalGroup(pid, sigKill())
-			}
-		}
-	})
+	t.Cleanup(func() { _, _ = KillLiveProcesses(local.State, 5*time.Second) })
 
 	st := newStore(local.State)
 	waitFor(t, "the live runner to settle", 15*time.Minute, st.settled)
