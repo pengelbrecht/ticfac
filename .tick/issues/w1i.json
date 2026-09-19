@@ -1,0 +1,13 @@
+{
+  "id": "w1i",
+  "title": "A run incarnation that ends without a terminal state leaves no checkpoint record of it",
+  "description": "epic-ncv's checkpoint went from sequence 39 ('z23 is running', 2026-09-18 16:39) straight to 40 ('admitted', 16:50), with no failed or stopped state between.\n\nThe cause is known, and it was me: I killed the run with SIGTERM at 16:50 to force a re-plan (the g50 workaround). The FEED recorded it — 'run_died: stopped by a signal (terminated)' at 16:50:11. The CHECKPOINT did not. So the durable record the close-out reads says nothing happened, while the ephemeral feed knew exactly what did.\n\nThat is backwards: the feed is uncommitted exhaust and the checkpoint is the durable truth.\n\nWork:\n- On a catchable signal, write a terminal checkpoint before exiting (the signal handler already records to the feed; record to the checkpoint too).\n- For an uncatchable end (SIGKILL, power loss), the NEXT incarnation should record that its predecessor ended without a terminal state, naming the last sequence it saw.\n- Either way the gap becomes a counted event for the intervention count rather than an invisible one.\n\nFrom ncv close-out finding 823d2af9.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Every incarnation's end is recorded in the checkpoint, either by the ending process or by its successor, and a SIGTERM leaves a terminal state",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T17:38:00.578777Z",
+  "updated_at": "2026-09-19T17:38:00.578777Z"
+}

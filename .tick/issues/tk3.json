@@ -1,0 +1,13 @@
+{
+  "id": "tk3",
+  "title": "The close-out's ancestor walk treats pending as a verdict and stops one commit short",
+  "description": "ciFromAnAncestor (internal/reconcile/closeout_ci.go) walks back for a commit CI ran on. Its loop continues only on CINone:\n\n    if report.State == forge.CINone { continue }\n    // A verdict.\n    return sha, report, true, nil\n\nSo CIPending is taken as 'a verdict' and returned. Pending is not a verdict — it is the ABSENCE of one, and returning it makes the caller hold forever.\n\nMeasured on epic/ncv closing Phase 4. The walk from head 0dae1d67:\n\n    0dae1d67 \u003cnone\u003e       continue\n    f8932575 \u003cnone\u003e       continue\n    07f8678c \u003cnone\u003e       continue\n    a454c7fb \u003cnone\u003e       continue\n    dac27935 \u003cnone\u003e       continue\n    6e9b201d cancelled x3 -\u003e CIPending -\u003e RETURNED, walk stops\n    35f6e9fe success x4   \u003c- one commit further on, never reached\n\nThe close-out held on 'CI is pending' while a fully green ancestor sat one commit away, with every change between it and the head under .ticfac/ — exactly the case 9da built this walk for.\n\nThe cancelled runs come from 5ob: the run's own checkpoint pushes cancel in-flight CI, and cancelled reads as pending forever on that commit. So 5ob manufactures the pending ancestors, and this defect makes the walk stop at the first one.\n\nFix: continue past PENDING as well as NONE, and take only a CONCLUSIVE verdict — green or red. That is sound for the same reason the walk is sound at all: onlyRunState proves the ancestor's code IS this tree's code, so a conclusive older verdict describes this tree whatever a newer commit's CI happens to be doing.\n\nKeep the head's own pending answer as the fallback when the walk finds nothing conclusive, so a genuinely-still-running CI still reads as pending rather than as absent.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The walk skips pending ancestors and returns the newest CONCLUSIVE one; a close-out whose head has no CI and whose only conclusive ancestor is green proceeds, with a test built from this exact ancestry",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T16:00:14.531283Z",
+  "updated_at": "2026-09-19T16:00:14.531283Z"
+}

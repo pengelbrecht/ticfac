@@ -1,0 +1,13 @@
+{
+  "id": "4g4",
+  "title": "RepoRoom migration v4 is listed before v2/v3 in wrangler.toml",
+  "description": "The migrations array lists v4 ahead of v2 and v3. Cloudflare applies migrations in array order, so a fresh deploy applies them out of sequence.\n\nSmall, and exactly the kind of thing that is invisible until a first deploy into a clean account — which is the deploy Phase 5 needs.\n\nFrom pxc, finding 71cdb339.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "wrangler.toml lists migrations in ascending order and a check fails if a new one is inserted out of sequence",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T13:50:58.034156Z",
+  "updated_at": "2026-09-19T13:50:58.034156Z"
+}

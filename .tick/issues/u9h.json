@@ -1,0 +1,29 @@
+{
+  "id": "u9h",
+  "title": "Perform Phase 5's gate run on a deployed Factory, with a mid-run Workflow restart",
+  "description": "Phase 4 built every component and NO TICK OWNED THE RUN, so its gate was never performed and the final review was the first to notice. This tick exists so that cannot happen twice.\n\nRun a real, small epic through EpicReconcilerWorkflow on a deployed Factory:\n- with max_parallel \u003e 1, so sibling-token revocation (53s) would show if it were still there\n- restarting the Workflow while an attempt is in flight, so adoption by identity (t5p) is exercised on the cloud host rather than asserted\n- reporting the intervention count MECHANICALLY rather than reconstructed afterwards\n\nBlocked on the component ticks it needs (nu9, t5p, cxk, 53s, us2, e9n) AND on the local-host causes that made Phase 4 need a person 17 times: aqm (untriaged-findings holds, 8 of the 17 stops), 80x (review re-dispatched on identical source, 3), ox0 (premature 'CI absent', 1), 6na (rerere-poisoned merge, 1), b50 (a NOT READY review recorded as ready-to-merge), 4sb (the PR cannot carry the review), and v3q (Phase 4's own unmet tracker-fixture criterion).\n\nThose local-host blockers are on THIS tick rather than on the epic deliberately: blocking dha itself would also stall work that does not need them, such as wiring the route. The gate run is the thing that would stop for those reasons.\n\nFrom ncv close-out findings 690a09e7 and f4dafd26.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "nu9",
+    "t5p",
+    "cxk",
+    "53s",
+    "us2",
+    "e9n",
+    "4sb",
+    "aqm",
+    "b50",
+    "80x",
+    "ox0",
+    "6na",
+    "v3q"
+  ],
+  "parent": "dha",
+  "acceptance_criteria": "A real epic completes on a deployed Factory driven by EpicReconcilerWorkflow with max_parallel \u003e 1, survives a Workflow restart with an attempt in flight adopted by identity, and reports its intervention count from recorded data",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T17:37:44.279768Z",
+  "updated_at": "2026-09-19T17:37:44.343998Z"
+}

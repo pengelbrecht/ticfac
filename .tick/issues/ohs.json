@@ -1,0 +1,13 @@
+{
+  "id": "ohs",
+  "title": "Route the SignalInbox's .tick/ commits through the repository publisher, or prove the disjointness",
+  "description": "The SignalInbox commit queue (tracker-write.ts) writes to the repository WITHOUT holding the publish slot.\n\nToday that is safe: its paths are disjoint from the run branch's records and it has its own in-DO queue. But the safety is stated only in prose, in repo-room's header — so the invariant 'every publish to a repository goes through one serialized publisher' currently has an undocumented-in-code exception.\n\nAn invariant with a prose exception is an invariant nobody can rely on, and the next person to add a writer will not read that header.\n\nWork: either route those commits through RepoRoom.publish, or add a test that proves the namespace disjointness and fails if either side grows a path into the other's space. Prefer the test if routing would serialise a queue that has no contention — but say which was chosen and why.\n\nFound by ef7, run epic-ncv, finding b52c8273. Belongs to a later phase than ncv.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Either SignalInbox publishes through RepoRoom.publish, or a test fails when the two path namespaces overlap; the prose exception in repo-room's header is gone either way",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T12:30:20.268068Z",
+  "updated_at": "2026-09-19T12:30:20.268068Z"
+}
