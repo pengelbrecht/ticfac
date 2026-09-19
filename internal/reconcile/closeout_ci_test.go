@@ -155,3 +155,58 @@ func TestAnOlderGreenIsNotBorrowedWhenCodeChangedSince(t *testing.T) {
 		t.Error("the answer should be the head's own")
 	}
 }
+
+// A PENDING ancestor must not end the walk, and this is the ancestry that
+// proved it matters (tick tk3, closing Phase 4). The run's own checkpoint
+// pushes cancel the CI they supersede, and a cancelled check reads as pending
+// FOREVER on that commit, because nothing ever re-runs on a commit the branch
+// has moved past (tick 5ob). So the branch accumulates permanently-pending
+// ancestors between the head and the last commit whose CI actually finished.
+//
+// Observed on epic/ncv: five run-state commits with no checks at all, then one
+// whose checks were cancelled, then the fully green commit — and the walk
+// stopped at the cancelled one, ONE COMMIT SHORT, while reporting the close-out
+// as pending.
+//
+// Walking past pending is sound because onlyRunState still has to prove the
+// ancestor's code is this tree's code. What is refused is treating "no answer
+// yet" as an answer.
+func TestAPendingAncestorDoesNotEndTheWalk(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	code := commitOn(t, f.Repo, "internal/thing/thing.go", "package thing\n")
+	// The commit whose CI was cancelled when the next checkpoint superseded it.
+	superseded := commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":41,"state":"gating"}`)
+	// Then the checkpoints that moved the head past it, none of which ever
+	// started a workflow of their own.
+	commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":42,"state":"gating"}`)
+	head := commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":43,"state":"gating"}`)
+	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
+
+	pr := &forge.PullRequest{Number: 11, URL: "https://example/pr/11", HeadRef: "epic/qeu", BaseRef: "main", HeadSHA: head}
+	forgeFake := &fakeForge{exists: true, pr: pr, bySHA: map[string]forge.CIReport{
+		code:       {State: forge.CIGreen},
+		superseded: {State: forge.CIPending},
+		// head deliberately absent: its checkpoint never started a workflow
+	}}
+
+	r, err := New(f.options(f.Repo, fixtureOptions{pullRequests: forgeFake}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report, sha, isHead, err := r.ciForTree(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ciForTree: %v", err)
+	}
+	if report.State != forge.CIGreen {
+		t.Fatalf("CI reads %s, want green: the walk stopped at a pending ancestor and never reached the "+
+			"conclusive one a single commit further on (tick tk3)", report.State)
+	}
+	if sha != code {
+		t.Errorf("the verdict is about %s, want the last commit that changed code (%s)", short(sha), short(code))
+	}
+	if isHead {
+		t.Error("the verdict is reported as the head's own, but it came from an ancestor")
+	}
+}
