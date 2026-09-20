@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 93,
-  "state": "gating",
-  "reason": "running the integrated gate for aqm on 7ef31cc4882b",
-  "updated_at": "2026-09-20T10:12:14Z",
+  "sequence": 94,
+  "state": "publishing",
+  "reason": "closing aqm behind the integrated gate on 7ef31cc4882b",
+  "updated_at": "2026-09-20T10:18:57Z",
   "ticks": [
     {
       "tick_id": "4sb",
