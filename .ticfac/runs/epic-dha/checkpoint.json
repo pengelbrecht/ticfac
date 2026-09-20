@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 61,
-  "state": "running",
-  "reason": "cxk is running as attempt 7",
-  "updated_at": "2026-09-20T08:13:55Z",
+  "sequence": 62,
+  "state": "collecting",
+  "reason": "collecting 80x attempt 4",
+  "updated_at": "2026-09-20T08:14:02Z",
   "ticks": [
     {
       "tick_id": "4sb",
