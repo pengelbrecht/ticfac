@@ -1,0 +1,13 @@
+{
+  "id": "atn",
+  "title": "replan_test's failure message names nothing: print the refusal",
+  "description": "replan_test.go:79 fails with 'closed [], want every tick of the epic' and nothing else. When it failed overnight in epic dha's gate, that message could not distinguish a load-caused timeout from a clock-skew refusal, and the investigation cost far more than the fix.\n\nThe run's own result carries the answer: adding result.Failure to that message would have named RefusedUnaddressed on the spot.\n\nCheap, and the same rule the refusals themselves follow — say the fact that explains the others (44q, rxe).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The test's failure message names the run's refusal reason when there is one",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T07:55:23.280792Z",
+  "updated_at": "2026-09-20T07:55:23.280792Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "bhc",
+  "title": "processTick is dead code since 9pz",
+  "description": "internal/reconcile/dispatch.go:242 — processTick has no callers since 9pz made the finish a state machine. Comments only. Delete it, and check whether anything it referenced is now orphaned too.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "processTick and any now-orphaned helpers are gone, and the gate passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T07:55:23.409314Z",
+  "updated_at": "2026-09-20T07:55:23.409314Z"
+}

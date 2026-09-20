@@ -1,0 +1,15 @@
+{
+  "id": "m4n",
+  "title": "The gate heartbeat resets its clock and stops beating: the finish state is re-created around a running shell",
+  "description": "Regression from 9pz (PR #12), seen on the first real run after merging. Epic dha, gating 6na:\n\n    05:36:48  gate_started   the go gate is running on a1bfaae94c36, bounded at 1h0m0s\n    05:53:59  gate_running   has been running for 1m0s ... last 8s ago; 59m0s of its bound is left\n    06:10:00  gate_running   has been running for 2m1s ... last 16m9s ago; 57m59s of its bound is left\n\nMeanwhile the shell itself: one 'go test -short -timeout 45m -parallel 12 ./...' process, started 05:36:48, still running at 44 minutes. It was never restarted.\n\nSo:\n- announceGate's elapsed is now.Sub(g.began), which is correct arithmetic — therefore g.began is being RESET about every 16 minutes, while the process keeps running. The finish state (the gateCommand) is being re-created around a shell that is still going, presumably by the step-cap leg re-derivation ('a FRESH step that re-derives its state from durable facts'), which the sentinel design makes possible because a new gateCommand can re-attach to a running shell.\n- Between re-creations exactly ONE heartbeat lands (a minute after the reset) and then nothing for ~15 minutes, so the gate is not being stepped at the cadence the heartbeat assumes either.\n\nConsequences:\n1. The heartbeat lies about elapsed and about how much bound is left — the two numbers an operator uses to decide whether to look at the host. Tonight it reported '2m1s' for a gate 34 minutes old.\n2. A finished gate is noticed late — up to the re-derivation interval — which eats part of what 9pz just bought.\n3. 'last 16m9s ago' is the one honest number in that line, and it is the one that looks alarming.\n\nWork: the gate's own clock must belong to the SHELL, not to the gateCommand wrapper — began and beat should be re-derived from the shell (its start, its output mtime) when the finish state is re-created, or the state must not be re-created while its shell is alive. Decide which, and say why in a comment. Then a test: re-derive the finish mid-gate and assert elapsed keeps increasing and the heartbeat keeps its cadence.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A gate's heartbeat reports elapsed and remaining bound from the shell's own start, unbroken across a finish-state re-derivation, and beats at its declared cadence for the whole gate",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T06:39:55.232644Z",
+  "updated_at": "2026-09-20T08:04:40.373523Z",
+  "closed_at": "2026-09-20T08:04:40.373523Z",
+  "closed_reason": "Merged as PR #13 (3485bc0). The gate's clock now belongs to the shell: wall time for what it reports (elapsed, last output), monotonic for what it spends (the bound), so a suspended host can neither corrupt the report nor refuse a gate for sleeping. Root cause was mixed clocks in one sentence, not the state re-creation I guessed."
+}
