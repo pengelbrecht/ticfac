@@ -2,13 +2,14 @@
   "id": "t5p",
   "title": "Persist the sandbox handle so an attempt survives a restart",
   "description": "epic-reconciler.ts records the attempt marker BEFORE executor.start, then merges start's sandbox / process_id / branch / base_sha only in memory. Every later pass, and every restart, calls namedSandbox(binding, undefined) and getProcess(undefined).\n\nSo on the cloud host an attempt cannot be re-inspected after the Workflow restarts — which is precisely the adoption-by-identity guarantee that made the local reconciler survive nine process deaths in Phase 3. The cloud host has the doctrine's words and not its behaviour.\n\nFakeExecutor keys on job_id, which is why the suite is green over this. Any fix must also fix the fake, or the next regression is invisible again.\n\nFrom pxc, finding b25e231d.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "An attempt dispatched before a Workflow restart is re-inspected by identity after it, proven by a test whose executor requires the persisted handle rather than job_id",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:49:51.439995Z",
-  "updated_at": "2026-09-19T13:49:51.439995Z"
+  "updated_at": "2026-09-20T13:56:34.903936Z",
+  "started_at": "2026-09-20T13:56:34.903935Z"
 }
