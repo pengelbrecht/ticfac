@@ -1,0 +1,13 @@
+{
+  "id": "nzo",
+  "title": "A killed reconciler leaks one gate scratch directory per gate, forever",
+  "description": "`startShell` creates a `ticfac-gate-io-*` scratch directory with `os.MkdirTemp`. `gateShell`'s cleanup removes it, but that cleanup is a deferred call, and a SIGKILLed reconciler does not run deferred calls. So every gate a killed reconciler was running leaks one directory, and nothing ever prunes them.\n\nSame class as the worktree registrations that `pruneWorktrees` exists for — the fix is probably the same shape: sweep on start rather than rely on release.\n\nFound by gatecache while doing 6wh, which deliberately did not touch it. The 6wh slot directories themselves are NOT affected: they are a stable, deliberately reused registration, reset on acquire rather than cleaned on release, precisely because release cannot be relied on.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A reconciler that starts after a previous one was killed mid-gate leaves no ticfac-gate-io-* directory behind, proven by a test that kills a reconciler holding one and starts another",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T12:58:36.964019Z",
+  "updated_at": "2026-09-20T12:58:36.964019Z"
+}

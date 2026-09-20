@@ -1,0 +1,13 @@
+{
+  "id": "7c0",
+  "title": "A preserved-work stop is never observed under host load",
+  "description": "`TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt` (internal/reconcile, prior_snapshots_test.go:94) failed in the e9n attempt-8 integrated gate after 595.97s:\n\n    the run's feed never said a1's wall clock fired:\n    the stop the snapshot preserves was never observed\n\nThe same commit (46caa836a30c) passes the whole reconcile package on a quiet host: ok 499.216s. It failed only when the package took 1363s instead of its ~180s quiet baseline.\n\nPer the standing 'flaky = bug' policy this is a defect, not load noise. The test waits for a wall_clock_fired feed line; under contention it gives up before the line arrives. Either the wall clock genuinely does not fire when the host is busy — which would be a production bug, since a wall clock that only fires on an idle machine is not a bound — or the test waits on a derived signal with its own deadline instead of on the observable. Determine which before fixing, and do not widen the timeout.\n\nSibling of e4u; both stopped the epic-dha Phase 5 run at 12:47 on failures that do not reproduce. Root cause of the exposure is miu.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The test passes deterministically under injected contention, with the fix naming whether the wall clock or the test's wait was at fault, proven without widening a timeout",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T13:00:19.8337Z",
+  "updated_at": "2026-09-20T13:00:19.8337Z"
+}
