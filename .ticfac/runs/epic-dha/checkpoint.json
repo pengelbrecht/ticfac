@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 264,
-  "state": "running",
-  "reason": "u9h is running as attempt 28",
-  "updated_at": "2026-09-20T18:30:01Z",
+  "sequence": 265,
+  "state": "collecting",
+  "reason": "collecting u9h attempt 28",
+  "updated_at": "2026-09-20T18:31:29Z",
   "ticks": [
     {
       "tick_id": "4sb",
