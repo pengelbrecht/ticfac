@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 159,
-  "state": "collecting",
-  "reason": "collecting sz0 attempt 12",
-  "updated_at": "2026-09-20T14:36:13Z",
+  "sequence": 160,
+  "state": "integrating",
+  "reason": "integrating sz0 attempt 12 into epic/dha",
+  "updated_at": "2026-09-20T14:36:35Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -59,7 +59,7 @@
     },
     {
       "tick_id": "sz0",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 12
     },
     {
