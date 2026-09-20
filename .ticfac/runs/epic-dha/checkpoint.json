@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 123,
-  "state": "running",
-  "reason": "cxk is closed",
-  "updated_at": "2026-09-20T12:21:53Z",
+  "sequence": 124,
+  "state": "dispatching",
+  "reason": "dispatching ox0 as attempt 11",
+  "updated_at": "2026-09-20T12:22:09Z",
   "ticks": [
     {
       "tick_id": "4sb",
