@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 119,
-  "state": "collecting",
-  "reason": "collecting cxk attempt 7",
-  "updated_at": "2026-09-20T10:39:16Z",
+  "sequence": 120,
+  "state": "integrating",
+  "reason": "integrating cxk attempt 7 into epic/dha",
+  "updated_at": "2026-09-20T10:39:40Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "cxk",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 7
     },
     {
