@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 52,
-  "state": "gating",
-  "reason": "running the integrated gate for 6na on a1bfaae94c36",
-  "updated_at": "2026-09-20T05:36:42Z",
+  "sequence": 53,
+  "state": "failed",
+  "reason": "the integrated gate on a1bfaae94c36 did not pass for 6na: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/dha, so the repair is to fix the check or the tree, push it to epic/dha, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+  "updated_at": "2026-09-20T07:22:36Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "6na",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 3
     },
     {
