@@ -2,13 +2,14 @@
   "id": "ox0",
   "title": "The close-out calls CI 'unsatisfiable by waiting' when it merely asked too early",
   "description": "3q0 opened epic PR #11 and refused it the SAME SECOND:\n\n    closeout_ci_absent: no CI has run on the epic PR #11: .github/workflows/ci.yml\n    has produced no check runs on its head, so the close-out's precondition is\n    unsatisfiable by waiting — the workflow may not trigger on pull_request at all\n\nEvery part of that diagnosis is wrong. ci.yml has a bare `pull_request:` trigger with no branch filter, and it ran on PRs #8, #9 and #10 earlier the same day. Forty-five seconds after the refusal, all four checks were present and running.\n\nGitHub had simply not created the check runs yet. The close-out opened the PR and asked about it within a second.\n\nThe damage is the WORDING, not the wait. 'Unsatisfiable by waiting' is the one verdict that tells an operator not to bother waiting, and it volunteers a false cause — that the workflow may not trigger at all — which sends whoever reads it to edit a workflow file that is correct. An unattended run would stop here permanently, and the person who came to look would be handed a wrong lead.\n\nThis is the mirror of 9da. There the close-out asked about a head that kept moving; here it asks before an answer can exist. Both are the close-out treating a MOMENTARY absence of CI as a PERMANENT fact.\n\nWork:\n- A PR opened by this run has no CI yet BY CONSTRUCTION. Wait for check runs to appear before concluding anything, bounded, and say 'waiting for CI to appear' while doing so.\n- Only after that bound expires may the run suggest the workflow might not trigger — and it should then say what it checked, not guess.\n- Never let one absent-CI code carry both 'too early' and 'never coming'. They have opposite repairs.\n- Test: open a PR, ask immediately, assert the run waits rather than refusing.\n\nFound 2026-09-19 closing Phase 4.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "A close-out that opens a PR waits a bounded time for check runs to appear before refusing, distinguishes 'not yet' from 'never', and names what it checked rather than guessing a cause",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T14:35:54.345851Z",
-  "updated_at": "2026-09-19T21:37:10.540514Z"
+  "updated_at": "2026-09-20T12:22:18.613329Z",
+  "started_at": "2026-09-20T12:22:18.613329Z"
 }
