@@ -460,6 +460,19 @@ declare namespace Cloudflare {
      * phase's item 3.
      */
     TICFAC_INTEGRATION?: import("./epic-reconciler").IntegrationHost;
+    /**
+     * The code-hosting surface the CI-gated close-out reads (tick cxk): the
+     * pull-request + CI seam the PR + CI close-out rule demands — find or
+     * open the epic PR, read CI on a commit, carry the review's verdict and
+     * the run's findings onto the PR. Unset on a deployment, which speaks
+     * GitHub's REST API directly from `GITHUB_TOKEN` — and a deployment
+     * with no token at all gets the typed refusal a rule-declaring
+     * repository answers to, never a silent ungated close-out.
+     */
+    TICFAC_PULL_REQUESTS?: {
+      project: string;
+      forge: import("./forge").PullRequests;
+    };
     /** Test knob for the reconcile Workflow's poll cadence (ms). */
     TICFAC_RECONCILE_POLL_MS?: number;
     [signalSecret: `SIGNAL_SECRET_${string}`]: string | undefined;

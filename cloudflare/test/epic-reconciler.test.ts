@@ -39,6 +39,7 @@ import {
   skeletonRank,
   tryOf,
 } from "../src/epic-reconciler";
+import type { CIReport, PullRequest, PullRequests } from "../src/forge";
 import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
 import {
   attemptPath,
@@ -281,11 +282,133 @@ class DyingIntegration implements IntegrationHost {
   }
 }
 
+// ----------------------------------------------- the CI-gated close-out (cxk) ---
+
+/**
+ * The rule the close-out gates on (cxk): the repository's own declaration,
+ * the anchor `internal/reconcile` recognises, with the workflow named.
+ */
+const CLOSEOUT_RULE =
+  "## Rules\n\n" +
+  "- Epic integration goes through a PR + CI gate: the epic close-out may not " +
+  "complete until CI (.github/workflows/ci.yml) is green on the epic PR. No direct " +
+  "merges of epic branches to the default branch.\n";
+
+/**
+ * The tracker fixture plus the two records the gated close-out reads: the rule
+ * in `.tick/config.md` and one findings draft the run's earlier incarnation
+ * left on the branch — the text the epic PR must carry beside CI.
+ */
+function seededWithRule(runID: string = RUN_ID): Record<string, string> {
+  const records = seedTracker();
+  records[".tick/config.md"] = CLOSEOUT_RULE;
+  records[`.ticfac/runs/${runID}/findings/key-draft.json`] = JSON.stringify(
+    {
+      schema_version: 1,
+      key: "key-draft",
+      source: "ticfac-worker",
+      discovered_from: `run-${runID}/tick-t01/attempt-1`,
+      kind: "defect",
+      title: "A defect outside the discovering tick",
+      body: "The finding's own text, which the person merging must read beside CI.",
+      severity: "medium",
+      target: "",
+      tick_id: "t01",
+      attempt: 1,
+      status: "proposed",
+      proposed_at: "2026-09-19T09:00:00Z",
+    },
+    null,
+    2,
+  );
+  return records;
+}
+
+/**
+ * The fake forge: the `PullRequests` seam with the CI answers a test states
+ * per sha, the ancestors a branch has, and the paths a range of commits
+ * changed — the three inputs the close-out's gates read. CI is asked by SHA
+ * and every ask is recorded, because WHICH commit a verdict was borrowed from
+ * is the thing 9da's walk exists to keep honest.
+ */
+class FakeForge implements PullRequests {
+  readonly opened: Array<{ headRef: string; baseRef: string; title: string; body: string }> = [];
+  /** every updateBody, in order — the overwrite the found path and the close gate write. */
+  readonly bodies: Array<{ number: number; body: string }> = [];
+  readonly prs = new Map<string, PullRequest>();
+  readonly ciBySHA = new Map<string, CIReport>();
+  readonly ciCalls: string[] = [];
+  readonly ancestorsByHead = new Map<string, string[]>();
+  readonly changedByPair = new Map<string, string[] | null>();
+  /** What a sha with no entry answers with: `none` until a test says otherwise. */
+  default: CIReport = { state: "none", failing: [] };
+  failOpen: Error | null = null;
+  failUpdate: Error | null = null;
+  failCI: Error | null = null;
+  #next = 0;
+
+  async find(headRef: string, _baseRef: string): Promise<PullRequest | null> {
+    return this.prs.get(headRef) ?? null;
+  }
+
+  async open(input: {
+    headRef: string;
+    baseRef: string;
+    title: string;
+    body: string;
+  }): Promise<PullRequest> {
+    if (this.failOpen !== null) throw this.failOpen;
+    this.#next += 1;
+    const pr: PullRequest = {
+      number: this.#next,
+      url: `https://example.com/${PROJECT}/pull/${this.#next}`,
+      head_ref: input.headRef,
+      head_sha: `head-${this.#next}`,
+      base_ref: input.baseRef,
+    };
+    this.opened.push(input);
+    this.prs.set(input.headRef, pr);
+    return pr;
+  }
+
+  async updateBody(pr: PullRequest, body: string): Promise<void> {
+    if (this.failUpdate !== null) throw this.failUpdate;
+    this.bodies.push({ number: pr.number, body });
+  }
+
+  async ci(sha: string): Promise<CIReport> {
+    if (this.failCI !== null) throw this.failCI;
+    this.ciCalls.push(sha);
+    return this.ciBySHA.get(sha) ?? this.default;
+  }
+
+  async ancestors(headRef: string, limit: number): Promise<string[]> {
+    return (this.ancestorsByHead.get(headRef) ?? []).slice(0, limit);
+  }
+
+  async changedPaths(from: string, to: string): Promise<string[] | null> {
+    return this.changedByPair.get(`${from}...${to}`) ?? null;
+  }
+
+  /** The branch moved under the PR — 9da's shape: the run's own writes moved the head. */
+  moveHead(headRef: string, sha: string): void {
+    const pr = this.prs.get(headRef);
+    if (pr === undefined) throw new Error(`no PR for ${headRef} to move`);
+    this.prs.set(headRef, { ...pr, head_sha: sha });
+  }
+}
+
 function reconcilerFor(
   contents: MemoryContents,
   executor?: AttemptExecutor,
   integration?: IntegrationHost,
   maxParallel?: number,
+  extra?: {
+    pullRequests?: PullRequests;
+    baseRef?: string;
+    now?: () => Date;
+    gateTimeoutMs?: number;
+  },
 ): EpicReconciler {
   const store = storeFor(contents);
   return new EpicReconciler({
@@ -295,6 +418,7 @@ function reconcilerFor(
     integration,
     provenance: store.provenance,
     maxParallel,
+    ...(extra ?? {}),
   });
 }
 
@@ -1013,6 +1137,373 @@ describe("the refusals", () => {
   });
 });
 
+describe("the CI-gated close-out, ported", () => {
+  /** The detail each role reports with — the review's answer is what the PR carries. */
+  const finishFor = (tickID: string) =>
+    tickID === "rev1"
+      ? { outcome: "done" as const, commits: 2, detail: "the review found nothing to refuse" }
+      : { outcome: "done" as const, commits: 1, detail: "pushed and reported" };
+
+  /** Drives every dispatch to done, then stops at the first gated hold. */
+  async function driveToHold(
+    pass: () => Promise<import("../src/epic-reconciler").PassResult>,
+    onDispatched: (dispatched: Array<{ tick_id: string; attempt: number }>) => void = () => {},
+    budget = 60,
+  ): Promise<import("../src/epic-reconciler").PassResult> {
+    for (let i = 0; i < budget; i += 1) {
+      const outcome = await pass();
+      if (outcome.terminal || outcome.state === "gating") return outcome;
+      onDispatched(outcome.dispatched);
+    }
+    throw new Error("the run did not settle within the pass budget");
+  }
+
+  it("admits the close-out behind green CI and opens a PR that carries the review's verdict and the run's findings", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const integration = new FakeIntegration();
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, integration, undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("completed");
+
+    // The PR: opened for the run branch into the default base, under the rule.
+    expect(forge.opened.length).toBe(1);
+    expect(forge.opened[0].headRef).toBe(BRANCH);
+    expect(forge.opened[0].baseRef).toBe("main");
+    expect(forge.opened[0].title).toContain(EPIC_ID);
+
+    // The body the PR was OPENED with, and the one the close gate re-carried,
+    // are recompositions of the same record: an overwrite, never an append.
+    expect(forge.bodies.length).toBe(1);
+    for (const body of [forge.opened[0].body, forge.bodies[0].body]) {
+      expect(body).toContain("the review found nothing to refuse");
+      expect(body).toContain("A defect outside the discovering tick");
+      expect(body).toContain(
+        "The finding's own text, which the person merging must read beside CI.",
+      );
+    }
+    expect(forge.bodies[0].body).toBe(forge.opened[0].body);
+
+    // The close-out closed behind the gate, and the run completed behind it.
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.state).toBe("completed");
+    expect(checkpoint?.ticks?.every((t) => t.state === "closed")).toBe(true);
+  });
+
+  it("refuses the close-out on red CI, naming the failing job, and never dispatches it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "red", failing: ["build-and-test"] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("build-and-test");
+    expect(run.outcome.reason).toContain("PR + CI gate");
+    // The close-out job was never claimed or started, and the tick stayed open.
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("open");
+    // The PR was opened and carried the record even though CI refused it.
+    expect(forge.opened.length).toBe(1);
+  });
+
+  it("refuses the close-out when no CI has run at all, naming the workflow", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge(); // default: none, no ancestors
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain(".github/workflows/ci.yml");
+    expect(run.outcome.reason).toContain("unsatisfiable by waiting");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("holds the close-out while CI is pending, and admits it once CI concludes", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "pending", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    let held = false;
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (outcome.state === "gating") {
+        // A held pass is a wait the run re-derives, not a failure of the work.
+        held = true;
+        forge.default = { state: "green", failing: [] };
+      }
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(held).toBe(true);
+    expect(run.outcome.state).toBe("completed");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(1);
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+  });
+
+  it("refuses the close-out when the rule is declared and no code-hosting surface is wired", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration());
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("no code-hosting surface");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("gates on the newest ancestor CI ran on when the head has none — 9da's walk, ported", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    // The PR exists with a head the run's own checkpoint writes moved, no
+    // check on it yet, and a green ancestor behind run-state-only commits.
+    forge.prs.set(BRANCH, {
+      number: 7,
+      url: "https://example.com/pr/7",
+      head_ref: BRANCH,
+      head_sha: "head-moved-by-checkpoints",
+      base_ref: "main",
+    });
+    forge.ciBySHA.set("head-moved-by-checkpoints", { state: "none", failing: [] });
+    forge.ancestorsByHead.set(BRANCH, ["head-moved-by-checkpoints", "ancestor-green"]);
+    forge.ciBySHA.set("ancestor-green", { state: "green", failing: [] });
+    forge.changedByPair.set("ancestor-green...head-moved-by-checkpoints", [
+      ".ticfac/runs/epic-ex1/checkpoint.json",
+    ]);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("completed");
+    // The head was asked first, and the ancestor's verdict was used only
+    // after the walk proved every change between them was run state.
+    expect(forge.ciCalls[0]).toBe("head-moved-by-checkpoints");
+    expect(forge.ciCalls).toContain("ancestor-green");
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+  });
+
+  it("does not borrow an ancestor's green when anything outside .ticfac/ changed since it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.prs.set(BRANCH, {
+      number: 7,
+      url: "https://example.com/pr/7",
+      head_ref: BRANCH,
+      head_sha: "head-moved-by-checkpoints",
+      base_ref: "main",
+    });
+    forge.ciBySHA.set("head-moved-by-checkpoints", { state: "none", failing: [] });
+    forge.ancestorsByHead.set(BRANCH, ["head-moved-by-checkpoints", "ancestor-green"]);
+    forge.ciBySHA.set("ancestor-green", { state: "green", failing: [] });
+    // Code moved between the ancestor and the head: its verdict does not
+    // describe this tree, so the honest answer is the head's own — none.
+    forge.changedByPair.set("ancestor-green...head-moved-by-checkpoints", [
+      "src/thing.ts",
+      ".ticfac/runs/epic-ex1/checkpoint.json",
+    ]);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain(".github/workflows/ci.yml");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("refuses to close the close-out on red CI at the close, naming the job, and leaves the tick open", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    let moved = false;
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+        if (!moved && outcome.dispatched.some((d) => d.tick_id === "clo1")) {
+          // The close-out's own commits moved the PR head; its CI is red.
+          moved = true;
+          forge.moveHead(BRANCH, "head-after-closeout");
+          forge.ciBySHA.set("head-after-closeout", { state: "red", failing: ["retro-lint"] });
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("retro-lint");
+    expect(run.outcome.reason).toContain("the close-out's own commits");
+    // The close-out is NOT closed behind red CI: the row is rejected, the
+    // tick stays claimed-but-open, and the run's record names the job.
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "clo1")?.state).toBe("rejected");
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("in_progress");
+  });
+
+  it("holds the close at absent CI without rewriting the wait's start, then refuses past its bound", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    let clock = new Date(NOW);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+      now: () => clock,
+      gateTimeoutMs: 60 * 60 * 1000,
+    });
+
+    let moved = false;
+    const outcome = await driveToHold(
+      async () => reconciler.reconcilePass(),
+      (dispatched) => {
+        for (const dispatch of dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+        if (!moved && dispatched.some((d) => d.tick_id === "clo1")) {
+          moved = true;
+          forge.moveHead(BRANCH, "head-after-closeout");
+          forge.ciBySHA.set("head-after-closeout", { state: "none", failing: [] });
+        }
+      },
+    );
+    expect(outcome.terminal).toBe(false);
+    expect(outcome.state).toBe("gating");
+    const held = await readCheckpoint(contents);
+    expect(held?.state).toBe("gating");
+    expect(held?.reason).toContain("produced no check runs");
+
+    // The same hold on the next pass is an OBSERVATION: the checkpoint keeps
+    // its own updated_at, which is the durable start the bound measures.
+    const before = (await contents.read(checkpointPath(RUN_ID)))!.content;
+    const again = await reconciler.reconcilePass();
+    expect(again.terminal).toBe(false);
+    expect(again.state).toBe("gating");
+    expect((await contents.read(checkpointPath(RUN_ID)))!.content).toBe(before);
+
+    // Past the bound the run refuses rather than holding forever, and says
+    // what a person must do: re-run the epic once CI concludes.
+    clock = new Date(NOW.getTime() + 61 * 60 * 1000);
+    const refused = await reconciler.reconcilePass();
+    expect(refused.terminal).toBe(true);
+    expect(refused.state).toBe("failed");
+    expect(refused.reason).toContain("produced no check runs");
+    expect(refused.reason).toContain("does not close the close-out");
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.state).toBe("failed");
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "clo1")?.state).toBe("rejected");
+  });
+
+  it("bounds the admission's pending hold too, and refuses to admit past it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "pending", failing: [] };
+    let clock = new Date(NOW);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+      now: () => clock,
+      gateTimeoutMs: 60 * 60 * 1000,
+    });
+
+    const outcome = await driveToHold(
+      async () => reconciler.reconcilePass(),
+      (dispatched) => {
+        for (const dispatch of dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      },
+    );
+    expect(outcome.state).toBe("gating");
+    // The hold re-derives from the PR on the next pass, still inside the bound.
+    const again = await reconciler.reconcilePass();
+    expect(again.state).toBe("gating");
+    clock = new Date(NOW.getTime() + 61 * 60 * 1000);
+    const refused = await reconciler.reconcilePass();
+    expect(refused.terminal).toBe(true);
+    expect(refused.state).toBe("failed");
+    expect(refused.reason).toContain("was still pending");
+    expect(refused.reason).toContain("does not admit the close-out");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+});
+
 describe("one Workflow per EpicRun, driven by the engine", () => {
   it("the EPIC_RECONCILER binding drives an epic run to completion", async () => {
     const contents = sharedContents();
@@ -1106,6 +1597,63 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     await expect(
       env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT)).slotStatus(),
     ).resolves.toBeNull();
+  });
+
+  it("drives a gated close-out: the Workflow hands over a PR that carries the verdict and the findings", async () => {
+    const runID = `${RUN_ID}-closeout-wf`;
+    const contents = new MemoryContents(seededWithRule(runID));
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: new AutoFinishExecutor(),
+      TICFAC_INTEGRATION: new FakeIntegration(),
+      TICFAC_PULL_REQUESTS: { project: PROJECT, forge },
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the checkpoint the Workflow writes.
+    const deadline = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+
+    // The run completed behind the gate, and the epic PR it opened carries
+    // the final review's verdict and the run's findings — the record the
+    // person merging reads beside CI, not CI status alone.
+    expect(checkpoint?.state).toBe("completed");
+    expect(forge.opened.length).toBe(1);
+    expect(forge.opened[0].headRef).toBe(BRANCH);
+    expect(forge.opened[0].body).toContain("pushed and reported");
+    expect(forge.opened[0].body).toContain("A defect outside the discovering tick");
+    // The close gate's last write is the same view, overwritten once — never
+    // appended to, however many passes the Workflow took.
+    expect(forge.bodies.length).toBe(1);
+    expect(forge.bodies[0].body).toBe(forge.opened[0].body);
+    const decisions = await contents.list(`.ticfac/runs/${runID}/decisions`);
+    expect(decisions.length).toBe(2);
   });
 
   it("refuses to run a second Workflow that cannot take the publish slot, and writes nothing", async () => {

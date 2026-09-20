@@ -40,6 +40,16 @@
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
+import {
+  type CloseoutRule,
+  ciForTree,
+  ciSubject,
+  composePRBody,
+  finalReviewOf,
+  readCloseoutRule,
+  readFindings,
+} from "./closeout";
+import { type PullRequest, type PullRequests, pullRequestsFromEnv } from "./forge";
 import { contentsStore } from "./git-contents";
 import type { Env } from "./index";
 import { DEFAULT_LEASE_TTL_MS, type HolderCredentials, MAX_LEASE_TTL_MS } from "./lease";
@@ -321,10 +331,32 @@ export type ReconcilerDeps = {
   executor?: AttemptExecutor;
   /** Wires the merge-and-gate half; absent means the recorded boundary above. */
   integration?: IntegrationHost;
+  /**
+   * The code-hosting surface the PR + CI close-out rule demands (tick cxk):
+   * find/open the epic PR, read CI on a commit, carry the review's verdict
+   * and the run's findings onto the PR. Absent with a rule declared is a
+   * typed refusal, never a silent ungated close — the same fail-closed
+   * answer `internal/reconcile` gives a build with no forge configured.
+   */
+  pullRequests?: PullRequests;
+  /** The ref the epic PR asks to merge into; GitHub's `main` convention by default. */
+  baseRef?: string;
+  /** The clock the CI holds' bound measures; real time by default. */
+  now?: () => Date;
+  /** How long a held close-out waits on CI before refusing; the Go gate's own default. */
+  gateTimeoutMs?: number;
   provenance: import("./run-state-store").Provenance;
   /** The dispatch window; 0 or absent means the graph's configured width. */
   maxParallel?: number;
 };
+
+/**
+ * How long a held close-out waits on CI before refusing — the port of the
+ * Go reconciler's `DefaultGateTimeout`, and for the same reason: a pending
+ * CI is a wait the run BOUNDS, because a CI run on the PR is a gate this
+ * run waits on rather than one it runs.
+ */
+export const DEFAULT_GATE_TIMEOUT_MS = 60 * 60 * 1000;
 
 /** What one reconcile pass learned: the state to checkpoint, and the evidence. */
 export type PassResult = {
@@ -413,17 +445,36 @@ export class EpicReconciler {
   }
 
   /**
-   * Settles a REPORTED tick: integrate, then close — or the recorded
-   * boundary/refusal that stops the run. Returns the terminal result when the
-   * run stops, null when the tick settled.
+   * Settles a REPORTED tick: gate (the close-out's own CI gate, when the tick
+   * is the close-out and the repository declares the rule), integrate, then
+   * close — or the recorded boundary/refusal that stops the run. Returns the
+   * terminal result when the run stops, null when the tick settled.
+   *
+   * The close-out's close gate runs BEFORE the integration call, one step
+   * left of where the local reconciler puts it (there: integrated gate, then
+   * CI gate): a held gate leaves this row `reported` and is re-derived every
+   * pass, and an integration that ran on every held pass would re-perform
+   * the merge the row says is still pending. CI's verdict is about the tree
+   * either way, and green is the only path that reaches the integrate — so
+   * the gate is never satisfied by work the gate refused.
    */
   async #settleReported(
     tickID: string,
     attempt: number,
     rows: Map<string, TickState>,
     dispatchedThisPass: Array<{ tick_id: string; attempt: number }>,
+    plan: PlanEntry[],
+    checkpoint: Checkpoint | null,
   ): Promise<PassResult | null> {
     const { client, store } = this.#deps;
+    const role = plan.find((entry) => entry.tick_id === tickID)?.role ?? "implement-tick";
+    if (role === "closeout-epic" && (await this.#closeoutRule()).declared) {
+      // The close-out's OTHER CI gate (the sqx position, ported): the
+      // admission's green is not evidence about the head the close-out's own
+      // commits moved, so the CLOSE re-derives CI from the PR.
+      const gate = await this.#gateCloseoutClose(tickID, rows, checkpoint, dispatchedThisPass);
+      if (gate !== null) return gate;
+    }
     if (this.#deps.integration === undefined) {
       // The recorded decision (module header): no integration host, no close,
       // no false completion. The run stops naming the boundary rather than
@@ -481,6 +532,380 @@ export class EpicReconciler {
     return graph.dispatch.max_parallel;
   }
 
+  // ---------------------------------------- the CI-gated close-out (cxk) ---
+
+  /** The rule, read once per incarnation the way the Go `New` reads it. */
+  #rule: CloseoutRule | null = null;
+  #ruleRead = false;
+
+  async #closeoutRule(): Promise<CloseoutRule> {
+    if (!this.#ruleRead) {
+      this.#rule = await readCloseoutRule(this.#deps.store.store);
+      this.#ruleRead = true;
+    }
+    return this.#rule ?? { declared: false, ciWorkflow: "", stated: "" };
+  }
+
+  /** The branch the run integrates on — the ref every durable record lives at. */
+  #branch(): string {
+    return this.#deps.client.ref;
+  }
+
+  #baseRef(): string {
+    return this.#deps.baseRef ?? "main";
+  }
+
+  #now(): Date {
+    return this.#deps.now?.() ?? new Date();
+  }
+
+  #gateTimeoutMs(): number {
+    return this.#deps.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
+  }
+
+  /** The bounds a refusal names the wait in — a person reads a number, not a constant. */
+  #humanBound(): string {
+    return `${Math.round(this.#gateTimeoutMs() / 60_000)} minutes`;
+  }
+
+  /**
+   * The body the epic PR carries, recomposed from the durable record — the
+   * `closeoutPRBody` port. The record, not the caller's memory, is the
+   * input: a resumed close-out composes the same body from the same
+   * decisions and findings, which is the idempotence of the write.
+   */
+  async #composeBody(): Promise<{ body: string; findings: number }> {
+    const { store } = this.#deps;
+    const rule = await this.#closeoutRule();
+    const decisions = await store.decisions();
+    const findings = await readFindings(store.store, store.runID);
+    const body = composePRBody({
+      runID: store.runID,
+      branch: this.#branch(),
+      rule,
+      review: finalReviewOf(decisions),
+      findings,
+    });
+    return { body, findings: findings.length };
+  }
+
+  /**
+   * One CI hold, across passes. The first held pass checkpoints `gating`
+   * with the hold's own reason; every later pass that derives the SAME hold
+   * is an OBSERVATION and writes nothing, so the checkpoint's `updated_at`
+   * stays the durable start the bound measures — a wait that rewrites its
+   * own clock is a wait that never expires. Past the bound the run refuses,
+   * saying what a person must do: re-run the epic once CI concludes.
+   */
+  async #holdOnCI(
+    reason: string,
+    rows: Map<string, TickState>,
+    checkpoint: Checkpoint | null,
+    dispatched: Array<{ tick_id: string; attempt: number }>,
+    boundReason: string,
+    boundEffect?: () => void,
+  ): Promise<PassResult> {
+    if (checkpoint !== null && checkpoint.state === "gating" && checkpoint.reason === reason) {
+      if (this.#now().getTime() - Date.parse(checkpoint.updated_at) > this.#gateTimeoutMs()) {
+        boundEffect?.();
+        await this.#checkpoint("failed", boundReason, rows);
+        return { terminal: true, state: "failed", reason: boundReason, dispatched };
+      }
+      // The same hold, re-derived: an observation, and observations write
+      // nothing — the ref keeps the hold's start.
+    } else {
+      await this.#checkpoint("gating", reason, rows);
+    }
+    return { terminal: false, state: "gating", reason, dispatched };
+  }
+
+  /** Whether the plan's review entry has not settled — the close-out follows it. */
+  #reviewUnsettled(plan: PlanEntry[], rows: Map<string, TickState>): boolean {
+    for (const entry of plan) {
+      if (entry.role !== "review-epic") continue;
+      if (rows.get(entry.tick_id)?.state !== "closed") return true;
+    }
+    return false;
+  }
+
+  /**
+   * The close-out phase's ADMISSION precondition — the `admitCloseout` port,
+   * one shape over: read the rule → PR exists? → open one if not, carrying
+   * the record → CI green? → ADMIT the close-out, or refuse typed, naming
+   * which half is unmet (the halves send the next repair somewhere
+   * different: a missing surface at the host, an absent CI at the workflow's
+   * triggers, a red CI at the failing job the message names, a pending CI at
+   * the clock).
+   *
+   * Returns null when the close-out is admitted; a PassResult for a hold or
+   * a typed refusal — the close-out job is claimed and dispatched only
+   * behind an admission, never like an implement tick.
+   */
+  async #admitCloseout(
+    rows: Map<string, TickState>,
+    checkpoint: Checkpoint | null,
+    dispatched: Array<{ tick_id: string; attempt: number }>,
+  ): Promise<PassResult | null> {
+    const { store } = this.#deps;
+    const rule = await this.#closeoutRule();
+    const refuse = async (reason: string): Promise<PassResult> => {
+      await this.#checkpoint("failed", reason, rows);
+      return { terminal: true, state: "failed", reason, dispatched };
+    };
+
+    const forge = this.#deps.pullRequests;
+    if (forge === undefined) {
+      // The fail-closed answer a build with no code-hosting surface gives a
+      // rule-declaring repository: the refusal is where an operator learns
+      // to provision one, not a silent ungated close-out.
+      return refuse(
+        `the repository declares the PR + CI close-out rule, and this Workflow has no ` +
+          `code-hosting surface configured to open or read the epic PR: ${rule.stated}`,
+      );
+    }
+
+    // The record half: the body the PR carries, composed from the durable
+    // state before the branch is asked about, so the open hands it to the PR
+    // the moment it exists and the found path rewrites it — one idempotence
+    // argument for both (the 4sb rule).
+    let composed: { body: string; findings: number };
+    try {
+      composed = await this.#composeBody();
+    } catch (error) {
+      return refuse(
+        `the epic PR cannot carry the final review's verdict and the run's findings: the ` +
+          `run's own record could not be read to compose them: ${String(error)}. ` +
+          `The rule the repository declares is: ${rule.stated}`,
+      );
+    }
+
+    // The PR half. Find before open, so a resumed run cut between the two
+    // finds the PR the previous incarnation opened rather than opening a
+    // second one.
+    const head = this.#branch();
+    const base = this.#baseRef();
+    let pr: PullRequest;
+    try {
+      const found = await forge.find(head, base);
+      if (found === null) {
+        pr = await forge.open({
+          headRef: head,
+          baseRef: base,
+          title: `epic ${store.epicID}: integrate ${head}`,
+          body: composed.body,
+        });
+      } else {
+        pr = found;
+        await forge.updateBody(pr, composed.body);
+      }
+    } catch (error) {
+      return refuse(
+        `the close-out cannot be admitted: the code-hosting surface could not open or write ` +
+          `the epic PR for ${head} (→ ${base}): ${String(error)}. ` +
+          `The rule the repository declares is: ${rule.stated}`,
+      );
+    }
+    // The PR fact lands in the checkpoint the moment it is known, so a
+    // resumed run — and a person reading the run's record — sees where the
+    // PR lives rather than rediscovering it — and only then: a pass-based
+    // admission re-runs on every held pass, and rewriting the fact each
+    // time would rewrite the hold's own durable start (its `updated_at`).
+    // This is a state change the first time, an observation after.
+    if (checkpoint === null || !checkpoint.reason.includes(`the epic PR #${pr.number}`)) {
+      await this.#checkpoint(
+        "running",
+        `the epic PR #${pr.number} (${head} → ${base}) is open and carries the final review's ` +
+          `verdict and the ${composed.findings} finding(s) this run drafted; the close-out of ` +
+          `${store.epicID} waits on CI`,
+        rows,
+      );
+    }
+
+    // The CI half, re-derived from the PR on every admission — CI's answer
+    // changes with every push, and the head this run remembers is stale the
+    // moment it checkpoints (the 9da shape `ciForTree` exists for).
+    for (;;) {
+      let verdict: Awaited<ReturnType<typeof ciForTree>>;
+      try {
+        verdict = await ciForTree(forge, pr);
+      } catch (error) {
+        return refuse(
+          `the close-out cannot be admitted: CI on the epic PR #${pr.number} could not be ` +
+            `read: ${String(error)}. The rule the repository declares is: ${rule.stated}`,
+        );
+      }
+      switch (verdict.report.state) {
+        case "green":
+          await this.#checkpoint(
+            "running",
+            `CI is green on ${ciSubject(verdict.sha, verdict.isHead, pr)}; the close-out of ` +
+              `${store.epicID} is admitted`,
+            rows,
+          );
+          return null; // admitted: the dispatch loop claims the close-out
+        case "red": {
+          const failing = verdict.report.failing.join(", ");
+          return refuse(
+            `CI is red on the epic PR #${pr.number}: the failing job is ${failing}. The ` +
+              `close-out of ${store.epicID} is not admitted until CI is green on the PR, and ` +
+              `the rule the repository declares is: ${rule.stated}`,
+          );
+        }
+        case "none":
+          return refuse(
+            `no CI has run on the epic PR #${pr.number}: ${rule.ciWorkflow} has produced no ` +
+              `check runs on its head, so the close-out's precondition is unsatisfiable by ` +
+              `waiting — the workflow may not trigger on pull_request at all. The rule the ` +
+              `repository declares is: ${rule.stated}`,
+          );
+        case "pending":
+          return await this.#holdOnCI(
+            `CI on the epic PR #${pr.number} is pending; the close-out of ${store.epicID} is held`,
+            rows,
+            checkpoint,
+            dispatched,
+            `CI on the epic PR #${pr.number} was still pending ${this.#humanBound()} after the ` +
+              `close-out began waiting on it, so this run does not admit the close-out of ` +
+              `${store.epicID}: re-run the epic once CI concludes, and this admission is ` +
+              `re-derived from the PR, not rediscovered. The rule the repository declares ` +
+              `is: ${rule.stated}`,
+          );
+      }
+    }
+  }
+
+  /**
+   * The close-out's OTHER CI gate — the `gateCloseoutClose` port. The
+   * admission covers the head as it stood when the close-out STARTS; the
+   * close-out's own commits — the retro, the learnings it compacts — then
+   * move that head, so the CLOSE re-derives CI from the PR rather than
+   * trusting the admission's green. One rule, two gates, one gap.
+   *
+   * Called with the close-out tick reported; returns null when the close is
+   * gated green (the close proceeds), a PassResult for a hold or a typed
+   * refusal (the tick does not close behind either).
+   */
+  async #gateCloseoutClose(
+    tickID: string,
+    rows: Map<string, TickState>,
+    checkpoint: Checkpoint | null,
+    dispatched: Array<{ tick_id: string; attempt: number }>,
+  ): Promise<PassResult | null> {
+    const { store } = this.#deps;
+    const rule = await this.#closeoutRule();
+    const refuse = async (reason: string): Promise<PassResult> => {
+      await this.#checkpoint("failed", reason, rows);
+      return { terminal: true, state: "failed", reason, dispatched };
+    };
+
+    const forge = this.#deps.pullRequests;
+    if (forge === undefined) {
+      // Defensive, and the same fail-closed answer the admission keeps.
+      return refuse(
+        `the repository declares the PR + CI close-out rule, and this Workflow has no ` +
+          `code-hosting surface to gate the close-out's close on: ${rule.stated}`,
+      );
+    }
+
+    // The PR is looked up rather than remembered from the admission, for the
+    // same reason the admission looks before it opens: the forge is the PR's
+    // authority the way origin is the run's.
+    const head = this.#branch();
+    const base = this.#baseRef();
+    let pr: PullRequest | null;
+    try {
+      pr = await forge.find(head, base);
+    } catch (error) {
+      return refuse(
+        `the close-out of ${store.epicID} cannot be gated on CI: the code-hosting surface ` +
+          `could not say whether the epic PR still exists for ${head} (→ ${base}): ` +
+          `${String(error)}. The rule the repository declares is: ${rule.stated}`,
+      );
+    }
+    if (pr === null) {
+      return refuse(
+        `the epic PR for ${head} (→ ${base}) is gone: the close-out's commits are on ${head}, ` +
+          `but a close-out whose rule declares a PR does not close behind a PR that no longer ` +
+          `exists. Re-run the epic: the admission re-opens the PR and the close is gated again`,
+      );
+    }
+
+    for (;;) {
+      let verdict: Awaited<ReturnType<typeof ciForTree>>;
+      try {
+        verdict = await ciForTree(forge, pr);
+      } catch (error) {
+        return refuse(
+          `the close-out of ${store.epicID} cannot be gated on CI: CI on the epic PR ` +
+            `#${pr.number} could not be read: ${String(error)}. The rule the repository ` +
+            `declares is: ${rule.stated}`,
+        );
+      }
+      switch (verdict.report.state) {
+        case "green": {
+          // The last write the run owns (the 4sb rule, at the close gate): the
+          // close-out's OWN attempt can have drafted a finding the
+          // admission's body predated, and a person must not merge behind a
+          // body the run's final state contradicts. The write is an
+          // overwrite, so a resumed close-out that reaches this gate again
+          // rewrites the same view and adds nothing.
+          try {
+            const composed = await this.#composeBody();
+            await forge.updateBody(pr, composed.body);
+          } catch (error) {
+            return refuse(
+              `the epic PR #${pr.number} cannot carry the final review's verdict and the ` +
+                `run's findings at the close-out's close: ${String(error)}. The rule the ` +
+                `repository declares is: ${rule.stated}`,
+            );
+          }
+          return null; // gated green: the close proceeds
+        }
+        case "red": {
+          const failing = verdict.report.failing.join(", ");
+          rows.set(tickID, { tick_id: tickID, state: "rejected" });
+          return refuse(
+            `CI is red on the epic PR #${pr.number} on the head that includes the close-out's ` +
+              `own commits: the failing job is ${failing}. The close-out of ${store.epicID} is ` +
+              `NOT closed behind it, and the rule the repository declares is: ${rule.stated}. ` +
+              `The repair is what the failing job names — the retro, the learnings or the ` +
+              `records the close-out itself wrote: fix them, push to ${head}, and run the epic ` +
+              `again under this run id — the close gate re-derives CI from the PR, it does not ` +
+              `trust the admission's green`,
+          );
+        }
+        case "none":
+        case "pending": {
+          // A pending CI — and a silent one, in the window after this run's
+          // own push — is a hold here, not a failure: the run itself just
+          // moved the head CI is asked about. Only a silence that survives
+          // the bound is the workflow's failure again.
+          const silent = verdict.report.state === "none";
+          const reason = silent
+            ? `CI on the epic PR #${pr.number} has produced no check runs on the head that ` +
+              `includes the close-out's own commits; the close-out of ${store.epicID} is held`
+            : `CI on the epic PR #${pr.number} is pending on the head that includes the ` +
+              `close-out's own commits; the close-out of ${store.epicID} is held`;
+          const what = silent ? "had still produced no check runs" : "was still pending";
+          return await this.#holdOnCI(
+            reason,
+            rows,
+            checkpoint,
+            dispatched,
+            `CI on the epic PR #${pr.number} ${what} ${this.#humanBound()} after the close-out ` +
+              `began waiting on the head that includes its own commits, so this run does not ` +
+              `close the close-out of ${store.epicID}: re-run the epic once CI concludes, and ` +
+              `this gate is re-derived from the PR, not rediscovered. The rule the repository ` +
+              `declares is: ${rule.stated}`,
+            // The refused tick reads as rejected in the run's own record, the
+            // same answer the local gate's `setTick(tick, "rejected")` gives.
+            () => rows.set(tickID, { tick_id: tickID, state: "rejected" }),
+          );
+        }
+      }
+    }
+  }
+
   /**
    * One pass. Everything it reads, it reads from the durable authorities —
    * the tracker through the contract client, the run branch through the
@@ -530,7 +955,7 @@ export class EpicReconciler {
     const rows = this.#seed(checkpoint, plan);
     await this.#settleClosedRows(rows, plan);
 
-    const result = await this.#work(rows, plan, graph);
+    const result = await this.#work(rows, plan, graph, checkpoint);
     if (result.terminal) {
       await this.#checkpoint(result.state, result.reason, rows);
     }
@@ -538,7 +963,12 @@ export class EpicReconciler {
   }
 
   /** The settle/dispatch half of a pass, over assembled rows. */
-  async #work(rows: Map<string, TickState>, plan: PlanEntry[], graph: Graph): Promise<PassResult> {
+  async #work(
+    rows: Map<string, TickState>,
+    plan: PlanEntry[],
+    graph: Graph,
+    checkpoint: Checkpoint | null,
+  ): Promise<PassResult> {
     const { client, store, executor } = this.#deps;
     const dispatchedThisPass: Array<{ tick_id: string; attempt: number }> = [];
 
@@ -566,6 +996,8 @@ export class EpicReconciler {
           row.attempt ?? 0,
           rows,
           dispatchedThisPass,
+          plan,
+          checkpoint,
         );
         if (settle !== null) return settle;
         stateChanged = true;
@@ -652,7 +1084,14 @@ export class EpicReconciler {
       }
       if (report.outcome === "done" && report.commits > 0) {
         rows.set(tickID, { tick_id: tickID, state: "reported", attempt });
-        const settle = await this.#settleReported(tickID, attempt, rows, dispatchedThisPass);
+        const settle = await this.#settleReported(
+          tickID,
+          attempt,
+          rows,
+          dispatchedThisPass,
+          plan,
+          checkpoint,
+        );
         if (settle !== null) return settle;
         stateChanged = true;
       } else if (report.outcome === "blocked") {
@@ -697,6 +1136,27 @@ export class EpicReconciler {
         stateChanged = true;
         live += 1;
         continue; // the next pass settles it through the evidence path
+      }
+
+      // The close-out's admission precondition (tick cxk, the admitCloseout
+      // port): BEFORE the close-out job is claimed or dispatched, the rule
+      // the repository declares is enforced — PR found or opened, the
+      // review's verdict and the run's findings carried onto it, CI green.
+      // An orphaned closeout marker skips this by continuing above: a
+      // marker is durable evidence a PREVIOUS incarnation was admitted and
+      // dispatched, and adoption is the resume of that dispatch, never a
+      // second admission over it.
+      if (entry.role === "closeout-epic" && (await this.#closeoutRule()).declared) {
+        // The close-out follows the review: the body the PR must carry
+        // names the FINAL review's verdict, and a review still in flight
+        // has recorded none. The tracker declares this order (the
+        // close-out's blocked_by); this host's window can reach the
+        // close-out entry beside the review instead of after it, so the
+        // admission waits for the review to settle rather than composing a
+        // body that states an absence the run has not settled yet.
+        if (this.#reviewUnsettled(plan, rows)) continue;
+        const admission = await this.#admitCloseout(rows, checkpoint, dispatchedThisPass);
+        if (admission !== null) return admission; // a hold, or a typed refusal
       }
 
       const claim = await client.claim(entry.tick_id, `run-${store.runID}`);
@@ -851,6 +1311,13 @@ export type EpicReconcilerParams = {
   max_parallel?: number;
   /** The Workflow's poll cadence in ms; defaults to a keepalive beat. */
   poll_interval_ms?: number;
+  /**
+   * The base ref the epic PR asks to merge into (tick cxk). Absent means
+   * GitHub's `main` convention — this host cannot resolve the remote's own
+   * HEAD the way the local `prBase` does, and the submitter naming the base
+   * is the honest replacement for guessing.
+   */
+  base_ref?: string;
 };
 
 /** The default poll cadence: a beat, not a number a run's correctness leans on. */
@@ -930,6 +1397,18 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       maxParallel: params.max_parallel,
     });
 
+    // The code-hosting surface the PR + CI close-out rule demands (tick cxk):
+    // a test's injection for one project, the deployment's GitHub surface
+    // otherwise — and no token is the supported, fail-closed state a
+    // rule-declaring repository refuses against, never a silent ungated
+    // close.
+    const pullRequests: PullRequests | undefined =
+      env.TICFAC_PULL_REQUESTS !== undefined &&
+      env.TICFAC_PULL_REQUESTS !== null &&
+      env.TICFAC_PULL_REQUESTS.project === params.project
+        ? env.TICFAC_PULL_REQUESTS.forge
+        : (pullRequestsFromEnv(env, params.project) ?? undefined);
+
     // The executor the run dispatches through: the test seam first, then the
     // deployment's own wiring (tick k4s). A missing wiring — no container
     // binding, no epic base, no factory URL — still refuses dispatches, by
@@ -947,6 +1426,8 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       store,
       executor,
       integration: env.TICFAC_INTEGRATION,
+      pullRequests,
+      baseRef: params.base_ref,
       provenance: store.provenance,
       maxParallel: params.max_parallel,
     });
