@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 147,
+  "sequence": 148,
   "state": "failed",
-  "reason": "attempt 10 of nu9 is missing-result: it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10 (commit c91d027c7c13): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10^ refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
-  "updated_at": "2026-09-20T13:52:35Z",
+  "reason": "nu9 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 10 of nu9 is missing-result: it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10 (commit c91d027c7c13): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10^ refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-09-20T13:52:40Z",
   "ticks": [
     {
       "tick_id": "4sb",
