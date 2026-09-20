@@ -1001,6 +1001,17 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
           };
         }
 
+        // The confirmed token is THIS pass's write credential, not only its
+        // durable result (tick e9n). The repository view reads `holder` at
+        // every write, and a re-acquire after a lapse mints a NEW token that
+        // the publisher compares from the first write on — assigning it only
+        // AFTER the step returned meant the pass whose heartbeat re-acquired
+        // still wrote under the stale token, every publish of that pass was
+        // refused `not_holder`, and a lease lapse — the normal case for a
+        // run that outlives its slot, not an edge — ended the run. The
+        // assignment below the step stays: a replayed step never re-runs
+        // this callback, and the token is recovered from its durable result.
+        holder = { run_id: params.run_id, token };
         const outcome = await reconciler.reconcilePass();
         return {
           terminal: outcome.terminal,

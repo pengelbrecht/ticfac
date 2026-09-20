@@ -19,7 +19,7 @@
  *    the run branch, so the resumed run needs no D1 access at all).
  */
 
-import { env } from "cloudflare:test";
+import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import runStateContract from "../../contracts/ticfac-run-state.json";
@@ -40,6 +40,7 @@ import {
   tryOf,
 } from "../src/epic-reconciler";
 import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
+import type { RepoRoom } from "../src/repo-room";
 import {
   attemptPath,
   type Checkpoint,
@@ -1158,6 +1159,125 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     // And the pre-held slot is untouched: the refused run released nothing.
     await expect(room.slotStatus()).resolves.toMatchObject({ run_id: "run_other" });
     await room.releaseSlot({ run_id: "run_other", token: held.lease.token });
+  });
+
+  // The slot-inspection the lapse test needs: read past the room's public
+  // API the way repo-room's own tests do (the token is withheld from every
+  // view by design, but the row is what production compares tokens against).
+  async function slotToken(stub: DurableObjectStub<RepoRoom>): Promise<string | null> {
+    let token: string | null = null;
+    await runInDurableObject(stub, (_instance, state) => {
+      const rows = [...state.storage.sql.exec<{ token: string }>("SELECT token FROM publish_slot")];
+      token = rows[0]?.token ?? null;
+    });
+    return token;
+  }
+
+  /**
+   * Expires the slot DELIBERATELY: the row's deadline moves into the past —
+   * which is all "the lease lapsed" is; the room's own clock is its only
+   * reader — and then the room's own alarm sweeps the row, the way a long
+   * pass or a restart that outlives the ttl really delivers a lapse.
+   */
+  async function expireSlotNow(stub: DurableObjectStub<RepoRoom>): Promise<void> {
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE publish_slot SET expires_at = ? WHERE id = 'slot'",
+        Date.now() - 1,
+      );
+    });
+    await runDurableObjectAlarm(stub);
+  }
+
+  it("completes a pass's writes under the re-acquired token after the lease lapses (tick e9n)", async () => {
+    const contents = sharedContents();
+    const executor = new AutoFinishExecutor();
+    const integration = new FakeIntegration();
+    // The poll beat is a full second so the test gets a named window — the
+    // sleep between passes — in which the slot is held, the pass is over,
+    // and no write is in flight. The slot's own ttl stays the 60s floor
+    // (three poll beats, the Workflow's rule); the lapse below is DELIVERED,
+    // not waited for.
+    const POLL_MS = 1_000;
+
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: executor,
+      TICFAC_INTEGRATION: integration,
+      TICFAC_RECONCILE_POLL_MS: POLL_MS,
+    });
+
+    const room = env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT));
+    const runID = `${RUN_ID}-lapsed-slot`;
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: POLL_MS,
+      },
+    });
+
+    // Pass 0's verdict checkpoint is its last write. Waiting on it — the
+    // run's own record, never a guessed sleep — parks the test inside the
+    // sleep that follows the pass, with the slot held and live and nothing
+    // in flight.
+    const opened = Date.now() + 25_000;
+    for (;;) {
+      if ((await contents.read(checkpointPath(runID))) !== null) break;
+      if (Date.now() > opened) throw new Error("timed out waiting for pass 0 to open the run");
+      await scheduler.wait(5);
+    }
+    const before = await slotToken(room);
+    if (before === null) throw new Error("expected the run to hold the publish slot");
+
+    // THE DELIBERATE LAPSE: the deadline passes, the room's alarm sweeps the
+    // row, and the repository observably has no writer at all — what a
+    // long pass or a restart outliving the ttl really leaves behind.
+    await expireSlotNow(room);
+    await expect(room.slotStatus()).resolves.toBeNull();
+
+    // The next pass's heartbeat finds no slot and re-acquires it — waited on
+    // as the durable evidence. A re-acquire after a lapse mints a NEW token:
+    // the old one died with the swept row, and the publisher compares
+    // tokens from here on.
+    const reacquired = Date.now() + 25_000;
+    for (;;) {
+      const held = await room.slotStatus();
+      if (held !== null) break;
+      if (Date.now() > reacquired) {
+        throw new Error("timed out waiting for the slot to be re-acquired");
+      }
+      await scheduler.wait(5);
+    }
+    const after = await slotToken(room);
+    expect(after).not.toBe(before);
+
+    // THE ACCEPTANCE: the pass after the lapse COMPLETES ITS WRITES under the
+    // re-acquired token — the tick closes and attempt markers it publishes
+    // pass a publisher that compares `after`, and the run goes on to finish.
+    // With the stale token the first of those writes is refused `not_holder`,
+    // the pass dies, and the checkpoint never leaves the lapsed state.
+    const end = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > end) {
+        throw new Error(`timed out waiting for the run; checkpoint: ${JSON.stringify(checkpoint)}`);
+      }
+      await scheduler.wait(20);
+    }
+    expect(checkpoint?.state).toBe("completed");
+    expectRecordValid((await contents.read(checkpointPath(runID)))!.content, "checkpoint");
+    expect(integration.integrated.length).toBeGreaterThan(0);
+    // And the finished run wedged nobody behind its slot.
+    await expect(room.slotStatus()).resolves.toBeNull();
   });
 });
 
