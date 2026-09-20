@@ -3,7 +3,7 @@
   "title": "Record the Workflow host's reconciler semantics changes as decisions",
   "description": "The Workflow port changed reconciler semantics in places without recording those changes as decisions, so the two implementations can diverge with nothing stating which is intended.\n\nThis is the same drift 5bp had to settle for cloud/sandbox and b9w had to settle for the contract bundle: two implementations of one thing, and no written statement of where they are allowed to differ.\n\nFrom pxc, finding f8ef8154.",
   "notes": "2026-09-20 16:36 - ticfac run epic-dha: attempt 12 reported a finding drafted for triage — proposed-tick \"No tick schedules the D31 revisit: admission-boundary decisions D26/D27/D28 are bounded by an integration host nobody has wired or planned\" (key 1c1964d67ed780a5ec049ea4e66a481544b5b26aba53385cc906bdc9ad6186c9, severity medium, for this repository). Triage with `ticfac finding dha 1c1964d67ed780a5ec049ea4e66a481544b5b26aba53385cc906bdc9ad6186c9 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 16:38 - ticfac run epic-dha: attempt 12 merged into epic/dha as efaa3cdbd52f; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "Every intentional semantic difference between the Go reconciler and the Workflow reconciler is recorded as a decision, and a check fails when one side changes a recorded behaviour without a matching decision",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:20.169794Z",
-  "updated_at": "2026-09-20T14:38:05.113971Z",
-  "started_at": "2026-09-20T13:50:25.601908Z"
+  "updated_at": "2026-09-20T14:38:10.345609Z",
+  "closed_at": "2026-09-20T14:38:10.345609Z"
 }
