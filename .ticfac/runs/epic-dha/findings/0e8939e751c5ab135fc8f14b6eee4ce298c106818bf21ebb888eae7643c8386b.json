@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "b50",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-20T10:22:01Z",
+  "triaged_at": "2026-09-20T10:30:02Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "gke",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "b50",
