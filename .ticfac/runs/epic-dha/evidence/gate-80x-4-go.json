@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-80x-4-go",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "80x",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "da7d636609b89d22319196004571f53f5dc9d585",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-20T08:38:05Z",
+  "finished_at": "2026-09-20T09:10:41Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t230.245s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t2.230s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.808s\n--- FAIL: TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown (7.33s)\n    operational_test.go:296: the launch that outlived the bound left no record: open /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown2058855945/002/state/18bae819299370c6/d9c741671b32f816/attempt.json: no such file or directory\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t628.038s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t430.757s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t224.644s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t1.255s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t2.399s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.083s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.379s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.470s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t1.829s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t1.776s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t3.010s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.444s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.750s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t1.494s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t1.457s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.683s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.150s\n--- FAIL: TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt (59.09s)\n    prior_snapshots_test.go:58: the refusal is attempt 1 of a1 still reads running 6s past the wall clock of 10s it was issued, and its executor could not settle it: pushed ticfac/run-r-fixture/tick-a1/attempt-1 to origin. Nobody can say it is finished; look at it, stop whatever is still running, then release it with `ticfac settle qeu a1 1 --release \"\u003cwho\u003e\"`, want collect_failed: a stopped attempt with nothing committed is refused by its collect\n--- FAIL: TestAnAbandonedAttemptIsMeasuredBeforeTheRunWalksAway (42.19s)\n    liveness_test.go:270: a2 was never announced as abandoned, so this run is not the shape the test is about: [tier_derived published claimed dispatched stall_warned rejected]\n--- FAIL: TestAWedgedAttemptIsDistinguishableFromAWorkingOne (374.64s)\n    liveness_test.go:117: read the run's liveness record: open /private/var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestAWedgedAttemptIsDistinguishableFromAWorkingOne249481597/002/repo/.ticfac/logs/r-fixture/liveness.jsonl: no such file or directory\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t1933.373s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t2.839s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.469s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t4.374s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t4.336s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t615.188s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t0.853s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.365s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.682s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:4a6e6a5eee5a19bb941988a89e556884b0ec0d75b09e485c65fb9fd792c7081d",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-80x-4-go.json"
+}
