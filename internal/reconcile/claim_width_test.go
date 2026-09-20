@@ -162,7 +162,12 @@ func TestATrackerRefusingAClaimHoldsTheRunAndKeepsItsWork(t *testing.T) {
 		t.Fatalf("the resumed run ended %s: %s", resumed.State, resumed.Reason)
 	}
 	if len(resumed.Closed) != 5 {
-		t.Errorf("the resumed run closed %v, want every tick of the epic", resumed.Closed)
+		// The refusal, not just the count (tick atn). "closed []" alone is the
+		// same message whether the run was refused, starved or never dispatched
+		// at all, and the reason is the whole diagnosis: naming it here is what
+		// turns an investigation into a read.
+		t.Errorf("the resumed run closed %v, want every tick of the epic; it ended %s: %+v",
+			resumed.Closed, resumed.State, resumed.Failure)
 	}
 	adopted := false
 	for _, event := range second.Journal() {
