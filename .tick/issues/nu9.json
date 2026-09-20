@@ -2,7 +2,7 @@
   "id": "nu9",
   "title": "Wire the run route to EpicReconcilerWorkflow",
   "description": "EpicReconcilerWorkflow is bound (wrangler.toml) but nothing under cloudflare/src calls EPIC_RECONCILER.create. runs.ts:244/606 still start RUN_WORKFLOW, which boots a container agent.\n\nUntil this lands, every other Phase 4 component is unreachable in production and the Phase 4 gate cannot be performed at all. It is the first tick of this epic for that reason.\n\nFrom pxc, finding ea78c31c.",
-  "notes": "2026-09-20 17:52 - ticfac run epic-dha: attempt 18 reported a finding drafted for triage — proposed-tick \"Budgets, completion pings and graded credentials still need the container agent as their driver\" (key 0d7c8d9f2e578e6ce7ff1a1af5bdc2a2a8998bb88a044e215762b249be553027, severity medium, for this repository). Triage with `ticfac finding dha 0d7c8d9f2e578e6ce7ff1a1af5bdc2a2a8998bb88a044e215762b249be553027 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
+  "notes": "2026-09-20 17:52 - ticfac run epic-dha: attempt 18 reported a finding drafted for triage — proposed-tick \"Budgets, completion pings and graded credentials still need the container agent as their driver\" (key 0d7c8d9f2e578e6ce7ff1a1af5bdc2a2a8998bb88a044e215762b249be553027, severity medium, for this repository). Triage with `ticfac finding dha 0d7c8d9f2e578e6ce7ff1a1af5bdc2a2a8998bb88a044e215762b249be553027 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 17:52 - ticfac run epic-dha: attempt 18 reported a finding drafted for triage — proposed-tick \"A draft press is pinned to the container agent and the reconciler cannot run a single tick\" (key 63bb18d9d92befdac0d5da3d23fbc8b5fb15c52921a9966f208633c91872c5ce, severity low, for this repository). Triage with `ticfac finding dha 63bb18d9d92befdac0d5da3d23fbc8b5fb15c52921a9966f208633c91872c5ce --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "A run started through the normal route is driven by EpicReconcilerWorkflow, and a test fails if runs.ts starts RUN_WORKFLOW for an epic run",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:49:51.380885Z",
-  "updated_at": "2026-09-20T15:52:29.290094Z",
+  "updated_at": "2026-09-20T15:52:40.418249Z",
   "started_at": "2026-09-20T10:39:01.242279Z"
 }
