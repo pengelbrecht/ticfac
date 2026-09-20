@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 185,
-  "state": "collecting",
-  "reason": "collecting v3q attempt 17",
-  "updated_at": "2026-09-20T15:33:11Z",
+  "sequence": 186,
+  "state": "integrating",
+  "reason": "integrating v3q attempt 17 into epic/dha",
+  "updated_at": "2026-09-20T15:33:46Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -74,7 +74,7 @@
     },
     {
       "tick_id": "v3q",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 17
     },
     {
