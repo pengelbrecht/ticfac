@@ -2,13 +2,14 @@
   "id": "cxk",
   "title": "Port the CI-gated close-out and PR-posted review to the Workflow reconciler",
   "description": "epic-reconciler.ts has no CI wait, no hold on red naming the job, no refusal on absent CI, and posts neither verdict nor findings on the PR. A closeout job reporting done is closed like an implement tick.\n\nThe Go admitCloseout (internal/reconcile/dispatch.go) has no TypeScript counterpart, so the repository's own PR + CI rule — the one .tick/config.md declares and the Go side refuses to run without — is simply absent on the Cloudflare host.\n\nNote the shape of the Go fix before porting: 9da's closeout_ci.go had to re-read the PR and walk ancestors past run-state-only commits, because the act of gating rewrites the thing being gated. The port needs that too, or it deadlocks the same way Phase 3 did.\n\nFrom pxc, finding 5c906cc7.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "A Workflow-hosted close-out refuses to complete without green CI on the epic PR, names the failing job on red, and the PR carries the review's verdict and findings",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:04.039238Z",
-  "updated_at": "2026-09-19T13:50:04.039238Z"
+  "updated_at": "2026-09-20T08:13:47.750907Z",
+  "started_at": "2026-09-20T08:13:47.750907Z"
 }
