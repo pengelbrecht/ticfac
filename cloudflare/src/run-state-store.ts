@@ -451,6 +451,61 @@ export class RunStateStore {
     return { state: "conflict_missing_base", detail: result.detail };
   }
 
+  /**
+   * Completes a dispatch's marker with the handle the executor's start
+   * RETURNED — SHA-guarded, so the marker is read fresh and a writer whose
+   * view moved is refused rather than writing over what landed (tick t5p).
+   *
+   * This is the same write finishing, not a second dispatch. The marker is
+   * written BEFORE start because a marker written afterwards guards nothing;
+   * the returned handle is recorded the moment start answers, because
+   * job-protocol's own start rule pins it: "Persist the JobSpec before
+   * addressing the executor, then record the returned handle. A handle that
+   * was never persisted is a job nobody can find after a restart." The
+   * create-if-absent rule above is untouched and remains the dispatch guard —
+   * a second reconciler racing the same attempt is still refused there, at
+   * the create — and only the marker's own creator, the one the repository
+   * let dispatch, ever reaches this write.
+   *
+   * The handle is REPLACED, never merged: it is the executor's open object
+   * ("executor-private by design"), and what the dispatch is now addressed
+   * by is what start answered, not an incarnation's memory of it. Every
+   * other field of the record is carried over from the fresh read. The
+   * write is idempotent — the same handle again is `no_change` — so a
+   * replayed pass records it once however many times it arrives.
+   */
+  async updateAttemptHandle(
+    attempt: number,
+    job_handle: Record<string, unknown>,
+  ): Promise<RunWriteOutcome> {
+    const path = attemptPath(this.runID, attempt);
+    const existing = await this.store.read(path);
+    if (existing === null) {
+      return {
+        state: "conflict_missing_base",
+        detail: `attempt ${attempt} of ${this.runID} is not on the ref; a handle can be recorded beside a dispatch, never in place of one`,
+      };
+    }
+    const record = JSON.parse(existing.content) as AttemptRecord;
+    if (record.schema_version !== RUN_STATE_SCHEMA_VERSION) {
+      throw new Error(
+        `attempt ${attempt} of ${this.runID} is schema_version ${record.schema_version}, not ${RUN_STATE_SCHEMA_VERSION}`,
+      );
+    }
+    const completed: AttemptRecord = { ...record, job_handle };
+    const content = encodeRecord(completed);
+    if (existing.content === content) return { state: "no_change" };
+    const result = await this.store.update(path, existing.sha, {
+      content,
+      message: `ticfac run ${this.runID}: record the handle attempt ${attempt} of ${record.tick_id} is addressed by`,
+    });
+    if (result.state === "written") return { state: "updated" };
+    if (result.state === "conflict") {
+      return { state: "conflict_stale_sha", detail: result.detail };
+    }
+    return { state: "conflict_missing_base", detail: result.detail };
+  }
+
   /** One recorded exchange, by number — null when the ref holds none. */
   async decision(decision: number): Promise<DecisionRecord | null> {
     const file = await this.store.read(decisionPath(this.runID, decision));

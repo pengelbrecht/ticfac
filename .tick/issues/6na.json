@@ -2,13 +2,15 @@
   "id": "6na",
   "title": "rerere silently resolves the reconciler's merges using a human's recorded resolutions",
   "description": "git rerere is enabled GLOBALLY on this host (~/.gitconfig [rerere] enabled = true). The reconciler merges attempt branches in the operator's checkout, so it shares .git/rr-cache — which currently holds 28 recorded resolutions, every one of them recorded by a PERSON resolving a conflict by hand.\n\nObserved live 2026-09-19: 9fc attempt 6 was refused with\n\n    merge_failed: attempt 6 of 9fc does not merge onto epic/ncv:\n    Recorded preimage for 'cloudflare/src/epic-reconciler.ts'\n\nThat line is rerere's, not the conflict's. So rerere is active inside the reconciler's merge, and it is doing two things nobody asked it to:\n\n1. RECORDING preimages from the run's merges, polluting a human's resolution cache with machine conflicts.\n2. REPLAYING a human's earlier hand resolution into a machine merge. THIS IS THE DANGEROUS HALF. A resolution recorded while a person merged branch A onto B is re-applied, silently and without review, to a DIFFERENT merge that happens to present the same conflict text. The run then gates and integrates a tree nobody looked at, and the evidence says the merge was clean.\n\nThis matters more here than in an ordinary repo because the whole design rests on durable evidence being a true statement about a tree. A silently re-resolved conflict makes the tree something no party chose: not the worker's, not the base's, and not a reviewer's.\n\nWork:\n- The reconciler must set -c rerere.enabled=false (or GIT_CONFIG_COUNT/KEY/VALUE) on every merge it performs, so the host's config cannot reach into it. Same category as GIT_TERMINAL_PROMPT=0: the run states its own environment rather than inheriting one.\n- Consider the same for rerere.autoupdate.\n- The refusal must carry the CONFLICT, not rerere's chatter — see 44q, which this makes more urgent: the operator was handed 'Recorded preimage for ...' as the entire reason a merge failed.\n- Test: a merge whose conflict text matches a poisoned rr-cache entry must still conflict and refuse, not resolve itself.\n\nFound while resuming Phase 4. The host's 28 cached resolutions include several I recorded by hand today while resolving the biome and rescue merges.",
-  "status": "open",
+  "notes": "2026-09-20 00:25 - ticfac run epic-dha: attempt 3 reported a finding drafted for triage — proposed-tick \"A worker agent's git still shares the operator's rerere cache; its pinned environment does not disable it\" (key e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd, severity low, for this repository). Triage with `ticfac finding dha e467654597044da520796fd060b753721823f03e51b0f779b9e07b0fa1e807fd --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick cannot close while it is untriaged.\n2026-09-20 10:13 - ticfac run epic-dha: attempt 3 merged into epic/dha as da2a4853a4ae; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "The reconciler's merges run with rerere disabled regardless of host config, and a test proves a matching rr-cache entry cannot resolve a run's merge",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T10:22:35.380302Z",
-  "updated_at": "2026-09-19T21:37:10.56445Z"
+  "updated_at": "2026-09-20T08:13:23.096965Z",
+  "closed_at": "2026-09-20T08:13:23.096965Z"
 }

@@ -3,11 +3,9 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	iofs "io/fs"
 	"os"
 
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -41,6 +39,8 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	follow := fs.Bool("follow", false, "keep the stream open: each event as it lands, from now, until Ctrl-C")
 	fromStart := fs.Bool("from-start", false, "with --follow, replay the standing feed first — including the terminal "+
 		"events of earlier incarnations of this run id")
+	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
+		"(a local feed is read at file-follow cadence)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -59,7 +59,17 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		}
 	}
 
-	path := runfeed.Path(*repo, runID)
+	// Where the run's feed lives is decided by the run, not the operator
+	// (tick k7p): this checkout when it holds the feed, else the factory when
+	// it knows the run. Either way the SAME loop follows it, and either way
+	// the lines are the same versioned schema — a cloud run's feed is
+	// indistinguishable from a local one's, by contract and by test.
+	source, kind, err := feedSource(ctx, *repo, runID, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+		return 1
+	}
+
 	print := func(event runfeed.Event) {
 		line, err := json.Marshal(event)
 		if err != nil {
@@ -74,17 +84,24 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	// this command without --follow is how a subscriber that wants history
 	// gets it.
 	if !*follow {
-		events, err := runfeed.Read(path)
-		if err != nil {
-			if errors.Is(err, iofs.ErrNotExist) {
-				fmt.Fprintf(stderr, "ticfac events: no feed for run %s at %s — the run has not written an event, which is what a run that has not started looks like\n", runID, path)
+		located, absent, err := feedStanding(ctx, source)
+		switch {
+		case err != nil:
+			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+			return 1
+		case absent:
+			// The same fact on either host: nothing has landed. A local feed
+			// names its path; a cloud one names the run a factory that knows
+			// it still has no line from.
+			if kind == "local" {
+				fmt.Fprintf(stderr, "ticfac events: no feed for run %s at %s — the run has not written an event, which is what a run that has not started looks like\n", runID, runfeed.Path(*repo, runID))
 			} else {
-				fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+				fmt.Fprintf(stderr, "ticfac events: the factory knows run %s, but the run has not written an event — which is what a run that has not started looks like\n", runID)
 			}
 			return 1
 		}
-		for _, event := range events {
-			print(event)
+		for _, line := range located {
+			print(line.Event)
 		}
 		return 0
 	}
@@ -100,18 +117,16 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	// watcher that reports nothing and looks alive.
 	cursor := int64(0)
 	if !*fromStart {
-		size, err := runfeed.End(path)
-		switch {
-		case errors.Is(err, iofs.ErrNotExist):
-			cursor = 0
-		case err != nil:
+		located, _, err := feedStanding(ctx, source)
+		if err != nil {
 			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 			return 1
-		default:
-			cursor = size
+		}
+		if len(located) > 0 {
+			cursor = located[len(located)-1].End
 		}
 	}
-	if err := runfeed.FollowFrom(ctx, path, cursor, print); err != nil {
+	if err := followFeed(ctx, source, kind, *interval, cursor, print); err != nil {
 		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 		return 1
 	}

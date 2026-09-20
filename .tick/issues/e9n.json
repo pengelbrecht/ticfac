@@ -2,13 +2,15 @@
   "id": "e9n",
   "title": "A re-acquired publish slot token must be used for that pass's writes",
   "description": "When the publish slot lease lapses and is re-acquired, the new token is not used for that pass's writes, so a lease lapse ends the run.\n\nA lease that can lapse is the normal case for a long run, not an edge: the whole reason the slot exists is that runs outlive their leases. So this turns an expected event into a terminal one.\n\nFrom pxc, finding 3906a9f0.",
-  "status": "open",
+  "notes": "2026-09-20 14:22 - ticfac run epic-dha: attempt 8 reported a finding drafted for triage — proposed-tick \"workerd test APIs cannot reach a DO while it awaits a promise resolved from the test context\" (key 08290531530b52b3faf4383e39ca201f8644742e396744bb5e02e68c21381728, severity low, for this repository). Triage with `ticfac finding dha 08290531530b52b3faf4383e39ca201f8644742e396744bb5e02e68c21381728 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 15:49 - ticfac run epic-dha: attempt 8 merged into epic/dha as f685b1210dd4; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "A run whose publish lease lapses mid-pass re-acquires and completes that pass's writes with the new token, proven by a test that expires the lease deliberately",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:20.114134Z",
-  "updated_at": "2026-09-19T13:50:20.114134Z"
+  "updated_at": "2026-09-20T13:49:55.000215Z",
+  "closed_at": "2026-09-20T13:49:55.000215Z"
 }

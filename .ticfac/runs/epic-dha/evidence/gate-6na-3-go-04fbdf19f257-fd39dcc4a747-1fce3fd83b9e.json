@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-6na-3-go-04fbdf19f257-fd39dcc4a747-1fce3fd83b9e",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "6na",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "1b95afae5ae54dc53d6af7360b53308ff9c49533",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-19T23:05:50Z",
+  "finished_at": "2026-09-19T23:42:46Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t1195.496s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t2.901s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t5.610s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t1406.791s\n--- FAIL: TestCollectCarriesAnUnparseableBlockAsAProblemNotSilence (113.04s)\n    findings_collect_test.go:69: timed out after 30s waiting for the attempt to settle\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t1254.054s\n--- FAIL: TestDeployWaitsForTheContainerRolloutToServeTheNewImage (62.11s)\n    deploy_test.go:871: Deploy: the factory deployed, but the ticks-orchestrator container rollout could not be confirmed: the container application is still serving a different image\n          image this deploy pushed: registry.cloudflare.com/acct/ticks-orchestrator@sha256:2222222222222222222222222222222222222222222222222222222222222222\n          image the application reports: sha256:1111111111111111111111111111111111111111111111111111111111111111\n          waited: 6s\n        Nothing is lost and nothing needs undoing — the bundle, the secrets and your\n        credentials all landed. What is not proven is that a run started NOW would boot\n        the image this deploy built rather than the previous one, which is why this is\n        not being reported as success.\n        Check `wrangler containers list` until the image matches, then re-run\n        `ticfac factory deploy` (it is idempotent), or deploy with --skip-rollout-wait to\n        accept the unconfirmed state deliberately.\n        wrangler calls:\n        --version\n        whoami\n        docker version --format {{.Server.Version}}\n        pnpm --version\n        pnpm install --prod --frozen-lockfile\n        d1 list --json\n        d1 create ticks-factory\n        d1 list --json\n        r2 bucket info ticks-factory-artifacts\n        r2 bucket list\n        r2 bucket create ticks-factory-artifacts\n        d1 migrations apply ticks-factory --remote\n        deploy\n        secret put FACTORY_TOKEN_HASH\n        secret put FACTORY_BASE_URL\n        d1 execute ticks-factory --remote --command INSERT INTO factory_deployment (id, tk_version, bundle_sha256, deployed_at) VALUES (1, '1.2.3', '6e9c355e73504331d57942956d531c8714d84f50259a4986925a926914779116', '2026-09-19T23:14:38Z') ON CONFLICT(id) DO UPDATE SET tk_version=excluded.tk_version, bundle_sha256=excluded.bundle_sha256, deployed_at=excluded.deployed_at\n        containers list --json\nMoved 15 factory credential(s) from /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationMovesAllFactoryKeys523116707/001/.ticksrc to /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationMovesAllFactoryKeys523116707/001/.ticfacrc. Board sync credentials in /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationMovesAllFactoryKeys523116707/001/.ticksrc are unchanged. See docs/factory-credentials.md.\nMoved 15 factory credential(s) from /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationPreservesEverythingElseInTheLegacyFile336614036/001/.ticksrc to /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationPreservesEverythingElseInTheLegacyFile336614036/001/.ticfacrc. Board sync credentials in /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationPreservesEverythingElseInTheLegacyFile336614036/001/.ticksrc are unchanged. See docs/factory-credentials.md.\nMoved 15 factory credential(s) from /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationSecondRunIsANoOp1973632331/001/.ticksrc to /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationSecondRunIsANoOp1973632331/001/.ticfacrc. Board sync credentials in /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationSecondRunIsANoOp1973632331/001/.ticksrc are unchanged. See docs/factory-credentials.md.\nMoved 15 factory credential(s) from /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationResumesAfterACrashBetweenTheTwoWrites3697900450/001/.ticksrc to /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationResumesAfterACrashBetweenTheTwoWrites3697900450/001/.ticfacrc. Board sync credentials in /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestMigrationResumesAfterACrashBetweenTheTwoWrites3697900450/001/.ticksrc are unchanged. See docs/factory-credentials.md.\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/factory\t1202.455s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.338s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t2.083s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t1.561s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t1.695s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t3.661s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t1.249s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.720s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t8.175s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t2.412s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.026s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t1.347s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t1.324s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t2.552s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t0.699s\n--- FAIL: TestTheSettlementWaitIsBoundedByTheAttemptsOwnWallClock (72.58s)\n    repair_test.go:157: the wait for an attempt that never settles did not end: it is not bounded\n--- FAIL: TestALostAttemptIsReleasedByAPersonAndTheNextRunDispatchesANewOne (410.15s)\n    repair_test.go:234: settle a1's lost attempt: reconcile: attempt 1 of a1 is running — the executor can still address it. A live attempt is cancelled, never released: Appendix A #6 is not an operator's to waive\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t2186.704s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t4.671s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t0.899s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t18.756s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t13.900s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t1388.826s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.848s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.634s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t1.269s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:5de0244f30fe838b55d3ac7d5555187b28cbc7ca6097d58090695534ff4cc161",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-6na-3-go-04fbdf19f257-fd39dcc4a747-1fce3fd83b9e.json"
+}

@@ -300,6 +300,14 @@ export type IssuedRunToken = { token: string; record: RunGatewayToken };
  * Rotation is the point. A rebooted run has a container that may still be
  * alive somewhere; its token is dead before the replacement's is live, so two
  * orchestrators can never both be spending against one run.
+ *
+ * This is the ORCHESTRATOR's rule, and only the orchestrator's: a run holds
+ * ONE orchestrator at a time, which is what makes "revoke everything this run
+ * holds" the correct rotation. A run holds SEVERAL workers at once
+ * (`max_parallel > 1`), and a worker boot through this function cut every
+ * sibling off with 403 run_token_revoked the moment a second one started
+ * (tick 53s) — workers mint through {@link issueWorkerRunToken}, which revokes
+ * nothing, and the run's kill switch (revokeRunTokens) is what ends them.
  */
 export async function issueRunToken(
   env: Env,
@@ -307,7 +315,41 @@ export async function issueRunToken(
 ): Promise<IssuedRunToken> {
   const at = new Date().toISOString();
   await revokeRunGatewayTokens(env.DB, input.run_id, `rotated:boot:${input.attempt}`, at);
+  return mintRunGatewayToken(env, input, at);
+}
 
+/**
+ * Issues one WORKER's credential, revoking nothing (tick 53s).
+ *
+ * A run's workers are legitimate PARALLEL spenders: with `max_parallel > 1`
+ * several hold live tokens at once, for their whole lifetimes, each stamped
+ * with its own tick and attempt so the gateway's telemetry still says whose
+ * model traffic is whose. Minting through the rotating {@link issueRunToken}
+ * instead cut every sibling off at the next boot — the second worker starting
+ * killed the first's token, and an adoption or cancel boot (which re-derives
+ * its inputs the same way) killed the very worker it was about to adopt or
+ * leave running. Per worker, never shared across attempts: a credential two
+ * attempts share is one revocation cannot take back from just one of them.
+ *
+ * What a worker's lifetime ends at is the run's kill switch
+ * ({@link revokeRunTokens}) — the operator's stop, the hard budget, the wave's
+ * cancellation — which kills every live credential the run holds, including
+ * every worker's. A broken attempt's replaced container keeps a live token
+ * row until then, but a destroyed container cannot present it.
+ */
+export async function issueWorkerRunToken(
+  env: Env,
+  input: { run_id: string; tick_id: string; attempt: number },
+): Promise<IssuedRunToken> {
+  return mintRunGatewayToken(env, input, new Date().toISOString());
+}
+
+/** Mints and records one fresh run credential; the callers decide what dies. */
+async function mintRunGatewayToken(
+  env: Env,
+  input: { run_id: string; tick_id: string; attempt: number },
+  at: string,
+): Promise<IssuedRunToken> {
   const token = mintRunToken();
   const record: RunGatewayToken = {
     token_hash: await hashRunToken(token),

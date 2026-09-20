@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-e9n-8-go",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "e9n",
+    "attempt": 8,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "46caa836a30cc9df549fd8208b1b02bb77e8aa93",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-20T12:23:36Z",
+  "finished_at": "2026-09-20T12:46:37Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t133.403s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t2.081s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t2.790s\n--- FAIL: TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown (7.79s)\n    operational_test.go:296: the launch that outlived the bound left no record: open /var/folders/2c/jcxdg0j966nbz580fsh8bg9m0000gn/T/TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown2776035276/002/state/0ca3e4a5a0e83f10/7297b4c69aa3f1c5/attempt.json: no such file or directory\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t848.299s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t158.304s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t122.479s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.036s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t1.499s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t2.313s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t1.072s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.088s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t1.329s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t1.668s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t2.955s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.455s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t1.583s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t1.790s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t1.563s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.841s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.257s\n--- FAIL: TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt (595.97s)\n    prior_snapshots_test.go:94: the run's feed never said a1's wall clock fired: the stop the snapshot preserves was never observed\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t1363.705s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t4.442s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.904s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t7.279s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t6.476s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t735.195s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t0.817s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.781s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.889s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:d8fd34c6e4c3561edb4a1b677e3f7e5f2c5ed0ee0a0e1e364bf0695bad7b187c",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-e9n-8-go.json"
+}

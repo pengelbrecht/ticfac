@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-6na-3-ts-04fbdf19f257-fd39dcc4a747-1fce3fd83b9e",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "6na",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "1b95afae5ae54dc53d6af7360b53308ff9c49533",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-09-19T23:42:54Z",
+  "finished_at": "2026-09-19T23:43:27Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "✓ Lockfile passes supply-chain policies (verified 1d ago)\nLockfile is up to date, resolution step is skipped\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: \u003credacted-host-path\u003e/Library/pnpm/store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +94\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 94, reused 94, downloaded 0, added 94, done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.21.3\n+ @cloudflare/workers-types 5.20260819.1\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.124.0\n\nDone in 567ms using pnpm v12.3.4\n\u001b[0m\u001b[34mChecked 120 files in 1633\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 15 contract(s) at bundle 5.2.0 read in place from /private\u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:91ac414887091afc3da2a4ddcb7b91336fb9d0a864b501abd8bc22918c6379cd",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-6na-3-ts-04fbdf19f257-fd39dcc4a747-1fce3fd83b9e.json"
+}

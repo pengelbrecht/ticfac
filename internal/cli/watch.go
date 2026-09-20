@@ -2,11 +2,9 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	iofs "io/fs"
 	"os"
 	"strconv"
 	"time"
@@ -91,24 +89,67 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return 1
 		}
 	}
-	path := runfeed.Path(*repo, runID)
+	// Where the run's feed lives is the run's own fact (tick k7p): this
+	// checkout when it holds the feed, else the factory when it knows the
+	// run. The watch then reads through the same one loop `events --follow`
+	// reads through, whichever host the run is on.
+	source, kind, err := feedSource(ctx, *repo, runID, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+		return 1
+	}
 
-	// The run's own liveness claim, asked once up front: it decides both
-	// whether there is anything to watch at all and, below, where the
-	// subscription starts.
-	probe := runlife.Probe(*repo, runID, time.Now())
+	// The standing feed is read once up front: it decides whether there is
+	// anything to watch at all and, below, where the subscription starts. The
+	// run's own liveness claim is asked with it.
+	located, absent, err := feedStanding(ctx, source)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+		return 1
+	}
+
+	// The run's own liveness claim: it decides both whether there is anything
+	// to watch at all and, below, where the subscription starts. For a run the
+	// Workflow hosts, the claim is the Workflow's own state, never "is there a
+	// process here" — the question status could not answer off-host until
+	// this tick.
+	var probeState runlife.State
+	var probeReason string
+	cloudSource, isCloud := source.(*cloudFeedSource)
+	if !isCloud {
+		probe := runlife.Probe(*repo, runID, time.Now())
+		probeState, probeReason = probe.State, probe.Reason
+	} else {
+		// The route serves the feed and the run record's state together, so
+		// the watch's first question cost the standing read above.
+		state := cloudSource.State()
+		switch {
+		case cloudRunStillGoing(state):
+			probeState, probeReason = runlife.Alive,
+				fmt.Sprintf("the Workflow hosts this run: the factory's record says %s", stateOrUnknown(state))
+		case state == "":
+			probeState, probeReason = runlife.NotRunning, "the factory's record carries no state for this run"
+		default:
+			probeState, probeReason = runlife.NotRunning,
+				fmt.Sprintf("the Workflow's own record says %s, so the run has ended", stateOrUnknown(state))
+		}
+	}
 
 	// A watcher may be started beside the run it watches, before the feed's
 	// first line exists — that is the good case, and waiting is the point. A
-	// LIVE pidfile is the run's own claim that it will write one, so it is
-	// what tells "too early to watch" from "nothing to watch here"; a run
-	// with neither a feed nor a live claim never ran on this checkout.
-	if _, err := os.Stat(path); errors.Is(err, iofs.ErrNotExist) {
-		if probe.State != runlife.Alive {
+	// LIVE claim is the run's own claim that it will write one, so it is what
+	// tells "too early to watch" from "nothing to watch here"; a run with
+	// neither a feed nor a live claim never ran anywhere this checkout can
+	// see.
+	if absent && probeState != runlife.Alive {
+		if kind == "local" {
 			fmt.Fprintf(stderr, "ticfac watch: no feed for run %s at %s — and no live process claims the run "+
-				"here, so there is nothing to watch. %s\n", runID, path, probe.Reason)
-			return 1
+				"here, so there is nothing to watch. %s\n", runID, runfeed.Path(*repo, runID), probeReason)
+		} else {
+			fmt.Fprintf(stderr, "ticfac watch: nothing to watch for run %s — the factory knows the run, but it has "+
+				"written no event and %s\n", runID, probeReason)
 		}
+		return 1
 	}
 
 	// The subscription, and the alert it exists to raise. The state below is
@@ -163,25 +204,18 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	// terminal line read here is history by construction — it stands BEFORE the
 	// cursor — so the watch can still end only on a terminal line the current
 	// incarnation writes (or, with no live claim, the run's own last word).
+	// For a run the Workflow hosts, the standing read above already served the
+	// feed and the run's state together; for a local run the read is the same
+	// one `events` prints, because the LINES are the same and so is the parser.
 	cursor := int64(0)
-	if probe.State == runlife.Alive {
-		located, err := runfeed.ReadLocated(path)
-		switch {
-		case errors.Is(err, iofs.ErrNotExist):
-			// The live run has not written its first line yet: everything it
-			// will say is still to come, from offset zero.
-		case err != nil:
-			fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
-			return 1
-		default:
-			for _, line := range located {
-				if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
-					cursor = line.End
-				}
+	if probeState == runlife.Alive {
+		for _, line := range located {
+			if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
+				cursor = line.End
 			}
 		}
 	}
-	if err := runfeed.FollowFrom(followCtx, path, cursor, print); err != nil {
+	if err := followFeed(followCtx, source, kind, 0, cursor, print); err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 		return 1
 	}

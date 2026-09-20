@@ -77,11 +77,19 @@ func (g *repoGit) onceEnv(dir string, extraEnv []string, args ...string) (stdout
 	// gitbin.NoAutoMaintenance: this repository is the one the run writes its
 	// trees, blobs and commits into, and a fetch or a merge that started a
 	// background repack of it would race those writes (tick mel).
-	cmd := exec.Command(gitbin.Path(), append(append([]string{
+	//
+	// gitbin.NoRerere: this repository is the OPERATOR'S, and a host whose
+	// rerere is enabled globally shares .git/rr-cache with a person's own
+	// merges — a resolution recorded by hand must neither be replayed into a
+	// run's merge nor have the run's conflicts recorded against it (tick 6na).
+	// Same category as GIT_TERMINAL_PROMPT=0 below: the run states its own git
+	// environment rather than inheriting the host's.
+	base := append(append([]string{
 		"-c", "user.name=" + g.name,
 		"-c", "user.email=" + g.email,
 		"-c", "commit.gpgsign=false",
-	}, gitbin.NoAutoMaintenance...), args...)...)
+	}, gitbin.NoAutoMaintenance...), gitbin.NoRerere...)
+	cmd := exec.Command(gitbin.Path(), append(base, args...)...)
 	cmd.Dir = dir
 	// GIT_TERMINAL_PROMPT=0 bounds the prompt; runstate.TransportEnv bounds the
 	// network, which is the one that stopped a run for two and a half hours.

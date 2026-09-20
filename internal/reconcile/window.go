@@ -231,7 +231,12 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				// readiness of any OTHER tick of this epic can have changed —
 				// so it is the moment the plan is asked whether it still
 				// describes the graph it came from.
+				// reconciler-decision:D33:begin:replan-cadence — the local
+				// host re-derives the plan only when an attempt closes; the
+				// Workflow re-derives it on every pass
+				// (decisions/reconciler-parity.json, D33).
 				plan, queue, err = r.replan(ctx, plan, queue)
+				// reconciler-decision:D33:end:replan-cadence
 				if err != nil {
 					return nil, err
 				}
@@ -611,13 +616,24 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 	if len(holders) == 0 {
 		return true
 	}
+	// reconciler-decision:D27:begin:isrole-next — a role job is admitted only
+	// when the window holds nothing; the Workflow host's admission carries no
+	// such rule (decisions/reconciler-parity.json, D27).
 	if isRoleJob(next.Role) {
 		return false
 	}
+	// reconciler-decision:D27:end:isrole-next
 	for _, fl := range holders {
+		// reconciler-decision:D27:begin:isrole-holder — and nothing is
+		// admitted while a role job is held; the Workflow host's admission
+		// carries no such rule (decisions/reconciler-parity.json, D27).
 		if isRoleJob(fl.entry.Role) {
 			return false
 		}
+		// reconciler-decision:D27:end:isrole-holder
+		// reconciler-decision:D26:begin:boundaries — the wave and blocker
+		// boundaries this window never crosses; the Workflow host's
+		// admission holds neither (decisions/reconciler-parity.json, D26).
 		// The holder's wave as the CURRENT plan has it, not as its own entry
 		// recorded it at dispatch: that entry is what its tier was derived
 		// from and it is deliberately left alone, so the live attempt's place
@@ -628,6 +644,7 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 		if next.blockedBy(fl.entry.TickID) {
 			return false
 		}
+		// reconciler-decision:D26:end:boundaries
 	}
 	// claims(), not workers(): the finishing attempt and the settled ones
 	// waiting their turn still hold claims, so they still occupy the width.

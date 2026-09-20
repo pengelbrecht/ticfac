@@ -51,6 +51,7 @@ import {
   type RunProgressRecord,
   updateRunState,
 } from "./db";
+import type { EpicReconcilerParams } from "./epic-reconciler";
 import { modelRoutingComplaint, revokeRunTokens } from "./gateway";
 import type { Env } from "./index";
 import type {
@@ -243,6 +244,86 @@ export interface RunWorkflowBinding {
 export function runWorkflowBinding(env: Env): RunWorkflowBinding | null {
   const binding = env.RUN_WORKFLOW;
   return binding === undefined || binding === null ? null : binding;
+}
+
+// ------------------------------------------------- the reconciler driver ---
+
+/**
+ * The EpicReconciler instance handle as the run route uses it — the same
+ * structural subset {@link RunWorkflowInstance} is, so one recording fake
+ * can stand in for either binding.
+ */
+export interface EpicReconcilerInstance {
+  id: string;
+  status(): Promise<WorkflowInstanceStatus>;
+  sendEvent?(event: { type: string; payload?: unknown }): Promise<void>;
+}
+
+/**
+ * The EPIC_RECONCILER binding as the run route uses it (tick nu9): the
+ * driver an epic run is handed to, one instance per run keyed by run id
+ * (`env.EPIC_RECONCILER.create({ id: run_id, params })`). Declared
+ * structurally, like {@link RunWorkflowBinding}, so the seam is testable —
+ * a recording fake can be assigned to `env` — and it reads exactly what
+ * `EpicReconcilerWorkflow` (src/epic-reconciler.ts) accepts.
+ */
+export interface EpicReconcilerBinding {
+  create(options: { id?: string; params: EpicReconcilerParams }): Promise<EpicReconcilerInstance>;
+  get(id: string): Promise<EpicReconcilerInstance>;
+}
+
+/**
+ * The EpicReconciler Workflow binding, or null when the deployment has none.
+ *
+ * A factory without it cannot drive an epic run (tick nu9), so an epic
+ * submission fails closed (503) rather than recording a run nobody would
+ * reconcile — the same rule `runWorkflowBinding`'s 503 has always held,
+ * pointed at the binding that actually drives those runs now.
+ */
+export function epicReconcilerBinding(env: Env): EpicReconcilerBinding | null {
+  const binding = env.EPIC_RECONCILER;
+  return binding === undefined || binding === null ? null : binding;
+}
+
+/**
+ * The run branch: the ref the run's `.tick/` records and `.ticfac/` state are
+ * pushed to (tick nu9).
+ *
+ * This is the local reconciler's own convention, verbatim —
+ * `internal/reconcile` defaults `IntegrationBranch` to `epic/<epic>` — so a
+ * cloud run and a local run of one epic write the same branch, and a person
+ * reading either finds the records where the other left them. The submission
+ * names an epic, not a branch, because that is the one identity the local
+ * host already answers to.
+ */
+export function epicBranchFor(epic: string): string {
+  return `epic/${epic}`;
+}
+
+/**
+ * Whether EpicReconcilerWorkflow can drive this submission (tick nu9).
+ *
+ * The reconciler plans an epic's own waves from its graph, meters no spend,
+ * pings no channel when a run ends, and its sandbox executor issues every
+ * worker the `write` grade. So the submissions it can honestly take over
+ * are exactly the plain epic runs — no wave, no budget, no completion ping,
+ * no grade the executor would silently upgrade — and everything else keeps
+ * the container-agent driver that DOES honour those fields. That is not a
+ * temporary shim: xo2's recorded rule is that no execution path is deleted
+ * before its ticfac equivalent passes a gate, and the reconciler's gate run
+ * (tick u9h) has not run yet. When the Workflow host grows the machinery —
+ * budget enforcement, a completion ping, graded credentials — the field
+ * moves out of this predicate and the tests that hold it move with it.
+ */
+export function reconcilerDrives(submission: RunSubmission): boolean {
+  return (
+    submission.tick_ids === undefined &&
+    submission.notify === undefined &&
+    submission.max_cost_usd === undefined &&
+    submission.max_wall_clock_ms === undefined &&
+    (submission.credential_grade === undefined ||
+      submission.credential_grade === DEFAULT_RUN_CREDENTIAL_GRADE)
+  );
 }
 
 // ----------------------------------------------------------- submission ---
@@ -593,20 +674,58 @@ export type StartRunInput = {
 export type StartedRun = { run: Run; workflow: { id: string; status: string } };
 
 /**
- * Records and boots a run whose lease is already held.
+ * Records and boots a run whose lease is already held — the half every
+ * driver shares (tick nu9).
  *
- * Called from the submit route and from the RunRoom's ignite-on-release path,
- * so a queued submission becomes exactly the same run as a direct one. The
- * caller owns the lease: if this throws, it must release it, because a lease
- * held by a run that never booted wedges the project until the ttl expires.
+ * The index row is written before the instance is asked for and UNDONE if
+ * the ask fails: a run recorded with no instance behind it would read as
+ * live forever, and its id — which the caller may well retry with — would
+ * collide on the primary key rather than failing for the reason it actually
+ * failed. The stamp and the dispatch log follow, after the instance exists,
+ * so an undone ignition leaves nothing behind.
  */
-export async function startRun(env: Env, input: StartRunInput): Promise<StartedRun> {
-  const workflow = runWorkflowBinding(env);
-  if (workflow === null) {
-    throw new Error("RUN_WORKFLOW binding is not configured on this deployment");
+async function bootRun(
+  env: Env,
+  run: Run,
+  boot: () => Promise<{ id: string; status(): Promise<WorkflowInstanceStatus> }>,
+): Promise<StartedRun> {
+  await insertRun(env.DB, run);
+  let instance: { id: string; status(): Promise<WorkflowInstanceStatus> };
+  try {
+    instance = await boot();
+  } catch (error) {
+    await deleteRun(env.DB, run.run_id);
+    throw error;
   }
 
-  const run: Run = {
+  await stampRunImage(env, run.run_id);
+  // The stamp is a deployment-level fact recorded PER RUN — one image per
+  // container class, chosen at deploy time — because that is the only form
+  // that stays true. The next deploy moves the deployment's image; what a
+  // finished run booted must not move with it, or the one question the stamp
+  // answers ("was my fix even running?") becomes unanswerable the moment it
+  // matters.
+  await logDispatch(env, {
+    run_id: run.run_id,
+    epic: run.epic,
+    decision: "dispatched",
+    reason: null,
+  });
+
+  return { run, workflow: { id: instance.id, status: await instanceStatus(instance) } };
+}
+
+/** The run row every driver records, built from the shared start fields. */
+function runRow(input: {
+  run_id: string;
+  project: string;
+  epic: string;
+  base_sha: string;
+  requested_by: string;
+  trace_id?: string;
+  credential_grade?: RunCredentialGrade;
+}): Run {
+  return {
     run_id: input.run_id,
     project: input.project,
     epic: input.epic,
@@ -627,13 +746,30 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
     // would be a run whose grade a boot could miss (D11, tick pzf).
     credential_grade: input.credential_grade ?? DEFAULT_RUN_CREDENTIAL_GRADE,
   };
-  await insertRun(env.DB, run);
+}
+
+/**
+ * Records and boots a container-agent run whose lease is already held — the
+ * Run Workflow driver, kept for every submission the reconciler cannot
+ * honestly take over yet (see {@link reconcilerDrives}).
+ *
+ * Called from the submit route and from the RunRoom's ignite-on-release path,
+ * so a queued submission becomes exactly the same run as a direct one. The
+ * caller owns the lease: if this throws, it must release it, because a lease
+ * held by a run that never booted wedges the project until the ttl expires.
+ */
+export async function startRun(env: Env, input: StartRunInput): Promise<StartedRun> {
+  const workflow = runWorkflowBinding(env);
+  if (workflow === null) {
+    throw new Error("RUN_WORKFLOW binding is not configured on this deployment");
+  }
+
+  const run = runRow(input);
 
   // The instance id IS the run id: one trace ID threads every layer (D20), and
   // it means status needs no workflow_id column to find the instance again.
-  let instance: RunWorkflowInstance;
-  try {
-    instance = await workflow.create({
+  return await bootRun(env, run, async () => {
+    const instance = await workflow.create({
       id: run.run_id,
       params: {
         run_id: run.run_id,
@@ -652,33 +788,93 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
         credential_grade: run.credential_grade as RunCredentialGrade,
       },
     });
-  } catch (error) {
-    // Undo the index row before rethrowing. A run recorded with no instance
-    // behind it would read as live forever, and its id — which the caller may
-    // well retry with — would collide on the primary key rather than failing
-    // for the reason it actually failed.
-    await deleteRun(env.DB, run.run_id);
-    throw error;
+    return instance;
+  });
+}
+
+/** The fields the reconciler driver needs — everything else it cannot honour. */
+export type StartReconcilerInput = {
+  run_id: string;
+  project: string;
+  epic: string;
+  base_sha: string;
+  requested_by: string;
+  trace_id?: string;
+  /** See {@link RunSubmission.credential_grade}. Absent means `write`. */
+  credential_grade?: RunCredentialGrade;
+  /**
+   * The dispatch lease's release credential. The reconciler renews it while
+   * the run lives and releases it at the end — the same ownership the Run
+   * Workflow's params carried, moved to the driver that now runs the epic.
+   */
+  lease_token: string;
+};
+
+/**
+ * Records and boots an EpicReconciler run whose lease is already held (tick
+ * nu9) — the driver every plain epic run is handed to, one Workflow instance
+ * per run keyed by run id.
+ *
+ * The Run Workflow stays the driver for the submissions the reconciler
+ * cannot honour (see {@link reconcilerDrives}); no new run of THOSE shapes
+ * may silently arrive here, which is what `reconcilerDrives`'s tests hold.
+ */
+export async function startReconcilerRun(
+  env: Env,
+  input: StartReconcilerInput,
+): Promise<StartedRun> {
+  const workflow = epicReconcilerBinding(env);
+  if (workflow === null) {
+    throw new Error("EPIC_RECONCILER binding is not configured on this deployment");
   }
 
-  // Stamp the orchestrator image this run boots, after the instance exists so
-  // an undone ignition leaves nothing behind.
-  //
-  // The image is a deployment-level fact — one image per container class,
-  // chosen at deploy time — but it is recorded PER RUN because that is the only
-  // form that stays true. The next deploy moves the deployment's image; what a
-  // finished run booted must not move with it, or the one question this answers
-  // ("was my fix even running?") becomes unanswerable the moment it matters.
-  await stampRunImage(env, run.run_id);
+  const run = runRow(input);
 
-  await logDispatch(env, {
-    run_id: run.run_id,
-    epic: run.epic,
-    decision: "dispatched",
-    reason: null,
+  // The instance id IS the run id here too (D20): status and stop find the
+  // reconciler's instance the same way they found the agent's.
+  return await bootRun(env, run, async () => {
+    const instance = await workflow.create({
+      id: run.run_id,
+      params: {
+        run_id: run.run_id,
+        epic_id: run.epic,
+        project: run.project,
+        // The run branch is where the reconciler's durable records live —
+        // the local reconciler's own `epic/<epic>` convention, so a cloud run
+        // and a local run of one epic write the same branch.
+        branch: epicBranchFor(run.epic),
+        base_sha: run.base_sha,
+        requested_by: run.requested_by,
+        // The lease's release credential rides to the driver, which renews it
+        // every pass and releases it at the end — the Run Workflow's own
+        // ownership, on the driver that owns the run now.
+        lease_token: input.lease_token,
+      },
+    });
+    return instance;
   });
+}
 
-  return { run, workflow: { id: instance.id, status: await instanceStatus(instance) } };
+/**
+ * Boots a queued submission's run on the driver its parked fields name (tick
+ * nu9): the RunRoom's ignite-on-release path calls this with the parked
+ * record, and the record's own shape decides the driver — the same rule
+ * {@link reconcilerDrives} holds the live route to, read off the columns a
+ * parked submission kept. A queued submission can carry a budget or a
+ * completion ping or a held-back grade, and those are the agent's still; a
+ * plain parked epic run ignites on the reconciler.
+ */
+export async function igniteRun(env: Env, input: StartRunInput): Promise<StartedRun> {
+  const reconcilerShaped =
+    input.notify === undefined &&
+    input.max_cost_usd === undefined &&
+    input.max_wall_clock_ms === undefined &&
+    (input.credential_grade === undefined ||
+      input.credential_grade === DEFAULT_RUN_CREDENTIAL_GRADE);
+  if (reconcilerShaped) {
+    return await startReconcilerRun(env, input);
+  }
+  return await startRun(env, input);
 }
 
 /**
@@ -698,7 +894,10 @@ async function stampRunImage(env: Env, runID: string): Promise<void> {
   }
 }
 
-async function instanceStatus(instance: RunWorkflowInstance): Promise<string> {
+async function instanceStatus(instance: {
+  id: string;
+  status(): Promise<WorkflowInstanceStatus>;
+}): Promise<string> {
   try {
     return (await instance.status()).status;
   } catch (error) {
@@ -757,9 +956,42 @@ export type SubmitResult =
  * The lease is asked for before anything durable is written, so a refused
  * submission leaves no half-run behind; only the dispatch_log entry records
  * that it happened at all.
+ *
+ * Which driver the submission rides is decided here (tick nu9): the
+ * reconciler for a plain epic run, the container agent for everything it
+ * cannot honour. `opts.driver: "agent"` is the one explicit opt-out — for
+ * a submitter whose ask is wave-shaped even when its fields are not (a
+ * draft press runs ONE tick now, an epic the reconciler's own wave planning
+ * cannot express) — and it is a named decision rather than a shape a future
+ * rule might silently re-route.
  */
-export async function submitRun(env: Env, submission: RunSubmission): Promise<SubmitResult> {
-  if (runWorkflowBinding(env) === null) {
+export async function submitRun(
+  env: Env,
+  submission: RunSubmission,
+  opts?: { driver?: "agent" },
+): Promise<SubmitResult> {
+  // Which driver this submission can honestly ride (tick nu9): the
+  // reconciler for a plain epic run, the container agent for everything it
+  // cannot honour — the wave, the budgets, the completion ping, the grades
+  // the executor would upgrade. The route, the sweeps, the drafts, the
+  // reviews and the remediations all submit through this one choke point,
+  // so the predicate is the one place the split lives and its tests are the
+  // contract every submitter is held to.
+  const drives = opts?.driver !== "agent" && reconcilerDrives(submission);
+  if (drives) {
+    if (epicReconcilerBinding(env) === null) {
+      // Fail closed and say which binding: a run recorded now would never be
+      // reconciled. The reconciler drives every plain epic run (tick nu9), so
+      // this is the availability answer for the whole epic-run route.
+      console.error(
+        "factory runs: EPIC_RECONCILER binding is missing; refusing every epic submission",
+      );
+      return {
+        outcome: "unavailable",
+        detail: "EPIC_RECONCILER binding is not configured on this deployment",
+      };
+    }
+  } else if (runWorkflowBinding(env) === null) {
     // Fail closed and say which binding: a run recorded now would never boot.
     console.error("factory runs: RUN_WORKFLOW binding is missing; refusing every submission");
     return {
@@ -815,26 +1047,39 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
     try {
       return {
         outcome: "started",
-        started: await startRun(env, {
-          run_id: runID,
-          project: submission.project,
-          epic: submission.epic,
-          base_sha: submission.base_sha,
-          requested_by: submission.requested_by,
-          trace_id: submission.trace_id,
-          ...(submission.notify === undefined ? {} : { notify: submission.notify }),
-          ...(submission.max_cost_usd === undefined
-            ? {}
-            : { max_cost_usd: submission.max_cost_usd }),
-          ...(submission.max_wall_clock_ms === undefined
-            ? {}
-            : { max_wall_clock_ms: submission.max_wall_clock_ms }),
-          lease_token: lease.lease.token,
-          ...(submission.tick_ids === undefined ? {} : { tick_ids: submission.tick_ids }),
-          ...(submission.credential_grade === undefined
-            ? {}
-            : { credential_grade: submission.credential_grade }),
-        }),
+        started: drives
+          ? await startReconcilerRun(env, {
+              run_id: runID,
+              project: submission.project,
+              epic: submission.epic,
+              base_sha: submission.base_sha,
+              requested_by: submission.requested_by,
+              trace_id: submission.trace_id,
+              ...(submission.credential_grade === undefined
+                ? {}
+                : { credential_grade: submission.credential_grade }),
+              lease_token: lease.lease.token,
+            })
+          : await startRun(env, {
+              run_id: runID,
+              project: submission.project,
+              epic: submission.epic,
+              base_sha: submission.base_sha,
+              requested_by: submission.requested_by,
+              trace_id: submission.trace_id,
+              ...(submission.notify === undefined ? {} : { notify: submission.notify }),
+              ...(submission.max_cost_usd === undefined
+                ? {}
+                : { max_cost_usd: submission.max_cost_usd }),
+              ...(submission.max_wall_clock_ms === undefined
+                ? {}
+                : { max_wall_clock_ms: submission.max_wall_clock_ms }),
+              lease_token: lease.lease.token,
+              ...(submission.tick_ids === undefined ? {} : { tick_ids: submission.tick_ids }),
+              ...(submission.credential_grade === undefined
+                ? {}
+                : { credential_grade: submission.credential_grade }),
+            }),
       };
     } catch (error) {
       // Hand the project back rather than wedging it for a lease ttl on a
@@ -907,6 +1152,43 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
 }
 
 // ------------------------------------------------------------------ stop ---
+
+/**
+ * Delivers the stop event to whichever Workflow instance drives the run —
+ * best effort, never load-bearing (the RunRoom's stop record is what makes a
+ * stop true; the driver enforces it at its next step boundary).
+ *
+ * The reconciler binding is asked first because every plain epic run lives
+ * there (tick nu9); the Run Workflow is still asked after it for the runs the
+ * reconciler cannot take over — waves, budgeted runs, reviews — so neither
+ * driver's live runs are silently unreachable. A binding with no instance
+ * for the id, or an instance not waiting on an event, answers nothing and
+ * the next binding is tried — the same graceful shape the single-binding
+ * version had.
+ */
+async function deliverStopEvent(env: Env, runID: string, stop: StopRequest): Promise<boolean> {
+  const bindings: Array<EpicReconcilerBinding | RunWorkflowBinding | null> = [
+    epicReconcilerBinding(env),
+    runWorkflowBinding(env),
+  ];
+  for (const workflow of bindings) {
+    if (workflow === null) continue;
+    try {
+      const instance = await workflow.get(runID);
+      if (typeof instance.sendEvent !== "function") continue;
+      await instance.sendEvent({ type: "stop", payload: stop });
+      return true;
+    } catch (error) {
+      // Expected whenever the instance is not waiting on an event. The stop is
+      // already durable; the driver reads it at its next step boundary.
+      console.error(
+        `factory runs: could not deliver the stop event to workflow ${runID} ` +
+          `(the stop record stands): ${String(error)}`,
+      );
+    }
+  }
+  return false;
+}
 
 export type StopResult =
   | {
@@ -990,24 +1272,7 @@ export async function stopRun(
     state: "stopping",
   };
 
-  let notified = false;
-  const workflow = runWorkflowBinding(env);
-  if (workflow !== null) {
-    try {
-      const instance = await workflow.get(runID);
-      if (typeof instance.sendEvent === "function") {
-        await instance.sendEvent({ type: "stop", payload: requested.stop });
-        notified = true;
-      }
-    } catch (error) {
-      // Expected whenever the instance is not waiting on an event. The stop is
-      // already durable; the Workflow reads it at its next step boundary.
-      console.error(
-        `factory runs: could not deliver the stop event to workflow ${runID} ` +
-          `(the stop record stands): ${String(error)}`,
-      );
-    }
-  }
+  const notified = await deliverStopEvent(env, runID, requested.stop);
 
   return {
     outcome: "stopping",
@@ -1077,17 +1342,24 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
 }
 
 async function workflowPhase(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
-  const workflow = runWorkflowBinding(env);
-  if (workflow === null) return null;
-  try {
-    const instance = await workflow.get(run.run_id);
-    return { id: instance.id, status: await instanceStatus(instance) };
-  } catch (error) {
-    // A run whose instance is gone (retention, or never created) still has an
-    // index row and a lease worth reporting.
-    console.error(`factory runs: workflow instance ${run.run_id} is unavailable: ${String(error)}`);
-    return null;
+  // The reconciler first — every plain epic run's instance lives there (tick
+  // nu9) — then the Run Workflow, for the runs it still drives: waves,
+  // budgeted runs, reviews.
+  for (const workflow of [epicReconcilerBinding(env), runWorkflowBinding(env)]) {
+    if (workflow === null) continue;
+    try {
+      const instance = await workflow.get(run.run_id);
+      return { id: instance.id, status: await instanceStatus(instance) };
+    } catch (error) {
+      // A run whose instance is not on this binding: try the next one. A run
+      // with an instance nowhere (retention, or never created) still has an
+      // index row and a lease worth reporting.
+      console.error(
+        `factory runs: workflow instance ${run.run_id} is unavailable: ${String(error)}`,
+      );
+    }
   }
+  return null;
 }
 
 export type ProjectStatus = {

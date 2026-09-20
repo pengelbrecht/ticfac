@@ -1,0 +1,118 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-dha",
+  "epic_id": "dha",
+  "sequence": 268,
+  "state": "failed",
+  "reason": "u9h did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 28 of u9h is no-commits: the attempt branch carries no commit beyond the base it was cut from (672eb0c8a819). This incarnation was reached after 12 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-09-20T18:31:49Z",
+  "ticks": [
+    {
+      "tick_id": "4sb",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "53s",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "6na",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "80x",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "aqm",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "b50",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "cxk",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "e9n",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "nu9",
+      "state": "closed",
+      "attempt": 18
+    },
+    {
+      "tick_id": "ox0",
+      "state": "closed",
+      "attempt": 11
+    },
+    {
+      "tick_id": "sz0",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "t5p",
+      "state": "closed",
+      "attempt": 15
+    },
+    {
+      "tick_id": "us2",
+      "state": "closed",
+      "attempt": 19
+    },
+    {
+      "tick_id": "v3q",
+      "state": "closed",
+      "attempt": 17
+    },
+    {
+      "tick_id": "u9h",
+      "state": "rejected",
+      "attempt": 28
+    },
+    {
+      "tick_id": "s8p",
+      "state": "ready"
+    },
+    {
+      "tick_id": "hb8",
+      "state": "ready"
+    },
+    {
+      "tick_id": "k7p",
+      "state": "closed",
+      "attempt": 13
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "1846c5a53c1a3b47672826a32c1bbaa277a8272c",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:5d10a094f859ee390f9e2853a5acd4d9e766b7e94d98ae4230de35bc20114e26",
+    "model": null,
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

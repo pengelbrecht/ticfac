@@ -164,8 +164,10 @@
 // except a FIXED original (tick her): a finding reported again after the
 // triage that named its repairing commit is the proof the fix did not hold,
 // and the re-report re-opens the draft instead of deduplicating. A tick
-// whose findings are untriaged is refused its close, which is the one
-// thing that stops a finding falling on the floor; a person triages with
+// whose findings are untriaged CLOSES, the finding rides to the close-out,
+// and the close-out does not hand over while one is untriaged or missing
+// from the epic PR — which is the one thing that stops a finding falling
+// on the floor; a person triages with
 // `ticfac finding`, promoting into the repository the finding targets (never
 // this package: a draft is not a tick, and the scope decision stays human).
 //

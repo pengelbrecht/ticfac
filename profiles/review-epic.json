@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "role": "review-epic",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "executor": "local-subprocess",
   "runner": "claude",
   "model": "opus",

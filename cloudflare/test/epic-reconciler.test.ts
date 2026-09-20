@@ -19,7 +19,7 @@
  *    the run branch, so the resumed run needs no D1 access at all).
  */
 
-import { env } from "cloudflare:test";
+import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import runStateContract from "../../contracts/ticfac-run-state.json";
@@ -39,7 +39,9 @@ import {
   skeletonRank,
   tryOf,
 } from "../src/epic-reconciler";
+import type { CIReport, PullRequest, PullRequests } from "../src/forge";
 import type { ContentsStore, StoredFile, StoreWrite } from "../src/git-contents";
+import type { RepoRoom } from "../src/repo-room";
 import {
   attemptPath,
   type Checkpoint,
@@ -53,7 +55,9 @@ import {
   TICK_STATES,
   terminalState,
 } from "../src/run-state-store";
+import { attemptSandboxName } from "../src/sandbox-executor";
 import { encodeTick, type Tick, TrackerClient } from "../src/tracker-client";
+import { attemptLandingBranch } from "../src/worker-boot";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // ------------------------------------------------------------ the contract ---
@@ -202,8 +206,22 @@ function storeFor(contents: ContentsStore): RunStateStore {
 
 /**
  * The fake executor: every started attempt is `running` until the test
- * settles it, exactly the way a real container is. Its handle IS the marker's
- * job_handle — the identity the reconciler adopts by.
+ * settles it, exactly the way a real container is. Its handle is the one the
+ * reconciler PERSISTS on the attempt marker — the identity a later pass,
+ * and a restarted incarnation, re-addresses the attempt by (tick t5p).
+ *
+ * It demands the identity the real executor demands. The concrete executor
+ * of this host is the sandbox one, whose `inspect` re-addresses the attempt
+ * by the container's NAME — a `job_id` the reconciler composed before start
+ * is not a container and cannot be inspected, and keying on it here is how
+ * the suite stayed green over a marker that never recorded what start
+ * returned. So `#key` REFUSES a marker whose `handle` slot carries no
+ * container name: a marker written before start and never completed would
+ * fail loudly here, the way it fails in production with
+ * `namedSandbox(binding, undefined)`. The drill is the contract's own
+ * shape (tick us2): the marker's open `handle` object carries the job_handle
+ * start returned, and THAT record's open `handle` object carries the
+ * executor's private addressing.
  */
 class FakeExecutor implements AttemptExecutor {
   readonly started: Array<{ tick_id: string; attempt: number; write_ref: string }> = [];
@@ -215,28 +233,63 @@ class FakeExecutor implements AttemptExecutor {
   constructor(readonly contents: MemoryContents) {}
 
   #key(handle: AttemptHandle): string {
-    return String(handle.job_id);
+    const job = handle.handle as { handle?: { sandbox?: unknown } } | undefined;
+    const sandbox = job?.handle?.sandbox;
+    if (typeof sandbox !== "string" || sandbox === "") {
+      throw new Error(
+        `this handle carries no container: the marker it came from never recorded what ` +
+          `start returned, and a job_id (${String(handle.job_id)}) is not an identity an attempt ` +
+          `can be re-inspected by`,
+      );
+    }
+    return sandbox;
   }
 
   async start(spec: AttemptSpec): Promise<AttemptHandle> {
     this.started.push({ tick_id: spec.tick_id, attempt: spec.attempt, write_ref: spec.write_ref });
+    // What the REAL executor returns (tick us2): the contract's closed
+    // job_handle — identity, executor name, the issue time, and the one
+    // open `handle` object carrying the container's own addressing: its
+    // name, its work process, the landing branch it pushes and the base
+    // the collect compares against.
     return {
-      executor: "cloudflare-sandbox",
+      schema_version: 1,
       job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
       attempt: spec.attempt,
-      try: spec.attempt,
-      tick_id: spec.tick_id,
-      role: spec.role,
-      remote: "origin",
-      resumed_from: null,
-      write_ref: spec.write_ref,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+        process_id: `proc-${spec.attempt}`,
+        base_sha: "f".repeat(40),
+        branch: attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id),
+        write_ref: spec.write_ref,
+        launched: true,
+        detail: "booted by the fake",
+        run_id: spec.run_id,
+        epic_id: spec.epic_id,
+        tick_id: spec.tick_id,
+        role: spec.role,
+        project: spec.project,
+        base_ref: spec.base_ref,
+        title: spec.title,
+      },
+      issued_at: NOW.toISOString(),
     };
   }
 
   async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
-    return this.settled.has(this.#key(handle))
-      ? { state: "exited", exit_code: 0 }
-      : { state: "running" };
+    // The contract's own job_status vocabulary (tick us2): the fake answers
+    // the same closed record the real executor does, so a reconciler that
+    // branched on a cloud-only vocabulary is a suite this fake would hide.
+    const settled = this.settled.has(this.#key(handle));
+    return {
+      schema_version: 1,
+      job_id: String(handle.job_id),
+      state: settled ? "succeeded" : "running",
+      terminal: settled,
+      observed_at: NOW.toISOString(),
+      cursor: null,
+    };
   }
 
   async collect(handle: AttemptHandle): Promise<AttemptReport> {
@@ -256,7 +309,7 @@ class FakeExecutor implements AttemptExecutor {
 
   /** The test settles an attempt — the container finishing its work. */
   finish(tick: string, attempt: number, report: AttemptReport): void {
-    this.settled.set(`run-${RUN_ID}/tick-${tick}/attempt-${attempt}`, report);
+    this.settled.set(attemptSandboxName(RUN_ID, tick, attempt), report);
   }
 }
 
@@ -281,11 +334,134 @@ class DyingIntegration implements IntegrationHost {
   }
 }
 
+// ----------------------------------------------- the CI-gated close-out (cxk) ---
+
+/**
+ * The rule the close-out gates on (cxk): the repository's own declaration,
+ * the anchor `internal/reconcile` recognises, with the workflow named.
+ */
+const CLOSEOUT_RULE =
+  "## Rules\n\n" +
+  "- Epic integration goes through a PR + CI gate: the epic close-out may not " +
+  "complete until CI (.github/workflows/ci.yml) is green on the epic PR. No direct " +
+  "merges of epic branches to the default branch.\n";
+
+/**
+ * The tracker fixture plus the two records the gated close-out reads: the rule
+ * in `.tick/config.md` and one findings draft the run's earlier incarnation
+ * left on the branch — the text the epic PR must carry beside CI.
+ */
+function seededWithRule(runID: string = RUN_ID): Record<string, string> {
+  const records = seedTracker();
+  records[".tick/config.md"] = CLOSEOUT_RULE;
+  records[`.ticfac/runs/${runID}/findings/key-draft.json`] = JSON.stringify(
+    {
+      schema_version: 1,
+      key: "key-draft",
+      source: "ticfac-worker",
+      discovered_from: `run-${runID}/tick-t01/attempt-1`,
+      kind: "defect",
+      title: "A defect outside the discovering tick",
+      body: "The finding's own text, which the person merging must read beside CI.",
+      severity: "medium",
+      target: "",
+      tick_id: "t01",
+      attempt: 1,
+      status: "proposed",
+      proposed_at: "2026-09-19T09:00:00Z",
+    },
+    null,
+    2,
+  );
+  return records;
+}
+
+/**
+ * The fake forge: the `PullRequests` seam with the CI answers a test states
+ * per sha, the ancestors a branch has, and the paths a range of commits
+ * changed — the three inputs the close-out's gates read. CI is asked by SHA
+ * and every ask is recorded, because WHICH commit a verdict was borrowed from
+ * is the thing 9da's walk exists to keep honest.
+ */
+class FakeForge implements PullRequests {
+  readonly opened: Array<{ headRef: string; baseRef: string; title: string; body: string }> = [];
+  /** every updateBody, in order — the overwrite the found path and the close gate write. */
+  readonly bodies: Array<{ number: number; body: string }> = [];
+  readonly prs = new Map<string, PullRequest>();
+  readonly ciBySHA = new Map<string, CIReport>();
+  readonly ciCalls: string[] = [];
+  readonly ancestorsByHead = new Map<string, string[]>();
+  readonly changedByPair = new Map<string, string[] | null>();
+  /** What a sha with no entry answers with: `none` until a test says otherwise. */
+  default: CIReport = { state: "none", failing: [] };
+  failOpen: Error | null = null;
+  failUpdate: Error | null = null;
+  failCI: Error | null = null;
+  #next = 0;
+
+  async find(headRef: string, _baseRef: string): Promise<PullRequest | null> {
+    return this.prs.get(headRef) ?? null;
+  }
+
+  async open(input: {
+    headRef: string;
+    baseRef: string;
+    title: string;
+    body: string;
+  }): Promise<PullRequest> {
+    if (this.failOpen !== null) throw this.failOpen;
+    this.#next += 1;
+    const pr: PullRequest = {
+      number: this.#next,
+      url: `https://example.com/${PROJECT}/pull/${this.#next}`,
+      head_ref: input.headRef,
+      head_sha: `head-${this.#next}`,
+      base_ref: input.baseRef,
+    };
+    this.opened.push(input);
+    this.prs.set(input.headRef, pr);
+    return pr;
+  }
+
+  async updateBody(pr: PullRequest, body: string): Promise<void> {
+    if (this.failUpdate !== null) throw this.failUpdate;
+    this.bodies.push({ number: pr.number, body });
+  }
+
+  async ci(sha: string): Promise<CIReport> {
+    if (this.failCI !== null) throw this.failCI;
+    this.ciCalls.push(sha);
+    return this.ciBySHA.get(sha) ?? this.default;
+  }
+
+  async ancestors(headRef: string, limit: number): Promise<string[]> {
+    return (this.ancestorsByHead.get(headRef) ?? []).slice(0, limit);
+  }
+
+  async changedPaths(from: string, to: string): Promise<string[] | null> {
+    return this.changedByPair.get(`${from}...${to}`) ?? null;
+  }
+
+  /** The branch moved under the PR — 9da's shape: the run's own writes moved the head. */
+  moveHead(headRef: string, sha: string): void {
+    const pr = this.prs.get(headRef);
+    if (pr === undefined) throw new Error(`no PR for ${headRef} to move`);
+    this.prs.set(headRef, { ...pr, head_sha: sha });
+  }
+}
+
 function reconcilerFor(
   contents: MemoryContents,
   executor?: AttemptExecutor,
   integration?: IntegrationHost,
   maxParallel?: number,
+  extra?: {
+    pullRequests?: PullRequests;
+    baseRef?: string;
+    baseSHA?: string;
+    now?: () => Date;
+    gateTimeoutMs?: number;
+  },
 ): EpicReconciler {
   const store = storeFor(contents);
   return new EpicReconciler({
@@ -295,12 +471,41 @@ function reconcilerFor(
     integration,
     provenance: store.provenance,
     maxParallel,
+    ...(extra ?? {}),
   });
 }
 
 async function readCheckpoint(contents: MemoryContents): Promise<Checkpoint | null> {
   const file = await contents.read(checkpointPath(RUN_ID));
   return file === null ? null : (JSON.parse(file.content) as Checkpoint);
+}
+
+/**
+ * Waits for a lease or slot the run is expected to RELEASE to read as free.
+ *
+ * The terminal checkpoint is not that signal. The checkpoint is written
+ * inside `reconcilePass()`, and `release-publish-slot` and
+ * `release-dispatch-lease` are steps that run AFTER it — so a test that waits
+ * on the checkpoint and then reads the room can look between the two and see
+ * a lease that is about to be released. It failed about one run in four.
+ *
+ * So wait on the observable this assertion is actually about. The deadline is
+ * short on purpose: this must still fail, and fail quickly, when the release
+ * genuinely does not happen. It is not a timeout widened until the flake
+ * stopped — the release is a step, not a delay, and the whole point is that
+ * the room ends up free.
+ */
+async function freedWithin(
+  read: () => Promise<unknown | null>,
+  ms = 2_000,
+): Promise<unknown | null> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const held = await read();
+    if (held === null) return null;
+    if (Date.now() > deadline) return held;
+    await scheduler.wait(10);
+  }
 }
 
 /** Runs passes until terminal — a test's driver, never the reconciler's own. */
@@ -454,6 +659,100 @@ describe("the run state store, against the pinned contract", () => {
       job_handle: { executor: "cloudflare-sandbox", job_id: "run-x/tick-t01/attempt-1" },
     });
     expect(second.state).toBe("conflict_exists");
+  });
+
+  it("completes a marker with the handle start returned, SHA-guarded — the dispatch guard untouched (t5p)", async () => {
+    const contents = sharedContents();
+    const store = storeFor(contents);
+    // The marker is written BEFORE start, create-if-absent — a marker
+    // written afterwards guards nothing.
+    await store.recordAttempt({
+      attempt: 1,
+      tick_id: "t01",
+      dispatched_at: NOW.toISOString(),
+      job_handle: {
+        executor: "cloudflare-sandbox",
+        job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      },
+    });
+
+    // Then the executor's start answers, and the handle it returned is
+    // recorded on the SAME marker: job-protocol's start rule — "Persist the
+    // JobSpec before addressing the executor, then record the returned
+    // handle. A handle that was never persisted is a job nobody can find
+    // after a restart." The record's other fields are untouched, and the
+    // create-if-absent guard above is still the one that answers a second
+    // reconciler racing the same dispatch.
+    // Then the executor's start answers, and the job_handle it returned is
+    // recorded on the SAME marker: job-protocol's start rule — "Persist the
+    // JobSpec before addressing the executor, then record the returned
+    // handle. A handle that was never persisted is a job nobody can find
+    // after a restart." The record's other fields are untouched, and the
+    // create-if-absent guard above is still the one that answers a second
+    // reconciler racing the same dispatch. The shape is the marker's own
+    // (tick us2): the reconciler's flat identity, with the executor's
+    // contract job_handle riding the one open `handle` slot.
+    const jobHandle = {
+      schema_version: 1,
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(RUN_ID, "t01", 1),
+        process_id: "proc-1",
+        branch: attemptLandingBranch(EPIC_ID, 1, "t01"),
+        base_sha: "f".repeat(40),
+      },
+      issued_at: NOW.toISOString(),
+    };
+    const handle = {
+      executor: "cloudflare-sandbox",
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      tick_id: "t01",
+      role: "implement-tick",
+      remote: "origin",
+      resumed_from: null,
+      write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+      handle: jobHandle,
+    };
+    const completed = await store.updateAttemptHandle(1, handle);
+    expect(completed.state).toBe("updated");
+    const file = (await contents.read(attemptPath(RUN_ID, 1)))!;
+    expectRecordValid(file.content, "attempt");
+    const marker = JSON.parse(file.content) as {
+      attempt: number;
+      tick_id: string;
+      dispatched_at: string;
+      job_handle: Record<string, unknown>;
+    };
+    expect(marker.job_handle).toEqual(handle);
+    expect(marker.tick_id).toBe("t01");
+    expect(marker.dispatched_at).toBe(NOW.toISOString());
+
+    // The completion is idempotent: the same handle again is an observation,
+    // and an observation writes nothing.
+    const again = await store.updateAttemptHandle(1, handle);
+    expect(again.state).toBe("no_change");
+
+    // A later handle (the truth moved) is still an update — the completion
+    // records what the executor last answered for a live attempt, never
+    // what an incarnation remembers.
+    const moved = await store.updateAttemptHandle(1, {
+      ...handle,
+      handle: { ...jobHandle, handle: { ...jobHandle.handle, process_id: "proc-2" } },
+    });
+    expect(moved.state).toBe("updated");
+    const reread = JSON.parse((await contents.read(attemptPath(RUN_ID, 1)))!.content) as {
+      job_handle: { handle: { handle: { process_id: string } } };
+    };
+    expect(reread.job_handle.handle.handle.process_id).toBe("proc-2");
+
+    // A marker that is not on the ref is a missing base, not a create: the
+    // completion records beside a dispatch that exists, never in place of
+    // one.
+    const missing = await store.updateAttemptHandle(9, handle);
+    expect(missing.state).toBe("conflict_missing_base");
   });
 
   it("records decisions create-if-absent: one validated exchange, never rewritten", async () => {
@@ -665,6 +964,120 @@ describe("the reconciler's window and records", () => {
   });
 });
 
+// --------------------------------------- a cloud attempt's records (tick us2) ---
+
+/**
+ * The contract suite, run against a CLOUD-PRODUCED record (tick us2's
+ * acceptance): the marker a real dispatch wrote must satisfy the same
+ * pinned schemas a local attempt's records answer to — schemas.attempt for
+ * the record, $defs.provenance for where it came from — and the identity it
+ * carries must be the local run's own: the attempt's write ref in the
+ * contract's `refs/heads/ticfac/…` vocabulary, the real source the dispatch
+ * was cut from (never a hard-coded main or forty zeros).
+ */
+describe("a cloud attempt's records, against the pinned contracts", () => {
+  const BASE_SHA = "5ec0ffee00000000000000000000000000000001";
+
+  it("a dispatch's marker is a local attempt's record: the pinned schemas take it, and the provenance names a real source", async () => {
+    const contents = sharedContents();
+    const executor = new FakeExecutor(contents);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      baseSHA: BASE_SHA,
+    });
+
+    await reconciler.reconcilePass();
+
+    const raw = (await contents.read(attemptPath(RUN_ID, 1)))!.content;
+    expectRecordValid(raw, "attempt");
+    const marker = JSON.parse(raw) as {
+      job_handle: Record<string, unknown>;
+      provenance: Record<string, unknown>;
+    };
+
+    // The identity half — the same keys a local marker's attemptHandle.asMap()
+    // writes, so a reader of one run's records cannot tell which host made it.
+    expect(marker.job_handle).toMatchObject({
+      executor: "cloudflare-sandbox",
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      tick_id: "t01",
+      try: 1,
+      role: "implement-tick",
+      remote: "origin",
+      write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+      base_sha: BASE_SHA,
+      resumed_from: null,
+    });
+
+    // The provenance names the ref and the commit the dispatch was cut from
+    // — the run branch at the epic base, exactly what the local dispatch's
+    // provenance carries — never a hard-coded main or forty zeros.
+    expect(marker.provenance).toMatchObject({
+      run_id: RUN_ID,
+      tick_id: "t01",
+      attempt: 1,
+      source_ref: `refs/heads/${BRANCH}`,
+      source_sha: BASE_SHA,
+      integration_ref: `refs/heads/${BRANCH}`,
+      phase: "worker",
+      executor: "cloudflare-sandbox",
+      role: "implement-tick",
+    });
+    // And it validates against the contract's own definition of provenance,
+    // not only against this test's idea of it.
+    const provenanceSchema = parseSchema(
+      (runStateContract as { $defs: Record<string, unknown> }).$defs.provenance,
+      "$",
+    );
+    const errors = validate(provenanceSchema, contractDefs, marker.provenance);
+    expect(errors, `provenance must satisfy the pinned definition: ${errors.join("; ")}`).toEqual(
+      [],
+    );
+  });
+
+  it("a redispatch gets a write ref of its own — one ref per attempt, the rule the local run moved to", async () => {
+    const contents = sharedContents();
+    const executor = new FakeExecutor(contents);
+    const integration = new FakeIntegration();
+    const reconciler = reconcilerFor(contents, executor, integration, undefined, {
+      baseSHA: BASE_SHA,
+    });
+
+    // Attempt 1 settles with nothing on its branch: an attempt that left
+    // nothing is redispatched, the local run's own resume rule.
+    const first = await reconciler.reconcilePass();
+    expect(first.dispatched.map((d) => d.tick_id)).toEqual(["t01", "t02"]);
+    for (const dispatch of first.dispatched) {
+      executor.finish(dispatch.tick_id, dispatch.attempt, {
+        outcome: "failed",
+        commits: 0,
+        detail: "nothing landed",
+      });
+    }
+    const second = await reconciler.reconcilePass();
+    // The window opens for the redispatch first — a NEW attempt number, run-wide.
+    const redone = second.dispatched.find((d) => d.tick_id === "t01");
+    expect(redone?.attempt).toBe(3);
+
+    const firstMarker = JSON.parse((await contents.read(attemptPath(RUN_ID, 1)))!.content) as {
+      job_handle: { write_ref: string };
+    };
+    const redoneMarker = JSON.parse((await contents.read(attemptPath(RUN_ID, 3)))!.content) as {
+      job_handle: { write_ref: string };
+    };
+    expect(firstMarker.job_handle.write_ref).toBe(
+      `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+    );
+    expect(redoneMarker.job_handle.write_ref).toBe(
+      `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-3`,
+    );
+    // One ref per attempt: the redispatch's collect reads its OWN ref, so it
+    // cannot count the previous attempt's commits — the exact defect the
+    // review found in the per-tick branch the cloud worker used to push.
+    expect(redoneMarker.job_handle.write_ref).not.toBe(firstMarker.job_handle.write_ref);
+  });
+});
+
 describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
   it("adopts every in-flight attempt by identity and never dispatches over one", async () => {
     const contents = sharedContents();
@@ -716,6 +1129,62 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     }
     const markers = await contents.list(`.ticfac/runs/${RUN_ID}/attempts`);
     expect(markers.length).toBe(6);
+  });
+
+  it("re-inspects an attempt by its PERSISTED handle after the restart — a job_id is not identity (t5p)", async () => {
+    const contents = sharedContents();
+    const integration = new FakeIntegration();
+
+    // Incarnation one dispatches, the containers run on, and the isolate
+    // dies — the shape every resume in this file answers to.
+    const firstExecutor = new FakeExecutor(contents);
+    const first = reconcilerFor(contents, firstExecutor, integration);
+    const outcome = await first.reconcilePass();
+    expect(outcome.dispatched.map((d) => d.tick_id)).toEqual(["t01", "t02"]);
+
+    // The marker on the run branch holds the handle start RETURNED — the
+    // container's own addressing beside the identity the reconciler
+    // composed before start. That completion is the adoption-by-identity
+    // the local reconciler always had: it is the only thing that survives
+    // the isolate, and without it no later pass can re-address the attempt
+    // at all. The executor's contract job_handle rides the marker's one
+    // open `handle` slot (tick us2), and the container's addressing rides
+    // THAT record's own open `handle` object — the shape the contract's
+    // golden attempt record pins.
+    const markerFile = (await contents.read(attemptPath(RUN_ID, 1)))!;
+    expectRecordValid(markerFile.content, "attempt");
+    const marker = JSON.parse(markerFile.content) as {
+      job_handle: { handle: { handle: { sandbox: string; process_id: string; branch: string } } };
+      tick_id: string;
+    };
+    expect(marker.tick_id).toBe("t01");
+    expect(marker.job_handle.handle.handle.sandbox).toBe(attemptSandboxName(RUN_ID, "t01", 1));
+    expect(marker.job_handle.handle.handle.process_id).toBe("proc-1");
+    expect(marker.job_handle.handle.handle.branch).toBe(attemptLandingBranch(EPIC_ID, 1, "t01"));
+
+    // The Workflow restarts: a FRESH reconciler and a FRESH executor over
+    // the same durable state. The first executor's memory died with its
+    // isolate — a fresh fake answers "running" for everything — so the
+    // only thing the resume can re-address the attempt by is the handle on
+    // the marker. The fake DEMANDS the persisted container name (its #key
+    // refuses a bare job_id), so this pass is the proof: without the
+    // persisted handle, the resume could not inspect the attempt at all.
+    const secondExecutor = new FakeExecutor(contents);
+    const second = reconcilerFor(contents, secondExecutor, integration);
+    const resume = await second.reconcilePass();
+    expect(resume.terminal).toBe(false);
+    expect(resume.dispatched).toEqual([]); // adopted, never dispatched over
+    expect(secondExecutor.started.length).toBe(0);
+
+    // The restart settles the attempt THROUGH the persisted handle: the
+    // second executor is asked to collect the container the FIRST one
+    // booted, addressed by the name the marker carries.
+    secondExecutor.finish("t01", 1, { outcome: "done", commits: 1, detail: "pushed" });
+    const settled = await second.reconcilePass();
+    expect(settled.terminal).toBe(false);
+    expect(secondExecutor.collects).toEqual([attemptSandboxName(RUN_ID, "t01", 1)]);
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "t01")?.state).toBe("closed");
   });
 
   it("adopts a dispatch whose checkpoint row was lost, by its marker", async () => {
@@ -905,7 +1374,10 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     // The review was collected exactly once — by the incarnation that died —
     // and its answer was re-read from the run branch ever after. The
     // closeout is the only exchange collected after the crash.
-    expect(executor.collects.filter((key) => key.includes("tick-rev1")).length).toBe(1);
+    expect(
+      executor.collects.filter((key) => key === attemptSandboxName(RUN_ID, "rev1", reviewAttempt))
+        .length,
+    ).toBe(1);
     expect(executor.collects.length).toBe(collectedBefore + 1);
 
     const decisionFiles = await contents.list(`.ticfac/runs/${RUN_ID}/decisions`);
@@ -1013,6 +1485,373 @@ describe("the refusals", () => {
   });
 });
 
+describe("the CI-gated close-out, ported", () => {
+  /** The detail each role reports with — the review's answer is what the PR carries. */
+  const finishFor = (tickID: string) =>
+    tickID === "rev1"
+      ? { outcome: "done" as const, commits: 2, detail: "the review found nothing to refuse" }
+      : { outcome: "done" as const, commits: 1, detail: "pushed and reported" };
+
+  /** Drives every dispatch to done, then stops at the first gated hold. */
+  async function driveToHold(
+    pass: () => Promise<import("../src/epic-reconciler").PassResult>,
+    onDispatched: (dispatched: Array<{ tick_id: string; attempt: number }>) => void = () => {},
+    budget = 60,
+  ): Promise<import("../src/epic-reconciler").PassResult> {
+    for (let i = 0; i < budget; i += 1) {
+      const outcome = await pass();
+      if (outcome.terminal || outcome.state === "gating") return outcome;
+      onDispatched(outcome.dispatched);
+    }
+    throw new Error("the run did not settle within the pass budget");
+  }
+
+  it("admits the close-out behind green CI and opens a PR that carries the review's verdict and the run's findings", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const integration = new FakeIntegration();
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, integration, undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("completed");
+
+    // The PR: opened for the run branch into the default base, under the rule.
+    expect(forge.opened.length).toBe(1);
+    expect(forge.opened[0].headRef).toBe(BRANCH);
+    expect(forge.opened[0].baseRef).toBe("main");
+    expect(forge.opened[0].title).toContain(EPIC_ID);
+
+    // The body the PR was OPENED with, and the one the close gate re-carried,
+    // are recompositions of the same record: an overwrite, never an append.
+    expect(forge.bodies.length).toBe(1);
+    for (const body of [forge.opened[0].body, forge.bodies[0].body]) {
+      expect(body).toContain("the review found nothing to refuse");
+      expect(body).toContain("A defect outside the discovering tick");
+      expect(body).toContain(
+        "The finding's own text, which the person merging must read beside CI.",
+      );
+    }
+    expect(forge.bodies[0].body).toBe(forge.opened[0].body);
+
+    // The close-out closed behind the gate, and the run completed behind it.
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.state).toBe("completed");
+    expect(checkpoint?.ticks?.every((t) => t.state === "closed")).toBe(true);
+  });
+
+  it("refuses the close-out on red CI, naming the failing job, and never dispatches it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "red", failing: ["build-and-test"] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("build-and-test");
+    expect(run.outcome.reason).toContain("PR + CI gate");
+    // The close-out job was never claimed or started, and the tick stayed open.
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("open");
+    // The PR was opened and carried the record even though CI refused it.
+    expect(forge.opened.length).toBe(1);
+  });
+
+  it("refuses the close-out when no CI has run at all, naming the workflow", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge(); // default: none, no ancestors
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain(".github/workflows/ci.yml");
+    expect(run.outcome.reason).toContain("unsatisfiable by waiting");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("holds the close-out while CI is pending, and admits it once CI concludes", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "pending", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    let held = false;
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (outcome.state === "gating") {
+        // A held pass is a wait the run re-derives, not a failure of the work.
+        held = true;
+        forge.default = { state: "green", failing: [] };
+      }
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(held).toBe(true);
+    expect(run.outcome.state).toBe("completed");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(1);
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+  });
+
+  it("refuses the close-out when the rule is declared and no code-hosting surface is wired", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration());
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("no code-hosting surface");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("gates on the newest ancestor CI ran on when the head has none — 9da's walk, ported", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    // The PR exists with a head the run's own checkpoint writes moved, no
+    // check on it yet, and a green ancestor behind run-state-only commits.
+    forge.prs.set(BRANCH, {
+      number: 7,
+      url: "https://example.com/pr/7",
+      head_ref: BRANCH,
+      head_sha: "head-moved-by-checkpoints",
+      base_ref: "main",
+    });
+    forge.ciBySHA.set("head-moved-by-checkpoints", { state: "none", failing: [] });
+    forge.ancestorsByHead.set(BRANCH, ["head-moved-by-checkpoints", "ancestor-green"]);
+    forge.ciBySHA.set("ancestor-green", { state: "green", failing: [] });
+    forge.changedByPair.set("ancestor-green...head-moved-by-checkpoints", [
+      ".ticfac/runs/epic-ex1/checkpoint.json",
+    ]);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("completed");
+    // The head was asked first, and the ancestor's verdict was used only
+    // after the walk proved every change between them was run state.
+    expect(forge.ciCalls[0]).toBe("head-moved-by-checkpoints");
+    expect(forge.ciCalls).toContain("ancestor-green");
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("closed");
+  });
+
+  it("does not borrow an ancestor's green when anything outside .ticfac/ changed since it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.prs.set(BRANCH, {
+      number: 7,
+      url: "https://example.com/pr/7",
+      head_ref: BRANCH,
+      head_sha: "head-moved-by-checkpoints",
+      base_ref: "main",
+    });
+    forge.ciBySHA.set("head-moved-by-checkpoints", { state: "none", failing: [] });
+    forge.ancestorsByHead.set(BRANCH, ["head-moved-by-checkpoints", "ancestor-green"]);
+    forge.ciBySHA.set("ancestor-green", { state: "green", failing: [] });
+    // Code moved between the ancestor and the head: its verdict does not
+    // describe this tree, so the honest answer is the head's own — none.
+    forge.changedByPair.set("ancestor-green...head-moved-by-checkpoints", [
+      "src/thing.ts",
+      ".ticfac/runs/epic-ex1/checkpoint.json",
+    ]);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain(".github/workflows/ci.yml");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+
+  it("refuses to close the close-out on red CI at the close, naming the job, and leaves the tick open", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+    });
+
+    let moved = false;
+    const run = await drive(async () => {
+      const outcome = await reconciler.reconcilePass();
+      if (!outcome.terminal) {
+        for (const dispatch of outcome.dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+        if (!moved && outcome.dispatched.some((d) => d.tick_id === "clo1")) {
+          // The close-out's own commits moved the PR head; its CI is red.
+          moved = true;
+          forge.moveHead(BRANCH, "head-after-closeout");
+          forge.ciBySHA.set("head-after-closeout", { state: "red", failing: ["retro-lint"] });
+        }
+      }
+      return outcome;
+    });
+    expect(run.outcome.state).toBe("failed");
+    expect(run.outcome.reason).toContain("retro-lint");
+    expect(run.outcome.reason).toContain("the close-out's own commits");
+    // The close-out is NOT closed behind red CI: the row is rejected, the
+    // tick stays claimed-but-open, and the run's record names the job.
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "clo1")?.state).toBe("rejected");
+    expect((await clientFor(contents).show("clo1"))?.status).toBe("in_progress");
+  });
+
+  it("holds the close at absent CI without rewriting the wait's start, then refuses past its bound", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    let clock = new Date(NOW);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+      now: () => clock,
+      gateTimeoutMs: 60 * 60 * 1000,
+    });
+
+    let moved = false;
+    const outcome = await driveToHold(
+      async () => reconciler.reconcilePass(),
+      (dispatched) => {
+        for (const dispatch of dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+        if (!moved && dispatched.some((d) => d.tick_id === "clo1")) {
+          moved = true;
+          forge.moveHead(BRANCH, "head-after-closeout");
+          forge.ciBySHA.set("head-after-closeout", { state: "none", failing: [] });
+        }
+      },
+    );
+    expect(outcome.terminal).toBe(false);
+    expect(outcome.state).toBe("gating");
+    const held = await readCheckpoint(contents);
+    expect(held?.state).toBe("gating");
+    expect(held?.reason).toContain("produced no check runs");
+
+    // The same hold on the next pass is an OBSERVATION: the checkpoint keeps
+    // its own updated_at, which is the durable start the bound measures.
+    const before = (await contents.read(checkpointPath(RUN_ID)))!.content;
+    const again = await reconciler.reconcilePass();
+    expect(again.terminal).toBe(false);
+    expect(again.state).toBe("gating");
+    expect((await contents.read(checkpointPath(RUN_ID)))!.content).toBe(before);
+
+    // Past the bound the run refuses rather than holding forever, and says
+    // what a person must do: re-run the epic once CI concludes.
+    clock = new Date(NOW.getTime() + 61 * 60 * 1000);
+    const refused = await reconciler.reconcilePass();
+    expect(refused.terminal).toBe(true);
+    expect(refused.state).toBe("failed");
+    expect(refused.reason).toContain("produced no check runs");
+    expect(refused.reason).toContain("does not close the close-out");
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.state).toBe("failed");
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "clo1")?.state).toBe("rejected");
+  });
+
+  it("bounds the admission's pending hold too, and refuses to admit past it", async () => {
+    const contents = new MemoryContents(seededWithRule());
+    const executor = new FakeExecutor(contents);
+    const forge = new FakeForge();
+    forge.default = { state: "pending", failing: [] };
+    let clock = new Date(NOW);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      pullRequests: forge,
+      now: () => clock,
+      gateTimeoutMs: 60 * 60 * 1000,
+    });
+
+    const outcome = await driveToHold(
+      async () => reconciler.reconcilePass(),
+      (dispatched) => {
+        for (const dispatch of dispatched) {
+          executor.finish(dispatch.tick_id, dispatch.attempt, finishFor(dispatch.tick_id));
+        }
+      },
+    );
+    expect(outcome.state).toBe("gating");
+    // The hold re-derives from the PR on the next pass, still inside the bound.
+    const again = await reconciler.reconcilePass();
+    expect(again.state).toBe("gating");
+    clock = new Date(NOW.getTime() + 61 * 60 * 1000);
+    const refused = await reconciler.reconcilePass();
+    expect(refused.terminal).toBe(true);
+    expect(refused.state).toBe("failed");
+    expect(refused.reason).toContain("was still pending");
+    expect(refused.reason).toContain("does not admit the close-out");
+    expect(executor.started.filter((s) => s.tick_id === "clo1").length).toBe(0);
+  });
+});
+
 describe("one Workflow per EpicRun, driven by the engine", () => {
   it("the EPIC_RECONCILER binding drives an epic run to completion", async () => {
     const contents = sharedContents();
@@ -1108,6 +1947,63 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     ).resolves.toBeNull();
   });
 
+  it("drives a gated close-out: the Workflow hands over a PR that carries the verdict and the findings", async () => {
+    const runID = `${RUN_ID}-closeout-wf`;
+    const contents = new MemoryContents(seededWithRule(runID));
+    const forge = new FakeForge();
+    forge.default = { state: "green", failing: [] };
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: new AutoFinishExecutor(),
+      TICFAC_INTEGRATION: new FakeIntegration(),
+      TICFAC_PULL_REQUESTS: { project: PROJECT, forge },
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the checkpoint the Workflow writes.
+    const deadline = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+
+    // The run completed behind the gate, and the epic PR it opened carries
+    // the final review's verdict and the run's findings — the record the
+    // person merging reads beside CI, not CI status alone.
+    expect(checkpoint?.state).toBe("completed");
+    expect(forge.opened.length).toBe(1);
+    expect(forge.opened[0].headRef).toBe(BRANCH);
+    expect(forge.opened[0].body).toContain("pushed and reported");
+    expect(forge.opened[0].body).toContain("A defect outside the discovering tick");
+    // The close gate's last write is the same view, overwritten once — never
+    // appended to, however many passes the Workflow took.
+    expect(forge.bodies.length).toBe(1);
+    expect(forge.bodies[0].body).toBe(forge.opened[0].body);
+    const decisions = await contents.list(`.ticfac/runs/${runID}/decisions`);
+    expect(decisions.length).toBe(2);
+  });
+
   it("refuses to run a second Workflow that cannot take the publish slot, and writes nothing", async () => {
     const contents = sharedContents();
     Object.assign(env, {
@@ -1159,6 +2055,261 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     await expect(room.slotStatus()).resolves.toMatchObject({ run_id: "run_other" });
     await room.releaseSlot({ run_id: "run_other", token: held.lease.token });
   });
+
+  /**
+   * Tick nu9: the dispatch lease the submit route hands the driver. The
+   * route arbitrates with the project's RunRoom lease and then hands its
+   * release credential to EpicReconcilerWorkflow — the same ownership the
+   * Run Workflow's params carried. Two properties must hold, and each gets
+   * its own test below:
+   *
+   *  - a lease taken by another run STOPS this one (D4: one arbiter per
+   *    project), before any pass writes;
+   *  - a lease this run holds is RELEASED at the end, so the project is not
+   *    wedged behind a finished run and a queued submission ignites (D22).
+   */
+  it("stops naming the taker when its dispatch lease is lost to another run, and writes nothing", async () => {
+    const contents = sharedContents();
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    // The project's dispatch lease, held by a run that is not this one —
+    // the shape the run route would have refused at the door, delivered here
+    // straight to the driver so the renewal's verdict is the thing under
+    // test.
+    const room = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(PROJECT));
+    const held = await room.acquireDispatchLease({
+      run_id: "run_other",
+      epic: EPIC_ID,
+      origin: "cloud",
+      requested_by: "operator@example.com",
+      ttl_ms: 60_000,
+    });
+    if (!held.ok) throw new Error("expected to pre-hold the dispatch lease");
+
+    const runID = `${RUN_ID}-lease-taken`;
+    const instance = await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+        requested_by: "operator@example.com",
+        lease_token: "a-token-this-run-does-not-hold",
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the Workflow's own terminal status —
+    // never on a guessed sleep.
+    const deadline = Date.now() + 20_000;
+    let status: { status?: string; output?: unknown } = {};
+    for (;;) {
+      status = (await instance.status()) as { status?: string; output?: unknown };
+      const state = String(status.status);
+      if (state !== "running" && state !== "queued") break;
+      if (Date.now() > deadline) {
+        throw new Error(`timed out waiting for the Workflow; status: ${state}`);
+      }
+      await scheduler.wait(20);
+    }
+
+    expect(String(status.status)).toContain("complete");
+    const output = status.output as { state?: string; reason?: string };
+    expect(output.state).toBe("failed");
+    // The verdict names BOTH the loss and the taker, the way the Run
+    // Workflow's own lost-lease stop always did (tick 7n7's lesson).
+    expect(output.reason).toContain("dispatch lease");
+    expect(output.reason).toContain("run_other");
+    // It stopped BEFORE a pass wrote: the run branch holds no state for a
+    // run that was never the project's arbiter.
+    expect(await contents.read(checkpointPath(runID))).toBeNull();
+    // And the other run still holds what it held.
+    await expect(room.leaseStatus()).resolves.toMatchObject({ run_id: "run_other" });
+    await room.releaseDispatchLease({ run_id: "run_other", token: held.lease.token });
+  });
+
+  it("releases the dispatch lease on its way out, so the project is not wedged behind a finished run", async () => {
+    const contents = sharedContents();
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: new AutoFinishExecutor(),
+      TICFAC_INTEGRATION: new FakeIntegration(),
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    // The lease as the run route would take it — this run's own, with its
+    // own release credential, and a ttl no test run could ever outlive: if
+    // the lease is free at the end, the workflow's release is the only
+    // thing that could have freed it.
+    const room = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(PROJECT));
+    const runID = `${RUN_ID}-lease-released`;
+    const acquired = await room.acquireDispatchLease({
+      run_id: runID,
+      epic: EPIC_ID,
+      origin: "cloud",
+      requested_by: "operator@example.com",
+      ttl_ms: 300_000,
+    });
+    if (!acquired.ok) throw new Error("expected to take the dispatch lease");
+
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+        requested_by: "operator@example.com",
+        lease_token: acquired.lease.token,
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the checkpoint the Workflow writes.
+    const deadline = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+
+    expect(checkpoint?.state).toBe("completed");
+    // The run held a five-minute lease and finished in seconds: a free lease
+    // now is the release step's doing, not the ttl's.
+    await expect(freedWithin(() => room.leaseStatus())).resolves.toBeNull();
+  });
+
+  // The slot-inspection the lapse test needs: read past the room's public
+  // API the way repo-room's own tests do (the token is withheld from every
+  // view by design, but the row is what production compares tokens against).
+  async function slotToken(stub: DurableObjectStub<RepoRoom>): Promise<string | null> {
+    let token: string | null = null;
+    await runInDurableObject(stub, (_instance, state) => {
+      const rows = [...state.storage.sql.exec<{ token: string }>("SELECT token FROM publish_slot")];
+      token = rows[0]?.token ?? null;
+    });
+    return token;
+  }
+
+  /**
+   * Expires the slot DELIBERATELY: the row's deadline moves into the past —
+   * which is all "the lease lapsed" is; the room's own clock is its only
+   * reader — and then the room's own alarm sweeps the row, the way a long
+   * pass or a restart that outlives the ttl really delivers a lapse.
+   */
+  async function expireSlotNow(stub: DurableObjectStub<RepoRoom>): Promise<void> {
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec(
+        "UPDATE publish_slot SET expires_at = ? WHERE id = 'slot'",
+        Date.now() - 1,
+      );
+    });
+    await runDurableObjectAlarm(stub);
+  }
+
+  it("completes a pass's writes under the re-acquired token after the lease lapses (tick e9n)", async () => {
+    const contents = sharedContents();
+    const executor = new AutoFinishExecutor();
+    const integration = new FakeIntegration();
+    // The poll beat is a full second so the test gets a named window — the
+    // sleep between passes — in which the slot is held, the pass is over,
+    // and no write is in flight. The slot's own ttl stays the 60s floor
+    // (three poll beats, the Workflow's rule); the lapse below is DELIVERED,
+    // not waited for.
+    const POLL_MS = 1_000;
+
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: executor,
+      TICFAC_INTEGRATION: integration,
+      TICFAC_RECONCILE_POLL_MS: POLL_MS,
+    });
+
+    const room = env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT));
+    const runID = `${RUN_ID}-lapsed-slot`;
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: POLL_MS,
+      },
+    });
+
+    // Pass 0's verdict checkpoint is its last write. Waiting on it — the
+    // run's own record, never a guessed sleep — parks the test inside the
+    // sleep that follows the pass, with the slot held and live and nothing
+    // in flight.
+    const opened = Date.now() + 25_000;
+    for (;;) {
+      if ((await contents.read(checkpointPath(runID))) !== null) break;
+      if (Date.now() > opened) throw new Error("timed out waiting for pass 0 to open the run");
+      await scheduler.wait(5);
+    }
+    const before = await slotToken(room);
+    if (before === null) throw new Error("expected the run to hold the publish slot");
+
+    // THE DELIBERATE LAPSE: the deadline passes, the room's alarm sweeps the
+    // row, and the repository observably has no writer at all — what a
+    // long pass or a restart outliving the ttl really leaves behind.
+    await expireSlotNow(room);
+    await expect(freedWithin(() => room.slotStatus())).resolves.toBeNull();
+
+    // The next pass's heartbeat finds no slot and re-acquires it — waited on
+    // as the durable evidence. A re-acquire after a lapse mints a NEW token:
+    // the old one died with the swept row, and the publisher compares
+    // tokens from here on.
+    const reacquired = Date.now() + 25_000;
+    for (;;) {
+      const held = await room.slotStatus();
+      if (held !== null) break;
+      if (Date.now() > reacquired) {
+        throw new Error("timed out waiting for the slot to be re-acquired");
+      }
+      await scheduler.wait(5);
+    }
+    const after = await slotToken(room);
+    expect(after).not.toBe(before);
+
+    // THE ACCEPTANCE: the pass after the lapse COMPLETES ITS WRITES under the
+    // re-acquired token — the tick closes and attempt markers it publishes
+    // pass a publisher that compares `after`, and the run goes on to finish.
+    // With the stale token the first of those writes is refused `not_holder`,
+    // the pass dies, and the checkpoint never leaves the lapsed state.
+    const end = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > end) {
+        throw new Error(`timed out waiting for the run; checkpoint: ${JSON.stringify(checkpoint)}`);
+      }
+      await scheduler.wait(20);
+    }
+    expect(checkpoint?.state).toBe("completed");
+    expectRecordValid((await contents.read(checkpointPath(runID)))!.content, "checkpoint");
+    expect(integration.integrated.length).toBeGreaterThan(0);
+    // And the finished run wedged nobody behind its slot.
+    await expect(freedWithin(() => room.slotStatus())).resolves.toBeNull();
+  });
 });
 
 /** An executor whose containers finish on their own: what a healthy wave looks like. */
@@ -1167,21 +2318,59 @@ class AutoFinishExecutor implements AttemptExecutor {
 
   async start(spec: AttemptSpec): Promise<AttemptHandle> {
     this.started.push({ tick_id: spec.tick_id, attempt: spec.attempt });
+    // The contract's closed job_handle, the same shape the unit-suite fake
+    // returns and the reconciler must persist (ticks t5p, us2): the markers
+    // the engine-driven runs write are the real record, not a leaner
+    // stand-in.
     return {
-      executor: "cloudflare-sandbox",
+      schema_version: 1,
       job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
       attempt: spec.attempt,
-      try: spec.attempt,
-      tick_id: spec.tick_id,
-      role: spec.role,
-      remote: "origin",
-      resumed_from: null,
-      write_ref: spec.write_ref,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+        process_id: `proc-${spec.attempt}`,
+        branch: attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id),
+        write_ref: spec.write_ref,
+        base_sha: "f".repeat(40),
+        launched: true,
+        detail: "auto-finished",
+        run_id: spec.run_id,
+        epic_id: spec.epic_id,
+        tick_id: spec.tick_id,
+        role: spec.role,
+        project: spec.project,
+        base_ref: spec.base_ref,
+        title: spec.title,
+      },
+      issued_at: NOW.toISOString(),
     };
   }
 
-  async inspect(): Promise<AttemptStatus> {
-    return { state: "exited", exit_code: 0 };
+  async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
+    // The same demand the unit-suite fake makes (tick t5p): an executor that
+    // answers any handle at all is the forgiving fake that certified the
+    // defect, so the engine-driven runs fail over a marker that never
+    // recorded what start returned, too. The drill is the marker's own
+    // shape (tick us2): the contract job_handle rides the marker's `handle`
+    // slot, and the container's name rides that record's `handle` object.
+    const job = handle.handle as { handle?: { sandbox?: unknown } } | undefined;
+    const sandbox = job?.handle?.sandbox;
+    if (typeof sandbox !== "string" || sandbox === "") {
+      throw new Error(
+        "this handle carries no container: the marker it came from never recorded what start returned",
+      );
+    }
+    // The contract's own job_status vocabulary (tick us2): terminal, so the
+    // pass settles it rather than waiting on it.
+    return {
+      schema_version: 1,
+      job_id: String(handle.job_id),
+      state: "succeeded",
+      terminal: true,
+      observed_at: NOW.toISOString(),
+      cursor: null,
+    };
   }
 
   async collect(): Promise<AttemptReport> {

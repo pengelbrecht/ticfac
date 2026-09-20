@@ -474,7 +474,7 @@ func waitFor(t *testing.T, condition func() bool, what string) {
 		if condition() {
 			return
 		}
-		time.Sleep(followTick)
+		time.Sleep(FollowTick)
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }

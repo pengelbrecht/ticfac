@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-6na-3-go-04fbdf19f257-fd39dcc4a747-e6fb78543e39",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "6na",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "a1bfaae94c36d2a1c0576d1685f6a24d3fa8039b",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-20T05:36:48Z",
+  "finished_at": "2026-09-20T07:22:11Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t49.106s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t0.730s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t2.319s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t189.749s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t78.192s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t42.318s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t1.940s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t2.473s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t1.465s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.604s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.588s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.053s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.161s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t2.049s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.639s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t2.096s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t1.729s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t1.854s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.696s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.632s\n--- FAIL: TestABlockerClosingMidRunAdmitsItsDependentWithoutARestart (11.17s)\n    replan_test.go:79: closed [], want every tick of the epic\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t353.861s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t1.908s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.740s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t2.130s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t2.349s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t123.466s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.380s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t1.415s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.800s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:b0c42aef30674b78037b663dc36c8d3492f2e19633fbd9e2315ca7b4f543081c",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-6na-3-go-04fbdf19f257-fd39dcc4a747-e6fb78543e39.json"
+}

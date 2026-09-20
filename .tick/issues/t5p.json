@@ -2,13 +2,15 @@
   "id": "t5p",
   "title": "Persist the sandbox handle so an attempt survives a restart",
   "description": "epic-reconciler.ts records the attempt marker BEFORE executor.start, then merges start's sandbox / process_id / branch / base_sha only in memory. Every later pass, and every restart, calls namedSandbox(binding, undefined) and getProcess(undefined).\n\nSo on the cloud host an attempt cannot be re-inspected after the Workflow restarts — which is precisely the adoption-by-identity guarantee that made the local reconciler survive nine process deaths in Phase 3. The cloud host has the doctrine's words and not its behaviour.\n\nFakeExecutor keys on job_id, which is why the suite is green over this. Any fix must also fix the fake, or the next regression is invisible again.\n\nFrom pxc, finding b25e231d.",
-  "status": "open",
+  "notes": "2026-09-20 16:40 - ticfac run epic-dha: attempt 15 reported a finding drafted for triage — contract \"The run-state pin's CAS table has no row for the attempt handle-completion write t5p relies on\" (key d88051b093fed155cc5c0e74f401300e1763434e3592ea29f4781dc345a92631, severity high, for this repository). Triage with `ticfac finding dha d88051b093fed155cc5c0e74f401300e1763434e3592ea29f4781dc345a92631 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 16:40 - ticfac run epic-dha: attempt 15 reported a finding drafted for triage — proposed-tick \"A marker whose start never answered still cannot name its container after a restart\" (key 8f8001fb3f59f48415a347bc9221b7e69c872dcf24ab0ef990c8fb30eebc9964, severity medium, for this repository). Triage with `ticfac finding dha 8f8001fb3f59f48415a347bc9221b7e69c872dcf24ab0ef990c8fb30eebc9964 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 16:42 - ticfac run epic-dha: attempt 15 merged into epic/dha as d07d5e702bba; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "An attempt dispatched before a Workflow restart is re-inspected by identity after it, proven by a test whose executor requires the persisted handle rather than job_id",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:49:51.439995Z",
-  "updated_at": "2026-09-19T13:49:51.439995Z"
+  "updated_at": "2026-09-20T14:42:41.116389Z",
+  "closed_at": "2026-09-20T14:42:41.116389Z"
 }

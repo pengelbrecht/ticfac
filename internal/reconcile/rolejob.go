@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,18 @@ import (
 
 // processRoleJob takes one review or closeout tick from the graph to closed.
 func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error {
+	// The resume half of that order (tick 80x): a role tick whose validated
+	// answer is ALREADY RECORDED closes behind it here, before anything is
+	// dispatched. A re-dispatch would buy the same review of the same source
+	// again, and the loop it makes has no honest end — each re-dispatch pays
+	// for a new review, a new review can raise new findings, and new findings
+	// raise a new hold, so the run would only ever end when a reviewer reports
+	// nothing. A resume replays a recorded decision, it never buys it again.
+	closed, err := r.closeBehindRecordedDecision(ctx, entry)
+	if closed || err != nil {
+		return err
+	}
+
 	handle, executor, marker, err := r.claimDispatch(ctx, entry)
 	if err != nil {
 		return err
@@ -96,6 +109,167 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 
 	r.cleanUp(handle, executor, marker)
 	return nil
+}
+
+// closeBehindRecordedDecision closes a role tick whose validated answer is
+// already recorded, behind that answer — the resume that does NOT pay for a
+// second review of the same source (tick 80x). It reports whether it took the
+// tick; a false means no recorded decision applies and the tick is dispatched
+// as usual.
+//
+// It is the read-only role's path only. A read-only role job's whole verdict
+// IS its answer — nothing was integrated, so there is nothing to gate — and a
+// decision recorded for it is a close the run owes. A write role's close
+// stands on integrated work as well as on its answer, and the resume that
+// closes it must re-run the gate over that work (the adopted attempt's path in
+// processRoleJob below); closing a write role behind its decision alone would
+// close a tick whose gate evidence was never re-checked.
+func (r *Reconciler) closeBehindRecordedDecision(ctx context.Context, entry planEntry) (bool, error) {
+	tick := entry.TickID
+	if sourceGradeFor(entry.Role) != "read-only" {
+		return false, nil
+	}
+	if r.store == nil {
+		return false, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return false, err
+	}
+	decision, ok, err := r.recordedRoleDecision(entry)
+	if err != nil || !ok {
+		return false, err
+	}
+
+	attempt := decisionAttemptOf(*decision)
+	if attempt < 1 {
+		// A record that cannot say which attempt it belongs to cannot stand
+		// behind a close either: the close and the decision must belong to one
+		// attempt, or the record says one review answered and another was
+		// closed behind.
+		r.setTick(tick, "rejected")
+		r.record(tick, StageRejected, "the recorded %s decision carries no attempt it belongs to", entry.Role)
+		return true, r.refuse(RefusedRoleResult, tick,
+			"the recorded %s decision for %s names no attempt: a decision that cannot say which attempt gave it "+
+				"cannot stand behind a close, and a tick closed behind one would say another review answered than "+
+				"the one that did. The tick is NOT closed and NOT re-dispatched: fix the record, then run the epic again",
+			entry.Role, tick)
+	}
+
+	// The answer is re-read from the record and held to the same contract it
+	// was validated against before it landed: a decision that cannot be read
+	// back as the envelope it says it is fails closed, exactly as the envelope
+	// that never validated did — an unreadable record is not re-paid for
+	// either.
+	answer, err := roleResultOf(decision.Response)
+	if err == nil {
+		err = ValidateRoleResult(answer, outputSchemaFor(entry.Role), entry.Role)
+	}
+	if err != nil {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageRejected, "the recorded %s decision could not be re-read as a validated envelope: %v",
+			entry.Role, err)
+		return true, r.refuse(RefusedRoleResult, tick,
+			"the recorded %s decision for %s does not re-read as the validated envelope it says it is: %v. "+
+				"The tick is NOT closed: acting on a record nobody could read back is the same failure as acting "+
+				"on an envelope nobody could parse, and re-dispatching would buy the review the run already paid for",
+			entry.Role, tick, err)
+	}
+
+	// The marker is the decision's OWN attempt — the number the recorded
+	// answer, its request and the close below all name — so the decision and
+	// the close belong to one attempt.
+	jobID, _ := decision.Request["job_id"].(string)
+	baseSHA, _ := decision.Request["source_sha"].(string)
+	marker := attemptHandle{
+		JobID:   jobID,
+		Attempt: attempt,
+		TickID:  tick,
+		Role:    answer.Role,
+		BaseSHA: baseSHA,
+	}
+	r.setAttempt(tick, attempt)
+	r.record(tick, StageAdopted,
+		"attempt %d (%s) already answered, and its validated %s decision is recorded; the resume closes "+
+			"behind it rather than dispatching the review again",
+		attempt, tick, answer.Status)
+
+	// closeRoleTick re-checks the findings gate against ORIGIN, so a triage
+	// that has not happened yet is still a hold — one that stops the run
+	// without buying anything, which is what the recorded decision is for.
+	if err := r.closeRoleTick(ctx, marker, answer); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+// recordedRoleDecision is the role decision a resume closes behind: the one
+// recorded for this role and tick, for the LATEST attempt a person has not
+// released. A release is a person saying the attempt's answer is spent and a
+// fresh one is wanted — so a released attempt's decision is not replayed, and
+// the tick dispatches again as the release asked.
+func (r *Reconciler) recordedRoleDecision(entry planEntry) (*runstate.Decision, bool, error) {
+	decisions, err := r.store.Decisions()
+	if err != nil {
+		return nil, false, err
+	}
+	released, err := r.settlements()
+	if err != nil {
+		return nil, false, err
+	}
+	var best *runstate.Decision
+	for i := range decisions {
+		decision := &decisions[i]
+		if decision.Role != entry.Role {
+			continue
+		}
+		if tick, _ := decision.Request["tick_id"].(string); tick != entry.TickID {
+			continue
+		}
+		if attempt := decisionAttemptOf(*decision); attempt >= 1 {
+			if _, was := released[attemptKey(entry.TickID, attempt)]; was {
+				continue
+			}
+			if best == nil || attempt > decisionAttemptOf(*best) {
+				best = decision
+			}
+		}
+	}
+	return best, best != nil, nil
+}
+
+// decisionAttemptOf is the attempt a recorded decision belongs to — the
+// identity the decision itself carries, from its provenance first and from
+// the job id it was dispatched as otherwise.
+func decisionAttemptOf(decision runstate.Decision) int {
+	if decision.Provenance.Attempt != nil {
+		return *decision.Provenance.Attempt
+	}
+	jobID, _ := decision.Request["job_id"].(string)
+	for _, part := range strings.Split(jobID, "/") {
+		if rest, ok := strings.CutPrefix(part, "attempt-"); ok {
+			if n, err := strconv.Atoi(rest); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+// roleResultOf turns a decision's recorded response back into the envelope it
+// says it is — the same round trip asRecordMap made, in the other direction.
+func roleResultOf(response map[string]any) (*subprocess.RoleResult, error) {
+	if response == nil {
+		return nil, fmt.Errorf("the decision carries no response")
+	}
+	raw, err := json.Marshal(response)
+	if err != nil {
+		return nil, err
+	}
+	var answer subprocess.RoleResult
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		return nil, err
+	}
+	return &answer, nil
 }
 
 // collectRole collects a role job and holds its answer to the contract.
@@ -203,6 +377,26 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 				"this one asks for a person", entry.Role, tick, answer.Status, answer.Summary)
 	}
 
+	// The review's judgement, validated the way the envelope was (tick b50):
+	// a review's only deliverable is its answer, and its answer is a VERDICT
+	// — a typed field with an effect, never a status line riding alone.
+	// Until this check the judgement had nowhere to live and no effect,
+	// which is how a review answering NOT READY was recorded as
+	// ready-to-merge and only the untriaged-findings hold stopped the
+	// close-out. The refusal fails closed the way the envelope's does, and
+	// the findings channel has already run, so what a refused review
+	// discovered is still drafted.
+	if entry.Role == "review-epic" {
+		if err := validateReviewVerdict(answer); err != nil {
+			r.setTick(tick, "rejected")
+			r.record(tick, StageRejected, "the review's verdict did not validate: %v", err)
+			return nil, nil, r.refuse(RefusedRoleResult, tick,
+				"the review-epic job for %s returned an answer whose judgement cannot be read: %v. The tick is NOT "+
+					"closed: a judgement that exists only in prose is how NOT READY comes to be recorded as its "+
+					"opposite, and the report is the only channel that is read", tick, err)
+		}
+	}
+
 	_ = status
 	return collected, answer, nil
 }
@@ -222,9 +416,14 @@ func (r *Reconciler) recordDecision(entry planEntry, marker attemptHandle, answe
 	}
 	number := len(decisions) + 1
 	for _, existing := range decisions {
-		if existing.Role == entry.Role && existing.Request["tick_id"] == marker.TickID {
-			// Already recorded, by an earlier incarnation of this run. A
-			// decision is created if absent and never rewritten.
+		if existing.Role == entry.Role && existing.Request["tick_id"] == marker.TickID &&
+			existing.Request["job_id"] == marker.JobID {
+			// Already recorded, by an earlier incarnation of this run, for the
+			// SAME attempt. A decision is created if absent and never rewritten,
+			// and it belongs to ONE attempt (tick 80x): a restart re-reads this
+			// attempt's answer, while a genuinely different attempt's answer is
+			// a decision of its own — so the record a close stands behind can
+			// never be one attempt's answer under another attempt's close.
 			return nil
 		}
 		if existing.Decision >= number {
@@ -296,16 +495,16 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 		return fmt.Errorf("read tick %s before closing it: %w", tick, err)
 	}
 	if current.Status != "closed" {
-		// The close's other gate (tick 7vn), same rule as the integrated
-		// close: a role job's findings are discoveries its answer made, and a
-		// tick whose findings are untriaged is not closed — behind a validated
-		// envelope or anything else.
-		if refusal, err := r.gateOnFindings(tick); err != nil {
-			return err
-		} else if refusal != nil {
-			r.setTick(tick, "rejected")
-			r.record(tick, StageRejected, "%s: %s", refusal.Reason, firstLine(refusal.Message))
-			return refusal
+		// The findings gate is GONE from the role tick's close too (tick aqm):
+		// a review's discoveries are drafted exactly as a worker's are, the tick
+		// closes, and the hold moved to the close-out — which is where a
+		// finding reported by the FINAL REVIEW rides as well, the one place a
+		// person is already being asked to look. The close keeps the RECORD of
+		// what is riding.
+		if carried := r.carriedUntriaged(tick); carried > 0 {
+			r.record(tick, StageClosedCarrying,
+				"%d untriaged finding(s) ride to the close-out: the tick closes and the hold is the close-out's",
+				carried)
 		}
 		note := fmt.Sprintf("ticfac run %s: the %s job (attempt %d) returned a validated %s envelope at %s — %s: %s",
 			r.runID, answer.Role, marker.Attempt, answer.SchemaID, short(marker.BaseSHA), answer.Status, answer.Summary)

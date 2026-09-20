@@ -706,6 +706,14 @@ const (
 	StageFindingFiled     = "finding_filed"
 	StageFindingDuplicate = "finding_duplicate"
 
+	// StageClosedCarrying is the line a tick's close leaves when it closes
+	// behind findings nobody has triaged yet (tick aqm): the per-tick hold is
+	// gone, the tick closes, and the finding rides to the close-out — so the
+	// feed says what is riding rather than letting the close read as
+	// "nothing found". A close with nothing to carry stays silent, exactly
+	// as it always was.
+	StageClosedCarrying = "closed_carrying"
+
 	// StageStartFailed is the line a failed Start leaves (tick d6s): an
 	// attempt whose marker is on origin but never started. It is recorded
 	// at TICK scope, carrying the attempt it is about, so a feed reader who
@@ -741,6 +749,15 @@ const (
 	// of, and it is the run that opens the PR, never the close-out worker's
 	// diligence.
 	StagePROpened = "pr_opened"
+
+	// StagePRBodyWritten is the line the close-out leaves when the epic PR
+	// carries the record a person merging reads (tick 4sb): the final
+	// review's verdict and every finding the run drafted, composed from the
+	// run's own state and written through the forge. It is recorded at the
+	// close-out tick's scope, at the admission and again at the close gate —
+	// the last moment the run owns the PR — because the close-out's own
+	// attempt can draft a finding the admission's body predated.
+	StagePRBodyWritten = "pr_body_written"
 
 	// StageCloseoutAdmitted is the line the close-out admission leaves when
 	// the precondition the target repo declares is met: the epic PR is open
@@ -1862,11 +1879,14 @@ const (
 	// this reconciler cannot read — a findings block that does not parse, a
 	// finding outside the vocabularies — and closing the tick behind it would
 	// be the 604 failure with one more step in it: findings read by nobody.
-	// The second is the close's other gate: a tick whose findings nobody has
-	// triaged is not closed, which is the one thing that stops a finding
-	// falling on the floor. They are distinct because they send the next
-	// repair somewhere different — the first at the worker's report block,
-	// the second at the person the draft is waiting for.
+	// The second was the per-tick close gate, and tick aqm MOVED it: a tick
+	// whose findings are untriaged closes, the run continues, and the
+	// close-out does not hand over while any finding of the run is untriaged
+	// — one decision point at the end instead of one per tick mid-run, which
+	// is the one thing that stops a finding falling on the floor. They stay
+	// distinct because they send the next repair somewhere different — the
+	// first at the worker's report block, the second at the person the draft
+	// is waiting for.
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
@@ -1890,27 +1910,47 @@ const (
 	// kill the run.
 	RefusedClaimWidth = "claim_width"
 
-	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), and the sixth its
-	// own CLOSE gate adds (tick sqx). The PR + CI rule a target repository
-	// declares in .tick/config.md is a precondition the RUN enforces, and
-	// each refusal names which half of it is unmet, because the halves send
+	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), the sixth its own
+	// CLOSE gate adds (tick sqx), and the seventh the PR's WRITE half adds
+	// (tick 4sb): a body the forge could not put the run's record on — the
+	// FORGE's credential or permission again, but named apart from the PR's
+	// existence, because a PR that exists and carries nothing is the silent
+	// merge this refusal exists to stop. The PR + CI rule a target
+	// repository declares in .tick/config.md is a precondition the RUN
+	// enforces, and each refusal names which half of it is unmet, because the
+	// halves send
 	// the next repair somewhere different: the first at the HOST, which
 	// configured no code-hosting surface for a repo that declares the rule;
 	// the second at the FORGE, which could not open or read the PR (a
 	// credential, a permission, a network); the third at the WORKFLOW, which
-	// never ran on the PR at all — unsatisfiable by waiting, which is the
-	// failure the rule exists to surface; the fourth at the CODE, named by
+	// produced no check runs on the PR within the run's bounded wait for
+	// them to appear (tick ox0) — the failure the rule exists to surface,
+	// named only after that wait, never at the check runs' first momentary
+	// absence; the fourth at the CODE, named by
 	// the failing job the message carries; the fifth at the CLOCK — the run
 	// bounded its wait, and re-running the epic re-derives the admission from
 	// the PR rather than rediscovering it. The sixth is the fourth again, one
 	// head later: CI red on the PR head the close-out's OWN commits made —
 	// the head its admission's green CI is not evidence about — with the
 	// repair aimed at the close-out's writes rather than at the epic's tree.
-	RefusedCloseoutForge     = "closeout_forge_absent" // no surface behind the rule
-	RefusedCloseoutPR        = "closeout_pr_unmet"     // no PR, or one the forge could not open or read
-	RefusedCloseoutCIAbsent  = "closeout_ci_absent"    // CI never ran on the PR head
-	RefusedCloseoutCI        = "closeout_ci_failed"    // CI red; the message names the failing job
-	RefusedCloseoutCIPending = "closeout_ci_pending"   // CI still pending past the run's bound
+	RefusedCloseoutForge     = "closeout_forge_absent"      // no surface behind the rule
+	RefusedCloseoutPR        = "closeout_pr_unmet"          // no PR, or one the forge could not open or read
+	RefusedCloseoutPRBody    = "closeout_pr_body_unwritten" // the PR exists but carries no record
+	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // no CI appeared on the PR head within the wait's bound
+	RefusedCloseoutCI        = "closeout_ci_failed"         // CI red; the message names the failing job
+	RefusedCloseoutCIPending = "closeout_ci_pending"        // CI still pending past the run's bound
+
+	// RefusedCloseoutPRFindings is the integrity check that replaces the
+	// per-tick findings hold (tick aqm): a finding the run filed that does
+	// not appear on the epic PR the close-out is about to hand over. The
+	// PR is the one gate a person actually reads — findings ride there, and
+	// a filed finding missing from it is a finding on the floor whatever
+	// green CI says beside it — so the close-out refuses the hand-over. The
+	// repair is whatever dropped the finding: the body write that lied, the
+	// composition that omitted it, or the PR body somebody stripped a
+	// finding from — re-run the epic and the close gate recomposes and
+	// rewrites the body from the record before checking again.
+	RefusedCloseoutPRFindings = "closeout_pr_findings_missing"
 
 	// RefusedCloseoutCIOnClose is CI red on the PR head that includes the
 	// close-out's OWN commits (tick sqx): the head the admission's green CI
@@ -1971,8 +2011,9 @@ const collapsedMessage = "the tick did not pass"
 //     nothing merged;
 //   - RefusedNeedsHuman and RefusedRoleAnswer: the worker or the role job
 //     answered BLOCKED or NEEDS_CONTEXT, and the answer is its deliverable;
-//   - RefusedFindingUntriaged: a tick whose findings nobody has triaged is
-//     refused its close, and the triage is a person's.
+//   - RefusedFindingUntriaged: the close-out does not hand over while a
+//     finding of the run is untriaged (tick aqm moved the hold here from the
+//     per-tick close), and the triage is a person's.
 //
 // Every other refusal is a repair another RUN can make — a gate that runs
 // again on a fixed tree, an attempt that is redispatched once its blocker

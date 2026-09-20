@@ -70,9 +70,9 @@ func TestTheFeedStatesTheRolesAnswerAndTheRunsVerdictSeparately(t *testing.T) {
 // The other half of the same rule: a review whose deliverable is its answer
 // collects an empty branch as ready-to-merge — the verdict is the role's rule,
 // not an incidental failure — and the run proceeds on the answer. The
-// untriaged finding still refuses the close, which is what this fixture's
-// review reports; what is under test here is that collect was not what
-// refused it.
+// review's untriaged finding no longer refuses the REVIEW's close (tick aqm):
+// the review closes and the close-out holds over the finding; what is under
+// test here is that collect was not what stopped the review.
 func TestAReviewWithNoCommitsIsNotAFailureAtTheRun(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "review_finding"})
@@ -81,8 +81,15 @@ func TestAReviewWithNoCommitsIsNotAFailureAtTheRun(t *testing.T) {
 		t.Fatalf("the run did not finish: %v", err)
 	}
 	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
-		t.Fatalf("failure %+v, want the review tick's own untriaged finding — collect must not be the "+
+		t.Fatalf("failure %+v, want the review's untriaged finding holding the close-out — collect must not be the "+
 			"thing that refused the review", result.Failure)
+	}
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the review closed and its finding rides to the close-out",
+			result.Failure.TickID)
+	}
+	if got := f.Tracker.count("close:rv"); got != 1 {
+		t.Fatalf("rv was closed %d times, want 1: the review's own answer stands; the finding holds the close-out", got)
 	}
 
 	line := collectedLineFor(t, f, "rv")

@@ -46,6 +46,43 @@ const decorationCutset = " \t>-*#`"
 
 var statusLine = regexp.MustCompile(statusLinePattern)
 
+// ----------------------------------------------- the review's own verdict ---
+
+// The review-epic job's own judgement of the epic AS INTEGRATED (tick b50):
+// a closed vocabulary of two words, deliberately NOT the collect vocabulary's.
+// READY and ready-to-merge answer different questions — the review's verdict
+// is about the EPIC, the collect verdict is about the ATTEMPT'S branch — and
+// one word shared between them is exactly how a review that said NOT READY
+// came to be recorded as ready-to-merge (epic-ncv decision 1). The line rides
+// in the report the review already writes, the way the findings block does,
+// and is asked for by the review-epic profile's prompt — the role contract
+// JobSpec.output_schema names.
+//
+// This vocabulary is ticfac's own rather than contracts/collect-vocabulary's,
+// on purpose. The bundle's words are shared by three implementations of one
+// reader and pinned there so they cannot drift; the review's verdict has one
+// reader (this parser) and one consumer (the reconciler that validates it),
+// and the bundle keeps `result` open so the role contract can own its shape.
+const (
+	ReviewVerdictReady    = "READY"
+	ReviewVerdictNotReady = "NOT READY"
+)
+
+// ReviewVerdicts is the closed review-verdict vocabulary, NOT READY first for
+// the same order-discipline the status alternation keeps: NOT READY must
+// precede READY so the alternation cannot read a longer word as a shorter
+// one, whatever else weakens.
+var ReviewVerdicts = []string{ReviewVerdictNotReady, ReviewVerdictReady}
+
+// reviewVerdictLinePattern mirrors the status line's two defences: NOT READY
+// precedes READY in the alternation, and the \b guard stops a suffixed word
+// (READINESS) parsing as a bare one. It is pinned here as source, the way the
+// bundle pins its own pattern: a re-ordered alternation is a verdict
+// inversion waiting for a weakened guard to let it through.
+const reviewVerdictLinePattern = "^REVIEW-VERDICT:[ \\t]*(NOT READY|READY)\\b[ \\t]*(?:[-\u2013\u2014:][ \\t]*)?(.*)$"
+
+var reviewVerdictLine = regexp.MustCompile(reviewVerdictLinePattern)
+
 // Report is a parsed RESULT-<tick>.md: the FINAL status line, and the typed
 // findings block if the report carries one (findings.go).
 type Report struct {
@@ -61,6 +98,18 @@ type Report struct {
 	// problem is carried to the reconciler, which refuses the close behind it.
 	Findings        []Finding
 	FindingsProblem string
+
+	// ReviewVerdict is the review's own judgement parsed off its typed
+	// REVIEW-VERDICT line — READY or NOT READY, the closed vocabulary above.
+	// Empty when the report carries none, whatever its prose says: prose is
+	// where NOT READY went to be recorded as its opposite, so the absence is
+	// stated as an absence and the reconciler refuses the answer rather than
+	// guessing a verdict a report never gave. ReviewVerdictDetail is what the
+	// review said would make the epic ready, and ReviewVerdictLine is the
+	// line as written, kept for the same reason Line is.
+	ReviewVerdict       string
+	ReviewVerdictDetail string
+	ReviewVerdictLine   string
 }
 
 // NeedsHuman is the escalation set: two statuses that reach a person
@@ -69,25 +118,30 @@ func (r Report) NeedsHuman() bool {
 	return r.Status == StatusBlocked || r.Status == StatusNeedsContext
 }
 
-// ParseReport reads the FINAL status line of a report body, and the FINAL
-// findings block. Everything is empty when the report carries no recognisable
-// status — which is the `missing-result` verdict, so a body that stops
-// matching here is a verdict change too.
+// ParseReport reads the FINAL status line of a report body, the FINAL
+// review-verdict line, and the FINAL findings block. Everything is empty when
+// the report carries no recognisable status — which is the `missing-result`
+// verdict, so a body that stops matching here is a verdict change too.
 func ParseReport(body string) Report {
 	var out Report
 	findings, problem := ParseFindings(body)
 	out.Findings, out.FindingsProblem = findings, problem
 	for _, raw := range strings.Split(body, "\n") {
 		trimmed := strings.Trim(strings.TrimRight(raw, "\r"), decorationCutset)
-		m := statusLine.FindStringSubmatch(trimmed)
-		if m == nil {
-			continue
+		if m := statusLine.FindStringSubmatch(trimmed); m != nil {
+			// Keep scanning: the contract is the *final* status line, because a
+			// report may quote the template's four options above its own answer.
+			out.Status = m[1]
+			out.Detail = strings.TrimSpace(strings.Trim(m[2], decorationCutset))
+			out.Line = trimmed
 		}
-		// Keep scanning: the contract is the *final* status line, because a
-		// report may quote the template's four options above its own answer.
-		out.Status = m[1]
-		out.Detail = strings.TrimSpace(strings.Trim(m[2], decorationCutset))
-		out.Line = trimmed
+		if m := reviewVerdictLine.FindStringSubmatch(trimmed); m != nil {
+			// The same final-line contract, and for the same reason: a review
+			// may weigh both sides in prose before it says which it is.
+			out.ReviewVerdict = m[1]
+			out.ReviewVerdictDetail = strings.TrimSpace(strings.Trim(m[2], decorationCutset))
+			out.ReviewVerdictLine = trimmed
+		}
 	}
 	return out
 }

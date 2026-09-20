@@ -262,7 +262,8 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
  *
  * `holder` is a GETTER, not a value: the slot's token is a fencing credential
  * that a run re-acquires after an expiry, and a captured value would go stale
- * where a getter is re-read at each write.
+ * where a getter is re-read at each write — the defect of tick e9n was exactly
+ * a token updated too late for the pass that re-acquired it.
  *
  * A `not_holder` refusal is thrown, not returned: the `ContentsStore`
  * vocabulary (`written | exists | conflict | missing`) is the repository's own
@@ -276,7 +277,10 @@ export function repoContentsStore(
   ref: string,
   holder: () => HolderCredentials,
 ): ContentsStore {
-  const readSide = githubContentsStore(env, project, ref);
+  // Reads honour the injected store the same seam below does: a test's fake
+  // is one (project, ref) view, and a run reading through the room's lock
+  // while writing into the fake must see the same repository it writes to.
+  const readSide = contentsStore(env, project, ref);
   const room = () => env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(project));
 
   const publish = async (write: PublishWrite): Promise<StoreWrite> => {
@@ -318,7 +322,16 @@ export function contentsStore(
   if (injected !== undefined && injected !== null) {
     // A test's fake stands in for ONE (project, ref); make a mismatch loud
     // rather than letting a fake silently serve a different repository's view.
-    if (injected.project === project && injected.ref === ref) return injected.store;
+    if (injected.project === project && injected.ref === ref) {
+      // A caller that names its slot holder is a run: its WRITES go through
+      // the room even against an injected store, or the fake never checks
+      // the credential production checks — and a fake more forgiving than
+      // production certifies the defect it hides (tick e9n: the lapsed-slot
+      // re-acquire was invisible to every Workflow test precisely because
+      // the injected store let a run write with a token nobody looked at).
+      // The room's own write side lands in the injected store unchanged.
+      return holder !== undefined ? repoContentsStore(env, project, ref, holder) : injected.store;
+    }
     throw new Error(
       `the injected contents store serves ${injected.project} at ${injected.ref}, ` +
         `not ${project} at ${ref}`,

@@ -98,6 +98,10 @@ func (r *Reconciler) beginFinish(fl *inflightAttempt, status *subprocess.JobStat
 	return &finishing{fl: fl, status: status, stage: finishCollecting, startedAt: r.now()}
 }
 
+// reconciler-decision:D31:begin:finish — the local finish is the
+// reconciler's own serial half: collect, merge, integrated gate, close; the
+// Workflow host refuses to close behind an unwired IntegrationHost instead
+// (decisions/reconciler-parity.json, D31).
 // advanceFinish takes one finish one step and reports whether it is over.
 //
 // The steps are the ones finishTick always ran, in the order it always ran them
@@ -121,6 +125,8 @@ func (r *Reconciler) advanceFinish(ctx context.Context, f *finishing) (bool, err
 		return true, nil
 	}
 }
+
+// reconciler-decision:D31:end:finish
 
 // finishCollect is the first step: take the attempt's evidence, and then let
 // the worker go.
