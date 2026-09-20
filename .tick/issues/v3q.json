@@ -3,7 +3,7 @@
   "title": "TypeScript tracker client writes bytes tk would not, and its fixture test is hand-picked",
   "description": "The TS tracker client emits tick JSON that differs from what tk itself writes, and the test that should catch this compares against hand-picked fixtures rather than against tk's own output.\n\nThis is the b9w failure shape returning: a second implementation of a shared format, and a test that cannot tell when the two diverge because it was written from the same misunderstanding as the code.\n\nWork: generate the fixtures from tk rather than curating them, so the test fails when tk changes or when the client drifts.\n\nFrom pxc, finding 7707a087.",
   "notes": "2026-09-20 17:33 - ticfac run epic-dha: attempt 17 reported a finding drafted for triage — defect \"tracker-write.ts's encodeTickRecord has the same Go-escaping divergence the corpus just fixed in the client\" (key 8462a2992c6be84c9e140f4c3a4238e247ca01747f1a8933951055d3fd88f55e, severity medium, for this repository). Triage with `ticfac finding dha 8462a2992c6be84c9e140f4c3a4238e247ca01747f1a8933951055d3fd88f55e --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 17:33 - ticfac run epic-dha: attempt 17 reported a finding drafted for triage — proposed-tick \"tk's note-line timestamp is LOCAL time; the Workers host is UTC-only — record the divergence as a decision\" (key 64d4339c5860ef3b353031815ae1c2804e48232f1bb5deffb96993719b3a0cef, severity low, for this repository). Triage with `ticfac finding dha 64d4339c5860ef3b353031815ae1c2804e48232f1bb5deffb96993719b3a0cef --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-20 17:35 - ticfac run epic-dha: attempt 17 merged into epic/dha as dbab083b60d4; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "The tracker client's output is byte-compared against tk's own for a generated corpus, and the test fails if either side changes independently",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:58.095971Z",
-  "updated_at": "2026-09-20T15:35:17.902078Z",
-  "started_at": "2026-09-20T14:43:06.431242Z"
+  "updated_at": "2026-09-20T15:35:23.870892Z",
+  "closed_at": "2026-09-20T15:35:23.870892Z"
 }
