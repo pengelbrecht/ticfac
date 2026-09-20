@@ -141,9 +141,11 @@ func parseCloseoutRule(document string) (CloseoutRule, error) {
 // or the PR is open and CI is green on it), and a typed refusal otherwise,
 // each reason naming which half of the precondition is unmet, because the
 // halves send the next repair somewhere different: a missing surface at the
-// host, an unopenable PR at the forge's credential, an absent CI at the
-// workflow's triggers, a red CI at the failing job the message names, a
-// pending CI at the clock.
+// host, an unopenable PR at the forge's credential, a red CI at the failing
+// job the message names, a pending CI at the clock — and a CI that never
+// APPEARS at the workflow's triggers, but only after the run has waited
+// its bound for the check runs to show up (tick ox0), because a PR this run
+// just opened has none yet by construction.
 func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 	if !r.closeoutRule.Declared {
 		return nil
@@ -214,10 +216,16 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 		return err
 	}
 
-	// The CI half. A pending CI is a wait the run bounds — the same bound a
-	// gate command gets, because a CI run on the PR is a gate this run waits
-	// on rather than one it runs. A state CI leaves (green, red, nothing at
-	// all) is a typed refusal naming which one it was.
+	// The CI half. Every state CI can leave is first a wait the run bounds
+	// against the same clock a gate command gets, because a CI run on the PR
+	// is a gate this run waits on rather than one it runs — pending is a
+	// wait for an answer, and NOTHING reported is a wait for the question
+	// itself to exist (tick ox0): a PR this run just opened has no check
+	// runs yet BY CONSTRUCTION, and refusing at their first momentary
+	// absence is the "unsatisfiable by waiting" verdict the production run
+	// handed an operator about a workflow that was correct. What survives
+	// the bound is a typed refusal naming which state it was and what was
+	// checked, never a cause guessed at the first ask.
 	deadline := r.now().Add(r.opts.GateTimeout)
 	for {
 		report, ciSHA, ciIsHead, ciErr := r.ciForTree(ctx, pr)
@@ -244,11 +252,34 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 					"until CI is green on the PR, and the rule the repository declares is: %s",
 				pr.Number, pr.URL, strings.Join(report.Failing, ", "), r.opts.EpicID, r.closeoutRule.Stated)
 		case forge.CINone:
-			return r.refuse(RefusedCloseoutCIAbsent, tick,
-				"no CI has run on the epic PR #%d (%s): %s has produced no check runs on its head, so the "+
-					"close-out's precondition is unsatisfiable by waiting — the workflow may not trigger on "+
-					"pull_request at all. The rule the repository declares is: %s",
-				pr.Number, pr.URL, r.closeoutRule.CIWorkflow, r.closeoutRule.Stated)
+			// Absence right after creation is "not yet", never "never" (tick
+			// ox0): the production run opened PR #11 and refused it the same
+			// second — "unsatisfiable by waiting", volunteering a cause that
+			// sent whoever read it to edit a workflow file that was correct,
+			// while the check runs appeared 45s later and went green. So a
+			// silent CI waits against the same bound a pending one does, and
+			// the feed says it is waiting for CI to APPEAR while it does — the
+			// "not yet" wording, kept apart from the "never" only the bound
+			// can earn, because the two have opposite repairs: one is a clock,
+			// the other is a workflow file.
+			if now := r.now(); now.After(deadline) {
+				return r.refuse(RefusedCloseoutCIAbsent, tick,
+					"no CI has appeared on the epic PR #%d (%s): this run waited %s for %s to produce check runs on "+
+						"the PR's head, asking the forge every %s, and none appeared in that time, so the close-out's "+
+						"precondition is unmet. What was checked: the code-hosting surface's check runs on the head of "+
+						"PR #%d. Only now may the run suggest a cause: the workflow may not trigger on pull_request at "+
+						"all — check what %s answers for other PRs before editing it. The rule the repository declares "+
+						"is: %s",
+					pr.Number, pr.URL, r.opts.GateTimeout, r.closeoutRule.CIWorkflow, r.pollInterval, pr.Number,
+					r.closeoutRule.CIWorkflow, r.closeoutRule.Stated)
+			}
+			r.record(tick, StageCloseoutHeld, "no check runs yet on the epic PR #%d: waiting for CI to appear", pr.Number)
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("no check runs yet on the epic PR #%d; the close-out of %s waits for CI to appear", pr.Number,
+					r.opts.EpicID)); err != nil {
+				return err
+			}
+			r.sleep(r.pollInterval)
 		case forge.CIPending:
 			if now := r.now(); now.After(deadline) {
 				return r.refuse(RefusedCloseoutCIPending, tick,
@@ -302,15 +333,15 @@ func (r *Reconciler) prBase() string {
 // the close-out's own. A repo that declares no rule has no PR to ask and no
 // CI to wait on, so the gate is a no-op there, exactly as the admission is.
 //
-// One deliberate difference from the admission's loop: CI reporting
-// NOTHING on the head is a wait here rather than an immediate refusal. At
-// the admission, `none` means the workflow does not trigger on
-// pull_request at all — unsatisfiable by waiting. At the close, the run
-// itself just pushed the head CI is asked about, and between that push and
-// the forge's first check run there is a window where nothing has reported
-// yet: refusing it as unsatisfiable would end a healthy run on a race. So
-// it is held against the same clock the admission's pending wait uses, and
-// only a `none` that survives that bound is the workflow's failure again.
+// One deliberate symmetry with the admission's loop (tick ox0): CI
+// reporting NOTHING on the head is a wait here for the same reason it is a
+// wait at the admission — between a push and the forge's first check run
+// there is a window where nothing has reported yet, and here the run
+// itself just pushed the head CI is asked about, so the window is
+// guaranteed; at the admission a PR the run opened is in the same window,
+// which is why refusing at the first absent answer was the same race there.
+// So `none` holds against the same clock the admission's pending wait uses,
+// and only a `none` that survives that bound is the workflow's failure again.
 func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle, merged merge) error {
 	tick := marker.TickID
 	if !r.closeoutRule.Declared {
