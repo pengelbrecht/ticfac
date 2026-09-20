@@ -1,0 +1,13 @@
+{
+  "id": "f5x",
+  "title": "ticfac events rejects the invocation its own help tells you to use",
+  "description": "The help line reads:\n\n    ticfac events \u003crun-id\u003e   a run's event feed: what it did, as it does it (--follow to subscribe)\n\nTyping exactly that fails:\n\n    $ ticfac events run_b124d64a6399460cb53b3b8ce1dde41a --follow\n    ticfac events: exactly one run id is required\n\nGo's flag package stops parsing flags at the first non-flag argument, so --follow after the run id is read as a SECOND run id. The working form is flags first:\n\n    ticfac events --follow \u003crun-id\u003e\n\nThe operator hit this on the first cloud gate run, following the help. The error message compounds it: 'exactly one run id is required' describes the parser's view, not the user's mistake, and gives no hint that argument ORDER is the problem.\n\nTwo things to fix, and the second matters more:\n1. Accept flags after positionals - parse the args manually, or re-parse the tail. Every other CLI on this machine accepts it.\n2. When the parse fails and one of the extra positionals starts with '-', say so: 'flags must come before the run id: try ticfac events --follow \u003crun-id\u003e'. A parser that knows exactly what went wrong should not make the reader guess.\n\nCheck the other subcommands with flags and positionals - status, watch, cloud logs, run-epic - for the same shape. ticfac cloud logs \u003crun\u003e -f is documented the same way in the same help text.\n\nFound during u9h, by the operator.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "ticfac events \u003crun-id\u003e --follow works, and a parse failure caused by argument order names the order as the problem and shows the working form; the same holds for every subcommand whose help documents a trailing flag",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T19:22:55.786189Z",
+  "updated_at": "2026-09-20T19:22:55.786189Z"
+}

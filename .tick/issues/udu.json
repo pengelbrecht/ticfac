@@ -1,0 +1,13 @@
+{
+  "id": "udu",
+  "title": "A run's base refresh is a no-op when -base defaults to HEAD",
+  "description": "Every reconcile round since epic-dha was restarted has logged:\n\n    base_refreshed | origin has no branch HEAD: there is nothing to refresh epic/dha from\n\n-base documents itself as 'what the integration branch is cut from (default \"HEAD\")'. HEAD is not a branch name on the remote, so the refresh resolves nothing and silently does nothing, every round, forever. The feed line says so, but it reads like a note rather than a failure.\n\nThe consequence is not cosmetic. The run reads the TRACKER from its integration branch. A tracker change made on main - blocking a tick, adding a blocker, closing something out of band - never reaches a running epic. I hit this directly on 2026-09-20: I blocked u9h on 37i, pushed to main, and the run dispatched u9h again 40 seconds later because epic/dha had never heard of the block. The fix was to fold main into epic/dha by hand and push that.\n\nSo an operator's only supported way to steer a live run - the tracker - is disconnected from it by a default value.\n\nFix options, in preference order:\n1. -base defaults to the repository's default branch, not HEAD. A run cut from HEAD is almost never what anyone means.\n2. If HEAD is genuinely meant to mean 'resolve the remote's HEAD', resolve it (git ls-remote --symref origin HEAD) rather than looking for a branch literally named HEAD.\n3. Failing either, make an unresolvable base a REFUSAL at run start, not a per-round note. A refresh that can never work should stop the run once, loudly, instead of reassuring it 400 times.\n\nFound by watching a live run.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run started without -base refreshes its integration branch from the repository's real default branch, proven by a test that changes the tracker on the default branch and shows the running epic observing it",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T16:43:56.314103Z",
+  "updated_at": "2026-09-20T16:43:56.314103Z"
+}

@@ -34,10 +34,6 @@ new_sqlite_classes = ["RunRoom"]
 name = "REPO_ROOMS"
 class_name = "RepoRoom"
 
-[[migrations]]
-tag = "v4"
-new_sqlite_classes = ["RepoRoom"]
-
 # One SignalInbox per project (idFromName(project)) — the funnel a signal
 # becomes a tick through (tick 8sm). Per project rather than per source,
 # because what has to be serialised is writes to ONE project's `.tick/`: two
@@ -67,6 +63,21 @@ new_sqlite_classes = ["Sandbox"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["SignalInbox"]
+
+# RepoRoom's migration lives here, away from its binding above, because
+# wrangler applies migrations in FILE ORDER and continues after the last tag
+# the deployed worker has already applied. Declared next to its binding —
+# between v1 and v2, where it reads best — a worker already at v3 sees nothing
+# after v3, so this migration never runs and the API then refuses the binding
+# for a class it was never told to create:
+#
+#   Cannot create binding for class 'RepoRoom' because it is not currently
+#   configured to implement Durable Objects [code: 10061]
+#
+# Tags must ascend down the file. Keep new migrations at the bottom.
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["RepoRoom"]
 
 # The container application the Sandbox class runs. `image` is a path to the
 # Dockerfile of the image context (ticfac/image — SPEC §12 Phase 4 item 4

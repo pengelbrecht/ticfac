@@ -1,0 +1,13 @@
+{
+  "id": "b8p",
+  "title": "ticfac cloud supervisor is blind to epic runs",
+  "description": "ticfac cloud supervisor documents itself as \"whether the Workflow is alive\". On an epic run - the runs EpicReconcilerWorkflow drives - it answers:\n\n    ticfac cloud supervisor: Cloudflare has no ticks-run instance for run_76c209eed46f4081bdd56d497b149c59:\n    either no supervisor was ever created for that run, or the instance has passed Cloudflare's retention\n\nThat reads like the run is missing. It is not: it is healthy on the OTHER Workflow. The command only looks at ticks-run instances, and nu9 added a second driver it was never taught about.\n\nThis is the command an operator reaches for to answer \"is my cloud run alive\", and on the code path Phase 5 exists to ship, it answers with something indistinguishable from \"your run is gone\".\n\nThe fallback an operator needs today is raw wrangler, which is not a supported surface:\n\n    wrangler workflows instances list ticfac-epic-reconciler\n    wrangler workflows instances describe ticfac-epic-reconciler RUN_ID\n\nBoth answer well - list gives status and a Modified timestamp, describe gives every step with its duration and output, which is how ant was diagnosed. The supervisor command should read whichever Workflow drives the run (the run row knows) and say which one it read.\n\nFound by performing u9h.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "cloud supervisor reports the live state of a run driven by EpicReconcilerWorkflow, names which Workflow it read, and distinguishes no-instance from driven-by-a-Workflow-I-did-not-check",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T19:25:14.887319Z",
+  "updated_at": "2026-09-20T19:25:14.887319Z"
+}

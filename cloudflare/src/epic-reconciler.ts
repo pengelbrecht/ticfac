@@ -59,6 +59,7 @@ import {
 } from "./closeout";
 import { type PullRequest, type PullRequests, pullRequestsFromEnv } from "./forge";
 import { contentsStore } from "./git-contents";
+import { ensureBranch } from "./git-refs";
 import type { Env } from "./index";
 import { DEFAULT_LEASE_TTL_MS, type HolderCredentials, MAX_LEASE_TTL_MS } from "./lease";
 import {
@@ -1535,6 +1536,24 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
     }
     let holder: HolderCredentials = { run_id: params.run_id, token: acquired.lease.token };
 
+    // The integration branch is where every durable record of this run lives
+    // — INCLUDING the tracker the very first plan reads. On a first run it
+    // does not exist yet, and a read of a branch nothing has cut returns
+    // nothing, which planning reports as "epic <id> is not readable": a
+    // fresh cloud epic run could never start (tick ant). Cut it from the
+    // base the submitter named, before the first read rather than after the
+    // first dispatch.
+    // An injected store IS the ref, the way contentsStore treats it: a test's
+    // fake stands in for one (project, ref) and there is no origin to cut a
+    // branch on. Asking GitHub for a ref behind a fake store would reach past
+    // the seam the whole host is built on.
+    if (env.TICK_CONTENTS === undefined || env.TICK_CONTENTS === null) {
+      const branch = await ensureBranch(env, params.project, params.branch, params.base_sha ?? "");
+      if (branch.state === "refused") {
+        return { terminal: true, state: "failed", reason: branch.detail, dispatched: [] };
+      }
+    }
+
     // The run's one repository view: reads direct, publishes through the room.
     const repository = contentsStore(env, params.project, params.branch, () => holder);
     const store = new RunStateStore(repository, {
@@ -1711,9 +1730,24 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         // lease already lapsed, or was taken over) must not turn a terminal
         // verdict into a wedged Workflow — the rooms' alarms sweep what it
         // leaves behind.
+        // releaseSlot RETURNS its refusal rather than throwing it, so the
+        // catch below never sees one (tick eg9). Best-effort is the right
+        // policy; discarding the answer is not — a refusal carries the
+        // holder that has the slot instead, which is the one fact a reader
+        // needs and the only evidence that the slot was left behind.
         await step.do("release-publish-slot", async () => {
           try {
-            await room().releaseSlot(holder);
+            const released = await room().releaseSlot(holder);
+            if (!released.ok) {
+              const holds =
+                "holder" in released && released.holder !== null
+                  ? `${released.holder.run_id} holds it until ${released.holder.expires_at}`
+                  : "nobody holds it";
+              console.error(
+                `run ${params.run_id} did not release the publish slot for ${params.project}: ` +
+                  `${released.error}: ${released.detail}; ${holds}`,
+              );
+            }
           } catch (error) {
             console.error(
               `run ${params.run_id} could not release the publish slot for ${params.project}: ${String(error)}`,
@@ -1725,10 +1759,23 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
           try {
             // The release is what ignites a queued submission (D22): a
             // finished run hands the project to whatever waited behind it.
-            await roomFor(env, params.project).releaseDispatchLease({
+            const released = await roomFor(env, params.project).releaseDispatchLease({
               run_id: params.run_id,
               token: params.lease_token,
             });
+            if (!released.ok) {
+              // Same shape as the slot above (tick eg9): the refusal is
+              // RETURNED, so the catch never sees it, and a lease left held
+              // wedges every submission parked behind this project.
+              const holds =
+                "holder" in released && released.holder !== null
+                  ? `${released.holder.run_id} holds it until ${released.holder.expires_at}`
+                  : "nobody holds it";
+              console.error(
+                `run ${params.run_id} did not release the dispatch lease for ${params.project}: ` +
+                  `${released.error}: ${released.detail}; ${holds}`,
+              );
+            }
           } catch (error) {
             console.error(
               `run ${params.run_id} could not release the dispatch lease for ${params.project}: ${String(error)}`,

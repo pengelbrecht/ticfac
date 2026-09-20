@@ -1,0 +1,15 @@
+{
+  "id": "63i",
+  "title": "A Durable Object migration declared out of tag order never runs",
+  "description": "Deploying the factory from epic/dha on 2026-09-20 failed:\n\n    Cannot create binding for class 'RepoRoom' because it is not currently\n    configured to implement Durable Objects. Configure a migration in your\n    configuration to add this class. [code: 10061]\n\nThe migration WAS declared. cloudflare/wrangler.toml had its [[migrations]] blocks written next to the bindings they belong to, which put the tags out of order in the file:\n\n    line 22  tag v1  RunRoom\n    line 37  tag v4  RepoRoom     \u003c- out of place\n    line 63  tag v2  Sandbox\n    line 67  tag v3  SignalInbox\n\nwrangler applies migrations in FILE ORDER, continuing after the last tag the deployed worker already applied. A worker at v3 sees nothing after v3 in the file, so RepoRoom's migration never ran, and the API then refused the binding for a class it was never told to create.\n\nFixed by moving the v4 block below v3, with a comment saying why it cannot live beside its binding. Tags must ascend down the file.\n\nThis is why Phase 4's factory could not deploy from a branch carrying ef7's RepoRoom. Nobody noticed because nobody deployed it - which is exactly the gap u9h exists to close.\n\nA guard is worth having: a test that reads wrangler.toml and refuses tags that do not ascend would have caught this at gate time rather than at deploy time.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A test refuses a wrangler.toml whose [[migrations]] tags do not ascend in file order, and fails on the pre-fix file",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T18:52:16.745443Z",
+  "updated_at": "2026-09-20T20:25:35.131906Z",
+  "closed_at": "2026-09-20T20:25:35.131906Z",
+  "closed_reason": "Landed via PR #21."
+}

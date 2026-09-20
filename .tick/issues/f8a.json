@@ -1,0 +1,13 @@
+{
+  "id": "f8a",
+  "title": "A budgeted submission is silently routed away from the epic reconciler",
+  "description": "reconcilerDrives() (cloudflare/src/runs.ts:318) sends a submission to EpicReconcilerWorkflow only when it carries no tick_ids, no notify, no max_cost_usd, no max_wall_clock_ms and no non-default credential_grade. Anything else goes to the old RunWorkflow.\n\nThe reasoning is sound and documented in place: the reconciler does not do budget enforcement yet, so a run that asks for a budget is handed to the driver that can honour it.\n\nThe problem is that this is INVISIBLE. On 2026-09-20 I submitted the Phase 5 gate run with --max-cost 5 --max-wall-clock 1h - the two flags any careful operator reaches for first - and the run silently went through ticks-run. Nothing in the submission output, the run row, or  said which driver was chosen. I only found out by reading , noticing it said 'workflow: ticks-run', and going to the source.\n\nSo the flags that exist to make a run SAFE are the ones that quietly opt it out of the code path under test. For a gate run that is the difference between proving the thing and proving nothing.\n\nMinimum fix: say which driver a submission was routed to, at submission time and in , and when a flag caused the fallback, name the flag. 'Routed to ticks-run because max_cost_usd was set; EpicReconcilerWorkflow does not enforce budgets yet' is one line and ends this class of confusion.\n\nBetter fix, separately: give the reconciler budget enforcement so the predicate shrinks. The comment at runs.ts:314 already anticipates exactly that.\n\nFound while performing u9h.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A submission states which Workflow drives it, and a submission that falls back names the field that caused it, at submission time and in cloud status",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T18:55:30.179989Z",
+  "updated_at": "2026-09-20T18:55:30.179989Z"
+}

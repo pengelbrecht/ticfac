@@ -480,6 +480,34 @@ async function readCheckpoint(contents: MemoryContents): Promise<Checkpoint | nu
   return file === null ? null : (JSON.parse(file.content) as Checkpoint);
 }
 
+/**
+ * Waits for a lease or slot the run is expected to RELEASE to read as free.
+ *
+ * The terminal checkpoint is not that signal. The checkpoint is written
+ * inside `reconcilePass()`, and `release-publish-slot` and
+ * `release-dispatch-lease` are steps that run AFTER it — so a test that waits
+ * on the checkpoint and then reads the room can look between the two and see
+ * a lease that is about to be released. It failed about one run in four.
+ *
+ * So wait on the observable this assertion is actually about. The deadline is
+ * short on purpose: this must still fail, and fail quickly, when the release
+ * genuinely does not happen. It is not a timeout widened until the flake
+ * stopped — the release is a step, not a delay, and the whole point is that
+ * the room ends up free.
+ */
+async function freedWithin(
+  read: () => Promise<unknown | null>,
+  ms = 2_000,
+): Promise<unknown | null> {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const held = await read();
+    if (held === null) return null;
+    if (Date.now() > deadline) return held;
+    await scheduler.wait(10);
+  }
+}
+
 /** Runs passes until terminal — a test's driver, never the reconciler's own. */
 async function drive(
   pass: () => Promise<import("../src/epic-reconciler").PassResult>,
@@ -2161,7 +2189,7 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     expect(checkpoint?.state).toBe("completed");
     // The run held a five-minute lease and finished in seconds: a free lease
     // now is the release step's doing, not the ttl's.
-    await expect(room.leaseStatus()).resolves.toBeNull();
+    await expect(freedWithin(() => room.leaseStatus())).resolves.toBeNull();
   });
 
   // The slot-inspection the lapse test needs: read past the room's public
@@ -2240,7 +2268,7 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     // row, and the repository observably has no writer at all — what a
     // long pass or a restart outliving the ttl really leaves behind.
     await expireSlotNow(room);
-    await expect(room.slotStatus()).resolves.toBeNull();
+    await expect(freedWithin(() => room.slotStatus())).resolves.toBeNull();
 
     // The next pass's heartbeat finds no slot and re-acquires it — waited on
     // as the durable evidence. A re-acquire after a lapse mints a NEW token:
@@ -2280,7 +2308,7 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     expectRecordValid((await contents.read(checkpointPath(runID)))!.content, "checkpoint");
     expect(integration.integrated.length).toBeGreaterThan(0);
     // And the finished run wedged nobody behind its slot.
-    await expect(room.slotStatus()).resolves.toBeNull();
+    await expect(freedWithin(() => room.slotStatus())).resolves.toBeNull();
   });
 });
 
