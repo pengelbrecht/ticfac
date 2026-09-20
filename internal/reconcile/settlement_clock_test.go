@@ -45,12 +45,10 @@ func TestASuspendedHostDoesNotRefuseALiveAttempt(t *testing.T) {
 	clock := &frozenClock{at: woke}
 	r.now = clock.now
 
-	// Dispatched seven hours ago in calendar terms, adopted the moment this
-	// run woke up. dha's numbers.
-	fl := &inflightAttempt{
-		deadline:   woke.Add(-6 * time.Hour).Round(0),
-		addressing: woke,
-	}
+	// Dispatched seven hours ago in calendar terms, and this run has not yet
+	// seen it overdue — which is what the first poll after a wake looks like.
+	// dha's numbers.
+	fl := &inflightAttempt{deadline: woke.Add(-6 * time.Hour).Round(0)}
 
 	if over, watched, unaddressable := r.unaddressable(fl); unaddressable {
 		t.Fatalf("an attempt was declared unaddressable %s past its budget after this run had watched it for %s: "+
@@ -71,12 +69,16 @@ func TestAnAttemptNobodyCanAddressIsStillRefused(t *testing.T) {
 	woke := time.Now()
 	clock := &frozenClock{at: woke}
 	r.now = clock.now
-	fl := &inflightAttempt{
-		deadline:   woke.Add(-6 * time.Hour).Round(0),
-		addressing: woke,
+	fl := &inflightAttempt{deadline: woke.Add(-6 * time.Hour).Round(0)}
+
+	// The first poll after waking notes the budget is spent and refuses
+	// nothing; the grace starts here, not at the dispatch.
+	if _, _, unaddressable := r.unaddressable(fl); unaddressable {
+		t.Fatal("the first poll after waking refused the attempt outright")
 	}
 
-	// This run has now been awake, watching, for longer than the grace.
+	// This run has now been awake, watching it not settle, for longer than the
+	// grace.
 	clock.at = woke.Add(21 * time.Minute)
 
 	over, watched, unaddressable := r.unaddressable(fl)
@@ -89,6 +91,40 @@ func TestAnAttemptNobodyCanAddressIsStillRefused(t *testing.T) {
 	}
 	if over < 6*time.Hour {
 		t.Errorf("the refusal says %s past the budget, want the calendar gap", over)
+	}
+}
+
+// TestTheGraceStartsWhenTheBoundFiresNotAtDispatch is the fault the first cut
+// of this tick had, pinned so it cannot come back.
+//
+// The grace exists so the executor's stop has time to land and the supervisor
+// has time to write its terminal record — all of which happens AFTER the wall
+// clock fires. Counting it from the dispatch makes both halves of the refusal
+// come true in the same instant, the grace delays nothing, and a stopped
+// attempt is refused instead of collected. Tick pbb's acceptance caught it.
+func TestTheGraceStartsWhenTheBoundFiresNotAtDispatch(t *testing.T) {
+	t.Parallel()
+	r := &Reconciler{
+		wipeThreshold: 10 * time.Second,
+		opts:          Options{WallSeconds: 10},
+	}
+	dispatched := time.Now()
+	clock := &frozenClock{at: dispatched}
+	r.now = clock.now
+	fl := &inflightAttempt{deadline: dispatched.Add(10 * time.Second).Round(0)}
+
+	// One second past the bound: the budget is spent, and nothing may be
+	// refused yet — the stop has not had its grace.
+	clock.at = dispatched.Add(11 * time.Second)
+	if _, _, unaddressable := r.unaddressable(fl); unaddressable {
+		t.Fatal("an attempt was refused one second past its bound: the grace that lets a stop land and be " +
+			"collected delayed nothing, which is the whole of what it is for")
+	}
+
+	// A full grace after the bound fired, and only then.
+	clock.at = dispatched.Add(21 * time.Second)
+	if _, watched, unaddressable := r.unaddressable(fl); !unaddressable {
+		t.Errorf("still not refused a full grace past the bound, having watched for %s", watched)
 	}
 }
 

@@ -1574,12 +1574,26 @@ type inflightAttempt struct {
 	// was issued. It is deliberately a wall-clock comparison — see
 	// settlementDeadline — and on its own it is not enough to refuse anything.
 	//
-	// addressing is when THIS RUN began addressing the attempt, read from the
-	// run's own clock, so the interval since is monotonic (tick 8jl). It is
-	// the other half of the refusal, and the half a suspended host cannot
-	// forge.
-	deadline   time.Time
-	addressing time.Time
+	// overdueAt is when THIS RUN first SAW the budget spent — the first poll
+	// at which the calendar half above was already true — read from the run's
+	// own clock, so the interval since is monotonic (tick 8jl). It is the
+	// other half of the refusal, and the half a suspended host cannot forge.
+	//
+	// It counts from the bound firing and NOT from the dispatch, because the
+	// claim the refusal makes is "this run has watched it, awake, WITHOUT IT
+	// SETTLING, since its budget ran out". Counting from dispatch would make
+	// both halves come true in the same instant and the grace would delay
+	// nothing — which is what it did on the first cut of this tick, refusing
+	// a stopped attempt a second past its bound instead of giving the
+	// executor's stop time to land and be collected (tick pbb's acceptance
+	// caught it).
+	//
+	// Zero until that first poll, which is what makes a RESUMED run safe: an
+	// incarnation that has just adopted an attempt whose budget ran out hours
+	// ago starts its own grace at its own first poll, and has watched it for
+	// no time at all.
+	deadline  time.Time
+	overdueAt time.Time
 
 	cursor string
 	// interval is the cadence this attempt is addressed at. It is the
@@ -1622,10 +1636,9 @@ type inflightAttempt struct {
 func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
 	fl := &inflightAttempt{
 		entry: entry, handle: handle, executor: executor, marker: marker,
-		step:       r.OpenStep(r.stepCap),
-		deadline:   r.settlementDeadline(marker),
-		addressing: r.now(),
-		interval:   r.pollIntervalFor(marker.Executor),
+		step:     r.OpenStep(r.stepCap),
+		deadline: r.settlementDeadline(marker),
+		interval: r.pollIntervalFor(marker.Executor),
 	}
 	// The baseline the liveness count is measured against is taken HERE, not
 	// at the first probe (tick dh1). The worktree exists by now — the
@@ -1997,22 +2010,39 @@ func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 //   - Has the attempt's issued budget been spent? CALENDAR time, from the
 //     durable dispatch stamp. An agent issued an hour has had its hour when an
 //     hour of the world has passed; that is what the operator bought.
-//   - Has THIS RUN watched it, awake, long enough to conclude nobody can say it
-//     is running? MONOTONIC time, from when this run began addressing it, for a
-//     full wipe threshold — the same grace the formula always carried and the
-//     same clock the wipe threshold beside it already spends (guards.go). Time
-//     the host spent asleep is time nobody spent watching.
+//   - Has THIS RUN watched it, awake, SINCE THAT MOMENT, long enough to
+//     conclude nobody can say it is running? MONOTONIC time, from the first
+//     poll that saw the budget spent, for a full wipe threshold — the same
+//     grace the formula always carried and the same clock the wipe threshold
+//     beside it already spends (guards.go). Time the host spent asleep is time
+//     nobody spent watching.
+//
+// The second half counts from the BOUND FIRING and not from the dispatch, and
+// that is load-bearing rather than tidy. The grace exists so the executor's
+// stop has time to land and the supervisor has time to write its terminal
+// record — all of which happens AFTER the wall clock fires. Counting from
+// dispatch makes both halves come true in the same instant, so the grace
+// delays nothing and a stopped attempt is refused a second past its bound
+// instead of being collected. That was the first cut of this tick, and tick
+// pbb's acceptance caught it.
 //
 // Both, or no refusal. The second half is the one a suspended host cannot
-// forge, and it is also what makes a RESUMED run safe: an incarnation that has
-// just adopted an attempt has watched it for zero seconds and does not refuse
-// something it has not yet addressed even once.
+// forge, and it is what makes a RESUMED run safe: an incarnation that has just
+// adopted an attempt whose budget ran out hours ago starts its grace at its own
+// first poll and has watched it for zero seconds.
+//
+// Noting the moment is a WRITE, the way probeProgress records probedAt: this is
+// the only reader and the only writer of it, and an observation nobody wrote
+// down is one the next poll cannot use.
 func (r *Reconciler) unaddressable(fl *inflightAttempt) (over time.Duration, watched time.Duration, ok bool) {
 	now := r.now()
 	if !now.After(fl.deadline) {
 		return 0, 0, false
 	}
-	watched = now.Sub(fl.addressing)
+	if fl.overdueAt.IsZero() {
+		fl.overdueAt = now
+	}
+	watched = now.Sub(fl.overdueAt)
 	if watched < r.wipeThreshold {
 		return 0, 0, false
 	}
