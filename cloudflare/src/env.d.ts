@@ -447,6 +447,17 @@ declare namespace Cloudflare {
      */
     TICFAC_EXECUTOR?: import("./epic-reconciler").AttemptExecutor;
     /**
+     * The git writer the sandbox executor puts an attempt's work on its own
+     * write_ref through (tick us2): the executor's collect takes the branch
+     * the container pushed and lands it on `refs/heads/ticfac/…`, the same
+     * push the local executor makes itself. Unset on a deployment, which
+     * speaks GitHub's git-data API directly from `GITHUB_TOKEN`; set, it is
+     * the seam a test injects its own writer through — the same pattern as
+     * `WORKER_COLLECTOR`, because the create-or-advance ordering is what
+     * needs testing, not the HTTP.
+     */
+    TICFAC_REF_WRITER?: import("./git-refs").GitRefWriter;
+    /**
      * The merge-and-gate half of a tick's settle on the Workflow host (tick
      * z23): what turns a reported attempt into a closeable one. Unset on a
      * deployment, where the run refuses to close ticks behind an

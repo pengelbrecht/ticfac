@@ -143,6 +143,37 @@ export function workerBranch(epic: string, tick: string): string {
   return `${WORKER_BRANCH_PREFIX}${epic}/${tick}`;
 }
 
+/**
+ * The EPIC SLOT value that makes a container derive a per-ATTEMPT landing
+ * branch (tick us2).
+ *
+ * A worker container derives its branch as `tick/${TICKS_EPIC}/${TICKS_TICK}`
+ * — inside the vendored image, from the two env slots and nothing else — so
+ * the control plane's only lever on where an attempt's container lands is
+ * the epic slot. Riding the attempt in it (`<epic>/attempt-<n>`) gives every
+ * attempt a landing branch of its own, which is the rule the local run
+ * moved to for exactly this reason (internal/reconcile's attemptWriteRef): a
+ * shared per-tick branch meant a redispatch's container adopted the previous
+ * attempt's pushed work, and its collect counted the previous attempt's
+ * commits. The tick id keeps the real slot — the prompt and the report file
+ * (`RESULT-<tick>.md`) are derived from it.
+ */
+export function workerAttemptEpicSlot(epic: string, attempt: number): string {
+  return `${epic}/attempt-${attempt}`;
+}
+
+/**
+ * The branch one ATTEMPT's worker container pushes (tick us2): the landing
+ * zone the executor mirrors onto the attempt's write_ref at collect. The
+ * spelling must be what the container derives from the boot this module's
+ * `workerBootEnv` composes — `tick/${TICKS_EPIC}/${TICKS_TICK}` — which the
+ * tests pin, because the image's rule and this helper have no compiler
+ * between them.
+ */
+export function attemptLandingBranch(epic: string, attempt: number, tick: string): string {
+  return `${WORKER_BRANCH_PREFIX}${workerAttemptEpicSlot(epic, attempt)}/${tick}`;
+}
+
 /** The report a worker's branch must carry. Mirrors `resultFile` in worker-collect.ts. */
 export function workerResultFile(tick: string): string {
   return `RESULT-${tick}.md`;
@@ -180,6 +211,13 @@ export type WorkerBootInput = {
   base_sha: string;
   epic: string;
   tick: string;
+  /**
+   * The dispatch's attempt number, when this boot belongs to one (tick us2).
+   * It rides the EPIC slot of the container's branch derivation
+   * ({@link workerAttemptEpicSlot}), never the tick's — the tick slot drives
+   * the prompt and the report file, and stays the tick's own id.
+   */
+  attempt?: number;
   run_id: string;
   gateway_base_url: string;
   gateway_token: string;
@@ -445,7 +483,8 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
   const env: Record<string, string> = {
     TICKS_REPO_URL: input.repo_url,
     TICKS_BASE_SHA: input.base_sha,
-    TICKS_EPIC: input.epic,
+    TICKS_EPIC:
+      input.attempt === undefined ? input.epic : workerAttemptEpicSlot(input.epic, input.attempt),
     TICKS_TICK: input.tick,
     TICKS_RUN_ID: input.run_id,
     AI_GATEWAY_BASE_URL: input.gateway_base_url,

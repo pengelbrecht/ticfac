@@ -57,6 +57,7 @@ import {
 } from "../src/run-state-store";
 import { attemptSandboxName } from "../src/sandbox-executor";
 import { encodeTick, type Tick, TrackerClient } from "../src/tracker-client";
+import { attemptLandingBranch } from "../src/worker-boot";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // ------------------------------------------------------------ the contract ---
@@ -214,9 +215,13 @@ function storeFor(contents: ContentsStore): RunStateStore {
  * by the container's NAME — a `job_id` the reconciler composed before start
  * is not a container and cannot be inspected, and keying on it here is how
  * the suite stayed green over a marker that never recorded what start
- * returned. So `#key` REFUSES a handle with no `sandbox`: a marker written
- * before start and never completed would fail loudly here, the way it fails
- * in production with `namedSandbox(binding, undefined)`.
+ * returned. So `#key` REFUSES a marker whose `handle` slot carries no
+ * container name: a marker written before start and never completed would
+ * fail loudly here, the way it fails in production with
+ * `namedSandbox(binding, undefined)`. The drill is the contract's own
+ * shape (tick us2): the marker's open `handle` object carries the job_handle
+ * start returned, and THAT record's open `handle` object carries the
+ * executor's private addressing.
  */
 class FakeExecutor implements AttemptExecutor {
   readonly started: Array<{ tick_id: string; attempt: number; write_ref: string }> = [];
@@ -228,7 +233,8 @@ class FakeExecutor implements AttemptExecutor {
   constructor(readonly contents: MemoryContents) {}
 
   #key(handle: AttemptHandle): string {
-    const sandbox = handle.sandbox;
+    const job = handle.handle as { handle?: { sandbox?: unknown } } | undefined;
+    const sandbox = job?.handle?.sandbox;
     if (typeof sandbox !== "string" || sandbox === "") {
       throw new Error(
         `this handle carries no container: the marker it came from never recorded what ` +
@@ -241,38 +247,49 @@ class FakeExecutor implements AttemptExecutor {
 
   async start(spec: AttemptSpec): Promise<AttemptHandle> {
     this.started.push({ tick_id: spec.tick_id, attempt: spec.attempt, write_ref: spec.write_ref });
-    // What the REAL executor returns and the reconciler must persist: the
-    // identity composed before start, beside the container's own addressing
-    // — its name, its work process, the branch it pushes and the base the
-    // collect compares against.
+    // What the REAL executor returns (tick us2): the contract's closed
+    // job_handle — identity, executor name, the issue time, and the one
+    // open `handle` object carrying the container's own addressing: its
+    // name, its work process, the landing branch it pushes and the base
+    // the collect compares against.
     return {
-      executor: "cloudflare-sandbox",
+      schema_version: 1,
       job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
       attempt: spec.attempt,
-      try: spec.attempt,
-      tick_id: spec.tick_id,
-      role: spec.role,
-      remote: "origin",
-      resumed_from: null,
-      write_ref: spec.write_ref,
-      sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
-      process_id: `proc-${spec.attempt}`,
-      branch: `ticfac/${spec.epic_id}/${spec.tick_id}`,
-      base_sha: "f".repeat(40),
-      launched: true,
-      detail: "booted by the fake",
-      run_id: spec.run_id,
-      epic_id: spec.epic_id,
-      project: spec.project,
-      base_ref: spec.base_ref,
-      title: spec.title,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+        process_id: `proc-${spec.attempt}`,
+        base_sha: "f".repeat(40),
+        branch: attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id),
+        write_ref: spec.write_ref,
+        launched: true,
+        detail: "booted by the fake",
+        run_id: spec.run_id,
+        epic_id: spec.epic_id,
+        tick_id: spec.tick_id,
+        role: spec.role,
+        project: spec.project,
+        base_ref: spec.base_ref,
+        title: spec.title,
+      },
+      issued_at: NOW.toISOString(),
     };
   }
 
   async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
-    return this.settled.has(this.#key(handle))
-      ? { state: "exited", exit_code: 0 }
-      : { state: "running" };
+    // The contract's own job_status vocabulary (tick us2): the fake answers
+    // the same closed record the real executor does, so a reconciler that
+    // branched on a cloud-only vocabulary is a suite this fake would hide.
+    const settled = this.settled.has(this.#key(handle));
+    return {
+      schema_version: 1,
+      job_id: String(handle.job_id),
+      state: settled ? "succeeded" : "running",
+      terminal: settled,
+      observed_at: NOW.toISOString(),
+      cursor: null,
+    };
   }
 
   async collect(handle: AttemptHandle): Promise<AttemptReport> {
@@ -441,6 +458,7 @@ function reconcilerFor(
   extra?: {
     pullRequests?: PullRequests;
     baseRef?: string;
+    baseSHA?: string;
     now?: () => Date;
     gateTimeoutMs?: number;
   },
@@ -637,15 +655,38 @@ describe("the run state store, against the pinned contract", () => {
     // after a restart." The record's other fields are untouched, and the
     // create-if-absent guard above is still the one that answers a second
     // reconciler racing the same dispatch.
+    // Then the executor's start answers, and the job_handle it returned is
+    // recorded on the SAME marker: job-protocol's start rule — "Persist the
+    // JobSpec before addressing the executor, then record the returned
+    // handle. A handle that was never persisted is a job nobody can find
+    // after a restart." The record's other fields are untouched, and the
+    // create-if-absent guard above is still the one that answers a second
+    // reconciler racing the same dispatch. The shape is the marker's own
+    // (tick us2): the reconciler's flat identity, with the executor's
+    // contract job_handle riding the one open `handle` slot.
+    const jobHandle = {
+      schema_version: 1,
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(RUN_ID, "t01", 1),
+        process_id: "proc-1",
+        branch: attemptLandingBranch(EPIC_ID, 1, "t01"),
+        base_sha: "f".repeat(40),
+      },
+      issued_at: NOW.toISOString(),
+    };
     const handle = {
       executor: "cloudflare-sandbox",
       job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
       attempt: 1,
       tick_id: "t01",
-      sandbox: attemptSandboxName(RUN_ID, "t01", 1),
-      process_id: "proc-1",
-      branch: `ticfac/${EPIC_ID}/t01`,
-      base_sha: "f".repeat(40),
+      role: "implement-tick",
+      remote: "origin",
+      resumed_from: null,
+      write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+      handle: jobHandle,
     };
     const completed = await store.updateAttemptHandle(1, handle);
     expect(completed.state).toBe("updated");
@@ -669,12 +710,15 @@ describe("the run state store, against the pinned contract", () => {
     // A later handle (the truth moved) is still an update — the completion
     // records what the executor last answered for a live attempt, never
     // what an incarnation remembers.
-    const moved = await store.updateAttemptHandle(1, { ...handle, process_id: "proc-2" });
+    const moved = await store.updateAttemptHandle(1, {
+      ...handle,
+      handle: { ...jobHandle, handle: { ...jobHandle.handle, process_id: "proc-2" } },
+    });
     expect(moved.state).toBe("updated");
     const reread = JSON.parse((await contents.read(attemptPath(RUN_ID, 1)))!.content) as {
-      job_handle: { process_id: string };
+      job_handle: { handle: { handle: { process_id: string } } };
     };
-    expect(reread.job_handle.process_id).toBe("proc-2");
+    expect(reread.job_handle.handle.handle.process_id).toBe("proc-2");
 
     // A marker that is not on the ref is a missing base, not a create: the
     // completion records beside a dispatch that exists, never in place of
@@ -892,6 +936,120 @@ describe("the reconciler's window and records", () => {
   });
 });
 
+// --------------------------------------- a cloud attempt's records (tick us2) ---
+
+/**
+ * The contract suite, run against a CLOUD-PRODUCED record (tick us2's
+ * acceptance): the marker a real dispatch wrote must satisfy the same
+ * pinned schemas a local attempt's records answer to — schemas.attempt for
+ * the record, $defs.provenance for where it came from — and the identity it
+ * carries must be the local run's own: the attempt's write ref in the
+ * contract's `refs/heads/ticfac/…` vocabulary, the real source the dispatch
+ * was cut from (never a hard-coded main or forty zeros).
+ */
+describe("a cloud attempt's records, against the pinned contracts", () => {
+  const BASE_SHA = "5ec0ffee00000000000000000000000000000001";
+
+  it("a dispatch's marker is a local attempt's record: the pinned schemas take it, and the provenance names a real source", async () => {
+    const contents = sharedContents();
+    const executor = new FakeExecutor(contents);
+    const reconciler = reconcilerFor(contents, executor, new FakeIntegration(), undefined, {
+      baseSHA: BASE_SHA,
+    });
+
+    await reconciler.reconcilePass();
+
+    const raw = (await contents.read(attemptPath(RUN_ID, 1)))!.content;
+    expectRecordValid(raw, "attempt");
+    const marker = JSON.parse(raw) as {
+      job_handle: Record<string, unknown>;
+      provenance: Record<string, unknown>;
+    };
+
+    // The identity half — the same keys a local marker's attemptHandle.asMap()
+    // writes, so a reader of one run's records cannot tell which host made it.
+    expect(marker.job_handle).toMatchObject({
+      executor: "cloudflare-sandbox",
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      tick_id: "t01",
+      try: 1,
+      role: "implement-tick",
+      remote: "origin",
+      write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+      base_sha: BASE_SHA,
+      resumed_from: null,
+    });
+
+    // The provenance names the ref and the commit the dispatch was cut from
+    // — the run branch at the epic base, exactly what the local dispatch's
+    // provenance carries — never a hard-coded main or forty zeros.
+    expect(marker.provenance).toMatchObject({
+      run_id: RUN_ID,
+      tick_id: "t01",
+      attempt: 1,
+      source_ref: `refs/heads/${BRANCH}`,
+      source_sha: BASE_SHA,
+      integration_ref: `refs/heads/${BRANCH}`,
+      phase: "worker",
+      executor: "cloudflare-sandbox",
+      role: "implement-tick",
+    });
+    // And it validates against the contract's own definition of provenance,
+    // not only against this test's idea of it.
+    const provenanceSchema = parseSchema(
+      (runStateContract as { $defs: Record<string, unknown> }).$defs.provenance,
+      "$",
+    );
+    const errors = validate(provenanceSchema, contractDefs, marker.provenance);
+    expect(errors, `provenance must satisfy the pinned definition: ${errors.join("; ")}`).toEqual(
+      [],
+    );
+  });
+
+  it("a redispatch gets a write ref of its own — one ref per attempt, the rule the local run moved to", async () => {
+    const contents = sharedContents();
+    const executor = new FakeExecutor(contents);
+    const integration = new FakeIntegration();
+    const reconciler = reconcilerFor(contents, executor, integration, undefined, {
+      baseSHA: BASE_SHA,
+    });
+
+    // Attempt 1 settles with nothing on its branch: an attempt that left
+    // nothing is redispatched, the local run's own resume rule.
+    const first = await reconciler.reconcilePass();
+    expect(first.dispatched.map((d) => d.tick_id)).toEqual(["t01", "t02"]);
+    for (const dispatch of first.dispatched) {
+      executor.finish(dispatch.tick_id, dispatch.attempt, {
+        outcome: "failed",
+        commits: 0,
+        detail: "nothing landed",
+      });
+    }
+    const second = await reconciler.reconcilePass();
+    // The window opens for the redispatch first — a NEW attempt number, run-wide.
+    const redone = second.dispatched.find((d) => d.tick_id === "t01");
+    expect(redone?.attempt).toBe(3);
+
+    const firstMarker = JSON.parse((await contents.read(attemptPath(RUN_ID, 1)))!.content) as {
+      job_handle: { write_ref: string };
+    };
+    const redoneMarker = JSON.parse((await contents.read(attemptPath(RUN_ID, 3)))!.content) as {
+      job_handle: { write_ref: string };
+    };
+    expect(firstMarker.job_handle.write_ref).toBe(
+      `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-1`,
+    );
+    expect(redoneMarker.job_handle.write_ref).toBe(
+      `refs/heads/ticfac/run-${RUN_ID}/tick-t01/attempt-3`,
+    );
+    // One ref per attempt: the redispatch's collect reads its OWN ref, so it
+    // cannot count the previous attempt's commits — the exact defect the
+    // review found in the per-tick branch the cloud worker used to push.
+    expect(redoneMarker.job_handle.write_ref).not.toBe(firstMarker.job_handle.write_ref);
+  });
+});
+
 describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
   it("adopts every in-flight attempt by identity and never dispatches over one", async () => {
     const contents = sharedContents();
@@ -961,17 +1119,20 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     // composed before start. That completion is the adoption-by-identity
     // the local reconciler always had: it is the only thing that survives
     // the isolate, and without it no later pass can re-address the attempt
-    // at all.
+    // at all. The executor's contract job_handle rides the marker's one
+    // open `handle` slot (tick us2), and the container's addressing rides
+    // THAT record's own open `handle` object — the shape the contract's
+    // golden attempt record pins.
     const markerFile = (await contents.read(attemptPath(RUN_ID, 1)))!;
     expectRecordValid(markerFile.content, "attempt");
     const marker = JSON.parse(markerFile.content) as {
-      job_handle: Record<string, unknown>;
+      job_handle: { handle: { handle: { sandbox: string; process_id: string; branch: string } } };
       tick_id: string;
     };
     expect(marker.tick_id).toBe("t01");
-    expect(marker.job_handle.sandbox).toBe(attemptSandboxName(RUN_ID, "t01", 1));
-    expect(marker.job_handle.process_id).toBe("proc-1");
-    expect(marker.job_handle.branch).toBe(`ticfac/${EPIC_ID}/t01`);
+    expect(marker.job_handle.handle.handle.sandbox).toBe(attemptSandboxName(RUN_ID, "t01", 1));
+    expect(marker.job_handle.handle.handle.process_id).toBe("proc-1");
+    expect(marker.job_handle.handle.handle.branch).toBe(attemptLandingBranch(EPIC_ID, 1, "t01"));
 
     // The Workflow restarts: a FRESH reconciler and a FRESH executor over
     // the same durable state. The first executor's memory died with its
@@ -2129,30 +2290,32 @@ class AutoFinishExecutor implements AttemptExecutor {
 
   async start(spec: AttemptSpec): Promise<AttemptHandle> {
     this.started.push({ tick_id: spec.tick_id, attempt: spec.attempt });
+    // The contract's closed job_handle, the same shape the unit-suite fake
+    // returns and the reconciler must persist (ticks t5p, us2): the markers
+    // the engine-driven runs write are the real record, not a leaner
+    // stand-in.
     return {
-      executor: "cloudflare-sandbox",
+      schema_version: 1,
       job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
       attempt: spec.attempt,
-      try: spec.attempt,
-      tick_id: spec.tick_id,
-      role: spec.role,
-      remote: "origin",
-      resumed_from: null,
-      write_ref: spec.write_ref,
-      // The container's own addressing, the same shape the unit-suite fake
-      // returns and the reconciler must persist (tick t5p): the markers the
-      // engine-driven runs write are the real record, not a leaner stand-in.
-      sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
-      process_id: `proc-${spec.attempt}`,
-      branch: `ticfac/${spec.epic_id}/${spec.tick_id}`,
-      base_sha: "f".repeat(40),
-      launched: true,
-      detail: "auto-finished",
-      run_id: spec.run_id,
-      epic_id: spec.epic_id,
-      project: spec.project,
-      base_ref: spec.base_ref,
-      title: spec.title,
+      executor: "cloudflare-sandbox",
+      handle: {
+        sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+        process_id: `proc-${spec.attempt}`,
+        branch: attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id),
+        write_ref: spec.write_ref,
+        base_sha: "f".repeat(40),
+        launched: true,
+        detail: "auto-finished",
+        run_id: spec.run_id,
+        epic_id: spec.epic_id,
+        tick_id: spec.tick_id,
+        role: spec.role,
+        project: spec.project,
+        base_ref: spec.base_ref,
+        title: spec.title,
+      },
+      issued_at: NOW.toISOString(),
     };
   }
 
@@ -2160,13 +2323,26 @@ class AutoFinishExecutor implements AttemptExecutor {
     // The same demand the unit-suite fake makes (tick t5p): an executor that
     // answers any handle at all is the forgiving fake that certified the
     // defect, so the engine-driven runs fail over a marker that never
-    // recorded what start returned, too.
-    if (typeof handle.sandbox !== "string" || handle.sandbox === "") {
+    // recorded what start returned, too. The drill is the marker's own
+    // shape (tick us2): the contract job_handle rides the marker's `handle`
+    // slot, and the container's name rides that record's `handle` object.
+    const job = handle.handle as { handle?: { sandbox?: unknown } } | undefined;
+    const sandbox = job?.handle?.sandbox;
+    if (typeof sandbox !== "string" || sandbox === "") {
       throw new Error(
         "this handle carries no container: the marker it came from never recorded what start returned",
       );
     }
-    return { state: "exited", exit_code: 0 };
+    // The contract's own job_status vocabulary (tick us2): terminal, so the
+    // pass settles it rather than waiting on it.
+    return {
+      schema_version: 1,
+      job_id: String(handle.job_id),
+      state: "succeeded",
+      terminal: true,
+      observed_at: NOW.toISOString(),
+      cursor: null,
+    };
   }
 
   async collect(): Promise<AttemptReport> {

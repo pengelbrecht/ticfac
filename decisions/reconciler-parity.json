@@ -190,6 +190,22 @@
           "digest": "sha256:0d1081e9227606eec7158f606f64f0c8b3c13cee89b90b487457e80c6d99d3e9"
         }
       ]
+    },
+    {
+      "id": "D34",
+      "tick": "us2",
+      "title": "An unaddressable attempt settles from the durable layer, where the local host refuses",
+      "go": "A status the executor reports as `lost` — it can no longer address the handle — is a refusal, not a settle (addressOnce's guardSettleFromEvidence branch): 'attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, which is not the same as nothing running'. The local collect would read a worktree the refusal tore down, so a collect there reports a missing report rather than the verdict the attempt really had.",
+      "workflow": "The settle branch (epic-reconciler.ts) reads the contract's own job_status vocabulary — `running` waits, everything else settles — so an attempt whose container nobody can address any more (`lost`, deliberately not terminal in the contract) still goes to collect: on this substrate the collect reads ONLY what survived in git, the work is never inside the container, and an honest verdict is waiting on the attempt's own write_ref even when the container is gone.",
+      "why": "Recorded when tick us2 moved the cloud host onto the contract's job_status vocabulary, because the difference the local refusal exists for does not exist here: the local `lost` means the evidence is gone with the worktree, the cloud `lost` means only the OBSERVER is gone. The failure mode this closes is the mirror of the local one — a container that died mid-tick whose pushed work was never collected would be redispatched and its work orphaned on a branch nobody reads. If the cloud executor is ever given a collect that can lie (a container-reported verdict, say), this decision is the one to revisit.",
+      "anchors": [
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "lost-settle",
+          "digest": "sha256:2aaab0e4dc7fd45914898a744bc4159e80a4b2dbb962ea0876086d75c8840cd7"
+        }
+      ]
     }
   ]
 }
