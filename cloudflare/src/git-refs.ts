@@ -171,3 +171,61 @@ export function gitRefWriter(env: Env, project: string): GitRefWriter {
     },
   };
 }
+
+/**
+ * The state of an integration branch after {@link ensureBranch} (tick ant).
+ *
+ * `already` and `created` are both success and are kept apart on purpose: a
+ * run that CREATED its branch is a first run, and that is worth saying in the
+ * feed rather than inferring later from the absence of records.
+ */
+export type BranchEnsured =
+  | { state: "already"; sha: string }
+  | { state: "created"; sha: string }
+  | { state: "refused"; detail: string };
+
+/**
+ * Make sure `branch` exists, cutting it from `baseSha` when it does not.
+ *
+ * The reconciler reads its tracker FROM its integration branch, so on a first
+ * run there is nothing to read and planning refuses with "epic <id> is not
+ * readable" — a fresh cloud epic run could never start (tick ant). The branch
+ * is the run's to create; this is where it gets created, before the first
+ * read rather than after the first dispatch.
+ *
+ * A concurrent creator is not a conflict: 422 means somebody else cut the
+ * same branch between our read and our write, which is the outcome we wanted.
+ */
+export async function ensureBranch(
+  env: Env,
+  project: string,
+  branch: string,
+  baseSha: string,
+): Promise<BranchEnsured> {
+  let head: RefRead;
+  try {
+    head = await readBranchHead(env, project, branch);
+  } catch (error) {
+    return { state: "refused", detail: `reading ${branch} raised ${String(error)}` };
+  }
+  if (head.ok) return { state: "already", sha: head.sha };
+  if (!head.missing) return { state: "refused", detail: head.detail };
+
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) {
+    return {
+      state: "refused",
+      detail: `${branch} is not on origin and no base sha was named to cut it from`,
+    };
+  }
+
+  const created = await createRef(env, project, `refs/heads/${branch}`, baseSha);
+  if (created.ok) return { state: "created", sha: baseSha };
+  if (!created.exists) return { state: "refused", detail: created.detail };
+
+  // 422: someone cut it while we were looking. Read it back rather than
+  // assuming it landed at our base.
+  const raced = await readBranchHead(env, project, branch);
+  return raced.ok
+    ? { state: "already", sha: raced.sha }
+    : { state: "refused", detail: raced.detail };
+}

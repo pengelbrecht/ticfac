@@ -59,6 +59,7 @@ import {
 } from "./closeout";
 import { type PullRequest, type PullRequests, pullRequestsFromEnv } from "./forge";
 import { contentsStore } from "./git-contents";
+import { ensureBranch } from "./git-refs";
 import type { Env } from "./index";
 import { DEFAULT_LEASE_TTL_MS, type HolderCredentials, MAX_LEASE_TTL_MS } from "./lease";
 import {
@@ -1534,6 +1535,18 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       return { terminal: true, state: "failed", reason, dispatched: [] };
     }
     let holder: HolderCredentials = { run_id: params.run_id, token: acquired.lease.token };
+
+    // The integration branch is where every durable record of this run lives
+    // — INCLUDING the tracker the very first plan reads. On a first run it
+    // does not exist yet, and a read of a branch nothing has cut returns
+    // nothing, which planning reports as "epic <id> is not readable": a
+    // fresh cloud epic run could never start (tick ant). Cut it from the
+    // base the submitter named, before the first read rather than after the
+    // first dispatch.
+    const branch = await ensureBranch(env, params.project, params.branch, params.base_sha ?? "");
+    if (branch.state === "refused") {
+      return { terminal: true, state: "failed", reason: branch.detail, dispatched: [] };
+    }
 
     // The run's one repository view: reads direct, publishes through the room.
     const repository = contentsStore(env, params.project, params.branch, () => holder);
