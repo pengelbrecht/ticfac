@@ -290,7 +290,12 @@ func TestACollectedWorkerIsReleasedBeforeItsGateRuns(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		// The refusal, not just the count (tick atn). "closed []" alone is the
+		// same message whether the run was refused, starved or never dispatched
+		// at all, and the reason is the whole diagnosis: naming it here is what
+		// turns an investigation into a read.
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 
 	released, gated, retired := 0, 0, 0

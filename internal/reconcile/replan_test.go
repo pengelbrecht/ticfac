@@ -149,7 +149,8 @@ func TestTheRePlanKeepsTheBoundaryItIsAbout(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 
 	dispatched := map[string]int{}
