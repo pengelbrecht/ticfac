@@ -1,0 +1,13 @@
+{
+  "id": "991",
+  "title": "A cloud epic run writes no run events and never leaves 'starting'",
+  "description": "An epic run on the deployed factory is invisible to every surface built to watch it. Observed on run_ba1cc951cd184126b7c9e3c54fecc5c2 (epic uzc) while it was demonstrably working:\n\n    ticfac cloud status   state: starting\n    ticfac events         \"the run has not written an event - which is what a run that has not started looks like\"\n    wrangler tail         POST /api/branches; 6 x chat/completions; 8 x RepoRoom.publish; renewSlot; renewDispatchLease\n\nThe run was cutting its integration branch, calling GLM, publishing commits through the room and renewing its leases. Both supported surfaces said it had not started.\n\nMechanism: src/run-events.ts is imported by src/run-workflow.ts and src/run-room.ts, and NOT by src/epic-reconciler.ts. run-events even exports an epicStarted() helper that nothing on the epic path calls. So k7p built the feed, wired it to the OLD driver, and the driver Phase 5 ships emits nothing into it. The run row likewise never leaves `starting`.\n\nThis is the exact question the operator asked when k7p was filed - \"as an epic runs in the cloud exclusively after phase 5, how do i track status while it runs?\" - and on the cloud path the answer today is: you cannot, unless you have wrangler and the account.\n\nNote k7p is not wrong about the LOCAL host: `ticfac events epic-dha --follow` works and is how the local Phase 5 run was watched all day. It is the cloud half that is missing.\n\nDo:\n- emit the same event vocabulary from the epic reconciler: run started, tick dispatched, gate started/failed, tick closed, run finished, and the interventions supervision records.\n- move the run row out of `starting` when the first pass dispatches.\n- b8p is the sibling for `ticfac cloud supervisor`, which is blind to the same driver. Fixing the feed does not fix that; fix both.\n\nFound by performing u9h.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "ticfac events --follow on a cloud epic run shows dispatches, gates, closes and interventions as they happen, and cloud status leaves 'starting' once the first pass dispatches",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T20:39:36.554273Z",
+  "updated_at": "2026-09-20T20:39:36.554273Z"
+}

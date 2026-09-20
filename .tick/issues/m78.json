@@ -1,0 +1,13 @@
+{
+  "id": "m78",
+  "title": "The tracker and the gate both name their worktree 'tree', and race",
+  "description": "CI failed on a TypeScript-only branch with a git worktree race:\n\n    reconcile_observer_test.go:107: the run ended under observation: reconcile: prepare the\n    tracker's worktree on epic/qeu: git worktree add --detach --quiet /tmp/ticfac-tracker-2270000979/tree\n    22006bc4c280: exit status 128: fatal: could not open '.git/worktrees/tree/locked' for\n    writing: No such file or directory\n\nMechanism: git registers a worktree under .git/worktrees/\u003cbasename of the path\u003e. Two places create worktrees whose directory is named exactly `tree`:\n\n    internal/reconcile/git.go:244      dir = filepath.Join(root, \"tree\")     the tracker's checkout\n    internal/reconcile/gatedir.go:125  tree := filepath.Join(held, \"tree\")   the gate slot (tick 6wh)\n\nSo both register as `tree`. Git picks a free name (tree, tree1, tree2 ...) and then creates the directory, and those two steps are not atomic: two concurrent `worktree add` calls can both decide `tree` is free, and the loser finds the administrative directory gone from under it while writing `locked`.\n\n6wh made this much more likely. Before it, gate runs used a throwaway worktree with a random directory name; now every gate slot ends in /tree, so a repository's gate and its tracker collide by construction whenever they overlap - which on a wave-width-4 run is most of the time.\n\nNot caused by the branch it failed on (a TypeScript-only change); main is green on the same commit, which is what a race looks like.\n\nFix shape: give each worktree a name that cannot collide, rather than a shared one. `git worktree add` takes the path, and the registration name follows the basename - so name the directories for what they are and who owns them (tracker-\u003crun id\u003e, gate-slot-\u003cn\u003e) instead of all calling them `tree`. Check whether anything depends on the basename being `tree`; the gate's redaction test (TestAFailingGatesOutputCarriesNoHostPath) knows about these paths.\n\nA guard is worth having: a test that creates the tracker worktree and a gate slot concurrently against one repository and asserts both succeed. It would have caught this when 6wh landed.\n\nFound by CI on PR #22.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The tracker worktree and a gate slot can be created concurrently against one repository without either failing, proven by a test that does exactly that and fails on the shared name",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T22:28:31.463017Z",
+  "updated_at": "2026-09-20T22:28:31.463017Z"
+}
