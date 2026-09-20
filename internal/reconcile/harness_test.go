@@ -3,7 +3,6 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,45 +31,59 @@ import (
 // clone" reads the same tracker the previous incarnation wrote — which is what
 // makes "no false close" an assertion instead of a hope.
 
-var executorBin string
+// binDir holds everything this suite builds: the executor binary and the gate
+// slots. executorOnce guards the build itself, which is LAZY — under -short
+// most of this package skips in newFixture, so a build in TestMain would be
+// seconds of every tick's gate spent on a binary nothing runs. The tests that
+// do keep their place in the gate (shorttest.LoadBearing, supervise_test.go)
+// drive the real supervisor, so the build has to happen for them; doing it on
+// first use is what serves both without asking TestMain to guess.
+var (
+	binDir       string
+	executorOnce sync.Once
+	executorPath string
+	executorErr  error
+)
 
 func TestMain(m *testing.M) {
-	// Under -short every test that would drive this binary skips itself in
-	// newFixture, so building it would be seconds of the gate spent on a
-	// path nothing takes. flag.Parse() first: testing.Short() panics if it is
-	// read before the flags are parsed, and m.Run() is what normally parses
-	// them.
-	flag.Parse()
-	if testing.Short() {
-		os.Exit(m.Run())
-	}
-
-	root, err := contracts.RepoRoot()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
-		os.Exit(1)
-	}
 	dir, err := os.MkdirTemp("", "ticfac-reconcile-bin-")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	binDir = dir
 	// The suite's gate slots live here too, and go away with everything else
 	// below. Every fixture builds a repository of its own, and a slot root
 	// under the host's temp directory (gatedir.go's default) would leave one
 	// checkout per fixture behind after every run of this package.
 	gateSlotBase = filepath.Join(dir, "gate-slots")
-	executorBin = filepath.Join(dir, "ticfac-exec-subprocess")
-	build := exec.Command("go", "build", "-o", executorBin, "./cmd/ticfac-exec-subprocess")
-	build.Dir = root
-	build.Stdout, build.Stderr = os.Stderr, os.Stderr
-	if err := build.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "build the executor the reconciler drives: %v\n", err)
-		os.Exit(1)
-	}
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+// executorBinary is the shipped supervisor the reconciler drives, built once
+// for whichever test asks for it first.
+func executorBinary(t *testing.T) string {
+	t.Helper()
+	executorOnce.Do(func() {
+		root, err := contracts.RepoRoot()
+		if err != nil {
+			executorErr = fmt.Errorf("locate the module root: %w", err)
+			return
+		}
+		executorPath = filepath.Join(binDir, "ticfac-exec-subprocess")
+		build := exec.Command("go", "build", "-o", executorPath, "./cmd/ticfac-exec-subprocess")
+		build.Dir = root
+		out, err := build.CombinedOutput()
+		if err != nil {
+			executorErr = fmt.Errorf("build the executor the reconciler drives: %w\n%s", err, out)
+		}
+	})
+	if executorErr != nil {
+		t.Fatal(executorErr)
+	}
+	return executorPath
 }
 
 // ------------------------------------------------------------- tracker ---
@@ -744,7 +757,7 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		Model:          model,
 		RolePrompt:     rolePrompt,
 		RunnerArgv:     f.Runner,
-		SupervisorArgv: []string{executorBin, "supervise"},
+		SupervisorArgv: []string{executorBinary(f.t), "supervise"},
 		Remote:         d.Remote,
 		Attempt:        d.Attempt,
 		Try:            d.Try,
