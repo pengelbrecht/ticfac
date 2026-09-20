@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import contract from "../../contracts/worker-boot-contract.json";
 import {
+  attemptLandingBranch,
   DEFAULT_WORKER_HARNESS_BUDGET_MS,
   MIN_WORKER_HARNESS_BUDGET_MS,
   ORCHESTRATOR_COMMAND,
@@ -85,6 +86,30 @@ describe("the worker boot contract", () => {
       branch: b.branch,
       base_sha: boot.base_sha,
     });
+  });
+});
+
+// One ref per attempt (tick us2). A worker container derives its branch as
+// `tick/${TICKS_EPIC}/${TICKS_TICK}` — inside the vendored image
+// (image/worker.sh worker_branch_name), from the two env slots it is given
+// and nothing else — so the control plane's only lever on WHERE an attempt's
+// container lands is the epic slot. The sandbox executor uses it to make
+// each attempt's landing branch its own, the rule the local run moved to for
+// exactly this reason (internal/reconcile/dispatch.go attemptWriteRef: a
+// shared per-tick branch made a redispatch's collect count the previous
+// attempt's commits, its pushes collide, and a merge unable to tell one
+// attempt's commits from another's).
+describe("the per-attempt landing branch (tick us2)", () => {
+  it("carries the attempt in the epic slot, so the container derives one branch per attempt", () => {
+    const env = workerBootEnv({ ...boot, attempt: 3 });
+    expect(env.TICKS_EPIC).toBe("1vn/attempt-3");
+    // The composition the container derives from these two slots — the
+    // control plane's spelling and the image's rule must agree.
+    expect(attemptLandingBranch("1vn", 3, "tap")).toBe(`tick/${env.TICKS_EPIC}/${env.TICKS_TICK}`);
+    expect(attemptLandingBranch("1vn", 3, "tap")).toBe("tick/1vn/attempt-3/tap");
+    // One branch per attempt: a redispatch lands beside, never on top of,
+    // the previous attempt's pushed work.
+    expect(attemptLandingBranch("1vn", 4, "tap")).not.toBe(attemptLandingBranch("1vn", 3, "tap"));
   });
 });
 

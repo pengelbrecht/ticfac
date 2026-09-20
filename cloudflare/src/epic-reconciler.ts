@@ -91,9 +91,22 @@ export type AttemptSpec = {
 /** The JobHandle the executor's start returned (SPEC 4.3); opaque here. */
 export type AttemptHandle = Record<string, unknown>;
 
+/**
+ * The JobStatus contract record (job-protocol $defs.job_status, tick us2):
+ * what an executor's `inspect` answers with — the closed state vocabulary the
+ * local executors speak, with the `terminal` flag the contract cross-checks
+ * against it. `lost` is deliberately NOT terminal: it says the executor can
+ * no longer address the handle, which is a statement about the observer and
+ * not about the job.
+ */
 export type AttemptStatus = {
-  state: "running" | "exited" | "gone";
-  exit_code?: number | null;
+  schema_version: 1;
+  job_id: string;
+  state: "pending" | "starting" | "running" | "lost" | "succeeded" | "failed" | "cancelled";
+  terminal: boolean;
+  observed_at: string;
+  cursor: string | null;
+  observations?: Array<{ at: string; kind: string; detail: string }>;
 };
 
 export type AttemptReport = {
@@ -356,6 +369,15 @@ export type ReconcilerDeps = {
   provenance: import("./run-state-store").Provenance;
   /** The dispatch window; 0 or absent means the graph's configured width. */
   maxParallel?: number;
+  /**
+   * The epic base — the commit every dispatch of this run is cut from and
+   * every attempt record's provenance names as its source (tick us2). The
+   * submitter named it with the run; absent here falls back to the store's
+   * own provenance, the run-level placeholder, rather than a hard-coded
+   * `refs/heads/main` at forty zeros: a record that cannot say where it was
+   * cut from is a record nobody can reproduce.
+   */
+  baseSHA?: string;
 };
 
 /**
@@ -1070,8 +1092,16 @@ export class EpicReconciler {
         // a wiped executor — the answer is on the branch (SPEC §10.4).
         report = recorded.response;
       } else {
+        // reconciler-decision:D34:begin:lost-settle
         const status = await executor.inspect(marker.job_handle); // adopted by identity
         if (status.state === "running") continue;
+        // A container nobody can address any more (lost — the contract's own
+        // word for the observer's gap, not a verdict on the job) settles
+        // FROM THE DURABLE LAYER here: this substrate's collect reads only
+        // what survived in git, so the work is never inside the container,
+        // and an attempt whose container died mid-tick still has an honest
+        // verdict waiting on its own write_ref.
+        // reconciler-decision:D34:end:lost-settle
         report = await executor.collect(marker.job_handle);
         if (isRoleJob(role) && reportIsShaped(report)) {
           // The request and the validated response land together, with
@@ -1215,6 +1245,11 @@ export class EpicReconciler {
       const number = nextAttemptNumber(markers);
       const try_ = tryOf(markers, entry.tick_id, number);
       const write_ref = writeRefFor(store.runID, entry.tick_id, number);
+      // The run branch is what this dispatch is cut from — the ref the local
+      // marker's identity names — and the epic base is the commit on it the
+      // submitter pinned the run to.
+      const source_ref = `refs/heads/${client.ref}`;
+      const source_sha = this.#deps.baseSHA ?? store.provenance.source_sha;
       const handle: AttemptHandle = {
         executor: "cloudflare-sandbox",
         job_id: `run-${store.runID}/tick-${entry.tick_id}/attempt-${number}`,
@@ -1225,6 +1260,7 @@ export class EpicReconciler {
         remote: "origin",
         resumed_from: null,
         write_ref,
+        ...(this.#deps.baseSHA === undefined ? {} : { base_sha: this.#deps.baseSHA }),
       };
 
       // The marker is written BEFORE the job starts: create-if-absent, and a
@@ -1239,8 +1275,9 @@ export class EpicReconciler {
           run_id: store.runID,
           tick_id: entry.tick_id,
           attempt: number,
-          source_ref: "refs/heads/main",
-          source_sha: "0".repeat(40),
+          source_ref,
+          source_sha,
+          integration_ref: source_ref,
           phase: "worker",
           // The contract's closed executor vocabulary: the sandbox
           // compatibility executor is this phase's item 4, and the dispatch
@@ -1292,11 +1329,15 @@ export class EpicReconciler {
         role: entry.role,
         project: client.project,
         write_ref,
-        base_ref: "refs/heads/main",
+        base_ref: source_ref,
         title: entry.title,
       });
       if (started !== undefined) {
-        Object.assign(handle, started);
+        // The executor's JobHandle rides the marker's `handle` slot — the one
+        // open object the run-state contract's own golden attempt record
+        // uses for executor addressing (tick us2): identity flat, addressing
+        // nested, so a cloud attempt's record is shaped like a local one's.
+        handle.handle = started;
       }
 
       // The handle start returned is RECORDED on the marker, not remembered
@@ -1462,11 +1503,15 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       run_id: params.run_id,
       epic_id: params.epic_id,
       // The checkpoint is a reconciler-side record: executor stays null —
-      // the contract's own golden checkpoint does the same.
+      // the contract's own golden checkpoint does the same. The source is
+      // the run branch at the epic base the submitter named; the zeros are
+      // the placeholder for a submission that named none, and such a run
+      // cannot dispatch at all — the executor wiring refuses without a
+      // base — so no attempt record ever carries them.
       provenance: provenance({
         run_id: params.run_id,
         source_ref: `refs/heads/${params.branch}`,
-        source_sha: "0".repeat(40),
+        source_sha: params.base_sha ?? "0".repeat(40),
         phase: "worker",
       }),
     });
@@ -1505,6 +1550,7 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       integration: env.TICFAC_INTEGRATION,
       pullRequests,
       baseRef: params.base_ref,
+      baseSHA: params.base_sha,
       provenance: store.provenance,
       maxParallel: params.max_parallel,
     });

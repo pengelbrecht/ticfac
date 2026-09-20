@@ -7,9 +7,11 @@
  */
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
+import jobProtocol from "../../contracts/job-protocol.json";
 import { insertRun, type Run } from "../src/db";
 import type { AttemptSpec } from "../src/epic-reconciler";
 import { authorizeRunCredential, revokeRunTokens } from "../src/gateway";
+import type { GitRefWriter, RefPut } from "../src/git-refs";
 import type {
   OrchestratorSandbox,
   SandboxBinding,
@@ -20,19 +22,21 @@ import type {
 import {
   attemptSandboxName,
   reportFromWorker,
-  type SandboxAttemptHandle,
   type SandboxExecutorDeps,
+  type SandboxJobHandle,
   sandboxExecutor,
   sandboxExecutorFromEnv,
 } from "../src/sandbox-executor";
-import type { WorkerBootInput } from "../src/worker-boot";
 import {
+  attemptLandingBranch,
   WORKER_CANCEL_COMMAND,
   WORKER_CANCEL_MARKER,
   WORKER_COMMAND,
   WORKER_PROBE_MARKER,
+  type WorkerBootInput,
 } from "../src/worker-boot";
 import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
+import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // --------------------------------------------------------------- the fakes ---
 
@@ -147,6 +151,7 @@ class FakeSandboxes implements SandboxBinding {
 }
 
 const RUN_ID = "run-x";
+const BASE_SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
 const SPEC: AttemptSpec = {
   run_id: RUN_ID,
   epic_id: "ncv",
@@ -154,18 +159,36 @@ const SPEC: AttemptSpec = {
   attempt: 3,
   role: "implement-tick",
   project: "pengelbrecht/ticfac",
-  write_ref: "refs/heads/tick-run-x/k4s",
-  base_ref: "refs/heads/main",
+  // The attempt's own ref, in the same vocabulary the local dispatch mints
+  // (job-protocol's golden write_refs, internal/reconcile's attemptWriteRef).
+  write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-k4s/attempt-3`,
+  base_ref: `refs/heads/epic/ncv`,
   title: "the sandbox executor",
 };
+
+// The pinned job-protocol definitions, so a cloud-produced handle and status
+// are validated against the same contract a local executor's answer to
+// (tick us2): the compatibility claim is checked, not asserted.
+const protocolDefs: Defs = parseDefs((jobProtocol as { $defs: unknown }).$defs);
+const jobHandleSchema = parseSchema(
+  (jobProtocol as { $defs: Record<string, unknown> }).$defs.job_handle,
+  "$",
+);
+const jobStatusSchema = parseSchema(
+  (jobProtocol as { $defs: Record<string, unknown> }).$defs.job_status,
+  "$",
+);
 
 /** Boot inputs with no secrets worth leaking, like every test fixture. */
 function bootInput(spec: AttemptSpec): WorkerBootInput {
   return {
     repo_url: "https://example.com/pengelbrecht/ticfac.git",
-    base_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    base_sha: BASE_SHA,
     epic: spec.epic_id,
     tick: spec.tick_id,
+    // The attempt rides the boot, so the container's TICKS_EPIC derives the
+    // per-attempt landing branch (worker-boot.ts, tick us2).
+    attempt: spec.attempt,
     run_id: spec.run_id,
     gateway_base_url: "https://factory.example.com/api/gateway",
     gateway_token: "tkr_testtoken",
@@ -179,8 +202,8 @@ function bootInput(spec: AttemptSpec): WorkerBootInput {
 class FakeCollector implements WorkerCollector {
   report: WorkerReport = {
     tick_id: SPEC.tick_id,
-    branch: "tick/ncv/k4s",
-    base_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+    branch: attemptLandingBranch(SPEC.epic_id, SPEC.attempt, SPEC.tick_id),
+    base_sha: BASE_SHA,
     verdict: "ready-to-merge",
     branch_exists: true,
     commits: 2,
@@ -200,24 +223,40 @@ class FakeCollector implements WorkerCollector {
   }
 }
 
+/**
+ * The ref writer the tests fill per case: collect's push of the attempt's
+ * write_ref is recorded, and a case can make it fail the way GitHub can.
+ */
+class FakeRefWriter implements GitRefWriter {
+  readonly puts: Array<{ branch: string; ref: string }> = [];
+  answer: RefPut = { state: "created", sha: "pushed-head-1" };
+
+  async put(input: { branch: string; ref: string }): Promise<RefPut> {
+    this.puts.push(input);
+    return this.answer;
+  }
+}
+
 /** The executor under test, wired over the fakes. */
 function makeExecutor() {
   const binding = new FakeSandboxes();
   const collector = new FakeCollector();
+  const refs = new FakeRefWriter();
   const deps: SandboxExecutorDeps = {
     binding,
     collector,
+    refs,
     boot: async (spec) => bootInput(spec),
     // No wall clock: the fake containers answer the probes instantly, and
     // nothing here should ever depend on real waiting.
     spawn: { sleep: async () => {} },
   };
-  return { binding, collector, executor: sandboxExecutor(deps) };
+  return { binding, collector, refs, executor: sandboxExecutor(deps) };
 }
 
 /** Unwraps a handle into this executor's own shape. */
-function asHandle(handle: unknown): SandboxAttemptHandle {
-  return handle as SandboxAttemptHandle;
+function asHandle(handle: unknown): SandboxJobHandle {
+  return handle as SandboxJobHandle;
 }
 
 // ---------------------------------------------------------------- the name ---
@@ -236,14 +275,20 @@ describe("start", () => {
     const { binding, executor } = makeExecutor();
     const handle = asHandle(await executor.start(SPEC));
 
+    // The job_handle contract's closed top level (job-protocol $defs.job_handle):
+    // identity, executor name, the one open `handle` object, the issue time.
+    expect(handle.schema_version).toBe(1);
     expect(handle.executor).toBe("cloudflare-sandbox");
     expect(handle.job_id).toBe(`run-${RUN_ID}/tick-k4s/attempt-3`);
-    expect(handle.sandbox).toBe("run-x-k4s-3");
-    expect(handle.write_ref).toBe(SPEC.write_ref);
-    expect(handle.branch).toBe("tick/ncv/k4s");
-    expect(handle.base_sha).toBe("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
-    expect(handle.launched).toBe(true);
-    expect(handle.process_id).not.toBeNull();
+    expect(handle.attempt).toBe(3);
+    expect(handle.issued_at).not.toBe("");
+    // The cloud's own addressing rides INSIDE the handle — never as extra
+    // top-level fields beside the identity the contract closes.
+    expect(handle.handle.sandbox).toBe("run-x-k4s-3");
+    expect(handle.handle.write_ref).toBe(SPEC.write_ref);
+    expect(handle.handle.base_sha).toBe(BASE_SHA);
+    expect(handle.handle.launched).toBe(true);
+    expect(handle.handle.process_id).not.toBeNull();
 
     const sandbox = binding.named("run-x-k4s-3");
     // The probe ran FIRST: the green-start trap is the executor's too, not a
@@ -251,7 +296,19 @@ describe("start", () => {
     expect(sandbox.processes[0]?.command).toContain("--probe");
     const work = sandbox.workProcess();
     expect(work).toBeDefined();
-    expect(handle.process_id).toBe(work?.id);
+    expect(handle.handle.process_id).toBe(work?.id);
+  });
+
+  it("boots the container on a per-attempt landing branch, so a redispatch cannot land on the previous attempt's work", async () => {
+    const { binding, executor } = makeExecutor();
+    await executor.start(SPEC);
+
+    const work = binding.named("run-x-k4s-3").workProcess();
+    expect(work?.env.TICKS_TICK).toBe("k4s");
+    // The attempt rides the epic slot, and the container derives
+    // tick/<epic>/attempt-<n>/<tick> from it (image/worker.sh).
+    expect(work?.env.TICKS_EPIC).toBe("ncv/attempt-3");
+    expect(attemptLandingBranch("ncv", 3, "k4s")).toBe("tick/ncv/attempt-3/k4s");
   });
 
   it("starts the work with the boot inputs the seam composed", async () => {
@@ -259,7 +316,7 @@ describe("start", () => {
     await executor.start(SPEC);
     const work = binding.named("run-x-k4s-3").workProcess();
     expect(work?.env.TICKS_REPO_URL).toBe("https://example.com/pengelbrecht/ticfac.git");
-    expect(work?.env.TICKS_BASE_SHA).toBe("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+    expect(work?.env.TICKS_BASE_SHA).toBe(BASE_SHA);
     expect(work?.env.TICKS_TICK).toBe("k4s");
     expect(work?.env.AI_GATEWAY_TOKEN).toBe("tkr_testtoken");
   });
@@ -272,14 +329,14 @@ describe("start", () => {
     // A Workflow step replay: the same spec, asked again.
     const second = asHandle(await executor.start(SPEC));
 
-    expect(second.process_id).toBe(first.process_id);
-    expect(second.launched).toBe(true);
-    expect(second.detail).toContain("adopted");
+    expect(second.handle.process_id).toBe(first.handle.process_id);
+    expect(second.handle.launched).toBe(true);
+    expect(second.handle.detail).toContain("adopted");
     expect(binding.named("run-x-k4s-3").processes.length).toBe(before);
   });
 
   it("reports a failed green-start probe as not launched, never as absent", async () => {
-    const { binding, collector } = makeExecutor();
+    const { binding, collector, refs } = makeExecutor();
     // A container whose probe never answers: nothing prints the marker and
     // nothing exits, so the green-start trap is what the executor reports.
     const poisoned: SandboxBinding = {
@@ -303,30 +360,64 @@ describe("start", () => {
     const failing = sandboxExecutor({
       binding: poisoned,
       collector,
+      refs,
       boot: async (spec) => bootInput(spec),
       spawn: { probe_timeout_ms: 10, probe_poll_ms: 1, sleep: async () => {} },
     });
 
     const handle = asHandle(await failing.start(SPEC));
-    expect(handle.launched).toBe(false);
-    expect(handle.detail).toContain("green-start trap");
+    expect(handle.handle.launched).toBe(false);
+    expect(handle.handle.detail).toContain("green-start trap");
+  });
+
+  it("returns a handle the pinned job-protocol contract takes, and refuses to be lied to", async () => {
+    const { executor } = makeExecutor();
+    const handle = asHandle(await executor.start(SPEC));
+    // The contract suite, run against a cloud-produced record (tick us2): the
+    // same closed job_handle a local executor's start answers to.
+    const errors = validate(
+      jobHandleSchema,
+      protocolDefs,
+      handle as unknown as Record<string, unknown>,
+    );
+    expect(errors, `job_handle must satisfy the pinned contract: ${errors.join("; ")}`).toEqual([]);
+    // And the validator is a validator: drop a required field and it refuses.
+    const mangled = { ...(handle as unknown as Record<string, unknown>) };
+    delete mangled.issued_at;
+    const refused = validate(jobHandleSchema, protocolDefs, mangled);
+    expect(refused.join(";")).toContain("issued_at");
   });
 });
 
 // ---------------------------------------------------------------- inspect ---
 
 describe("inspect", () => {
-  it("reports a running work process as running", async () => {
+  it("reports a running work process in the contract's own vocabulary", async () => {
     const { executor } = makeExecutor();
     const handle = await executor.start(SPEC);
-    expect(await executor.inspect(handle)).toEqual({ state: "running" });
+    const status = await executor.inspect(handle);
+    expect(status).toMatchObject({
+      schema_version: 1,
+      job_id: `run-${RUN_ID}/tick-k4s/attempt-3`,
+      state: "running",
+      terminal: false,
+    });
+    // The pinned job_status contract takes a cloud-produced status (tick us2).
+    const errors = validate(
+      jobStatusSchema,
+      protocolDefs,
+      status as unknown as Record<string, unknown>,
+    );
+    expect(errors, `job_status must satisfy the pinned contract: ${errors.join("; ")}`).toEqual([]);
   });
 
-  it("reports a terminal process as exited, with its exit code", async () => {
+  it("reports a terminal process in the contract's own vocabulary, with its exit code riding an observation", async () => {
     const { binding, executor } = makeExecutor();
-    const handle = asHandle(await executor.start(SPEC));
+    const handle = await executor.start(SPEC);
     binding.named("run-x-k4s-3").workProcess()?.finish(0);
-    expect(await executor.inspect(handle)).toEqual({ state: "exited", exit_code: 0 });
+    expect(await executor.inspect(handle)).toMatchObject({ state: "succeeded", terminal: true });
+    binding.named("run-x-k4s-3").workProcess()?.finish(11);
+    expect(await executor.inspect(handle)).toMatchObject({ state: "failed", terminal: true });
   });
 
   it("falls back to the process list when the id answers nothing", async () => {
@@ -335,38 +426,111 @@ describe("inspect", () => {
     const _sandbox = binding.named("run-x-k4s-3");
     // The recorded id goes stale — the container forgot it. The list still
     // answers, and "no id" must not read as "nothing is running".
-    const stale = handle.process_id;
-    handle.process_id = "gone-pid";
-    expect(await executor.inspect(handle)).toEqual({ state: "running" });
-    handle.process_id = stale;
+    const stale = handle.handle.process_id;
+    handle.handle.process_id = "gone-pid";
+    expect(await executor.inspect(handle)).toMatchObject({ state: "running" });
+    handle.handle.process_id = stale;
   });
 
-  it("says gone when neither the id nor the list can answer", async () => {
+  it("says lost — the observer's gap, never a verdict on the job — when neither the id nor the list can answer", async () => {
     const { binding, executor } = makeExecutor();
     const handle = asHandle(await executor.start(SPEC));
-    binding.named("run-x-k4s-3").workProcess()?.finish(11);
-    expect(await executor.inspect(handle)).toEqual({ state: "exited", exit_code: 11 });
-    handle.process_id = "gone-pid";
-    expect(await executor.inspect(handle)).toEqual({ state: "gone" });
+    binding.named("run-x-k4s-3").workProcess()?.finish(0);
+    expect(await executor.inspect(handle)).toMatchObject({ state: "succeeded", terminal: true });
+    handle.handle.process_id = "gone-pid";
+    const status = await executor.inspect(handle);
+    // `lost` is deliberately not terminal in the contract: it says nobody can
+    // address the handle, which is a statement about the observer.
+    expect(status).toMatchObject({ state: "lost", terminal: false });
+    const errors = validate(
+      jobStatusSchema,
+      protocolDefs,
+      status as unknown as Record<string, unknown>,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("refuses a record that carries no executor handle, rather than addressing nothing", async () => {
+    const { executor } = makeExecutor();
+    // A dispatch marker from before the handle was persisted: the identity
+    // half alone names the dispatch, and nothing in it names the container.
+    await expect(executor.inspect({ tick_id: "k4s", attempt: 3 })).rejects.toThrow(
+      /no executor handle|cannot be re-addressed/,
+    );
+    await expect(executor.collect({ tick_id: "k4s", attempt: 3 })).rejects.toThrow(
+      /no executor handle|cannot be re-addressed/,
+    );
+  });
+
+  it("refuses another executor's handle by name", async () => {
+    const { executor } = makeExecutor();
+    const foreign = {
+      schema_version: 1,
+      job_id: "run-x/tick-k4s/attempt-3",
+      attempt: 3,
+      executor: "herdr",
+      handle: { workspace_id: "w2f" },
+      issued_at: new Date().toISOString(),
+    };
+    await expect(executor.inspect(foreign)).rejects.toThrow(/herdr/);
   });
 });
 
 // ---------------------------------------------------------------- collect ---
 
 describe("collect", () => {
-  it("reads only the durable layer, through the collector the handle names", async () => {
-    const { collector, executor } = makeExecutor();
+  it("puts the container's pushed head on the attempt's write_ref, then reads the write_ref", async () => {
+    const { collector, refs, executor } = makeExecutor();
     const handle = await executor.start(SPEC);
     const report = await executor.collect(handle);
+
+    // The executor's push, the cloud's port of the local executor's own
+    // pushBranch: the container lands on a per-attempt branch (the image
+    // derives it), and collect is the moment the attempt's own ref — the one
+    // the marker, the settle and a person all name — comes to carry the work.
+    expect(refs.puts).toEqual([{ branch: "tick/ncv/attempt-3/k4s", ref: SPEC.write_ref }]);
+    // And the collect READS the attempt's write_ref, never the landing
+    // branch: the reconciler's settle and the collect look at one ref.
     expect(collector.asked).toEqual([
       {
         tick_id: "k4s",
-        branch: "tick/ncv/k4s",
-        base_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+        branch: "ticfac/run-run-x/tick-k4s/attempt-3",
+        base_sha: BASE_SHA,
       },
     ]);
     expect(report.outcome).toBe("done");
     expect(report.commits).toBe(2);
+  });
+
+  it("never reports a clean verdict when the write_ref could not be advanced", async () => {
+    const { collector, executor, refs } = makeExecutor();
+    refs.answer = { state: "refused", detail: "GitHub answered HTTP 403 creating the ref" };
+    const handle = await executor.start(SPEC);
+    const report = await executor.collect(handle);
+    expect(report.outcome).toBe("failed");
+    expect(report.commits).toBe(0);
+    expect(report.detail).toContain(SPEC.write_ref);
+    expect(report.detail).toContain("could not be advanced");
+    expect(report.detail).toContain("403");
+    // The collect never ran: there is no read of a ref that was not written.
+    expect(collector.asked).toEqual([]);
+  });
+
+  it("collects the write_ref as it stands when the container never pushed its landing branch", async () => {
+    const { collector, executor, refs } = makeExecutor();
+    // The landing branch is absent — a container that died before its push.
+    // The write_ref may still hold an earlier collect of this same attempt.
+    refs.answer = { state: "missing" };
+    const handle = await executor.start(SPEC);
+    const report = await executor.collect(handle);
+    expect(report.outcome).toBe("done"); // the fake's verdict, read off the write_ref
+    expect(collector.asked).toEqual([
+      {
+        tick_id: "k4s",
+        branch: "ticfac/run-run-x/tick-k4s/attempt-3",
+        base_sha: BASE_SHA,
+      },
+    ]);
   });
 
   it("maps a DONE_WITH_CONCERNS report to done, concerns riding the detail", async () => {
@@ -403,7 +567,7 @@ describe("collect", () => {
 describe("reportFromWorker", () => {
   const base: WorkerReport = {
     tick_id: "k4s",
-    branch: "tick/ncv/k4s",
+    branch: "ticfac/run-run-x/tick-k4s/attempt-3",
     base_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     verdict: "ready-to-merge",
     branch_exists: true,
@@ -466,7 +630,7 @@ describe("cancel", () => {
   it("still reclaims a container whose work process never started", async () => {
     const { binding, executor } = makeExecutor();
     const handle = asHandle(await executor.start(SPEC));
-    handle.process_id = null;
+    handle.handle.process_id = null;
     await executor.cancel(handle);
     expect(binding.named("run-x-k4s-3").destroyed).toBe(true);
   });
@@ -476,19 +640,19 @@ describe("cancel", () => {
 
 describe("the four operations, end to end", () => {
   it("a dispatch a reconciler would settle: start, watch it finish, collect", async () => {
-    const { binding, executor } = makeExecutor();
+    const { binding, executor, refs } = makeExecutor();
     const handle = asHandle(await executor.start(SPEC));
     binding.named("run-x-k4s-3").workProcess()?.finish(0);
     const status = await executor.inspect(handle);
-    expect(status).toEqual({ state: "exited", exit_code: 0 });
+    expect(status).toMatchObject({ state: "succeeded", terminal: true });
     const report = await executor.collect(handle);
     expect(report.outcome).toBe("done");
     expect(report.detail).toContain("ready-to-merge");
+    // The work reached the attempt's own ref on the way to the verdict.
+    expect(refs.puts).toEqual([{ branch: "tick/ncv/attempt-3/k4s", ref: SPEC.write_ref }]);
     const record = handle as unknown as Record<string, unknown>;
     // The handle is a local attempt's shape, not a cloud-only one.
     expect(record.executor).toBe("cloudflare-sandbox");
-    expect(record.resumed_from).toBeNull();
-    expect(record.remote).toBe("origin");
     expect(JSON.stringify(handle)).not.toContain("tkr_testtoken");
   });
 });
@@ -631,8 +795,8 @@ describe("the deployment wiring's boot credential", () => {
     // work process — and must not kill the credential that process is
     // spending with, which is what the boot the old adoption path took did.
     const replay = asHandle(await executor!.start(spec));
-    expect(replay.detail).toContain("adopted");
-    expect(replay.process_id).toBe(first.process_id);
+    expect(replay.handle.detail).toContain("adopted");
+    expect(replay.handle.process_id).toBe(first.handle.process_id);
     await expect(authorizeRunCredential(env, token)).resolves.toMatchObject({ ok: true });
   });
 
