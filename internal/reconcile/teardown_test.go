@@ -130,7 +130,7 @@ func TestAnAttemptWhoseWorkNeverReachedOriginIsNotDeclaredSpent(t *testing.T) {
 	}
 	// The merge refusal tore the attempt down: the worktree is gone, the branch
 	// that holds the only copy is not.
-	assertOneWorktree(t, f.Repo.Dir)
+	assertTornDown(t, f.Repo.Dir, "a1")
 	if _, err := os.Stat(filepath.Join(attemptStateDir(t, f, marker), "credential")); !os.IsNotExist(err) {
 		t.Errorf("the refused attempt's credential survived the refusal: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestAGateThatFailedRunsAgainOnceTheTreeIsFixed(t *testing.T) {
 	// The refusal tore the attempt down — every refusal class does — and kept
 	// the branch, which carries commits.
 	marker := attemptMarker(t, f, "a1", 1)
-	assertOneWorktree(t, f.Repo.Dir)
+	assertTornDown(t, f.Repo.Dir, "a1")
 	if _, err := os.Stat(filepath.Join(attemptStateDir(t, f, marker), "credential")); !os.IsNotExist(err) {
 		t.Errorf("the gate-refused attempt's credential is still live: %v", err)
 	}

@@ -1,0 +1,14 @@
+{
+  "id": "j8m",
+  "title": "A rejected role job is never torn down: its worker session and worktree leak",
+  "description": "OBSERVED: after epic ncv, three herdr sessions named tick-pxc-* sat idle for hours — one per rejected review attempt (9, 10, 11). The operator spotted them; nothing in ticfac did.\n\nThe feed shows the mechanism exactly. Attempts 9, 10 and 11 each go:\n\n    rejected      finding_untriaged: ...\n    run_held      ...\n    redispatched  attempt N settled with nothing ... a new attempt is dispatched\n\nwith NO cleaned_up line. Attempt 12, which passed, has one:\n\n    closed        closed behind a validated review-epic answer\n    cleaned_up    attempt 12 of pxc is merged into epic/ncv and the tick is closed\n\ndispatch.go's redispatchAttempt branch (~line 482) records the redispatch, increments the rung and s. It never disposes the spent attempt's worker. Ordinary ticks reach disposeRefused (~367/372); this path does not.\n\nSo every rejected role job leaks a worker session, its pane and its worktree. Phase 4 leaked three from one tick, and the leak is proportional to 80x's re-dispatch loop — which re-dispatches a review on byte-identical source until it reports nothing.\n\nWork:\n- Dispose the spent attempt before dispatching its successor, by the same path a refused ordinary tick takes (and after kvn: worktree first, then branch).\n- Emit cleaned_up so the feed shows it happened; today the absence is the only evidence.\n- Test: reject a role job, redispatch, and assert the previous attempt's executor handle is torn down and its worktree gone.\n\nRelated: 80x (why there were three, not one), kvn (disposal ordering), qqy (leaked refs).",
+  "notes": "2026-09-19 23:57 - Correction: a shell-quoting slip mangled one line of the description. It should read:\n\n  dispatch.go's redispatchAttempt branch (~line 482) records the redispatch,\n  increments the rung and \"continue\"s to the next tick. It never disposes the\n  spent attempt's worker.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A rejected role job's worker is disposed before its successor is dispatched, the feed says so, and a test proves no session or worktree survives a redispatch",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T21:56:46.407621Z",
+  "updated_at": "2026-09-19T21:57:14.323237Z"
+}

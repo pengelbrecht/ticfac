@@ -512,6 +512,12 @@ type fixtureOptions struct {
 	// never comes round twice in a test's lifetime would make the count the
 	// record exists for permanently null.
 	progressProbe time.Duration
+
+	// gateHeartbeat overrides how often a running gate says so (tick 9pz),
+	// for the same reason as gateTimeout and stallWarn: a cadence measured in
+	// minutes is testable in milliseconds without the minute being a
+	// test-only number.
+	gateHeartbeat time.Duration
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -593,6 +599,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		PullRequests:       opts.pullRequests,
 		StallWarnAfter:     opts.stallWarn,
 		ProgressProbeEvery: progressProbe,
+		GateHeartbeatEvery: opts.gateHeartbeat,
 		Sleep:              func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		guardsOff:          opts.guardsOff,
 		stopAfter:          opts.stopAfter,

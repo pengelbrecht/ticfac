@@ -1,0 +1,13 @@
+{
+  "id": "vmq",
+  "title": "Adoption mints gateway tokens nobody will ever present",
+  "description": "startAttempt's ADOPTION path calls the boot seam only to read base_sha, but the seam mints a fresh live run_gateway_token on every call. So every Workflow step replay inserts an inert live token row: issued to nobody, presented by nobody, and cleared only when the run's kill switch sweeps.\n\nHarmless today, and the reporter (53s) said so plainly — the kill switch does sweep them. It earns a tick for a different reason: the token table stops being an exact inventory of the credentials containers actually hold. A security surface you cannot read at a glance is one nobody audits, and 'which live tokens exist for this run' is exactly the question an incident asks.\n\nWork: a compose-without-mint seam for the paths that only need to READ the boot's facts (base_sha), leaving the mint to the paths that genuinely issue a credential. Note the exception the reporter already found: Cancel genuinely needs its mint, because the salvage door pushes through it.\n\nReported by 53s, run epic-dha, finding 3e64fdbe.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Adopting an attempt mints no gateway token; the token table lists only credentials a container was actually given; Cancel's own mint still works and the salvage door still pushes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-19T23:00:59.646472Z",
+  "updated_at": "2026-09-19T23:00:59.646472Z"
+}

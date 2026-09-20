@@ -91,6 +91,25 @@ const (
 	// bound — and it keeps the walk off the keepalive's cadence, where every
 	// future shortening of the poll would have made it silently dearer.
 	DefaultProgressProbeEvery = time.Minute
+
+	// DefaultGateHeartbeatEvery is how often a RUNNING gate says so in the
+	// feed (tick 9pz).
+	//
+	// The cadence is an argument, so here it is. The gate is now polled every
+	// round of the run loop — seconds — and a line per poll would bury the
+	// feed: an eight-minute gate would write a hundred of them, and a feed
+	// nobody can read is the same as a feed nobody gets. At the other end, the
+	// thing this must beat is a person's patience with silence. Measured on
+	// this repository's three epic feeds the median gate is 6m32s and the
+	// worst observed is 42 minutes, and tonight a 3m26s gate took 37 under
+	// another repository's load.
+	//
+	// A minute puts six or seven lines under a median gate and forty under the
+	// worst, and it is the same number the liveness probe already uses for the
+	// same question asked of a worker — "is this thing still getting
+	// anywhere". Matching it is deliberate: an operator reading the feed
+	// should not have to learn two cadences for one question.
+	DefaultGateHeartbeatEvery = time.Minute
 )
 
 // Tracker is the tracker surface the reconciler uses. It is exactly the tk
@@ -414,6 +433,13 @@ type Options struct {
 	// less often merely keeps a coarser account of itself.
 	ProgressProbeEvery time.Duration
 
+	// GateHeartbeatEvery is how often a running gate writes a feed line about
+	// itself (tick 9pz). Zero is the default (DefaultGateHeartbeatEvery);
+	// negative disables the heartbeat. Like every other cadence here it bounds
+	// a STATEMENT, not a verdict: nothing it writes stops, rejects or holds
+	// anything, and the gate's own timeout is the only bound on the gate.
+	GateHeartbeatEvery time.Duration
+
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
 	// reported.
@@ -517,6 +543,9 @@ type Reconciler struct {
 	// liveness record, and livenessErr the first error writing it — exhaust
 	// beside the feed, and never fatal for the same reason (liveness.go).
 	progressProbe time.Duration
+
+	// gateHeartbeat is how often a running gate says so (tick 9pz).
+	gateHeartbeat time.Duration
 	livenessErr   error
 
 	now   func() time.Time
@@ -721,6 +750,28 @@ const (
 	// caught it by reading the pane.
 	StageStallWarned = "stall_warned"
 
+	// The gate's own three lines (tick 9pz). Until this tick the gate was the
+	// longest thing a run did and the only thing it never said a word about:
+	// the feed went from `integrated` straight to `gate_passed` with nothing
+	// in between, so a run inside a gate and a run that had died were the same
+	// feed. Observed live: 32 minutes of a run emitting nothing at all.
+	//
+	//   - StageGateStarted names the check, the commit it is about to prove
+	//     and the bound it is running under, at the moment it starts.
+	//   - StageGateRunning is the heartbeat, at GateHeartbeatEvery, carrying
+	//     what the run can actually see: how long it has been going, how much
+	//     of the bound is left, and how much output the command has written.
+	//   - StageGateStalled is dh1's reasoning applied to a gate rather than to
+	//     a worker: a check that has produced nothing for longer than the
+	//     stall threshold is a reason to LOOK, never a verdict. It is typed
+	//     apart from StageStallWarned on purpose — both say "this has stopped
+	//     getting anywhere", but the first move differs, and a person reading
+	//     the feed should not have to parse a sentence to learn whether to go
+	//     and look at a worker or at this host.
+	StageGateStarted = "gate_started"
+	StageGateRunning = "gate_running"
+	StageGateStalled = "gate_stalled"
+
 	// StageRemoteRetried and StageRemoteExhausted are the two halves of a
 	// transient remote failure's story (tick enj). A connection the remote
 	// reset is waited through instead of killing the run, and the feed says
@@ -798,6 +849,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.ProgressProbeEvery <= 0 {
 		opts.ProgressProbeEvery = DefaultProgressProbeEvery
+	}
+	if opts.GateHeartbeatEvery == 0 {
+		opts.GateHeartbeatEvery = DefaultGateHeartbeatEvery
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -946,6 +1000,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.executors = theExecutors(opts.Executors)
 	r.feed = runfeed.Open(opts.Repo, opts.RunID)
 	r.progressProbe = opts.ProgressProbeEvery
+	r.gateHeartbeat = opts.GateHeartbeatEvery
 	r.now = opts.Now
 	r.sleep = opts.Sleep
 	r.guardsOff = opts.guardsOff
