@@ -1,54 +1,201 @@
 package cli
 
+// The live status view (tick k7p, item b): the table the operator asked for —
+// one line per tick with its stage, its attempt and how long it has been
+// there, plus the run's own liveness — refreshed in place until Ctrl-C.
+//
+// It is `status --follow`, and it works identically against a run on this
+// machine and one the Workflow hosts, because everything it shows is read
+// through the same [runfeed.Source] selection `events` and `watch` read
+// through: the feed's own lines give every tick's stage and the moment it
+// landed there, and the liveness line is the same answer one-shot status
+// gives — run.pid for a local run, the Workflow's own state for a cloud one.
+//
+// The refresh cadence is a flag (--interval, default 2s): a table that
+// refreshes is the surface, and its rhythm is the operator's own, never a
+// guess about the work — the same rule the feed's contract holds for a
+// subscription. A run that reaches its own end while watched ends the table:
+// the follow's answer is that it ended, and the exit code says the surface
+// did its job (0), never a verdict about the work.
+
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
 )
 
-// `ticfac status <run-id>` answers the question every stall in the ticks pwp
-// production run came down to: is this run alive? The operator's answer that
-// day was `pgrep -f "ticfac run-epic"`, which matched the operator's own
-// watcher and reported a dead run alive for ten minutes. Liveness is a fact
-// ticfac reports now, not a pattern each watcher improvises (tick udp).
-//
-// Since tick 7zs it answers the question liveness never did — is the run
-// GETTING anywhere? For each in-flight attempt, whose worktree still stands
-// in this repo, it reports how long since the attempt's branch last moved
-// and its worktree last changed: two measured facts, a reason to look, and
-// never a verdict. The gap does not change the exit code — that stays
-// liveness's answer alone, so a watcher loops over it exactly as before.
-//
-// Since tick q1e it also reports, for an in-flight attempt, the fact the run
-// has already said on its feed: this attempt's wall clock FIRED, and it has
-// not settled — the moment the run stops making progress on its own. The
-// fact is the feed line's typed stage and attempt identity, never its
-// prose, and never its position: the firing joins the attempt's own line
-// even when later events follow, because a watcher reading status while the
-// run polls on cannot be expected to have seen the line when it was last.
-//
-// It exits 0 only while the run is alive, so a watcher is a loop over the exit
-// code — `while ticfac status <run-id> >/dev/null; do sleep 15; done` — with
-// nothing to parse and nothing to match. --json is the same answer for a
-// program that wants the reason, the recorded process, the last feed event
-// and the attempts' gaps.
-func statusCommand(args []string, stdout, stderr io.Writer) int {
+// defaultStatusFollowInterval is how often the live table re-renders. Two
+// seconds: fast enough that "what is it doing right now" is right, slow
+// enough that a cloud refresh (one or two factory reads) stays polite.
+const defaultStatusFollowInterval = 2 * time.Second
+
+// statusFollow renders the live table until the run ends or the caller
+// interrupts. One frame per interval; between frames the cursor is moved up
+// over the previous frame and the lines rewritten in place.
+func statusFollow(ctx context.Context, repo, runID string, interval time.Duration, stdout, stderr io.Writer) int {
+	source, kind, err := feedSource(ctx, repo, runID, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+		return 1
+	}
+	cloudSource, _ := source.(*cloudFeedSource)
+	if interval <= 0 {
+		interval = defaultStatusFollowInterval
+	}
+
+	previous := 0
+	for {
+		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, stdout)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 1
+		}
+		if previous > 0 {
+			// Redraw in place: up over the last frame, clear to the end of
+			// the screen, print. A table that scrolls is a log, and a log is
+			// what `events --follow` is for.
+			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
+		}
+		for _, line := range lines {
+			fmt.Fprintf(stdout, "%s\n", line)
+		}
+		previous = len(lines)
+		if ended {
+			return 0
+		}
+		select {
+		case <-ctx.Done():
+			fmt.Fprintf(stderr, "ticfac status: the follow was interrupted; `ticfac status %s` asks whether %s is still alive\n",
+				runID, runID)
+			return 1
+		case <-time.After(interval):
+		}
+	}
+}
+
+// renderStatusFrame builds one frame of the live table: the run's own
+// liveness first, then one line per tick — its stage, its attempt, and how
+// long it has been where it is. The first return says the run reached its own
+// end, which ends the follow.
+func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, out io.Writer) (ended bool, lines []string, err error) {
+	located, _, err := feedStanding(ctx, source)
+	if err != nil {
+		return false, nil, err
+	}
+
+	var alive bool
+	var liveness string
+	switch {
+	case kind == "cloud":
+		state := cloudSource.State()
+		answer := cloudRunLiveness(ctx, runID, state)
+		alive = answer.Alive
+		stateWord := "alive"
+		if !alive {
+			stateWord = "not alive"
+		}
+		liveness = fmt.Sprintf("%s — %s", stateWord, answer.Reason)
+		ended = !cloudRunStillGoing(state)
+	default:
+		probe := runlife.Probe(repo, runID, time.Now())
+		alive = probe.State == runlife.Alive
+		liveness = fmt.Sprintf("%s — %s", probe.State, probe.Reason)
+		for _, line := range located {
+			if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
+				ended = true
+			}
+		}
+	}
+
+	lines = append(lines, fmt.Sprintf("run %s: %s", runID, liveness))
+
+	// One line per tick, in the order the run first mentioned it — the wave
+	// order the run dispatches in, and the order a table that refreshes
+	// without jumping around needs. The stage, attempt and age on each line
+	// are the latest event's own typed fields, never its prose.
+	type tickLine struct {
+		tickID string
+		event  runfeed.Event
+	}
+	var order []string
+	latest := map[string]runfeed.Event{}
+	for _, line := range located {
+		if runLevel(line.Event) {
+			continue
+		}
+		id := *line.TickID
+		if _, seen := latest[id]; !seen {
+			order = append(order, id)
+		}
+		latest[id] = line.Event
+	}
+	for _, id := range order {
+		event := latest[id]
+		attempt := "-"
+		if event.Attempt != nil {
+			attempt = fmt.Sprintf("%d", *event.Attempt)
+		}
+		lines = append(lines, fmt.Sprintf("tick %s attempt %s: %s for %s — %s",
+			id, attempt, event.Stage, ageOf(event.At, time.Now()), event.Detail))
+	}
+
+	// The run's own last word, when it has said one at run level: what the
+	// run said about ITSELF, with the same age every tick line carries.
+	for i := len(located) - 1; i >= 0; i-- {
+		if !runLevel(located[i].Event) {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("run: %s for %s — %s",
+			located[i].Stage, ageOf(located[i].At, time.Now()), located[i].Detail))
+		break
+	}
+	return ended, lines, nil
+}
+
+// ageOf says how long ago a stamp was, as a person reads it. A stamp that
+// does not parse is "?" rather than a guess — the writer's clock is the only
+// clock there is, and a number nobody measured is a number that lies.
+func ageOf(stamp string, now time.Time) string {
+	at, err := time.Parse(time.RFC3339, stamp)
+	if err != nil {
+		return "?"
+	}
+	return now.Sub(at).Round(time.Second).String()
+}
+
+// statusCommand is `ticfac status`: the one-shot liveness answer (and, with
+// --follow, the live table above). For a run the Workflow hosts it answers
+// from the Workflow's own state, never from "is there a process here" — the
+// question status could not answer off-host until tick k7p.
+func statusCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	asJSON := fs.Bool("json", false, "print the full status as JSON")
+	follow := fs.Bool("follow", false, "keep the status table updated in place, one line per tick, until the run ends or Ctrl-C")
+	interval := fs.Duration("interval", defaultStatusFollowInterval, "with --follow, how often the table refreshes")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	rest := fs.Args()
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac status: exactly one run id is required\n")
+		return 2
+	}
+	if *asJSON && *follow {
+		fmt.Fprintf(stderr, "ticfac status: --json prints one answer; a table that refreshes is not a JSON stream — pipe one frame or follow the other\n")
 		return 2
 	}
 	if *repo == "" {
@@ -59,8 +206,20 @@ func statusCommand(args []string, stdout, stderr io.Writer) int {
 		}
 		*repo = wd
 	}
+	runID := rest[0]
+	if *follow {
+		return statusFollow(ctx, *repo, runID, *interval, stdout, stderr)
+	}
 
-	status := runlife.Probe(*repo, rest[0], time.Now())
+	status := runlife.Probe(*repo, runID, time.Now())
+
+	// A run the Workflow hosts is answered by the Workflow, and its id says
+	// which host that is: `run_` plus hex names a cloud run, and no local
+	// pidfile was ever its claim to life.
+	if status.State != runlife.Alive && looksLikeCloudRunID(runID) {
+		return cloudRunStatus(ctx, runID, *asJSON, stdout, stderr)
+	}
+
 	if *asJSON {
 		raw, err := json.MarshalIndent(status, "", "  ")
 		if err != nil {
@@ -106,6 +265,111 @@ func statusCommand(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	return 1
+}
+
+// cloudRunStatus is the one-shot answer for a run the Workflow hosts: the run
+// record's state — the Workflow's own durable claim, written by the run
+// itself — checked against the Workflow instance when the operator's own
+// Cloudflare credentials allow it, and said plainly when they do not.
+//
+// The feed is read best effort for the last event, exactly the way one-shot
+// status reports it for a local run: a feed that cannot be served costs the
+// table its last-event line, never the liveness answer — the feed is exhaust
+// and may never gate anything.
+func cloudRunStatus(ctx context.Context, runID string, asJSON bool, stdout, stderr io.Writer) int {
+	resolved, note, err := resolveCloudRunID(ctx, runID)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+		return 1
+	}
+	if note != "" {
+		fmt.Fprintln(stderr, note)
+	}
+	runID = resolved
+
+	state, err := readCloudRunState(ctx, runID)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+		return 1
+	}
+	answer := cloudRunLiveness(ctx, runID, state)
+
+	status := struct {
+		RunID          string         `json:"run_id"`
+		Host           string         `json:"host"`
+		Alive          bool           `json:"alive"`
+		State          string         `json:"state"`
+		LivenessSource string         `json:"liveness_source"`
+		Reason         string         `json:"reason"`
+		CurrentStep    string         `json:"current_step,omitempty"`
+		LastEvent      *runfeed.Event `json:"last_event,omitempty"`
+		EventAge       string         `json:"last_event_age,omitempty"`
+	}{
+		RunID:          runID,
+		Host:           "cloud",
+		Alive:          answer.Alive,
+		State:          answer.State,
+		LivenessSource: answer.Source,
+		Reason:         answer.Reason,
+		CurrentStep:    answer.Current,
+	}
+	if client, err := newCloudClient(); err == nil {
+		source := &cloudFeedSource{client: client, runID: runID, warn: stderr}
+		if located, absent, err := feedStanding(ctx, source); err == nil && !absent && len(located) > 0 {
+			last := located[len(located)-1].Event
+			status.LastEvent = &last
+			if at, err := time.Parse(time.RFC3339, last.At); err == nil {
+				status.EventAge = time.Since(at).Round(time.Second).String()
+			}
+		}
+	}
+
+	if asJSON {
+		raw, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 2
+		}
+		fmt.Fprintf(stdout, "%s\n", raw)
+	} else {
+		stateWord := "alive"
+		if !answer.Alive {
+			stateWord = "not alive"
+		}
+		fmt.Fprintf(stdout, "run %s: %s — %s\n", runID, stateWord, answer.Reason)
+		if status.LastEvent != nil {
+			tick := "-"
+			if status.LastEvent.TickID != nil {
+				tick = *status.LastEvent.TickID
+			}
+			fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n",
+				status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
+		}
+	}
+	if answer.Alive {
+		return 0
+	}
+	return 1
+}
+
+// readCloudRunState reads the run record's own state from the factory — the
+// durable claim the Workflow's run writes about itself. Unlike the
+// best-effort read `cloud supervisor` makes beside its own verdict, a
+// failure here is a failure to answer liveness at all, and is reported.
+func readCloudRunState(ctx context.Context, runID string) (string, error) {
+	client, err := newCloudClient()
+	if err != nil {
+		return "", err
+	}
+	data, err := client.request(ctx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	if err != nil {
+		return "", err
+	}
+	var response cloudStatusResponse
+	if err := decodeCloudJSON(data, &response); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(response.Run.State), nil
 }
 
 // gapOf renders one measured gap for the status line, "?" when the fact
