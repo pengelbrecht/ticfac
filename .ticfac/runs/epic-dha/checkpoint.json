@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 73,
-  "state": "publishing",
-  "reason": "closing 80x behind the integrated gate on f8c7cc07a4ee",
-  "updated_at": "2026-09-20T09:34:40Z",
+  "sequence": 74,
+  "state": "running",
+  "reason": "80x is refused its close: a drafted finding is untriaged",
+  "updated_at": "2026-09-20T09:34:45Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "80x",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 4
     },
     {
