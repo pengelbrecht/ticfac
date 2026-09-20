@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 87,
-  "state": "integrating",
-  "reason": "integrating aqm attempt 5 into epic/dha",
-  "updated_at": "2026-09-20T09:41:01Z",
+  "sequence": 88,
+  "state": "gating",
+  "reason": "running the integrated gate for aqm on f3a9541661c4",
+  "updated_at": "2026-09-20T09:41:08Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "aqm",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 5
     },
     {
