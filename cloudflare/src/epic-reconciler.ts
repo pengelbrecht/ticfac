@@ -1298,6 +1298,37 @@ export class EpicReconciler {
       if (started !== undefined) {
         Object.assign(handle, started);
       }
+
+      // The handle start returned is RECORDED on the marker, not remembered
+      // in the isolate (tick t5p). Job-protocol's start rule pins the order —
+      // "Persist the JobSpec before addressing the executor, then record the
+      // returned handle. A handle that was never persisted is a job nobody
+      // can find after a restart." — and this host's executor is the reason
+      // the rule exists: what start adds (the container's name, the work
+      // process's id, the branch it pushes, the base the collect compares
+      // against) is exactly what a later pass — and a restarted incarnation —
+      // re-inspects the attempt by. Without this write every one of them
+      // addressed a container nobody recorded, and the adoption-by-identity
+      // the local reconciler earned the hard way was this host's words only.
+      //
+      // SHA-guarded and idempotent, so a replayed pass records it once, and
+      // a marker another writer moved is re-read and retried on the fresh
+      // read — never lost, never spun on: a conflict that survives a fresh
+      // read is an operational problem to fail on, not a race to win.
+      for (let tries = 0; ; tries += 1) {
+        const recorded = await store.updateAttemptHandle(number, handle);
+        if (recorded.state === "updated" || recorded.state === "no_change") break;
+        if (recorded.state !== "conflict_stale_sha" || tries >= 3) {
+          const detail =
+            "detail" in recorded ? recorded.detail : `the write was refused (${recorded.state})`;
+          throw new Error(
+            `recording the handle of attempt ${number} (${entry.tick_id}) was refused: ` +
+              `${detail}; the job is running but no later pass could re-inspect it`,
+          );
+        }
+        // `conflict_stale_sha`: the marker moved under the write — re-read and
+        // retry, the same fresh-read-and-retry the contract's CAS rules name.
+      }
       rows.set(entry.tick_id, { tick_id: entry.tick_id, state: "dispatched", attempt: number });
       dispatchedThisPass.push({ tick_id: entry.tick_id, attempt: number });
       stateChanged = true;

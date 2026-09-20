@@ -55,6 +55,7 @@ import {
   TICK_STATES,
   terminalState,
 } from "../src/run-state-store";
+import { attemptSandboxName } from "../src/sandbox-executor";
 import { encodeTick, type Tick, TrackerClient } from "../src/tracker-client";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
@@ -204,8 +205,18 @@ function storeFor(contents: ContentsStore): RunStateStore {
 
 /**
  * The fake executor: every started attempt is `running` until the test
- * settles it, exactly the way a real container is. Its handle IS the marker's
- * job_handle — the identity the reconciler adopts by.
+ * settles it, exactly the way a real container is. Its handle is the one the
+ * reconciler PERSISTS on the attempt marker — the identity a later pass,
+ * and a restarted incarnation, re-addresses the attempt by (tick t5p).
+ *
+ * It demands the identity the real executor demands. The concrete executor
+ * of this host is the sandbox one, whose `inspect` re-addresses the attempt
+ * by the container's NAME — a `job_id` the reconciler composed before start
+ * is not a container and cannot be inspected, and keying on it here is how
+ * the suite stayed green over a marker that never recorded what start
+ * returned. So `#key` REFUSES a handle with no `sandbox`: a marker written
+ * before start and never completed would fail loudly here, the way it fails
+ * in production with `namedSandbox(binding, undefined)`.
  */
 class FakeExecutor implements AttemptExecutor {
   readonly started: Array<{ tick_id: string; attempt: number; write_ref: string }> = [];
@@ -217,11 +228,23 @@ class FakeExecutor implements AttemptExecutor {
   constructor(readonly contents: MemoryContents) {}
 
   #key(handle: AttemptHandle): string {
-    return String(handle.job_id);
+    const sandbox = handle.sandbox;
+    if (typeof sandbox !== "string" || sandbox === "") {
+      throw new Error(
+        `this handle carries no container: the marker it came from never recorded what ` +
+          `start returned, and a job_id (${String(handle.job_id)}) is not an identity an attempt ` +
+          `can be re-inspected by`,
+      );
+    }
+    return sandbox;
   }
 
   async start(spec: AttemptSpec): Promise<AttemptHandle> {
     this.started.push({ tick_id: spec.tick_id, attempt: spec.attempt, write_ref: spec.write_ref });
+    // What the REAL executor returns and the reconciler must persist: the
+    // identity composed before start, beside the container's own addressing
+    // — its name, its work process, the branch it pushes and the base the
+    // collect compares against.
     return {
       executor: "cloudflare-sandbox",
       job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
@@ -232,6 +255,17 @@ class FakeExecutor implements AttemptExecutor {
       remote: "origin",
       resumed_from: null,
       write_ref: spec.write_ref,
+      sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+      process_id: `proc-${spec.attempt}`,
+      branch: `ticfac/${spec.epic_id}/${spec.tick_id}`,
+      base_sha: "f".repeat(40),
+      launched: true,
+      detail: "booted by the fake",
+      run_id: spec.run_id,
+      epic_id: spec.epic_id,
+      project: spec.project,
+      base_ref: spec.base_ref,
+      title: spec.title,
     };
   }
 
@@ -258,7 +292,7 @@ class FakeExecutor implements AttemptExecutor {
 
   /** The test settles an attempt — the container finishing its work. */
   finish(tick: string, attempt: number, report: AttemptReport): void {
-    this.settled.set(`run-${RUN_ID}/tick-${tick}/attempt-${attempt}`, report);
+    this.settled.set(attemptSandboxName(RUN_ID, tick, attempt), report);
   }
 }
 
@@ -581,6 +615,74 @@ describe("the run state store, against the pinned contract", () => {
     expect(second.state).toBe("conflict_exists");
   });
 
+  it("completes a marker with the handle start returned, SHA-guarded — the dispatch guard untouched (t5p)", async () => {
+    const contents = sharedContents();
+    const store = storeFor(contents);
+    // The marker is written BEFORE start, create-if-absent — a marker
+    // written afterwards guards nothing.
+    await store.recordAttempt({
+      attempt: 1,
+      tick_id: "t01",
+      dispatched_at: NOW.toISOString(),
+      job_handle: {
+        executor: "cloudflare-sandbox",
+        job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      },
+    });
+
+    // Then the executor's start answers, and the handle it returned is
+    // recorded on the SAME marker: job-protocol's start rule — "Persist the
+    // JobSpec before addressing the executor, then record the returned
+    // handle. A handle that was never persisted is a job nobody can find
+    // after a restart." The record's other fields are untouched, and the
+    // create-if-absent guard above is still the one that answers a second
+    // reconciler racing the same dispatch.
+    const handle = {
+      executor: "cloudflare-sandbox",
+      job_id: `run-${RUN_ID}/tick-t01/attempt-1`,
+      attempt: 1,
+      tick_id: "t01",
+      sandbox: attemptSandboxName(RUN_ID, "t01", 1),
+      process_id: "proc-1",
+      branch: `ticfac/${EPIC_ID}/t01`,
+      base_sha: "f".repeat(40),
+    };
+    const completed = await store.updateAttemptHandle(1, handle);
+    expect(completed.state).toBe("updated");
+    const file = (await contents.read(attemptPath(RUN_ID, 1)))!;
+    expectRecordValid(file.content, "attempt");
+    const marker = JSON.parse(file.content) as {
+      attempt: number;
+      tick_id: string;
+      dispatched_at: string;
+      job_handle: Record<string, unknown>;
+    };
+    expect(marker.job_handle).toEqual(handle);
+    expect(marker.tick_id).toBe("t01");
+    expect(marker.dispatched_at).toBe(NOW.toISOString());
+
+    // The completion is idempotent: the same handle again is an observation,
+    // and an observation writes nothing.
+    const again = await store.updateAttemptHandle(1, handle);
+    expect(again.state).toBe("no_change");
+
+    // A later handle (the truth moved) is still an update — the completion
+    // records what the executor last answered for a live attempt, never
+    // what an incarnation remembers.
+    const moved = await store.updateAttemptHandle(1, { ...handle, process_id: "proc-2" });
+    expect(moved.state).toBe("updated");
+    const reread = JSON.parse((await contents.read(attemptPath(RUN_ID, 1)))!.content) as {
+      job_handle: { process_id: string };
+    };
+    expect(reread.job_handle.process_id).toBe("proc-2");
+
+    // A marker that is not on the ref is a missing base, not a create: the
+    // completion records beside a dispatch that exists, never in place of
+    // one.
+    const missing = await store.updateAttemptHandle(9, handle);
+    expect(missing.state).toBe("conflict_missing_base");
+  });
+
   it("records decisions create-if-absent: one validated exchange, never rewritten", async () => {
     const contents = sharedContents();
     const store = storeFor(contents);
@@ -843,6 +945,59 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     expect(markers.length).toBe(6);
   });
 
+  it("re-inspects an attempt by its PERSISTED handle after the restart — a job_id is not identity (t5p)", async () => {
+    const contents = sharedContents();
+    const integration = new FakeIntegration();
+
+    // Incarnation one dispatches, the containers run on, and the isolate
+    // dies — the shape every resume in this file answers to.
+    const firstExecutor = new FakeExecutor(contents);
+    const first = reconcilerFor(contents, firstExecutor, integration);
+    const outcome = await first.reconcilePass();
+    expect(outcome.dispatched.map((d) => d.tick_id)).toEqual(["t01", "t02"]);
+
+    // The marker on the run branch holds the handle start RETURNED — the
+    // container's own addressing beside the identity the reconciler
+    // composed before start. That completion is the adoption-by-identity
+    // the local reconciler always had: it is the only thing that survives
+    // the isolate, and without it no later pass can re-address the attempt
+    // at all.
+    const markerFile = (await contents.read(attemptPath(RUN_ID, 1)))!;
+    expectRecordValid(markerFile.content, "attempt");
+    const marker = JSON.parse(markerFile.content) as {
+      job_handle: Record<string, unknown>;
+      tick_id: string;
+    };
+    expect(marker.tick_id).toBe("t01");
+    expect(marker.job_handle.sandbox).toBe(attemptSandboxName(RUN_ID, "t01", 1));
+    expect(marker.job_handle.process_id).toBe("proc-1");
+    expect(marker.job_handle.branch).toBe(`ticfac/${EPIC_ID}/t01`);
+
+    // The Workflow restarts: a FRESH reconciler and a FRESH executor over
+    // the same durable state. The first executor's memory died with its
+    // isolate — a fresh fake answers "running" for everything — so the
+    // only thing the resume can re-address the attempt by is the handle on
+    // the marker. The fake DEMANDS the persisted container name (its #key
+    // refuses a bare job_id), so this pass is the proof: without the
+    // persisted handle, the resume could not inspect the attempt at all.
+    const secondExecutor = new FakeExecutor(contents);
+    const second = reconcilerFor(contents, secondExecutor, integration);
+    const resume = await second.reconcilePass();
+    expect(resume.terminal).toBe(false);
+    expect(resume.dispatched).toEqual([]); // adopted, never dispatched over
+    expect(secondExecutor.started.length).toBe(0);
+
+    // The restart settles the attempt THROUGH the persisted handle: the
+    // second executor is asked to collect the container the FIRST one
+    // booted, addressed by the name the marker carries.
+    secondExecutor.finish("t01", 1, { outcome: "done", commits: 1, detail: "pushed" });
+    const settled = await second.reconcilePass();
+    expect(settled.terminal).toBe(false);
+    expect(secondExecutor.collects).toEqual([attemptSandboxName(RUN_ID, "t01", 1)]);
+    const checkpoint = await readCheckpoint(contents);
+    expect(checkpoint?.ticks?.find((t) => t.tick_id === "t01")?.state).toBe("closed");
+  });
+
   it("adopts a dispatch whose checkpoint row was lost, by its marker", async () => {
     const contents = sharedContents();
     const executor = new FakeExecutor(contents);
@@ -1030,7 +1185,10 @@ describe("a Workflow restarted mid-run resumes from .ticfac/", () => {
     // The review was collected exactly once — by the incarnation that died —
     // and its answer was re-read from the run branch ever after. The
     // closeout is the only exchange collected after the crash.
-    expect(executor.collects.filter((key) => key.includes("tick-rev1")).length).toBe(1);
+    expect(
+      executor.collects.filter((key) => key === attemptSandboxName(RUN_ID, "rev1", reviewAttempt))
+        .length,
+    ).toBe(1);
     expect(executor.collects.length).toBe(collectedBefore + 1);
 
     const decisionFiles = await contents.list(`.ticfac/runs/${RUN_ID}/decisions`);
@@ -1845,10 +2003,33 @@ class AutoFinishExecutor implements AttemptExecutor {
       remote: "origin",
       resumed_from: null,
       write_ref: spec.write_ref,
+      // The container's own addressing, the same shape the unit-suite fake
+      // returns and the reconciler must persist (tick t5p): the markers the
+      // engine-driven runs write are the real record, not a leaner stand-in.
+      sandbox: attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt),
+      process_id: `proc-${spec.attempt}`,
+      branch: `ticfac/${spec.epic_id}/${spec.tick_id}`,
+      base_sha: "f".repeat(40),
+      launched: true,
+      detail: "auto-finished",
+      run_id: spec.run_id,
+      epic_id: spec.epic_id,
+      project: spec.project,
+      base_ref: spec.base_ref,
+      title: spec.title,
     };
   }
 
-  async inspect(): Promise<AttemptStatus> {
+  async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
+    // The same demand the unit-suite fake makes (tick t5p): an executor that
+    // answers any handle at all is the forgiving fake that certified the
+    // defect, so the engine-driven runs fail over a marker that never
+    // recorded what start returned, too.
+    if (typeof handle.sandbox !== "string" || handle.sandbox === "") {
+      throw new Error(
+        "this handle carries no container: the marker it came from never recorded what start returned",
+      );
+    }
     return { state: "exited", exit_code: 0 };
   }
 
