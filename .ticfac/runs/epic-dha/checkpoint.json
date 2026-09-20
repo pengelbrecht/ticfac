@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 210,
-  "state": "running",
-  "reason": "attempt 20 of u9h is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (cf676c4d8500)",
-  "updated_at": "2026-09-20T16:26:40Z",
+  "sequence": 211,
+  "state": "failed",
+  "reason": "attempt 20 of u9h is no-commits: the attempt branch carries no commit beyond the base it was cut from (cf676c4d8500)",
+  "updated_at": "2026-09-20T16:26:46Z",
   "ticks": [
     {
       "tick_id": "4sb",
