@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 111,
-  "state": "failed",
-  "reason": "b50 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: b50 reported 1 finding(s) nobody has triaged — \"The Workflow host must carry the typed review-verdict when its review/PR path is built\" (proposed-tick, for this repository) — and the tick is NOT closed: a finding that falls on the floor is the failure this gate exists to stop. Triage each with `ticfac finding dha 0e8939e751c5ab135fc8f14b6eee4ce298c106818bf21ebb888eae7643c8386b --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding dha 0e8939e751c5ab135fc8f14b6eee4ce298c106818bf21ebb888eae7643c8386b --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding dha 0e8939e751c5ab135fc8f14b6eee4ce298c106818bf21ebb888eae7643c8386b --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close is the only step left. The drafts are key 0e8939e751c5ab135fc8f14b6eee4ce298c106818bf21ebb888eae7643c8386b under .ticfac/runs/epic-dha/findings/ on origin",
-  "updated_at": "2026-09-20T10:29:30Z",
+  "sequence": 112,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-20T10:30:42Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -94,7 +94,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/dha",
-    "source_sha": "486e35dd0bd739f0feaeaeba2956cf86918ea1f0",
+    "source_sha": "afba2f8e43b66dfc21046d10fd9a6892741c5c4d",
     "integration_ref": "refs/heads/epic/dha",
     "phase": "worker",
     "executor": null,
