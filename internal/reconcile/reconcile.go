@@ -71,6 +71,29 @@ const (
 	// declares no timeout of its own, or whose own timeout failed to fire.
 	DefaultGateTimeout = 60 * time.Minute
 
+	// DefaultAutoResumeCap is the most automatic continuations one supervised
+	// run makes (tick go6). The number is an argument, so here it is: on
+	// 2026-09-19/20 the operator's orchestrator retyped `ticfac run-epic`
+	// about fifteen times in a day across two epics, so a cap under that would
+	// stop short of the loop it is replacing, and a cap far over it would let
+	// a run spend a night on a stop nobody is fixing. Twelve covers the
+	// observed day with room, and it is the BACKSTOP rather than the first
+	// guard: the same refusal over an unchanged tree halts on the first
+	// repeat, long before this.
+	DefaultAutoResumeCap = 12
+
+	// DefaultAutoResumeBackoff is the wait before the first automatic
+	// continuation, doubling to AutoResumeBackoffMax. The wait is not
+	// politeness: the resumable stops include a tracker refusing a claim
+	// another holder has not released yet, and continuing instantly would ask
+	// the same question of the same world and count an intervention for it.
+	DefaultAutoResumeBackoff = 15 * time.Second
+
+	// AutoResumeBackoffMax bounds the doubling. Past a couple of minutes a
+	// longer wait is no longer backoff — it is the latency this tick exists to
+	// remove, reintroduced by arithmetic.
+	AutoResumeBackoffMax = 2 * time.Minute
+
 	// DefaultStallWarnAfter is how long an in-flight attempt may produce
 	// nothing durable — its branch unmoved, its worktree unchanged — before
 	// the run says so in the feed (tick 7zs). It is an EARLY WARNING, not a
@@ -440,6 +463,26 @@ type Options struct {
 	// anything, and the gate's own timeout is the only bound on the gate.
 	GateHeartbeatEvery time.Duration
 
+	// AutoResumeCap is the most automatic continuations Supervise makes in one
+	// run (tick go6). Zero is the default (DefaultAutoResumeCap); NEGATIVE
+	// disables supervision, so a caller that wants the old one-incarnation
+	// behaviour out of Supervise can ask for it without a second entry point.
+	//
+	// What happens when the cap is hit: the run STOPS, in the state its last
+	// incarnation reached, with the refusal that stopped it on the Result and
+	// a supervision_halted line in the feed naming the cap. It is not a
+	// failure of its own and it changes no verdict — the cap is a bound on the
+	// SUPERVISOR, not on the work — and it exists because a run that resumes
+	// forever over the same refusal is a spin, and a spin is worse than a
+	// refusal: it burns the host and looks alive while doing it.
+	AutoResumeCap int
+
+	// AutoResumeBackoff is the wait before the first automatic continuation;
+	// each later one doubles it, to AutoResumeBackoffMax. Zero is the default
+	// (DefaultAutoResumeBackoff). It is spent through Sleep, so a test
+	// replaces it the way it replaces every other cadence here.
+	AutoResumeBackoff time.Duration
+
 	// BudgetUSD is what an operator asked for, and CeilingUSD is what the
 	// deployment allows. The effective number is what is issued AND what is
 	// reported.
@@ -566,6 +609,15 @@ type Reconciler struct {
 	ticks    []runstate.TickState
 	journal  []Event
 	failure  *Refusal
+
+	// priorResumes is how many automatic continuations came before THIS
+	// incarnation (tick go6), set by the supervisor on each successor it
+	// builds. It exists so the number rides the run's own terminal reason —
+	// the durable checkpoint on origin — and not only the feed: zi2 asks for
+	// an intervention count that can be traced to records with no inference,
+	// and a count that lives only in gitignored exhaust is one a close-out
+	// would have to reconstruct all over again.
+	priorResumes int
 
 	// The tier policy half of tick 5eq: the declared mapping from tick facts
 	// to a dispatch tier, the tier-resolved profiles it can route to, and
@@ -777,6 +829,33 @@ const (
 	// reset us" are the same sentence about two different remotes.
 	StageRemoteRetried   = "remote_retried"
 	StageRemoteExhausted = "remote_exhausted"
+
+	// The two supervision lines (tick go6), and they are a PAIR on purpose:
+	// one for every stop the run continued across by itself, one for the stop
+	// it would not.
+	//
+	// StageResumedAutomatically is the INTERVENTION RECORD. A resume nobody
+	// typed is still an intervention in the count zi2 asks for, and an epic
+	// that "completed unattended" after forty of them has not demonstrated
+	// what that phrase claims. It is deliberately not folded into
+	// StageResumed, which is what an incarnation says about adopting the
+	// previous one's work: the whole value of this line is that it can be
+	// counted on its own — `grep -c resumed_automatically` — and a stage
+	// shared with the ordinary resume would make the number un-gettable
+	// again, which is the defect zi2 is about.
+	//
+	// StageSupervisionHalted is the supervisor declining to continue, and it
+	// says WHICH of the three reasons it was: the stop needs a person, the
+	// same refusal came back over an unchanged tree, or the cap is spent. It
+	// is the louder half of the distinction go6 asks for — a run that stopped
+	// for a DECISION now says so in its own line rather than leaving a reader
+	// to infer it from a refusal reason.
+	//
+	// Both are run-level and carry no tick: the subject is the run's
+	// continuation, not any one tick's, even when the refusal underneath them
+	// names one.
+	StageResumedAutomatically = "resumed_automatically"
+	StageSupervisionHalted    = "supervision_halted"
 )
 
 // New prepares a reconciler. It makes no network call and starts nothing: a
@@ -837,6 +916,12 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.StallWarnAfter == 0 {
 		opts.StallWarnAfter = DefaultStallWarnAfter
+	}
+	if opts.AutoResumeCap == 0 {
+		opts.AutoResumeCap = DefaultAutoResumeCap
+	}
+	if opts.AutoResumeBackoff <= 0 {
+		opts.AutoResumeBackoff = DefaultAutoResumeBackoff
 	}
 	if opts.ProgressProbeEvery <= 0 {
 		opts.ProgressProbeEvery = DefaultProgressProbeEvery
@@ -1159,6 +1244,21 @@ type Result struct {
 	// violation without matching on prose.
 	Failure *Refusal
 
+	// Resumes is every automatic continuation this run made (tick go6), in
+	// order, and each one is an INTERVENTION. A caller reporting that a run
+	// went unattended reports len(Resumes) beside it or reports nothing:
+	// fifteen resumes a person did not have to type is a real gain over
+	// fifteen a person did, and it is not the same fact as a run that needed
+	// none. Empty on a run that stopped once and on a run that never stopped.
+	Resumes []Resume
+
+	// Halt is why the supervisor stopped continuing, when it was supervising
+	// and something stopped it: the stop needed a person, the same refusal
+	// came back over an unchanged tree, or the cap was spent. It is a
+	// statement about the SUPERVISOR and never a verdict about the work —
+	// Failure and State carry that — and it is empty on a completed run.
+	Halt string
+
 	// FeedError is the run event feed's own write failure, if it had one.
 	// What it MEANS (tick d6s): not a verdict about the work — the durable
 	// records and this result are the evidence, and a run whose feed cannot
@@ -1281,11 +1381,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			return nil, fmt.Errorf("reconcile: refresh %s from the epic's base branch: %w", r.branch, err)
 		}
 		r.failure = refusal
-		if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
+		stopped := refusal.Error() + autoResumeNote(r.priorResumes)
+		if _, cErr := r.checkpoint(runstate.StateFailed, stopped); cErr != nil {
 			return nil, cErr
 		}
-		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, refusal.Error())
-		return r.result(runstate.StateFailed, refusal.Error()), nil
+		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, stopped)
+		return r.result(runstate.StateFailed, stopped), nil
 	}
 	// What the fold pushed is what every later read of this branch must see,
 	// including the store's own: its view was fetched before the fold.
@@ -1331,11 +1432,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	r.recordWaveCompositionDecision(plan)
 	if refusal := r.checkWaveComposition(plan); refusal != nil {
 		r.failure = refusal
-		if _, cErr := r.checkpoint(runstate.StateFailed, refusal.Error()); cErr != nil {
+		stopped := refusal.Error() + autoResumeNote(r.priorResumes)
+		if _, cErr := r.checkpoint(runstate.StateFailed, stopped); cErr != nil {
 			return nil, cErr
 		}
-		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, refusal.Error())
-		return r.result(runstate.StateFailed, refusal.Error()), nil
+		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, stopped)
+		return r.result(runstate.StateFailed, stopped), nil
 	}
 
 	failed, err := r.runPlan(ctx, plan)
@@ -1363,6 +1465,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			reason += fmt.Sprintf(". The refusal that stopped the run: %s", r.failure.Message)
 		}
 	}
+	// The intervention count, on the DURABLE record and not only in the feed
+	// (ticks go6, zi2). A run that reached this line after four automatic
+	// continuations is not the same fact as one that reached it unattended,
+	// and the checkpoint is where a close-out reads what happened without
+	// reconstructing it.
+	reason += autoResumeNote(r.priorResumes)
 	if _, err := r.checkpoint(state, reason); err != nil {
 		return nil, err
 	}

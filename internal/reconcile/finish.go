@@ -270,33 +270,16 @@ func (r *Reconciler) disposeFinished(f *finishing, err error) {
 		f.fl.marker.Attempt, f.fl.marker.TickID, refusal.Reason, firstLine(refusal.Message))
 }
 
-// finishTick is everything a settled attempt still owes: collect, integrate,
-// gate, close, clean up — driven to completion in one call.
+// The blocking finish driver that used to live here — finishTick, and
+// processTick above it in dispatch.go — is gone (tick bhc). Tick 9pz turned
+// the finish into a state machine the WINDOW drives one step per round
+// (window.go), so that it can admit and poll between the steps, and from that
+// day the two of them had no caller: what they documented was the sequential
+// run loop, which no longer exists.
 //
-// This half is deliberately NOT concurrent, whatever the window's width. There
-// is one integration branch, and a gate that ran on a tree other than the one
-// being closed proves nothing about it — so attempts queue here and go through
-// one at a time, in the order they settled. What tick 9pz changed is who waits
-// while it happens: the window drives the same steps one per round (window.go)
-// so that it can admit and poll in between, and this blocking driver is for a
-// caller with nothing else to do.
-func (r *Reconciler) finishTick(ctx context.Context, fl *inflightAttempt, status *subprocess.JobStatus) error {
-	f := r.beginFinish(fl, status)
-	for {
-		done, err := r.advanceFinish(ctx, f)
-		if err != nil {
-			return err
-		}
-		if done {
-			return nil
-		}
-		// The one step that is a WAIT rather than a piece of work. Every other
-		// step returns having done something; a gate command that has not
-		// answered yet is the only reason to come round again immediately, and
-		// spinning on it would spend the host on asking.
-		if f.stage == finishGating && f.gate != nil && f.gate.running != nil {
-			// The wall clock, for gateAndClose's reason in full there.
-			time.Sleep(gatePollInterval)
-		}
-	}
-}
+// What they said that is still true has moved to the state machine itself:
+// this half is deliberately NOT concurrent, whatever the window's width, since
+// there is one integration branch and a gate that ran on a tree other than the
+// one being closed proves nothing about it — so attempts queue and go through
+// one at a time, in the order they settled (advanceFinish above,
+// pollWindow in window.go).
