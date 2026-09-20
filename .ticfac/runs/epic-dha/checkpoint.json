@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 120,
-  "state": "integrating",
-  "reason": "integrating cxk attempt 7 into epic/dha",
-  "updated_at": "2026-09-20T10:39:40Z",
+  "sequence": 121,
+  "state": "gating",
+  "reason": "running the integrated gate for cxk on a68289a8bdbe",
+  "updated_at": "2026-09-20T10:55:34Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "cxk",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
