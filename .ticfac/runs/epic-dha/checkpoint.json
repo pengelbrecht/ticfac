@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 176,
-  "state": "publishing",
-  "reason": "closing k7p behind the integrated gate on 39c94043b1ad",
-  "updated_at": "2026-09-20T14:54:06Z",
+  "sequence": 177,
+  "state": "running",
+  "reason": "k7p is closed",
+  "updated_at": "2026-09-20T14:54:21Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -91,7 +91,7 @@
     },
     {
       "tick_id": "k7p",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 13
     }
   ],
