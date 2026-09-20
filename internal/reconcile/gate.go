@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -37,16 +39,68 @@ import (
 // output is a run nobody reads.
 const maxInlineOutput = 16 << 10
 
+// gateProgress is the integrated gate, PART WAY THROUGH.
+//
+// The gate is a list of declared commands run one after another, and until tick
+// 9pz that list was a `for` loop inside one blocking call. It is now the state a
+// caller carries between steps, so the run loop can advance it one command — or
+// one poll of one command — per round and go on admitting and polling in
+// between. What it is not is concurrency: there is still exactly one gate
+// running at a time, in one goroutine, over the integration branch as it stands.
+type gateProgress struct {
+	fingerprint Fingerprint
+	profile     *profile.Profile
+	keys        []string
+	index       int
+	passed      bool
+	failures    []string
+
+	// running is the command that has been started and not yet answered for.
+	// Nil between commands, and nil once every command has been answered.
+	running *gateCommand
+}
+
 // gateAndClose runs the integrated gate over the merge, records its evidence,
 // checks that the evidence is still about what is being published, and closes
 // the tick.
+//
+// This is the BLOCKING driver: it drives beginGate/stepGate to completion and
+// then closes. It is what a role job uses, because a role job runs alone and has
+// nothing to admit or poll while its gate runs. The window drives the same three
+// calls a step at a time instead (finish.go).
 func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker attemptHandle,
 	collected *subprocess.Collection, merged merge) error {
 
+	g, err := r.beginGate(marker, merged)
+	if err != nil {
+		return err
+	}
+	for {
+		done, err := r.stepGate(ctx, marker, merged, g)
+		if err != nil {
+			return err
+		}
+		if done {
+			break
+		}
+		// The WALL clock, not the run's own sleep. What this waits on is a
+		// local `sh` this host is running, not a substrate whose cadence an
+		// executor states (tick u9l) and not anything a fake clock in a test
+		// or a replay is describing — and the gate's own bound is measured the
+		// same way, for the same reason.
+		time.Sleep(gatePollInterval)
+	}
+	return r.closeAfterGate(ctx, entry, marker, collected, merged, g)
+}
+
+// beginGate is everything the gate decides before it runs a single command: the
+// checkpoint, what the evidence will say it evaluated, and the structural check
+// that costs nothing.
+func (r *Reconciler) beginGate(marker attemptHandle, merged merge) (*gateProgress, error) {
 	tick := marker.TickID
 	if _, err := r.checkpoint(runstate.StateGating,
 		fmt.Sprintf("running the integrated gate for %s on %s", tick, short(merged.GateSHA))); err != nil {
-		return err
+		return nil, err
 	}
 
 	// What this evidence will say it evaluated (Appendix A #13).
@@ -74,7 +128,7 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	// profile, which a tiered dispatch never used.
 	dispatchProfile, err := r.profileOfMarker(marker)
 	if err != nil {
-		return fmt.Errorf("the gate for %s cannot say which profile dispatched it: %w", tick, err)
+		return nil, fmt.Errorf("the gate for %s cannot say which profile dispatched it: %w", tick, err)
 	}
 	fingerprint := Fingerprint{
 		"source_sha":              merged.GateSHA,
@@ -92,13 +146,13 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	// every command here stays green — the blindness tick cwa closes.
 	stale, err := r.staleWorkflowPatterns(merged.GateSHA)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(stale) > 0 {
 		r.setTick(tick, "rejected")
 		r.record(tick, StageGateFailed, "the repo's own CI configuration is not about this tree: %s",
 			strings.Join(stale, "; "))
-		return r.refuse(RefusedGate, tick,
+		return nil, r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s: the repo's own CI configuration is not about this "+
 				"tree — %s. The tick is NOT closed, and the repair is the workflow or the tree, not the check: "+
 				"fix the workflow to name what the tree carries, or restore the package it names, push it to %s, "+
@@ -107,34 +161,102 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 			short(merged.GateSHA), tick, strings.Join(stale, "; "), r.branch)
 	}
 
-	passed := true
-	var failures []string
-	keys := make([]string, len(r.gate))
-	for i, command := range r.gate {
-		key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA, dispatchProfile.Digest)
-		if err != nil {
-			return err
-		}
-		keys[i] = key
+	return &gateProgress{
+		fingerprint: fingerprint,
+		profile:     dispatchProfile,
+		keys:        make([]string, len(r.gate)),
+		passed:      true,
+	}, nil
+}
 
-		// Appendix A #13: a record that cannot say what it evaluated is not
-		// evidence. All four fingerprint fields or none of it.
-		if outcome := r.RecordEvidence(key, fingerprint); outcome != "recorded" {
-			return r.refuse(RefusedStale, tick,
-				"the gate's evidence for %s cannot say what it evaluated (%s): %v", tick, outcome, fingerprint)
-		}
-
-		record, err := r.runGateCommand(ctx, command, key, marker, merged, fingerprint)
-		if err != nil {
-			return err
-		}
-		if record.Result != "pass" {
-			passed = false
-			failures = append(failures, fmt.Sprintf("%s (%s)", command.Name, record.Result))
-		}
+// stepGate takes the gate one step: start the next declared command, or ask the
+// running one whether it has answered. It reports true once every command has.
+//
+// One step is deliberately small. The caller gets the turn back between every
+// command AND on every poll of a running one, which is what lets the run loop
+// keep admitting and polling through an eight-minute gate (tick 9pz). The
+// commands still run ONE AT A TIME and in declared order: the gate is a verdict
+// about a tree, and two commands racing on the same tree would be two verdicts
+// about different moments of it.
+func (r *Reconciler) stepGate(ctx context.Context, marker attemptHandle, merged merge, g *gateProgress) (bool, error) {
+	tick := marker.TickID
+	if err := ctx.Err(); err != nil {
+		return false, err
 	}
 
-	if !passed {
+	if g.running != nil {
+		if !g.running.shell.settled() {
+			// The gate's own bound is the ONE bound on a gate, and this is
+			// where a second one was deliberately not added (tick 9pz). The
+			// shell already carries GateTimeout and kills its process group at
+			// it; a bound in the loop could only fire earlier, which refuses a
+			// gate that is merely slow — the false refusals cy2 is about, on a
+			// host where a 3m26s check has been measured taking 37 minutes
+			// under someone else's load — or later, which is decoration. What
+			// a second bound would have been a clumsy proxy for is the
+			// INFORMATION, and that is what the heartbeat carries instead:
+			// elapsed, output, and how much of the real bound is left.
+			r.announceGate(g.running, marker, merged)
+			return false, nil
+		}
+		record, err := r.finishGateCommand(g.running, marker, merged, g.fingerprint)
+		g.running = nil
+		if err != nil {
+			return false, err
+		}
+		if record.Result != "pass" {
+			g.passed = false
+			g.failures = append(g.failures, fmt.Sprintf("%s (%s)", record.Check.ID, record.Result))
+		}
+		g.index++
+		return g.index >= len(r.gate), nil
+	}
+
+	if g.index >= len(r.gate) {
+		return true, nil
+	}
+
+	command := r.gate[g.index]
+	key, err := r.gateEvidenceKey(tick, marker.Attempt, command.Name, merged.GateSHA, g.profile.Digest)
+	if err != nil {
+		return false, err
+	}
+	g.keys[g.index] = key
+
+	// Appendix A #13: a record that cannot say what it evaluated is not
+	// evidence. All four fingerprint fields or none of it.
+	if outcome := r.RecordEvidence(key, g.fingerprint); outcome != "recorded" {
+		return false, r.refuse(RefusedStale, tick,
+			"the gate's evidence for %s cannot say what it evaluated (%s): %v", tick, outcome, g.fingerprint)
+	}
+
+	started, existing, err := r.startGateCommand(command, key, marker, merged)
+	if err != nil {
+		return false, err
+	}
+	if existing != nil {
+		// Already paid for by an earlier incarnation: no command runs and the
+		// recorded verdict stands.
+		if existing.Result != "pass" {
+			g.passed = false
+			g.failures = append(g.failures, fmt.Sprintf("%s (%s)", command.Name, existing.Result))
+		}
+		g.index++
+		return g.index >= len(r.gate), nil
+	}
+	g.running = started
+	return false, nil
+}
+
+// closeAfterGate is the verdict on a finished gate and everything behind it:
+// the freshness check, the close-out's own CI gate, and the close.
+func (r *Reconciler) closeAfterGate(ctx context.Context, entry planEntry, marker attemptHandle,
+	collected *subprocess.Collection, merged merge, g *gateProgress) error {
+
+	tick := marker.TickID
+	fingerprint, keys, failures := g.fingerprint, g.keys, g.failures
+
+	if !g.passed {
 		r.setTick(tick, "rejected")
 		r.record(tick, StageGateFailed, "the integrated gate did not pass: %s", strings.Join(failures, ", "))
 		return r.refuse(RefusedGate, tick,
@@ -183,33 +305,129 @@ func (r *Reconciler) gateAndClose(ctx context.Context, entry planEntry, marker a
 	return r.closeTick(ctx, entry, marker, collected, merged)
 }
 
-// runGateCommand runs one declared check and records its evidence.
+// gateCommand is one declared check that has been STARTED: its throwaway
+// worktree, the shell running in it, and what the record will say about when it
+// began.
+type gateCommand struct {
+	command GateCommand
+	key     string
+	dir     string
+	remove  func()
+	shell   *gateShell
+	started string
+
+	// began is when this check started, beat is when it last said so, and
+	// stalled records that it has already been warned about — once per check,
+	// for the reason the attempt's own stall warning is written once: a
+	// warning repeated every minute is a warning nobody reads.
+	began   time.Time
+	beat    time.Time
+	stalled bool
+}
+
+// startGateCommand begins one declared check, or reports the record that
+// already answers it.
 //
 // The evidence record is created-if-absent, so a restarted run that already
 // paid for this check re-reads its verdict instead of running it again — and a
 // record that already exists is never overwritten, because a record that can be
-// overwritten is not evidence.
-func (r *Reconciler) runGateCommand(ctx context.Context, command GateCommand, key string,
-	marker attemptHandle, merged merge, fingerprint Fingerprint) (*runstate.Evidence, error) {
+// overwritten is not evidence. A non-nil record means nothing was started.
+func (r *Reconciler) startGateCommand(command GateCommand, key string,
+	marker attemptHandle, merged merge) (*gateCommand, *runstate.Evidence, error) {
 
 	if _, err := r.store.Fetch(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if existing, ok, err := r.store.Evidence(key); err != nil {
-		return nil, err
+		return nil, nil, err
 	} else if ok {
 		r.record(marker.TickID, StageWaiting, "the %s gate already ran for this attempt: %s", command.Name, existing.Result)
-		return existing, nil
+		return nil, existing, nil
 	}
 
 	dir, remove, err := r.git.tempWorktree("ticfac-gate-", merged.GateSHA)
 	if err != nil {
-		return nil, fmt.Errorf("prepare the gate worktree at %s: %w", short(merged.GateSHA), err)
+		return nil, nil, fmt.Errorf("prepare the gate worktree at %s: %w", short(merged.GateSHA), err)
 	}
-	defer remove()
+	shell, err := startShell(dir, command.Command, r.opts.GateTimeout)
+	if err != nil {
+		remove()
+		return nil, nil, err
+	}
+	now := r.now()
+	r.record(marker.TickID, StageGateStarted,
+		"the %s gate is running on %s, bounded at %s: %s",
+		command.Name, short(merged.GateSHA), r.opts.GateTimeout, command.Description)
+	return &gateCommand{
+		command: command, key: key, dir: dir, remove: remove, shell: shell,
+		started: now.UTC().Format(time.RFC3339),
+		began:   now, beat: now,
+	}, nil, nil
+}
 
-	started := r.now().UTC().Format(time.RFC3339)
-	stdout, stderr, code, runErr := runShell(ctx, dir, command.Command, r.opts.GateTimeout)
+// announceGate is what a running gate says about itself, and it is the answer
+// to the second half of tick 9pz: a run whose window has nothing live left to
+// poll must still not look dead.
+//
+// It is driven from stepGate, which the run loop calls every round whether or
+// not any worker is alive — that is the whole point. Before this, the two
+// things a run emitted (feed lines and liveness probes) were both driven off
+// polling LIVE attempts, so "the last tick of a wave is gating" produced
+// exactly the same feed as a process that had died.
+//
+// Everything it writes is an observation, never a verdict. It does not stop,
+// refuse or hold anything: the gate's own timeout is the only bound, and see
+// the note in stepGate for why a second one would be worse than none.
+func (r *Reconciler) announceGate(g *gateCommand, marker attemptHandle, merged merge) {
+	if r.gateHeartbeat < 0 {
+		return
+	}
+	now := r.now()
+	if now.Sub(g.beat) < r.gateHeartbeat {
+		return
+	}
+	g.beat = now
+
+	elapsed := now.Sub(g.began).Round(time.Second)
+	left := (r.opts.GateTimeout - now.Sub(g.began)).Round(time.Second)
+	bytes, at := g.shell.written()
+	produced := fmt.Sprintf("%d bytes of output", bytes)
+	idle := elapsed
+	if bytes > 0 && !at.IsZero() {
+		idle = now.Sub(at).Round(time.Second)
+		produced = fmt.Sprintf("%d bytes of output, last %s ago", bytes, idle)
+	}
+	r.record(marker.TickID, StageGateRunning,
+		"the %s gate has been running for %s on %s and has written %s; %s of its bound is left",
+		g.command.Name, elapsed, short(merged.GateSHA), produced, left)
+
+	// dh1's rule, pointed at a check instead of a worker: alive was never the
+	// question, and what a person needs to know is whether it is getting
+	// anywhere. Said once, and only about a gate that has BOTH outlived the
+	// threshold and produced nothing in that time — a long check that is
+	// printing as it goes is working, however long it takes.
+	if g.stalled || r.opts.StallWarnAfter <= 0 || elapsed < r.opts.StallWarnAfter || idle < r.opts.StallWarnAfter {
+		return
+	}
+	g.stalled = true
+	r.record(marker.TickID, StageGateStalled,
+		"the %s gate has been running for %s on %s and has produced nothing for %s — longer than this run's stall "+
+			"threshold of %s. It is NOT refused and nothing about it is decided: a check that prints only at the end "+
+			"legitimately looks like this, and the gate's own bound of %s is what spends it. It is a reason to look "+
+			"at this host — at load, at the command, at what it is waiting on",
+		g.command.Name, elapsed, short(merged.GateSHA), idle, r.opts.StallWarnAfter, r.opts.GateTimeout)
+}
+
+// finishGateCommand collects one started check's answer and records its
+// evidence. It is only ever called once the shell has settled — or once the
+// bound it was given has passed, which is the same call with a killed shell at
+// the end of it.
+func (r *Reconciler) finishGateCommand(g *gateCommand, marker attemptHandle, merged merge,
+	fingerprint Fingerprint) (*runstate.Evidence, error) {
+
+	defer g.remove()
+	command, key, dir, started := g.command, g.key, g.dir, g.started
+	stdout, stderr, code, runErr := g.shell.wait()
 	finished := r.now().UTC().Format(time.RFC3339)
 
 	// `error` is not `fail`: a gate whose command could not run has produced no
@@ -689,54 +907,205 @@ func (r *Reconciler) sourceFingerprint(commit string) (string, error) {
 // gateWaitDelay is how long the gate's output may keep the wait alive after
 // the gate's own processes are gone.
 //
-// The reconciler reads the gate's output through a pipe (a strings.Builder is
-// not a file, so os/exec makes one), and cmd.Wait does not return until that
-// pipe is closed — which a grandchild holding the write end can put off
-// indefinitely, timeout or no timeout. WaitDelay is the bound on that: past it
-// the pipes are closed under whoever still holds them and Wait returns.
+// The reconciler USED to read the gate's output through a pipe (a
+// strings.Builder is not a file, so os/exec makes one), and cmd.Wait does not
+// return until that pipe is closed — which a grandchild holding the write end
+// can put off indefinitely, timeout or no timeout. WaitDelay was the bound on
+// that: past it the pipes are closed under whoever still holds them and Wait
+// returns.
+//
+// Since tick 9pz the output goes to FILES, which os/exec hands the child
+// directly, so there is no pipe for a grandchild to hold and Wait returns when
+// the killed group is reaped. The delay is kept because it costs nothing and
+// because it is still the bound on the one case files do not cover: an os/exec
+// wait that has been asked to give up.
 const gateWaitDelay = 5 * time.Second
 
-// runShell runs one declared gate command. It is `sh -c` because that is what
-// the configuration is: a command LINE, written by the repository's author, in
-// the same shell the person who wrote it ran it in.
+// gateShell is one declared gate command, RUNNING.
 //
-// The timeout is a real bound rather than a hope, in the two halves it takes
-// (gate_unix.go): the shell runs as a process GROUP leader and the cancellation
-// kills the GROUP, so a server or watcher the gate started dies with it; and
-// WaitDelay bounds the wait on the output pipe, so a child that outlived the
-// kill cannot hold the run open through it.
-func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+// It is STARTED and then POLLED rather than waited for (tick 9pz). The wait was
+// the run's longest blind spot: measured across the three epic feeds this
+// repository carries, a settled tick blocked the whole window for a median of
+// 7m19s from its settlement to the next admission, and 89% of that was this one
+// call. Nothing else about the gate changes — same `sh -c`, same process group,
+// same bound — only who is holding still while it runs.
+//
+// The finish is a state machine the run loop advances one step per round
+// (finish.go), so the step that owns a running gate has to be able to ask "is it
+// done yet" and get an answer without blocking. Two decisions follow from that,
+// and both are about not needing a goroutine of our own:
+//
+//   - The output goes to FILES, not to a strings.Builder. os/exec makes a pipe
+//     for anything that is not an *os.File and copies it on a goroutine of its
+//     own, and Wait then does not return until that pipe closes — which a
+//     grandchild holding the write end can put off indefinitely. Files have no
+//     such wait, which is also why gateWaitDelay stops being the thing that
+//     rescues the timeout path.
+//   - The shell writes a SENTINEL carrying its exit status as its last act, so
+//     "has it finished" is one os.Stat rather than a blocking Wait. The inner
+//     command line is handed over in the environment rather than concatenated
+//     into the wrapper, so what runs is byte for byte the line the repository
+//     declared.
+type gateShell struct {
+	cmd      *exec.Cmd
+	scratch  string
+	outPath  string
+	errPath  string
+	donePath string
+	deadline time.Time
+}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0")
-	cmd.SysProcAttr = gateProcessGroup()
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		return killGateGroup(cmd.Process.Pid)
+// gateSentinelScript is the wrapper the gate's shell runs: the declared command
+// line, exactly as declared, and then the sentinel that says it is over.
+const gateSentinelScript = `sh -c "$TICFAC_GATE_COMMAND"; __ticfac_gate_status=$?; ` +
+	`printf %s "$__ticfac_gate_status" > "$TICFAC_GATE_DONE"; exit $__ticfac_gate_status`
+
+// errGateKilled is what a gate that never reported an exit status returns: the
+// bound fired, or the run was cancelled under it. `error` is not `fail` — a
+// command that was killed has produced no verdict about the ref at all.
+var errGateKilled = errors.New("the gate command was killed before it reported an exit status")
+
+// startShell starts one declared gate command and returns without waiting for
+// it.
+//
+// The bound is measured on the WALL CLOCK rather than on the reconciler's own
+// `now`. It is a bound on a process this host is running, not on anything the
+// run reasons about, and a run whose clock a test or a replay holds still must
+// not thereby hold a real `sh` open forever.
+func startShell(dir, command string, timeout time.Duration) (*gateShell, error) {
+	scratch, err := os.MkdirTemp("", "ticfac-gate-io-")
+	if err != nil {
+		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
+	s := &gateShell{
+		scratch:  scratch,
+		outPath:  filepath.Join(scratch, "stdout"),
+		errPath:  filepath.Join(scratch, "stderr"),
+		donePath: filepath.Join(scratch, "exit"),
+		deadline: time.Now().Add(timeout),
+	}
+	out, err := os.Create(s.outPath)
+	if err != nil {
+		_ = os.RemoveAll(scratch)
+		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
+	}
+	defer out.Close()
+	errOut, err := os.Create(s.errPath)
+	if err != nil {
+		_ = os.RemoveAll(scratch)
+		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
+	}
+	defer errOut.Close()
+
+	cmd := exec.Command("sh", "-c", gateSentinelScript)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
+		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath)
+	cmd.SysProcAttr = gateProcessGroup()
+	cmd.Stdout, cmd.Stderr = out, errOut
 	cmd.WaitDelay = gateWaitDelay
-	var out, errOut strings.Builder
-	cmd.Stdout, cmd.Stderr = &out, &errOut
-	err = cmd.Run()
-	stdout, stderr = out.String(), errOut.String()
+	if err := cmd.Start(); err != nil {
+		_ = os.RemoveAll(scratch)
+		return nil, err
+	}
+	s.cmd = cmd
+	return s, nil
+}
+
+// settled answers whether there is nothing left to wait for: the shell wrote
+// its sentinel, or the bound this gate was given has passed.
+func (s *gateShell) settled() bool {
+	if _, err := os.Stat(s.donePath); err == nil {
+		return true
+	}
+	return !time.Now().Before(s.deadline)
+}
+
+// wait collects the gate's answer. A shell that has not written its sentinel is
+// KILLED first — by group, so a server or watcher the command started dies with
+// it (gate_unix.go) — because wait is only ever reached when the caller is done
+// waiting: the bound fired, or the run was cancelled under it.
+func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
+	defer func() { _ = os.RemoveAll(s.scratch) }()
+
+	_, sentinel := os.Stat(s.donePath)
+	if sentinel != nil && s.cmd.Process != nil {
+		_ = killGateGroup(s.cmd.Process.Pid)
+	}
+	waitErr := s.cmd.Wait()
+	stdout, stderr = readGateOutput(s.outPath), readGateOutput(s.errPath)
 
 	switch {
-	case err == nil:
-		return stdout, stderr, 0, nil
-	case cmd.ProcessState != nil && cmd.ProcessState.Exited():
-		return stdout, stderr, cmd.ProcessState.ExitCode(), err
-	default:
+	case sentinel != nil:
 		// The command could not be run, or was killed. Either way this is not
 		// a verdict about the ref: `error`, with a negative code that says the
 		// process never reported one.
-		return stdout, stderr, -1, err
+		if waitErr != nil {
+			return stdout, stderr, -1, fmt.Errorf("%w: %v", errGateKilled, waitErr)
+		}
+		return stdout, stderr, -1, errGateKilled
+	case waitErr == nil:
+		return stdout, stderr, 0, nil
+	case s.cmd.ProcessState != nil && s.cmd.ProcessState.Exited():
+		return stdout, stderr, s.cmd.ProcessState.ExitCode(), waitErr
+	default:
+		return stdout, stderr, -1, waitErr
 	}
 }
+
+// written is how much output the command has produced so far and when it last
+// produced any: the gate's equivalent of the branch tip and worktree mtime that
+// dh1 reads off a worker (liveness.go).
+//
+// It is available for free because the output goes to FILES — one stat, no
+// read, nothing consumed that the record needs later — and it is the only
+// evidence a run has about whether a gate is getting anywhere. A command that
+// has written nothing for twenty minutes may be perfectly healthy (a single
+// long Go package prints at the end, not during), which is exactly why this
+// feeds a line that says LOOK and never a bound that refuses.
+func (s *gateShell) written() (bytes int64, at time.Time) {
+	for _, path := range []string{s.outPath, s.errPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		bytes += info.Size()
+		if mod := info.ModTime(); mod.After(at) {
+			at = mod
+		}
+	}
+	return bytes, at
+}
+
+func readGateOutput(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// runShell runs one declared gate command to completion. It is the blocking
+// driver over the start-and-poll pair above, for the callers that have nothing
+// else to do while a gate runs — and it is what the process-group kill is
+// proved through.
+func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
+	s, err := startShell(dir, command, timeout)
+	if err != nil {
+		return "", "", -1, err
+	}
+	for {
+		if ctx.Err() != nil || s.settled() {
+			return s.wait()
+		}
+		time.Sleep(gatePollInterval)
+	}
+}
+
+// gatePollInterval is how often a blocking driver asks a running gate whether
+// it is done. The run loop asks at its OWN cadence — this is only for the
+// callers that have nothing else to do.
+const gatePollInterval = 10 * time.Millisecond
 
 // redactHostPaths strips every occurrence of any of paths from text, and
 // reports whether it changed anything. A path is matched both as given and

@@ -108,34 +108,35 @@ func TestTheWindowIntegratesOneAtATime(t *testing.T) {
 }
 
 // TestAnUndeclaredWidthRunsExactlyAsItAlwaysDid pins the default. A repo that
-// never declared max_parallel gets the sequential run, tick by tick, with no
-// overlap at all — the width is opt-in, and a run that was not told how wide it
-// may be does not widen itself.
+// never declared max_parallel runs ONE WORKER at a time — the width is opt-in,
+// and a run that was not told how wide it may be does not widen itself.
+//
+// "One worker at a time" is what the sentence above used to say as "between one
+// tick's dispatch and its close, no other tick is dispatched", and tick 9pz is
+// where the two stopped meaning the same thing. A worker is finished once its
+// evidence is collected: its credential is revoked and its worktree removed
+// there, and what follows — integrate, gate, close — is the orchestrator's own
+// bookkeeping over git refs and the tracker. Holding a slot through that held it
+// for a party that had already gone home, for a median of seven minutes a tick
+// measured on this repository's own epic feeds, and max_parallel was never a
+// bound on bookkeeping. So the next tick starts when the previous tick's WORKER
+// goes, and the count below is of workers rather than of open ticks.
 func TestAnUndeclaredWidthRunsExactlyAsItAlwaysDid(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
-	r, result, err := f.run(f.Repo, fixtureOptions{})
+	count := &workerCount{gone: map[string]bool{}}
+	f.wrap = func(inner Executor) Executor {
+		return &countingExecutor{Executor: inner, state: count}
+	}
+	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
 		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
 	}
-
-	// Sequential means: between one tick's dispatch and its close, no other
-	// tick is dispatched.
-	open := ""
-	for _, event := range dispatchOrder(r.Journal()) {
-		switch event.Stage {
-		case StageDispatched, StageAdopted, StageRedispatched:
-			if open != "" && open != event.Tick {
-				t.Fatalf("%s was dispatched while %s was still open: an undeclared width widened itself",
-					event.Tick, open)
-			}
-			open = event.Tick
-		case StageClosed:
-			open = ""
-		}
+	if count.peak != 1 {
+		t.Fatalf("%d workers existed at once: an undeclared width widened itself", count.peak)
 	}
 }
 
@@ -183,6 +184,10 @@ func TestTheWindowNeverSpansAWaveBoundary(t *testing.T) {
 // TestAWidthOfOneIsTheSequentialRun: the width is a bound, not a target, and
 // one is the bound the old loop had. This is the regression guard for every
 // test in this package that was written against the sequential shape.
+//
+// It counts WORKERS, for the reason the test above states in full: since tick
+// 9pz a worker is finished at its collect, and a declared one means one worker
+// at a time, not one tick's whole bookkeeping at a time.
 func TestAWidthOfOneIsTheSequentialRun(t *testing.T) {
 	t.Parallel()
 	narrow := `version = 2
@@ -198,25 +203,19 @@ model = "sonnet"
 tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
 `
 	f := newFixture(t, fixtureOptions{gate: narrow})
-	r, result, err := f.run(f.Repo, fixtureOptions{gate: narrow})
+	count := &workerCount{gone: map[string]bool{}}
+	f.wrap = func(inner Executor) Executor {
+		return &countingExecutor{Executor: inner, state: count}
+	}
+	_, result, err := f.run(f.Repo, fixtureOptions{gate: narrow})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
 		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
 	}
-	open := ""
-	for _, event := range dispatchOrder(r.Journal()) {
-		switch event.Stage {
-		case StageDispatched, StageAdopted, StageRedispatched:
-			if open != "" && open != event.Tick {
-				t.Fatalf("%s was dispatched while %s was still open, at a declared width of one",
-					event.Tick, open)
-			}
-			open = event.Tick
-		case StageClosed:
-			open = ""
-		}
+	if count.peak != 1 {
+		t.Fatalf("%d workers existed at once at a declared width of one", count.peak)
 	}
 }
 
@@ -251,6 +250,15 @@ tree = { command = "exit 3", description = "always refuses" }
 	// The second tick of the wave was dispatched — that is the point of the
 	// width — and it must NOT have been integrated or closed after the first
 	// tick's gate refused.
+	//
+	// What the feed says about a2 depends on where a2 had got to, and since
+	// tick 9pz both answers are reachable in this fixture. The window is now
+	// POLLED through a finish rather than blocked by one, so a2 — whose fake
+	// runner finishes in about as long as a1's — is usually seen to have
+	// settled while a1 was being gated, and is announced as a settled attempt
+	// the run did not finish rather than as one still running. Either sentence
+	// is the assertion: an operator must be able to tell an attempt the run
+	// walked away from, in whichever state, from one it finished with.
 	var dispatched, abandoned bool
 	for _, event := range r.Journal() {
 		if event.Tick == "a2" {
@@ -261,7 +269,9 @@ tree = { command = "exit 3", description = "always refuses" }
 				t.Errorf("a2 reached %s after a1's gate refused: the run integrated over a tree "+
 					"it had just been told nothing stands behind", event.Stage)
 			}
-			if event.Stage == StageWaiting && strings.Contains(event.Detail, "still running") {
+			if event.Stage == StageWaiting &&
+				(strings.Contains(event.Detail, "still running") ||
+					strings.Contains(event.Detail, "was not finished")) {
 				abandoned = true
 			}
 		}

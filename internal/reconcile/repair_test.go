@@ -548,6 +548,28 @@ func assertOneWorktree(t *testing.T, dir string) {
 	}
 }
 
+// assertTornDown is assertOneWorktree for a run that STOPPED: it asks about the
+// refused attempt's own worktree rather than about every worktree in the
+// checkout.
+//
+// The count was a proxy, and tick 9pz is where the proxy stopped holding. A
+// settled attempt's worker is released at its collect and the slot it held is
+// admitted into at once, so a run that stops on one tick's refusal can be
+// holding a live worker for ANOTHER tick — one it announces as abandoned, whose
+// supervisor holds its own wall clock, and which a resumed run adopts by
+// identity rather than dispatching over. That worktree is not a leak and it is
+// not this assertion's business; what is, and what every caller of it was
+// actually about, is that the REFUSED attempt was torn down.
+func assertTornDown(t *testing.T, dir, tick string) {
+	t.Helper()
+	mine := string(filepath.Separator) + tick + string(filepath.Separator)
+	for _, path := range registeredWorktrees(t, dir) {
+		if strings.Contains(path, mine) {
+			t.Errorf("the refused attempt of %s left its worktree registered in the checkout: %s", tick, path)
+		}
+	}
+}
+
 // registeredWorktrees is every worktree git holds a registration for except the
 // main checkout.
 func registeredWorktrees(t *testing.T, dir string) []string {
@@ -813,7 +835,7 @@ func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 	if head == "" || head == marker.BaseSHA {
 		t.Fatalf("%s carries nothing beyond its base; the teardown took the work the refusal is about", branch)
 	}
-	assertOneWorktree(t, f.Repo.Dir)
+	assertTornDown(t, f.Repo.Dir, "a1")
 
 	// And the run after that reports the held work instead of collecting a
 	// worktree that is gone. This is the assertion that used to fail with
