@@ -1,0 +1,13 @@
+{
+  "id": "8jl",
+  "title": "A suspended laptop refuses every live attempt: the settlement deadline is wall time",
+  "description": "Found by the m4n clock audit. This is the one audit finding that can REFUSE HEALTHY WORK, not merely misreport it.\n\nsettlementDeadline -\u003e addressOnce computes an attempt's deadline from dispatchedAt, which is a PARSED RFC3339 value and so carries no monotonic reading. Comparing it against r.now() makes Go fall back to WALL time. So when the host suspends — a closed lid, an overnight — every live attempt instantly ages past its bound the moment the machine wakes, addressOnce refuses each as RefusedUnaddressed, and the run stops.\n\nOn an operator's laptop, which is where these runs live, closing the lid can kill a healthy run and the refusal will name the attempts rather than the sleep.\n\nContrast, from the same audit, which is why this one is wrong rather than merely different:\n  Poll / wipe threshold (guards.go) — now.Sub(last), both r.now(), MONOTONIC. A suspend never reads as a wipe. Correct.\n  excuseWindow gap — monotonic both sides, compared against the monotonic wipe threshold. Correct.\n  announceStall, calibrateProgress/probeProgress — wall on both sides (parsed stamps, filesystem mtimes). Internally consistent.\n  the gate — fixed by m4n: wall for what it REPORTS, monotonic for what it SPENDS.\n\nThe same split applies here. A settlement deadline bounds WORK — how long an executor may take to answer — so it should be spent in monotonic time, like the wipe threshold beside it. Time the host spent asleep is time nobody spent working.\n\nAlso decide, deliberately, what to do about the sibling: wallClockAt / announceWall reads the same parsed marker, so an agent's wall clock also fires for every attempt at once on wake. 'An agent's hour is an hour' is defensible — an API bill does not pause for a closed lid — but firing every attempt's bound simultaneously on wake is not what anyone intended. Decide and write the reason down.\n\nFrom m4n's audit, 2026-09-20.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A host suspend cannot age a live attempt past its settlement deadline; the deadline is spent in the same clock the wipe threshold uses, with a test that advances wall time without advancing the run's own clock and proves no attempt is refused",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T07:55:23.116844Z",
+  "updated_at": "2026-09-20T07:55:23.116844Z"
+}
