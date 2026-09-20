@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 204,
-  "state": "gating",
-  "reason": "running the integrated gate for us2 on 3f835866728a",
-  "updated_at": "2026-09-20T16:04:11Z",
+  "sequence": 205,
+  "state": "publishing",
+  "reason": "closing us2 behind the integrated gate on 3f835866728a",
+  "updated_at": "2026-09-20T16:05:13Z",
   "ticks": [
     {
       "tick_id": "4sb",
