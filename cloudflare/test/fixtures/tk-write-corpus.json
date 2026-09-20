@@ -1,0 +1,684 @@
+{
+  "generated": {
+    "by": "internal/tkcorpus, from a real tk binary driven command by command",
+    "regenerate": "go test ./internal/tkcorpus -update",
+    "from": "the exact bytes tk committed to .tick/issues/ per write, canonicalized as below",
+    "canonicalized": [
+      "tick ids: the random ids tk minted, mapped to g01, g02, ... in creation order",
+      "clock values: created_at to the create instant; updated_at, and started_at/closed_at when the op sets them, to the case's `now`; a kept started_at/closed_at keeps the canonical instant of the op that wrote it",
+      "note-line stamps: the appended line's `YYYY-MM-DD HH:MM` to the `now` instant's UTC minute"
+    ],
+    "tz": "the tk subprocesses run with TZ=UTC (tk stamps note lines in local time; the host the TypeScript client serves is UTC)",
+    "tk_version": "tk dev",
+    "hand_edited": "this file is generated; regenerate it, never edit it"
+  },
+  "cases": [
+    {
+      "id": "g01",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "An epic for the corpus",
+          "-t",
+          "epic",
+          "-p",
+          "1",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g01\",\n  \"title\": \"An epic for the corpus\",\n  \"status\": \"open\",\n  \"priority\": 1,\n  \"type\": \"epic\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Plain task",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g03",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Zero priority corner",
+          "-p",
+          "0",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"open\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g04",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Rich record",
+          "-d",
+          "Desc with \u0026 \u003c \u003e and \"quotes\" plus backslash \\ plus café and a ctrl-\u0001 and a separator \u2028 end",
+          "-l",
+          "api,beta",
+          "-p",
+          "4",
+          "-t",
+          "feature",
+          "-o",
+          "team@example.com",
+          "-b",
+          "{g02}",
+          "-b",
+          "{g03}",
+          "--after",
+          "{g02}",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g04\",\n  \"title\": \"Rich record\",\n  \"description\": \"Desc with \\u0026 \\u003c \\u003e and \\\"quotes\\\" plus backslash \\\\ plus café and a ctrl-\\u0001 and a separator \\u2028 end\",\n  \"status\": \"open\",\n  \"priority\": 4,\n  \"type\": \"feature\",\n  \"owner\": \"team@example.com\",\n  \"labels\": [\n    \"api\",\n    \"beta\"\n  ],\n  \"blocked_by\": [\n    \"g02\",\n    \"g03\"\n  ],\n  \"after\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g05",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Gated work",
+          "--requires",
+          "approval",
+          "-d",
+          "gate: the provider choice needs a human",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g05\",\n  \"title\": \"Gated work\",\n  \"description\": \"gate: the provider choice needs a human\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"requires\": \"approval\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g06",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Awaiting checkpoint",
+          "--awaiting",
+          "checkpoint",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g06\",\n  \"title\": \"Awaiting checkpoint\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"awaiting\": \"checkpoint\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g07",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Final review",
+          "--role",
+          "review",
+          "-b",
+          "{g02}",
+          "-p",
+          "3",
+          "-d",
+          "gate: review is a human gate",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"open\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g08",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Deferred and targeted",
+          "--defer",
+          "2027-03-01",
+          "--target-date",
+          "2026-12-31",
+          "--external-ref",
+          "gh-42",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g08\",\n  \"title\": \"Deferred and targeted\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"target_date\": \"2026-12-31\",\n  \"defer_until\": \"2027-03-01T00:00:00Z\",\n  \"external_ref\": \"gh-42\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g09",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Discovered and accepted",
+          "--discovered-from",
+          "{g02}",
+          "--acceptance",
+          "The bytes match \u0026 the test fails on drift",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g09\",\n  \"title\": \"Discovered and accepted\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"discovered_from\": \"g02\",\n  \"acceptance_criteria\": \"The bytes match \\u0026 the test fails on drift\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g10",
+      "op": {
+        "kind": "create",
+        "argv": [
+          "create",
+          "Owned and labeled",
+          "-o",
+          "crew@example.com",
+          "-l",
+          "solo",
+          "-t",
+          "chore",
+          "--parent",
+          "{g01}",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T11:00:00.000Z",
+      "result": "written",
+      "before": null,
+      "after": "{\n  \"id\": \"g10\",\n  \"title\": \"Owned and labeled\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"chore\",\n  \"owner\": \"crew@example.com\",\n  \"labels\": [\n    \"solo\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g02",
+          "--status",
+          "in_progress",
+          "--owner",
+          "worker@example.com",
+          "--json"
+        ],
+        "owner": "worker@example.com"
+      },
+      "now": "2026-09-20T12:00:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:00:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g02",
+          "--status",
+          "in_progress",
+          "--owner",
+          "second@example.com",
+          "--json"
+        ],
+        "owner": "second@example.com"
+      },
+      "now": "2026-09-20T12:05:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:00:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:05:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "note",
+        "argv": [
+          "note",
+          "g02",
+          "PR ready: merged \u0026 deployed \u003cprod\u003e",
+          "--from",
+          "agent",
+          "--json"
+        ],
+        "text": "PR ready: merged \u0026 deployed \u003cprod\u003e",
+        "from": "agent"
+      },
+      "now": "2026-09-20T12:10:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:05:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:10:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "note",
+        "argv": [
+          "note",
+          "g02",
+          "  operator direction: less \u003c more  ",
+          "--from",
+          "human",
+          "--json"
+        ],
+        "text": "  operator direction: less \u003c more  ",
+        "from": "human"
+      },
+      "now": "2026-09-20T12:15:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:10:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:15:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g02",
+          "--reason",
+          "done \u0026 done",
+          "--json"
+        ],
+        "reason": "done \u0026 done"
+      },
+      "now": "2026-09-20T12:20:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:15:00.000Z\",\n  \"started_at\": \"2026-09-20T12:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"closed\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:20:00.000Z\",\n  \"closed_at\": \"2026-09-20T12:20:00.000Z\",\n  \"closed_reason\": \"done \\u0026 done\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "reopen",
+        "argv": [
+          "reopen",
+          "g02",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T12:25:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"closed\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:20:00.000Z\",\n  \"closed_at\": \"2026-09-20T12:20:00.000Z\",\n  \"closed_reason\": \"done \\u0026 done\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:25:00.000Z\"\n}"
+    },
+    {
+      "id": "g02",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g02",
+          "--status",
+          "in_progress",
+          "--owner",
+          "back@example.com",
+          "--json"
+        ],
+        "owner": "back@example.com"
+      },
+      "now": "2026-09-20T12:30:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"second@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:25:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g02\",\n  \"title\": \"Plain task\",\n  \"notes\": \"2026-09-20 12:10 - PR ready: merged \\u0026 deployed \\u003cprod\\u003e\\n2026-09-20 12:15 - [human] operator direction: less \\u003c more\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"back@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:30:00.000Z\",\n  \"started_at\": \"2026-09-20T12:30:00.000Z\"\n}"
+    },
+    {
+      "id": "g03",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g03",
+          "--status",
+          "in_progress",
+          "--owner",
+          "worker@example.com",
+          "--json"
+        ],
+        "owner": "worker@example.com"
+      },
+      "now": "2026-09-20T12:35:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"open\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:35:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}"
+    },
+    {
+      "id": "g03",
+      "op": {
+        "kind": "update",
+        "argv": [
+          "update",
+          "g03",
+          "--notes",
+          "line one\nline two \u0026 \u003ctag\u003e\nthird with separator \u2028 end",
+          "--json"
+        ],
+        "notes": "line one\nline two \u0026 \u003ctag\u003e\nthird with separator \u2028 end"
+      },
+      "now": "2026-09-20T12:40:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:35:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"notes\": \"line one\\nline two \\u0026 \\u003ctag\\u003e\\nthird with separator \\u2028 end\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:40:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}"
+    },
+    {
+      "id": "g03",
+      "op": {
+        "kind": "update",
+        "argv": [
+          "update",
+          "g03",
+          "--notes",
+          "",
+          "--json"
+        ],
+        "notes": ""
+      },
+      "now": "2026-09-20T12:45:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"notes\": \"line one\\nline two \\u0026 \\u003ctag\\u003e\\nthird with separator \\u2028 end\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:40:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:45:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}"
+    },
+    {
+      "id": "g03",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g03",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T12:50:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"in_progress\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:45:00.000Z\",\n  \"started_at\": \"2026-09-20T12:35:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g03\",\n  \"title\": \"Zero priority corner\",\n  \"status\": \"closed\",\n  \"priority\": 0,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:50:00.000Z\",\n  \"closed_at\": \"2026-09-20T12:50:00.000Z\"\n}"
+    },
+    {
+      "id": "g05",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g05",
+          "--status",
+          "in_progress",
+          "--owner",
+          "worker@example.com",
+          "--json"
+        ],
+        "owner": "worker@example.com"
+      },
+      "now": "2026-09-20T12:55:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g05\",\n  \"title\": \"Gated work\",\n  \"description\": \"gate: the provider choice needs a human\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"requires\": \"approval\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g05\",\n  \"title\": \"Gated work\",\n  \"description\": \"gate: the provider choice needs a human\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"parent\": \"g01\",\n  \"requires\": \"approval\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:55:00.000Z\",\n  \"started_at\": \"2026-09-20T12:55:00.000Z\"\n}"
+    },
+    {
+      "id": "g05",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g05",
+          "--reason",
+          "work complete",
+          "--json"
+        ],
+        "reason": "work complete"
+      },
+      "now": "2026-09-20T13:00:00.000Z",
+      "result": "refused",
+      "before": "{\n  \"id\": \"g05\",\n  \"title\": \"Gated work\",\n  \"description\": \"gate: the provider choice needs a human\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"parent\": \"g01\",\n  \"requires\": \"approval\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T12:55:00.000Z\",\n  \"started_at\": \"2026-09-20T12:55:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g05\",\n  \"title\": \"Gated work\",\n  \"description\": \"gate: the provider choice needs a human\",\n  \"notes\": \"2026-09-20 13:00 - Work complete, awaiting approval\",\n  \"status\": \"in_progress\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"parent\": \"g01\",\n  \"requires\": \"approval\",\n  \"awaiting\": \"approval\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:00:00.000Z\",\n  \"started_at\": \"2026-09-20T12:55:00.000Z\"\n}"
+    },
+    {
+      "id": "g06",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g06",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T13:05:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g06\",\n  \"title\": \"Awaiting checkpoint\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"awaiting\": \"checkpoint\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g06\",\n  \"title\": \"Awaiting checkpoint\",\n  \"status\": \"closed\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"awaiting\": \"checkpoint\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:05:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:05:00.000Z\"\n}"
+    },
+    {
+      "id": "g08",
+      "op": {
+        "kind": "note",
+        "argv": [
+          "note",
+          "g08",
+          "text with tab\tand café \u003cok\u003e",
+          "--from",
+          "agent",
+          "--json"
+        ],
+        "text": "text with tab\tand café \u003cok\u003e",
+        "from": "agent"
+      },
+      "now": "2026-09-20T13:10:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g08\",\n  \"title\": \"Deferred and targeted\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"target_date\": \"2026-12-31\",\n  \"defer_until\": \"2027-03-01T00:00:00Z\",\n  \"external_ref\": \"gh-42\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g08\",\n  \"title\": \"Deferred and targeted\",\n  \"notes\": \"2026-09-20 13:10 - text with tab\\tand café \\u003cok\\u003e\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"target_date\": \"2026-12-31\",\n  \"defer_until\": \"2027-03-01T00:00:00Z\",\n  \"external_ref\": \"gh-42\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:10:00.000Z\"\n}"
+    },
+    {
+      "id": "g08",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g08",
+          "--reason",
+          "shipped \u0026 closed",
+          "--json"
+        ],
+        "reason": "shipped \u0026 closed"
+      },
+      "now": "2026-09-20T13:15:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g08\",\n  \"title\": \"Deferred and targeted\",\n  \"notes\": \"2026-09-20 13:10 - text with tab\\tand café \\u003cok\\u003e\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"target_date\": \"2026-12-31\",\n  \"defer_until\": \"2027-03-01T00:00:00Z\",\n  \"external_ref\": \"gh-42\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:10:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g08\",\n  \"title\": \"Deferred and targeted\",\n  \"notes\": \"2026-09-20 13:10 - text with tab\\tand café \\u003cok\\u003e\",\n  \"status\": \"closed\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"target_date\": \"2026-12-31\",\n  \"defer_until\": \"2027-03-01T00:00:00Z\",\n  \"external_ref\": \"gh-42\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:15:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:15:00.000Z\",\n  \"closed_reason\": \"shipped \\u0026 closed\"\n}"
+    },
+    {
+      "id": "g09",
+      "op": {
+        "kind": "note",
+        "argv": [
+          "note",
+          "g09",
+          "first note",
+          "--from",
+          "agent",
+          "--json"
+        ],
+        "text": "first note",
+        "from": "agent"
+      },
+      "now": "2026-09-20T13:20:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g09\",\n  \"title\": \"Discovered and accepted\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"discovered_from\": \"g02\",\n  \"acceptance_criteria\": \"The bytes match \\u0026 the test fails on drift\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g09\",\n  \"title\": \"Discovered and accepted\",\n  \"notes\": \"2026-09-20 13:20 - first note\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"discovered_from\": \"g02\",\n  \"acceptance_criteria\": \"The bytes match \\u0026 the test fails on drift\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:20:00.000Z\"\n}"
+    },
+    {
+      "id": "g09",
+      "op": {
+        "kind": "note",
+        "argv": [
+          "note",
+          "g09",
+          "second \u0026 final \u003csep \u2028\u003e",
+          "--from",
+          "agent",
+          "--json"
+        ],
+        "text": "second \u0026 final \u003csep \u2028\u003e",
+        "from": "agent"
+      },
+      "now": "2026-09-20T13:25:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g09\",\n  \"title\": \"Discovered and accepted\",\n  \"notes\": \"2026-09-20 13:20 - first note\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"discovered_from\": \"g02\",\n  \"acceptance_criteria\": \"The bytes match \\u0026 the test fails on drift\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:20:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g09\",\n  \"title\": \"Discovered and accepted\",\n  \"notes\": \"2026-09-20 13:20 - first note\\n2026-09-20 13:25 - second \\u0026 final \\u003csep \\u2028\\u003e\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"parent\": \"g01\",\n  \"discovered_from\": \"g02\",\n  \"acceptance_criteria\": \"The bytes match \\u0026 the test fails on drift\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:25:00.000Z\"\n}"
+    },
+    {
+      "id": "g01",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g01",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T13:30:00.000Z",
+      "result": "refused",
+      "before": "{\n  \"id\": \"g01\",\n  \"title\": \"An epic for the corpus\",\n  \"status\": \"open\",\n  \"priority\": 1,\n  \"type\": \"epic\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g01\",\n  \"title\": \"An epic for the corpus\",\n  \"status\": \"open\",\n  \"priority\": 1,\n  \"type\": \"epic\",\n  \"owner\": \"corpus@example.com\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}"
+    },
+    {
+      "id": "g07",
+      "op": {
+        "kind": "claim",
+        "argv": [
+          "update",
+          "g07",
+          "--status",
+          "in_progress",
+          "--owner",
+          "worker@example.com",
+          "--json"
+        ],
+        "owner": "worker@example.com"
+      },
+      "now": "2026-09-20T13:35:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"open\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"corpus@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"in_progress\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:35:00.000Z\",\n  \"started_at\": \"2026-09-20T13:35:00.000Z\"\n}"
+    },
+    {
+      "id": "g07",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g07",
+          "--reason",
+          "review held",
+          "--json"
+        ],
+        "reason": "review held"
+      },
+      "now": "2026-09-20T13:40:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"in_progress\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:35:00.000Z\",\n  \"started_at\": \"2026-09-20T13:35:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"closed\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:40:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:40:00.000Z\",\n  \"closed_reason\": \"review held\"\n}"
+    },
+    {
+      "id": "g07",
+      "op": {
+        "kind": "reopen",
+        "argv": [
+          "reopen",
+          "g07",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T13:45:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"closed\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:40:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:40:00.000Z\",\n  \"closed_reason\": \"review held\"\n}",
+      "after": "{\n  \"id\": \"g07\",\n  \"title\": \"Final review\",\n  \"description\": \"gate: review is a human gate\",\n  \"status\": \"open\",\n  \"priority\": 3,\n  \"type\": \"task\",\n  \"owner\": \"worker@example.com\",\n  \"blocked_by\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"role\": \"review\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:45:00.000Z\"\n}"
+    },
+    {
+      "id": "g04",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g04",
+          "--reason",
+          "child done",
+          "--json"
+        ],
+        "reason": "child done"
+      },
+      "now": "2026-09-20T13:50:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g04\",\n  \"title\": \"Rich record\",\n  \"description\": \"Desc with \\u0026 \\u003c \\u003e and \\\"quotes\\\" plus backslash \\\\ plus café and a ctrl-\\u0001 and a separator \\u2028 end\",\n  \"status\": \"open\",\n  \"priority\": 4,\n  \"type\": \"feature\",\n  \"owner\": \"team@example.com\",\n  \"labels\": [\n    \"api\",\n    \"beta\"\n  ],\n  \"blocked_by\": [\n    \"g02\",\n    \"g03\"\n  ],\n  \"after\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g04\",\n  \"title\": \"Rich record\",\n  \"description\": \"Desc with \\u0026 \\u003c \\u003e and \\\"quotes\\\" plus backslash \\\\ plus café and a ctrl-\\u0001 and a separator \\u2028 end\",\n  \"status\": \"closed\",\n  \"priority\": 4,\n  \"type\": \"feature\",\n  \"owner\": \"team@example.com\",\n  \"labels\": [\n    \"api\",\n    \"beta\"\n  ],\n  \"blocked_by\": [\n    \"g02\",\n    \"g03\"\n  ],\n  \"after\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:50:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:50:00.000Z\",\n  \"closed_reason\": \"child done\"\n}"
+    },
+    {
+      "id": "g04",
+      "op": {
+        "kind": "reopen",
+        "argv": [
+          "reopen",
+          "g04",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T13:55:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g04\",\n  \"title\": \"Rich record\",\n  \"description\": \"Desc with \\u0026 \\u003c \\u003e and \\\"quotes\\\" plus backslash \\\\ plus café and a ctrl-\\u0001 and a separator \\u2028 end\",\n  \"status\": \"closed\",\n  \"priority\": 4,\n  \"type\": \"feature\",\n  \"owner\": \"team@example.com\",\n  \"labels\": [\n    \"api\",\n    \"beta\"\n  ],\n  \"blocked_by\": [\n    \"g02\",\n    \"g03\"\n  ],\n  \"after\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:50:00.000Z\",\n  \"closed_at\": \"2026-09-20T13:50:00.000Z\",\n  \"closed_reason\": \"child done\"\n}",
+      "after": "{\n  \"id\": \"g04\",\n  \"title\": \"Rich record\",\n  \"description\": \"Desc with \\u0026 \\u003c \\u003e and \\\"quotes\\\" plus backslash \\\\ plus café and a ctrl-\\u0001 and a separator \\u2028 end\",\n  \"status\": \"open\",\n  \"priority\": 4,\n  \"type\": \"feature\",\n  \"owner\": \"team@example.com\",\n  \"labels\": [\n    \"api\",\n    \"beta\"\n  ],\n  \"blocked_by\": [\n    \"g02\",\n    \"g03\"\n  ],\n  \"after\": [\n    \"g02\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T13:55:00.000Z\"\n}"
+    },
+    {
+      "id": "g10",
+      "op": {
+        "kind": "close",
+        "argv": [
+          "close",
+          "g10",
+          "--json"
+        ]
+      },
+      "now": "2026-09-20T14:00:00.000Z",
+      "result": "written",
+      "before": "{\n  \"id\": \"g10\",\n  \"title\": \"Owned and labeled\",\n  \"status\": \"open\",\n  \"priority\": 2,\n  \"type\": \"chore\",\n  \"owner\": \"crew@example.com\",\n  \"labels\": [\n    \"solo\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T11:00:00.000Z\"\n}",
+      "after": "{\n  \"id\": \"g10\",\n  \"title\": \"Owned and labeled\",\n  \"status\": \"closed\",\n  \"priority\": 2,\n  \"type\": \"chore\",\n  \"owner\": \"crew@example.com\",\n  \"labels\": [\n    \"solo\"\n  ],\n  \"parent\": \"g01\",\n  \"created_by\": \"corpus@example.com\",\n  \"created_at\": \"2026-09-20T11:00:00.000Z\",\n  \"updated_at\": \"2026-09-20T14:00:00.000Z\",\n  \"closed_at\": \"2026-09-20T14:00:00.000Z\"\n}"
+    }
+  ]
+}
