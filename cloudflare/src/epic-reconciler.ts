@@ -1543,9 +1543,15 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
     // fresh cloud epic run could never start (tick ant). Cut it from the
     // base the submitter named, before the first read rather than after the
     // first dispatch.
-    const branch = await ensureBranch(env, params.project, params.branch, params.base_sha ?? "");
-    if (branch.state === "refused") {
-      return { terminal: true, state: "failed", reason: branch.detail, dispatched: [] };
+    // An injected store IS the ref, the way contentsStore treats it: a test's
+    // fake stands in for one (project, ref) and there is no origin to cut a
+    // branch on. Asking GitHub for a ref behind a fake store would reach past
+    // the seam the whole host is built on.
+    if (env.TICK_CONTENTS === undefined || env.TICK_CONTENTS === null) {
+      const branch = await ensureBranch(env, params.project, params.branch, params.base_sha ?? "");
+      if (branch.state === "refused") {
+        return { terminal: true, state: "failed", reason: branch.detail, dispatched: [] };
+      }
     }
 
     // The run's one repository view: reads direct, publishes through the room.
