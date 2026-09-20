@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 152,
-  "state": "collecting",
-  "reason": "collecting ox0 attempt 11",
-  "updated_at": "2026-09-20T13:54:15Z",
+  "sequence": 153,
+  "state": "integrating",
+  "reason": "integrating ox0 attempt 11 into epic/dha",
+  "updated_at": "2026-09-20T13:54:37Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "ox0",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 11
     },
     {
