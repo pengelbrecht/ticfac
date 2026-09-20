@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 158,
-  "state": "running",
-  "reason": "t5p is running as attempt 15",
-  "updated_at": "2026-09-20T13:56:42Z",
+  "sequence": 159,
+  "state": "collecting",
+  "reason": "collecting sz0 attempt 12",
+  "updated_at": "2026-09-20T14:36:13Z",
   "ticks": [
     {
       "tick_id": "4sb",
