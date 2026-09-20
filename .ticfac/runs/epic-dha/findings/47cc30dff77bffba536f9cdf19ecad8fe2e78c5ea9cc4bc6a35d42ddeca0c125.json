@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "aqm",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-20T09:37:31Z",
+  "triaged_at": "2026-09-20T10:19:42Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "ae2",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "aqm",
