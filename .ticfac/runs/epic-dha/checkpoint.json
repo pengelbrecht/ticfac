@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 175,
-  "state": "gating",
-  "reason": "running the integrated gate for k7p on 39c94043b1ad",
-  "updated_at": "2026-09-20T14:53:04Z",
+  "sequence": 176,
+  "state": "publishing",
+  "reason": "closing k7p behind the integrated gate on 39c94043b1ad",
+  "updated_at": "2026-09-20T14:54:06Z",
   "ticks": [
     {
       "tick_id": "4sb",
