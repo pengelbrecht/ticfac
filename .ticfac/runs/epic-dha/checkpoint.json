@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 101,
-  "state": "publishing",
-  "reason": "closing aqm behind the integrated gate on e62d101923f0",
-  "updated_at": "2026-09-20T10:21:02Z",
+  "sequence": 102,
+  "state": "running",
+  "reason": "aqm is closed",
+  "updated_at": "2026-09-20T10:21:18Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "aqm",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 5
     },
     {
