@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 66,
-  "state": "integrating",
-  "reason": "integrating 80x attempt 4 into epic/dha",
-  "updated_at": "2026-09-20T08:37:29Z",
+  "sequence": 67,
+  "state": "gating",
+  "reason": "running the integrated gate for 80x on da7d636609b8",
+  "updated_at": "2026-09-20T08:37:45Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "80x",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 4
     },
     {
