@@ -1017,9 +1017,9 @@ func startShell(dir, command string, timeout time.Duration, now time.Time) (*gat
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
 	s := &gateShell{
-		scratch:  scratch,
-		outPath:  filepath.Join(scratch, "stdout"),
-		errPath:  filepath.Join(scratch, "stderr"),
+		scratch:   scratch,
+		outPath:   filepath.Join(scratch, "stdout"),
+		errPath:   filepath.Join(scratch, "stderr"),
 		donePath:  filepath.Join(scratch, "exit"),
 		startedAt: now.Round(0),
 		deadline:  time.Now().Add(timeout),
