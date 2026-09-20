@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 244,
-  "state": "collecting",
-  "reason": "collecting u9h attempt 25",
-  "updated_at": "2026-09-20T18:16:25Z",
+  "sequence": 245,
+  "state": "running",
+  "reason": "attempt 25 of u9h is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (cbfdaada6c09)",
+  "updated_at": "2026-09-20T18:16:36Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "u9h",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 25
     },
     {
