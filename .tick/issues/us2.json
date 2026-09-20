@@ -2,6 +2,7 @@
   "id": "us2",
   "title": "Cloud attempts must match the job_handle contract and push the attempt's write_ref",
   "description": "Two contract breaks the review found in the same area; they belong together because both make a cloud attempt unreadable by the tools that read a local one.\n\n1. The cloud worker pushes a PER-TICK branch rather than the attempt's write_ref (finding 1d778f96). The attempt's identity is its ref; pushing somewhere else means the reconciler's collect looks where the contract says and finds nothing.\n2. Cloud attempt records do not match the job_handle contract or local provenance (finding fdb454df).\n\nThe point of the compatibility host is that its records are INDISTINGUISHABLE from a local run's — that is z23's own acceptance wording. These two make them distinguishable, and the contract test that should have caught it evidently does not cover the cloud path.\n\nFrom pxc, findings 1d778f96 and fdb454df.",
+  "notes": "2026-09-20 18:03 - ticfac run epic-dha: attempt 19 reported a finding drafted for triage — proposed-tick \"run-workflow's worker path still pushes per-tick branches with no attempt identity\" (key 3350776c0903d37fbaa9f6d7d33aede2347ea35ab8ee29f024abcea3a88e1704, severity low, for this repository). Triage with `ticfac finding dha 3350776c0903d37fbaa9f6d7d33aede2347ea35ab8ee29f024abcea3a88e1704 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "A cloud attempt's branch and records validate against the same contracts a local attempt's do, with a test that runs the contract suite against a cloud-produced record",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:20.04447Z",
-  "updated_at": "2026-09-20T15:43:31.869545Z",
+  "updated_at": "2026-09-20T16:03:30.080001Z",
   "started_at": "2026-09-20T14:38:35.528753Z"
 }
