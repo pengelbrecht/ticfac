@@ -32,7 +32,7 @@ import (
 func TestAGateClockIsWallTimeNotAwakeTime(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	s, err := startShell(dir, "exit 0", time.Minute, time.Now())
+	s, err := startShell(dir, "exit 0", time.Minute, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestAGateClockSurvivesItsWrapperBeingRebuilt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	start := time.Now().Add(-4 * time.Minute)
-	s, err := startShell(dir, "sleep 30", time.Hour, start)
+	s, err := startShell(dir, "sleep 30", time.Hour, start, nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}

@@ -571,9 +571,19 @@ func assertTornDown(t *testing.T, dir, tick string) {
 }
 
 // registeredWorktrees is every worktree git holds a registration for except the
-// main checkout.
+// main checkout and the gate's slots.
+//
+// The gate's slots are excluded because they are not leaks: since tick 6wh the
+// gate runs in a directory it REUSES, so that Go's test cache recognises the
+// path, and that directory stays registered between gates on purpose. Every
+// caller of this asks "did the run leave a worktree behind that it meant to
+// clean up", and a slot is the one worktree this package means to keep.
 func registeredWorktrees(t *testing.T, dir string) []string {
 	t.Helper()
+	slots, err := (&repoGit{dir: dir, name: "ticfac", email: "ticfac@example.com"}).gateSlotRoot("ticfac-gate-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	var out []string
 	for _, line := range strings.Split(mustRun(t, dir, "git", "worktree", "list", "--porcelain"), "\n") {
 		path, ok := strings.CutPrefix(strings.TrimSpace(line), "worktree ")
@@ -583,7 +593,7 @@ func registeredWorktrees(t *testing.T, dir string) []string {
 		if resolved, err := filepath.EvalSymlinks(path); err == nil {
 			path = resolved
 		}
-		if path == dir {
+		if path == dir || strings.HasPrefix(path, slots+string(filepath.Separator)) {
 			continue
 		}
 		out = append(out, path)

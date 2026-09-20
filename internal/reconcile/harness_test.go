@@ -43,6 +43,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// The suite's gate slots live here too, and go away with everything else
+	// below. Every fixture builds a repository of its own, and a slot root
+	// under the host's temp directory (gatedir.go's default) would leave one
+	// checkout per fixture behind after every run of this package.
+	gateSlotBase = filepath.Join(dir, "gate-slots")
 	executorBin = filepath.Join(dir, "ticfac-exec-subprocess")
 	build := exec.Command("go", "build", "-o", executorBin, "./cmd/ticfac-exec-subprocess")
 	build.Dir = root
