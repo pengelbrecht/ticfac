@@ -1,0 +1,15 @@
+{
+  "id": "3mp",
+  "title": "9pz admits past the tracker's width: workers and claims count differently",
+  "description": "Regression from 9pz, and the tracker caught it. epic dha died:\n\n    claim e9n: tk command \"claim\" refused: dispatch width exceeded: wave width 4\n    is full: 4 implementer(s) already in flight under dha (80x, aqm, b50, cxk).\n    Claiming e9n would make 5.\n\n9pz made the WINDOW count only attempts that still have a live worker, so a settled attempt awaiting collect/integrate/gate/close no longer holds a slot — that is the change that bought ~7 minutes per tick. But tk counts CLAIMS, and a claim lives until the tick CLOSES. 80x, aqm and b50 had settled and were waiting to be finished: no worker, still claimed. So the reconciler admitted a fifth claim and tk refused it.\n\ntk is right. The width is enforced where it cannot be argued with, and the refusal names the four holders. The disagreement is ours: 'in flight' means a live worker to the window and an open claim to the tracker, and 9pz made those two numbers diverge for the first time.\n\nOptions, none obviously right:\n- The window counts CLAIMS for admission (holders, not live workers). Correct against tk, and gives back most of 9pz's gain whenever finishes queue up.\n- The claim is released at collect and re-taken at close. Wrong: a released claim invites another run to take the tick while its work is being integrated.\n- tk learns the distinction — a claim that is 'settled, being integrated' is not an implementer in flight. Most honest, and the biggest change: it is a tracker-side concept the tracker currently has no reason to know.\n- The width is raised. Not a fix: it makes the two numbers disagree by a larger margin.\n\nDecide what 'in flight' means ONCE, for both sides, and make the other follow. Whatever is chosen, the run must never again ask tk for something tk will refuse — the reconciler should not be able to die on its own tracker's guard.\n\nNote for whoever takes it: the epic cannot proceed past four settled-but-unfinished ticks until this is settled, because the run dies rather than holds.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run never asks the tracker for a claim its width forbids; 'in flight' has one meaning across the window and the tracker; and a queue of settled-but-unfinished ticks neither stalls admission nor kills the run",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T08:15:09.84441Z",
+  "updated_at": "2026-09-20T09:25:15.664456Z",
+  "closed_at": "2026-09-20T09:25:15.664456Z",
+  "closed_reason": "Merged as PR #15 (b23b9f6b). A tracker width refusal now HOLDS the run with a reason rather than killing it, and admission counts claims so the run asks for exactly what the tracker will grant. The throughput 9pz bought is parked until e3c (ticks) lets a claim say it is merely integrating; that is named at three sites in the code and guarded by a skipped test that was verified to fail when unskipped."
+}

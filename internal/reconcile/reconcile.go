@@ -1771,6 +1771,26 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
+	// RefusedClaimWidth is the tracker refusing a claim because the epic's
+	// declared dispatch width is already full (tk exit 8, tk.ErrDispatchWidth).
+	//
+	// It HOLDS the run rather than killing it (tick 3mp). Epic dha died on
+	// exactly this: tk refused a fifth claim, the error was operational so
+	// runPlan returned it, and the run went down with three settled ticks
+	// waiting to be finished and their work safe on branches that nobody was
+	// told about. A refusal from the tracker is a fact about the world, not a
+	// crash — the run already knows how to hold for a person and how to resume
+	// by adoption, and this makes it one.
+	//
+	// Since 3mp the window counts CLAIMS, so the run should never ask for one
+	// the width forbids and this should be unreachable from the run's own
+	// arithmetic. It stays because the tracker is the authority and can refuse
+	// for reasons this run cannot see — another run holding claims under the
+	// same epic, or a tick claimed by a person — and a guard that can only be
+	// reached by somebody else's actions is exactly the guard that must not
+	// kill the run.
+	RefusedClaimWidth = "claim_width"
+
 	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), the sixth its own
 	// CLOSE gate adds (tick sqx), and the seventh the PR's WRITE half adds
 	// (tick 4sb): a body the forge could not put the run's record on — the
@@ -1867,7 +1887,8 @@ const collapsedMessage = "the tick did not pass"
 func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
-		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged:
+		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
+		RefusedClaimWidth:
 		return true
 	}
 	return false

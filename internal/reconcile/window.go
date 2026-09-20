@@ -34,13 +34,36 @@ import (
 // thinking, the ones that have settled and are waiting their turn to be
 // finished, and the one attempt actually being finished.
 //
-// The three are kept apart because they answer two different questions
-// differently (tick 9pz). For the GRAPH they are all the same thing: a tick
-// that has not closed yet, whose wave the window may not run past and whose
-// dependents may not start. For the declared WIDTH only the first two count —
-// max_parallel bounds live workers, a model and a pane and CPU, and the
-// attempt being finished has had its worker torn down at the collect precisely
-// so that it stops being one.
+// All three are the same thing for both questions the window asks: a tick this
+// run has CLAIMED and not yet closed. Its wave the window may not run past, its
+// dependents may not start, and it counts against the declared width.
+//
+// Tick 9pz made the width count only attempts with a LIVE WORKER, on the
+// reasoning that max_parallel bounds a model and a pane and CPU rather than
+// bookkeeping. That reasoning is fine and the number was wrong, because the
+// width is not ours to define: `tk` enforces it, and tk counts CLAIMS — and a
+// claim lives until its tick CLOSES. Epic dha found it. Three ticks had settled
+// and were waiting to be finished: no worker, still claimed. The window
+// admitted a fifth and tk refused it with the four holders named:
+//
+//	claim e9n: tk command "claim" refused: dispatch width exceeded: wave width
+//	4 is full: 4 implementer(s) already in flight under dha (80x, aqm, b50,
+//	cxk). Claiming e9n would make 5.
+//
+// tk is right. The width is enforced where it cannot be argued with, and "in
+// flight" now means one thing on both sides of that line: claimed and not
+// closed.
+//
+// WHAT IT COSTS, said plainly rather than discovered later: finishing is
+// serial, so a queue of settled-but-unfinished ticks holds claims the window
+// cannot reuse, and admission starves for as long as the queue takes to drain.
+// That gives back most of what 9pz bought whenever finishes pile up. It is
+// deliberate and it is temporary — correct against the tracker as it stands
+// today, and no more than that. What lifts it is tk learning the distinction
+// (ticks repo, e3c): a claim that is settled and being integrated is not an
+// implementer in flight, and only the former should count. Until that exists,
+// this side does not get to assume it. Raising max_parallel is NOT the
+// workaround: it makes the two numbers disagree by a larger margin.
 type held struct {
 	live    []*inflightAttempt
 	settled []*settledAttempt
@@ -70,17 +93,12 @@ func (h *held) holders() []*inflightAttempt {
 	return out
 }
 
-// workers is how many of them still HAVE a worker: the number the declared
-// width bounds. The attempt being finished counts only until its collect lets
-// its worker go, which is what keeps the width honest across the moment the
-// slot frees.
-func (h *held) workers() int {
-	n := len(h.live) + len(h.settled)
-	if h.finish != nil && !h.finish.released {
-		n++
-	}
-	return n
-}
+// claims is how many ticks this run holds a claim on: the number the declared
+// width bounds, counted the way the tracker counts it (tick 3mp). A claim is
+// taken at the dispatch and lives until the tick closes, so every holder counts
+// — the worker still thinking, the one that settled and is waiting its turn,
+// and the one being finished whose worker is already gone.
+func (h *held) claims() int { return len(h.holders()) }
 
 // runPlan works the plan and reports the ticks that were rejected.
 func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, error) {
@@ -582,13 +600,12 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 // reports no dependency edges at all; the blocker list is the reason behind
 // the number, and it still holds when a layering is stale — which, between two
 // settlements, is exactly what a layering is.
-// The three boundaries are read against everything the window is HOLDING —
-// the live workers, the settled attempts waiting their turn, and the one being
-// finished — because all three are ticks this run has not closed. The declared
-// width is the one that reads something narrower: a worker that has been
-// collected and torn down is not a live worker, and counting it would be the
-// defect this tick is about (9pz), where a run held a slot for a party that had
-// already gone home for the whole of a gate.
+// All four boundaries are read against everything the window is HOLDING — the
+// live workers, the settled attempts waiting their turn, and the one being
+// finished — because all of them are ticks this run has CLAIMED and not closed.
+// That includes the declared width, which is the tracker's number before it is
+// ours: asking for a claim the width forbids is asking for a refusal, and a run
+// must never ask the tracker for something the tracker will refuse (tick 3mp).
 func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bool {
 	holders := window.holders()
 	if len(holders) == 0 {
@@ -612,7 +629,13 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 			return false
 		}
 	}
-	return window.workers() < r.widthForWave(plan, next.Wave)
+	// claims(), not workers(): the finishing attempt and the settled ones
+	// waiting their turn still hold claims, so they still occupy the width.
+	// This is the line tick e3c lifts — once a claim can say it is merely
+	// integrating, this may count workers again and the slot a settled attempt
+	// frees becomes admissible in the moment it frees it (9pz's gain, and
+	// TestE3cWillRestoreAdmissionWhileASettledAttemptIsBeingFinished).
+	return window.claims() < r.widthForWave(plan, next.Wave)
 }
 
 // widthForWave is the width this wave may run at: the host's declared number,
