@@ -29,6 +29,7 @@ import type { Env } from "./index";
 import type { HolderCredentials } from "./lease";
 import { GITHUB_API_BASE_URL } from "./progress";
 import type { PublishWrite } from "./repo-room";
+import { describeLimit, repositoryFiles } from "./tarball";
 
 // ------------------------------------------------------------- the seam ---
 
@@ -71,6 +72,20 @@ export interface ContentsStore {
   list(prefix: string): Promise<string[]>;
   /** One file, or null when the ref does not hold it. */
   read(path: string): Promise<StoredFile | null>;
+  /**
+   * Every file under `prefix`, by path, in ONE request (tick 8xd).
+   *
+   * Optional, and the reason it is optional is the reason it exists: a host
+   * that can answer a whole directory at once should, because reading a
+   * ~1100-record tracker file by file costs 1104 points against GitHub's
+   * 900-per-minute secondary limit and cannot be paced out of it. A store with
+   * no bulk answer — a test's in-memory fake, where a per-path read is free —
+   * simply omits this and callers fall back to `list` + `read`.
+   *
+   * Contents only: a caller that needs a blob sha to guard a write still reads
+   * that one path.
+   */
+  readAll?(prefix: string): Promise<Map<string, string>>;
   /** Create one new file. The ref's head is the compare-and-swap. */
   create(path: string, input: { content: string; message: string }): Promise<StoreWrite>;
   /**
@@ -209,12 +224,22 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
       return paths;
     },
 
+    async readAll(prefix) {
+      // One request for the whole directory (tick 8xd). The prefix is matched
+      // against the archive's paths with the generated wrapper directory
+      // already stripped, so callers name paths the way every other method
+      // here does.
+      const wanted = prefix.endsWith("/") ? prefix : `${prefix}/`;
+      return await repositoryFiles(env, project, ref, (path) => path.startsWith(wanted));
+    },
+
     async read(path) {
       const response = await getJSON(entryURL(path));
       if (response.status === 404) return null;
       if (!response.ok) {
         throw new Error(
-          `GitHub answered HTTP ${response.status} reading ${path} in ${project} at ${ref}`,
+          `GitHub answered HTTP ${response.status} reading ${path} in ${project} at ${ref}` +
+            describeLimit(response),
         );
       }
       const payload = (await response.json()) as {

@@ -65,17 +65,6 @@ import { TICK_RECORD_DIR } from "./tick-membership";
  */
 export const MANIFEST_CONTRACT = 1;
 
-/**
- * How many tracker records are read at once (tick 0h9).
- *
- * Sixteen is chosen against GitHub's limits rather than against a stopwatch:
- * the documented guidance is to avoid many concurrent requests and to keep
- * well clear of the secondary rate limit, which refuses a whole burst rather
- * than queueing it. Sixteen turns a thousand-record read from ten minutes
- * into tens of seconds while staying inside that advice, and the lease it
- * has to finish inside is three minutes.
- */
-export const READ_CONCURRENCY = 16;
 export const MANIFEST_MIN_TK_VERSION = "0.32.0";
 
 import type { Env } from "./index";
@@ -474,26 +463,24 @@ export class TrackerClient {
   /**
    * Reads every tick record on the ref, parsed, in id order.
    *
-   * The reads run READ_CONCURRENCY at a time (tick 0h9). One at a time is
-   * one HTTPS round-trip per record, and a real tracker has thousands:
-   * pengelbrecht/ticks had 1104 records when a cloud plan pass took over
-   * fourteen minutes here and had not finished. That is not merely slow —
-   * every pass re-derives the world (D33), and the publish slot the pass
-   * holds has a three-minute TTL, so a serial read outlives its own lease
-   * and the run carries on holding a slot it no longer owns.
+   * Through the host's bulk read when it has one (tick 8xd). Per-file reads
+   * do not survive a real tracker: ~1100 records is ~1100 requests, and
+   * GitHub's secondary limit is 900 POINTS PER MINUTE for REST where most
+   * GETs cost a point — so the cost is the same however the requests are
+   * paced. Serial it was a fourteen-minute pass that outlived its own
+   * three-minute publish slot; concurrent it was 403s. The GitHub store
+   * answers this from one repository archive instead.
    *
-   * The bound is a bound, not a throttle to be tuned away: unbounded
-   * concurrency over a thousand paths is a thousand simultaneous sockets
-   * and GitHub's secondary rate limit, which fails the whole pass rather
-   * than slowing it.
+   * A store with no bulk answer — a test's in-memory fake — falls back to
+   * list-and-read, where a per-path read costs nothing.
    */
   async #all(): Promise<Tick[]> {
     const paths = (await this.store.list(`${TICK_RECORD_DIR}`)).filter((p) => p.endsWith(".json"));
-    const files = await this.#readConcurrently(paths);
+    const contents = await this.#contentsOf(paths);
     const ticks: Tick[] = [];
-    for (const file of files) {
-      if (file === null) continue;
-      const tick = parseTick(file.content);
+    for (const content of contents) {
+      if (content === null) continue;
+      const tick = parseTick(content);
       if (tick === null) continue;
       ticks.push(tick);
     }
@@ -501,27 +488,17 @@ export class TrackerClient {
     return ticks;
   }
 
-  /**
-   * Reads `paths` with at most {@link READ_CONCURRENCY} in flight, answering
-   * in the order asked (tick 0h9).
-   *
-   * Order is preserved because the caller sorts by id afterwards and a read
-   * that resolves out of order would make the result depend on the network
-   * rather than on the tracker. Each worker writes into its own slot.
-   */
-  async #readConcurrently(paths: string[]): Promise<(StoredFile | null)[]> {
-    const out: (StoredFile | null)[] = new Array(paths.length).fill(null);
-    let next = 0;
-    const worker = async (): Promise<void> => {
-      for (;;) {
-        const index = next;
-        next += 1;
-        if (index >= paths.length) return;
-        out[index] = await this.store.read(paths[index]);
-      }
-    };
-    const width = Math.min(READ_CONCURRENCY, paths.length);
-    await Promise.all(Array.from({ length: width }, () => worker()));
+  /** The bodies of `paths`, in the order asked, however this host serves them. */
+  async #contentsOf(paths: string[]): Promise<(string | null)[]> {
+    if (this.store.readAll !== undefined) {
+      const bulk = await this.store.readAll(TICK_RECORD_DIR);
+      return paths.map((path) => bulk.get(path) ?? null);
+    }
+    const out: (string | null)[] = [];
+    for (const path of paths) {
+      const file = await this.store.read(path);
+      out.push(file === null ? null : file.content);
+    }
     return out;
   }
 
