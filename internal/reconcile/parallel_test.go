@@ -7,8 +7,9 @@ package reconcile
 // they ran in parallel the suite measured 604-1063s per invocation — paid by
 // every worker and every gate, repeatedly. The isolation that parallelism
 // needs is structural (each fixture owns a t.TempDir() root, its own repo and
-// origin, its own executor state root; the only shared value, executorBin, is
-// built once in TestMain and only read afterwards), so the discipline that
+// origin, its own executor state root; the only shared value, the executor
+// binary, is built under a sync.Once and only read afterwards), so the
+// discipline that
 // actually has to be kept is the annotation itself.
 //
 // This test keeps it: every top-level test in this package either calls

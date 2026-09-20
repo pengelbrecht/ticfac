@@ -1,0 +1,13 @@
+{
+  "id": "hfp",
+  "title": "A run must record how it was started so it can be restarted",
+  "description": "Restarting epic-dha under the same run id took five attempts today, each failing on a different missing piece of the invocation, because nothing records how the run was started:\n\n1. no executor: ticfac-exec-subprocess was not beside the binary\n2. no code-hosting surface: GITHUB_TOKEN unset\n3. died: adopted attempt of e9n names executor 'herdr'; this is local-subprocess — no -profiles\n4. same, after guessing HERDR_ENV and HERDR_SOCKET_PATH\n5. same, after -profiles profiles — the repo has BOTH profiles/ (local-subprocess) and profiles-herdr/ (herdr), and only the second matches the run's own evidence\n\nEach refusal was individually clear and fail-closed, which is right. The problem is that none of them could be anticipated: the flags, env and profile directory a run was started with are nowhere in its durable state, so resuming a run is archaeology against its own evidence files. The provenance block in gate evidence records profile_digest, executor and model AFTER the fact; the invocation that produced them is not recorded at all.\n\nThe run already writes run.log, events.jsonl and a checkpoint. It should write the invocation too: argv, the resolved profiles directory, the executor per role, and which environment variables it depended on (by name, never value — this repo is public). Then a restart is 'ticfac run-epic -run-id epic-dha --as-before' or at minimum a printed command a person can paste.\n\nThis is the same class as the missing test failure messages atn fixed: a system that knows the answer and does not say it, leaving the reader to re-derive it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A stopped run can be restarted from its own durable state without a person reconstructing the invocation, proven by a test that starts a run, stops it, and restarts it from what it recorded",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T13:45:28.857678Z",
+  "updated_at": "2026-09-20T13:45:28.857678Z"
+}

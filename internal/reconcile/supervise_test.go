@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // Tick go6: a run exits on stops that only need resuming.
@@ -36,7 +37,9 @@ import (
 //
 // With supervision off this run stops with claim_width and closes nothing,
 // which is the stop the orchestrator answered by hand fifteen times.
+// gate: 11.7s — the only end-to-end proof that the continuation loop keeps an autonomous run alive across a resumable stop; go6's whole subject, and a regression here is silent
 func TestAResumableRefusalIsContinuedByTheRunAndCountedAsAnIntervention(t *testing.T) {
+	shorttest.LoadBearing(t)
 	t.Parallel()
 	supervised := fixtureOptions{gate: wideGate}
 	f := newFixture(t, supervised)
@@ -126,7 +129,9 @@ func TestAResumableRefusalIsContinuedByTheRunAndCountedAsAnIntervention(t *testi
 // branch are what they were; the only thing added is a feed line saying, in
 // its own stage, that the run was NOT continued and why — which is the
 // distinction go6 asks to be made louder rather than softer.
+// gate: 1.9s — the other half of that proof: supervision that continued a stop needing a person would run unattended past a decision
 func TestAStopThatNeedsAPersonStillStopsUnderSupervision(t *testing.T) {
+	shorttest.LoadBearing(t)
 	t.Parallel()
 	escalating := fixtureOptions{mode: "blocked-with-work"}
 	f := newFixture(t, escalating)
@@ -192,7 +197,9 @@ func TestAStopThatNeedsAPersonStillStopsUnderSupervision(t *testing.T) {
 // pushes a record onto this same branch for every state change it makes, so
 // the branch HEAD moves even when nothing was produced, and a rule reading
 // heads would never fire at all.
+// gate: 2.6s — the anti-spin rule is what bounds the continuation loop; without it a resumable stop loops until the cap
 func TestTheSameRefusalOverAnUnchangedTreeHaltsInsteadOfSpinning(t *testing.T) {
+	shorttest.LoadBearing(t)
 	t.Parallel()
 	spinning := fixtureOptions{gate: wideGate}
 	f := newFixture(t, spinning)

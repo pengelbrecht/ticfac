@@ -1,0 +1,13 @@
+{
+  "id": "psp",
+  "title": "The wall clock fires long before the stop actually lands",
+  "description": "Three attempts in epic-dha settled far past their 3600s wall clock, and the run states the lateness plainly rather than hiding it:\n\n    ox0 attempt 11  settled as succeeded, 32m2s  after the wall clock of 3600s fired\n    nu9 attempt 10  settled as failed,    2h6m51s after the wall clock of 3600s fired\n    k7p attempt 9   settled as failed,    2h24m2s after the wall clock of 3600s fired\n\nA bound that resolves between 32 minutes and 2.5 hours late is not bounding the job; it is describing it afterwards. The cost is concrete: ox0 had actually SUCCEEDED and answered DONE, but its verdict sat uncollected while the run treated it as in-flight, holding a claim slot against the wave width the whole time.\n\nLikely the same defect as 7c0, where TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt waited 595.97s for a feed line saying a1's wall clock fired and never saw it. If the firing is what is late rather than the observing, that test is not slow - it is correct, and it is reporting this bug.\n\nDetermine which before fixing:\n- does the wall clock fire on time and the STOP take hours to land (a teardown that waits on something unbounded), or\n- does the clock itself not fire until something else pokes the loop (a timer only evaluated on another event)?\n\nThe second would explain both symptoms at once, including why the lateness varies with host load.\n\nDo not fix this by shortening the bound or widening the test's wait.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An attempt stopped at its wall clock settles within a stated, bounded interval of the clock firing, proven by a test that holds the job open and asserts the settle lands inside that interval - with the root cause named as either the firing or the teardown",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T13:54:41.372716Z",
+  "updated_at": "2026-09-20T13:54:41.372716Z"
+}
