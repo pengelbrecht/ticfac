@@ -1,0 +1,13 @@
+{
+  "id": "psx",
+  "title": "The gate heartbeat's elapsed and remaining disagree: one is wall, one is work",
+  "description": "Seen on epic dha's gate for cxk, 2026-09-20:\n\n    the go gate has been running for 1h18m5s on a68289a8bdbe and has written 1626\n    bytes of output, last 25m42s ago; 54m2s of its bound is left\n\nWith a bound of 1h0m0s, a gate 1h18m old cannot have 54m left. Read in sequence the second number moves about one minute per heartbeat while the first moves about seventeen:\n\n    11:31  35m26s elapsed, 57m48s left\n    11:47  52m1s  elapsed, 56m56s left\n    12:05  1h9m47s elapsed, 56m5s left\n    12:12  1h17m4s elapsed, 55m2s left\n\nBoth halves are behaving as m4n designed them — elapsed is WALL (what a person compares against a clock) and the bound is spent in MONOTONIC time (a gate that got five minutes of a sleeping laptop's attention has spent five minutes of its bound). That split is right and should stay.\n\nWhat is wrong is putting them in ONE SENTENCE with no hint they are different clocks. The line reads as arithmetic and the arithmetic does not hold, so a reader either distrusts the whole line or concludes the bound is broken. Both are worse than the truth, which is interesting: this host gave that gate about 17 minutes of work in 78 minutes of wall, and that ratio is the most useful number on the line.\n\nWork: say which clock each number is in, or better, report the ratio the numbers already imply — 'running 1h18m, of which 17m of work; 43m of its bound left'. A person reading that learns the host is oversubscribed, which is what they would have had to work out by hand.\n\nRelated: m4n (the split, which is correct), w1j (recording host conditions — this line is most of it already).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A gate heartbeat cannot be read as inconsistent arithmetic: each duration says which clock it is in, or the line reports work-time against wall-time explicitly",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T12:14:56.606031Z",
+  "updated_at": "2026-09-20T12:14:56.606031Z"
+}

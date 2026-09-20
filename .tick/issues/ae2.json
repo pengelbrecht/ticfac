@@ -1,0 +1,13 @@
+{
+  "id": "ae2",
+  "title": "The moved findings gate has a latent hole: a zero-commit close-out would skip it",
+  "description": "Found by aqm, the tick that moved the findings gate to the close-out.\n\ngateCloseoutClose — and therefore aqm's hold — runs only in the INTEGRATED path, i.e. for a close-out attempt that has commits. A closeout-epic collecting ZERO commits goes through closeRoleTick, which no longer has any findings gate at all.\n\nToday the shape is unreachable: the recorded no-commits rule refuses such a collect (RefusedCollect) before any close happens. So this is latent, not live — and the reporter said so plainly rather than dressing it up.\n\nIt earns a tick because of what it is latent BEHIND. The only thing standing between an epic handing over with untriaged findings and the rule that stops it is an unrelated refusal in another path. Relax or reshape the no-commits rule — which rxe already narrowed once, and lj4 argued about again — and this hole opens with nothing to announce it.\n\nFix: either call the gate from closeRoleTick guarded on marker.Role == closeout-epic, or add a guard test that FAILS if a zero-commit close-out can ever reach a close without the findings gate. The second is cheaper and is the one that would notice if the no-commits rule moves.\n\nReported by aqm, run epic-dha, finding 47cc30df.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A close-out cannot close without the findings gate whatever its commit count, and a test fails if that becomes possible",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T10:19:26.45353Z",
+  "updated_at": "2026-09-20T10:19:26.45353Z"
+}

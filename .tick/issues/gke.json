@@ -1,0 +1,13 @@
+{
+  "id": "gke",
+  "title": "The Workflow host must carry the typed review-verdict when its review/PR path is built",
+  "description": "From b50, the tick that gave the review a typed verdict on the local host.\n\nb50 added the verdict where the Go reconciler records and reads it. The Workflow-hosted reconciler has no review/PR path yet — cxk is building it — so there is nothing there to carry the field through today. When cxk's path lands, the verdict must ride with it: a NOT READY review recorded on the cloud host as ready-to-merge would be the same defect b50 just fixed, in the host Phase 5 exists to prove.\n\nThis is the 'indistinguishable records' rule again (z23's acceptance): a run on either host must produce records a reader cannot tell apart.\n\nReported by b50, run epic-dha, finding 0e8939e7.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A review's typed verdict is recorded and read identically by the Workflow host and the Go reconciler, with a test that a NOT READY review on the cloud host is never recorded as ready-to-merge",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T10:29:48.40804Z",
+  "updated_at": "2026-09-20T10:29:48.40804Z"
+}
