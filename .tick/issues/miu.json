@@ -2,12 +2,14 @@
   "id": "miu",
   "title": "The per-tick gate must run a short suite, not the whole end-to-end suite",
   "description": "The gate runs `go test -short`, but `-short` is inert: only 6 of 215 test files honour `testing.Short()` (12 call sites, mostly internal/cli/factory_test.go). So every per-tick gate runs the entire end-to-end suite.\n\nThat suite is not a unit suite. internal/reconcile has 206 tests and 8 time.Sleep calls — the cost is not sleeping, it is real work: each test builds real git repositories and spawns real subprocesses. Same shape in internal/exec/herdr (108 tests), internal/runstate (51), internal/cli (134).\n\nMeasured on the e9n attempt-8 gate (commit 46caa836a30c), 23 minutes wall:\n\n    internal/reconcile   1363s   (~180s quiet, 7.5x)\n    internal/exec/herdr   848s   (~176s quiet, 4.8x)\n    internal/runstate     735s   (~113s quiet, 6.5x)\n    everything else      ~290s   (~270s quiet, ~1x)\n\nThe packages that stretch are the ones doing real process work; the tests that FAIL under the stretch are the ones asserting on a deadline. That gate stopped the Phase 5 run on a herdr failure that does not reproduce on a quiet host (see e4u).\n\nThe fix is to make -short mean what it says: end-to-end tests skip under it, the per-tick gate becomes seconds, and the full suite runs on CI and at epic close-out where it is not competing with four concurrent gates. 6wh's caching stacks on top of this rather than substituting for it.\n\nOperator, 2026-09-20: 'there has to be some bug with these very slow gates... We want to prioritize speed over very thorough gates' and 'this is a highly spec'd mac m5 with a few other things going on, unacceptable to have a flaky suite'.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "The gate command completes in under 90s on a quiet host with a warm cache, the full suite still runs on CI and at epic close-out, and the .tick/runners.toml gate stays byte-identical to the Makefile recipe so TestTheGateTargetMatchesTheDeclaredGate holds",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-20T13:00:00.287394Z",
-  "updated_at": "2026-09-20T13:00:00.287394Z"
+  "updated_at": "2026-09-20T13:33:52.871431Z",
+  "closed_at": "2026-09-20T13:33:52.871431Z",
+  "closed_reason": "Landed via PR #19: the gate's -short now skips the end-to-end suite. Whole gate cold and green in 44.6s, was 23 minutes. reconcile 311.4s-\u003e0.67s, herdr 176.0s-\u003e0.58s, runstate 99.4s-\u003e1.04s. Skip lives in the five harness constructors so it covers future tests too; internal/shorttest carries an AST guard (default-deny: a new end-to-end test is CI-only unless it carries a 'short:' justification). Found and fixed a real bug on the way: ten tests built the harness only inside a subtest closure, so t.Skip skipped the subtest and left the parent asserting over work that never happened - runstate's CAS coverage check was green while measuring nothing. Coverage unchanged: ci.yml runs make test (no -short), so all 277 are still refused before main."
 }
