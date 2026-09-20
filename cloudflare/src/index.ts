@@ -153,6 +153,10 @@ async function health(env: Env): Promise<Response> {
       // The Run Workflow is bound by tick ldr; until then every submission
       // fails closed, and this is where a deploy sees why.
       run_workflow: Boolean(env.RUN_WORKFLOW),
+      // The reconciler that drives every plain epic run since tick nu9 - the
+      // binding a deploy must see true, because a false here is a factory that
+      // refuses every epic submission with a message naming it.
+      epic_reconciler: Boolean(env.EPIC_RECONCILER),
       // The orchestrator container. A deployment without it records runs that
       // can never boot, so `tk factory deploy` fails on a false here rather
       // than leaving a factory that refuses every run with a correct message

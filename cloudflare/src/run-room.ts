@@ -86,7 +86,7 @@ import {
   type RunEventSource,
   runEventSink,
 } from "./run-events";
-import { MAX_QUEUE_TTL_MS, MIN_QUEUE_TTL_MS, startRun } from "./runs";
+import { igniteRun, MAX_QUEUE_TTL_MS, MIN_QUEUE_TTL_MS } from "./runs";
 
 export type {
   AcquireLeaseRequest,
@@ -1268,7 +1268,7 @@ export class RunRoom extends DurableObject<Env> {
   /**
    * Hands the free lease to the oldest live parked submission and boots it.
    *
-   * The lease is taken BEFORE the run is started, because `startRun` awaits and
+   * The lease is taken BEFORE the run is started, because `igniteRun` awaits and
    * anything may interleave at an await inside a DO. If the boot then fails the
    * lease is handed straight back and the submission stays parked, so a broken
    * ignition costs a retry rather than wedging the project for a lease ttl.
@@ -1303,7 +1303,7 @@ export class RunRoom extends DurableObject<Env> {
     this.#lease.write(record);
 
     try {
-      await startRun(this.env, {
+      await igniteRun(this.env, {
         run_id: next.run_id,
         project: next.project,
         epic: next.epic,

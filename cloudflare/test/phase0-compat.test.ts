@@ -279,6 +279,7 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     expect(Object.keys(body.bindings).sort()).toEqual([
       "artifacts",
       "db",
+      "epic_reconciler",
       "run_rooms",
       "run_workflow",
       "sandboxes",

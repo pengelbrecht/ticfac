@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { type DispatchLog, getRun, listDispatchLogs, listRunGatewayTokens } from "../src/db";
+import type { EpicReconcilerParams } from "../src/epic-reconciler";
 import { GATEWAY_PATH_PREFIX, issueRunToken } from "../src/gateway";
 import type { QueuedSubmission } from "../src/run-room";
 import {
@@ -20,15 +21,21 @@ import {
  * the Run Workflow tick ldr lands. The fake is the ONLY substitution: it
  * exists because the binding does not, and it records exactly what the real
  * one is asked for, so the seam is proven rather than assumed.
+ *
+ * Since tick nu9 there are two drivers and so two fakes: a plain epic run is
+ * handed to the EpicReconciler binding, and everything the reconciler cannot
+ * honour — a wave, a budget, a completion ping, a held-back grade — keeps the
+ * Run Workflow. Which fake a submission lands on IS part of what these
+ * tests hold.
  */
 
 const BASE = "https://factory.example.com";
 
-type CreatedInstance = { id: string; params: RunWorkflowParams };
+type CreatedInstance<P> = { id: string; params: P };
 
-/** A stand-in for the Run Workflow binding, recording what the routes ask of it. */
-class FakeWorkflow {
-  created: CreatedInstance[] = [];
+/** A stand-in for either Workflow binding, recording what the routes ask of it. */
+class FakeWorkflow<P> {
+  created: CreatedInstance<P>[] = [];
   /** Set to make `sendEvent` throw — a Workflow not waiting on an event. */
   refuseEvents = false;
   /** Set to make the next `create` throw — a Workflows API that is having a bad day. */
@@ -36,7 +43,7 @@ class FakeWorkflow {
   events: { id: string; type: string }[] = [];
   status = "running";
 
-  async create(options: { id?: string; params?: RunWorkflowParams }): Promise<RunWorkflowInstance> {
+  async create(options: { id?: string; params?: P }): Promise<RunWorkflowInstance> {
     if (this.failNextCreate) {
       this.failNextCreate = false;
       throw new Error("workflow instance could not be created");
@@ -65,7 +72,9 @@ class FakeWorkflow {
   }
 }
 
-let workflow: FakeWorkflow;
+let workflow: FakeWorkflow<RunWorkflowParams>;
+/** The reconciler binding's stand-in — the driver of every plain epic run (tick nu9). */
+let reconciler: FakeWorkflow<EpicReconcilerParams>;
 let token: string;
 const originalHash = env.FACTORY_TOKEN_HASH;
 const originalGateway = env.AI_GATEWAY_BASE_URL;
@@ -84,12 +93,15 @@ afterAll(() => {
   else env.AI_GATEWAY_BASE_URL = originalGateway;
   if (originalFactoryURL === undefined) delete env.FACTORY_BASE_URL;
   else env.FACTORY_BASE_URL = originalFactoryURL;
+  delete env.EPIC_RECONCILER;
   delete env.RUN_WORKFLOW;
 });
 
 beforeEach(() => {
   workflow = new FakeWorkflow();
+  reconciler = new FakeWorkflow();
   env.RUN_WORKFLOW = workflow;
+  env.EPIC_RECONCILER = reconciler as unknown as typeof env.EPIC_RECONCILER;
   // A submission is refused outright when the deployment has no gateway
   // configured (D17), so a harness that submits runs is a harness with one.
   env.AI_GATEWAY_BASE_URL = "https://gateway.ai.cloudflare.com/v1/account/ticks";
@@ -417,9 +429,11 @@ describe("submission on a free project", () => {
     expect(logs[0]).toMatchObject({ decision: "dispatched", reason: null, tick_id: "ko8" });
   });
 
-  it("leaves nothing behind when the Workflow refuses to start", async () => {
+  it("leaves nothing behind when the driver refuses to start", async () => {
     const project = await enrolled("ignition-failure");
-    workflow.failNextCreate = true;
+    // A plain epic run is the reconciler's now (tick nu9), so the bad day is
+    // had there.
+    reconciler.failNextCreate = true;
 
     const res = await post("/api/runs", submission(project));
 
@@ -436,16 +450,32 @@ describe("submission on a free project", () => {
     expect((await post("/api/runs", submission(project))).status).toBe(201);
   });
 
-  it("fails closed when the deployment has no Run Workflow binding", async () => {
-    const project = await enrolled("no-workflow");
-    delete env.RUN_WORKFLOW;
+  it("fails closed when the deployment has no EpicReconciler binding", async () => {
+    const project = await enrolled("no-reconciler");
+    delete env.EPIC_RECONCILER;
 
     const res = await post("/api/runs", submission(project));
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toMatchObject({ error: "run_unavailable" });
-    // Nothing recorded, nothing leased: a run that cannot boot is not a run.
+    // Nothing recorded, nothing leased: a run that cannot be driven is not a
+    // run, and the project is not wedged behind it.
     await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
+  });
+
+  it("fails closed when the deployment has no Run Workflow binding and the submission needs it", async () => {
+    const project = await enrolled("no-workflow");
+    delete env.RUN_WORKFLOW;
+
+    // A wave is the container agent's to drive — the reconciler plans its
+    // own waves from the epic's graph — so a missing agent binding is this
+    // submission's answer, not the epic run's (tick nu9).
+    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa"] }));
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({ error: "run_unavailable" });
+    await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
+    expect(reconciler.created).toEqual([]);
   });
 
   it("fails closed when no AI Gateway is configured, naming tk factory setup", async () => {
@@ -484,13 +514,17 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
     expect(workflow.created[0]!.params).toMatchObject({ tick_ids: ["aaa", "bbb", "ccc"] });
   });
 
-  it("treats an absent tick_ids exactly as Phase 1 always has", async () => {
+  it("treats an absent tick_ids as a whole epic the reconciler drives", async () => {
     const project = await enrolled("wave-absent");
 
     const res = await post("/api/runs", submission(project));
 
     expect(res.status).toBe(201);
-    expect(workflow.created[0]!.params.tick_ids).toBeUndefined();
+    // The whole-epic run is the reconciler's (tick nu9): the agent fake was
+    // asked for nothing, and the reconciler got exactly one instance.
+    expect(workflow.created).toEqual([]);
+    expect(reconciler.created).toHaveLength(1);
+    expect(reconciler.created[0]!.params.epic_id).toBe("ko8");
   });
 
   it("refuses an id that is not tick-id shaped", async () => {
@@ -534,7 +568,10 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
     const res = await post("/api/runs", submission(project, { tick_ids: [] }));
 
     expect(res.status).toBe(201);
-    expect(workflow.created[0]!.params.tick_ids).toBeUndefined();
+    // Dropped at parse, so an empty wave IS a whole-epic run: the
+    // reconciler's, and the agent's fake was asked for nothing.
+    expect(workflow.created).toEqual([]);
+    expect(reconciler.created).toHaveLength(1);
   });
 
   // The RunRoom's queued-submission record has no tick_ids column yet: rather
@@ -580,7 +617,7 @@ describe("submission on a leased project", () => {
     expect(body.holder.expires_at).toEqual(expect.any(String));
 
     // The refused submission started nothing.
-    expect(workflow.created).toHaveLength(1);
+    expect(reconciler.created).toHaveLength(1);
     await expect(getRun(env.DB, body.run_id)).resolves.toBeNull();
   });
 
@@ -624,8 +661,10 @@ describe("queued submissions (D22)", () => {
       blocked_by: first.run.run_id,
     });
     expect(body.holder.run_id).toBe(first.run.run_id);
-    // Parked, not started.
-    expect(workflow.created).toHaveLength(1);
+    // Parked, not started: the holder's own create is the only one either
+    // driver was asked for.
+    expect(workflow.created).toEqual([]);
+    expect(reconciler.created).toHaveLength(1);
 
     const logs = await dispatchLogs(body.queued.run_id, "afj");
     expect(logs).toHaveLength(1);
@@ -645,11 +684,13 @@ describe("queued submissions (D22)", () => {
       )
     ).json()) as { queued: QueuedSubmission };
 
-    // The holder finishes and releases with its own credential — exactly what
-    // the Run Workflow does at finalize.
+    // The holder finishes and releases with its own credential — exactly
+    // what the reconciler driver does at its terminal step (tick nu9).
+    const holderLease = reconciler.created[0]!.params.lease_token;
+    if (holderLease === undefined) throw new Error("the route must hand the lease to the driver");
     const released = await roomFor(env, project).releaseDispatchLease({
       run_id: first.run.run_id,
-      token: workflow.created[0]!.params.lease_token,
+      token: holderLease,
     });
 
     expect(released.ok).toBe(true);
@@ -663,7 +704,10 @@ describe("queued submissions (D22)", () => {
       base_sha: OTHER_SHA,
       state: "starting",
     });
-    expect(workflow.created.map((c) => c.id)).toEqual([first.run.run_id, parked.queued.run_id]);
+    // Both the direct submission and the queued one it ignited were the
+    // reconciler's — never the container agent.
+    expect(reconciler.created.map((c) => c.id)).toEqual([first.run.run_id, parked.queued.run_id]);
+    expect(workflow.created).toEqual([]);
     await expect(roomFor(env, project).leaseStatus()).resolves.toMatchObject({
       run_id: parked.queued.run_id,
     });
@@ -693,14 +737,20 @@ describe("queued submissions (D22)", () => {
       )
     ).json()) as { queued: QueuedSubmission };
 
+    const holderLease = reconciler.created[0]!.params.lease_token;
+    if (holderLease === undefined) throw new Error("the route must hand the lease to the driver");
     const released = await roomFor(env, project).releaseDispatchLease({
       run_id: first.run.run_id,
-      token: workflow.created[0]!.params.lease_token,
+      token: holderLease,
     });
     expect(released.ok).toBe(true);
 
-    expect(workflow.created).toHaveLength(2);
-    expect(workflow.created[1]!.params).toMatchObject({
+    // The holder was the reconciler's (a plain epic run); the budgeted
+    // submission parked behind it ignites on the container agent, which is
+    // the driver that still enforces a budget (tick nu9).
+    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toHaveLength(1);
+    expect(workflow.created[0]!.params).toMatchObject({
       run_id: parked.queued.run_id,
       max_cost_usd: 1.25,
       max_wall_clock_ms: 600_000,
@@ -727,13 +777,16 @@ describe("queued submissions (D22)", () => {
     // Expired entries read as absent before any alarm deletes them.
     await expect(roomFor(env, project).listQueuedSubmissions()).resolves.toEqual([]);
 
+    const holderLease = reconciler.created[0]!.params.lease_token;
+    if (holderLease === undefined) throw new Error("the route must hand the lease to the driver");
     const released = await roomFor(env, project).releaseDispatchLease({
       run_id: first.run.run_id,
-      token: workflow.created[0]!.params.lease_token,
+      token: holderLease,
     });
     expect(released.ok).toBe(true);
     if (released.ok) expect(released.ignited).toBeNull();
-    expect(workflow.created).toHaveLength(1);
+    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toEqual([]);
   });
 
   it("refuses a queue window outside the accepted bounds", async () => {
@@ -831,8 +884,10 @@ describe("stop is enforced at the control plane", () => {
       run: { run_id: string };
     };
     await markRunning(run.run_id);
-    // The Workflow is not waiting for an event and the orchestrator is wedged:
-    // nothing downstream agrees to the stop, and it happens anyway.
+    // The driver is not waiting for an event and the orchestrator is wedged:
+    // nothing downstream agrees to the stop, and it happens anyway. Neither
+    // binding's instance takes the optimisation — the record is the truth.
+    reconciler.refuseEvents = true;
     workflow.refuseEvents = true;
 
     const res = await post(`/api/runs/${run.run_id}/stop`, {
@@ -877,8 +932,11 @@ describe("stop is enforced at the control plane", () => {
       workflow_notified: boolean;
     };
 
+    // The optimisation went to the driver that holds the run — the
+    // reconciler's instance (tick nu9).
     expect(body.workflow_notified).toBe(true);
-    expect(workflow.events).toEqual([{ id: run.run_id, type: "stop" }]);
+    expect(reconciler.events).toEqual([{ id: run.run_id, type: "stop" }]);
+    expect(workflow.events).toEqual([]);
   });
 
   it("is idempotent: a repeated stop is the same stop", async () => {
