@@ -392,8 +392,8 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 			r.record(tick, StageRejected, "the review's verdict did not validate: %v", err)
 			return nil, nil, r.refuse(RefusedRoleResult, tick,
 				"the review-epic job for %s returned an answer whose judgement cannot be read: %v. The tick is NOT "+
-				"closed: a judgement that exists only in prose is how NOT READY comes to be recorded as its "+
-				"opposite, and the report is the only channel that is read", tick, err)
+					"closed: a judgement that exists only in prose is how NOT READY comes to be recorded as its "+
+					"opposite, and the report is the only channel that is read", tick, err)
 		}
 	}
 

@@ -195,8 +195,8 @@ func TestTheReviewVerdictLineParses(t *testing.T) {
 		verdict: ReviewVerdictNotReady,
 		detail:  "see defect 3",
 	}, {
-		name: "tab separator with a hyphen",
-		body: "REVIEW-VERDICT:\tNOT READY\t- the reconciler never ran\n",
+		name:    "tab separator with a hyphen",
+		body:    "REVIEW-VERDICT:\tNOT READY\t- the reconciler never ran\n",
 		verdict: ReviewVerdictNotReady,
 		detail:  "the reconciler never ran",
 	}, {

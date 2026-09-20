@@ -69,7 +69,7 @@ func validateReviewVerdict(answer *subprocess.RoleResult) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("the answer's review_verdict %q is outside the closed vocabulary %v: a verdict outside it is a " +
+	return fmt.Errorf("the answer's review_verdict %q is outside the closed vocabulary %v: a verdict outside it is a "+
 		"word two runs can disagree about, which is how a status line came to be the only thing a verdict could ride on",
 		verdict, subprocess.ReviewVerdicts)
 }

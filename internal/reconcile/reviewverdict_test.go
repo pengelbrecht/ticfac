@@ -24,6 +24,8 @@ import (
 
 // validateReviewVerdict: the field is required, the vocabulary is closed, and
 // a review that said neither word is refused rather than guessed at.
+//
+// short: pure table over validateReviewVerdict, no repository and no process.
 func TestValidateReviewVerdict(t *testing.T) {
 	t.Parallel()
 	reviewPayload := func(verdict any) *subprocess.RoleResult {
@@ -65,6 +67,8 @@ func TestValidateReviewVerdict(t *testing.T) {
 // first, the stated carry rule on a NOT READY, and a legacy record — one that
 // predates the typed field — stating its status and summary rather than
 // nothing, which a person merging would read as "no review found anything".
+//
+// short: pure string formatting, no repository and no process.
 func TestReviewVerdictParagraph(t *testing.T) {
 	t.Parallel()
 	typed := runstate.Decision{
