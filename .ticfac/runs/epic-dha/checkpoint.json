@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 56,
-  "state": "integrating",
-  "reason": "integrating 6na attempt 3 into epic/dha",
-  "updated_at": "2026-09-20T08:06:19Z",
+  "sequence": 57,
+  "state": "gating",
+  "reason": "running the integrated gate for 6na on da2a4853a4ae",
+  "updated_at": "2026-09-20T08:06:26Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "6na",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 3
     },
     {
