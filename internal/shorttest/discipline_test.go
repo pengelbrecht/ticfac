@@ -8,7 +8,7 @@ package shorttest_test
 // month is out of the per-tick gate by construction, not because its author
 // remembered.
 //
-// Every top-level test in a declared package must do one of three things:
+// Every top-level test in a declared package must do one of four things:
 //
 //   - build the package's end-to-end harness in its own body — the constructor
 //     calls shorttest.EndToEnd for it, so the skip is free;
@@ -17,11 +17,21 @@ package shorttest_test
 //     a closure skips the subtest and leaves the parent's assertions running
 //     against nothing;
 //   - carry a doc-comment line beginning `short:` saying why it is cheap
-//     enough to pay for on every tick.
+//     enough to pay for on every tick;
+//   - call shorttest.LoadBearing(t) AND carry a `gate:` doc-comment line with
+//     its measured cost — an end-to-end test that stays in the gate because
+//     it is the only proof a critical path works.
 //
-// A test that does none of the three fails here. The default is therefore
+// A test that does none of the four fails here. The default is therefore
 // "runs on CI, not in the gate", and the only way past this guard is to say in
-// one line why the gate should carry it.
+// one line which side the test is on and why.
+//
+// The fourth is the one worth watching, because it is the one that can walk
+// the gate back to 23 minutes a reasonable-looking test at a time. So it is
+// bounded rather than argued: the `gate:` costs are summed and must fit in
+// shorttest.Budget, and the guard prints the spend either way. Admitting a new
+// load-bearing test therefore means measuring it against what is left, or
+// raising a number in a diff a reviewer can see.
 
 import (
 	"go/ast"
@@ -29,10 +39,13 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // endToEndPackages are the packages whose tests build real git repositories
@@ -58,6 +71,10 @@ func TestEveryEndToEndTestSkipsItselfOrSaysWhyItIsShort(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The gate's end-to-end spend, and what it was spent on.
+	var spend time.Duration
+	var admitted []string
+
 	for pkg, constructors := range endToEndPackages {
 		dir := filepath.Join(root, pkg)
 		entries, err := os.ReadDir(dir)
@@ -81,19 +98,136 @@ func TestEveryEndToEndTestSkipsItselfOrSaysWhyItIsShort(t *testing.T) {
 				if !strings.HasPrefix(fn.Name.Name, "Test") || fn.Name.Name == "TestMain" {
 					continue
 				}
+				where := pkg + "/" + entry.Name() + ": " + fn.Name.Name
+
+				// The load-bearing exception, checked from both ends. A claim
+				// without a cost is an exception nobody priced; a cost without
+				// a claim is a comment that does nothing, and the test it
+				// decorates is silently skipped while its doc says otherwise —
+				// which is worse than either alone.
+				claims := callsOwnBody(fn, []string{"LoadBearing"})
+				cost, stated := gateCost(fn)
+				switch {
+				case claims && !stated:
+					t.Errorf("%s calls shorttest.LoadBearing(t) without a `gate:` doc-comment line: "+
+						"a place in the per-tick gate is spent against shorttest.Budget, so it is taken "+
+						"with a measured cost or not at all", where)
+				case stated && !claims:
+					t.Errorf("%s carries a `gate:` doc-comment line but never calls shorttest.LoadBearing(t): "+
+						"the harness skips it under -short and the comment says it does not", where)
+				case claims && stated:
+					if shortReason(fn) != "" {
+						t.Errorf("%s carries both `gate:` and `short:`: it is either an end-to-end test "+
+							"the gate pays for or a cheap one, and this file cannot tell which", where)
+					}
+					spend += cost
+					admitted = append(admitted, where+" ("+cost.String()+")")
+					continue
+				}
+
 				if callsOwnBody(fn, append([]string{"EndToEnd"}, constructors...)) {
 					continue
 				}
 				if shortReason(fn) != "" {
 					continue
 				}
-				t.Errorf("%s/%s: %s neither builds the end-to-end harness in its own body, "+
+				t.Errorf("%s neither builds the end-to-end harness in its own body, "+
 					"nor calls shorttest.EndToEnd(t), nor carries a `short:` doc-comment line "+
-					"saying why the per-tick gate should pay for it",
-					pkg, entry.Name(), fn.Name.Name)
+					"saying why the per-tick gate should pay for it, nor claims a place in it with "+
+					"shorttest.LoadBearing(t) and a `gate:` cost", where)
 			}
 		}
 	}
+
+	// The spend, printed whether or not it fits. A budget nobody sees the
+	// balance of is a budget that is discovered only when it is already gone.
+	sort.Strings(admitted)
+	t.Logf("end-to-end tests admitted to the per-tick gate: %s of %s\n  %s",
+		spend, shorttest.Budget, strings.Join(admitted, "\n  "))
+	if spend > shorttest.Budget {
+		t.Errorf("the admitted end-to-end tests declare %s against a budget of %s. Either drop one to "+
+			"EndToEnd, or raise shorttest.Budget deliberately and say in its comment what the gate bought",
+			spend, shorttest.Budget)
+	}
+}
+
+// The negative control for the load-bearing exception. The two halves of the
+// claim — the call and the priced `gate:` line — must be refused apart and
+// accepted only together, because each half alone is a lie of a different
+// shape: a call without a cost is an exception nobody priced, and a line
+// without a call is a doc comment saying the gate runs a test the harness
+// skips.
+func TestTheDisciplineRefusesHalfAClaimOnTheGate(t *testing.T) {
+	t.Parallel()
+
+	const src = `package p
+
+// gate: 2s — priced, and claimed below
+func TestBoth(t *testing.T) { shorttest.LoadBearing(t); newFixture(t, fixtureOptions{}) }
+
+func TestClaimWithNoCost(t *testing.T) { shorttest.LoadBearing(t); newFixture(t, fixtureOptions{}) }
+
+// gate: 2s — priced, but nothing claims it
+func TestCostWithNoClaim(t *testing.T) { newFixture(t, fixtureOptions{}) }
+
+// gate: soon — a cost that is not a duration
+func TestUnpriceable(t *testing.T) { shorttest.LoadBearing(t); newFixture(t, fixtureOptions{}) }
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "synthetic_test.go", src, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]struct {
+		claims bool
+		cost   time.Duration
+		stated bool
+	}{
+		"TestBoth":            {claims: true, cost: 2 * time.Second, stated: true},
+		"TestClaimWithNoCost": {claims: true},
+		"TestCostWithNoClaim": {cost: 2 * time.Second, stated: true},
+		"TestUnpriceable":     {claims: true},
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		w := want[fn.Name.Name]
+		claims := callsOwnBody(fn, []string{"LoadBearing"})
+		cost, stated := gateCost(fn)
+		if claims != w.claims || stated != w.stated || cost != w.cost {
+			t.Errorf("%s: claims=%v cost=%v stated=%v; want claims=%v cost=%v stated=%v",
+				fn.Name.Name, claims, cost, stated, w.claims, w.cost, w.stated)
+		}
+	}
+}
+
+// gateCost reads the measured cost off a `gate:` doc-comment line, whose shape
+// is `gate: <duration> — <why the coverage is load-bearing>`. The duration is
+// first because it is the part this file has to be able to add up; the reason
+// is for the person deciding whether the next one fits.
+func gateCost(fn *ast.FuncDecl) (time.Duration, bool) {
+	if fn.Doc == nil {
+		return 0, false
+	}
+	for _, comment := range fn.Doc.List {
+		text := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//"))
+		rest, ok := strings.CutPrefix(text, "gate:")
+		if !ok {
+			continue
+		}
+		field := strings.TrimSpace(rest)
+		if cut := strings.IndexAny(field, " \t"); cut >= 0 {
+			field = field[:cut]
+		}
+		d, err := time.ParseDuration(field)
+		if err != nil {
+			return 0, false
+		}
+		return d, true
+	}
+	return 0, false
 }
 
 // The negative control. A guard nothing has ever seen refuse is not known to

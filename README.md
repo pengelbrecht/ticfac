@@ -74,9 +74,31 @@ skip, so the short suite is the readers, the parsers, the drift guards and the
 negative controls, and it finishes in seconds. Everything skipped there runs in
 `make test`, which CI runs on every push and pull request beside
 `make test-short`, and which epic close-out runs before a merge. The discipline
-is enforced by `internal/shorttest`'s guard rather than remembered: a new test
-in one of those packages must build the harness, call `shorttest.EndToEnd(t)`,
-or carry a `short:` doc-comment line saying why the gate should pay for it.
+is enforced by `internal/shorttest`'s guard rather than remembered.
+
+**Which side a new test belongs on.** "End-to-end" is not the same claim as
+"not worth a tick's time", so the second is decided by name rather than
+inferred from the first. A test in one of those three packages must do one of
+four things, and the guard fails it otherwise:
+
+| | what it means |
+|---|---|
+| build the harness | the default — skipped in the gate, run by `make test` and close-out |
+| `shorttest.EndToEnd(t)` | same, said explicitly; needed when the harness is only built inside a subtest closure |
+| `short:` doc-comment line | cheap: no repository, no subprocess, so the gate pays for it |
+| `shorttest.LoadBearing(t)` + a `gate:` line | end-to-end, and it **stays in the gate** |
+
+The last is the exception, and the bar is narrow: the test is the only proof
+that a path the run depends on works, and a regression in it would be
+expensive and silent. Today that is `internal/reconcile/supervise_test.go`'s
+three supervision tests (16.2s) — the continuation loop is what now keeps an
+autonomous run alive across resumable stops, and nothing else proves it.
+"This test is important" is not the bar; nearly every test is important, which
+is how a fast gate becomes a slow one. So the exception is bounded rather than
+argued: each `gate:` line carries a measured cost, the costs are summed against
+`shorttest.Budget` (30s), and the guard prints the spend on every run. Admitting
+a new one means measuring it against what is left, or raising a number in a diff
+a reviewer can see.
 
 `make test` still pins `-timeout 45m`: the full `internal/reconcile` suite runs
 600-620s, past `go test`'s default 10-minute per-package timeout. Use these
