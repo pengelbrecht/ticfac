@@ -1,0 +1,15 @@
+{
+  "id": "eg9",
+  "title": "A refused publish slot release is discarded, not reported",
+  "description": "The reconciler releases its publish slot best-effort, and throws the answer away:\n\n    await step.do(\"release-publish-slot\", async () =\u003e {\n      try {\n        await room().releaseSlot(holder);      // return value discarded\n      } catch (error) {\n        console.error(`run ... could not release the publish slot ...`);\n      }\n    });\n\nreleaseSlot does not THROW on refusal - it RETURNS one:\n\n    export type ReleaseSlotResult =\n      | { ok: true; released: DispatchLeaseView }\n      | { ok: false; error: \"not_holder\"; holder: DispatchLeaseView | null; detail: string }\n      | RequestInvalid;\n\nSo the catch never fires for a refused release. The refusal - which carries the CURRENT holder and a detail string, exactly the two facts a reader needs - is dropped at the point it is produced. A run whose release is refused reports success, leaves the slot held, and says nothing anywhere.\n\nBest-effort is the right POLICY: a failed release must not turn a terminal verdict into a wedged Workflow, and the rooms' alarms sweep what it leaves behind. Best-effort is not a reason to discard the evidence. Log the refusal with its holder and detail, and put it in the run's feed; keep not failing the run.\n\nObserved, not yet explained: during u9h's work a Workflow test asserted the slot was null after a finished run and found one held, with acquired_at and expires_at 62 seconds apart rather than the three-minute TTL - i.e. a RE-ACQUIRED lease. It failed in two different lease-timing tests across two runs and did not reproduce in three runs on either the branch or the base. The cause is NOT established. What is established is that if a refused release is what happened, nothing in the system would have told us - which is why this ticket is worth doing before the cause is known, not after.\n\nCheck the sibling: release-dispatch-lease has the same try/catch shape a few lines below; confirm whether releaseDispatchLease throws or returns.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A release refused with not_holder is logged and reaches the run's feed with the current holder and the detail, without failing the run, proven by a test that releases with a stale token",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T20:06:34.295876Z",
+  "updated_at": "2026-09-20T20:25:35.187601Z",
+  "closed_at": "2026-09-20T20:25:35.187601Z",
+  "closed_reason": "Landed via PR #21."
+}

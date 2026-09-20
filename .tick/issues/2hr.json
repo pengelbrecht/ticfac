@@ -1,0 +1,13 @@
+{
+  "id": "2hr",
+  "title": "A factory deploy does not say which bundle it is deploying",
+  "description": "The factory deploys from a bundle embedded in the ticfac binary (go:embed), staged to ~/.tick/factory/ticfac/. That is deliberate - deploy-factory.yml says the deploy runs 'from the bundle embedded in the exact commit being released', so there is one deploy path.\n\nBut the deploy never says WHICH bundle it is using, and the consequence is a silent loop. On 2026-09-20 I fixed cloudflare/wrangler.toml in the working tree, redeployed, and got a byte-identical failure. Nothing indicated my edit had not been read. The staged copy at ~/.tick/factory/ticfac/cloudflare/wrangler.toml still held the old file, because the fix only takes effect after the BINARY is rebuilt.\n\nAn operator editing config and redeploying gets the same error forever with no clue why. The fix that works - rebuild the binary - is not suggested by anything in the output.\n\nThe deploy already prints 'ticfac: dev' and 'image tk: built from \u003csha\u003e'. It should also print the bundle's provenance: the commit the embedded bundle came from, and a clear statement that the working tree is NOT the source. 'ticfac: dev' is actively unhelpful here - a dev build is exactly the case where the operator is most likely to be editing the bundle's source.\n\nRelated: 63i, the migration ordering bug this loop was hiding.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A deploy states the commit its embedded bundle came from and that the working tree is not the source, so an operator who edits bundle source and redeploys can see why nothing changed",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T18:52:37.968555Z",
+  "updated_at": "2026-09-20T18:52:37.968555Z"
+}

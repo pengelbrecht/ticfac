@@ -1,0 +1,15 @@
+{
+  "id": "0h9",
+  "title": "A cloud plan pass reads 1104 tick records one at a time and outlives its own lease",
+  "description": "The cloud reconciler cannot plan a real repository. On 2026-09-20, run_b124d64a6399460cb53b3b8ce1dde41a spent OVER 14 MINUTES in plan-1 and had not finished:\n\n    Status: Running\n    publish-slot-1  ok    lease expires_at 19:14:06 (3 minute TTL)\n    plan-1          running since 19:11, still running at 19:25\n\nMechanism: TrackerClient.#all() (tracker-client.ts:463) reads every tick record one at a time:\n\n    const paths = await this.store.list(TICK_RECORD_DIR);\n    for (const path of paths) {\n      const file = await this.store.read(path);   // one GitHub round-trip, sequential\n    }\n\npengelbrecht/ticks has 1104 records under .tick/issues. That is 1104 sequential HTTPS round-trips through the GitHub contents API per plan pass, and graph() calls #all() on EVERY pass (D33: every pass re-derives the world).\n\nTwo consequences, and the second is worse:\n\n1. A plan pass takes ~10+ minutes where it should take one request.\n2. The publish slot lease it holds has a 3-minute TTL and is not renewed during the read, so the lease EXPIRES mid-plan on every pass. The run holds a slot it no longer owns, and whatever depends on that lease being valid is running on a lie. The lease line disappears from `ticfac cloud status` while the run carries on.\n\nThis is invisible locally: the local reconciler reads .tick/ from a worktree on disk.\n\nFix shape - any of these alone would do, the first is the obvious one:\n- Read the tracker in ONE request. GitHub's git/trees API with recursive=1 returns every path and blob sha for a ref; the contents of a whole directory can come from a single tree fetch plus blob reads, and the blobs can be fetched concurrently rather than in a loop.\n- Failing that, bound the concurrency at something like 16 rather than 1.\n- Renew the lease during a long read, or take the lease AFTER planning rather than before.\n\nAlso worth asking whether a plan needs all 1104 records at all: it needs the epic and its descendants. #all() exists to serve tk-shaped queries; graph() of one epic does not need the whole tracker.\n\nFound by performing u9h - the first time an epic has been run on the deployed factory against a real repository.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A plan pass against a repository with ~1100 tick records completes in seconds and holds a valid lease throughout, proven against the deployed factory",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T19:26:17.447568Z",
+  "updated_at": "2026-09-20T20:25:35.160015Z",
+  "closed_at": "2026-09-20T20:25:35.160015Z",
+  "closed_reason": "Landed via PR #21."
+}

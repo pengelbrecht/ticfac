@@ -1,0 +1,15 @@
+{
+  "id": "ant",
+  "title": "A fresh cloud epic run dies reading the tracker from a branch nothing has cut",
+  "description": "Every new epic run on the deployed factory fails in its first plan step, about one second in:\n\n    publish-slot-1   ok, lease acquired\n    plan-1           {\"terminal\":true,\"state\":\"failed\",\"reason\":\"epic uzc is not readable\"}\n    release-publish-slot-1\n    release-dispatch-lease-1\n\nMechanism:\n\n- runs.ts:845 hands the reconciler  - epic/\u003cepic\u003e - with base_sha alongside it.\n- epic-reconciler.ts:1539 builds the tracker store against THAT branch: contentsStore(env, params.project, params.branch, ...).\n- tracker-client.ts:589 graph() does store.read('.tick/issues/\u003cepic\u003e.json'), gets null because refs/heads/epic/\u003cepic\u003e does not exist yet, and returns null.\n- epic-reconciler.ts:991 turns that null into a terminal failure: 'epic \u003cid\u003e is not readable'.\n\nepic/\u003cepic\u003e is the branch the run is supposed to CREATE. Nothing cuts it before the first read, so a fresh run can never plan. Verified on 2026-09-20: run_76c209eed46f4081bdd56d497b149c59, epic uzc, all five tick records present on origin/main at 43490a23, no refs/heads/epic/uzc on the remote.\n\nThe local reconciler does not hit this because epic/dha already existed when it ran.\n\nFix shape: the first read must come from a ref that exists. Either cut epic/\u003cepic\u003e from base_sha before the first plan, or read the tracker at base_sha until the integration branch exists. base_sha is already in params and unused for this read.\n\nSecond, smaller defect in the same path: graph() returns null for 'file missing', 'parse failed' and 'not an epic' alike, so the reason reaching the operator cannot distinguish 'the branch does not exist' from 'the epic record is corrupt'. It cost the whole diagnosis here.\n\nFound by performing u9h - the first time an epic has been run on the deployed factory.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A cloud run of an epic that has never run before reaches dispatch, proven against a deployed factory; and graph() distinguishes a missing ref from a missing record from a malformed one",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T19:04:16.945964Z",
+  "updated_at": "2026-09-20T20:25:35.080301Z",
+  "closed_at": "2026-09-20T20:25:35.080301Z",
+  "closed_reason": "Landed via PR #21."
+}

@@ -1,0 +1,13 @@
+{
+  "id": "co3",
+  "title": "A live run clobbers tracker edits to its own integration branch",
+  "description": "On 2026-09-20 I added a blocker to u9h on epic/dha and pushed it. The run's next claim write replaced the record wholesale and my blocked_by entry was gone:\n\n    16:45  I push u9h.blocked_by = [37i, 4sb, 53s, ...]  to epic/dha\n    later  origin/epic/dha has u9h.blocked_by = [4sb, 53s, ...], status in_progress\n\nThe run writes the whole tick record from its own in-memory view rather than merging into what is on the branch, so any edit a person makes between the run reading and writing is lost silently. There is no conflict, no feed line, no evidence it happened.\n\nThis is worse than udu, which is about tracker edits on the DEFAULT branch never reaching a running epic. This one is about edits to the run's OWN branch - the last place an operator could reasonably expect to be heard - being overwritten.\n\nTogether the two mean there is currently no supported way to steer a live run through the tracker: not from main (udu), and not from the integration branch (this). The only lever left is stopping the run.\n\nThe repository already has the machinery for this: .gitattributes declares  precisely so two writers to one record combine rather than clobber. The run's own writes do not go through it.\n\nNote this makes 'edit the tracker in a normal checkout and submit it again' - the steering story  tells operators - false for a run that is still live.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A blocker added to a tick on the integration branch while the run is live survives the run's next write to that tick, proven by a test that writes from both sides",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T18:28:37.511846Z",
+  "updated_at": "2026-09-20T18:28:37.511846Z"
+}

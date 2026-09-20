@@ -1,0 +1,13 @@
+{
+  "id": "1vp",
+  "title": "The factory should live at factory.ticks.sh",
+  "description": "The deployed factory is reachable at its workers.dev subdomain. It should be on a stable custom domain, factory.ticks.sh, so the address an operator configures and a webhook points at does not carry an account-specific workers.dev name.\n\nNeeds: a Workers custom domain binding on the ticks.sh zone, DNS, and then the configured deployment URL in the operator's factory config updated to match. Check whether anything else has the workers.dev address baked in - the Telegram webhook registration (ticfac factory webhook) is the obvious one, and a stale webhook target would fail silently.\n\nticks is a PUBLIC repository: the workers.dev address is account-specific and should not be committed there as an example. factory.ticks.sh is exactly the kind of address that can be.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The factory answers on https://factory.ticks.sh, ticfac factory status reports that address and checks live against it, and any registered webhook points at the new address",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T18:25:31.375026Z",
+  "updated_at": "2026-09-20T18:25:31.375026Z"
+}
