@@ -20,11 +20,12 @@
     "ox0",
     "6na",
     "v3q",
-    "k7p"
+    "k7p",
+    "37i"
   ],
   "parent": "dha",
   "acceptance_criteria": "A real epic completes on a deployed Factory driven by EpicReconcilerWorkflow with max_parallel \u003e 1, survives a Workflow restart with an attempt in flight adopted by identity, and reports its intervention count from recorded data",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T17:37:44.279768Z",
-  "updated_at": "2026-09-19T22:04:41.254203Z"
+  "updated_at": "2026-09-20T16:41:09.233435Z"
 }
