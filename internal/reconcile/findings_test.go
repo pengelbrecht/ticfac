@@ -492,6 +492,17 @@ func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 	if !strings.Contains(result.Failure.Message, "tick rv") {
 		t.Errorf("the hold does not name rv, the tick whose review reported the finding: %s", result.Failure.Message)
 	}
+	// A finding routed to ANOTHER repository is untriaged like any other, and
+	// holds the close-out like any other. Neither the per-tick gate this
+	// replaced nor the close-out gate has ever looked at a finding's target:
+	// "triaged" is a decision a PERSON records, and a person can record one for
+	// a finding they will promote elsewhere — that is what --promote-as is for.
+	// Asserted because the alternative reading turns aqm's one stop per run
+	// into one permanent stop that nothing in this run could ever clear.
+	if !strings.Contains(result.Failure.Message, "for pengelbrecht/ticks") {
+		t.Errorf("the hold does not name the finding routed to another repository: a finding this run "+
+			"cannot fix is still a finding a person must decide about: %s", result.Failure.Message)
+	}
 	if got := f.Tracker.count("close:rv"); got != 1 {
 		t.Fatalf("rv was closed %d times, want 1: a review whose findings wait for a person closes; "+
 			"the hold is the close-out's (tick aqm), and re-holding the review is the loop that "+
@@ -520,12 +531,19 @@ func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 }
 
 // The resume half of the same story (tick 80x): a review whose findings
-// stopped its close is a role tick whose VALIDATED ANSWER is already
+// stopped the run is a role tick whose VALIDATED ANSWER is already
 // recorded — the model was paid for it once. Triaging the findings is the
 // person's step, and the resume then CLOSES behind that recorded decision:
 // a re-dispatch would pay for the same review of the same source again, and
 // the loop it makes ends only when a reviewer reports nothing — a system
 // structurally biased toward the review that finds least.
+//
+// The tick the hold belongs to is the CLOSE-OUT's since tick aqm, not the
+// review's: the review closes carrying its findings and they ride to the one
+// decision point at the end. 80x is untouched by that — what 80x is about is
+// the RESUME not buying the answer again, and where the hold sits does not
+// change what the resume owes. The tick asserted here follows aqm; everything
+// below it is 80x's own and is asserted unchanged.
 func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testing.T) {
 	t.Parallel()
 
@@ -534,8 +552,8 @@ func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testin
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
-		t.Fatalf("failure %+v, want the review tick's own untriaged finding", result.Failure)
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "co" {
+		t.Fatalf("failure %+v, want the review's untriaged finding holding the CLOSE-OUT (tick aqm)", result.Failure)
 	}
 
 	// The answer is already recorded — the decision the close will stand
@@ -636,6 +654,12 @@ func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testin
 // The hold half (tick 80x): a resume while the findings are STILL untriaged
 // refuses at the same gate, again — and buys nothing. The recorded decision is
 // what the run owes the person; the hold that waits for them is free.
+//
+// Since tick aqm that gate is the CLOSE-OUT's, so the hold names co and the
+// review itself has already closed carrying its findings. Neither changes what
+// 80x asserts: a second run must not dispatch rv again, because the answer it
+// would re-buy is recorded — and it must not close rv a second time either,
+// which is the same rule read from the other end.
 func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T) {
 	t.Parallel()
 
@@ -644,8 +668,8 @@ func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
-		t.Fatalf("failure %+v, want the review tick's own untriaged finding", result.Failure)
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "co" {
+		t.Fatalf("failure %+v, want the review's untriaged finding holding the CLOSE-OUT (tick aqm)", result.Failure)
 	}
 
 	// Nobody triages. The resume stops at the same gate — and the review is
@@ -654,8 +678,8 @@ func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T)
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "rv" {
-		t.Fatalf("failure %+v, want the same untriaged finding to hold the run again", result.Failure)
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged || result.Failure.TickID != "co" {
+		t.Fatalf("failure %+v, want the same untriaged finding to hold the close-out again", result.Failure)
 	}
 	events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
 	if err != nil {
@@ -671,8 +695,23 @@ func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T)
 		t.Fatalf("the review was dispatched %d times across both runs, want 1: the hold is free, not "+
 			"a re-paid review of the same source", dispatched)
 	}
-	if got := f.Tracker.count("close:rv"); got != 0 {
-		t.Fatalf("rv was closed %d times, want 0: the finding is still waiting for a person", got)
+	// And the hold SAYS so. 80x's only change to this message was the sentence
+	// that tells the operator a resume replays rather than re-buys; the aqm
+	// merge took aqm's wording wholesale and dropped it, which is a silent loss
+	// of the one thing that makes running the epic again an obviously cheap
+	// thing to do. Asserted so the next merge of this message cannot drop it.
+	if !strings.Contains(result.Failure.Message, "it does not dispatch the job again") {
+		t.Errorf("the hold does not tell the operator the resume replays rather than re-buys the review "+
+			"(tick 80x): %s", result.Failure.Message)
+	}
+	// rv closed ONCE, in the first run, carrying its findings — and the resume
+	// did not close it again. Before tick aqm this read "want 0": the review
+	// was re-held for its own findings and never closed at all. aqm made the
+	// close happen and the close-out hold instead; 80x's rule is unchanged and
+	// is the second half of this number — a resume replays, it does not redo.
+	if got := f.Tracker.count("close:rv"); got != 1 {
+		t.Fatalf("rv was closed %d times, want 1: it closes carrying its findings (tick aqm) and the "+
+			"resume stands behind that close rather than repeating it (tick 80x)", got)
 	}
 }
 
