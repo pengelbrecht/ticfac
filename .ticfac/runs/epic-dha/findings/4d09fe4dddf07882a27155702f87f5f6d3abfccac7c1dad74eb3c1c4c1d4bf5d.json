@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "80x",
   "attempt": 4,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-20T08:14:09Z",
+  "triaged_at": "2026-09-20T09:35:16Z",
+  "triaged_by": "peter (operator)",
+  "promoted_as": "j8m",
   "provenance": {
     "run_id": "epic-dha",
     "tick_id": "80x",
