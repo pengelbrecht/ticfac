@@ -32,6 +32,9 @@ type repoGit struct {
 	// (tick enj). It is the reconciler's, so the retries it reports land in
 	// the run's feed.
 	retry runstate.RemoteRetry
+	// common is this repository's shared git directory, remembered on first
+	// use (commonDir). The gate's slot root is keyed by it.
+	common string
 }
 
 func (g *repoGit) run(dir string, args ...string) (string, error) {
@@ -164,18 +167,20 @@ func (g *repoGit) removeWorktree(dir string) {
 // pruneWorktrees drops worktree registrations whose directory is gone, and
 // answers with what git said it removed.
 //
-// Every worktree this package makes is a throwaway outside the repository, and
-// every one of them is removed on the way out of the leg that made it — by a
-// defer, which is exactly the thing a SIGKILL does not run. What survives such
-// a run is an ADMIN ENTRY under .git/worktrees pointing at a directory the
-// operating system has since cleared out: `git worktree list` grows one line
-// per killed run, and `git worktree add` can refuse a path one of them still
-// claims.
+// Every worktree this package makes is outside the repository, and every one
+// of them but the gate's slots is removed on the way out of the leg that made
+// it — by a defer, which is exactly the thing a SIGKILL does not run. (The
+// gate's slots are the exception on purpose: they are REUSED so that Go's test
+// cache recognises the path, and they are bounded at gateSlots per repository.
+// See gatedir.go, tick 6wh.) What survives such a run is an ADMIN ENTRY under
+// .git/worktrees pointing at a directory the operating system has since
+// cleared out: `git worktree list` grows one line per killed run, and `git
+// worktree add` can refuse a path one of them still claims.
 //
 // It is deliberately only the registered-but-MISSING ones. A registration
 // whose directory is still there may be another run's live worktree — two
-// epics can be reconciled in one checkout — and removing that would break a
-// run this one knows nothing about.
+// epics can be reconciled in one checkout — or a gate slot that is about to be
+// reused, and removing either would break a run this one knows nothing about.
 func (g *repoGit) pruneWorktrees() (string, error) {
 	return g.run("", "worktree", "prune", "--verbose")
 }

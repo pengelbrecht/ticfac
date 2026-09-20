@@ -350,11 +350,18 @@ func (r *Reconciler) startGateCommand(command GateCommand, key string,
 		return nil, existing, nil
 	}
 
-	dir, remove, err := r.git.tempWorktree("ticfac-gate-", merged.GateSHA)
+	// gateWorktree, not tempWorktree: a gate that ran in a fresh directory
+	// every time could never hit Go's test cache, which keys on the absolute
+	// paths a test opened. The slot is reset to this commit on the way in and
+	// held under a lock for the life of the check (gatedir.go, tick 6wh).
+	dir, lock, remove, err := r.git.gateWorktree("ticfac-gate-", merged.GateSHA)
 	if err != nil {
 		return nil, nil, fmt.Errorf("prepare the gate worktree at %s: %w", short(merged.GateSHA), err)
 	}
-	shell, err := startShell(dir, command.Command, r.opts.GateTimeout, r.now())
+	// The slot's lock goes to the shell as well as staying here: a gate that
+	// outlives the reconciler that started it must keep holding the directory
+	// it is running in (gatedir.go).
+	shell, err := startShell(dir, command.Command, r.opts.GateTimeout, r.now(), lock)
 	if err != nil {
 		remove()
 		return nil, nil, err
@@ -450,10 +457,11 @@ func (r *Reconciler) finishGateCommand(g *gateCommand, marker attemptHandle, mer
 		result = "fail"
 	}
 
-	// The command ran in `dir`, a throwaway os.MkdirTemp worktree OUTSIDE the
-	// repository (git.go's tempWorktree) — a host-local path a failing
-	// command's own output (a stack trace, a shell error line naming its
-	// $PWD) can carry verbatim. Redact it, the reconciler's own repository
+	// The command ran in `dir`, a worktree OUTSIDE the repository (gatedir.go's
+	// gateWorktree, or git.go's tempWorktree when every slot is held) — a
+	// host-local path a failing command's own output (a stack trace, a shell
+	// error line naming its $PWD) can carry verbatim. Redact it, the
+	// reconciler's own repository
 	// checkout, and the operator's home directory before anything here is
 	// recorded: this evidence is pushed to origin, which may be a public repo.
 	redactPaths := []string{dir, r.opts.Repo}
@@ -1011,7 +1019,11 @@ var errGateKilled = errors.New("the gate command was killed before it reported a
 // must not thereby hold a real `sh` open forever. `now` is the run's clock and
 // is what the heartbeat reports from — see the field comments above for why
 // those are two different clocks on purpose.
-func startShell(dir, command string, timeout time.Duration, now time.Time) (*gateShell, error) {
+// hold, when it is not nil, is a lock on the directory the command runs in. It
+// is passed to the shell so that the kernel keeps holding it for as long as
+// anything this gate started is alive — including a shell that outlived the
+// reconciler. Nothing reads fd 3; being open is the whole job. See gatedir.go.
+func startShell(dir, command string, timeout time.Duration, now time.Time, hold *os.File) (*gateShell, error) {
 	scratch, err := os.MkdirTemp("", "ticfac-gate-io-")
 	if err != nil {
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
@@ -1043,6 +1055,9 @@ func startShell(dir, command string, timeout time.Duration, now time.Time) (*gat
 		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath)
 	cmd.SysProcAttr = gateProcessGroup()
 	cmd.Stdout, cmd.Stderr = out, errOut
+	if hold != nil {
+		cmd.ExtraFiles = []*os.File{hold}
+	}
 	cmd.WaitDelay = gateWaitDelay
 	if err := cmd.Start(); err != nil {
 		_ = os.RemoveAll(scratch)
@@ -1139,7 +1154,7 @@ func readGateOutput(path string) string {
 // else to do while a gate runs — and it is what the process-group kill is
 // proved through.
 func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
-	s, err := startShell(dir, command, timeout, time.Now())
+	s, err := startShell(dir, command, timeout, time.Now(), nil)
 	if err != nil {
 		return "", "", -1, err
 	}

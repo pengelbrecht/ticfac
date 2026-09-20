@@ -86,9 +86,10 @@ func TestNoDurableRecordCarriesAHostPath(t *testing.T) {
 }
 
 // TestAFailingGatesOutputCarriesNoHostPath is TestNoDurableRecordCarriesAHostPath's
-// case for a gate that FAILS. The integrated gate runs in an os.MkdirTemp
-// worktree OUTSIDE the repository (git.go's tempWorktree), a directory git
-// tears down before the run ends, so it can only be caught by inspecting the
+// case for a gate that FAILS. The integrated gate runs in a worktree OUTSIDE
+// the repository (gatedir.go's gateWorktree, whose slot directory is named
+// after a HASH of the checkout rather than after the checkout — tick 6wh), so
+// it can only be caught by inspecting the
 // evidence gate.go recorded from a command whose failure output names its own
 // working directory — no forbidden string here happens to fall under
 // `/Users/` or `/home/` the way the earlier incident did, so this scans for

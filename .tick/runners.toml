@@ -70,14 +70,25 @@ effort = "high"
 # keys the cache on the package's sources, its dependencies, and the files and
 # environment the test consulted.
 #
-# The known exposure, measured rather than assumed: a test that reads a file by
-# an ABSOLUTE path outside the module can be served from cache after that file
+# 2026-09-20 — and until tick 6wh it bought NOTHING, because the gate ran in a
+# fresh temp directory every time and Go's cache keys on the absolute paths a
+# test opened. The reasoning above was right and the mechanism was broken. 6wh
+# runs the gate in a stable directory per repository, so the saving described
+# here is now a thing that actually happens.
+#
+# The exposure that came with it, and the answer. A test that reads a file by an
+# ABSOLUTE path OUTSIDE the module can be served from cache after that file
 # changes. contracts.RepoRoot() builds absolute paths, so the drift guards that
 # read this very file — TestThisRepositorysGateIsReadable,
 # TestTheGateTargetMatchesTheDeclaredGate,
-# TestTheHarnessBoundOutlivesEveryDeclaredGateBound — are the ones to watch.
-# Tick mbv owns proving this either way; until it lands, run `make suite` (which
-# keeps -count=1) before trusting a green gate about THOSE guards.
+# TestTheHarnessBoundOutlivesEveryDeclaredGateBound — were the ones to watch.
+# They are safe: this file is INSIDE the module those tests belong to, and go
+# invalidates on it. Demonstrated by hand (edit the command on the line below
+# and the guard fails, uncached) and on every run by
+# TestACachedPassCannotHideAnEditToAFileAGuardReads, which rebuilds the guards'
+# exact shape in a throwaway module and edits its input under it. `make suite`
+# keeps -count=1 and remains the paranoid answer; it is no longer a required
+# one. The wider audit is still tick mbv's.
 go = { command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
