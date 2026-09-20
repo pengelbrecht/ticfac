@@ -46,8 +46,48 @@ func waveOfThree(t *testing.T, f *fixture) {
 // bound is the test's own, well under the fixture's GateTimeout, so the old code
 // fails with this command's own message rather than with a timeout somewhere
 // else.
-func admissionGate(signal string) string {
-	return `version = 2
+// slowGate is a declared gate that takes real time at a chosen width, so a
+// tick's finish overlaps whatever else the window is doing.
+func slowGate(width int) string {
+	return fmt.Sprintf(`version = 2
+
+[orchestration]
+max_parallel = %d
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = "sleep 3; test -f README.md", description = "slow enough to overlap the window" }
+`, width)
+}
+
+// TestAFinishDoesNotBlockTheLoop is what tick 9pz bought and tick 3mp keeps.
+//
+// 9pz had two halves. The first — a settled attempt's slot is freed for the
+// next tick — is DELIBERATELY SUSPENDED by 3mp: a claim lives until its tick
+// closes, tk counts claims, and the window must count what tk counts or ask
+// for refusals. What lifts it is tk learning the distinction (ticks repo,
+// e3c), and until then this side does not get to assume it.
+//
+// The second half is untouched and is what this asserts: the finish is a state
+// machine the run loop advances one step per round, so the loop keeps turning
+// while a gate runs. Before 9pz the loop disappeared into finishTick for the
+// whole of a collect, integrate, gate and close — median 7m19s on this
+// repository's own epic feeds — and nothing else was polled, noticed or said.
+//
+// The proof is another attempt SETTLING inside the finishing tick's gate. That
+// can only be noticed by a poll, and a poll can only happen if the loop is
+// still going round.
+func TestAFinishDoesNotBlockTheLoop(t *testing.T) {
+	t.Parallel()
+	// The gate itself releases the other worker: it touches the file a2's
+	// runner is waiting on and then takes its time. So a2 can only settle
+	// while a1's gate is running, and the run can only NOTICE it by polling —
+	// which it can only do if the loop is still going round.
+	signal := filepath.Join(t.TempDir(), "gate-running")
+	gate := `version = 2
 
 [orchestration]
 max_parallel = 2
@@ -57,71 +97,45 @@ kind = "claude"
 model = "sonnet"
 
 [testing.commands]
-tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
-admitted = { command = "i=0; while [ $i -lt 400 ] && [ ! -f '` + signal + `' ]; do sleep 0.05; i=$((i+1)); done; test -f '` + signal + `' || { echo 'no third tick was admitted while this gate ran'; exit 9; }", description = "the window admits while this gate runs" }
+tree = { command = "touch '` + signal + `'; sleep 3; test -f README.md", description = "releases the other worker, then takes its time" }
 `
-}
-
-// TestTheWindowAdmitsWhileASettledAttemptIsBeingFinished is tick 9pz's
-// acceptance: with a width of two and three ready ticks, the third is dispatched
-// into the slot the first settled attempt freed — WHILE that attempt is being
-// integrated and gated, not after.
-//
-// On the code before this tick it fails with the gate's own words:
-//
-//	the integrated gate on <sha> did not pass for a1: admitted (fail). ...
-//
-// because the run is inside finishTick(a1) for the whole of that gate and
-// cannot reach the admission at the top of its loop.
-func TestTheWindowAdmitsWhileASettledAttemptIsBeingFinished(t *testing.T) {
-	t.Parallel()
-	signal := filepath.Join(t.TempDir(), "third-dispatched")
-	gate := admissionGate(signal)
-
 	f := newFixture(t, fixtureOptions{gate: gate, mode: "linger-until"})
 	waveOfThree(t, f)
-
-	// a2 keeps thinking until the third tick is dispatched, so the run really
-	// does have to admit from a free slot rather than from an empty window.
 	f.Runner = append([]string{f.Runner[0], "LINGER_TICK=a2", "LINGER_UNTIL=" + signal}, f.Runner[1:]...)
-	f.wrap = func(inner Executor) Executor {
-		return &dispatchSignal{Executor: inner, tick: "b1", path: signal}
-	}
 
 	r, result, err := f.run(f.Repo, fixtureOptions{gate: gate})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %s",
-			result.Closed, result.State, result.Reason)
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 
-	// The feed's own account of it: b1 was dispatched after a1 settled and
-	// BEFORE a1's gate passed.
-	var settled, dispatched, gated int
+	// a1's finish: from the merge that starts its gate to the verdict.
+	integrated, gated, settledInside := -1, -1, false
 	for i, event := range r.Journal() {
 		switch {
-		case event.Tick == "a1" && event.Stage == StageWaiting && strings.Contains(event.Detail, "settled as"):
-			if settled == 0 {
-				settled = i + 1
-			}
-		case event.Tick == "b1" && event.Stage == StageDispatched:
-			dispatched = i + 1
+		case event.Tick == "a1" && event.Stage == StageIntegrated:
+			integrated = i
 		case event.Tick == "a1" && event.Stage == StageGatePassed:
-			gated = i + 1
+			gated = i
 		}
 	}
-	if settled == 0 || dispatched == 0 || gated == 0 {
-		t.Fatalf("the feed is missing one of the three events: a1 settled %d, b1 dispatched %d, a1 gated %d",
-			settled, dispatched, gated)
+	if integrated < 0 || gated < 0 {
+		t.Fatalf("a1 never integrated (%d) or never gated (%d): %v", integrated, gated, r.Stages("a1"))
 	}
-	if dispatched > gated {
-		t.Errorf("b1 was dispatched at %d, after a1's gate passed at %d: the run admitted nothing for the whole "+
-			"of the finish, which is the defect 9pz is about", dispatched, gated)
+	for i, event := range r.Journal() {
+		if i <= integrated || i >= gated {
+			continue
+		}
+		if event.Tick != "a1" && event.Stage == StageWaiting && strings.Contains(event.Detail, "settled as") {
+			settledInside = true
+		}
 	}
-	if dispatched < settled {
-		t.Errorf("b1 was dispatched at %d, before a1 even settled at %d: the width was exceeded", dispatched, settled)
+	if !settledInside {
+		t.Errorf("nothing else was noticed between a1's integrate at %d and its gate passing at %d: the run "+
+			"disappeared into the finish, which is the whole of what 9pz is about", integrated, gated)
 	}
 }
 
@@ -167,24 +181,20 @@ func (e *countingExecutor) Dispose(handle *subprocess.JobHandle, opts subprocess
 	return nil
 }
 
-// TestTheDeclaredWidthIsStillHonouredThroughAFinish: the slot a finish frees is
-// a real slot, and freeing it must not let the run run wider than it said. With
-// a declared width of two, no more than two workers exist at any moment.
+// TestTheDeclaredWidthIsStillHonouredThroughAFinish: the run never runs wider
+// than it said, counted BOTH ways — the workers it has alive, and the claims
+// the tracker has open. Since tick 3mp those are different numbers and the
+// second is the one tk enforces; a settled attempt has released its worker and
+// still holds its claim.
 func TestTheDeclaredWidthIsStillHonouredThroughAFinish(t *testing.T) {
 	t.Parallel()
-	signal := filepath.Join(t.TempDir(), "third-dispatched")
-	gate := admissionGate(signal)
-
-	f := newFixture(t, fixtureOptions{gate: gate, mode: "linger-until"})
+	gate := slowGate(3)
+	f := newFixture(t, fixtureOptions{gate: gate})
 	waveOfThree(t, f)
-	f.Runner = append([]string{f.Runner[0], "LINGER_TICK=a2", "LINGER_UNTIL=" + signal}, f.Runner[1:]...)
 
 	count := &workerCount{gone: map[string]bool{}}
 	f.wrap = func(inner Executor) Executor {
-		return &countingExecutor{
-			Executor: &dispatchSignal{Executor: inner, tick: "b1", path: signal},
-			state:    count,
-		}
+		return &countingExecutor{Executor: inner, state: count}
 	}
 
 	_, result, err := f.run(f.Repo, fixtureOptions{gate: gate})
@@ -195,12 +205,20 @@ func TestTheDeclaredWidthIsStillHonouredThroughAFinish(t *testing.T) {
 		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %s",
 			result.Closed, result.State, result.Reason)
 	}
-	if count.peak > 2 {
-		t.Errorf("%d workers existed at once under a declared width of 2: freeing the finished tick's slot "+
-			"widened the run past what it said", count.peak)
+	// Workers, which can only ever be fewer than claims: a settled attempt has
+	// released its worker and still holds its claim (tick 3mp).
+	if count.peak > 3 {
+		t.Errorf("%d workers existed at once under a declared width of 3: the run widened past what it said",
+			count.peak)
 	}
 	if count.peak < 2 {
 		t.Errorf("never more than %d worker existed at once: the fixture is not exercising a window at all", count.peak)
+	}
+	// And the number the TRACKER counts, which is the one that can refuse: a
+	// claim opens at the dispatch and closes at the close.
+	if peak := f.Tracker.peakClaims(); peak > 3 {
+		t.Errorf("%d claims were open at once under a declared width of 3: the window counted something the "+
+			"tracker does not, which is what killed epic dha", peak)
 	}
 }
 

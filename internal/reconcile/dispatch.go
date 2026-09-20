@@ -17,6 +17,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
 // One tick, from the graph to the close, with the compare-and-swap that proves
@@ -590,6 +591,28 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 
 		// The effect, now that the marker proves it has not happened.
 		if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
+			// A tracker that REFUSED is not a tracker that broke (tick 3mp).
+			// The width guard is a verdict about the world — this epic already
+			// has as many claims open as it declared it may — so the run holds
+			// for a person with that reason in the feed, and every settled
+			// attempt it is holding is announced as adoptable rather than
+			// abandoned in silence. Epic dha died here instead, taking three
+			// settled ticks' worth of unfinished work down with it.
+			//
+			// Only the TYPED refusal holds. A tracker that would not answer at
+			// all — a missing binary, an unreadable repository — is an
+			// operational error and is returned as one, the same rule
+			// disposeRefused keeps: an outage is not a verdict on the work.
+			var width *tk.ErrDispatchWidth
+			if errors.As(err, &width) {
+				return nil, nil, marker, r.refuse(RefusedClaimWidth, tick,
+					"the tracker refused to claim %s: %v. The run is HELD, not failed: nothing it was holding is "+
+						"lost — every dispatched attempt's marker is on %s and its commits are on its own branch, "+
+						"and running the epic again under this run id adopts them by identity rather than "+
+						"dispatching over them. A claim lives until its tick CLOSES, so the width frees itself as "+
+						"the ticks already in flight finish; if it does not, look at what else holds a claim under "+
+						"this epic", tick, err, r.opts.Remote)
+			}
 			return nil, nil, marker, fmt.Errorf("claim %s: %w", tick, err)
 		}
 		r.record(tick, StageClaimed, "claimed for %s", r.opts.Owner)

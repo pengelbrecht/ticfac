@@ -81,12 +81,28 @@ type fakeTracker struct {
 	// calls counts what was asked of the tracker, so "the tick was closed
 	// twice" is a number and not an impression.
 	calls map[string]int
+
+	// claims is the tracker's own view of the width (tick 3mp): how many ticks
+	// are claimed and not yet closed, and the most that were ever open at once.
+	// It is a POINTER so the relocated fakes share one count, the way they
+	// share one mutex — they are one tracker, and a width counted per copy
+	// would be no width at all.
+	claims *claimCount
+}
+
+// claimCount is what tk counts: claims open, and the high-water mark. refuseAt
+// makes the tracker refuse a claim that would exceed a width, which is the
+// guard epic dha hit.
+type claimCount struct {
+	open     int
+	peak     int
+	refuseAt int
 }
 
 // In is the fake's half of the reconciler's relocation: the same tracker, with
 // its records written into another checkout.
 func (f *fakeTracker) In(dir string) Tracker {
-	return &fakeTracker{path: f.path, mu: f.mu, dir: dir, calls: f.calls}
+	return &fakeTracker{path: f.path, mu: f.mu, dir: dir, calls: f.calls, claims: f.claims}
 }
 
 type trackerState struct {
@@ -111,7 +127,10 @@ type trackerState struct {
 
 func newTracker(t *testing.T, dir string) *fakeTracker {
 	t.Helper()
-	tracker := &fakeTracker{path: filepath.Join(dir, "tracker.json"), mu: &sync.Mutex{}, calls: map[string]int{}}
+	tracker := &fakeTracker{
+		path: filepath.Join(dir, "tracker.json"), mu: &sync.Mutex{},
+		calls: map[string]int{}, claims: &claimCount{},
+	}
 	state := trackerState{
 		Epic:  "qeu",
 		Waves: [][]string{{"a1", "a2"}, {"b1"}, {"rv", "co"}},
@@ -271,9 +290,43 @@ func (f *fakeTracker) Show(_ context.Context, tickID string) (tk.Tick, error) {
 
 func (f *fakeTracker) Claim(_ context.Context, tickID, owner string) (tk.Tick, error) {
 	f.tally("claim:" + tickID)
+	// tk's own guard, in the fake (tick 3mp): a claim lives until its tick
+	// closes, and one beyond the declared width is REFUSED with the typed
+	// error the real tk returns for exit 8.
+	f.mu.Lock()
+	if f.claims.refuseAt > 0 && f.claims.open >= f.claims.refuseAt {
+		open := f.claims.open
+		f.mu.Unlock()
+		return tk.Tick{}, &tk.ErrDispatchWidth{
+			Command:  "claim",
+			ExitCode: 8,
+			Stderr: fmt.Sprintf("wave width %d is full: %d implementer(s) already in flight; claiming %s would make %d",
+				f.claims.refuseAt, open, tickID, open+1),
+		}
+	}
+	f.claims.open++
+	if f.claims.open > f.claims.peak {
+		f.claims.peak = f.claims.open
+	}
+	f.mu.Unlock()
 	return f.mutate(tickID, func(tick *tk.Tick) {
 		tick.Status, tick.Owner = "in_progress", owner
 	})
+}
+
+// peakClaims is the most claims this tracker ever had open at once: the number
+// a width assertion reads, rather than the reconciler's own bookkeeping.
+func (f *fakeTracker) peakClaims() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.claims.peak
+}
+
+// refuseClaimsBeyond makes this tracker enforce a width, as tk does.
+func (f *fakeTracker) refuseClaimsBeyond(width int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claims.refuseAt = width
 }
 
 func (f *fakeTracker) Note(_ context.Context, tickID, text string) (tk.Tick, error) {
@@ -285,6 +338,13 @@ func (f *fakeTracker) Note(_ context.Context, tickID, text string) (tk.Tick, err
 
 func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	f.tally("close:" + tickID)
+	// The claim ends HERE and nowhere earlier, which is the whole of tick 3mp:
+	// a settled attempt still being integrated is still claimed.
+	f.mu.Lock()
+	if f.claims.open > 0 {
+		f.claims.open--
+	}
+	f.mu.Unlock()
 	return f.mutate(tickID, func(tick *tk.Tick) {
 		tick.Status, tick.ClosedReason = "closed", "closed by ticfac"
 	})
