@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-aqm-5-go",
+  "provenance": {
+    "run_id": "epic-dha",
+    "tick_id": "aqm",
+    "attempt": 5,
+    "source_ref": "refs/heads/epic/dha",
+    "source_sha": "f3a9541661c4bdd0ca7f6bbc222c835ef1abe469",
+    "integration_ref": "refs/heads/epic/dha",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:fd39dcc4a747ef642f48a634ad254f35bfd4528ca49be0a28039f9ceac4c8175",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-20T09:41:13Z",
+  "finished_at": "2026-09-20T09:47:09Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t49.106s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.878s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.405s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t176.250s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t73.782s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t43.166s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t2.103s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.839s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t1.345s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t2.533s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.489s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t2.524s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t2.390s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t2.347s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t3.887s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t2.109s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.048s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t2.066s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.940s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.638s\n--- FAIL: TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain (30.22s)\n    findings_test.go:648: failure 2 finding(s) this run drafted are still waiting for a person — \"An upstream finding routed to another repository\" (upstream-tick, severity low, tick rv, for pengelbrecht/ticks); \"A finding the fake runner proposes\" (proposed-tick, severity high, tick rv, for this repository) — and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode here, and this is the one decision point. Triage each with `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` (promote into the repository it targets), `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --discard --by \"\u003cwho\u003e\"`, or — when the finding was repaired inside this epic — `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`, then run the epic again under this run id: the gate has already passed, so the close-out's close is the only step left. The drafts are keys 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d, d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 under .ticfac/runs/r-fixture/findings/ on origin, listed by `ticfac findings qeu`, want the review tick's own untriaged finding\n--- FAIL: TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch (30.69s)\n    findings_test.go:538: failure 2 finding(s) this run drafted are still waiting for a person — \"An upstream finding routed to another repository\" (upstream-tick, severity low, tick rv, for pengelbrecht/ticks); \"A finding the fake runner proposes\" (proposed-tick, severity high, tick rv, for this repository) — and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode here, and this is the one decision point. Triage each with `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"` (promote into the repository it targets), `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --discard --by \"\u003cwho\u003e\"`, or — when the finding was repaired inside this epic — `ticfac finding qeu 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d|d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 --fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`, then run the epic again under this run id: the gate has already passed, so the close-out's close is the only step left. The drafts are keys 206b5433bac796580bb965f4a0e2aa88c2dbefec2e53af9be0d944f012fa345d, d3cbd2b13a8f16674a4f08242fd24320861948dceb242a97ad32fb1f436136e4 under .ticfac/runs/r-fixture/findings/ on origin, listed by `ticfac findings qeu`, want the review tick's own untriaged finding\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/reconcile\t345.353s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t1.418s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.858s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t2.056s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t2.424s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t113.016s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.855s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t1.207s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.992s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:8f8312bf40cc243edaeffafe7deded9973861ba49554d58e1b9cc5fbf2bf9321",
+  "persistence_uri": "git:refs/heads/epic/dha:.ticfac/runs/epic-dha/evidence/gate-aqm-5-go.json"
+}
