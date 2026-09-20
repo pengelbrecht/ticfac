@@ -45,6 +45,7 @@ func feedReader(t *testing.T, retry runstate.RemoteRetry) (*Reconciler, func() [
 // epic-ncv needed a person is that nobody could tell a run waiting on a
 // remote from a run that had stopped emitting, so a retry that fixed the
 // death and said nothing would trade one invisible failure for another.
+// short: the retry policy over a stubbed sleep and an in-memory feed
 func TestARetryIsSaidOutLoudInTheRunsFeed(t *testing.T) {
 	t.Parallel()
 	r, feed := feedReader(t, runstate.RemoteRetry{
@@ -89,6 +90,7 @@ func TestARetryIsSaidOutLoudInTheRunsFeed(t *testing.T) {
 // "The remote reset us" and "the remote reset us four times" are the same
 // sentence about two very different remotes, and only the second tells an
 // operator the run waited before it stopped.
+// short: the retry policy over a stubbed sleep and an in-memory feed
 func TestARunThatGaveUpSaysHowManyTimesItTried(t *testing.T) {
 	t.Parallel()
 	r, feed := feedReader(t, runstate.RemoteRetry{
@@ -126,6 +128,7 @@ func TestARunThatGaveUpSaysHowManyTimesItTried(t *testing.T) {
 // The feed is the second half of the classification: a run that stopped on a
 // rejected key must not show a person a run that spent its bound waiting on
 // the network, because that is where they would then go looking.
+// short: the retry policy over a stubbed sleep and an in-memory feed
 func TestATerminalRemoteFailureLeavesNoRetryInTheFeed(t *testing.T) {
 	t.Parallel()
 	r, _ := feedReader(t, runstate.RemoteRetry{

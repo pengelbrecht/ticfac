@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // A real origin: a bare repository in a temp directory, with the EpicRun
@@ -32,6 +33,7 @@ type origin struct {
 
 func newOrigin(t *testing.T) *origin {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not on the path")
 	}

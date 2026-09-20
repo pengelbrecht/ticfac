@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"encoding/json"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"reflect"
 	"sort"
 	"strings"
@@ -94,6 +95,7 @@ func encodeStep(t *testing.T, step casStep) []byte {
 }
 
 func TestCASSequencesRunAgainstARealOrigin(t *testing.T) {
+	shorttest.EndToEnd(t)
 	c := loadContract(t)
 	if len(c.CAS.Sequences) != 7 {
 		t.Errorf("the contract carries %d CAS sequences; bundle 3.0.0 carries 7", len(c.CAS.Sequences))
@@ -165,6 +167,7 @@ func TestCASSequencesRunAgainstARealOrigin(t *testing.T) {
 // pays for both jobs. So the guard is switched off and every sequence that
 // expects a refusal must stop matching the contract.
 func TestDisablingTheGuardBreaksEverySequenceThatExpectsARefusal(t *testing.T) {
+	shorttest.EndToEnd(t)
 	c := loadContract(t)
 
 	refusing := 0

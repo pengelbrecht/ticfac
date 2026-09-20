@@ -195,6 +195,7 @@ func validateDocument(t *testing.T, s *schema.Schema, defs map[string]*schema.Sc
 
 // The layout, the tag pattern and the CAS mode per record are contract text
 // this package restates in Go. Restating is fine; drifting is not.
+// short: the contract bundle read and compared with this package's own vocabulary
 func TestThePathHelpersAreTheContractsLayout(t *testing.T) {
 	c := loadContract(t)
 
@@ -246,6 +247,7 @@ func TestThePathHelpersAreTheContractsLayout(t *testing.T) {
 
 // The outcome vocabulary is the fake's, because a second implementation that
 // renames the outcomes cannot be compared with the first.
+// short: the contract bundle read and compared with this package's own vocabulary
 func TestOutcomesAreTheContractsVocabulary(t *testing.T) {
 	c := loadContract(t)
 

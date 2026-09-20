@@ -33,6 +33,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 )
 
+// short: an AST scan of this package's own test files
 func TestEveryTestRunsInParallelOrSaysWhyItCannot(t *testing.T) {
 	t.Parallel()
 

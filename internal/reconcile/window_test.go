@@ -302,6 +302,7 @@ tree = { command = "exit 3", description = "always refuses" }
 //
 // This is about identity, which this run treats as load-bearing: a feed line
 // that cannot say which attempt it is about is a line nobody can act on.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestARefreshDoesNotRevertAnAttemptTheWindowIsHolding(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{ticks: []runstate.TickState{
@@ -339,6 +340,7 @@ func TestARefreshDoesNotRevertAnAttemptTheWindowIsHolding(t *testing.T) {
 
 // And a tick the window admitted that origin has never heard of survives the
 // refresh rather than vanishing from the run's own state.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestARefreshKeepsATickOriginHasNotHeardOf(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{ticks: []runstate.TickState{{TickID: "a2", State: "dispatched", Attempt: 8}}}
@@ -360,6 +362,7 @@ func TestARefreshKeepsATickOriginHasNotHeardOf(t *testing.T) {
 // the default wipe threshold is 20 minutes and a gate may run to 45. Without
 // excuseWindow the very next poll of a healthy attempt reads as wiped, and the
 // run refuses work that was never in trouble.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestABusyRunDoesNotReadItsOwnGateAsAWipe(t *testing.T) {
 	t.Parallel()
 	clock := time.Now()
@@ -410,6 +413,7 @@ func TestABusyRunDoesNotReadItsOwnGateAsAWipe(t *testing.T) {
 }
 
 // A gap that stayed under the threshold is unremarkable and says nothing.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestAShortGateSaysNothing(t *testing.T) {
 	t.Parallel()
 	clock := time.Now()

@@ -9,6 +9,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // The final review's two blockers, and the repairs around them.
@@ -121,6 +122,7 @@ func TestOriginsHeadIsNotMergedWhenItIsNotTheHeadThatWasCollected(t *testing.T) 
 // its own — so a second attempt works in the same checkout whether or not the
 // first one's teardown ever ran.
 func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *testing.T) {
+	shorttest.EndToEnd(t)
 	t.Parallel()
 	t.Run("the rejected attempt is disposed", func(t *testing.T) {
 		t.Parallel()

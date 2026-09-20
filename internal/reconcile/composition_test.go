@@ -209,6 +209,7 @@ func TestAnAttemptThatTouchesAnUndeclaredFileIsRefused(t *testing.T) {
 
 // The parsing rules the two halves share, at unit size: normalisation, the
 // directory declaration, and the malformed shapes the run-level check refuses.
+// short: parses the touch declarations — source text in, table out
 func TestTouchDeclarationsParseAndCoverMechanically(t *testing.T) {
 	t.Parallel()
 	files, bad := parseTouchLabels("a1", []string{"chore", "touch:./collect.go", "touch:collect.go", "touch:internal/reconcile/"})

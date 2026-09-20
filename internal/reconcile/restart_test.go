@@ -12,6 +12,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // Restart: the reconciler is killed at three points a crash could genuinely
@@ -31,6 +32,7 @@ import (
 //	                          cut: a close recorded before the tracker has it
 //	                          is a false close.
 func TestARestartFromAFreshCloneNeitherRedispatchesNorFalselyCloses(t *testing.T) {
+	shorttest.EndToEnd(t)
 	t.Parallel()
 	cases := []struct {
 		name  string

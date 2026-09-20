@@ -196,6 +196,7 @@ func TestAReleaseNeverRecordsTheOperatorIdentity(t *testing.T) {
 // IS one, whole. The truncation to 32 hex characters was a false label over
 // 128 bits, and 32 hex is exactly the shape of a cloud account id, so every
 // run record carrying one tripped a public-repo account detector.
+// short: one digest
 func TestDigestOfIsAFullSha256(t *testing.T) {
 	t.Parallel()
 	got := digestOf("anything")

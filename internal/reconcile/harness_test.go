@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -33,6 +35,16 @@ import (
 var executorBin string
 
 func TestMain(m *testing.M) {
+	// Under -short every test that would drive this binary skips itself in
+	// newFixture, so building it would be seconds of the gate spent on a
+	// path nothing takes. flag.Parse() first: testing.Short() panics if it is
+	// read before the flags are parsed, and m.Run() is what normally parses
+	// them.
+	flag.Parse()
+	if testing.Short() {
+		os.Exit(m.Run())
+	}
+
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
@@ -410,6 +422,7 @@ type testRepo struct {
 // origin to push to.
 func newRepo(t *testing.T, root, name, gate string) *testRepo {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	dir := filepath.Join(root, name)
 	origin := filepath.Join(root, name+"-origin.git")
 
@@ -455,6 +468,7 @@ func newRepo(t *testing.T, root, name, gate string) *testRepo {
 // it needs has to come from origin.
 func cloneRepo(t *testing.T, origin, dir string) *testRepo {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	mustRun(t, filepath.Dir(dir), "git", "clone", "--quiet", origin, dir)
 	configure(t, dir)
 	resolved, err := filepath.EvalSymlinks(dir)
@@ -617,6 +631,7 @@ type fixtureOptions struct {
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	root := t.TempDir()
 	gate := opts.gate
 	if gate == "" {

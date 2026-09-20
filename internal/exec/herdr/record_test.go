@@ -19,6 +19,7 @@ import (
 //     attempt record, because that is the shape a restarted controller holds;
 //   - an agent name is a legal herdr name and unique per attempt.
 
+// short: handle decoding and the agent-name rules, in memory
 func TestLocalRefusesAHandleFromAnotherExecutor(t *testing.T) {
 	h := &subprocess.JobHandle{Executor: subprocess.ExecutorName, Handle: map[string]any{"state": "/tmp/x"}}
 	if _, err := local(h); err == nil {
@@ -27,6 +28,7 @@ func TestLocalRefusesAHandleFromAnotherExecutor(t *testing.T) {
 	}
 }
 
+// short: handle decoding and the agent-name rules, in memory
 func TestLocalRefusesAHandleWithNoState(t *testing.T) {
 	if _, err := local(&subprocess.JobHandle{Executor: ExecutorName}); err == nil {
 		t.Fatal("a handle carrying no state directory decoded: nothing can be re-addressed through it")
@@ -101,6 +103,7 @@ func TestTheHandleRoundTripsThroughJSON(t *testing.T) {
 	}
 }
 
+// short: handle decoding and the agent-name rules, in memory
 func TestAgentNameIsALegalHerdrName(t *testing.T) {
 	for _, check := range []struct {
 		tick    string
@@ -134,6 +137,7 @@ func TestAgentNameIsALegalHerdrName(t *testing.T) {
 // that keeps a second attempt of one tick from colliding with a first one
 // whose agent is still live. The TICK ID is truncated, never the
 // discriminator.
+// short: handle decoding and the agent-name rules, in memory
 func TestAgentNameNeverTruncatesTheAttemptDiscriminator(t *testing.T) {
 	long := "averylongtickidentifierthat-will-not-fit-inside-32-chars"
 	seen := map[string]bool{}

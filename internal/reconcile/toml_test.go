@@ -14,6 +14,7 @@ import (
 // The one table the reconciler is allowed to read, in both spellings, and the
 // refusals that keep it from reading anything else.
 
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestGateCommandsReadTheInlineTableSpelling(t *testing.T) {
 	t.Parallel()
 	got, err := parseGateCommands(`
@@ -46,6 +47,7 @@ which-go = { command = "which go", description = "Go toolchain on PATH" }
 	}
 }
 
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestGateCommandsReadTheSubTableSpelling(t *testing.T) {
 	t.Parallel()
 	got, err := parseGateCommands(`
@@ -64,6 +66,7 @@ description = "Go"
 // [environment.commands] configures somebody else's process. The reconciler
 // running one of those would be the reconciler running a command nothing
 // authorised, so the reader must not see them at all.
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestOnlyTheTestingCommandsTableIsRead(t *testing.T) {
 	t.Parallel()
 	got, err := parseGateCommands(`
@@ -81,6 +84,7 @@ kind = "claude"
 	}
 }
 
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestCommentsAndQuotedHashesAreHandled(t *testing.T) {
 	t.Parallel()
 	got, err := parseGateCommands(`
@@ -95,6 +99,7 @@ go = { command = "go test -run 'A#B' ./...", description = "Go" } # trailing
 	}
 }
 
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestAGateWithNoCommandIsRefused(t *testing.T) {
 	t.Parallel()
 	_, err := parseGateCommands("[testing.commands.go]\ndescription = \"Go\"\n")
@@ -103,6 +108,7 @@ func TestAGateWithNoCommandIsRefused(t *testing.T) {
 	}
 }
 
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestABareStringCommandIsRefused(t *testing.T) {
 	t.Parallel()
 	_, err := parseGateCommands("[testing.commands]\ngo = \"go test ./...\"\n")
@@ -115,6 +121,7 @@ func TestABareStringCommandIsRefused(t *testing.T) {
 // `description` (contracts/runners-config-contract.json, testing.commands). A
 // third key is not a future schema addition to tolerate — it is a malformed
 // entry, and the refusal must name the file and the offending line.
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestAThirdKeyInACommandsEntryIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, document := range []string{
@@ -133,6 +140,7 @@ func TestAThirdKeyInACommandsEntryIsRefused(t *testing.T) {
 
 // This repository's own runners.toml is the one document the reader must not
 // get wrong: it is what the epic's integrated gate runs.
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestThisRepositorysGateIsReadable(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()
@@ -182,6 +190,7 @@ func TestThisRepositorysGateIsReadable(t *testing.T) {
 // hit it on its first gate: bzx's ran against three live workers competing for
 // the machine, crossed 30 minutes, and was killed undiagnosed. The tick was
 // refused for the run's own scheduling rather than for anything about its work.
+// short: the gate-file parser over strings, and two reads of this checkout's own gate
 func TestTheHarnessBoundOutlivesEveryDeclaredGateBound(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()

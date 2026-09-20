@@ -1,6 +1,7 @@
 package runstate
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"strings"
 	"testing"
 )
@@ -75,6 +76,7 @@ func TestAFindingIsProposedAsADraftOnOrigin(t *testing.T) {
 // is deduplicated against the original proposal and proposes nothing new —
 // including when the original was discarded.
 func TestARepeatedFindingProposesNothingNewWhateverHappenedToTheOriginal(t *testing.T) {
+	shorttest.EndToEnd(t)
 	for _, tc := range []struct {
 		name    string
 		triage  string
@@ -210,6 +212,7 @@ func TestARoutedFindingKeepsItsTargetAndNamesItAtPromotion(t *testing.T) {
 	}
 }
 
+// short: the draft funnel's refusals, decided in memory
 func TestTheDraftRefusesEverythingTheFunnelRefuses(t *testing.T) {
 	finding := testFinding("d34db33f")
 
@@ -235,6 +238,7 @@ func TestTheDraftRefusesEverythingTheFunnelRefuses(t *testing.T) {
 	}
 }
 
+// short: the draft funnel's refusals, decided in memory
 func TestAPromotedDraftWithoutATickIsRefused(t *testing.T) {
 	finding := testFinding("d34db33f")
 	finding.Status, finding.TriagedAt, finding.TriagedBy = FindingPromoted, "2026-09-11T19:00:00Z", "the operator"

@@ -14,6 +14,7 @@ import (
 // types, re-encoded, and put back through the contract's schemas: a field these
 // types cannot express, or one they invent, fails here.
 
+// short: golden records through the Go types and the contract's schemas
 func TestGoldenRecordsRoundTripThroughTheGoTypes(t *testing.T) {
 	c := loadContract(t)
 	schemas, defs := contractSchemas(t)
@@ -59,6 +60,7 @@ func TestGoldenRecordsRoundTripThroughTheGoTypes(t *testing.T) {
 // The evidence record crosses the seam: this package places the file and
 // contracts/job-protocol.json defines what is in it. So the golden evidence is
 // round-tripped through the Go type and validated against THAT definition.
+// short: golden records through the Go types and the contract's schemas
 func TestGoldenEvidenceRoundTripsAndValidatesAgainstTheContractThatDefinesIt(t *testing.T) {
 	c := loadContract(t)
 	s, defs := evidenceSchema(t)
@@ -103,6 +105,7 @@ func TestGoldenEvidenceRoundTripsAndValidatesAgainstTheContractThatDefinesIt(t *
 // reader, by the validation, or by both. A writer that would happily persist a
 // document the bundle refuses is a writer that puts the run's record beyond the
 // reach of everything that reads it.
+// short: golden records through the Go types and the contract's schemas
 func TestEveryNegativeDocumentIsRefusedByThisPackage(t *testing.T) {
 	c := loadContract(t)
 	if len(c.Invalid) == 0 {
@@ -137,6 +140,7 @@ func TestEveryNegativeDocumentIsRefusedByThisPackage(t *testing.T) {
 // The union: an evidence record carries inline output or artifact output, never
 // both and never neither. An `anyOf` with two arms satisfied is a record two
 // readers disagree about.
+// short: golden records through the Go types and the contract's schemas
 func TestEvidenceOutputIsAClosedUnion(t *testing.T) {
 	inline := Output{Inline: &InlineOutput{Mode: "inline", MaxBytes: 4096}}
 	raw, err := json.Marshal(inline)
@@ -167,6 +171,7 @@ func TestEvidenceOutputIsAClosedUnion(t *testing.T) {
 // Provenance is required-and-nullable in every field, and the difference is the
 // point: "this ran before integration" and "nobody recorded where it ran" are
 // different claims.
+// short: golden records through the Go types and the contract's schemas
 func TestProvenanceRefusesAnOmittedFieldAndAcceptsANullOne(t *testing.T) {
 	full := map[string]any{}
 	for _, field := range provenanceFields {
@@ -201,6 +206,7 @@ func TestProvenanceRefusesAnOmittedFieldAndAcceptsANullOne(t *testing.T) {
 
 // The closed vocabularies, as Go values. A state meaning "in flight" that no
 // other reconciler can settle is the exact failure these enums prevent.
+// short: golden records through the Go types and the contract's schemas
 func TestClosedVocabulariesMatchTheContract(t *testing.T) {
 	c := loadContract(t)
 

@@ -25,6 +25,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // testRepo is a repository with one commit and a bare origin to push to.
@@ -38,6 +39,7 @@ type testRepo struct {
 
 func newRepo(t *testing.T, name string) *testRepo {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	root := t.TempDir()
 	dir := filepath.Join(root, name)
 	origin := filepath.Join(root, name+"-origin.git")
@@ -210,6 +212,7 @@ type harnessOptions struct {
 // status file the fake agent (or the test) writes.
 func newHarness(t *testing.T, opts harnessOptions) *harness {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	repo := newRepo(t, "repo")
 	root := t.TempDir()
 	state := filepath.Join(root, "agent")

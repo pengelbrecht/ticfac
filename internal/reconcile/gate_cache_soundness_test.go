@@ -48,6 +48,7 @@ import (
 // the module root, reached by an absolute path built from the working
 // directory. Get either of those wrong and the experiment answers about a
 // different shape — mbv found three shapes that disagreed.
+// short: a throwaway module of two files and two `go test` runs in it, ~0.7s — and it is the guard that says the gate's own cache cannot serve a stale pass, so every tick wants it
 func TestACachedPassCannotHideAnEditToAFileAGuardReads(t *testing.T) {
 	t.Parallel()
 	// Resolved, and this is not a detail: a module reached through a symlink

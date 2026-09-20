@@ -16,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/schema"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // The run event feed (tick u9l, epic av8; the contract is
@@ -264,6 +265,7 @@ func TestALostFeedSignalChangesNoVerdict(t *testing.T) {
 // It is not a regression from the liveness probe (tick dh1): the same tree
 // passes this test repeatedly in isolation.
 func TestTheWaitUsesTheExecutorsCadenceNotTheRuns(t *testing.T) {
+	shorttest.EndToEnd(t)
 	t.Parallel()
 
 	hold := func(t *testing.T, count int, opts Options) []time.Duration {
@@ -401,6 +403,7 @@ var _ Executor = (*holdingInspector)(nil)
 // failed. The number belongs to the dispatch the moment its marker is on
 // origin: every line from there — the claim, the start failure — is about it.
 func TestClaimAndStartFailureLinesCarryTheAttemptTheyAreAbout(t *testing.T) {
+	shorttest.EndToEnd(t)
 	t.Parallel()
 
 	// claimAndFailure returns the attempt numbers on a1's LAST claimed line
