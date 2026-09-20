@@ -316,11 +316,16 @@ type gateCommand struct {
 	shell   *gateShell
 	started string
 
-	// began is when this check started, beat is when it last said so, and
-	// stalled records that it has already been warned about — once per check,
-	// for the reason the attempt's own stall warning is written once: a
-	// warning repeated every minute is a warning nobody reads.
-	began   time.Time
+	// beat is when this check last said so, in the same wall clock the shell
+	// records its own start in, and stalled records that it has already been
+	// warned about — once per check, for the reason the attempt's own stall
+	// warning is written once: a warning repeated every minute is a warning
+	// nobody reads.
+	//
+	// What is NOT here any more is when the check STARTED (tick m4n). That
+	// belongs to the shell: this wrapper can be rebuilt around a live shell,
+	// and a clock that restarts with the wrapper reports the wrapper's age
+	// rather than the gate's.
 	beat    time.Time
 	stalled bool
 }
@@ -349,7 +354,7 @@ func (r *Reconciler) startGateCommand(command GateCommand, key string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("prepare the gate worktree at %s: %w", short(merged.GateSHA), err)
 	}
-	shell, err := startShell(dir, command.Command, r.opts.GateTimeout)
+	shell, err := startShell(dir, command.Command, r.opts.GateTimeout, r.now())
 	if err != nil {
 		remove()
 		return nil, nil, err
@@ -361,7 +366,7 @@ func (r *Reconciler) startGateCommand(command GateCommand, key string,
 	return &gateCommand{
 		command: command, key: key, dir: dir, remove: remove, shell: shell,
 		started: now.UTC().Format(time.RFC3339),
-		began:   now, beat: now,
+		beat:    now.Round(0),
 	}, nil, nil
 }
 
@@ -382,14 +387,17 @@ func (r *Reconciler) announceGate(g *gateCommand, marker attemptHandle, merged m
 	if r.gateHeartbeat < 0 {
 		return
 	}
-	now := r.now()
+	// Wall, with the monotonic reading stripped, because this is the clock the
+	// feed stamps its own lines with and an operator subtracts one from the
+	// other (tick m4n).
+	now := r.now().Round(0)
 	if now.Sub(g.beat) < r.gateHeartbeat {
 		return
 	}
 	g.beat = now
 
-	elapsed := now.Sub(g.began).Round(time.Second)
-	left := (r.opts.GateTimeout - now.Sub(g.began)).Round(time.Second)
+	elapsed := g.shell.age(now).Round(time.Second)
+	left := g.shell.remaining().Round(time.Second)
 	bytes, at := g.shell.written()
 	produced := fmt.Sprintf("%d bytes of output", bytes)
 	idle := elapsed
@@ -952,7 +960,36 @@ type gateShell struct {
 	outPath  string
 	errPath  string
 	donePath string
-	deadline time.Time
+
+	// The gate's clock lives HERE, on the shell, and not on the gateCommand
+	// wrapper around it (tick m4n). Two separate reasons, and they want
+	// different clocks:
+	//
+	//   - startedAt is WALL time with the monotonic reading stripped
+	//     (Round(0)), because it is what the heartbeat REPORTS. An operator
+	//     reads "running for 5m2s" beside a feed line stamped 07:14:44 and
+	//     subtracts; those two numbers have to come from the same clock. They
+	//     did not: `began` came off time.Now() carrying a monotonic reading,
+	//     and on a host whose monotonic clock does not advance while it is
+	//     suspended — every darwin laptop — time.Sub silently measured AWAKE
+	//     time while the feed's own stamps measured wall. On epic dha the
+	//     go gate reported 1m0s, 2m1s, 3m1s, 4m2s, 5m2s across beats that
+	//     were 17, 16, 29 and 18 WALL minutes apart. The giveaway was in the
+	//     same sentence: "last 16m9s ago" was right, because an mtime carries
+	//     no monotonic reading and that subtraction fell back to wall. One
+	//     line, two clocks, and only the alarming half was true.
+	//
+	//   - deadline keeps its monotonic reading, deliberately, because it
+	//     bounds WORK rather than describing it. A gate that got five minutes
+	//     of a suspended laptop's attention has spent five minutes of its
+	//     bound, and killing it because the lid was shut for an hour would
+	//     manufacture exactly the false refusal cy2 is about.
+	//
+	// Putting both on the shell also answers m4n's other half: the wrapper
+	// can be rebuilt around a live shell without the clock restarting, so a
+	// re-derived finish reports the gate's real age rather than its own.
+	startedAt time.Time
+	deadline  time.Time
 }
 
 // gateSentinelScript is the wrapper the gate's shell runs: the declared command
@@ -968,21 +1005,24 @@ var errGateKilled = errors.New("the gate command was killed before it reported a
 // startShell starts one declared gate command and returns without waiting for
 // it.
 //
-// The bound is measured on the WALL CLOCK rather than on the reconciler's own
-// `now`. It is a bound on a process this host is running, not on anything the
-// run reasons about, and a run whose clock a test or a replay holds still must
-// not thereby hold a real `sh` open forever.
-func startShell(dir, command string, timeout time.Duration) (*gateShell, error) {
+// The bound is measured on the host's own clock rather than on the
+// reconciler's `now`: it bounds a process this host is running, not anything
+// the run reasons about, and a run whose clock a test or a replay holds still
+// must not thereby hold a real `sh` open forever. `now` is the run's clock and
+// is what the heartbeat reports from — see the field comments above for why
+// those are two different clocks on purpose.
+func startShell(dir, command string, timeout time.Duration, now time.Time) (*gateShell, error) {
 	scratch, err := os.MkdirTemp("", "ticfac-gate-io-")
 	if err != nil {
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
 	s := &gateShell{
-		scratch:  scratch,
-		outPath:  filepath.Join(scratch, "stdout"),
-		errPath:  filepath.Join(scratch, "stderr"),
-		donePath: filepath.Join(scratch, "exit"),
-		deadline: time.Now().Add(timeout),
+		scratch:   scratch,
+		outPath:   filepath.Join(scratch, "stdout"),
+		errPath:   filepath.Join(scratch, "stderr"),
+		donePath:  filepath.Join(scratch, "exit"),
+		startedAt: now.Round(0),
+		deadline:  time.Now().Add(timeout),
 	}
 	out, err := os.Create(s.outPath)
 	if err != nil {
@@ -1053,6 +1093,15 @@ func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
 	}
 }
 
+// age is how long this shell has been running, in the same wall clock the feed
+// stamps its lines with, and remaining is how much of its bound is left in the
+// monotonic clock that bound is actually enforced in. The two are equal on a
+// host that never suspends and diverge on one that does; reporting each from
+// the clock that governs it is the whole of tick m4n.
+func (s *gateShell) age(now time.Time) time.Duration { return now.Round(0).Sub(s.startedAt) }
+
+func (s *gateShell) remaining() time.Duration { return time.Until(s.deadline) }
+
 // written is how much output the command has produced so far and when it last
 // produced any: the gate's equivalent of the branch tip and worktree mtime that
 // dh1 reads off a worker (liveness.go).
@@ -1090,7 +1139,7 @@ func readGateOutput(path string) string {
 // else to do while a gate runs — and it is what the process-group kill is
 // proved through.
 func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
-	s, err := startShell(dir, command, timeout)
+	s, err := startShell(dir, command, timeout, time.Now())
 	if err != nil {
 		return "", "", -1, err
 	}
