@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 146,
-  "state": "running",
-  "reason": "attempt 10 of nu9 is rejected (missing-result): it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10 (commit c91d027c7c13): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10^ refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
-  "updated_at": "2026-09-20T13:52:32Z",
+  "sequence": 147,
+  "state": "failed",
+  "reason": "attempt 10 of nu9 is missing-result: it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10 (commit c91d027c7c13): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10^ refs/ticfac/wip/run-epic-dha/tick-nu9/attempt-10` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
+  "updated_at": "2026-09-20T13:52:35Z",
   "ticks": [
     {
       "tick_id": "4sb",
