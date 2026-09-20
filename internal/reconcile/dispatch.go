@@ -1567,9 +1567,21 @@ type inflightAttempt struct {
 	executor Executor
 	marker   attemptHandle
 
-	step     *Step
-	deadline time.Time
-	cursor   string
+	step *Step
+
+	// deadline is when this attempt's ISSUED BUDGET is spent, in CALENDAR
+	// time: the dispatch stamp off the durable marker plus the wall clock it
+	// was issued. It is deliberately a wall-clock comparison — see
+	// settlementDeadline — and on its own it is not enough to refuse anything.
+	//
+	// addressing is when THIS RUN began addressing the attempt, read from the
+	// run's own clock, so the interval since is monotonic (tick 8jl). It is
+	// the other half of the refusal, and the half a suspended host cannot
+	// forge.
+	deadline   time.Time
+	addressing time.Time
+
+	cursor string
 	// interval is the cadence this attempt is addressed at. It is the
 	// EXECUTOR's, not one global constant (tick u9l, epic av8), so a window
 	// holding a local and a cloud attempt addresses each at its own beat.
@@ -1610,9 +1622,10 @@ type inflightAttempt struct {
 func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
 	fl := &inflightAttempt{
 		entry: entry, handle: handle, executor: executor, marker: marker,
-		step:     r.OpenStep(r.stepCap),
-		deadline: r.settlementDeadline(marker),
-		interval: r.pollIntervalFor(marker.Executor),
+		step:       r.OpenStep(r.stepCap),
+		deadline:   r.settlementDeadline(marker),
+		addressing: r.now(),
+		interval:   r.pollIntervalFor(marker.Executor),
 	}
 	// The baseline the liveness count is measured against is taken HERE, not
 	// at the first probe (tick dh1). The worktree exists by now — the
@@ -1705,22 +1718,16 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		// is the reason to look while there is still an attempt to look at.
 		r.announceStall(fl)
 
-		// The reconciler's OWN deadline. The job's wall clock is the
-		// supervisor's to enforce, and a supervisor that died without settling
-		// enforces nothing: `running` then rests on a pid, and a pid is a
-		// number the operating system reuses — one that belongs to somebody
-		// else's process now answers signal 0 (and EPERM, "alive and not ours
-		// to signal", answers it too). Nothing in the poll loop notices,
-		// because the wipe threshold measures the interval between polls and
-		// not the age of the job, so the run would address a dead attempt
-		// forever at perfect cadence.
+		// The reconciler's OWN deadline: its budget spent in calendar time AND
+		// this run's own patience spent, awake, watching it. Both halves, in
+		// the clocks that answer them honestly — unaddressable says why, and
+		// tick 8jl says what a host suspend did before it took two.
 		//
-		// Past its own wall clock plus a full wipe threshold of grace for the
-		// supervisor to write its terminal record, an attempt still reading
-		// `running` is one nobody can say is running. That is `unaddressed`,
-		// not `wiped`: the substrate did not take it away, and a person is the
-		// next actor (settle.go).
-		if now := r.now(); now.After(fl.deadline) {
+		// An attempt that satisfies both, still reading `running`, is one
+		// nobody can say is running. That is `unaddressed`, not `wiped`: the
+		// substrate did not take it away, and a person is the next actor
+		// (settle.go).
+		if over, watched, unaddressable := r.unaddressable(fl); unaddressable {
 			// What the executor last SAW goes in the refusal, because the two
 			// shapes need different first moves. A local subprocess whose
 			// supervisor died leaves a pid nobody can trust. A herdr agent can
@@ -1729,11 +1736,13 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			// re-delivered at every poll, and a refusal about a dead supervisor
 			// sent the reader at the wrong problem (tick emk).
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and its executor "+
-					"could not settle it: %s. Nobody can say it is finished; look at it, stop whatever is still "+
-					"running, then release it with `ticfac settle %s %s %d --release \"<who>\"`",
-				marker.Attempt, marker.TickID, status.State, now.Sub(fl.deadline).Round(time.Second),
-				r.opts.WallSeconds, lastObservation(status), r.opts.EpicID, marker.TickID, marker.Attempt)
+				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
+					"watched it for %s without it settling. Its executor could not settle it: %s. Nobody can say "+
+					"it is finished; look at it, stop whatever is still running, then release it with "+
+					"`ticfac settle %s %s %d --release \"<who>\"`",
+				marker.Attempt, marker.TickID, status.State, over.Round(time.Second),
+				r.opts.WallSeconds, watched.Round(time.Second), lastObservation(status),
+				r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
 		// The poll IS the keepalive. Its answer is about the substrate, not
@@ -1948,7 +1957,66 @@ func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 	if at, ok := r.dispatchedAt(marker); ok {
 		issued = at
 	}
-	return issued.Add(time.Duration(r.opts.WallSeconds)*time.Second + r.wipeThreshold)
+	// CALENDAR time, deliberately, and the monotonic reading is stripped so it
+	// is calendar time whoever asks (tick 8jl). The dispatch stamp comes off
+	// the durable marker as RFC3339 and so has no monotonic reading of its
+	// own; making that explicit here means the comparison in addressOnce reads
+	// the same way on a fresh dispatch and on an adopted one, instead of
+	// silently changing clock depending on whether the marker could be read.
+	//
+	// The grace that used to be added here — a wipe threshold for the
+	// supervisor to write its terminal record — has moved to the OTHER half of
+	// the refusal, where it is spent in the run's own clock. What is left is
+	// the one thing calendar time answers honestly: the attempt's issued
+	// budget is spent.
+	return issued.Add(time.Duration(r.opts.WallSeconds) * time.Second).Round(0)
+}
+
+// unaddressable is the reconciler's own deadline, and it takes TWO clocks to
+// state honestly (tick 8jl).
+//
+// The bound exists because a job's wall clock is the supervisor's to enforce
+// and a supervisor that died without settling enforces nothing: `running` then
+// rests on a pid, and a pid is a number the operating system reuses. Nothing in
+// the poll loop notices, because the wipe threshold measures the interval
+// between polls and not the age of the job, so the run would address a dead
+// attempt forever at perfect cadence.
+//
+// What it must never do is refuse an attempt that was merely not being worked
+// on. Until this tick the whole test was `now.After(fl.deadline)` against a
+// deadline parsed out of the durable marker — a WALL comparison — so a host
+// that suspended aged every live attempt past its bound while it slept, and the
+// first poll after the lid opened refused all of them at once. On an operator's
+// laptop, which is where these runs live, closing the lid killed healthy runs
+// and the refusal named the attempts rather than the sleep. Epic dha woke with
+// four attempts 5 to 7 hours past their wall clocks; every one of them settled
+// SUCCESSFULLY within a minute of the machine waking.
+//
+// So the two halves are asked in the clocks that answer them:
+//
+//   - Has the attempt's issued budget been spent? CALENDAR time, from the
+//     durable dispatch stamp. An agent issued an hour has had its hour when an
+//     hour of the world has passed; that is what the operator bought.
+//   - Has THIS RUN watched it, awake, long enough to conclude nobody can say it
+//     is running? MONOTONIC time, from when this run began addressing it, for a
+//     full wipe threshold — the same grace the formula always carried and the
+//     same clock the wipe threshold beside it already spends (guards.go). Time
+//     the host spent asleep is time nobody spent watching.
+//
+// Both, or no refusal. The second half is the one a suspended host cannot
+// forge, and it is also what makes a RESUMED run safe: an incarnation that has
+// just adopted an attempt has watched it for zero seconds and does not refuse
+// something it has not yet addressed even once.
+func (r *Reconciler) unaddressable(fl *inflightAttempt) (over time.Duration, watched time.Duration, ok bool) {
+	now := r.now()
+	if !now.After(fl.deadline) {
+		return 0, 0, false
+	}
+	watched = now.Sub(fl.addressing)
+	if watched < r.wipeThreshold {
+		return 0, 0, false
+	}
+	return now.Sub(fl.deadline), watched, true
 }
 
 // dispatchedAt is when the attempt's own durable marker on origin says it was

@@ -76,7 +76,12 @@ func TestABlockerClosingMidRunAdmitsItsDependentWithoutARestart(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		// The refusal, not just the count (tick atn). This test failed once in
+		// a loaded parallel suite with nothing but "closed []" to go on, which
+		// is the same message whether the run was refused, starved or never
+		// dispatched at all — and the reason is the whole diagnosis.
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 
 	dispatched := map[string]int{}
