@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 79,
-  "state": "gating",
-  "reason": "running the integrated gate for 80x on fcd85122d4bc",
-  "updated_at": "2026-09-20T09:36:23Z",
+  "sequence": 80,
+  "state": "publishing",
+  "reason": "closing 80x behind the integrated gate on fcd85122d4bc",
+  "updated_at": "2026-09-20T09:36:46Z",
   "ticks": [
     {
       "tick_id": "4sb",
