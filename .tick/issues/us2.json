@@ -2,13 +2,14 @@
   "id": "us2",
   "title": "Cloud attempts must match the job_handle contract and push the attempt's write_ref",
   "description": "Two contract breaks the review found in the same area; they belong together because both make a cloud attempt unreadable by the tools that read a local one.\n\n1. The cloud worker pushes a PER-TICK branch rather than the attempt's write_ref (finding 1d778f96). The attempt's identity is its ref; pushing somewhere else means the reconciler's collect looks where the contract says and finds nothing.\n2. Cloud attempt records do not match the job_handle contract or local provenance (finding fdb454df).\n\nThe point of the compatibility host is that its records are INDISTINGUISHABLE from a local run's — that is z23's own acceptance wording. These two make them distinguishable, and the contract test that should have caught it evidently does not cover the cloud path.\n\nFrom pxc, findings 1d778f96 and fdb454df.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "A cloud attempt's branch and records validate against the same contracts a local attempt's do, with a test that runs the contract suite against a cloud-produced record",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:20.04447Z",
-  "updated_at": "2026-09-19T13:50:20.04447Z"
+  "updated_at": "2026-09-20T14:38:35.528753Z",
+  "started_at": "2026-09-20T14:38:35.528753Z"
 }
