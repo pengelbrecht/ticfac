@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 156,
-  "state": "running",
-  "reason": "ox0 is closed",
-  "updated_at": "2026-09-20T13:56:13Z",
+  "sequence": 157,
+  "state": "dispatching",
+  "reason": "dispatching t5p as attempt 15",
+  "updated_at": "2026-09-20T13:56:27Z",
   "ticks": [
     {
       "tick_id": "4sb",
