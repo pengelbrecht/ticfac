@@ -1730,9 +1730,24 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         // lease already lapsed, or was taken over) must not turn a terminal
         // verdict into a wedged Workflow — the rooms' alarms sweep what it
         // leaves behind.
+        // releaseSlot RETURNS its refusal rather than throwing it, so the
+        // catch below never sees one (tick eg9). Best-effort is the right
+        // policy; discarding the answer is not — a refusal carries the
+        // holder that has the slot instead, which is the one fact a reader
+        // needs and the only evidence that the slot was left behind.
         await step.do("release-publish-slot", async () => {
           try {
-            await room().releaseSlot(holder);
+            const released = await room().releaseSlot(holder);
+            if (!released.ok) {
+              const holds =
+                "holder" in released && released.holder !== null
+                  ? `${released.holder.run_id} holds it until ${released.holder.expires_at}`
+                  : "nobody holds it";
+              console.error(
+                `run ${params.run_id} did not release the publish slot for ${params.project}: ` +
+                  `${released.error}: ${released.detail}; ${holds}`,
+              );
+            }
           } catch (error) {
             console.error(
               `run ${params.run_id} could not release the publish slot for ${params.project}: ${String(error)}`,
@@ -1744,10 +1759,23 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
           try {
             // The release is what ignites a queued submission (D22): a
             // finished run hands the project to whatever waited behind it.
-            await roomFor(env, params.project).releaseDispatchLease({
+            const released = await roomFor(env, params.project).releaseDispatchLease({
               run_id: params.run_id,
               token: params.lease_token,
             });
+            if (!released.ok) {
+              // Same shape as the slot above (tick eg9): the refusal is
+              // RETURNED, so the catch never sees it, and a lease left held
+              // wedges every submission parked behind this project.
+              const holds =
+                "holder" in released && released.holder !== null
+                  ? `${released.holder.run_id} holds it until ${released.holder.expires_at}`
+                  : "nobody holds it";
+              console.error(
+                `run ${params.run_id} did not release the dispatch lease for ${params.project}: ` +
+                  `${released.error}: ${released.detail}; ${holds}`,
+              );
+            }
           } catch (error) {
             console.error(
               `run ${params.run_id} could not release the dispatch lease for ${params.project}: ${String(error)}`,
