@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 199,
-  "state": "gating",
-  "reason": "running the integrated gate for nu9 on 766fbdfc7f0c",
-  "updated_at": "2026-09-20T15:53:31Z",
+  "sequence": 200,
+  "state": "publishing",
+  "reason": "closing nu9 behind the integrated gate on 766fbdfc7f0c",
+  "updated_at": "2026-09-20T15:54:33Z",
   "ticks": [
     {
       "tick_id": "4sb",
