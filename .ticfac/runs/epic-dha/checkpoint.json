@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 154,
-  "state": "gating",
-  "reason": "running the integrated gate for ox0 on b1eaaa0e15a2",
-  "updated_at": "2026-09-20T13:54:56Z",
+  "sequence": 155,
+  "state": "publishing",
+  "reason": "closing ox0 behind the integrated gate on b1eaaa0e15a2",
+  "updated_at": "2026-09-20T13:55:57Z",
   "ticks": [
     {
       "tick_id": "4sb",
