@@ -781,6 +781,10 @@ export class TrackerClient {
     const found = all.find((t) => t.id === id);
     if (found === undefined)
       return { state: "refused", reason: "not_found", detail: `no tick ${id}` };
+    // reconciler-decision:D28:begin:claim — this claim reads the tick's
+    // existence and the wave width, never its blockers; the local window
+    // holds a tick behind its blockers before the claim is ever made
+    // (decisions/reconciler-parity.json, D26 and D28).
     const width = await this.#width();
     if (typeof found.parent === "string" && found.parent !== "" && width.value > 0) {
       const inFlight = all.filter(
@@ -805,6 +809,7 @@ export class TrackerClient {
         };
       }
     }
+    // reconciler-decision:D28:end:claim
     return this.#commit(id, (tick) => {
       // Idempotent re-claim: an already in_progress tick keeps its started_at.
       if (tick.status !== "in_progress") {

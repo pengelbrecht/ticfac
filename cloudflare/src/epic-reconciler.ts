@@ -36,6 +36,14 @@
  * ticks and this module's tests do. A Workflow that closed ticks without
  * integrating them would write `completed` over work nobody proved, which is
  * exactly the false success the Go reconciler exists to refuse.
+ *
+ * And where this host's semantics deliberately DIVERGE from the Go
+ * reconciler's — the admission boundaries it does not carry, the per-repo
+ * publish slot, the lapsed-slot re-acquire, the named PR base — each
+ * divergence is a numbered decision in `decisions/reconciler-parity.json`
+ * (D26-D33, tick sz0), pinned to the code regions that implement it on both
+ * sides and held by `internal/reconcile`'s parity check: two implementations
+ * of one reconciler may differ only where a decision says so.
  */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
@@ -468,6 +476,11 @@ export class EpicReconciler {
   ): Promise<PassResult | null> {
     const { client, store } = this.#deps;
     const role = plan.find((entry) => entry.tick_id === tickID)?.role ?? "implement-tick";
+    // reconciler-decision:D31:begin:gate-order — the close-out's close gate
+    // runs BEFORE the integration call, one step left of the local order
+    // (there: integrated gate, then CI gate), so a held gate re-derives
+    // without re-performing the merge (decisions/reconciler-parity.json,
+    // D31).
     if (role === "closeout-epic" && (await this.#closeoutRule()).declared) {
       // The close-out's OTHER CI gate (the sqx position, ported): the
       // admission's green is not evidence about the head the close-out's own
@@ -475,6 +488,10 @@ export class EpicReconciler {
       const gate = await this.#gateCloseoutClose(tickID, rows, checkpoint, dispatchedThisPass);
       if (gate !== null) return gate;
     }
+    // reconciler-decision:D31:end:gate-order
+    // reconciler-decision:D31:begin:integration-boundary — no integration
+    // host, no close: the run stops naming the boundary rather than writing
+    // `completed` over unproven work (decisions/reconciler-parity.json, D31).
     if (this.#deps.integration === undefined) {
       // The recorded decision (module header): no integration host, no close,
       // no false completion. The run stops naming the boundary rather than
@@ -492,6 +509,7 @@ export class EpicReconciler {
         dispatched: dispatchedThisPass,
       };
     }
+    // reconciler-decision:D31:end:integration-boundary
     const outcome = await this.#deps.integration.integrate({
       tick_id: tickID,
       attempt,
@@ -551,9 +569,13 @@ export class EpicReconciler {
     return this.#deps.client.ref;
   }
 
+  // reconciler-decision:D32:begin:baseref — this host's PR base is named by
+  // the submitter (default `main`); the local close-out resolves the remote's
+  // HEAD instead (decisions/reconciler-parity.json, D32).
   #baseRef(): string {
     return this.#deps.baseRef ?? "main";
   }
+  // reconciler-decision:D32:end:baseref
 
   #now(): Date {
     return this.#deps.now?.() ?? new Date();
@@ -933,6 +955,10 @@ export class EpicReconciler {
       }
     }
 
+    // reconciler-decision:D33:begin:plan-cadence — every pass re-derives
+    // the world from the durable authorities, plan included; the local host
+    // replans only when an attempt closes (decisions/reconciler-parity.json,
+    // D33).
     const graph = await this.#deps.client.graph(store.epicID);
     if (graph === null) {
       return {
@@ -943,6 +969,7 @@ export class EpicReconciler {
       };
     }
     const plan = planFrom(graph);
+    // reconciler-decision:D33:end:plan-cadence
     if (plan.length === 0) {
       return {
         terminal: true,
@@ -1115,9 +1142,14 @@ export class EpicReconciler {
     let live = this.#liveCount(rows);
     const markers = await store.attempts();
     for (const entry of plan) {
+      // reconciler-decision:D26:begin:admission — this host's admission is
+      // the width and the row's readiness only: no wave boundary, no blocker
+      // read, no wave-composition refusal (decisions/reconciler-parity.json,
+      // D26).
       if (width > 0 && live >= width) break;
       const row = rows.get(entry.tick_id);
       if (row === undefined || row.state !== "ready") continue;
+      // reconciler-decision:D26:end:admission
 
       // A marker this tick holds that no row admits: a dispatch by an
       // incarnation that died between writing the marker and checkpointing
@@ -1146,6 +1178,10 @@ export class EpicReconciler {
       // marker is durable evidence a PREVIOUS incarnation was admitted and
       // dispatched, and adoption is the resume of that dispatch, never a
       // second admission over it.
+      // reconciler-decision:D27:begin:closeout-admission — the one hold-back
+      // this host carries: the close-out's admission waits for the review to
+      // settle; nothing runs alone here (decisions/reconciler-parity.json,
+      // D27).
       if (entry.role === "closeout-epic" && (await this.#closeoutRule()).declared) {
         // The close-out follows the review: the body the PR must carry
         // names the FINAL review's verdict, and a review still in flight
@@ -1158,7 +1194,11 @@ export class EpicReconciler {
         const admission = await this.#admitCloseout(rows, checkpoint, dispatchedThisPass);
         if (admission !== null) return admission; // a hold, or a typed refusal
       }
+      // reconciler-decision:D27:end:closeout-admission
 
+      // reconciler-decision:D26:begin:claim-wait — the tracker's own
+      // refusal is the barrier here: the claim is asked, and a full window is
+      // a wait, where the local window never asks for what tk would refuse.
       const claim = await client.claim(entry.tick_id, `run-${store.runID}`);
       if (claim.state === "refused") {
         if (claim.reason === "wave_full") break; // a full window is a wait, not a failure
@@ -1166,6 +1206,7 @@ export class EpicReconciler {
         await this.#checkpoint("failed", reason, rows);
         return { terminal: true, state: "failed", reason, dispatched: dispatchedThisPass };
       }
+      // reconciler-decision:D26:end:claim-wait
 
       // Attempt numbers are RUN-WIDE identity, not per-tick ordinals: they
       // name the marker, the branch and every record of this dispatch. The
@@ -1351,6 +1392,10 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       params.poll_interval_ms ?? env.TICFAC_RECONCILE_POLL_MS ?? DEFAULT_RECONCILE_POLL_MS;
 
     const room = () => env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(params.project));
+    // reconciler-decision:D29:begin:slot-key — the slot is keyed by the
+    // REPOSITORY (one writer per project, across epics); the local host has
+    // no slot — its guard is the run branch's own compare-and-swap
+    // (decisions/reconciler-parity.json, D29).
     // The slot outlives a poll beat threefold so one slow pass cannot lose it,
     // and stays inside the lease's own pinned bounds.
     const slotTtlMs = Math.min(MAX_LEASE_TTL_MS, Math.max(DEFAULT_LEASE_TTL_MS, pollMs * 3));
@@ -1366,6 +1411,7 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         ttl_ms: slotTtlMs,
       }),
     );
+    // reconciler-decision:D29:end:slot-key
     if (!acquired.ok) {
       // The tick's acceptance, answered: two concurrent runs cannot both
       // write, and the loser stops naming the holder. It cannot even record
@@ -1449,6 +1495,10 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         if (renewal.ok) {
           token = renewal.lease.token;
         } else if (renewal.error === "lease_lost" && renewal.lost === "expired") {
+          // reconciler-decision:D30:begin:lapse — a lapsed (not taken) slot
+          // is re-acquired under the room's CAS and the run continues, where
+          // the local host rebuilds a lost push lease rather than ending
+          // (decisions/reconciler-parity.json, D30).
           // Lapsed, not taken: re-derive, under the room's own CAS — another
           // run may have taken the slot in the gap, and then this acquire
           // refuses naming it, which is the run stopping, below.
@@ -1464,6 +1514,7 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
               again.error === "lease_held"
                 ? `the publish slot for ${params.project} was taken over by run ${again.holder.run_id} while this run lapsed`
                 : `the publish slot for ${params.project} refused this run: ${again.detail}`;
+          // reconciler-decision:D30:end:lapse
         } else if (renewal.error === "lease_lost") {
           // Taken: another run is this repository's writer now.
           slotFailure =

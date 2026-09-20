@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "record": "reconciler-parity",
+  "note": "Every intentional semantic difference between the Go reconciler (internal/reconcile) and the Workflow reconciler (cloudflare/src/epic-reconciler.ts) is a numbered decision here, and every decision is pinned to the code regions that implement it on each side with reconciler-decision markers. decisions/README.md is the charter; internal/reconcile/parity_decision_test.go is the check, and it runs in the per-tick gate. The numbers continue the cloud-factory series (D1-D25), which lives in the ticks repository's docs/design/cloud-factory.md; the same rule governs both: two implementations of one thing, and no difference unless a decision says so.",
+  "decisions": [
+    {
+      "id": "D26",
+      "tick": "sz0",
+      "title": "The Workflow host admits across wave boundaries; the tracker's own refusal is the only barrier",
+      "go": "The window's admission (mayAdmit, internal/reconcile/window.go) refuses, before the tracker is ever asked, a tick whose wave is later than any held tick's and a tick blocked by a held tick — 'do not start work that depends on unfinished work' — and counts width in CLAIMS, because 'a run must never ask the tracker for something the tracker will refuse' (tick 3mp). The wave composition is refused at admission too: two ticks of one wave that declare the same file never dispatch (composition.go).",
+      "workflow": "The dispatch loop (epic-reconciler.ts) admits in plan order, held back only by the window's live count and the rows' readiness: a later-wave tick is dispatched while earlier-wave attempts are still in flight, and a tick is claimed while its blockers are open. The barrier that comes back is the claim's own wave_full refusal — a wait, not an ask the run avoided — and there is no wave-composition refusal.",
+      "why": "Recorded divergence, bounded by the integration boundary (D31): on this host every attempt boots from the epic base the submitter named (base_sha, base_ref refs/heads/main), not from an integration branch carrying earlier waves' merged code, so the wave barrier's protective reason — a later wave's worker must see the wave it was sequenced behind — has no tree to protect here, and the plan's wave ordering plus the tracker's own width refusal stand in. A blocked tick claimed here is discovered by its worker, which reports BLOCKED and stops the run: a paid-for attempt instead of a held dispatch. When integration is wired (D31), this decision is the one to revisit — the barrier must then either be ported or recorded again.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/reconcile/window.go",
+          "region": "boundaries",
+          "digest": "sha256:9553de46437766f84dd90775d6634d199b964f5e8981bcfc9d5180452a67fb27"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "admission",
+          "digest": "sha256:50bf91f7de9d578f1dc717466dd86d406fafdb00fe091e87b8ba7a9bf7990683"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "claim-wait",
+          "digest": "sha256:bf405d6f56e00e0c72d4b94f0669c406a17aaea77a24d42b2bf1820457d01494"
+        }
+      ]
+    },
+    {
+      "id": "D27",
+      "tick": "sz0",
+      "title": "Review and close-out do not run alone on the Workflow host",
+      "go": "A role job is admitted only when the window holds nothing, and nothing is admitted while a role job is held (mayAdmit's two isRoleJob refusals): review and close-out are about a finished epic, so they run alone.",
+      "workflow": "The skeleton sort still puts review and close-out last in the plan, and the close-out's admission waits for the review to settle (#reviewUnsettled) before it composes the PR body — but alone-ness is not enforced: a review can be dispatched while implement attempts are still in flight, and an implement tick can be admitted while a review is.",
+      "why": "Recorded divergence, same boundary as D26: the review's answer is a recorded decision on the run branch, and the close-out's admission reads THAT record rather than the window's emptiness, so the ordering the local host enforces structurally is enforced here only at the close-out's admission. The gap is real and named: until integration lands (D31), the review may read an epic whose last attempts have not settled. Revisit with D26.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/reconcile/window.go",
+          "region": "isrole-next",
+          "digest": "sha256:bcbd475455dd453903f1716928cdf9b90a309be2c7b4c3df0af68966add4d07f"
+        },
+        {
+          "side": "go",
+          "file": "internal/reconcile/window.go",
+          "region": "isrole-holder",
+          "digest": "sha256:c87a6c9d8acabd0b359b26f7cd54a611d8069be1bfdcd96c797ddef0174cf28e"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "closeout-admission",
+          "digest": "sha256:03124888d5c36296be374ee594e02d3e8cef36206d8ceedb2757cbf6f7ff7363"
+        }
+      ]
+    },
+    {
+      "id": "D28",
+      "tick": "sz0",
+      "title": "The claim path reads no blockers",
+      "go": "The window reads the tick's open blockers (planEntry.BlockedBy, derived from the graph) and holds a tick behind them before the claim is ever made; the tracker's claim itself (the tk contract, pinned in contracts/tk-json-manifest.json) refuses only width. The Go side of this rule is pinned by D26's window region.",
+      "workflow": "The contract client's claim (tracker-client.ts) checks the tick's existence and the wave width — never its blockers. The graph computes blocked_by (agent_ready), but neither the dispatch loop (D26) nor the claim reads it.",
+      "why": "Recorded with D26, which is where the omission lives in the loop; this decision pins the client's half so the read cannot appear on one path only. The failure mode on this host is the worker's own BLOCKED answer stopping the run, rather than a dispatch the window held back.",
+      "anchors": [
+        {
+          "side": "ts",
+          "file": "cloudflare/src/tracker-client.ts",
+          "region": "claim",
+          "digest": "sha256:2f48e548426f7eb40ada22465d5bdbb2977525542cdc10951da70749f2eb25bb"
+        }
+      ]
+    },
+    {
+      "id": "D29",
+      "tick": "sz0",
+      "title": "The publish slot is per repository, not per epic",
+      "go": "The local host has no single-writer slot: the run's guard is the compare-and-swap on its own run branch (internal/runstate), so two runs of DIFFERENT epics in one repository proceed concurrently on their own branches, and the tracker's width bounds one epic.",
+      "workflow": "One RepoRoom publish slot per repository: a run takes the repository's slot for its whole life, so two runs of the same repository cannot overlap even when they are of different epics and write different branches. The second stops naming the holder, and cannot even record its own failure — a checkpoint write would be a publish too.",
+      "why": "The room's serialized publisher is what makes this host's repository writes single-writer at all, and the room is keyed by the name being written — the repository — so the slot's granularity is the publisher's (repo-room.ts states the rule: 'the name being written is what has to be serialised'). The narrowing is real and recorded: a repository runs one epic at a time on this host where the local host could run one per branch. If per-branch slots are ever wanted, that is a new decision replacing this one, in the room's own design.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/runstate/store.go",
+          "region": "guard",
+          "digest": "sha256:55b4796a4a4a9d71b762f8d8f868e89b52fc55432aebdcdb8820190611790b07"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "slot-key",
+          "digest": "sha256:6b162c016921eede88b25729d3a02d361e3ed02dd5bfb02af262d3db4d609af7"
+        }
+      ]
+    },
+    {
+      "id": "D30",
+      "tick": "sz0",
+      "title": "A lapsed run re-acquires and continues",
+      "go": "A lost push lease is not a conflict: the branch ref moved for some other path, the commit is rebuilt on the fresh head and pushed again, bounded by maxContendedPushes; a genuine per-path loss is the typed conflict. The run does not end for losing a race it can re-derive from.",
+      "workflow": "A publish slot that LAPSED — expired, not taken — is re-acquired under the room's own compare-and-swap and the run continues on the new token; only a slot taken by another run stops it, naming the taker.",
+      "why": "The same rule expressed for a lease the run holds rather than a ref it pushes: durability comes from the compare-and-swap, and losing the lease temporarily is a fact to re-derive from, not a verdict. A lapse is the normal case for a run that outlives its slot (a slow pass, a long gate), so ending the run for it would make the lease the run's own single point of failure.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/runstate/store.go",
+          "region": "lost-lease",
+          "digest": "sha256:29e4f1ecdd9b8101dc40b85077a995871f6706c478719a60fb07c000a04d0b14"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "lapse",
+          "digest": "sha256:35ba143af541f448afb1e4019f17c93829f4359dd9683a327d51a1d1e148c5bf"
+        }
+      ]
+    },
+    {
+      "id": "D31",
+      "tick": "sz0",
+      "title": "Integration and the integrated gate are a wired boundary, not the reconciler's own half",
+      "go": "The finish is the reconciler's own serial half — collect, merge into the EpicRun integration branch, run the integrated gate the repository declares, close, clean up (advanceFinish) — and a tick never closes behind a gate that did not run.",
+      "workflow": "The reconciler refuses to close a reported tick unless an IntegrationHost is wired; with none, the run ends failed naming the integration boundary rather than writing completed over unproven work. The close-out's close gate also runs BEFORE the integration call — one step left of the local order (there: integrated gate, then CI gate) — so a held gate re-derives every pass without re-performing the merge the row says is still pending.",
+      "why": "Recorded before this record existed (the module header's 'one recorded decision'); this entry gives it a number and pins both sides. The boundary is this phase's own sequencing: the serialized publisher (tick ef7) and the container executor (tick k4s) exist, and the Workflow's runs stop at the boundary until the merge-and-gate half is wired as an IntegrationHost. When it is, its integrate() must BE the merge and the gate — or a new decision must record why the host's close is allowed to rest on less.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/reconcile/finish.go",
+          "region": "finish",
+          "digest": "sha256:5e97ecc62888b79bd23cfb3705ed65af9e9cfb28bad2989e84b34e75f222ff55"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "gate-order",
+          "digest": "sha256:4249673e6c4a541fb1655a46c57aba11acb8d534308db362740914feeb53be00"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "integration-boundary",
+          "digest": "sha256:9bfa6d6b6c44b97da9bc6ae11d642458b961debc0c76861e05417f04ce28e098"
+        }
+      ]
+    },
+    {
+      "id": "D32",
+      "tick": "sz0",
+      "title": "The close-out's PR base is named by the submitter, not resolved",
+      "go": "prBase resolves the merge base from the refs git holds: the remote's HEAD first, then the checkout's current branch, then the operator's --base, and main as the documented convention when nothing else resolves.",
+      "workflow": "The Workflow takes base_ref from the submission (default main) and never resolves the remote's HEAD: this host cannot run the git command that resolution is, so the submitter naming the base is the honest replacement for guessing.",
+      "why": "Recorded in the parameter's own doc (tick cxk); this entry pins it. The consequence is a submission against a repository whose default branch is not main refusing at admission unless the submitter names the base — a typed failure, not a wrong merge.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/reconcile/closeout.go",
+          "region": "prbase",
+          "digest": "sha256:e33660f3380aa6a5ece0bb3429d8a7c75e11b706489ec0672a3dc01f2a7a0c2a"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "baseref",
+          "digest": "sha256:23d0e3aa25e2823b34d49ab745bc1940d84fa39c2ca94f5162103e83daefcaf4"
+        }
+      ]
+    },
+    {
+      "id": "D33",
+      "tick": "sz0",
+      "title": "The Workflow re-derives the plan on every pass; the local host replans when an attempt closes",
+      "go": "The plan is a snapshot: it is re-derived (replan) only when an attempt closes — 'the only moment the readiness of any OTHER tick of this epic can have changed' — and at a restart; between settlements the run works the sequencing it was admitted with.",
+      "workflow": "Every pass re-derives the world from the durable authorities — the graph is read and planFrom runs on each reconcile pass, so the Workflow always dispatches against the tracker's current layering, whatever moment the last pass happened at.",
+      "why": "The module header's resume rule ('every step re-derives its decision from the durable records') made per-pass re-derivation the honest shape for a host whose steps are replayed after a restart; this entry gives it a number. The observable difference: a person's mid-run re-wave or close is picked up by the next pass here, while the local host notices it at a finish or a restart. The graph remains the authority on both; nothing here lets the run re-plan anything itself.",
+      "anchors": [
+        {
+          "side": "go",
+          "file": "internal/reconcile/window.go",
+          "region": "replan-cadence",
+          "digest": "sha256:dcc221c1eebaf1bf47b47153d59c20328f201648bfccb909ae30cd40b0e96598"
+        },
+        {
+          "side": "ts",
+          "file": "cloudflare/src/epic-reconciler.ts",
+          "region": "plan-cadence",
+          "digest": "sha256:0d1081e9227606eec7158f606f64f0c8b3c13cee89b90b487457e80c6d99d3e9"
+        }
+      ]
+    }
+  ]
+}
