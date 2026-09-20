@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 55,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-20T08:05:44Z",
+  "sequence": 56,
+  "state": "integrating",
+  "reason": "integrating 6na attempt 3 into epic/dha",
+  "updated_at": "2026-09-20T08:06:19Z",
   "ticks": [
     {
       "tick_id": "4sb",
