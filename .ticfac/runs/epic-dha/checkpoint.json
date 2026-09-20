@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 226,
-  "state": "failed",
-  "reason": "u9h did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 22 of u9h is no-commits: the attempt branch carries no commit beyond the base it was cut from (7a58bd0d0af5). This incarnation was reached after 6 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-09-20T17:44:53Z",
+  "sequence": 227,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-20T17:47:11Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -101,7 +101,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/dha",
-    "source_sha": "3b39bf536e1f384aa6b1ca0a37fd153da0955975",
+    "source_sha": "c2becf481fdf38b8df3d77fe8d7ecd9aef63dc9a",
     "integration_ref": "refs/heads/epic/dha",
     "phase": "worker",
     "executor": null,
