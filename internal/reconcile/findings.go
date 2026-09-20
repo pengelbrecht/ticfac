@@ -26,8 +26,10 @@ import (
 //     `discovered_from` is never empty again;
 //   - a finding targeting ANOTHER repository keeps its target and is routed
 //     there at promotion, rather than dropped;
-//   - a tick whose findings are untriaged is REFUSED its close, which is
-//     what stops one falling on the floor.
+//   - a tick whose findings are untriaged CLOSES, and the finding rides to the
+//     CLOSE-OUT (tick aqm), which does not hand over while any finding of the
+//     run is untriaged — one decision point at the end, where a person is
+//     already being asked to look, instead of one per tick mid-run.
 //
 // The worker never writes the tracker: `.tick/` is a protected prefix, and the
 // draft this package files lives in `.ticfac/`, on the integration branch the
@@ -145,7 +147,8 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		note := fmt.Sprintf("ticfac run %s: attempt %d reported a finding drafted for triage — %s %q "+
 			"(key %s, severity %s, for %s). Triage with `ticfac finding %s %s --promote-as <tick> --by "+
 			"\"<who>\"`, `--discard --by \"<who>\"`, or — when it was repaired inside this epic — "+
-			"`--fixed-as <commit> --by \"<who>\"`; the tick cannot close while it is untriaged.",
+			"`--fixed-as <commit> --by \"<who>\"`; the tick closes and the finding rides to the close-out, "+
+			"which does not hand over while it is untriaged.",
 			r.runID, marker.Attempt, finding.Kind, finding.Title, key, finding.Severity,
 			targetName(finding.Target), r.opts.EpicID, key)
 		if _, err := r.tracker.Note(ctx, marker.TickID, note); err != nil {
@@ -155,11 +158,12 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 	return nil
 }
 
-// untriagedFindings is every finding this tick's attempts reported that is
-// still waiting for a person. Read from ORIGIN, fetched first: a close that
-// checked this run's memory of the drafts rather than the durable record is a
-// close that survives a triage made while the run was stopped.
-func (r *Reconciler) untriagedFindings(tickID string) ([]runstate.Finding, error) {
+// untriagedFindings is every finding this run's attempts reported that is
+// still waiting for a person, whatever tick reported it. Read from ORIGIN,
+// fetched first: a gate that checked this run's memory of the drafts rather
+// than the durable record is a gate that survives a triage made while the
+// run was stopped.
+func (r *Reconciler) untriagedFindings() ([]runstate.Finding, error) {
 	if r.store == nil {
 		return nil, nil
 	}
@@ -172,41 +176,81 @@ func (r *Reconciler) untriagedFindings(tickID string) ([]runstate.Finding, error
 	}
 	var out []runstate.Finding
 	for _, finding := range findings {
-		if finding.TickID == tickID && finding.Status == runstate.FindingProposed {
+		if finding.Status == runstate.FindingProposed {
 			out = append(out, finding)
 		}
 	}
 	return out, nil
 }
 
-// gateOnFindings is the close's other gate: a tick whose findings have not
-// been triaged does not close. It returns the refusal that stops the close, or
-// a nil refusal when there is nothing waiting — and an error only when nobody
-// can say, because an unreadable draft store must not read as "no findings",
-// the same way an unreachable remote never reads as "not merged".
-func (r *Reconciler) gateOnFindings(tick string) (*Refusal, error) {
-	untriaged, err := r.untriagedFindings(tick)
+// gateOnFindings was the per-tick close gate (tick 7vn), and tick aqm
+// removed it: a tick whose findings are untriaged CLOSES, and the gate moved
+// to the close-out (gateCloseoutOnFindings), where one decision point
+// replaces N. What survives here is the count a close RECORDS, so the feed
+// says the tick closed carrying findings rather than closing silently
+// behind them.
+func (r *Reconciler) carriedUntriaged(tick string) int {
+	untriaged, err := r.untriagedFindings()
 	if err != nil {
-		return nil, fmt.Errorf("read the findings drafted for %s: %w", tick, err)
+		// An unreadable draft store must not read as "no findings" — the
+		// same rule the gate kept — but it must not refuse a close the
+		// close-out will refuse either: the close-out's gate re-reads the
+		// store and fails closed there, where the refusal belongs.
+		return 0
+	}
+	n := 0
+	for _, finding := range untriaged {
+		if finding.TickID == tick {
+			n++
+		}
+	}
+	return n
+}
+
+// gateCloseoutOnFindings is the gate the per-tick hold became (tick aqm): the
+// close-out does not hand over while any finding of the run is untriaged,
+// naming them — one decision point at the end, where a person is already
+// being asked to look, instead of one per tick mid-run. The findings are on
+// the epic PR when the repository declares the rule (the body was rewritten
+// from the final records immediately before this gate), so the person the
+// hold asks for reads them where the merge judgement happens; without the
+// rule the durable record under .ticfac/ is the view, listed by
+// `ticfac findings`.
+//
+// prNumber is the epic PR's number when one exists, zero when the repository
+// declares no PR + CI rule. It returns the refusal that stops the hand-over,
+// and an error only when nobody can say — an unreadable draft store must not
+// read as "no findings", the same way an unreachable remote never reads as
+// "not merged".
+func (r *Reconciler) gateCloseoutOnFindings(tick string, prNumber int) (*Refusal, error) {
+	untriaged, err := r.untriagedFindings()
+	if err != nil {
+		return nil, fmt.Errorf("read the run's drafted findings: %w", err)
 	}
 	if len(untriaged) == 0 {
 		return nil, nil
+	}
+	onThePR := ""
+	if prNumber > 0 {
+		onThePR = fmt.Sprintf(" and the epic PR #%d carries each one's full text", prNumber)
 	}
 	keys := make([]string, 0, len(untriaged))
 	titles := make([]string, 0, len(untriaged))
 	for _, finding := range untriaged {
 		keys = append(keys, finding.Key)
-		titles = append(titles, fmt.Sprintf("%q (%s, for %s)", finding.Title, finding.Kind, targetName(finding.Target)))
+		titles = append(titles, fmt.Sprintf("%q (%s, severity %s, tick %s, for %s)",
+			finding.Title, finding.Kind, finding.Severity, finding.TickID, targetName(finding.Target)))
 	}
 	return r.refuse(RefusedFindingUntriaged, tick,
-		"%s reported %d finding(s) nobody has triaged — %s — and the tick is NOT closed: a finding that falls "+
-			"on the floor is the failure this gate exists to stop. Triage each with `ticfac finding %s %s "+
-			"--promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding %s "+
-			"%s --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding %s "+
-			"%s --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has "+
-			"already passed, so the close is the only step left — and the resume closes behind the recorded "+
-			"decision, it does not dispatch the job again. The drafts are key %s under .ticfac/runs/%s/findings/ on %s",
-		tick, len(untriaged), strings.Join(titles, "; "), r.opts.EpicID, strings.Join(keys, "|"), r.opts.EpicID,
+		"%d finding(s) this run drafted are still waiting for a person — %s — and the close-out does "+
+			"not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode "+
+			"here, and this is the one decision point. Triage each with `ticfac finding %s %s --promote-as "+
+			"<tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding %s %s --discard "+
+			"--by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding %s %s "+
+			"--fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already "+
+			"passed, so the close-out's close is the only step left. The drafts are keys %s under "+
+			".ticfac/runs/%s/findings/ on %s, listed by `ticfac findings %s`%s",
+		len(untriaged), strings.Join(titles, "; "), r.opts.EpicID, strings.Join(keys, "|"), r.opts.EpicID,
 		strings.Join(keys, "|"), r.opts.EpicID, strings.Join(keys, "|"), strings.Join(keys, ", "), r.runID,
-		r.opts.Remote), nil
+		r.opts.Remote, r.opts.EpicID, onThePR), nil
 }

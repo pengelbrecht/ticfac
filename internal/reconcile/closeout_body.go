@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The epic PR's body (tick 4sb): the write half of the PR + CI close-out rule.
@@ -103,14 +104,33 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 	body.WriteString("\n## Findings this run drafted\n\n")
 	if len(findings) == 0 {
 		body.WriteString("This run drafted no findings.\n")
-	}
-	for i, finding := range findings {
-		fmt.Fprintf(&body, "%d. %s — %s (%s, for %s), triaged %s\n",
-			i+1, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target), finding.Status)
-		if finding.Body != "" {
-			// The finding's own text, indented under its identity: "every
-			// finding's text" is the acceptance, not just every title.
-			fmt.Fprintf(&body, "\n   %s\n", strings.ReplaceAll(finding.Body, "\n", "\n   "))
+	} else {
+		// Grouped by the tick whose attempt reported the finding (tick aqm):
+		// a person triaging at the close-out — or judging the merge — reads
+		// what each tick's work discovered, beside that tick's own record,
+		// rather than one flat pile. Full text, not a count, because a link
+		// nobody opens is a finding on the floor.
+		body.WriteString("Every finding this run drafted, grouped by the tick whose attempt reported it, each with " +
+			"its own text and triage state.\n")
+		var order []string
+		byTick := make(map[string][]runstate.Finding)
+		for _, finding := range findings {
+			if _, seen := byTick[finding.TickID]; !seen {
+				order = append(order, finding.TickID)
+			}
+			byTick[finding.TickID] = append(byTick[finding.TickID], finding)
+		}
+		for _, tick := range order {
+			fmt.Fprintf(&body, "\n### Tick %s\n\n", tick)
+			for i, finding := range byTick[tick] {
+				fmt.Fprintf(&body, "%d. %s — %s (%s, for %s), triaged %s\n",
+					i+1, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target), finding.Status)
+				if finding.Body != "" {
+					// The finding's own text, indented under its identity: "every
+					// finding's text" is the acceptance, not just every title.
+					fmt.Fprintf(&body, "\n   %s\n", strings.ReplaceAll(finding.Body, "\n", "\n   "))
+				}
+			}
 		}
 	}
 

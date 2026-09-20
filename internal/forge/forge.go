@@ -56,12 +56,18 @@ func ResolveToken() string {
 
 // PullRequest is the epic integration PR: the head ref this run integrates
 // on, the base ref it asks to merge into, and where the forge says it lives.
+// Body is the body the PR carries as the forge READS it back (tick aqm) — the
+// field Find and Open decode, never a copy of what this process last wrote,
+// because the close-out's carried check is a round trip: it asks the forge
+// what the PR says now, and a PR a person (or a lying surface) stripped a
+// finding from must be read as it stands, not as the run remembers it.
 type PullRequest struct {
 	Number  int
 	URL     string
 	HeadRef string
 	HeadSHA string
 	BaseRef string
+	Body    string
 }
 
 // CIState is what CI says on the PR's head, closed. The vocabulary is closed
@@ -253,6 +259,7 @@ func (g GitHub) Find(ctx context.Context, headRef, baseRef string) (*PullRequest
 	var found []struct {
 		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`
+		Body    string `json:"body"`
 		Head    struct {
 			Ref string `json:"ref"`
 			SHA string `json:"sha"`
@@ -272,7 +279,7 @@ func (g GitHub) Find(ctx context.Context, headRef, baseRef string) (*PullRequest
 		}
 		return &PullRequest{
 			Number: pr.Number, URL: pr.HTMLURL, HeadRef: pr.Head.Ref, HeadSHA: pr.Head.SHA,
-			BaseRef: pr.Base.Ref,
+			BaseRef: pr.Base.Ref, Body: pr.Body,
 		}, nil
 	}
 	return nil, nil
@@ -283,6 +290,7 @@ func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) 
 	var created struct {
 		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`
+		Body    string `json:"body"`
 		Head    struct {
 			Ref string `json:"ref"`
 			SHA string `json:"sha"`
@@ -297,7 +305,7 @@ func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) 
 	}
 	return &PullRequest{
 		Number: created.Number, URL: created.HTMLURL, HeadRef: created.Head.Ref, HeadSHA: created.Head.SHA,
-		BaseRef: created.Base.Ref,
+		BaseRef: created.Base.Ref, Body: created.Body,
 	}, nil
 }
 

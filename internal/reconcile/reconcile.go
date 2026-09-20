@@ -654,6 +654,14 @@ const (
 	StageFindingFiled     = "finding_filed"
 	StageFindingDuplicate = "finding_duplicate"
 
+	// StageClosedCarrying is the line a tick's close leaves when it closes
+	// behind findings nobody has triaged yet (tick aqm): the per-tick hold is
+	// gone, the tick closes, and the finding rides to the close-out — so the
+	// feed says what is riding rather than letting the close read as
+	// "nothing found". A close with nothing to carry stays silent, exactly
+	// as it always was.
+	StageClosedCarrying = "closed_carrying"
+
 	// StageStartFailed is the line a failed Start leaves (tick d6s): an
 	// attempt whose marker is on origin but never started. It is recorded
 	// at TICK scope, carrying the attempt it is about, so a feed reader who
@@ -1763,11 +1771,14 @@ const (
 	// this reconciler cannot read — a findings block that does not parse, a
 	// finding outside the vocabularies — and closing the tick behind it would
 	// be the 604 failure with one more step in it: findings read by nobody.
-	// The second is the close's other gate: a tick whose findings nobody has
-	// triaged is not closed, which is the one thing that stops a finding
-	// falling on the floor. They are distinct because they send the next
-	// repair somewhere different — the first at the worker's report block,
-	// the second at the person the draft is waiting for.
+	// The second was the per-tick close gate, and tick aqm MOVED it: a tick
+	// whose findings are untriaged closes, the run continues, and the
+	// close-out does not hand over while any finding of the run is untriaged
+	// — one decision point at the end instead of one per tick mid-run, which
+	// is the one thing that stops a finding falling on the floor. They stay
+	// distinct because they send the next repair somewhere different — the
+	// first at the worker's report block, the second at the person the draft
+	// is waiting for.
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
@@ -1818,6 +1829,18 @@ const (
 	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // CI never ran on the PR head
 	RefusedCloseoutCI        = "closeout_ci_failed"         // CI red; the message names the failing job
 	RefusedCloseoutCIPending = "closeout_ci_pending"        // CI still pending past the run's bound
+
+	// RefusedCloseoutPRFindings is the integrity check that replaces the
+	// per-tick findings hold (tick aqm): a finding the run filed that does
+	// not appear on the epic PR the close-out is about to hand over. The
+	// PR is the one gate a person actually reads — findings ride there, and
+	// a filed finding missing from it is a finding on the floor whatever
+	// green CI says beside it — so the close-out refuses the hand-over. The
+	// repair is whatever dropped the finding: the body write that lied, the
+	// composition that omitted it, or the PR body somebody stripped a
+	// finding from — re-run the epic and the close gate recomposes and
+	// rewrites the body from the record before checking again.
+	RefusedCloseoutPRFindings = "closeout_pr_findings_missing"
 
 	// RefusedCloseoutCIOnClose is CI red on the PR head that includes the
 	// close-out's OWN commits (tick sqx): the head the admission's green CI
@@ -1878,8 +1901,9 @@ const collapsedMessage = "the tick did not pass"
 //     nothing merged;
 //   - RefusedNeedsHuman and RefusedRoleAnswer: the worker or the role job
 //     answered BLOCKED or NEEDS_CONTEXT, and the answer is its deliverable;
-//   - RefusedFindingUntriaged: a tick whose findings nobody has triaged is
-//     refused its close, and the triage is a person's.
+//   - RefusedFindingUntriaged: the close-out does not hand over while a
+//     finding of the run is untriaged (tick aqm moved the hold here from the
+//     per-tick close), and the triage is a person's.
 //
 // Every other refusal is a repair another RUN can make — a gate that runs
 // again on a fixed tree, an attempt that is redispatched once its blocker

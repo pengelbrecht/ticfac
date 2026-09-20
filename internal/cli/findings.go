@@ -118,7 +118,7 @@ func findingsCommand(args []string, stdout, stderr io.Writer) int {
 	if untriaged == 0 {
 		fmt.Fprintf(stdout, "%d finding(s), none waiting for a person; the triage gate is down.\n", len(findings))
 	} else {
-		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; a tick with an untriaged finding cannot close.\n",
+		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; the epic's close-out does not hand over while a finding is untriaged.\n",
 			len(findings), untriaged)
 	}
 	return 0

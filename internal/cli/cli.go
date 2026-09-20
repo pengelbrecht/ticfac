@@ -188,8 +188,10 @@ finding flags:
 A worker that discovers something outside its tick reports it as a typed
 findings block in its report; the reconciler drafts each finding under
 .ticfac/runs/<run-id>/findings/ on the integration branch, stamped with the
-attempt that discovered it. A tick whose findings are untriaged is refused its
-close, which is what stops one falling on the floor. Promotion keeps the
+attempt that discovered it. The tick that reported it closes, the run
+continues, and the finding rides to the close-out — which does not hand
+over while any finding is untriaged, and refuses the hand-over when one is
+missing from the epic PR. Promotion keeps the
 scope decision human: it records the tick YOU created — pass the draft's
 discovered_from to the tracker when you file it, so the attempt that found
 it is never lost again — and nothing here writes the tracker for you.
