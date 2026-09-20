@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 85,
-  "state": "failed",
-  "reason": "aqm did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 5 of aqm does not merge onto epic/dha: ",
-  "updated_at": "2026-09-20T09:37:56Z",
+  "sequence": 86,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-20T09:40:27Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -93,7 +93,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/dha",
-    "source_sha": "cc001498d285dd942cfc1e81c4ba8250167602b2",
+    "source_sha": "909bb9e1dd26f59ab878c612c321e2a7eb1060ac",
     "integration_ref": "refs/heads/epic/dha",
     "phase": "worker",
     "executor": null,
