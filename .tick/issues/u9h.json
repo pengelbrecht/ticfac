@@ -27,6 +27,6 @@
   "acceptance_criteria": "A real epic completes on a deployed Factory driven by EpicReconcilerWorkflow with max_parallel \u003e 1, survives a Workflow restart with an attempt in flight adopted by identity, and reports its intervention count from recorded data",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T17:37:44.279768Z",
-  "updated_at": "2026-09-20T16:26:36.862578Z",
+  "updated_at": "2026-09-20T16:29:26.893766Z",
   "started_at": "2026-09-20T16:05:51.783681Z"
 }
