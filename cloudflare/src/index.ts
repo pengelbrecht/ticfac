@@ -79,6 +79,7 @@ import { runDailyDigest } from "./loop-digest";
 import { observeRoute } from "./observe";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
+import { readRunFeed } from "./run-feed";
 import {
   type MessageRef,
   type Outcome,
@@ -451,6 +452,56 @@ async function logsRoute(url: URL, runID: string, env: Env): Promise<Response> {
 
 /** What may name a worker stream: a tick id, and nothing that walks the tree. */
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * A run's versioned event feed — the same `ticfac.run_event.v1` lines the
+ * local reconciler appends under `.ticfac/logs/`, as the cloud host wrote
+ * them to R2 (tick k7p).
+ *
+ * The transport a laptop reads a cloud run through, and deliberately the
+ * coarse one: a plain authenticated GET of the standing feed, with byte
+ * totals a follower uses as its cursor — the same shape the logs read
+ * serves, because `cloud logs -f` already proved a byte-cursor poll follows
+ * a live run from anywhere. An SSE or WebSocket endpoint would be live-er and
+ * would cost a long-lived connection surface this factory has no other use
+ * for; the run-state branch store is durable but coarse AND would put exhaust
+ * on the integration branch, which the feed's own contract refuses. A
+ * bounded read of an R2 stream costs a run nothing and is followable by any
+ * client that can issue a GET — including a laptop with only the factory
+ * token.
+ *
+ * Best effort both ways, like the feed itself: a run with no artifacts bucket
+ * answers `feed_unavailable`, and no run is refused, gated or slowed by
+ * whether this route can serve it.
+ */
+async function runFeedRoute(runID: string, env: Env): Promise<Response> {
+  // getRun, not runStatus, for the same reason logsRoute gives: the feed is
+  // R2 and the run's index row, and a read that consulted the Workflows
+  // binding would make observability depend on the layer being diagnosed.
+  const run = await getRun(env.DB, runID);
+  if (run === null) {
+    return Response.json({ error: "unknown_run", detail: `no run ${runID}` }, { status: 404 });
+  }
+  if (!env.ARTIFACTS) {
+    return Response.json(
+      {
+        error: "feed_unavailable",
+        detail: "this deployment has no artifacts bucket, so no run event feed was ever written",
+      },
+      { status: 503 },
+    );
+  }
+  const text = await readRunFeed(env.ARTIFACTS, run.project, runID);
+  return Response.json({
+    run_id: runID,
+    project: run.project,
+    state: run.state,
+    trace_id: run.trace_id,
+    text,
+    bytes: text.length,
+    total_bytes: text.length,
+  });
+}
 
 // -------------------------------------------------------------- projects ---
 
@@ -1355,6 +1406,14 @@ export default {
       if (segments.length === 4 && segments[3] === "logs") {
         if (request.method !== "GET") return methodNotAllowed(["GET"]);
         return await logsRoute(url, segments[2]!, env);
+      }
+      // /api/runs/:id/events — the run's versioned event feed, readable
+      // from anywhere the factory is (tick k7p). Read-only like logs: a
+      // subscriber cannot steer a run through a path whose whole rule is
+      // that a lost line changes no verdict.
+      if (segments.length === 4 && segments[3] === "events") {
+        if (request.method !== "GET") return methodNotAllowed(["GET"]);
+        return await runFeedRoute(segments[2]!, env);
       }
     }
 

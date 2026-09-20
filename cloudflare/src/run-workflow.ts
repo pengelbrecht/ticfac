@@ -114,6 +114,17 @@ import {
   tickCompleted,
   tickStarted,
 } from "./run-events";
+import {
+  appendFeed,
+  attemptsSoFar,
+  FINAL_FEED_SEQ,
+  runFinishedFeedEvent,
+  runStartedFeedEvent,
+  START_FEED_SEQ,
+  tickCollectedFeedEvent,
+  tickDispatchedFeedEvent,
+  waveFeedSeq,
+} from "./run-feed";
 import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
@@ -1089,6 +1100,29 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
           : `${cloud_wave.tick_ids.length} tick(s), ${cloud_wave.width} at a time`,
     }),
   ]);
+
+  // The same moment, on the other feed (tick k7p): the board gets its own
+  // protocol shape above, and the versioned run-event feed gets the line a
+  // subscriber on a laptop can parse — same identity, same vocabulary, one
+  // segment the CLI follows from anywhere. Inside the checkpointed `context`
+  // step, so a replayed Workflow rewrites the same key rather than appending
+  // a second copy; and best effort, so a run with no artifacts bucket — or a
+  // full one — notices nothing.
+  await appendFeed(env, {
+    project: params.project,
+    run_id: params.run_id,
+    seq: START_FEED_SEQ,
+    events: [
+      runStartedFeedEvent({
+        run_id: params.run_id,
+        detail: `run started: ${
+          cloud_wave === null
+            ? "one orchestrator container"
+            : `${cloud_wave.tick_ids.length} tick(s), ${cloud_wave.width} at a time`
+        }`,
+      }),
+    ],
+  });
 
   return { ok: true, context };
 }
@@ -2719,8 +2753,16 @@ export async function superviseCloudWave(
     // booted, because a wave that boots and then wedges is exactly the run an
     // operator needs to see the shape of. One publish per batch, never one per
     // tick: a wave's events are generated together and one DO hop carries them.
-    await step.do(`cloud:events:started:${tag}${i}`, OBSERVE_RETRIES, async () =>
-      publishRunEvents(
+    //
+    // The versioned feed learns the same thing in the same checkpointed step
+    // (tick k7p): one segment per batch, the lines the CLI follows live. The
+    // attempt on each line is counted from what this run already collected,
+    // so a tick the orchestrator re-requests in a later wave is attempt 2 and
+    // not a second attempt 1.
+    const feedSeq = waveFeedSeq(wave, i, false);
+    const collectedSoFar = outcomes.map((outcome) => outcome.collect.tick_id);
+    await step.do(`cloud:events:started:${tag}${i}`, OBSERVE_RETRIES, async () => {
+      await publishRunEvents(
         env,
         params.project,
         batch.map((tick) =>
@@ -2731,8 +2773,22 @@ export async function superviseCloudWave(
             ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
           }),
         ),
-      ),
-    );
+      );
+      await appendFeed(env, {
+        project: params.project,
+        run_id: params.run_id,
+        seq: feedSeq,
+        events: batch.map((tick) =>
+          tickDispatchedFeedEvent({
+            run_id: params.run_id,
+            tick_id: tick,
+            attempt: attemptsSoFar(collectedSoFar, tick) + 1,
+            detail: `worker container dispatched (wave ${wave + 1}, batch ${i + 1})`,
+          }),
+        ),
+      });
+      return { published: true };
+    });
 
     const ran = await runWaveBatch(env, step, params, context, plan, collector, batch, {
       wave,
@@ -2791,8 +2847,10 @@ export async function superviseCloudWave(
     // cancelled mid-batch is exactly when an operator most needs the board to
     // show what the containers that did run actually produced. Returning first
     // would hide a cancelled batch's real outcomes behind the cancellation.
-    await step.do(`cloud:events:collected:${tag}${i}`, OBSERVE_RETRIES, async () =>
-      publishRunEvents(
+    const collectedSeq = waveFeedSeq(wave, i, true);
+    const collectedIDs = outcomes.map((outcome) => outcome.collect.tick_id);
+    await step.do(`cloud:events:collected:${tag}${i}`, OBSERVE_RETRIES, async () => {
+      await publishRunEvents(
         env,
         params.project,
         dispatched.outcomes.map((outcome) => {
@@ -2810,8 +2868,36 @@ export async function superviseCloudWave(
             ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
           });
         }),
-      ),
-    );
+      );
+      // The feed carries the same facts in the same checkpointed step (tick
+      // k7p). `outcomes` already holds this batch, so the attempt on a
+      // collected line is the count itself — the number its dispatch line
+      // carried — and a replayed Workflow rewrites the same segment key
+      // rather than appending a second copy of a line.
+      await appendFeed(env, {
+        project: params.project,
+        run_id: params.run_id,
+        seq: collectedSeq,
+        events: dispatched.outcomes.map((outcome) => {
+          const reported = outcome.launched || outcome.settled !== undefined;
+          const message =
+            outcome.collect.status === ""
+              ? outcome.collect.detail
+              : `${outcome.collect.status}${
+                  outcome.collect.detail === "" ? "" : ` — ${outcome.collect.detail}`
+                }`;
+          return tickCollectedFeedEvent({
+            run_id: params.run_id,
+            tick_id: outcome.collect.tick_id,
+            attempt: attemptsSoFar(collectedIDs, outcome.collect.tick_id),
+            detail: reported
+              ? `verdict ${outcome.collect.verdict}: ${message}`
+              : `not launched: ${outcome.detail}`,
+          });
+        }),
+      });
+      return { published: true };
+    });
 
     if (dispatched.cancelled !== null) {
       const trip = tripFromCancellation(dispatched.cancelled);
@@ -3159,6 +3245,23 @@ export async function finalize(
         : { duration_ms: Math.max(0, Date.parse(endedAt) - Date.parse(run.started_at)) }),
     }),
   ]);
+
+  // The run's own terminal line, on the versioned feed a laptop follows (tick
+  // k7p) — the same `run_finished` stage the local reconciler writes, with the
+  // run's id and its outcome in the fields, never in prose alone. Best effort
+  // like everything on this feed: a finalize that could not write it is still
+  // a finalize, and the durable record below is where the verdict lives.
+  await appendFeed(env, {
+    project: params.project,
+    run_id: params.run_id,
+    seq: FINAL_FEED_SEQ,
+    events: [
+      runFinishedFeedEvent({
+        run_id: params.run_id,
+        detail: `${outcome.state}: ${outcome.detail}`,
+      }),
+    ],
+  });
 
   // The dispatch log's own closing line, written before the row goes terminal
   // for the same reason the board event is: a caller who polls state and sees

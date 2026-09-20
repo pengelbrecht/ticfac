@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -80,7 +81,7 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	t.Cleanup(func() { life.Release("test") })
 
 	var out bytes.Buffer
-	if code := statusCommand([]string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	text := out.String()
@@ -95,7 +96,7 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := statusCommand([]string{"--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := statusCommand(context.Background(), []string{"--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
 	var status runlife.Status
@@ -126,7 +127,7 @@ func TestTheGapChangesNoVerdict(t *testing.T) {
 	repo := statusFixture(t, time.Now())
 
 	var out bytes.Buffer
-	code := statusCommand([]string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{})
+	code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{})
 	if code != 1 {
 		t.Fatalf("a dead run exited %d: the gap must not change the verdict, only report beside it", code)
 	}
@@ -172,7 +173,7 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if code := statusCommand([]string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := statusCommand(context.Background(), []string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "wall clock fired 4m") {
@@ -183,7 +184,7 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := statusCommand([]string{"--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := statusCommand(context.Background(), []string{"--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
 	var status runlife.Status
@@ -235,7 +236,7 @@ func TestStatusReportsNoFiringFromProseAlone(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if code := statusCommand([]string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := statusCommand(context.Background(), []string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if strings.Contains(out.String(), "wall clock fired") {

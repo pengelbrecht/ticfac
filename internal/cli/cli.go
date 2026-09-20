@@ -217,7 +217,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case "finding":
 		return findingCommand(args[1:], stdout, stderr)
 	case "status":
-		return statusCommand(args[1:], stdout, stderr)
+		// Signal-aware so a --follow table shuts down cleanly on Ctrl-C: a
+		// table a person leaves open is a subscription like any other.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return statusCommand(ctx, args[1:], stdout, stderr)
 	case "events":
 		// Signal-aware so a --follow shuts down cleanly on Ctrl-C: a
 		// subscription is a thing a person leaves open.
