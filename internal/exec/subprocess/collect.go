@@ -126,21 +126,13 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 			SchemaID:      record.Spec.OutputSchema,
 			Role:          record.Spec.Role,
 			Status:        report.Status,
-			Summary:       summaryOf(report, verdict),
-			Result: map[string]any{
-				"verdict":             verdict,
-				"commits":             commits,
-				"branch":              record.Branch,
-				"report_path":         report.Path,
-				"boundary_violations": stringsOrEmpty(append(append([]string{}, violations...), artifactViolations...)),
-				"needs_human":         report.NeedsHuman(),
-				// The findings channel (tick 7vn) rides FIRST-CLASS in the envelope
-				// since bundle 4.0.0 (Findings, below) — the open payload keeps only the
-				// problem, the one thing the closed record has no field for: a block that
-				// would not parse is stated as a problem, never as an empty list, so a
-				// truncated report cannot read as a clean one.
-				"findings_problem": report.FindingsProblem,
-			},
+			Summary:       RoleSummary(record.Spec.Role, report, verdict),
+			// The payload and summary are minted through the one shared
+			// implementation (rolepayload.go, tick b50): a review's answer is
+			// its own verdict, and the collect verdict is a different question
+			// that must not be spelled inside it.
+			Result: RoleResultPayload(record.Spec.Role, report, verdict, commits, record.Branch,
+				append(append([]string{}, violations...), artifactViolations...)),
 			Findings: report.Findings,
 		}
 	}
@@ -402,13 +394,6 @@ func headOrNil(head string, commits int) *string {
 	}
 	value := head
 	return &value
-}
-
-func summaryOf(report Report, verdict string) string {
-	if report.Detail != "" {
-		return report.Detail
-	}
-	return fmt.Sprintf("%s (%s)", report.Status, verdict)
 }
 
 func stringsOrEmpty(values []string) []string {

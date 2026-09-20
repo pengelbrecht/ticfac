@@ -151,6 +151,105 @@ func TestEveryParseCaseFromTheBundleParsesTheSameWayHere(t *testing.T) {
 	}
 }
 
+// The review-verdict line (tick b50): the review-epic role's own judgement,
+// parsed with the same discipline the status line is — the FINAL line wins,
+// markdown decoration is trimmed, and the alternation order plus the \b guard
+// stop a suffixed word reading as a bare one. The vocabulary is ticfac's own
+// rather than the bundle's (see report.go for why), so the cases that pin it
+// live here.
+func TestTheReviewVerdictLineParses(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		body    string
+		verdict string
+		detail  string
+	}{{
+		name:    "a plain READY",
+		body:    "REVIEW-VERDICT: READY\n",
+		verdict: ReviewVerdictReady,
+	}, {
+		name:    "a plain NOT READY",
+		body:    "REVIEW-VERDICT: NOT READY\n",
+		verdict: ReviewVerdictNotReady,
+	}, {
+		name:    "not ready with what would make it ready",
+		body:    "REVIEW-VERDICT: NOT READY — the gate run never happened\n",
+		verdict: ReviewVerdictNotReady,
+		detail:  "the gate run never happened",
+	}, {
+		name:    "a colon separator",
+		body:    "REVIEW-VERDICT: READY: all waves integrate and the gate ran\n",
+		verdict: ReviewVerdictReady,
+		detail:  "all waves integrate and the gate ran",
+	}, {
+		name: "the FINAL verdict line wins",
+		body: "REVIEW-VERDICT: READY\n" +
+			"\nThen I looked again.\n\n" +
+			"REVIEW-VERDICT: NOT READY — the last word is the one that counts\n",
+		verdict: ReviewVerdictNotReady,
+		detail:  "the last word is the one that counts",
+	}, {
+		name:    "inside a bolded bullet",
+		body:    "Some prose first.\n\n- **REVIEW-VERDICT: NOT READY — see defect 3**\n",
+		verdict: ReviewVerdictNotReady,
+		detail:  "see defect 3",
+	}, {
+		name: "tab separator with a hyphen",
+		body: "REVIEW-VERDICT:\tNOT READY\t- the reconciler never ran\n",
+		verdict: ReviewVerdictNotReady,
+		detail:  "the reconciler never ran",
+	}, {
+		name:    "a word with a suffix is not a verdict",
+		body:    "REVIEW-VERDICT: READINESS\n",
+		verdict: "",
+	}, {
+		name:    "a judgement word outside the vocabulary",
+		body:    "REVIEW-VERDICT: MAYBE\n",
+		verdict: "",
+	}, {
+		name:    "the vocabulary is uppercase as the review writes it",
+		body:    "REVIEW-VERDICT: not ready — said in prose casing\n",
+		verdict: "",
+	}, {
+		name:    "no verdict line at all",
+		body:    "STATUS: DONE — the review's prose says it is not ready\n",
+		verdict: "",
+	}}
+	for _, c := range cases {
+		report := ParseReport(c.body)
+		if report.ReviewVerdict != c.verdict {
+			t.Errorf("%s: verdict %q, want %q", c.name, report.ReviewVerdict, c.verdict)
+		}
+		if report.ReviewVerdictDetail != c.detail {
+			t.Errorf("%s: detail %q, want %q", c.name, report.ReviewVerdictDetail, c.detail)
+		}
+	}
+}
+
+// The verdict line and the status line are TWO lines, and neither stands in
+// for the other: a report whose verdict rides only in the status detail is a
+// report whose judgement is prose, which is the gap this tick exists to close.
+func TestTheStatusLineIsNotAReviewVerdictAndViceVersa(t *testing.T) {
+	t.Parallel()
+	report := ParseReport("REVIEW-VERDICT: NOT READY — the gate run never happened\n\nSTATUS: DONE_WITH_CONCERNS — see above\n")
+	if report.Status != StatusDoneWithConcerns {
+		t.Errorf("status %q, want DONE_WITH_CONCERNS: the verdict line must not displace the status", report.Status)
+	}
+	if report.ReviewVerdict != ReviewVerdictNotReady {
+		t.Errorf("review verdict %q, want NOT READY: the status line must not displace the verdict", report.ReviewVerdict)
+	}
+	// A report that ends READY in its own vocabulary and DONE in the status
+	// vocabulary states two facts about two questions, and both parse.
+	both := ParseReport("REVIEW-VERDICT: READY\n\nSTATUS: DONE\n")
+	if both.Status != StatusDone || both.ReviewVerdict != ReviewVerdictReady {
+		t.Errorf("status %q verdict %q: the two lines are independent answers", both.Status, both.ReviewVerdict)
+	}
+	if both.NeedsHuman() {
+		t.Error("a READY verdict is not an escalation")
+	}
+}
+
 type lifecycleFixture struct {
 	Harness struct {
 		ProtectedPrefixes struct {

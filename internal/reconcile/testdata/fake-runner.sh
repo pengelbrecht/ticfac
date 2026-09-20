@@ -21,11 +21,21 @@ commit() {
 	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: ${TICFAC_TICK}" >/dev/null 2>&1
 }
 
+verdict_line() {
+	# The review's typed verdict line (tick b50): only the review-epic role is
+	# asked for one, so only that role writes one. It sits before the final
+	# status line, which stays the report's last line.
+	if [ "$TICFAC_ROLE" = "review-epic" ]; then
+		printf 'REVIEW-VERDICT: %s\n' "${FAKE_RUNNER_REVIEW_VERDICT:-READY}"
+	fi
+}
+
 report() {
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
 		printf '# %s\n\n' "$TICFAC_TICK"
 		printf 'The fake runner ran in mode %s.\n\n' "$mode"
+		verdict_line
 		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 }
@@ -60,7 +70,9 @@ report_with_findings() {
 		printf '# %s\n\n' "$TICFAC_TICK"
 		printf 'The fake runner also found things outside its tick.\n\n'
 		findings_block
-		printf '\nSTATUS: %s\n' "$status"
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 }
 case "$mode" in
@@ -133,6 +145,41 @@ closeout_nocommit)
 	if [ "$TICFAC_TICK" = "co" ]; then
 		status="DONE_WITH_CONCERNS"
 		report
+	else
+		commit
+		report
+	fi
+	;;
+review_not_ready)
+	# The pxc shape (tick b50): the review judges the epic NOT READY — DONE_WITH_
+	# CONCERNS in the status vocabulary, its own typed line stating the verdict —
+	# over the empty branch a correct read-only review leaves. The run must
+	# record that answer as its own verdict, never as the collect vocabulary's
+	# ready-to-merge, and carry it to the epic PR. Every other tick is the
+	# plain report mode.
+	if [ "$TICFAC_TICK" = "rv" ]; then
+		status="DONE_WITH_CONCERNS"
+		FAKE_RUNNER_REVIEW_VERDICT="NOT READY — the Phase 4 gate run never happened"
+		report
+	else
+		commit
+		report
+	fi
+	;;
+review_no_verdict)
+	# The refusal case (tick b50): a review whose report says in prose that the
+	# epic is not ready but never states its typed REVIEW-VERDICT line. Prose is
+	# where NOT READY went to be recorded as its opposite, so the answer is
+	# refused rather than guessed at — the run fails naming the line the report
+	# lacked, and the review tick is not closed behind a judgement nobody can
+	# read. Every other tick is the plain report mode.
+	if [ "$TICFAC_TICK" = "rv" ]; then
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The review says in prose that the epic is not ready, but the typed line is missing.\n\n'
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
 	else
 		commit
 		report

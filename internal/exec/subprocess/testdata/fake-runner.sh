@@ -23,11 +23,21 @@ commit() {
 	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: ${mode}" >/dev/null 2>&1
 }
 
+verdict_line() {
+	# The review's typed verdict line (tick b50): only the review-epic role is
+	# asked for one, so only that role writes one — a stray line in another
+	# role's report is ignored by the parser and never reaches a payload.
+	if [ "$TICFAC_ROLE" = "review-epic" ]; then
+		printf 'REVIEW-VERDICT: %s\n' "${FAKE_RUNNER_REVIEW_VERDICT:-READY}"
+	fi
+}
+
 report() {
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
 		printf '# %s\n\n' "${TICFAC_TICK}"
 		printf 'The fake runner ran in mode %s.\n\n' "$mode"
+		verdict_line
 		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 }
@@ -36,6 +46,21 @@ case "$mode" in
 report)
 	commit
 	report
+	;;
+review_not_ready)
+	# The b50 shape at the executor: the review's report carries its typed
+	# verdict — DONE_WITH_CONCERNS in the status vocabulary, NOT READY in its
+	# own — over an empty branch, which is what a correct review attempt looks
+	# like. Only a review-epic job has a verdict to state, so every other job
+	# is exactly the plain report mode.
+	if [ "$TICFAC_ROLE" = "review-epic" ]; then
+		status="DONE_WITH_CONCERNS"
+		FAKE_RUNNER_REVIEW_VERDICT="NOT READY — the reconciler was never wired to the run"
+		report
+	else
+		commit
+		report
+	fi
 	;;
 report_from_tmp)
 	# The case the absolute path exists for: the worker wanders off and then

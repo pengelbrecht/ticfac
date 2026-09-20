@@ -377,6 +377,26 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 				"this one asks for a person", entry.Role, tick, answer.Status, answer.Summary)
 	}
 
+	// The review's judgement, validated the way the envelope was (tick b50):
+	// a review's only deliverable is its answer, and its answer is a VERDICT
+	// — a typed field with an effect, never a status line riding alone.
+	// Until this check the judgement had nowhere to live and no effect,
+	// which is how a review answering NOT READY was recorded as
+	// ready-to-merge and only the untriaged-findings hold stopped the
+	// close-out. The refusal fails closed the way the envelope's does, and
+	// the findings channel has already run, so what a refused review
+	// discovered is still drafted.
+	if entry.Role == "review-epic" {
+		if err := validateReviewVerdict(answer); err != nil {
+			r.setTick(tick, "rejected")
+			r.record(tick, StageRejected, "the review's verdict did not validate: %v", err)
+			return nil, nil, r.refuse(RefusedRoleResult, tick,
+				"the review-epic job for %s returned an answer whose judgement cannot be read: %v. The tick is NOT "+
+				"closed: a judgement that exists only in prose is how NOT READY comes to be recorded as its "+
+				"opposite, and the report is the only channel that is read", tick, err)
+		}
+	}
+
 	_ = status
 	return collected, answer, nil
 }

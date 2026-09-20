@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -37,6 +38,59 @@ func TestCollectAppliesTheRolesRecordedNoCommitsRule(t *testing.T) {
 	}
 	if closeout.Result.Outcome != subprocess.OutcomeFailed {
 		t.Errorf("the close-out collected as %s, want failed", closeout.Result.Outcome)
+	}
+}
+
+// The review's answer carries its OWN verdict, not the collect vocabulary's
+// (tick b50), and this executor mints it through the same shared
+// implementation the local one does — a review's answer must not read
+// differently depending on which host collected it. The closeout keeps the
+// collect verdict where it belongs: its branch IS its deliverable.
+func TestTheReviewsPayloadCarriesItsOwnVerdictNotTheCollects(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, harnessOptions{})
+
+	review, err := h.startRole(t, "nrv2", "review-epic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := local(review)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(local.ResultPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local.ResultPath, []byte(
+		"REVIEW-VERDICT: NOT READY — the reconciler was never wired to the run\n\nSTATUS: DONE_WITH_CONCERNS\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	collected, err := h.ex.CollectDetail(review)
+	if err != nil {
+		t.Fatalf("collect the review attempt: %v", err)
+	}
+	payload := collected.Result.RoleResult.Result
+	if got := payload["review_verdict"]; got != subprocess.ReviewVerdictNotReady {
+		t.Errorf("the review's payload says review_verdict %v, want %s", got, subprocess.ReviewVerdictNotReady)
+	}
+	if _, ok := payload["verdict"]; ok {
+		t.Errorf("the review's payload still carries the collect verdict %v: a word that read as "+
+			"approval was the whole defect", payload["verdict"])
+	}
+	if strings.Contains(collected.Result.RoleResult.Summary, subprocess.VerdictReadyToMerge) {
+		t.Errorf("the review's summary %q spells the collect verdict", collected.Result.RoleResult.Summary)
+	}
+	if !strings.Contains(collected.Result.RoleResult.Summary, subprocess.ReviewVerdictNotReady) {
+		t.Errorf("the review's summary %q does not state the review's own verdict", collected.Result.RoleResult.Summary)
+	}
+
+	closeout := collectRoleOverEmptyBranch(t, "closeout-epic", "nco2")
+	closeoutPayload := closeout.Result.RoleResult.Result
+	if got := closeoutPayload["verdict"]; got != subprocess.VerdictNoCommits {
+		t.Errorf("the close-out's payload says verdict %v, want %s", got, subprocess.VerdictNoCommits)
+	}
+	if _, ok := closeoutPayload["review_verdict"]; ok {
+		t.Error("a close-out's payload carries a review verdict nobody asked it for")
 	}
 }
 

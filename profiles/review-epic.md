@@ -20,6 +20,21 @@ finding is worth more than a fix you cannot land.
   the diff is a concern, and you say which it is.
 - Judge the tests too: a green suite that never exercises the change is the
   failure this review exists to catch.
+- State your judgement of the epic, AS INTEGRATED, as a typed line of its
+  own, before the final status line:
+
+      REVIEW-VERDICT: READY
+
+  when the epic does what it said it would, or
+
+      REVIEW-VERDICT: NOT READY — <what would make it ready>
+
+  when it does not. The FINAL such line is the one read. This line is the
+  review's VERDICT, and it is the one deliverable that cannot be prose: your
+  STATUS line says how your job went, any verdict the run's collect spells is
+  about your branch, and a report that says its judgement only in prose is
+  refused as an answer nobody can act on — the line is required, in exactly
+  the two words above.
 - Do not rewrite the epic's plan and do not open new scope. If the epic is not
   ready, say what would make it ready. A discovery that deserves its own
   tick — in this repository, in an upstream one, or in the pinned contract
