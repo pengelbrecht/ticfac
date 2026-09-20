@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 166,
-  "state": "collecting",
-  "reason": "collecting t5p attempt 15",
-  "updated_at": "2026-09-20T14:40:34Z",
+  "sequence": 167,
+  "state": "integrating",
+  "reason": "integrating t5p attempt 15 into epic/dha",
+  "updated_at": "2026-09-20T14:41:07Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "t5p",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 15
     },
     {
