@@ -516,15 +516,79 @@ func TestCloseoutIsHeldUntilCITurnsGreen(t *testing.T) {
 	}
 }
 
-// No CI on the PR at all is not pending: it is unsatisfiable by waiting —
-// the failure mode the rule exists to surface, because a workflow that does
-// not trigger on pull_request runs nothing on any PR.
-func TestNoCIOnThePRRefusesUnsatisfiable(t *testing.T) {
+// A PR this run opens has no CI yet BY CONSTRUCTION (tick ox0): GitHub
+// creates the check runs some time after the open, and the production run
+// refused PR #11 the same second it opened it — "unsatisfiable by waiting",
+// with a guessed cause that sent the repair at a workflow file that was
+// correct. Absence right after the open is "not yet", never "never": the
+// admission WAITS for the check runs to appear, says so while it waits, and
+// admits the close-out when they do.
+func TestNoCIYetOnAPropenedThisSecondIsAWaitNotARefusal(t *testing.T) {
 	t.Parallel()
-	forge := &fakeForge{exists: true, pr: openPR(), ci: []forge.CIReport{{State: forge.CINone}}}
+	// exists: false — the run OPENS the PR, the tick's exact scenario, and
+	// the queue walks none → none → green: asked immediately, asked again,
+	// and only then answered.
+	forge := &fakeForge{ci: []forge.CIReport{{State: forge.CINone}, {State: forge.CINone},
+		{State: forge.CIGreen}}}
 	f := newFixture(t, fixtureOptions{pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
-	_, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge})
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s — asked about CI the moment it opened the PR, it refused a PR "+
+			"whose check runs had not been created yet", result.State, result.Reason)
+	}
+	// The run WAITED rather than refusing at the first absent answer: CI was
+	// asked more than once, and the PR was opened exactly once.
+	if got := forge.count("ci"); got < 3 {
+		t.Errorf("CI was asked %d times; the run did not wait for the check runs to appear", got)
+	}
+	if got := forge.count("open"); got != 1 {
+		t.Errorf("the run opened the PR %d times, want 1", got)
+	}
+	// The wait SAID SO — "waiting for CI to appear", the "not yet" wording —
+	// and never said "never": the hold is in the feed, the admission behind it.
+	stages := r.Stages("co")
+	if !contains(stages, StageCloseoutHeld) {
+		t.Errorf("stages %v do not record the hold while CI had not appeared", stages)
+	}
+	var held string
+	for _, e := range r.Journal() {
+		if e.Tick == "co" && e.Stage == StageCloseoutHeld {
+			held = e.Detail
+		}
+	}
+	if !strings.Contains(held, "waiting for CI to appear") {
+		t.Errorf("the hold does not say it is waiting for CI to appear: %q", held)
+	}
+	if !contains(stages, StageCloseoutAdmitted) {
+		t.Errorf("stages %v do not record the admission", stages)
+	}
+	current, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Errorf("co is %s, want closed: a close-out whose CI appeared is admitted", current.Status)
+	}
+}
+
+// A CI that never appears is still refused — but only after the run has
+// WAITED a bounded time for the check runs to show up (tick ox0), and the
+// refusal names what was checked — the bound it waited, the workflow it
+// asked about, the check runs that never came — rather than diagnosing the
+// first momentary absence as "unsatisfiable by waiting" with a guessed
+// cause. "Not yet" and "never" have opposite repairs, and only the bound
+// tells them apart.
+func TestACIThatNeverAppearsIsRefusedAfterTheBoundedWait(t *testing.T) {
+	t.Parallel()
+	// A single-element queue is sticky in the fake: every ask answers none.
+	forge := &fakeForge{ci: []forge.CIReport{{State: forge.CINone}}}
+	f := newFixture(t, fixtureOptions{pullRequests: forge, gateTimeout: ciWaitBound})
+	declareCloseoutRule(t, f.Repo)
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge, gateTimeout: ciWaitBound})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,10 +598,36 @@ func TestNoCIOnThePRRefusesUnsatisfiable(t *testing.T) {
 	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCIAbsent {
 		t.Fatalf("the failure is %+v, want a %s refusal", result.Failure, RefusedCloseoutCIAbsent)
 	}
-	for _, want := range []string{"no CI has run", ".github/workflows/ci.yml", "pull_request"} {
+	// The wait happened first: the run asked again and again until the bound
+	// fired, and said "waiting for CI to appear" while it did.
+	if got := forge.count("ci"); got < 2 {
+		t.Errorf("CI was asked %d times; the run refused before waiting for the check runs", got)
+	}
+	var held string
+	for _, e := range r.Journal() {
+		if e.Tick == "co" && e.Stage == StageCloseoutHeld {
+			held = e.Detail
+		}
+	}
+	if !strings.Contains(held, "waiting for CI to appear") {
+		t.Errorf("the hold does not say it is waiting for CI to appear: %q", held)
+	}
+	// And the refusal names what was checked: the bound it waited, the
+	// workflow, the pull_request suggestion that is only earned AFTER that
+	// wait — never the "unsatisfiable by waiting" verdict that told the
+	// operator not to bother.
+	for _, want := range []string{ciWaitBound.String(), ".github/workflows/ci.yml", "pull_request", "PR #7"} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the refusal does not say %q: %q", want, result.Failure.Message)
 		}
+	}
+	if strings.Contains(result.Failure.Message, "unsatisfiable by waiting") {
+		t.Errorf("the refusal still carries the one verdict that tells an operator not to bother waiting: %q",
+			result.Failure.Message)
+	}
+	// The wait was bounded: the run did not hang on a CI that never comes.
+	if !contains(r.Stages("co"), StageCloseoutHeld) {
+		t.Errorf("stages %v do not record the bounded wait", r.Stages("co"))
 	}
 }
 

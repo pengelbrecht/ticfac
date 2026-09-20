@@ -1815,8 +1815,10 @@ const (
 	// configured no code-hosting surface for a repo that declares the rule;
 	// the second at the FORGE, which could not open or read the PR (a
 	// credential, a permission, a network); the third at the WORKFLOW, which
-	// never ran on the PR at all — unsatisfiable by waiting, which is the
-	// failure the rule exists to surface; the fourth at the CODE, named by
+	// produced no check runs on the PR within the run's bounded wait for
+	// them to appear (tick ox0) — the failure the rule exists to surface,
+	// named only after that wait, never at the check runs' first momentary
+	// absence; the fourth at the CODE, named by
 	// the failing job the message carries; the fifth at the CLOCK — the run
 	// bounded its wait, and re-running the epic re-derives the admission from
 	// the PR rather than rediscovering it. The sixth is the fourth again, one
@@ -1826,7 +1828,7 @@ const (
 	RefusedCloseoutForge     = "closeout_forge_absent"      // no surface behind the rule
 	RefusedCloseoutPR        = "closeout_pr_unmet"          // no PR, or one the forge could not open or read
 	RefusedCloseoutPRBody    = "closeout_pr_body_unwritten" // the PR exists but carries no record
-	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // CI never ran on the PR head
+	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // no CI appeared on the PR head within the wait's bound
 	RefusedCloseoutCI        = "closeout_ci_failed"         // CI red; the message names the failing job
 	RefusedCloseoutCIPending = "closeout_ci_pending"        // CI still pending past the run's bound
 
