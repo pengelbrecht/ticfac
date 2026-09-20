@@ -14,6 +14,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // contracts/lifecycle-invariants.json — EXECUTABLE, against the REAL
@@ -78,6 +79,7 @@ var beneathInvariants = map[string]string{
 // The three lists together are the thirteen, with nothing in two of them and
 // nothing in none — and every claimed guard is exactly the fixture's, so a
 // guard added upstream cannot land here as silence.
+// short: reads the lifecycle fixture and the guards' own declarations; no reconciler runs here
 func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
 	t.Parallel()
 	c := loadLifecycle(t)
@@ -143,6 +145,7 @@ func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
 // ------------------------------------------------------------ the replay ---
 
 // The fixture's own sequences, run against the real reconciler.
+// short: reads the lifecycle fixture and the guards' own declarations; no reconciler runs here
 func TestTheFixturesSequencesRunAgainstTheRealReconciler(t *testing.T) {
 	t.Parallel()
 	c := loadLifecycle(t)
@@ -176,6 +179,7 @@ func TestTheFixturesSequencesRunAgainstTheRealReconciler(t *testing.T) {
 // together cannot see a dead guard: A13 has two, and the first one's divergence
 // would satisfy the whole control while the second could have stopped enforcing
 // anything.
+// short: reads the lifecycle fixture and the guards' own declarations; no reconciler runs here
 func TestDisablingAGuardBreaksTheInvariantItBelongsTo(t *testing.T) {
 	t.Parallel()
 	c := loadLifecycle(t)
@@ -635,6 +639,7 @@ func TestA8ARestartSettlesAnInFlightAttemptFromDurableEvidence(t *testing.T) {
 // and a boundary violation are different problems and send the next repair
 // somewhere different.
 func TestA9DistinctRefusalsDoNotShareAMessage(t *testing.T) {
+	shorttest.EndToEnd(t)
 	t.Parallel()
 	messages := func(t *testing.T, guardsOff map[string]bool) (gate, boundary string) {
 		t.Helper()
@@ -830,6 +835,7 @@ func loadThresholds(t *testing.T) lifecycleThresholds {
 
 // Appendix A #4's relationship, pinned in ONE place: this package's defaults
 // are the fixture's numbers, not a second copy of them.
+// short: reads the lifecycle fixture and the guards' own declarations; no reconciler runs here
 func TestTheDefaultCadenceIsTheFixtures(t *testing.T) {
 	t.Parallel()
 	thresholds := loadThresholds(t)

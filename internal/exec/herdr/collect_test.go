@@ -124,6 +124,7 @@ func TestCollectRefusesAMissingResult(t *testing.T) {
 // settlement any leg recorded, herdr silent for every poll — is nobody's to
 // collect, and collect HOLDS it for a person instead of minting a verdict
 // out of the substrate's silence. The two must not share an outcome.
+// short: collected from records in a tempdir; no herdr server and no agent
 func TestCollectDistinguishesSettledFromUnsettled(t *testing.T) {
 	settled, err := collectForState(t, true)
 	if err != nil {

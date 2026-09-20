@@ -16,6 +16,7 @@ import (
 // integrating over an unproven change"), and the actual reason — the attempt
 // was unaddressed past its wall clock, release it with `ticfac settle` — was
 // only recoverable by reading dispatch.go.
+// short: a bare Reconciler's journal, recorded and read in memory
 func TestARefusalReachesTheFeedInItsOwnWords(t *testing.T) {
 	t.Parallel()
 
@@ -41,6 +42,7 @@ func TestARefusalReachesTheFeedInItsOwnWords(t *testing.T) {
 
 // A path that already recorded its own rejection keeps it: that line carries
 // detail this one cannot, and a terminal event said twice is not terminal.
+// short: a bare Reconciler's journal, recorded and read in memory
 func TestARefusalIsNotRecordedTwice(t *testing.T) {
 	t.Parallel()
 
@@ -54,6 +56,7 @@ func TestARefusalIsNotRecordedTwice(t *testing.T) {
 }
 
 // A rejection recorded for ANOTHER tick does not suppress this one's.
+// short: a bare Reconciler's journal, recorded and read in memory
 func TestARefusalIsRecordedPerTick(t *testing.T) {
 	t.Parallel()
 
@@ -74,6 +77,7 @@ func TestARefusalIsRecordedPerTick(t *testing.T) {
 // guess. A local subprocess whose supervisor died and a herdr agent that will
 // not stop are different problems with different first moves, and the refusal
 // used to describe only the first (tick emk).
+// short: a bare Reconciler's journal, recorded and read in memory
 func TestTheUnaddressedRefusalCarriesTheExecutorsLastWord(t *testing.T) {
 	t.Parallel()
 

@@ -252,6 +252,7 @@ func TestTheSameRefusalOverAnUnchangedTreeHaltsInsteadOfSpinning(t *testing.T) {
 // makes progress and is refused anyway, which no fixture in this package can
 // produce without an executor that lies. The arithmetic is asserted here
 // instead of not at all.
+// short: the supervisor's rules over synthesised stops
 func TestTheCapIsWhatStopsAResumableStopThatKeepsChangingTheTree(t *testing.T) {
 	t.Parallel()
 
@@ -298,6 +299,7 @@ func TestTheCapIsWhatStopsAResumableStopThatKeepsChangingTheTree(t *testing.T) {
 // The classification itself, asserted as the closed set it is. A reason this
 // set has no evidence about needs a person: continuing across an unrecognised
 // stop is continuing across a bug.
+// short: the supervisor's rules over synthesised stops
 func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient} {

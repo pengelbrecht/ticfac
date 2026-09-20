@@ -22,6 +22,7 @@ import (
 // an attempt cannot be addressed. It happened in the Phase 3 run: the wall
 // clock could not stop a pi worker, the reconciler refused the attempt as
 // unaddressed and named this command, and this command refused too.
+// short: handle routing and a source-text guard; nothing is dispatched
 func TestSettleAddressesTheAttemptsOwnExecutor(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +49,7 @@ func TestSettleAddressesTheAttemptsOwnExecutor(t *testing.T) {
 
 // TestNoSettlementHandleHardcodesAnExecutor is the guard: the defect was one
 // literal in one struct, and a reader cannot see it is wrong from the line.
+// short: handle routing and a source-text guard; nothing is dispatched
 func TestNoSettlementHandleHardcodesAnExecutor(t *testing.T) {
 	t.Parallel()
 

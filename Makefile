@@ -17,6 +17,17 @@ GOTEST_TIMEOUT := 45m
 # re-measure and override without editing this file.
 GOTEST_PARALLEL ?= 12
 
+# What `-short` means here (tick miu). It used to mean nothing: 6 of 215 test
+# files consulted testing.Short(), so `test-short` and `gate` below ran the
+# entire end-to-end suite and a per-tick gate cost 20+ minutes — 23 on the e9n
+# attempt-8 run, which then failed on two tests that pass on a quiet host.
+#
+# Now internal/reconcile, internal/exec/herdr and internal/runstate skip under
+# -short at their harness constructors, so the short suite is the readers, the
+# parsers, the drift guards and the negative controls. Nothing stops running:
+# `test` below has no -short and CI runs BOTH targets on every push and pull
+# request, so everything the gate skips is still refused before main.
+# internal/shorttest holds the guard that keeps a new test from forgetting.
 .PHONY: build vet test-short test gate
 
 build:

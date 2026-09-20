@@ -61,16 +61,26 @@ unchanged; only where the vendored copy lives here moved.
 
 ```
 go build ./...                    # the ticfac binary
-make test-short                   # readers, negative controls, CLI (-timeout 45m)
-make test                         # the full suite, same timeout
+make test-short                   # the short suite: seconds, and what a tick's gate runs
+make test                         # the full suite, end-to-end included (-timeout 45m)
 go run ./cmd/contracts check      # verify the vendored bundle, offline
 go run ./cmd/sandbox check        # verify the vendored image context, offline
 ```
 
-`make test` / `make test-short` pin `-timeout 45m`: `internal/reconcile`'s suite
-runs 600-620s even under `-short`, past `go test`'s default 10-minute
-per-package timeout. Use these targets (or pass `-timeout` yourself) rather
-than a bare `go test ./...`.
+`-short` means something here (tick miu). `internal/reconcile`,
+`internal/exec/herdr` and `internal/runstate` build real git repositories and
+spawn real worker processes per test; under `-short` their harness constructors
+skip, so the short suite is the readers, the parsers, the drift guards and the
+negative controls, and it finishes in seconds. Everything skipped there runs in
+`make test`, which CI runs on every push and pull request beside
+`make test-short`, and which epic close-out runs before a merge. The discipline
+is enforced by `internal/shorttest`'s guard rather than remembered: a new test
+in one of those packages must build the harness, call `shorttest.EndToEnd(t)`,
+or carry a `short:` doc-comment line saying why the gate should pay for it.
+
+`make test` still pins `-timeout 45m`: the full `internal/reconcile` suite runs
+600-620s, past `go test`'s default 10-minute per-package timeout. Use these
+targets (or pass `-timeout` yourself) rather than a bare `go test ./...`.
 
 ## Deploying the factory
 

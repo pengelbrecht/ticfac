@@ -19,6 +19,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // gateRecordOf resolves the started attempt's record and observation
@@ -150,6 +151,7 @@ func TestATruncatedGateReadIsNotAFailedAgent(t *testing.T) {
 // as three-plus-two DIFFERENT values on the record, each from exactly the
 // observations that produced it.
 func TestTheGateDistinguishesItsFindings(t *testing.T) {
+	shorttest.EndToEnd(t)
 	stalledPrompt := func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		return herdtest.RespondErr(w, req.ID, "agent_prompt_stalled", "herdr saw no state change")
 	}

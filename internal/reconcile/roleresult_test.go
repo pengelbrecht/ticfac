@@ -22,6 +22,7 @@ func wellFormed() *subprocess.RoleResult {
 	}
 }
 
+// short: envelope validation — JSON in, verdict out
 func TestAWellFormedEnvelopeValidates(t *testing.T) {
 	t.Parallel()
 	if err := ValidateRoleResult(wellFormed(), "ticfac.job-result.review-epic.v1", "review-epic"); err != nil {
@@ -32,6 +33,7 @@ func TestAWellFormedEnvelopeValidates(t *testing.T) {
 // The refusal contracts/job-protocol.json's own negative example pins, word for
 // word: a fifth spelling of "done" makes two runs disagree about what happened
 // to one tick with nothing failing.
+// short: envelope validation — JSON in, verdict out
 func TestAStatusOfItsOwnInventionIsRefused(t *testing.T) {
 	t.Parallel()
 	result := wellFormed()
@@ -45,6 +47,7 @@ func TestAStatusOfItsOwnInventionIsRefused(t *testing.T) {
 	}
 }
 
+// short: envelope validation — JSON in, verdict out
 func TestAnEnvelopeMissingARequiredFieldIsRefused(t *testing.T) {
 	t.Parallel()
 	result := wellFormed()
@@ -63,6 +66,7 @@ func TestAnEnvelopeMissingARequiredFieldIsRefused(t *testing.T) {
 // contract the JobSpec named, and the role is the role that was dispatched.
 // Validating against what came back rather than against what was asked for is
 // how a review's answer gets read as a closeout's.
+// short: envelope validation — JSON in, verdict out
 func TestAnEnvelopeThatAnswersADifferentQuestionIsRefused(t *testing.T) {
 	t.Parallel()
 	other := wellFormed()
@@ -80,6 +84,7 @@ func TestAnEnvelopeThatAnswersADifferentQuestionIsRefused(t *testing.T) {
 
 // No envelope at all is not "nothing to check": a role job whose only
 // deliverable is its answer, with no answer, has not produced one.
+// short: envelope validation — JSON in, verdict out
 func TestNoEnvelopeIsRefused(t *testing.T) {
 	t.Parallel()
 	err := ValidateRoleResult(nil, "ticfac.job-result.review-epic.v1", "review-epic")

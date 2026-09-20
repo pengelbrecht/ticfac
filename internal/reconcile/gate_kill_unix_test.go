@@ -26,6 +26,7 @@ import (
 // kill, and a host saturated by its own parallel siblings would turn that
 // bound into scheduler noise rather than a fact about the kill path. It is
 // the only test in this package that measures the host's own responsiveness.
+// short: one shell with a 300ms bound; the bound is the whole cost
 func TestAGateThatTimesOutTakesItsChildrenWithIt(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "child.pid")

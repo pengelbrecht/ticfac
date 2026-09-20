@@ -52,6 +52,7 @@ func TestTheWorkspaceLabelIdentifiesTheAttempt(t *testing.T) {
 // a label "tick-<id>-a<n>" still says which TICK the workspace is about, so
 // a workspace attributed only by its label reports the tick, never the
 // attempt-suffixed string.
+// short: reads the attempt-scoped label off a record
 func TestTickOfFactsReadsTheAttemptScopedLabelAsTheTick(t *testing.T) {
 	for label, want := range map[string]string{
 		"tick-t1-a2":   "t1",

@@ -12,6 +12,7 @@ import (
 // while the reconciler waited inside it, alive and emitting nothing. ssh's
 // defaults have no connect timeout and no keepalive, so a connection that dies
 // without a FIN is waited on forever.
+// short: TransportEnv() over one environment variable
 func TestTheTransportIsBoundedUnlessTheOperatorBoundItThemselves(t *testing.T) {
 	t.Setenv("GIT_SSH_COMMAND", "")
 	env := TransportEnv()

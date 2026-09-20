@@ -156,6 +156,7 @@ func TestTheGatePassesAWorkflowWhosePackagePatternsResolve(t *testing.T) {
 
 // What the extraction reads, and what it refuses to read. A false positive
 // here is a refusal of an honest workflow, so every narrowing is pinned.
+// short: pattern extraction over strings
 func TestWorkflowPackagePatternExtraction(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
