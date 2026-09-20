@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 57,
-  "state": "gating",
-  "reason": "running the integrated gate for 6na on da2a4853a4ae",
-  "updated_at": "2026-09-20T08:06:26Z",
+  "sequence": 58,
+  "state": "publishing",
+  "reason": "closing 6na behind the integrated gate on da2a4853a4ae",
+  "updated_at": "2026-09-20T08:13:10Z",
   "ticks": [
     {
       "tick_id": "4sb",
