@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-dha",
   "epic_id": "dha",
-  "sequence": 193,
-  "state": "failed",
-  "reason": "us2 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 16 of us2 is missing-result: it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-dha/tick-us2/attempt-16 (commit b1ef0cc52c54): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-dha/tick-us2/attempt-16^ refs/ticfac/wip/run-epic-dha/tick-us2/attempt-16` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref. This incarnation was reached after 3 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-09-20T15:40:50Z",
+  "sequence": 194,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-20T15:43:08Z",
   "ticks": [
     {
       "tick_id": "4sb",
@@ -100,7 +100,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/dha",
-    "source_sha": "abc44fd975d4eec95f7cdd4427b47a14e131b5a6",
+    "source_sha": "c2cea4e65880fb7dc4d50891bec745a37e090f33",
     "integration_ref": "refs/heads/epic/dha",
     "phase": "worker",
     "executor": null,
