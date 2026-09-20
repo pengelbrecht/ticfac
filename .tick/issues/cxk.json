@@ -2,6 +2,7 @@
   "id": "cxk",
   "title": "Port the CI-gated close-out and PR-posted review to the Workflow reconciler",
   "description": "epic-reconciler.ts has no CI wait, no hold on red naming the job, no refusal on absent CI, and posts neither verdict nor findings on the PR. A closeout job reporting done is closed like an implement tick.\n\nThe Go admitCloseout (internal/reconcile/dispatch.go) has no TypeScript counterpart, so the repository's own PR + CI rule — the one .tick/config.md declares and the Go side refuses to run without — is simply absent on the Cloudflare host.\n\nNote the shape of the Go fix before porting: 9da's closeout_ci.go had to re-read the PR and walk ancestors past run-state-only commits, because the act of gating rewrites the thing being gated. The port needs that too, or it deadlocks the same way Phase 3 did.\n\nFrom pxc, finding 5c906cc7.",
+  "notes": "2026-09-20 12:39 - ticfac run epic-dha: attempt 7 reported a finding drafted for triage — proposed-tick \"The Workflow plan dispatches the close-out beside the review, ignoring blocked_by\" (key 421dddb266654dc917c75bc718d8239c8a7632218151d76f59d643a7d75c92aa, severity medium, for this repository). Triage with `ticfac finding dha 421dddb266654dc917c75bc718d8239c8a7632218151d76f59d643a7d75c92aa --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "A Workflow-hosted close-out refuses to complete without green CI on the epic PR, names the failing job on red, and the PR carries the review's verdict and findings",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:50:04.039238Z",
-  "updated_at": "2026-09-20T08:13:47.750907Z",
+  "updated_at": "2026-09-20T10:39:29.015124Z",
   "started_at": "2026-09-20T08:13:47.750907Z"
 }
