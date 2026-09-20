@@ -68,6 +68,8 @@ import {
   type TickState,
   terminalState,
 } from "./run-state-store";
+import { leaseLostTrip, renewalTtl, renewRunLease } from "./run-workflow";
+import { roomFor } from "./runs";
 import { sandboxExecutorFromEnv } from "./sandbox-executor";
 import { type Graph, type GraphTask, TrackerClient } from "./tracker-client";
 
@@ -1381,6 +1383,25 @@ export type EpicReconcilerParams = {
   base_sha?: string;
   /** The dispatch window; 0 or absent for the repository's own declaration. */
   max_parallel?: number;
+  /**
+   * The dispatch lease's release credential, handed over by the submit route
+   * (tick nu9). The Workflow renews it inside every pass step and releases it
+   * on the way out, exactly as the Run Workflow did — the lease is the
+   * project's single-arbiter answer (D4), and a driver that never renewed it
+   * would let the room's alarm ignite a queued submission beside a live run.
+   *
+   * Absent means no lease to own: the engine tests' instances, or a Workflow
+   * created by hand — nothing renews or releases what nobody holds.
+   */
+  lease_token?: string;
+  /**
+   * Who submitted the run, carried for the one call that needs it after
+   * ignition — a reclaim of a lapsed lease records the run's requester on
+   * the lease the room re-issues (tick oen). Absent is accepted; a reclaim
+   * without it fails and the run stops naming that, rather than inventing a
+   * requester.
+   */
+  requested_by?: string;
   /** The Workflow's poll cadence in ms; defaults to a keepalive beat. */
   poll_interval_ms?: number;
   /**
@@ -1452,6 +1473,23 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
           ? `the publish slot for ${params.project} is held by run ${acquired.holder.run_id} ` +
             `(epic ${acquired.holder.epic}); this run stops rather than write around it`
           : `the publish slot for ${params.project} refused this run: ${acquired.detail}`;
+      // The dispatch lease the route handed over must not wedge the project
+      // behind a run that stopped before it started: a refused run releases
+      // it on the way out (D4's own remedy — the room's alarm would
+      // otherwise hold it for the boot ttl).
+      await step.do("release-dispatch-lease", async () => {
+        if (params.lease_token === undefined) return;
+        try {
+          await roomFor(env, params.project).releaseDispatchLease({
+            run_id: params.run_id,
+            token: params.lease_token,
+          });
+        } catch (error) {
+          console.error(
+            `run ${params.run_id} could not release the dispatch lease for ${params.project}: ${String(error)}`,
+          );
+        }
+      });
       return { terminal: true, state: "failed", reason, dispatched: [] };
     }
     let holder: HolderCredentials = { run_id: params.run_id, token: acquired.lease.token };
@@ -1575,6 +1613,43 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
         // assignment below the step stays: a replayed step never re-runs
         // this callback, and the token is recovered from its durable result.
         holder = { run_id: params.run_id, token };
+
+        // The DISPATCH lease, renewed in the same step for the same reason
+        // the slot's heartbeat is: a run that never renewed it would let the
+        // room's alarm read BOOT_LEASE_TTL as a release and ignite a queued
+        // submission beside a live run. The renewal is the Run Workflow's
+        // own (reused, not re-answered: the same reclaim-on-lapse rule, the
+        // same take-is-a-stop rule), inside the step so a replayed step never
+        // re-runs it.
+        if (params.lease_token !== undefined) {
+          const renewal = await renewRunLease(
+            env,
+            {
+              run_id: params.run_id,
+              project: params.project,
+              epic: params.epic_id,
+              requested_by: params.requested_by ?? "",
+              base_sha: params.base_sha ?? "",
+              lease_token: params.lease_token,
+            },
+            renewalTtl(pollMs),
+          );
+          if (renewal !== null && !renewal.ok) {
+            // D4 is one arbiter per project, and a run that is not the
+            // arbiter must not keep writing. Like the slot refusal above, it
+            // cannot even record its own failure — a checkpoint write would
+            // be a publish.
+            const trip = leaseLostTrip(renewal);
+            return {
+              terminal: true,
+              state: "failed",
+              reason: `run ${params.run_id} stopped: ${trip.detail}`,
+              dispatched: [],
+              slot_token: token,
+            };
+          }
+        }
+
         const outcome = await reconciler.reconcilePass();
         return {
           terminal: outcome.terminal,
@@ -1586,15 +1661,31 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
       });
       holder = { run_id: params.run_id, token: result.slot_token };
       if (result.terminal) {
-        // Best effort and its own step: a release that fails (the slot already
-        // lapsed, or was taken over) must not turn a terminal verdict into a
-        // wedged Workflow — the room's alarm sweeps what it leaves behind.
+        // Best effort and its own steps: a release that fails (the slot or the
+        // lease already lapsed, or was taken over) must not turn a terminal
+        // verdict into a wedged Workflow — the rooms' alarms sweep what it
+        // leaves behind.
         await step.do("release-publish-slot", async () => {
           try {
             await room().releaseSlot(holder);
           } catch (error) {
             console.error(
               `run ${params.run_id} could not release the publish slot for ${params.project}: ${String(error)}`,
+            );
+          }
+        });
+        await step.do("release-dispatch-lease", async () => {
+          if (params.lease_token === undefined) return;
+          try {
+            // The release is what ignites a queued submission (D22): a
+            // finished run hands the project to whatever waited behind it.
+            await roomFor(env, params.project).releaseDispatchLease({
+              run_id: params.run_id,
+              token: params.lease_token,
+            });
+          } catch (error) {
+            console.error(
+              `run ${params.run_id} could not release the dispatch lease for ${params.project}: ${String(error)}`,
             );
           }
         });

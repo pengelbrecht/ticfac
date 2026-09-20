@@ -20,17 +20,18 @@ describe("health route", () => {
     const body = (await res.json()) as { bindings: Record<string, boolean> };
 
     // A deploy that lost a binding sees it here rather than in a failed
-    // submission — RUN_WORKFLOW especially, since a factory without it can
-    // record runs it could never boot, and SANDBOXES, which is the binding a
-    // live deployment shipped without: every run was refused by a message
-    // naming a remedy (`tk factory deploy`) that could not supply what the
-    // bundle never declared.
+    // submission — EPIC_RECONCILER especially (the driver of every plain epic
+    // run since tick nu9: a factory without it refuses every epic submission),
+    // and SANDBOXES, which is the binding a live deployment shipped without:
+    // every run was refused by a message naming a remedy (`tk factory deploy`)
+    // that could not supply what the bundle never declared.
     expect(body.bindings).toEqual({
       run_rooms: true,
       signal_inboxes: true,
       artifacts: true,
       db: true,
       run_workflow: true,
+      epic_reconciler: true,
       sandboxes: true,
     });
   });

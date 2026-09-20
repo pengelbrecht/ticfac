@@ -659,7 +659,15 @@ async function igniteDraft(
     return { run_id: null, detail: parsed.detail, draft };
   }
 
-  const result = await submitRun(env, parsed.submission);
+  const result = await submitRun(env, parsed.submission, {
+    // A press runs ONE tick now — a wave-shaped ask, even when the draft has
+    // no parent to name a wave with (the run's epic is the tick itself),
+    // which the reconciler's own wave planning cannot express. The press
+    // stays the container agent's, as an explicit decision (tick nu9): the
+    // reconciler drives epics, and a person pressing a button is asking for
+    // this tick, not for the reconciler's plan for whatever contains it.
+    driver: "agent",
+  });
   if (result.outcome !== "started") {
     const detail =
       result.outcome === "refused"

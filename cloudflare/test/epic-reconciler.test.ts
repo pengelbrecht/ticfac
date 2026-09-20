@@ -1867,6 +1867,142 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
     await room.releaseSlot({ run_id: "run_other", token: held.lease.token });
   });
 
+  /**
+   * Tick nu9: the dispatch lease the submit route hands the driver. The
+   * route arbitrates with the project's RunRoom lease and then hands its
+   * release credential to EpicReconcilerWorkflow — the same ownership the
+   * Run Workflow's params carried. Two properties must hold, and each gets
+   * its own test below:
+   *
+   *  - a lease taken by another run STOPS this one (D4: one arbiter per
+   *    project), before any pass writes;
+   *  - a lease this run holds is RELEASED at the end, so the project is not
+   *    wedged behind a finished run and a queued submission ignites (D22).
+   */
+  it("stops naming the taker when its dispatch lease is lost to another run, and writes nothing", async () => {
+    const contents = sharedContents();
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    // The project's dispatch lease, held by a run that is not this one —
+    // the shape the run route would have refused at the door, delivered here
+    // straight to the driver so the renewal's verdict is the thing under
+    // test.
+    const room = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(PROJECT));
+    const held = await room.acquireDispatchLease({
+      run_id: "run_other",
+      epic: EPIC_ID,
+      origin: "cloud",
+      requested_by: "operator@example.com",
+      ttl_ms: 60_000,
+    });
+    if (!held.ok) throw new Error("expected to pre-hold the dispatch lease");
+
+    const runID = `${RUN_ID}-lease-taken`;
+    const instance = await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+        requested_by: "operator@example.com",
+        lease_token: "a-token-this-run-does-not-hold",
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the Workflow's own terminal status —
+    // never on a guessed sleep.
+    const deadline = Date.now() + 20_000;
+    let status: { status?: string; output?: unknown } = {};
+    for (;;) {
+      status = (await instance.status()) as { status?: string; output?: unknown };
+      const state = String(status.status);
+      if (state !== "running" && state !== "queued") break;
+      if (Date.now() > deadline) {
+        throw new Error(`timed out waiting for the Workflow; status: ${state}`);
+      }
+      await scheduler.wait(20);
+    }
+
+    expect(String(status.status)).toContain("complete");
+    const output = status.output as { state?: string; reason?: string };
+    expect(output.state).toBe("failed");
+    // The verdict names BOTH the loss and the taker, the way the Run
+    // Workflow's own lost-lease stop always did (tick 7n7's lesson).
+    expect(output.reason).toContain("dispatch lease");
+    expect(output.reason).toContain("run_other");
+    // It stopped BEFORE a pass wrote: the run branch holds no state for a
+    // run that was never the project's arbiter.
+    expect(await contents.read(checkpointPath(runID))).toBeNull();
+    // And the other run still holds what it held.
+    await expect(room.leaseStatus()).resolves.toMatchObject({ run_id: "run_other" });
+    await room.releaseDispatchLease({ run_id: "run_other", token: held.lease.token });
+  });
+
+  it("releases the dispatch lease on its way out, so the project is not wedged behind a finished run", async () => {
+    const contents = sharedContents();
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: new AutoFinishExecutor(),
+      TICFAC_INTEGRATION: new FakeIntegration(),
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    // The lease as the run route would take it — this run's own, with its
+    // own release credential, and a ttl no test run could ever outlive: if
+    // the lease is free at the end, the workflow's release is the only
+    // thing that could have freed it.
+    const room = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(PROJECT));
+    const runID = `${RUN_ID}-lease-released`;
+    const acquired = await room.acquireDispatchLease({
+      run_id: runID,
+      epic: EPIC_ID,
+      origin: "cloud",
+      requested_by: "operator@example.com",
+      ttl_ms: 300_000,
+    });
+    if (!acquired.ok) throw new Error("expected to take the dispatch lease");
+
+    await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+        requested_by: "operator@example.com",
+        lease_token: acquired.lease.token,
+      },
+    });
+
+    // Wait on the DURABLE EVIDENCE — the checkpoint the Workflow writes.
+    const deadline = Date.now() + 25_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+
+    expect(checkpoint?.state).toBe("completed");
+    // The run held a five-minute lease and finished in seconds: a free lease
+    // now is the release step's doing, not the ttl's.
+    await expect(room.leaseStatus()).resolves.toBeNull();
+  });
+
   // The slot-inspection the lapse test needs: read past the room's public
   // API the way repo-room's own tests do (the token is withheld from every
   // view by design, but the row is what production compares tokens against).

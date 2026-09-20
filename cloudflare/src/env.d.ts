@@ -43,22 +43,16 @@ declare namespace Cloudflare {
      * hosted by a Workflow, one instance per EpicRun keyed by run id
      * (`[[workflows]]` in wrangler.toml, class `EpicReconcilerWorkflow`).
      *
-     * Optional for the same reason `RUN_WORKFLOW` is — a deployment whose
-     * Workflow failed to register must fail closed at the point of use
-     * rather than record runs that could never reconcile — and typed as the
-     * structural subset the reconciler's own start path uses so a test can
-     * substitute a recording fake for it.
+     * Since tick nu9 this is the driver every plain epic run started through
+     * the run route is handed to; `RUN_WORKFLOW` above still drives the
+     * submissions the reconciler cannot honour (waves, budgeted runs,
+     * reviews) until the Workflow host grows that machinery. Still optional
+     * in the type — a deployment whose Workflow failed to register must fail
+     * closed at the point of use rather than record runs that could never
+     * reconcile — and typed as the structural subset the run route uses so a
+     * test can substitute a recording fake for it.
      */
-    EPIC_RECONCILER?: {
-      create(options: {
-        id?: string;
-        params: import("./epic-reconciler").EpicReconcilerParams;
-      }): Promise<{
-        id: string;
-        status: () => Promise<unknown>;
-      }>;
-      get(id: string): Promise<unknown>;
-    };
+    EPIC_RECONCILER?: import("./runs").EpicReconcilerBinding;
     /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
      * tick from Phase 2 (see image/).
