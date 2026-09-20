@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// reconciler-decision:D30:begin:lost-lease — on the local host a lost
+// push lease is rebuilt, not run-ending; the Workflow host's lapsed publish
+// slot is re-acquired and the run continues (decisions/reconciler-parity.json,
+// D30).
 // maxContendedPushes bounds the rebuild-on-a-lost-lease loop.
 //
 // A lost lease is not a conflict: the branch ref moved for some OTHER path, and
@@ -18,6 +22,8 @@ import (
 // the new head and pushed again. That is bounded, because a ref moving forever
 // under a writer is an operational problem to report, not to spin on.
 const maxContendedPushes = 8
+
+// reconciler-decision:D30:end:lost-lease
 
 // Options configures a Store.
 type Options struct {
@@ -50,11 +56,16 @@ type Options struct {
 	RemoteRetry RemoteRetry
 }
 
+// reconciler-decision:D29:begin:guard — the local host's write guard is the
+// compare-and-swap on the run's own branch, not a repository-wide writer's
+// slot; the Workflow host's publish slot is per repository
+// (decisions/reconciler-parity.json, D29).
 // Store reads and writes one run's `.ticfac/` records against origin.
 //
 // It is not safe for concurrent use by several goroutines; it IS safe against
 // other processes, which is the point — the guard is a compare-and-swap on a
 // shared ref, not a lock any of them could lose.
+// reconciler-decision:D29:end:guard
 type Store struct {
 	git    *git
 	remote string

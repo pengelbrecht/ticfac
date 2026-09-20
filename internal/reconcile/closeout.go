@@ -299,6 +299,9 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 	}
 }
 
+// reconciler-decision:D32:begin:prbase — the local close-out RESOLVES the
+// PR base from the refs git holds; the Workflow host takes it named by the
+// submitter (decisions/reconciler-parity.json, D32).
 // prBase is the ref the epic PR asks to merge into: the default branch of
 // the remote, resolved from the refs git holds rather than guessed — the
 // remote's own HEAD first, then the checkout's current branch, then the
@@ -316,6 +319,8 @@ func (r *Reconciler) prBase() string {
 	}
 	return "main"
 }
+
+// reconciler-decision:D32:end:prbase
 
 // gateCloseoutClose is the close-out's OTHER CI gate (tick sqx): the one
 // over the head the admission's green CI is not evidence about. The
