@@ -20,6 +20,7 @@ import (
 // ignores nothing, so what is checked here is that git applies it: the
 // installer writes it into a real repository and `git check-ignore` is asked.
 
+// short: the fragment, and one `git check-ignore` in a tempdir
 func TestTheFragmentIsTheContracts(t *testing.T) {
 	c := loadContract(t)
 
@@ -36,6 +37,7 @@ func TestTheFragmentIsTheContracts(t *testing.T) {
 	}
 }
 
+// short: the fragment, and one `git check-ignore` in a tempdir
 func TestEnsureGitignoreIsHonouredByGitCheckIgnore(t *testing.T) {
 	c := loadContract(t)
 	if _, err := exec.LookPath("git"); err != nil {
@@ -95,6 +97,7 @@ func TestEnsureGitignoreIsHonouredByGitCheckIgnore(t *testing.T) {
 
 // A repository with no .gitignore at all: the file is created, and the fragment
 // is all of it.
+// short: the fragment, and one `git check-ignore` in a tempdir
 func TestEnsureGitignoreCreatesTheFile(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not on the path")
@@ -115,6 +118,7 @@ func TestEnsureGitignoreCreatesTheFile(t *testing.T) {
 
 // An out-of-date block is replaced in place, markers and all — the fragment is
 // the contract's, not whatever an older ticfac wrote.
+// short: the fragment, and one `git check-ignore` in a tempdir
 func TestEnsureGitignoreReplacesAnOldBlock(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not on the path")
@@ -154,6 +158,7 @@ func TestEnsureGitignoreReplacesAnOldBlock(t *testing.T) {
 // ticfac is a ticfac target like any other, so the fragment this package
 // installs is the one this repository carries. If the two ever differ, one of
 // them is wrong and nothing else would say which.
+// short: the fragment, and one `git check-ignore` in a tempdir
 func TestThisRepositoryCarriesTheInstalledFragment(t *testing.T) {
 	root, err := contracts.RepoRoot()
 	if err != nil {

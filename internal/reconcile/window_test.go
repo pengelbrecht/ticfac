@@ -51,7 +51,12 @@ func TestTheWindowDispatchesAWaveTogether(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		// The refusal, not just the count (tick atn). "closed []" alone is the
+		// same message whether the run was refused, starved or never dispatched
+		// at all, and the reason is the whole diagnosis: naming it here is what
+		// turns an investigation into a read.
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 
 	var a1Dispatched, a2Dispatched, a1Closed int
@@ -133,7 +138,8 @@ func TestAnUndeclaredWidthRunsExactlyAsItAlwaysDid(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 	if count.peak != 1 {
 		t.Fatalf("%d workers existed at once: an undeclared width widened itself", count.peak)
@@ -212,7 +218,8 @@ tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description 
 		t.Fatalf("run: %v", err)
 	}
 	if len(result.Closed) != 5 {
-		t.Fatalf("closed %v, want every tick of the epic", result.Closed)
+		t.Fatalf("closed %v, want every tick of the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
 	}
 	if count.peak != 1 {
 		t.Fatalf("%d workers existed at once at a declared width of one", count.peak)
@@ -295,6 +302,7 @@ tree = { command = "exit 3", description = "always refuses" }
 //
 // This is about identity, which this run treats as load-bearing: a feed line
 // that cannot say which attempt it is about is a line nobody can act on.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestARefreshDoesNotRevertAnAttemptTheWindowIsHolding(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{ticks: []runstate.TickState{
@@ -332,6 +340,7 @@ func TestARefreshDoesNotRevertAnAttemptTheWindowIsHolding(t *testing.T) {
 
 // And a tick the window admitted that origin has never heard of survives the
 // refresh rather than vanishing from the run's own state.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestARefreshKeepsATickOriginHasNotHeardOf(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{ticks: []runstate.TickState{{TickID: "a2", State: "dispatched", Attempt: 8}}}
@@ -353,6 +362,7 @@ func TestARefreshKeepsATickOriginHasNotHeardOf(t *testing.T) {
 // the default wipe threshold is 20 minutes and a gate may run to 45. Without
 // excuseWindow the very next poll of a healthy attempt reads as wiped, and the
 // run refuses work that was never in trouble.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestABusyRunDoesNotReadItsOwnGateAsAWipe(t *testing.T) {
 	t.Parallel()
 	clock := time.Now()
@@ -403,6 +413,7 @@ func TestABusyRunDoesNotReadItsOwnGateAsAWipe(t *testing.T) {
 }
 
 // A gap that stayed under the threshold is unremarkable and says nothing.
+// short: a bare Reconciler's window arithmetic, in memory
 func TestAShortGateSaysNothing(t *testing.T) {
 	t.Parallel()
 	clock := time.Now()

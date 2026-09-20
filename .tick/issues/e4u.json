@@ -1,0 +1,13 @@
+{
+  "id": "e4u",
+  "title": "A launch past the call bound loses its record under host load",
+  "description": "`TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown` (internal/exec/herdr, operational_test.go:296) failed in the e9n attempt-8 integrated gate:\n\n    the launch that outlived the bound left no record:\n    open .../state/0ca3e4a5a0e83f10/7297b4c69aa3f1c5/attempt.json: no such file or directory\n\nThe same commit (46caa836a30c) passes the herdr package on a quiet host. It failed only when the package took 848s instead of its ~176s quiet baseline, i.e. under ~5x contention.\n\nPer the standing 'flaky = bug' policy this is filed as a defect, not as load noise. The shape to look for is the one m4n and the subprocess observe bug had: a value read at one moment and trusted at a later one. A launch that outlives its call bound is supposed to leave attempt.json behind; under load it does not, which means the record is written on a path that the bound can cut, rather than before the bound can fire.\n\nFound by running the system: it stopped the epic-dha Phase 5 run at 12:47 on a failure that was not real.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The test passes deterministically under injected contention, proven by a test that makes the bound fire at the racy instant rather than by widening a timeout",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-20T12:58:23.033389Z",
+  "updated_at": "2026-09-20T12:58:23.033389Z"
+}

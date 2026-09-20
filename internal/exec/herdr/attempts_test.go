@@ -70,6 +70,7 @@ func jsonMarshal(v any) ([]byte, error) {
 	return jsonEncode(v)
 }
 
+// short: attempt records written into a tempdir and read back; no herdr server and no agent
 func TestAttemptsLatestPerTick(t *testing.T) {
 	root := t.TempDir()
 	writeFactsRecord(t, root, "epic-9pd", "glb", 1, "ws-old", "pane-old", "agent-old", "implement-tick")
@@ -89,6 +90,7 @@ func TestAttemptsLatestPerTick(t *testing.T) {
 	}
 }
 
+// short: attempt records written into a tempdir and read back; no herdr server and no agent
 func TestAttemptsMissingRunIsEmpty(t *testing.T) {
 	facts, err := Attempts(t.TempDir(), "epic-nope")
 	if err != nil || len(facts) != 0 {
@@ -96,6 +98,7 @@ func TestAttemptsMissingRunIsEmpty(t *testing.T) {
 	}
 }
 
+// short: attempt records written into a tempdir and read back; no herdr server and no agent
 func TestAttemptsSkipsDamagedAndForeign(t *testing.T) {
 	root := t.TempDir()
 	writeFactsRecord(t, root, "epic-9pd", "glb", 1, "ws-1", "pane-1", "agent-1", "implement-tick")
@@ -122,6 +125,7 @@ func TestAttemptsSkipsDamagedAndForeign(t *testing.T) {
 	}
 }
 
+// short: attempt records written into a tempdir and read back; no herdr server and no agent
 func TestEpicIDFromRun(t *testing.T) {
 	if got := epicIDFromRun("epic-9pd"); got != "9pd" {
 		t.Fatalf("epic id: %q", got)

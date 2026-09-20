@@ -32,6 +32,7 @@ var _ reconcile.Executor = (*Executor)(nil)
 // reconciler defines: five operations, no more. A sixth operation added to
 // the interface is a change to the protocol this package has not followed —
 // and a fifth quietly dropped is one this executor stopped implementing.
+// short: reflection over the Executor interface and a read of this package's sources
 func TestTheExecutorInterfaceIsUnchanged(t *testing.T) {
 	const want = 5 // Start, Inspect, CollectDetail, Cancel, Dispose
 	if got := reflect.TypeOf((*reconcile.Executor)(nil)).Elem().NumMethod(); got != want {
@@ -54,6 +55,8 @@ func TestTheExecutorInterfaceIsUnchanged(t *testing.T) {
 //     seam, exactly the way this package asserts the seam from its side.
 //     What neither side's tests may do is import the other's packages, and
 //     the import half of this check runs over the tests too.
+//
+// short: reflection over the Executor interface and a read of this package's sources
 func TestReconcileContainsNoHerdrCode(t *testing.T) {
 	root, err := contracts.RepoRoot()
 	if err != nil {

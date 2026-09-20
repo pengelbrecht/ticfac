@@ -306,6 +306,7 @@ func TestDisposeRemovesTheExcludeLineWhileTheWorktreeExists(t *testing.T) {
 // exactly the drift the contract's closed vocabulary exists to make
 // impossible. This test reads the message composer directly because the
 // refusal is the thing under test, not the agent's conduct.
+// short: the refusal text for a record built in memory
 func TestTheBoundaryRefusalMatchesTheLocalExecutors(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,7 @@
 package runstate
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"reflect"
 	"strings"
 	"testing"
@@ -275,6 +276,7 @@ func TestEvidenceAndDecisionsLandOnce(t *testing.T) {
 // stays reachable for a post-mortem without living in the target's log — and a
 // failed or cancelled run's is as reachable as a successful one's.
 func TestTerminalStatePlacesTheRunTag(t *testing.T) {
+	shorttest.EndToEnd(t)
 	for _, state := range []State{StateCompleted, StateFailed, StateCancelled} {
 		t.Run(string(state), func(t *testing.T) {
 			o := newOrigin(t)

@@ -15,6 +15,7 @@ import (
 // one rule for every job, and the same tick with the same facts must collect
 // the same verdict on either executor — so the review's empty branch collects
 // as ready-to-merge here too.
+// short: collected from records in a tempdir; no herdr server and no agent
 func TestCollectAppliesTheRolesRecordedNoCommitsRule(t *testing.T) {
 	t.Parallel()
 

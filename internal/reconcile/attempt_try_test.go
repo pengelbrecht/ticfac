@@ -13,6 +13,7 @@ import (
 // `ticfac settle`. In a sentence that reads wrong — "attempt 12 of nvn" sounds
 // like eleven failures at nvn when it is nvn's first try and the run's twelfth
 // dispatch. This is the number that makes the line honest.
+// short: tryOf over attempt records already in memory
 func TestTryOfCountsThisTicksDispatches(t *testing.T) {
 	t.Parallel()
 
@@ -43,6 +44,7 @@ func TestTryOfCountsThisTicksDispatches(t *testing.T) {
 
 // An attempt numbered below one already recorded for the same tick — a replay,
 // or a marker read out of order — must not inflate the count.
+// short: tryOf over attempt records already in memory
 func TestTryOfIgnoresLaterAttemptsOfTheSameTick(t *testing.T) {
 	t.Parallel()
 

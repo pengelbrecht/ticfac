@@ -129,6 +129,23 @@
 //     answer nobody could validate is how an unchecked model response becomes a
 //     verdict.
 //
+// And one thing a run now does for itself, which a person used to do for it
+// (tick go6, supervise.go): CONTINUE ACROSS THE STOPS THAT NEED NOBODY. Stops
+// are of two kinds and the run used to separate them nowhere. A settled
+// attempt rejected with nothing lost, a tracker refusing a claim whose width
+// another holder will release, gate evidence that went stale under a moving
+// branch, a transient remote failure — in every one of those the next
+// incarnation adopts by identity, re-derives and continues, and no human
+// judgement exists anywhere in the loop. A finding to triage, a gate that
+// fails on an unchanged tree, a worker that answered BLOCKED — those are
+// decisions, and stopping for them is correct. Supervise runs the first kind
+// out in this process, on a closed set of reasons that FAILS CLOSED, with
+// bounded backoff, a cap, and a halt the moment the same refusal comes back
+// over an unchanged tree. Every continuation is written to the feed as an
+// INTERVENTION and counted on the run's own terminal reason, because a run
+// that "completed unattended" after forty automatic resumes has not
+// demonstrated what that phrase claims (tick zi2).
+//
 // The five lifecycle invariants the local subprocess executor names as not its
 // own — A3 (the step cap), A4 (poll as keepalive), A11 (a struck-out unit is
 // released by a person), A12 (budgets reported after clamping) and A13

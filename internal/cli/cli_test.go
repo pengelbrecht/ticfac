@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
 
 // The acceptance criterion, stated as a test: `ticfac run-epic x` exits 2 and
@@ -309,6 +311,43 @@ func TestTheFeedFailureWarningSaysWhatItMeans(t *testing.T) {
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the warning does not say %q: %q", want, line)
+		}
+	}
+}
+
+// Supervision is ON by default and --supervise=false is the way off (tick
+// go6), and the two flags meet in one number the reconciler reads. The
+// default is the argument: the behaviour it replaces is not "the run stops",
+// it is "the run stops and a person retypes the identical command" — which
+// the operator did about fifteen times in one day, and which is the same
+// behaviour with worse latency and no record.
+func TestSupervisionIsOnByDefaultAndTheFlagIsHowItGoesOff(t *testing.T) {
+	if got := autoResumeCap(true, reconcile.DefaultAutoResumeCap); got != reconcile.DefaultAutoResumeCap {
+		t.Errorf("a supervised run's cap is %d, want the default %d", got, reconcile.DefaultAutoResumeCap)
+	}
+	if got := autoResumeCap(false, reconcile.DefaultAutoResumeCap); got >= 0 {
+		t.Errorf("--supervise=false produced a cap of %d; supervision off is a NEGATIVE cap, which is the one "+
+			"number that makes Supervise exactly Run", got)
+	}
+}
+
+// The intervention count an operator reads (tick zi2): the number, and what
+// each stop was. A run that says "completed" after four automatic
+// continuations did not run unattended, and the line has to say so on the
+// surface the operator is already reading rather than only in the feed.
+func TestTheInterventionLineNamesEveryAutomaticContinuation(t *testing.T) {
+	line := resumeLine(&reconcile.Result{Resumes: []reconcile.Resume{
+		{Reason: reconcile.RefusedClaimWidth, TickID: "a2"},
+		{Reason: reconcile.StoppedRemoteTransient},
+	}})
+	for _, want := range []string{
+		"interventions: 2",
+		reconcile.RefusedClaimWidth + " on a2",
+		reconcile.StoppedRemoteTransient,
+		"did not run unattended",
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the intervention line does not say %q: %q", want, line)
 		}
 	}
 }

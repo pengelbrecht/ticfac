@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -274,6 +275,26 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
 		ceiling   = fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to")
 		wall      = fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by")
+		// Supervision is ON by default (tick go6), and the default is the
+		// argument. The behaviour it replaces is not "the run stops" — it is
+		// "the run stops and a person retypes the identical command", which
+		// the operator did about fifteen times in one day. Defaulting to off
+		// would keep exactly that behaviour with worse latency (the person has
+		// to notice first: two of the day's stalls were multi-hour) and no
+		// record that the loop happened at all. Neither is safer. What IS
+		// safer is that the loop is now bounded, classified and counted: it
+		// continues only across the closed set of stops that need nobody, it
+		// halts on a repeat over an unchanged tree, and every continuation is
+		// recorded as the intervention it is.
+		supervise = fs.Bool("supervise", true,
+			"continue across stops that only need resuming — a rejected attempt that left nothing, a tracker "+
+				"width refusal, gate evidence that went stale, a transient remote failure — adopting the "+
+				"in-flight attempts by identity, with bounded backoff and a cap. Every continuation is RECORDED "+
+				"as an intervention. A stop that needs a person still stops. --supervise=false stops at the "+
+				"first refusal")
+		maxResumes = fs.Int("max-resumes", reconcile.DefaultAutoResumeCap,
+			"the most automatic continuations one supervised run makes before it stops with the refusal it "+
+				"stopped over; the cap is the safety against a run that resumes forever over the same stop")
 		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
 			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
 				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
@@ -357,6 +378,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		BudgetUSD:         *budget,
 		CeilingUSD:        *ceiling,
 		PullRequests:      pulls,
+		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
@@ -432,7 +454,10 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		}
 	}()
 
-	result, err := reconciler.Run(context.Background())
+	// Supervise, not Run: the run continues across the stops that need nobody
+	// and stops for the ones that need a person (tick go6). With
+	// --supervise=false the cap is negative and this is exactly Run.
+	result, err := reconciler.Supervise(context.Background())
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		died(err.Error())
@@ -443,6 +468,18 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	fmt.Fprintf(stdout, "run %s of epic %s: %s\n%s\n", result.RunID, result.EpicID, result.State, result.Reason)
 	for _, tick := range result.Ticks {
 		fmt.Fprintf(stdout, "  %-8s %s\n", tick.TickID, tick.State)
+	}
+	// The intervention count, said to the operator's face rather than left in
+	// the feed (ticks go6, zi2). It is printed whenever it is non-zero, and it
+	// is printed BEFORE any verdict line, because a run that reached
+	// "completed" after four automatic continuations has not demonstrated what
+	// an unattended run demonstrates, and the number is the whole of that
+	// distinction.
+	if len(result.Resumes) > 0 {
+		fmt.Fprintf(stdout, "%s\n", resumeLine(result))
+	}
+	if result.Halt != "" {
+		fmt.Fprintf(stderr, "ticfac run-epic %s: the run was not continued automatically: %s\n", epicID, result.Halt)
 	}
 	// Not a verdict about the work, so it does not change the exit code —
 	// but never silent: the operator who would subscribe to this run has to
@@ -461,6 +498,38 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		return 1
 	}
 	return 0
+}
+
+// autoResumeCap turns the operator's two flags into the one number the
+// reconciler reads: the cap when supervision is on, and a negative — which is
+// supervision off — when it is not. The flag is the surface; the number is the
+// configuration, so there is exactly one thing to read when asking whether a
+// run was supervised.
+func autoResumeCap(supervise bool, cap int) int {
+	if !supervise {
+		return -1
+	}
+	return cap
+}
+
+// resumeLine is the intervention count an operator reads (tick zi2): how many
+// times this run continued by itself, and what it stopped over each time. A
+// run that says "completed" after four of these completed a loop a person used
+// to perform, which is a real and reportable gain — and it is NOT the same
+// claim as a run that never stopped, so the line names each stop rather than
+// only counting them.
+func resumeLine(result *reconcile.Result) string {
+	stops := make([]string, 0, len(result.Resumes))
+	for _, resume := range result.Resumes {
+		reason := resume.Reason
+		if resume.TickID != "" {
+			reason += " on " + resume.TickID
+		}
+		stops = append(stops, reason)
+	}
+	return fmt.Sprintf("interventions: %d automatic continuation(s), which nobody typed and which are counted "+
+		"as interventions all the same — %s. A run that continued across these did not run unattended",
+		len(result.Resumes), strings.Join(stops, ", "))
 }
 
 // startupLine is the one line a redirected run-epic now says while the run

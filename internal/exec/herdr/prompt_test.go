@@ -15,6 +15,7 @@ import (
 // local one — or dropped them — would be two answers to the same question,
 // and the re-dispatches this tick exists for would start blind on exactly
 // the substrate that runs the longest attempts.
+// short: prompt text assembled from values in memory
 func TestTheHerdrPromptNamesThePredecessorsToo(t *testing.T) {
 	t.Parallel()
 
@@ -51,6 +52,7 @@ func TestTheHerdrPromptNamesThePredecessorsToo(t *testing.T) {
 // — or dropped it — would be two answers to the same question, and the
 // herdr substrate is the one that runs the longest attempts, so it is the
 // one whose stops carry the most uncommitted work.
+// short: prompt text assembled from values in memory
 func TestTheHerdrPromptPointsAtPreservedWorkToo(t *testing.T) {
 	t.Parallel()
 

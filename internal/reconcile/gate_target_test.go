@@ -24,6 +24,7 @@ import (
 // The command stays spelled out in runners.toml rather than delegating to make:
 // that file is what says what the gate runs, and a reader must see it there.
 // This test is what keeps the copy honest.
+// short: two files of this checkout compared — and it is the drift guard the gate exists to keep honest, so it belongs in every tick
 func TestTheGateTargetMatchesTheDeclaredGate(t *testing.T) {
 	t.Parallel()
 

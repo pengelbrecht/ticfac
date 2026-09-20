@@ -18,6 +18,7 @@ import (
 // failure would be retried until the bound was spent, which is its own bug: a
 // bounded wait on a credential that will never be right is just a slower
 // refusal with the run's clock spent on it.
+// short: remote failure classification over captured stderr, with a stubbed sleep
 func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -125,6 +126,7 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 // observed failing, so the runner has to know which invocations can meet a
 // network at all. A local plumbing command that failed is a bug to report,
 // and running it four times would only report it four times more slowly.
+// short: remote failure classification over captured stderr, with a stubbed sleep
 func TestOnlyTheSubcommandsThatReachTheNetworkAreRetried(t *testing.T) {
 	remote := [][]string{
 		{"fetch", "--quiet", "--no-write-fetch-head", "--refmap=", "origin", "+refs/heads/x:refs/y"},
@@ -158,6 +160,7 @@ func TestOnlyTheSubcommandsThatReachTheNetworkAreRetried(t *testing.T) {
 // ATTEMPTS — "the remote reset us three times" and "the remote reset us" are
 // the same sentence about two very different remotes, and only the first
 // tells an operator to go look at their network.
+// short: remote failure classification over captured stderr, with a stubbed sleep
 func TestTheBoundIsSpentAndThenTheRunStops(t *testing.T) {
 	reset := errors.New("git fetch: exit status 128: Connection reset by remote.invalid port 22")
 	var slept []time.Duration
@@ -201,6 +204,7 @@ func TestTheBoundIsSpentAndThenTheRunStops(t *testing.T) {
 
 // TestOneResetIsWaitedThroughAndTheWorkGoesOn is the other direction: the
 // failure that actually happened, with the remote back on the next attempt.
+// short: remote failure classification over captured stderr, with a stubbed sleep
 func TestOneResetIsWaitedThroughAndTheWorkGoesOn(t *testing.T) {
 	var notices []RemoteRetryNotice
 	retry := RemoteRetry{
@@ -233,6 +237,7 @@ func TestOneResetIsWaitedThroughAndTheWorkGoesOn(t *testing.T) {
 //
 // Ten attempts at a credential that will never be right is its own bug, and
 // it is the one a naive "just retry remote errors" fix ships with.
+// short: remote failure classification over captured stderr, with a stubbed sleep
 func TestAnAuthenticationFailureIsNotRetried(t *testing.T) {
 	for _, stderr := range []string{
 		"git@remote.invalid: Permission denied (publickey).\nfatal: Could not read from remote repository.",

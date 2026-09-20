@@ -29,10 +29,11 @@ import (
 // does that — so the defect is unreachable in-process and the property is what
 // a test can hold. A time carries a monotonic reading exactly when it differs
 // from its own Round(0), which is what this asserts.
+// short: one short-lived shell in a tempdir; no repository and no run
 func TestAGateClockIsWallTimeNotAwakeTime(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	s, err := startShell(dir, "exit 0", time.Minute, time.Now())
+	s, err := startShell(dir, "exit 0", time.Minute, time.Now(), nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -58,11 +59,12 @@ func TestAGateClockIsWallTimeNotAwakeTime(t *testing.T) {
 // On the code before this tick the start time lived on the gateCommand wrapper,
 // so rebuilding the wrapper reset the gate's age to zero — elapsed would read a
 // few milliseconds for a gate minutes old.
+// short: one short-lived shell in a tempdir; no repository and no run
 func TestAGateClockSurvivesItsWrapperBeingRebuilt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	start := time.Now().Add(-4 * time.Minute)
-	s, err := startShell(dir, "sleep 30", time.Hour, start)
+	s, err := startShell(dir, "sleep 30", time.Hour, start, nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}

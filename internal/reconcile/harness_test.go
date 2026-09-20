@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,7 +16,9 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -32,6 +35,16 @@ import (
 var executorBin string
 
 func TestMain(m *testing.M) {
+	// Under -short every test that would drive this binary skips itself in
+	// newFixture, so building it would be seconds of the gate spent on a
+	// path nothing takes. flag.Parse() first: testing.Short() panics if it is
+	// read before the flags are parsed, and m.Run() is what normally parses
+	// them.
+	flag.Parse()
+	if testing.Short() {
+		os.Exit(m.Run())
+	}
+
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
@@ -42,6 +55,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// The suite's gate slots live here too, and go away with everything else
+	// below. Every fixture builds a repository of its own, and a slot root
+	// under the host's temp directory (gatedir.go's default) would leave one
+	// checkout per fixture behind after every run of this package.
+	gateSlotBase = filepath.Join(dir, "gate-slots")
 	executorBin = filepath.Join(dir, "ticfac-exec-subprocess")
 	build := exec.Command("go", "build", "-o", executorBin, "./cmd/ticfac-exec-subprocess")
 	build.Dir = root
@@ -97,6 +115,15 @@ type claimCount struct {
 	open     int
 	peak     int
 	refuseAt int
+
+	// refusals is how many claims this tracker has refused, and relentAfter is
+	// the refusal at which it stops refusing (tick go6). Together they are the
+	// other holder finishing: the width frees between one incarnation and the
+	// next, which is the world the run holds for and the reason the hold is
+	// resumable by construction rather than by anyone's judgement. Zero
+	// relentAfter never relents.
+	refusals    int
+	relentAfter int
 }
 
 // In is the fake's half of the reconciler's relocation: the same tracker, with
@@ -296,6 +323,12 @@ func (f *fakeTracker) Claim(_ context.Context, tickID, owner string) (tk.Tick, e
 	f.mu.Lock()
 	if f.claims.refuseAt > 0 && f.claims.open >= f.claims.refuseAt {
 		open := f.claims.open
+		f.claims.refusals++
+		if f.claims.relentAfter > 0 && f.claims.refusals >= f.claims.relentAfter {
+			// The other holder closed its tick. This claim is still refused —
+			// the width was full when it was asked — and the next one is not.
+			f.claims.refuseAt = 0
+		}
 		f.mu.Unlock()
 		return tk.Tick{}, &tk.ErrDispatchWidth{
 			Command:  "claim",
@@ -327,6 +360,14 @@ func (f *fakeTracker) refuseClaimsBeyond(width int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.claims.refuseAt = width
+}
+
+// relentAfterRefusals makes the width free itself after n refusals: the other
+// holder finished, which is what a claim-width refusal says will happen.
+func (f *fakeTracker) relentAfterRefusals(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claims.relentAfter = n
 }
 
 func (f *fakeTracker) Note(_ context.Context, tickID, text string) (tk.Tick, error) {
@@ -381,6 +422,7 @@ type testRepo struct {
 // origin to push to.
 func newRepo(t *testing.T, root, name, gate string) *testRepo {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	dir := filepath.Join(root, name)
 	origin := filepath.Join(root, name+"-origin.git")
 
@@ -426,6 +468,7 @@ func newRepo(t *testing.T, root, name, gate string) *testRepo {
 // it needs has to come from origin.
 func cloneRepo(t *testing.T, origin, dir string) *testRepo {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	mustRun(t, filepath.Dir(dir), "git", "clone", "--quiet", origin, dir)
 	configure(t, dir)
 	resolved, err := filepath.EvalSymlinks(dir)
@@ -573,6 +616,12 @@ type fixtureOptions struct {
 	// record exists for permanently null.
 	progressProbe time.Duration
 
+	// autoResumeCap is the supervisor's cap (tick go6). Zero is the
+	// production default; NEGATIVE is supervision off, which is exactly the
+	// behaviour this repository had before go6 — a run that stops at the first
+	// refusal and waits for somebody to type the command again.
+	autoResumeCap int
+
 	// gateHeartbeat overrides how often a running gate says so (tick 9pz),
 	// for the same reason as gateTimeout and stallWarn: a cadence measured in
 	// minutes is testable in milliseconds without the minute being a
@@ -582,6 +631,7 @@ type fixtureOptions struct {
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	t.Helper()
+	shorttest.EndToEnd(t)
 	root := t.TempDir()
 	gate := opts.gate
 	if gate == "" {
@@ -640,22 +690,27 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		progressProbe = 200 * time.Millisecond
 	}
 	return Options{
-		Repo:               repo.Dir,
-		Remote:             "origin",
-		EpicID:             "qeu",
-		RunID:              runID,
-		BaseRef:            "HEAD",
-		Owner:              "ticfac-test",
-		Tracker:            f.Tracker,
-		ExecStateRoot:      f.StateRoot,
-		GateConfig:         filepath.Join(repo.Dir, ".tick", "runners.toml"),
-		GateTimeout:        gateTimeout,
-		PollInterval:       20 * time.Millisecond,
-		WipeThreshold:      10 * time.Second,
-		StepCap:            60 * time.Millisecond,
-		WallSeconds:        120,
-		BudgetUSD:          opts.budget,
-		CeilingUSD:         opts.ceiling,
+		Repo:          repo.Dir,
+		Remote:        "origin",
+		EpicID:        "qeu",
+		RunID:         runID,
+		BaseRef:       "HEAD",
+		Owner:         "ticfac-test",
+		Tracker:       f.Tracker,
+		ExecStateRoot: f.StateRoot,
+		GateConfig:    filepath.Join(repo.Dir, ".tick", "runners.toml"),
+		GateTimeout:   gateTimeout,
+		PollInterval:  20 * time.Millisecond,
+		WipeThreshold: 10 * time.Second,
+		StepCap:       60 * time.Millisecond,
+		WallSeconds:   120,
+		BudgetUSD:     opts.budget,
+		CeilingUSD:    opts.ceiling,
+		AutoResumeCap: opts.autoResumeCap,
+		// A supervised resume waits before the next incarnation, and the wait
+		// is spent through Sleep above — milliseconds here, the production
+		// number everywhere else.
+		AutoResumeBackoff:  time.Millisecond,
 		PullRequests:       opts.pullRequests,
 		StallWarnAfter:     opts.stallWarn,
 		ProgressProbeEvery: progressProbe,
@@ -893,6 +948,54 @@ func (f *fixture) run(repo *testRepo, opts fixtureOptions) (*Reconciler, *Result
 	}
 	result, err := r.RunProtected(context.Background())
 	return r, result, err
+}
+
+// supervise is run's supervised twin (tick go6): one process, one call, and
+// every continuation across a resumable stop made by the reconciler itself.
+// The reconciler it returns is the FIRST incarnation — the later ones are the
+// supervisor's — so a test that wants what the whole run said reads the feed
+// file, which every incarnation appends to under the one run id.
+func (f *fixture) supervise(repo *testRepo, opts fixtureOptions) (*Reconciler, *Result, error) {
+	f.t.Helper()
+	r, err := New(f.options(repo, opts))
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := r.Supervise(context.Background())
+	return r, result, err
+}
+
+// feedStages is every stage in the run's feed file, in order, across every
+// incarnation of the run — which is where a supervised run's story is, since
+// each incarnation has a journal of its own and the feed is keyed by run id.
+func feedStages(t *testing.T, repo, runID string) []runfeed.Event {
+	t.Helper()
+	events, err := runfeed.Read(runfeed.Path(repo, runID))
+	if err != nil {
+		t.Fatalf("the run left no feed to read: %v", err)
+	}
+	return events
+}
+
+// countStage is how many times one stage appears in a feed.
+func countStage(events []runfeed.Event, stage string) int {
+	n := 0
+	for _, event := range events {
+		if event.Stage == stage {
+			n++
+		}
+	}
+	return n
+}
+
+// detailOfStage is the detail of the first line with a stage, or empty.
+func detailOfStage(events []runfeed.Event, stage string) string {
+	for _, event := range events {
+		if event.Stage == stage {
+			return event.Detail
+		}
+	}
+	return ""
 }
 
 // RunProtected is Run with the simulated kill caught. A real reconciler has no

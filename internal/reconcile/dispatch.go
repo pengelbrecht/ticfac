@@ -239,26 +239,6 @@ func (r *Reconciler) execStateDir(tickID string, attempt int) string {
 	return filepath.Join(r.opts.ExecStateRoot, r.runID, tickID, fmt.Sprintf("%d", attempt))
 }
 
-// processTick takes one tick from wherever it already is to closed.
-func (r *Reconciler) processTick(ctx context.Context, entry planEntry) error {
-	done, err := r.settleBeforeDispatch(ctx, entry)
-	if err != nil || done {
-		return err
-	}
-
-	fl, err := r.beginTick(ctx, entry)
-	if err != nil {
-		return err
-	}
-
-	status, err := r.awaitInflight(ctx, fl)
-	if err != nil {
-		return err
-	}
-
-	return r.finishTick(ctx, fl, status)
-}
-
 // settleBeforeDispatch is everything the run decides about a tick BEFORE it
 // dispatches anything: whether the tracker already closed it, whether a person
 // struck it out, and whether it is a role job — which is dispatched and acted

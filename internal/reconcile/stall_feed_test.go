@@ -168,6 +168,7 @@ func TestNoStallWarningForAWorkerThatSettlesPromptly(t *testing.T) {
 // runprogress.ParseAttempt reads back, and the namespace the source grant
 // bounds is the one Standing enumerates. Two spellings of one vocabulary
 // drift silently unless one is pinned to the other.
+// short: parses an attempt write ref; no repository
 func TestTheProgressMeasurementReadsTheRunWriteRefs(t *testing.T) {
 	t.Parallel()
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", "epic-x", "7zs", 22)

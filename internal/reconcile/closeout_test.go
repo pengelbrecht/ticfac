@@ -216,6 +216,7 @@ func openPR() *forge.PullRequest {
 
 // ------------------------------------------------------------- the rule ---
 
+// short: reads the declared close-out rule out of this checkout; a file read, not a run
 func TestTheCloseoutRuleReader(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -273,6 +274,7 @@ func TestTheCloseoutRuleReader(t *testing.T) {
 // This repository declares the rule its own run now enforces — the same
 // dogfooding the runners.toml reader has: a mistake in the repo's own
 // declaration breaks the run that routes the very workers building ticfac.
+// short: reads the declared close-out rule out of this checkout; a file read, not a run
 func TestThisRepoDeclaresTheRuleItNowEnforces(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()

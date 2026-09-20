@@ -70,15 +70,43 @@ effort = "high"
 # keys the cache on the package's sources, its dependencies, and the files and
 # environment the test consulted.
 #
-# The known exposure, measured rather than assumed: a test that reads a file by
-# an ABSOLUTE path outside the module can be served from cache after that file
+# 2026-09-20 — and until tick 6wh it bought NOTHING, because the gate ran in a
+# fresh temp directory every time and Go's cache keys on the absolute paths a
+# test opened. The reasoning above was right and the mechanism was broken. 6wh
+# runs the gate in a stable directory per repository, so the saving described
+# here is now a thing that actually happens.
+#
+# The exposure that came with it, and the answer. A test that reads a file by an
+# ABSOLUTE path OUTSIDE the module can be served from cache after that file
 # changes. contracts.RepoRoot() builds absolute paths, so the drift guards that
 # read this very file — TestThisRepositorysGateIsReadable,
 # TestTheGateTargetMatchesTheDeclaredGate,
-# TestTheHarnessBoundOutlivesEveryDeclaredGateBound — are the ones to watch.
-# Tick mbv owns proving this either way; until it lands, run `make suite` (which
-# keeps -count=1) before trusting a green gate about THOSE guards.
-go = { command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
+# TestTheHarnessBoundOutlivesEveryDeclaredGateBound — were the ones to watch.
+# They are safe: this file is INSIDE the module those tests belong to, and go
+# invalidates on it. Demonstrated by hand (edit the command on the line below
+# and the guard fails, uncached) and on every run by
+# TestACachedPassCannotHideAnEditToAFileAGuardReads, which rebuilds the guards'
+# exact shape in a throwaway module and edits its input under it. `make suite`
+# keeps -count=1 and remains the paranoid answer; it is no longer a required
+# one. The wider audit is still tick mbv's.
+#
+# 2026-09-20 — the `-short` in this line now MEANS something (tick miu). It
+# used to mean nothing: 6 of 215 test files consulted testing.Short(), so every
+# per-tick gate ran the entire end-to-end suite — 23 minutes on the e9n
+# attempt-8 run, which then failed on two tests (e4u, 7c0) that pass on a quiet
+# host and stopped the Phase 5 run for nothing.
+#
+# internal/reconcile, internal/exec/herdr and internal/runstate now skip under
+# -short at their harness constructors, and this command runs in seconds. What
+# it no longer covers is exactly what CI covers: ci.yml's go job runs
+# `make test-short` AND `make test`, so nothing this gate skips reaches main
+# unrefused. internal/shorttest holds the guard that stops a new test from
+# quietly re-entering — or quietly escaping — the short suite.
+#
+# The command itself is UNCHANGED, and must stay byte-identical to the
+# Makefile's `gate` recipe: TestTheGateTargetMatchesTheDeclaredGate compares
+# the two.
+go ={ command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the

@@ -22,6 +22,7 @@ import (
 //
 // This is a grep, deliberately: the defect is a SHAPE, it already occurred
 // twice in two packages, and a reviewer cannot be relied on to catch the third.
+// short: a scan of this package's production sources
 func TestNoProductionCodeReadsFetchHead(t *testing.T) {
 	t.Parallel()
 
@@ -94,6 +95,7 @@ func repoRoot(t *testing.T) string {
 // TestAnOperatorFetchingInTheRunsCheckoutEndsNothing on the code that had
 // already stopped reading FETCH_HEAD. A fetch ticfac issues must update only
 // the refspec on its own command line and write nothing else.
+// short: a scan of this package's production sources
 func TestEveryProductionFetchStaysOffSharedRefs(t *testing.T) {
 	t.Parallel()
 

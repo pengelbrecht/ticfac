@@ -204,6 +204,7 @@ func TestASecondTicfacProcessDoesNotEndTheRun(t *testing.T) {
 //
 // Leading with the id keeps each instance's namespace disjoint from anything any
 // other build ever wrote.
+// short: the private fetch ref is a string a Store builds
 func TestAPrivateFetchRefLeadsWithItsInstanceID(t *testing.T) {
 	t.Parallel()
 

@@ -35,6 +35,7 @@ func (c *frozenClock) hold(time.Duration) {}
 // is long spent in CALENDAR terms — which is exactly what waking from a
 // suspend looks like — while the run's own clock has not moved, so this run has
 // watched the attempt for no time at all. Nothing may be refused on that.
+// short: a bare Reconciler over a frozen clock
 func TestASuspendedHostDoesNotRefuseALiveAttempt(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{
@@ -60,6 +61,7 @@ func TestASuspendedHostDoesNotRefuseALiveAttempt(t *testing.T) {
 // And the bound still bounds: a run whose OWN clock advances past the grace,
 // with the attempt still unsettled, does refuse. This is the half that must
 // not be lost in making the other half safe.
+// short: a bare Reconciler over a frozen clock
 func TestAnAttemptNobodyCanAddressIsStillRefused(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{
@@ -102,6 +104,7 @@ func TestAnAttemptNobodyCanAddressIsStillRefused(t *testing.T) {
 // clock fires. Counting it from the dispatch makes both halves of the refusal
 // come true in the same instant, the grace delays nothing, and a stopped
 // attempt is refused instead of collected. Tick pbb's acceptance caught it.
+// short: a bare Reconciler over a frozen clock
 func TestTheGraceStartsWhenTheBoundFiresNotAtDispatch(t *testing.T) {
 	t.Parallel()
 	r := &Reconciler{
