@@ -2,13 +2,14 @@
   "id": "nu9",
   "title": "Wire the run route to EpicReconcilerWorkflow",
   "description": "EpicReconcilerWorkflow is bound (wrangler.toml) but nothing under cloudflare/src calls EPIC_RECONCILER.create. runs.ts:244/606 still start RUN_WORKFLOW, which boots a container agent.\n\nUntil this lands, every other Phase 4 component is unreachable in production and the Phase 4 gate cannot be performed at all. It is the first tick of this epic for that reason.\n\nFrom pxc, finding ea78c31c.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "dha",
   "acceptance_criteria": "A run started through the normal route is driven by EpicReconcilerWorkflow, and a test fails if runs.ts starts RUN_WORKFLOW for an epic run",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T13:49:51.380885Z",
-  "updated_at": "2026-09-19T13:49:51.380885Z"
+  "updated_at": "2026-09-20T10:39:01.242279Z",
+  "started_at": "2026-09-20T10:39:01.242279Z"
 }
