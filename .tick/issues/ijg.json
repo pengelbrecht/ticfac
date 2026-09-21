@@ -1,0 +1,17 @@
+{
+  "id": "ijg",
+  "title": "A reconcile pass is one Workflow step, and a step dies at ten minutes",
+  "description": "A reconcile pass is ONE Workflow step, and a Workflow step is killed at ten minutes. A pass contains a model doing the tick's work, so the pass is as long as the work.\n\nObserved on run_2ec0cf6e153f4814a7eab14ce993c819, the first cloud run to dispatch two workers:\n\n    plan-1   7:15:57 -\u003e 7:25:57   10 minutes   WorkflowTimeoutError: Execution timed out after 600000ms\n\nThe pass before it, with one worker, took seven minutes and survived. With two it reached the ceiling and was killed.\n\nThis is NOT q35. q35 keeps the publish slot alive across a long pass, and it works - the slot survived and the writes landed on epic/uzc. But a heartbeat cannot help a step that the platform itself terminates at 600s.\n\nConsequences as they stand:\n- Any wave whose workers together take more than ten minutes kills its own pass.\n- The kill is a step failure, so the Workflow RETRIES it, which re-dispatches the workers and redoes the work (the hazard already noted on q35). A pass that cannot finish in ten minutes therefore cannot finish at all, and burns a model every ten minutes trying.\n- The ceiling is not configurable; it is the platform's.\n\nFix shape - the pass has to stop being one step:\n- Dispatch and collect belong in DIFFERENT steps. Dispatch a worker, return; let the Workflow sleep; collect in a later step. That is what step.sleep is for, and the reconciler already has a settle-\u003cpass\u003e sleep between passes.\n- The natural shape is the one the local reconciler already has: a pass does not WAIT for a worker, it observes what has settled since last time. The cloud driver is waiting inside the step because the executor's dispatch is awaited to completion.\n- Check whether sandboxExecutor's dispatch can return a handle rather than a finished attempt - t5p persisted the sandbox handle across a Workflow restart precisely so an attempt outlives the step that started it, which suggests the machinery is already there.\n\nWorth measuring first: which awaited call inside reconcilePass actually spans the worker's lifetime. The fix depends on whether it is the executor's Start or a collect that polls.\n\nFound by performing u9h, on the first run to dispatch two workers in parallel.",
+  "notes": "2026-09-21 08:05 - Superseded in approach by yoh. ijg framed this as 'split dispatch and collect into different steps', which is the right direction but describes the change as a step-boundary problem. yoh states the principle instead: nothing in the control plane waits for work. The step ceiling is then not something to work around but something a correct pass can never reach.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "yoh"
+  ],
+  "acceptance_criteria": "A wave whose workers take longer than ten minutes completes, proven against the deployed factory; a pass never waits inside a step for work a later step could observe",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T05:36:13.533355Z",
+  "updated_at": "2026-09-21T06:05:27.376163Z"
+}

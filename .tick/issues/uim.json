@@ -1,0 +1,13 @@
+{
+  "id": "uim",
+  "title": "The PAT's hourly budget is a shared resource the factory can exhaust",
+  "description": "A cloud run failed with:\n\n    GitHub answered HTTP 403 reading .ticfac/runs/\u003crun\u003e/checkpoint.json in pengelbrecht/ticks\n    at epic/uzc (0 of the hourly budget left; resets at 1789970415)\n\nThat is the PRIMARY limit - 5,000 requests per hour for a personal access token - not the secondary points limit 8xd was about. It was exhausted by a night of runs, most of them before 8xd landed, each reading 1104 tick records per pass and retrying.\n\n8xd removed the per-pass cost (one request instead of 1104), so this should not recur at the same rate. But the exposure is real and worth naming:\n\n- The budget is per TOKEN, shared by every run, every retry and every other use of that token. A run cannot see how much is left before it starts.\n- A run that exhausts it fails every subsequent read for up to an hour, and the failures look like unrelated bugs unless the error carries the budget - which it now does, and that is the only reason this was legible.\n- A GitHub App installation token would NOT help on its own: also 5,000/hr outside GHEC.\n\nWorth doing:\n- Read x-ratelimit-remaining on responses and put it in the run's feed when it falls below some fraction, so exhaustion is visible before it is terminal rather than after.\n- Refuse to START a run when the remaining budget cannot plausibly cover it, with the number in the refusal.\n- Consider whether retries should back off against the reset time rather than a fixed schedule; Retry-After is already carried.\n\nFound by performing u9h.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run states the remaining hourly budget when it is low and refuses to start when it is exhausted, naming the reset time",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T05:36:13.580548Z",
+  "updated_at": "2026-09-21T05:36:13.580548Z"
+}
