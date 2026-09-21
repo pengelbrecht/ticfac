@@ -1,0 +1,13 @@
+{
+  "id": "yjs",
+  "title": "Two internal/cli tests fail locally on unmodified main and pass in CI",
+  "description": "TestRunEpicFailsClosed and TestTheBuiltBinaryExitsTwo (internal/cli) fail on an unmodified origin/main checkout - both in the main checkout and in a fresh worktree - while the same commit passes both in CI.\n\nA test that is red on the developer's machine and green in CI is no signal at all. It trains everyone to ignore a red local run, which is how a real failure gets waved through; and it means 'the suite passes' means different things in the two places that say it.\n\nPer the standing rule, treat this as a bug rather than as environment noise. Both names suggest process-level assertions - a run that must fail closed, and a built binary's exit code - so the likely shape is a dependency on something the CI image has and this machine does not, or the reverse: a PATH entry, an installed binary, a git identity, a HOME-relative path, or something ticfac itself installed into ~/.local/bin during a session.\n\nDetermine which, and make the test either independent of it or explicit about requiring it - a skip with a reason naming what is missing is acceptable; a silent difference is not.\n\nReported by the agent implementing prs, which correctly declined to treat its own green CI as evidence that a locally red test was fine.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Both tests give the same verdict locally and in CI on an unmodified checkout, or skip with a reason naming exactly what the environment lacks",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T06:52:53.212201Z",
+  "updated_at": "2026-09-21T06:52:53.212201Z"
+}
