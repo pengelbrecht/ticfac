@@ -398,8 +398,10 @@ RUN set -euo pipefail; \
     fi; \
     echo "$reported"
 
-# The entrypoint is NOT changed here (tick prs stops at presence; tick hn0
-# makes the orchestrator run ticfac).
+# The entrypoint is not changed HERE. It is changed in the staged entrypoint.sh
+# this image COPYs, by SetSandboxOrchestratorEntrypoint (tick hn0): the staged
+# script execs ` + "`ticfac run-epic`" + ` instead of a headless harness, and keeps
+# everything before that — the clone, the pre-flight, the actor, the run keeper.
 ENV TICFAC_VERSION=${TICFAC_VERSION}
 `
 

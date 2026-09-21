@@ -1,0 +1,259 @@
+package factory
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// The orchestrator container runs ticfac, not a harness on a skill loop
+// (tick hn0).
+//
+// WHAT CHANGES, AND WHAT DELIBERATELY DOES NOT.
+// /usr/local/bin/ticks-orchestrator clones the repo at the submitted SHA,
+// verifies tk, adopts the run branch, provisions the toolchain, runs the
+// repository's `[sandbox]` setup and its `[environment.commands]` pre-flight,
+// exports TK_ACTOR=cloud:orchestrator, starts the RUN KEEPER — and then execs
+// a headless harness on the ticks skill loop, which is a MODEL deciding
+// control flow. Only that last step changes. Everything above it is kept,
+// the keeper most of all: it pushes the run branch as soon as there is
+// anything on it and heartbeats on a timer, which is why committed work
+// already outlives the container (epic yoh's eviction story rests on it).
+//
+// WHY THE DEPLOY REWRITES THE STAGED ENTRYPOINT.
+// Three mechanisms were available and two of them are closed:
+//
+//   - The entrypoint cannot be told to exec something else. `start_harness`
+//     builds its command from a closed `case "$harness"` over exactly `omp`
+//     and `claude`, and TICKS_HARNESS chooses between those two harnesses —
+//     both models. There is no env var or argument that selects a
+//     deterministic orchestrator, so nothing can be configured here.
+//
+//   - The change cannot go upstream into ticks for the same reason the ticfac
+//     binaries could not (ticfacbin.go): ticks' own build context holds no
+//     ticfac, so a ticks image that booted `ticfac run-epic` would be a ticks
+//     image that cannot boot at all.
+//
+//   - So it goes where the deploy's other image edits already go. image/ is
+//     ticfac's VENDORED copy of ticks' cloud/sandbox tree, and sandbox.pin.json
+//     states the rule outright: "ticfac never edits a file under image/". CI
+//     enforces it from both ends (`go run ./cmd/sandbox check` and
+//     `verify-upstream`). The STAGED copy is a different thing: SetSandboxTkPins
+//     rewrites the staged Dockerfile's pins, SetSandboxTicfacPins inserts
+//     ticfac's, and MaterializeSandbox rewrites the whole staged tree from the
+//     embedded one on every deploy — so an edit there cannot accumulate and the
+//     vendored bytes are never touched. This is that, applied to entrypoint.sh.
+//
+// WHY IT WRAPS THE FUNCTION RATHER THAN PATCHING ITS BODY.
+// The inserted block is appended immediately before the script's final
+// `main "$@"`, and it REDEFINES `start_harness`. Not one existing line is
+// rewritten: bash takes the last definition of a function, and `main` is
+// called after both. The original is kept under another name — captured with
+// `declare -f`, so the capture depends on no text in it — because one phase
+// must still reach it (see below). A rewrite that edited the body would have
+// to match the vendored script's prose, and would break the next time ticks
+// changed a word of it.
+//
+// WHY `review` IS NOT REDIRECTED.
+// A review boot reads a hostile pull request and writes prose; it holds no
+// push credential, commits nothing, opens no PR, and the only thing it
+// produces is a findings file the entrypoint itself posts. There is no epic to
+// reconcile, so it keeps the harness it has always had.
+
+// ticfacEntrypointName is the orchestrator's run entrypoint inside the staged
+// image context. The Dockerfile installs it as /usr/local/bin/ticks-orchestrator.
+const ticfacEntrypointName = "entrypoint.sh"
+
+// ticfacEntrypointMarker identifies the inserted block, so a second
+// application is a refusal rather than two definitions of one function.
+const ticfacEntrypointMarker = "# >>> ticfac run-epic (tick hn0)"
+
+// entrypointMainPattern is the script's last line, `main "$@"`, and the anchor
+// the override is inserted BEFORE. A function defined after the call that uses
+// it is a function bash never sees.
+var entrypointMainPattern = regexp.MustCompile(`(?m)^main "\$@"[ \t]*$`)
+
+// SetSandboxOrchestratorEntrypoint rewrites the STAGED orchestrator entrypoint
+// so that a run boot execs `ticfac run-epic` instead of a headless harness.
+//
+// Same contract as SetSandboxTkPins and SetSandboxTicfacPins: the staged copy
+// is edited, the vendored tree is not, and it must run after MaterializeSandbox
+// — which writes the staged copy fresh — or it would be appending to a file
+// about to be overwritten.
+func SetSandboxOrchestratorEntrypoint(dir string) error {
+	path := filepath.Join(dir, ticfacEntrypointName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", path, err)
+	}
+	text := string(data)
+	if strings.Contains(text, ticfacEntrypointMarker) {
+		return fmt.Errorf("%s already execs ticfac — the staged entrypoint is written fresh by MaterializeSandbox on every deploy, so a second insertion means the staging order is wrong", path)
+	}
+	anchor := entrypointMainPattern.FindStringIndex(text)
+	if anchor == nil {
+		return fmt.Errorf(`%s has no final "main \"$@\"" line to insert the ticfac override before — the vendored entrypoint changed shape and this rewrite has to be re-derived against it`, path)
+	}
+
+	var b strings.Builder
+	b.WriteString(text[:anchor[0]])
+	b.WriteString(ticfacEntrypointBlock)
+	b.WriteString("\n")
+	b.WriteString(text[anchor[0]:])
+	if err := os.WriteFile(path, []byte(b.String()), 0o755); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// ticfacEntrypointBlock is what the deploy inserts. Read it as the whole of
+// the change: everything the entrypoint did before `start_harness` is
+// untouched, `start_harness` itself is replaced by a boot of `ticfac run-epic`,
+// and the run keeper is started exactly where it was.
+const ticfacEntrypointBlock = ticfacEntrypointMarker + `
+# The orchestrator is a DETERMINISTIC reconciler, not a model following a skill
+# loop. Inserted into the STAGED copy of this script by ` + "`ticfac factory deploy`" + `
+# (internal/factory/ticfacentrypoint.go); it is not in the committed
+# image/entrypoint.sh and cannot be — image/ is ticfac's vendored copy of ticks'
+# cloud/sandbox tree, which ticfac never edits.
+#
+# Everything main() does before start_harness is unchanged: the clone at the
+# submitted SHA, the run branch, tk's verification, toolchain provisioning, the
+# repository's own setup and [environment.commands] pre-flight, the model and
+# harness probes, and TK_ACTOR. Only the exec changes.
+
+# The harness path, kept under its own name so the review phase can still reach
+# it. Captured from the live definition rather than copied, so it cannot drift
+# from the script above.
+eval "ticks_harness_start_harness() $(declare -f start_harness | tail -n +2)"
+
+# The default branch of the remote, as a BRANCH NAME.
+#
+# ` + "`ticfac run-epic --base`" + ` defaults to the literal string "HEAD", which is not
+# a branch: base refresh resolves nothing and silently does nothing every round,
+# and the epic PR falls back to a guessed base (tick udu). The clone here is a
+# fetch of one SHA into a fresh ` + "`git init`" + `, so it has no origin/HEAD to read —
+# the remote is asked instead, and only if that says nothing does this fall back
+# to the same convention the reconciler documents.
+ticfac_base_branch() {
+	local ref
+	ref="$(git -C "$workdir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+	if [[ -n $ref ]]; then
+		printf '%s\n' "${ref#origin/}"
+		return 0
+	fi
+	ref="$(git -C "$workdir" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { print $2; exit }')"
+	if [[ -n $ref ]]; then
+		printf '%s\n' "${ref#refs/heads/}"
+		return 0
+	fi
+	warn "the remote named no default branch, so the epic is based on 'main' by convention"
+	printf 'main\n'
+}
+
+start_harness() {
+	# A review reads a pull request and writes prose. There is no epic to
+	# reconcile, it holds no push credential, and the findings file this script
+	# posts is the only thing it produces — so it keeps the harness.
+	if [[ $phase == "review" ]]; then
+		ticks_harness_start_harness
+		return
+	fi
+
+	export TK_ACTOR="$ACTOR"
+	export TICKS_RUN_ID="$run_id"
+	export TICKS_PHASE="$phase"
+	export TICKS_RUN_BRANCH="$run_branch"
+	if [[ -n $run_pass ]]; then export TICKS_PASS="$run_pass"; fi
+	if [[ -n $factory_url ]]; then export TICKS_FACTORY_URL="$factory_url"; fi
+	if [[ -n $factory_token ]]; then export TICKS_FACTORY_TOKEN="$factory_token"; fi
+	if [[ -n $factory_project ]]; then export TICKS_FACTORY_PROJECT="$factory_project"; fi
+	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
+
+	# The two binaries, both required. ticfac refuses to start without the
+	# executor beside it — correctly: a run without it would start jobs nothing
+	# is watching — and the refusal is worth more here than at the first
+	# dispatch, because this container has already paid for the clone and the
+	# pre-flight by now.
+	local missing=()
+	command -v ticfac >/dev/null 2>&1 || missing+=(ticfac)
+	command -v ticfac-exec-subprocess >/dev/null 2>&1 || missing+=(ticfac-exec-subprocess)
+	if ((${#missing[@]} > 0)); then
+		die $EXIT_CONFIG "this image does not carry ${missing[*]} — the orchestrator IS ticfac, so there is nothing for this container to run. Rebuild the image from a deploy that stages it (internal/factory/ticfacbin.go)."
+	fi
+
+	# ticfac's workers are ` + "`claude`" + ` processes in THIS container, launched by the
+	# local-subprocess executor, and they inherit this environment: common.sh has
+	# already pointed ANTHROPIC_BASE_URL at the gateway and set every vendor
+	# credential to the run's gateway token, and the executor's source grade
+	# preserves exactly those variables. So a worker's model call is the
+	# gateway-backed one the factory already pays for, metered against this run.
+	#
+	# That only holds on the Anthropic route. A run whose [orchestrator].model is
+	# served by Workers AI or OpenAI would dispatch workers that cannot make one
+	# call, so it is refused here rather than discovered at the first attempt —
+	# the same rule, for the same reason, that select_model_route applies to the
+	# claude harness.
+	if [[ ${TICKS_MODEL_PROVIDER:-anthropic} != "anthropic" ]]; then
+		die $EXIT_MODEL "ticfac dispatches its workers through the claude CLI, which speaks the Anthropic API, but '$model' is served by ${TICKS_MODEL_PROVIDER} — route [orchestrator].model to an Anthropic model for a run this container orchestrates."
+	fi
+
+	# The container runs as root, and the claude CLI REFUSES
+	# ` + "`--permission-mode bypassPermissions`" + ` under root unless it is told it is
+	# in a sandbox: "cannot be used with root/sudo privileges for security
+	# reasons". Every ticfac worker here is launched with that flag
+	# (internal/runconfig/kinds.go), so without this every dispatch would fail
+	# at exec with a message about privileges and nothing about the run.
+	#
+	# The statement is true rather than convenient: this IS a disposable
+	# container with an ephemeral disk, which is the condition the variable
+	# names. The ticks harness never met this because its default kind is omp,
+	# which has no such check — so the escape hatch belongs to ticfac's boot and
+	# is set here, where the processes that need it inherit it.
+	export IS_SANDBOX=1
+
+	# The base branch, and the LOCAL ref that makes it resolvable.
+	#
+	# The clone above is a ` + "`git init`" + ` plus a fetch of one SHA, so the checkout
+	# holds the submitted commit and nothing else: ` + "`git rev-parse main`" + ` fails,
+	# and rev-parse does not fall back to refs/remotes/origin/main the way
+	# ` + "`git checkout`" + ` DWIMs. The reconciler resolves --base locally when it
+	# creates the integration branch, so a base that names a branch nothing
+	# fetched is refused at the first leg — which is exactly what a container run
+	# did before this line. Fetching it is what a local checkout already has.
+	local base_branch
+	base_branch="$(ticfac_base_branch)"
+	if ! git -C "$workdir" fetch -q origin "+refs/heads/${base_branch}:refs/heads/${base_branch}"; then
+		die $EXIT_CLONE "cannot fetch the base branch ${base_branch} from origin — ticfac cuts the epic's integration branch from it, and a base the checkout does not hold is refused before any tick is claimed"
+	fi
+
+	# --branch is left at ticfac's default, epic/<epic-id>, and NOT pointed at
+	# ${run_branch}: the reconciler requires its integration branch to be checked
+	# out nowhere (internal/reconcile/git.go, worktreeAt), and adopt_run_branch
+	# has this checkout sitting on ${run_branch}. Durability is not lost by that.
+	# ticfac pushes the integration branch to origin as it goes — that is axiom
+	# 1, and it is what a fresh orchestrator re-derives from — while the keeper
+	# goes on doing what it does here: pushing whatever this checkout commits,
+	# and printing the heartbeat that is the only view an operator has of a
+	# container they cannot reach.
+	local cmd=(
+		ticfac run-epic
+		--repo "$workdir"
+		--remote origin
+		--base "$base_branch"
+		--run-id "$run_id"
+		"$epic"
+	)
+
+	# Started BEFORE the exec, watching this pid: exec keeps the pid, so the
+	# keeper is watching ticfac itself and dies when it does.
+	start_keeper "$$"
+	say "starting ticfac run-epic ${epic} on ${base_branch} — a deterministic reconciler, with no model deciding control flow"
+	# exec, so ticfac owns stdout directly: its output streams as it is produced
+	# and its exit status is the run's exit status.
+	exec "${cmd[@]}"
+}
+# <<< ticfac run-epic (tick hn0)
+`
