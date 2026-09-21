@@ -1459,6 +1459,57 @@ export type EpicReconcilerParams = {
 export const DEFAULT_RECONCILE_POLL_MS = 60_000;
 
 /**
+ * What fraction of a lease's life may pass between heartbeats (tick q35).
+ *
+ * A third, so a beat may be missed entirely — a slow round trip, a retry —
+ * and the lease still outlives the gap. Beating at the TTL itself would make
+ * every late beat an expiry.
+ */
+export const HEARTBEAT_FRACTION = 3;
+
+/** A beat that keeps something alive while other work runs, and stops with it. */
+export type Heartbeat = { stop: () => void };
+
+/**
+ * Calls `beat` every `ttlMs / HEARTBEAT_FRACTION` until stopped, or until a
+ * beat answers false.
+ *
+ * This exists because a lease renewed only at the START of a piece of work
+ * cannot cover work whose length is set by a model (tick q35): a seven-minute
+ * pass published under a three-minute slot and was refused. The answer is to
+ * keep beating, not to raise the TTL — the TTL is how long a DEAD run may
+ * wedge a repository, and that number wants to stay small.
+ *
+ * Deliberately not a step: a Workflow step's retry re-runs its whole callback,
+ * and a heartbeat that could be replayed would renew a lease for a pass that
+ * is no longer running.
+ */
+export function heartbeat(beat: () => Promise<boolean>, ttlMs: number): Heartbeat {
+  // The cadence IS the ratio. An absolute floor large enough to matter would
+  // silently override it — a 1s floor against a 300ms lease beats once a
+  // second and lets the lease die, which is the bug this function exists to
+  // fix, reintroduced inside it. The floor here only stops a pathological
+  // busy loop on a lease measured in milliseconds.
+  const every = Math.max(25, Math.floor(ttlMs / HEARTBEAT_FRACTION));
+  let live = true;
+  const timer = setInterval(() => {
+    if (!live) return;
+    // A beat that throws must not take the pass with it: the pass's own write
+    // is what reports a slot it no longer holds.
+    void beat()
+      .then((keep) => {
+        if (!keep) stop();
+      })
+      .catch(() => stop());
+  }, every);
+  const stop = () => {
+    live = false;
+    clearInterval(timer);
+  };
+  return { stop };
+}
+
+/**
  * The reconciler's Workflow: one instance per EpicRun, keyed by run id
  * (`env.EPIC_RECONCILER.create({ id: run_id, params })`).
  *
@@ -1715,14 +1766,50 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
           }
         }
 
-        const outcome = await reconciler.reconcilePass();
-        return {
-          terminal: outcome.terminal,
-          state: outcome.state,
-          reason: outcome.reason,
-          dispatched: outcome.dispatched,
-          slot_token: token,
-        };
+        // The slot has to survive the PASS, not just start it (tick q35).
+        // A pass is as long as the work inside it: the first cloud run to
+        // reach a dispatched worker spent seven minutes here while a model
+        // deleted two files, and published under a slot that had expired
+        // four minutes earlier. Renewing once at the top cannot cover that,
+        // and a longer TTL is the wrong answer — the TTL is how long a DEAD
+        // run may wedge the repository, and that number should stay small.
+        //
+        // So beat while the pass runs. The token the room hands back is
+        // carried into `token`, because a renewal may rotate it and the
+        // publish at the end must use the current one.
+        const beat = heartbeat(async () => {
+          const again = await room().renewSlot({
+            run_id: params.run_id,
+            token,
+            ttl_ms: slotTtlMs,
+          });
+          if (again.ok) {
+            token = again.lease.token;
+            holder = { run_id: params.run_id, token };
+            return true;
+          }
+          // A slot lost mid-pass is not this beat's to resolve: the pass is
+          // already writing, and the publisher refuses a write with no slot
+          // (which is how q35 was found). Say so and stop beating; the pass's
+          // own refusal carries the verdict.
+          console.error(
+            `run ${params.run_id} lost the publish slot for ${params.project} mid-pass: ${again.detail}`,
+          );
+          return false;
+        }, slotTtlMs);
+
+        try {
+          const outcome = await reconciler.reconcilePass();
+          return {
+            terminal: outcome.terminal,
+            state: outcome.state,
+            reason: outcome.reason,
+            dispatched: outcome.dispatched,
+            slot_token: token,
+          };
+        } finally {
+          beat.stop();
+        }
       });
       holder = { run_id: params.run_id, token: result.slot_token };
       if (result.terminal) {
