@@ -66,14 +66,48 @@ import (
 // image context. The Dockerfile installs it as /usr/local/bin/ticks-orchestrator.
 const ticfacEntrypointName = "entrypoint.sh"
 
+// entrypointReDerive is the remedy every anchor refusal ends with. One
+// sentence, because all three failures have the same fix and the same owner.
+const entrypointReDerive = "the vendored entrypoint changed shape under sandbox.pin.json " +
+	"and this rewrite has to be re-derived against it (internal/factory/ticfacentrypoint.go). " +
+	"The deploy stops here on purpose: an override that does not apply is a container that boots " +
+	"a model on the skill loop, which is what tick hn0 removed."
+
 // ticfacEntrypointMarker identifies the inserted block, so a second
 // application is a refusal rather than two definitions of one function.
 const ticfacEntrypointMarker = "# >>> ticfac run-epic (tick hn0)"
 
-// entrypointMainPattern is the script's last line, `main "$@"`, and the anchor
-// the override is inserted BEFORE. A function defined after the call that uses
-// it is a function bash never sees.
-var entrypointMainPattern = regexp.MustCompile(`(?m)^main "\$@"[ \t]*$`)
+// THE THREE ANCHORS, AND WHY EACH ONE IS A STOP.
+//
+// This rewrite is coupled to three structural facts about a file ticfac does
+// not own and that gets vendor-bumped with sandbox.pin.json. Each is checked,
+// and a missing one FAILS THE DEPLOY. The outcome being guarded against is
+// specific and quiet: a rewrite that still produces a script bash accepts —
+// `bash -n` green, the image builds, the container boots — but whose override
+// is never reached, so a model orchestrates again. That is the exact thing
+// this tick removes, and it would be invisible until somebody read a run log.
+//
+//   - `main "$@"` is the last line. The block is inserted BEFORE it, because a
+//     function defined after the call that uses it is a function bash never
+//     sees. No anchor, no insertion point.
+//
+//   - a function named `start_harness` is defined. It is what `declare -f`
+//     captures for the review phase and what the block redefines.
+//
+//   - `main` CALLS it by that name. This is the one that matters most: if ticks
+//     renames the call site, the block still parses, still defines
+//     `start_harness`, and nothing ever calls it. Every other failure is loud
+//     on its own; this one is not.
+//
+// When one of these fires, the rewrite has to be re-derived against the new
+// vendored script — which is a person's job, at the moment the pin moves.
+var (
+	entrypointMainPattern = regexp.MustCompile(`(?m)^main "\$@"[ \t]*$`)
+
+	entrypointHarnessDefPattern = regexp.MustCompile(`(?m)^start_harness\(\)[ \t]*\{[ \t]*$`)
+
+	entrypointHarnessCallPattern = regexp.MustCompile(`(?m)^[ \t]+start_harness[ \t]*$`)
+)
 
 // SetSandboxOrchestratorEntrypoint rewrites the STAGED orchestrator entrypoint
 // so that a run boot execs `ticfac run-epic` instead of a headless harness.
@@ -94,7 +128,20 @@ func SetSandboxOrchestratorEntrypoint(dir string) error {
 	}
 	anchor := entrypointMainPattern.FindStringIndex(text)
 	if anchor == nil {
-		return fmt.Errorf(`%s has no final "main \"$@\"" line to insert the ticfac override before — the vendored entrypoint changed shape and this rewrite has to be re-derived against it`, path)
+		return fmt.Errorf(`%s has no final "main \"$@\"" line to insert the ticfac override before — %s`, path, entrypointReDerive)
+	}
+	def := entrypointHarnessDefPattern.FindStringIndex(text)
+	if def == nil {
+		return fmt.Errorf("%s defines no start_harness() function for the ticfac override to replace — %s", path, entrypointReDerive)
+	}
+	if def[0] > anchor[0] {
+		return fmt.Errorf("%s defines start_harness() AFTER its own `main \"$@\"`, which bash never reaches — %s", path, entrypointReDerive)
+	}
+	// The quiet one. A script that defines start_harness and never calls it by
+	// that name would take the override, parse, build, boot — and run the
+	// harness, because nothing reaches the redefinition.
+	if !entrypointHarnessCallPattern.MatchString(text) {
+		return fmt.Errorf("%s never calls start_harness by name, so the ticfac override would be defined and never reached: the container would boot a model on the skill loop and say nothing about it — %s", path, entrypointReDerive)
 	}
 
 	var b strings.Builder

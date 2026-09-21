@@ -93,21 +93,64 @@ func TestSetSandboxOrchestratorEntrypointRefusesASecondApplication(t *testing.T)
 	}
 }
 
-// The anchor is the vendored script's last line. If ticks ever stops ending
-// entrypoint.sh with `main "$@"`, this rewrite has to be re-derived — and the
-// deploy has to stop rather than ship an image whose override is never called.
-func TestSetSandboxOrchestratorEntrypointRefusesAMissingAnchor(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ticfacEntrypointName)
-	if err := os.WriteFile(path, []byte("#!/usr/bin/env bash\nstart_harness() { :; }\nstart_harness\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	err := SetSandboxOrchestratorEntrypoint(dir)
-	if err == nil {
-		t.Fatal("an entrypoint with no main \"$@\" was accepted")
-	}
-	if !strings.Contains(err.Error(), "no final") {
-		t.Errorf("refusal does not name the anchor: %v", err)
+// Every anchor this rewrite depends on is a STOP when it moves.
+//
+// image/ is vendored from ticks and gets bumped with sandbox.pin.json. The
+// outcome being guarded against is the quiet one: a staged script that bash
+// still accepts and that still boots, but whose override is never reached — a
+// model orchestrating again, invisible until somebody reads a run log. So the
+// deploy must fail rather than ship it.
+func TestSetSandboxOrchestratorEntrypointRefusesEveryMovedAnchor(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		script string
+		says   string
+	}{
+		{
+			// Nothing to insert before: a function defined after the call that
+			// uses it is a function bash never sees.
+			name:   "no main call to insert before",
+			script: "#!/usr/bin/env bash\nstart_harness() {\n\t:\n}\n\tstart_harness\n",
+			says:   "no final",
+		},
+		{
+			// Nothing to capture for the review phase, and nothing to replace.
+			name:   "no start_harness to replace",
+			script: "#!/usr/bin/env bash\nrun_the_agent() {\n\t:\n}\nmain() {\n\trun_the_agent\n}\nmain \"$@\"\n",
+			says:   "defines no start_harness",
+		},
+		{
+			// THE QUIET ONE. This script takes the override, parses, builds and
+			// boots — and runs the harness, because main calls it by another
+			// name and nothing ever reaches the redefinition.
+			name:   "start_harness is defined but never called by name",
+			script: "#!/usr/bin/env bash\nstart_harness() {\n\t:\n}\nboot=start_harness\nmain() {\n\t$boot\n}\nmain \"$@\"\n",
+			says:   "never calls start_harness by name",
+		},
+		{
+			// Defined below its own caller: bash reaches main first.
+			name:   "start_harness is defined after main runs",
+			script: "#!/usr/bin/env bash\nmain() {\n\tstart_harness\n}\nmain \"$@\"\nstart_harness() {\n\t:\n}\n",
+			says:   "AFTER its own",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, ticfacEntrypointName), []byte(c.script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			err := SetSandboxOrchestratorEntrypoint(dir)
+			if err == nil {
+				t.Fatal("accepted; the deploy would have shipped a container that boots a model on the skill loop")
+			}
+			if !strings.Contains(err.Error(), c.says) {
+				t.Errorf("refusal does not name what moved: %v", err)
+			}
+			// Every one of them ends with the same remedy and the same owner.
+			if !strings.Contains(err.Error(), "re-derived against it") {
+				t.Errorf("refusal carries no remedy: %v", err)
+			}
+		})
 	}
 }
 
