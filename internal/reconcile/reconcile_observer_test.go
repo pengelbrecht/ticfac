@@ -1,7 +1,6 @@
 package reconcile
 
 import (
-	"os/exec"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -62,7 +61,15 @@ func TestReviewH0fAnOperatorObservingARunEndsNothing(t *testing.T) {
 			// FETCH_HEAD and refmap fixes (tick wdb) this clobbered the head
 			// the store resolved, emptied its view of the run's own state,
 			// and ended the run on conflict_exists.
-			if err := exec.Command("git", "-C", dir, "fetch", "--quiet", "origin").Run(); err == nil {
+			//
+			// Through the harness's runner, so this loop starts no
+			// background maintenance of its own (tick qsn): what it is here
+			// to race is the REFS a plain fetch writes — FETCH_HEAD and the
+			// remote-tracking ref — and a few thousand detached repacks of
+			// the fixture's object store are not that. The maintenance a
+			// real operator's fetch would start is tick mel's subject, and
+			// maintenance_test.go holds it down against the run's own git.
+			if err := harnessCommand("git", "-C", dir, "fetch", "--quiet", "origin").run(""); err == nil {
 				fetches.Add(1)
 			}
 
@@ -87,7 +94,7 @@ func TestReviewH0fAnOperatorObservingARunEndsNothing(t *testing.T) {
 
 			// Three: read the branch — the log of what the run has landed so
 			// far, the way an operator watching a run does.
-			if err := exec.Command("git", "-C", dir, "log", "--oneline", "-5", "origin/"+branch).Run(); err == nil {
+			if err := harnessCommand("git", "-C", dir, "log", "--oneline", "-5", "origin/"+branch).run(""); err == nil {
 				branchReads.Add(1)
 			}
 

@@ -2,7 +2,6 @@ package reconcile
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -181,10 +180,7 @@ func TestTheRunsMergeIsNotResolvedByTheHostsRerereCache(t *testing.T) {
 // hand merge conflicts, and that exit status is the setup working, not the
 // test failing.
 func runGit(dir string, args ...string) error {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	return cmd.Run()
+	return harnessCommand("git", args...).run(dir)
 }
 
 // rrCacheIDs is the rerere cache's conflict ids, and nil when the repository
