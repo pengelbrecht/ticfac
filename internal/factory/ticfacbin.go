@@ -430,6 +430,13 @@ func InstallTicfacInSandbox(ctx context.Context, dir, version string) ([]string,
 	if err := SetSandboxTicfacPins(dir, version, sums); err != nil {
 		return nil, err
 	}
+	// The image's own downloads, made to survive a dropped connection (tick
+	// jge). Here rather than in its own deploy step because this is the same
+	// staged Dockerfile the pins above were just written into: one read, one
+	// rewrite, one place that fails if the staging order is wrong.
+	if _, err := MakeSandboxDownloadsResumable(dir); err != nil {
+		return nil, err
+	}
 	names := make([]string, 0, len(sums))
 	for name := range sums {
 		names = append(names, name)
