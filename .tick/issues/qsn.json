@@ -3,12 +3,14 @@
   "title": "A git process outlives its test and breaks TempDir cleanup",
   "description": "CI failed on PR #26 with no assertion failing:\n\n    --- FAIL: TestAChangedGateCommandIsNotEvidenceForTheGateDeclaredNow (24.37s)\n        testing.go:1267: TempDir RemoveAll cleanup: unlinkat\n        /tmp/TestAChangedGateCommand.../002/.git/objects: directory not empty\n\nThe test passed. What failed is Go's t.TempDir cleanup: RemoveAll walked .git/objects and something WROTE INTO IT while the walk was running, so the directory was not empty when unlinkat reached it. That is a git process still alive after the test that started it returned.\n\nSame family as the two we already fixed: git auto-maintenance repacking and deleting object subdirectories mid-write, which gitbin.NoAutoMaintenance stops, and the pre-rmc teardown that killed scraped pids. Different in that this one is about a child outliving its TEST rather than corrupting a repository.\n\nCandidates, in order of likelihood:\n- a git subprocess the test started and did not wait for, most likely a fetch or a push to a fixture remote;\n- auto-maintenance on a path that does not carry gitbin.NoAutoMaintenance - the flags are added by repoGit.run, so any git invocation NOT going through it is exposed (this is the same gap I wrongly suspected for m78, worth actually checking here);\n- a worktree or gate process that outlives the reconciler in the fixture.\n\nNot caused by the change it failed on: PR #26 touches internal/factory only and never internal/reconcile.\n\nDo not fix this by retrying the cleanup or by t.TempDir-ing somewhere that does not get cleaned. Find the process and make the test wait for it - a test that leaves a child running is a test that will eventually corrupt the next one's fixture.",
   "notes": "2026-09-21 19:13 - Confirmed INTERMITTENT: re-ran the same commit on PR #26 and the go job went green. So it is a race, not a deterministic break - which is consistent with a git child outliving its test rather than with anything in the change it failed on.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "The reconcile suite leaves no git process running after any test returns, proven by a check that fails when one does",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T17:05:49.645177Z",
-  "updated_at": "2026-09-21T17:13:26.943467Z"
+  "updated_at": "2026-09-21T21:15:59.123992Z",
+  "closed_at": "2026-09-21T21:15:59.123992Z",
+  "closed_reason": "Landed via PR #27. harness_test.go's mustRun ran git with the ambient environment, so every clone/fetch/commit/merge ended by starting 'git maintenance run --auto --detach' - git's own daemonize - and the detached child outlived the test that spawned it, writing into .git/objects while t.TempDir's RemoveAll walked it. Proven with GIT_TRACE2_EVENT rather than by repetition: the child's trace stream ends after its parent's, and zero children start once pinned. Two guards, both proven failing first: a trace2 check that the harness starts nothing it does not wait for (LoadBearing, gate: 0.5s against 0.31s measured), and an AST scan that every git the tests start goes through the pinned runner (short:)."
 }

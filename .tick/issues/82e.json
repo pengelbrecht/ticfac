@@ -1,0 +1,13 @@
+{
+  "id": "82e",
+  "title": "Pin git auto-maintenance in the two exec packages' own runners",
+  "description": "qsn fixed internal/reconcile's test harness. Two gaps remain, both found while proving it, neither fixed there:\n\n1. internal/exec/herdr has its OWN unpinned mustRun, and it runs 'fetch' and 'merge' - both of which end by starting 'git maintenance run --auto --detach'. That is the same defect qsn fixed, in a package qsn did not touch. Highest value of the two: it is a test harness, so it leaks into whatever test runs next.\n\n2. internal/exec/subprocess/git.go:336 pushes to a LOCAL-PATH remote, which runs receive-pack unpinned in the destination repository. Harmless where the destination is a fixture whose newRepo already disarms maintenance; a real exposure where it is not. Worth establishing which destinations are reachable before deciding.\n\nThe production wrappers at internal/exec/subprocess/git.go:40 and internal/exec/herdr/git.go:38 were CHECKED and cleared: they carry no pins, but the subcommands they actually run (worktree, push, commit-tree, rev-parse, diff) do not spawn maintenance - verified per subcommand with trace2. So this is not 'pin everything', it is 'pin the two places that demonstrably spawn'.\n\nThe rule worth writing down while fixing: a git invocation that does not go through a pinned runner is exposed, and the only safe default is to pin the runner rather than audit the subcommands each time. gitbin.WithNoAutoMaintenance on the ENVIRONMENT survives a clone whose repository later commands run in, which a -c flag on the command line does not.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "internal/exec/herdr's test runner starts no git it does not wait for, proven by the same trace2 guard qsn added; and the local-path push destination is either pinned or shown to be a repository that already disarms maintenance",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T21:15:59.187703Z",
+  "updated_at": "2026-09-21T21:15:59.187703Z"
+}
