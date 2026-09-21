@@ -1,0 +1,20 @@
+{
+  "id": "mn7",
+  "title": "Delete the TypeScript reconciler",
+  "description": "Once a cloud epic runs through ticfac in the container, the isolate's reimplementation of the reconciler has no callers and should be deleted rather than maintained. Two implementations of one mechanism is what put us here: git-contents.ts and tracker-write.ts both wrote through GitHub's contents API and only one of them sent the branch, which is 99f - and that module's own header says 'Two consumers, one mechanism, so the rules cannot drift between them'.\n\nGoes: epic-reconciler.ts, tracker-client.ts, git-contents.ts, tarball.ts and their tests.\n\nCheck before deleting each - some of this has other callers. tracker-write.ts serves the signal funnel and is NOT part of this. The RepoRoom publish slot and the RunRoom dispatch lease arbitrate between CONCURRENT RUNS of a project and stay. decisions/reconciler-parity.json describes a parity that will no longer have two sides; decide whether it is deleted or rewritten to say the hosts are now one implementation.\n\nThis tick is LAST on purpose. Nothing is deleted until the replacement has run an epic end to end on the deployed factory.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "lkd",
+    "ppt",
+    "cr4",
+    "7eq"
+  ],
+  "parent": "yoh",
+  "acceptance_criteria": "The isolate no longer implements a reconciler, every deleted module is confirmed to have no remaining caller, tracker-write.ts and the rooms are untouched, and the full suite passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T06:19:53.26353Z",
+  "updated_at": "2026-09-21T06:19:53.26353Z"
+}

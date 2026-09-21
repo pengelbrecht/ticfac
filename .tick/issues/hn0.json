@@ -1,0 +1,17 @@
+{
+  "id": "hn0",
+  "title": "The orchestrator runs ticfac, not a harness on a skill loop",
+  "description": "ticks-orchestrator today clones the repo at a SHA, verifies tk, provisions, runs the repository's [environment.commands] pre-flight, exports TK_ACTOR=cloud:orchestrator, and then execs a HEADLESS HARNESS on the ticks skill loop - a model deciding control flow.\n\nReplace that last step with 'ticfac run-epic'. Everything before it stays: the clone, the preflight, the actor, and the RUN KEEPER, which already pushes the run branch as soon as there is anything on it and heartbeats on a timer. That keeper is why committed work already outlives the container.\n\nKeep determinism. EpicReconcilerWorkflow's real improvement over the original design was replacing a model-driven orchestration loop with code; this tick keeps that and only moves where the code runs. Do not regress to 'an agent follows a skill loop'.\n\nticfac needs what a local run needs: a GITHUB_TOKEN for the forge surface, the profiles directory, and ticfac-exec-subprocess beside the binary (the run refuses to start without it, correctly). The executor is local-subprocess: ticfac implements only local-subprocess and herdr, and 'cloudflare-sandbox' is a reserved name in runstate.Executors with no implementation. So workers are processes in this container with their own worktrees - exactly what a local run does, and what the operator asked for: one filesystem, one git repo, a PR at the end.\n\nWatch: standard-3 is 2 vCPU / 8 GiB / 16 GB disk, and the per-tick gate is the CPU-heavy part. Measure what max_parallel this container can actually carry rather than inheriting the local number.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "prs"
+  ],
+  "parent": "yoh",
+  "acceptance_criteria": "A cloud run's orchestrator container runs an epic to completion through ticfac with the local-subprocess executor, pushing the epic branch and leaving a PR, with no model deciding control flow; and the measured max_parallel this instance type sustains is recorded",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T06:19:06.893947Z",
+  "updated_at": "2026-09-21T06:19:06.893947Z"
+}

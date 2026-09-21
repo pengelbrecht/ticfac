@@ -1,0 +1,14 @@
+{
+  "id": "prs",
+  "title": "Put ticfac in the orchestrator image",
+  "description": "The image already carries tk, git, Go, ripgrep and a real filesystem, and has /usr/local/bin/ticks-orchestrator as the role entrypoint the Run Workflow starts and streams. It does NOT carry ticfac - zero mentions in image/Dockerfile. That is the gap this epic turns on.\n\nAdd the ticfac binary the way everything else in that image is added: pinned and checksummed in the version block at the top, so a rebuild is a diff of that block. Note the image is 'pinned to the tk version it embeds' - ticfac's pin belongs beside it and moves with it.\n\nNothing else in this tick. Do not change the entrypoint yet.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "yoh",
+  "acceptance_criteria": "ticfac is on PATH inside the orchestrator container with its version pinned and checksummed in image/Dockerfile's version block, and 'ticfac version' answers from inside a running container",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T06:19:06.845657Z",
+  "updated_at": "2026-09-21T06:19:06.845657Z"
+}
