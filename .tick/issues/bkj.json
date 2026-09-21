@@ -1,0 +1,13 @@
+{
+  "id": "bkj",
+  "title": "The ticfac pins sit at the top of the staged Dockerfile and bust the whole image cache",
+  "description": "SetSandboxTicfacPins inserts ARG TICFAC_VERSION and ARG TICFAC_SHA256_* into the version block at the TOP of the staged Dockerfile. Docker invalidates every layer after a changed instruction, so any ticfac change rebuilds Go, Node, Bun, uv, mise and the rest from scratch - about twenty minutes - when the only thing that actually changed is a 15 MB COPY at the very end.\n\nPre-existing from prs; found while implementing hn0, where the rebuild cost is paid on every iteration.\n\nFix: move the ticfac ARG block DOWN beside the COPY that uses it. The pins are still pinned and a rebuild is still a diff of one block; the block just does not need to sit where it poisons every layer below it. Check TARGETARCH's bare re-declaration stays in the same stage as the COPY when it moves.\n\nWorth measuring after: a ticfac-only change should rebuild in seconds.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A deploy whose only change is the ticfac binaries rebuilds only the final layers, and the measured rebuild time is recorded",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T17:01:28.07637Z",
+  "updated_at": "2026-09-21T17:01:28.07637Z"
+}

@@ -1,0 +1,13 @@
+{
+  "id": "r9p",
+  "title": "run-workflow.test.ts times out intermittently in CI",
+  "description": "cloudflare/test/run-workflow.test.ts failed the typescript job on PR #26 with a timeout at 33s against a 15s bound, and passed on a re-run of the same commit - so it is intermittent rather than a real failure of the change.\n\nPer the standing rule this is a bug rather than noise, but note where it sits: run-workflow.test.ts tests the TypeScript supervisor, which yoh plans to delete once the orchestrator runs ticfac in the container (mn7). So the cheapest correct outcome may be that this test goes away with the code it covers.\n\nDo NOT fix it by widening the 15s bound. If it survives mn7, find why a 15s assertion takes 33s; if mn7 deletes it, close this as removed with the commit that removed it.\n\nFound on PR #26 and confirmed intermittent by re-running the job on the same commit.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Either the test gives the same verdict every run without a widened timeout, or it is gone with the code it covered",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-21T17:01:28.121717Z",
+  "updated_at": "2026-09-21T17:01:28.121717Z"
+}
