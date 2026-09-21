@@ -292,6 +292,16 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	fmt.Fprintf(out, "ticfac %s staged into the image context (%s)\n",
 		opts.Version, strings.Join(staged, ", "))
 
+	// The orchestrator runs ticfac, not a harness on a skill loop (tick hn0).
+	// A step of the deploy rather than a step of InstallTicfacInSandbox,
+	// because it compiles nothing: stageTicfac above is a seam the tests
+	// substitute the COMPILER at, and an entrypoint that only some deploys
+	// rewrote would be the one difference nobody could see in the image.
+	if err := SetSandboxOrchestratorEntrypoint(sandboxDir); err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(out, "the orchestrator entrypoint execs `ticfac run-epic` (no model decides control flow)\n")
+
 	// The Worker imports the Cloudflare Sandbox SDK to run a container, so the
 	// staged bundle is installed before it is deployed. Local work, done before
 	// the first `create`: a deploy that cannot bundle must not have provisioned
