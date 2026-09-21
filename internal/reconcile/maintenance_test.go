@@ -44,9 +44,14 @@ func TestTheRunStartsNoMaintenanceInTheRepositoryItWritesTo(t *testing.T) {
 
 	// The control: a plain git in this repository DOES start it. Without this
 	// a git that ignored the arming would pass the assertion below for free.
+	//
+	// unpinnedGit, not mustRun: since tick qsn the harness's own runner
+	// carries the same pins the reconciler's git does, so a control run
+	// through it would prove nothing about the arming. This is the operator's
+	// git, which is what the control was always describing.
 	looseObject(t, repo.Dir, "control")
 	before := packCount(t, repo.Dir)
-	mustRun(t, repo.Dir, "git", "fetch", "--quiet", "origin")
+	mustSucceed(t, unpinnedGit(repo.Dir, "fetch", "--quiet", "origin"))
 	if packCount(t, repo.Dir) == before {
 		t.Fatal("a plain `git fetch` in the armed repository started no maintenance; this fixture proves nothing")
 	}

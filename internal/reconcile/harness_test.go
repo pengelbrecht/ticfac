@@ -15,6 +15,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -509,22 +510,92 @@ func write(t *testing.T, path, content string) {
 // mustRunAllowingFailure is mustRun for a question whose answer is the exit
 // code — `merge-base --is-ancestor` says yes or no, and neither is an error.
 func mustRunAllowingFailure(dir, name string, args ...string) bool {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	return cmd.Run() == nil
+	return harnessCommand(name, args...).run(dir) == nil
 }
 
 func mustRun(t *testing.T, dir, name string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
+	out, err := harnessCommand(name, args...).output(dir)
 	if err != nil {
 		t.Fatalf("%s %s (in %s): %v\n%s", name, strings.Join(args, " "), dir, err, out)
 	}
 	return string(out)
+}
+
+// ------------------------------------------------- the harness's own git ---
+
+// harnessCommand is the ONE way this suite starts a process, and the only way
+// it is allowed to start a git. Everything a test runs by hand — the
+// repository it builds, the clone it commits in, the fetch it pulls the
+// commit back with — goes through here, so that the rule below is stated once
+// instead of at ninety call sites. maintenance_guard_test.go holds both of
+// those facts down.
+//
+// The rule is gitbin.WithNoAutoMaintenance, and tick qsn is what it is for.
+//
+// A `git clone`, `git fetch`, `git commit` and `git merge` each END by
+// starting `git maintenance run --auto --detach`. `--detach` is git's own
+// daemonize: fork, setsid, and the parent returns. So the git a test waited
+// for has already exited while a git it never knew about is still running in
+// that repository's object store — traced on this project's host, the
+// detached child outliving the `git commit` that started it.
+//
+// A test that returns with one of those alive is what CI caught: Go's
+// t.TempDir cleanup walks the repository the test made, and the maintenance
+// writes into `.git/objects` while RemoveAll is walking it —
+//
+//	testing.go:1267: TempDir RemoveAll cleanup: unlinkat
+//	.../002/.git/objects: directory not empty
+//
+// — a test that PASSED, failed by a child it left behind. Whether that child
+// writes anything is the version split gitbin.NoAutoMaintenance documents
+// (CI's 2.55 repacks at two loose objects in a fan-out directory; a 2.50 does
+// nothing until 6700), which is why this is intermittent and why it shows up
+// on CI and not on a laptop. The fix is not to make the cleanup tolerant: it
+// is to not start the process.
+//
+// Said through the ENVIRONMENT rather than through `-c` on purpose. `-c`
+// reaches one command line, and half of what the harness runs is a `git
+// clone` whose repository every LATER command is run in; GIT_CONFIG_COUNT is
+// read above every config file there is and is inherited by every git those
+// commands start in turn.
+type harnessCmd struct {
+	name string
+	args []string
+	env  []string
+}
+
+func harnessCommand(name string, args ...string) harnessCmd {
+	if name == "git" {
+		// The same binary /usr/bin/git would have exec'd, asked for once
+		// rather than once per process (gitbin.Path).
+		name = gitbin.Path()
+	}
+	return harnessCmd{name: name, args: args,
+		env: gitbin.WithNoAutoMaintenance(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))}
+}
+
+// withEnv appends environment entries AFTER the pins, which is where a
+// caller's own statement belongs: git reads GIT_CONFIG_COUNT above every
+// config file, and appending keeps the numbering WithNoAutoMaintenance
+// produced intact. Its one caller is the guard, which turns tracing on for
+// the invocations it is watching.
+func (c harnessCmd) withEnv(entries ...string) harnessCmd {
+	c.env = append(append([]string{}, c.env...), entries...)
+	return c
+}
+
+func (c harnessCmd) command(dir string) *exec.Cmd {
+	cmd := exec.Command(c.name, c.args...)
+	cmd.Dir = dir
+	cmd.Env = c.env
+	return cmd
+}
+
+func (c harnessCmd) run(dir string) error { return c.command(dir).Run() }
+
+func (c harnessCmd) output(dir string) ([]byte, error) {
+	return c.command(dir).CombinedOutput()
 }
 
 // -------------------------------------------------------------- gates ---

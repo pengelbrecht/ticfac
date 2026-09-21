@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -174,9 +173,7 @@ func TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt(t *testing.T) {
 // gitOut runs one git command and returns its output, failing the test.
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	out, err := harnessCommand("git", args...).output(dir)
 	if err != nil {
 		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
 	}
