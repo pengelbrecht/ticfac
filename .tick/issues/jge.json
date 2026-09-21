@@ -2,12 +2,14 @@
   "id": "jge",
   "title": "The factory cannot be deployed from a low-bandwidth connection",
   "description": "A deploy that rebuilds the orchestrator image pulls Go, Node, Bun, uv and mise from upstream - mise alone is 116 MB - into a ~3 GB image. On a low-bandwidth link each large transfer fails partway (curl 56 'Send failure: Broken pipe', curl 18 'partial file') and the build never completes.\n\nMeasured 2026-09-21, and the diagnosis is worth keeping because three plausible explanations were wrong:\n- NOT the factory image: reproduced in a three-line Dockerfile that only downloads mise.\n- NOT BuildKit's bridge: --network=host fails identically.\n- NOT builds specifically: plain 'docker run curl' on the same URL fails the same way.\nIt is the link. Small transfers succeed; large ones drop.\n\nConsequences as it stands:\n- An operator on a poor connection cannot ship a change to the orchestrator image AT ALL, which now includes every ticfac change, since prs put the ticfac binaries in it.\n- bkj makes it maximally bad: the ticfac pins sit at the top of the staged Dockerfile, so a 15 MB binary change invalidates every layer and re-downloads everything.\n\nWorth considering, roughly in order of value:\n1. bkj first. Moving the pins down means a ticfac-only change rebuilds the last layers and downloads nothing. That alone converts the common case from impossible to trivial on a bad link.\n2. Make the image's downloads resumable and retried. 'curl -fsSL --retry N --retry-all-errors -C -' would survive a drop instead of failing the layer. This is in the VENDORED Dockerfile, so it belongs upstream in ticks - and it would help every ticks user on a bad connection, not just us.\n3. Consider whether the deploy should build the image at all when only the ticfac binaries changed, or whether it can push a layer onto the existing image.\n\nRelated: h8u - all of these failures reported exit 0, so a scripted deploy would have called them releases.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A deploy whose only change is the ticfac binaries completes on a low-bandwidth connection, and a dropped transfer during a full image build is retried rather than failing the build",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T19:12:54.159654Z",
-  "updated_at": "2026-09-21T19:12:54.159654Z"
+  "updated_at": "2026-09-21T23:13:44.02117Z",
+  "closed_at": "2026-09-21T23:13:44.02117Z",
+  "closed_reason": "Landed via PR #28: the staged Dockerfile's five downloads carry --retry 10 --retry-all-errors --retry-delay 2 -C -. The flag that mattered is -C -: retrying without resuming restarts a 116 MB transfer from zero, which on a link dropping every 40 MB never finishes however many retries it is given. Rewritten in the staged copy, where the tk and ticfac pins already are; belongs upstream in ticks eventually."
 }
