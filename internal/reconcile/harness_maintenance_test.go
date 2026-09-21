@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // No test in this package leaves a git process running when it returns
@@ -49,7 +50,17 @@ import (
 // that runner. A rule pinned at one helper is worth nothing if the next test
 // reaches for exec.Command directly, which is exactly how this one was
 // introduced.
+//
+// gate: 0.5s — a leaked child is not caught by the test that leaks it. It is
+// caught by the NEXT one, whose fixture it corrupts, and the failure surfaces
+// wherever the RemoveAll happened to lose the race — which is how this cost
+// two days of chasing "flaky reconcile" before anyone read a cleanup line as
+// a process. CI-only is the wrong side for that: a tick that introduces the
+// leak should be the tick that hears about it, not the tick after next. The
+// price is one repository, two clones and a dozen git processes, measured at
+// 0.31s in the full -short suite and 0.20s alone.
 func TestTheHarnessStartsNoGitItDoesNotWaitFor(t *testing.T) {
+	shorttest.LoadBearing(t)
 	t.Parallel()
 
 	// A repository of its own rather than newRepo's: this guard is about the
@@ -106,6 +117,8 @@ func TestTheHarnessStartsNoGitItDoesNotWaitFor(t *testing.T) {
 
 // Every git this package's tests start goes through the harness's runner
 // (tick qsn). The rule above reaches only as far as this holds.
+//
+// short: an AST scan of this package's own test files
 func TestEveryGitTheTestsStartGoesThroughTheHarnessRunner(t *testing.T) {
 	t.Parallel()
 	entries, err := os.ReadDir(".")
