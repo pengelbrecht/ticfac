@@ -83,6 +83,18 @@ type Options struct {
 	// harness can propagate the secret into its fake worker the way
 	// Cloudflare does for real.
 	onSecretPut func()
+
+	// stageTicfac replaces the cross-compile of ticfac and
+	// ticfac-exec-subprocess into the image context (tests). Nil means the
+	// real one, InstallTicfacInSandbox.
+	//
+	// A seam and not a skip: the harness substitutes the COMPILER and nothing
+	// else — its stand-in still writes four staged files and still drives
+	// SetSandboxTicfacPins over the real staged Dockerfile — because four
+	// cross-compiles per Deploy() would put minutes into a suite that runs
+	// this path a dozen times, while the thing worth asserting on every one of
+	// them is that the deploy staged and pinned at all.
+	stageTicfac func(ctx context.Context, dir, version string) ([]string, error)
 }
 
 // Result describes what a deploy produced.
@@ -263,6 +275,22 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	}
 	fmt.Fprintf(out, "orchestrator image context staged in %s (tk %s built from %s)\n",
 		sandboxDir, pin.Version, sourceRef)
+
+	// ticfac's own binaries, AFTER MaterializeSandbox rather than before: that
+	// call prunes everything under the staged directory the embedded tree does
+	// not ship, so the previous deploy's binaries are deleted there and these
+	// replace them. Staging first would stage them into a directory about to
+	// be swept. (StageTicfacBinaries says the same thing at the other end.)
+	stage := opts.stageTicfac
+	if stage == nil {
+		stage = InstallTicfacInSandbox
+	}
+	staged, err := stage(ctx, sandboxDir, opts.Version)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(out, "ticfac %s staged into the image context (%s)\n",
+		opts.Version, strings.Join(staged, ", "))
 
 	// The Worker imports the Cloudflare Sandbox SDK to run a container, so the
 	// staged bundle is installed before it is deployed. Local work, done before

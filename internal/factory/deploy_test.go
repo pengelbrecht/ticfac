@@ -3,6 +3,8 @@ package factory
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -175,7 +178,38 @@ func (h *harness) options() Options {
 		ConfigPath:  h.ticfacrc,
 		Out:         io.Discard,
 		onSecretPut: h.syncSecret,
+		stageTicfac: fakeStageTicfac,
 	}
+}
+
+// fakeStageTicfac stands in for the four cross-compiles. It substitutes the
+// COMPILER and nothing else: the staged files are written, hashed and pinned
+// through the real SetSandboxTicfacPins over the real staged Dockerfile, so
+// every deploy test still asserts against the mechanism — only the minutes of
+// `go build` are gone. The real one is covered by the tests in
+// ticfacbin_test.go, which run it for both architectures.
+func fakeStageTicfac(_ context.Context, dir, version string) ([]string, error) {
+	sums := map[string]string{}
+	for _, binary := range ticfacStagedBinaries {
+		for _, arch := range ticfacStagedArches {
+			name := stagedBinaryName(binary, arch)
+			body := []byte("fake " + name + " " + version + "\n")
+			if err := os.WriteFile(filepath.Join(dir, name), body, 0o755); err != nil {
+				return nil, err
+			}
+			sum := sha256.Sum256(body)
+			sums[name] = hex.EncodeToString(sum[:])
+		}
+	}
+	if err := SetSandboxTicfacPins(dir, version, sums); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(sums))
+	for name := range sums {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 func (h *harness) log() string {
@@ -688,6 +722,53 @@ func TestDeployStagesTheImageAndInstallsBeforeDeploying(t *testing.T) {
 	}
 	if deploy == -1 || install > deploy {
 		t.Errorf("the install did not run before `wrangler deploy`:\n%s", h.log())
+	}
+}
+
+// The orchestrator has to be IN the image it boots (tick prs). Staging the
+// binaries has one hard ordering constraint: MaterializeSandbox prunes
+// everything under the staged directory the embedded tree does not ship, so
+// staging before it would stage into a directory about to be swept — and the
+// image would be pinned to checksums of files that are no longer there.
+func TestDeployStagesTicfacIntoTheImageContext(t *testing.T) {
+	h := newHarness(t)
+
+	if _, err := Deploy(context.Background(), h.options()); err != nil {
+		t.Fatalf("Deploy: %v\n%s", err, h.log())
+	}
+
+	sandboxDir := SandboxDir(h.bundleDir)
+	for _, binary := range ticfacStagedBinaries {
+		for _, arch := range ticfacStagedArches {
+			name := stagedBinaryName(binary, arch)
+			if _, err := os.Stat(filepath.Join(sandboxDir, name)); err != nil {
+				t.Errorf("%s was not staged into the image context: %v", name, err)
+			}
+		}
+	}
+
+	data, err := os.ReadFile(filepath.Join(sandboxDir, sandboxDockerfileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "\nARG TICFAC_VERSION=1.2.3\n") {
+		t.Errorf("the staged Dockerfile does not pin the deployed ticfac version:\n%s", data)
+	}
+	// Every pinned digest must be the digest of a file that is actually there:
+	// that is the whole of the ordering claim, checked against the artifact
+	// rather than against the call order.
+	for _, binary := range ticfacStagedBinaries {
+		for _, arch := range ticfacStagedArches {
+			name := stagedBinaryName(binary, arch)
+			body, err := os.ReadFile(filepath.Join(sandboxDir, name))
+			if err != nil {
+				continue
+			}
+			sum := sha256.Sum256(body)
+			if !strings.Contains(string(data), hex.EncodeToString(sum[:])) {
+				t.Errorf("the staged Dockerfile pins no digest matching the staged %s", name)
+			}
+		}
 	}
 }
 

@@ -258,6 +258,7 @@ func (h *setupHarness) options(stdin string) SetupOptions {
 		CloudflareAPIBase: h.cloudflare.base(),
 		Repo:              testRepo,
 		onSecretPut:       h.syncSecret,
+		stageTicfac:       fakeStageTicfac,
 	}
 }
 

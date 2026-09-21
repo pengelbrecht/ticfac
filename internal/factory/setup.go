@@ -210,6 +210,11 @@ type SetupOptions struct {
 	// can propagate a secret into its fake worker the way Cloudflare does.
 	onSecretPut func()
 
+	// stageTicfac is handed to the deploy the rung below invokes, so a setup
+	// harness substitutes the cross-compile of the orchestrator's binaries the
+	// same way a deploy harness does (Options.stageTicfac).
+	stageTicfac func(ctx context.Context, dir, version string) ([]string, error)
+
 	// deployFn overrides the deploy invoked from the deployment rung (tests).
 	deployFn func(context.Context, Options) (*Result, error)
 
@@ -505,6 +510,7 @@ func setupDeployment(
 			ConfigPath:  opts.ConfigPath,
 			Out:         out,
 			onSecretPut: opts.onSecretPut,
+			stageTicfac: opts.stageTicfac,
 		})
 		if err != nil {
 			return err
