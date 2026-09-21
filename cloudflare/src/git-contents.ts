@@ -162,10 +162,17 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
   }
 
   async function put(path: string, body: Record<string, unknown>): Promise<StoreWrite> {
+    // The contents API takes the target ref DIFFERENTLY for reads and writes
+    // (tick 99f): a read takes ?ref= in the query, a write takes `branch` in
+    // the BODY, and a write with no branch commits to the repository's DEFAULT
+    // branch without complaining. The query string is not consulted. So the
+    // branch goes here, on every write, from the ref this store was built for
+    // — the alternative is a 201 and a commit sha for a commit that landed
+    // somewhere else, which is exactly what a cloud run did to `main`.
     const response = await fetch(entryURL(path), {
       method: "PUT",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, branch: ref }),
     });
     if (response.status === 409) {
       return {
