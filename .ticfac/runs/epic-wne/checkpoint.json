@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 12,
-  "state": "integrating",
-  "reason": "integrating 0ju attempt 1 into epic/wne",
-  "updated_at": "2026-09-22T15:54:58Z",
+  "sequence": 13,
+  "state": "gating",
+  "reason": "running the integrated gate for 0ju on 39e6a25dedd2",
+  "updated_at": "2026-09-22T15:55:12Z",
   "ticks": [
     {
       "tick_id": "0ju",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 1
     },
     {
