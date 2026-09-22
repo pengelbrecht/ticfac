@@ -122,6 +122,15 @@ var sourceCredentialSubstrings = []string{"TOKEN", "PASSWORD", "PASSWD", "CREDEN
 var modelCredentialPrefixes = []string{
 	"ANTHROPIC_", "CLAUDE_", "OPENAI_", "AZURE_OPENAI_", "OPENROUTER_",
 	"XAI_", "GEMINI_", "GOOGLE_GENAI_", "PI_",
+	// The gateway's workers-ai route (tick mdw). WORKERS_AI_* is the route's
+	// own namespace — common.sh exports WORKERS_AI_BASE_URL, and the run's
+	// gateway token is the credential — and CLOUDFLARE_API_KEY is the name
+	// pi's cloudflare-workers-ai provider reads that token by. Named EXACTLY,
+	// not as a CLOUDFLARE_ namespace: CLOUDFLARE_API_TOKEN is the operator's
+	// own wrangler credential (internal/factory/setup.go), a SOURCE grant
+	// this grade owns, and a namespace prefix would hand it to a read-only
+	// runner.
+	"CLOUDFLARE_API_KEY", "WORKERS_AI_",
 }
 
 // readOnly reports whether this attempt may advance no ref. It fails CLOSED: a
