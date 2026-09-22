@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 21,
-  "state": "publishing",
-  "reason": "closing mdw behind the integrated gate on eb59d0c37715",
-  "updated_at": "2026-09-22T16:11:25Z",
+  "sequence": 22,
+  "state": "running",
+  "reason": "mdw is closed",
+  "updated_at": "2026-09-22T16:11:53Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "mdw",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
