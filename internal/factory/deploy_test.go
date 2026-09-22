@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
@@ -426,6 +427,39 @@ func TestDeployNeverTouchesBoardSyncConfig(t *testing.T) {
 	}
 	if string(data) != boardContent {
 		t.Errorf("~/.ticksrc changed:\nbefore:\n%safter:\n%s", boardContent, data)
+	}
+}
+
+// A bundle whose two capacity numbers disagree is one a wave would dispatch
+// wider than the account can host — the overflow surfacing as sandbox
+// creation failures attributed to whichever tick happened to be fourth, never
+// as a capacity message (tick 7fl). The deploy refuses to ship one, and the
+// refusal comes before any prerequisite is probed and before anything is
+// staged or created: the disagreement is a property of the bundle, not of
+// the account.
+func TestDeployRefusesADisagreeingCapacityMirror(t *testing.T) {
+	fake := fakeBundle()
+	config := string(fake["cloudflare/wrangler.toml"].Data)
+	fake["cloudflare/wrangler.toml"] = &fstest.MapFile{Data: []byte(
+		strings.Replace(config, "max_instances = 3", "max_instances = 2", 1),
+	)}
+	setPayloadSeam(t, fake, fake)
+
+	h := newHarness(t)
+	_, err := Deploy(context.Background(), h.options())
+	if err == nil {
+		t.Fatalf("Deploy shipped a disagreeing capacity mirror; wrangler calls:\n%s", h.log())
+	}
+	for _, want := range []string{"max_instances = 2", `FACTORY_MAX_INSTANCES = "3"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %s: %v", want, err)
+		}
+	}
+	if log := h.log(); log != "" {
+		t.Errorf("the refusal came after wrangler had run:\n%s", log)
+	}
+	if _, statErr := os.Stat(h.bundleDir); !os.IsNotExist(statErr) {
+		t.Errorf("the refusal staged a bundle: %s exists", h.bundleDir)
 	}
 }
 
