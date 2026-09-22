@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 13,
-  "state": "integrating",
-  "reason": "integrating 8ty attempt 1 into epic/xte",
-  "updated_at": "2026-09-22T15:55:30Z",
+  "sequence": 14,
+  "state": "gating",
+  "reason": "running the integrated gate for 8ty on 875bde9a2ac0",
+  "updated_at": "2026-09-22T15:55:53Z",
   "ticks": [
     {
       "tick_id": "8ty",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
