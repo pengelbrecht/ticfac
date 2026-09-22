@@ -3,7 +3,7 @@
   "title": "The dispatch profile is pi on GLM 5.3, executor cloudflare-sandbox",
   "description": "The routing already exists and the executor now exists; this tick pairs them, which neither shipped profile does.\n\n  profiles-herdr/ pairs pi with cloudflare-workers-ai/@cf/zai-org/glm-5.3 - KEEP that routing - and with executor herdr, for which there is no server in the container. Replace that half with cloudflare-sandbox.\n  profiles/ pairs the right executor family with claude + sonnet. Keep neither half.\n\n.tick/runners.toml's [roles.implement] already says implementation runs 'entirely on GLM on cloudflare through pi', so this is the repo's stated intent being honoured rather than a new direction - hn0 diverged from it by taking whichever compiled-in profile happened to have a local executor.\n\nTwo tiers, because wne is coming: glm-5.3 and glm-5.3-flash both need to be nameable as a worker model here. Do not build wne's classifier in this tick - just make sure the profile shape does not assume a single model per role, so that wne maps a work type onto a model that already has somewhere to land.",
   "notes": "2026-09-23 00:47 - ticfac run epic-xte: attempt 7 reported a finding drafted for triage — proposed-tick \"The dispatch door carries no model, so a cloud profile's recorded model rests on the factory agreeing\" (key b7e18ccfc8eaaa213ba9624d9e0ff7f072dd6b6916829c1166f678662e79b56e, severity medium, for this repository). Triage with `ticfac finding xte b7e18ccfc8eaaa213ba9624d9e0ff7f072dd6b6916829c1166f678662e79b56e --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 01:05 - ticfac run epic-xte: attempt 7 merged into epic/xte as 6963bd9ca036; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "A dispatch profile exists pairing runner pi, executor cloudflare-sandbox and model cloudflare-workers-ai/@cf/zai-org/glm-5.3, both glm-5.3 and glm-5.3-flash are nameable as a worker model, no profile the container can select starts a claude process, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:20:22.212883Z",
-  "updated_at": "2026-09-22T23:05:38.973031Z",
-  "started_at": "2026-09-22T17:45:03.285456Z"
+  "updated_at": "2026-09-22T23:05:55.270479Z",
+  "closed_at": "2026-09-22T23:05:55.270479Z"
 }
