@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 36,
-  "state": "dispatching",
-  "reason": "dispatching 7fl as attempt 5",
-  "updated_at": "2026-09-22T17:42:26Z",
+  "sequence": 37,
+  "state": "running",
+  "reason": "7fl is running as attempt 5",
+  "updated_at": "2026-09-22T17:42:49Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "7fl",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "avx",
