@@ -7,8 +7,10 @@
   "type": "task",
   "owner": "ticfac",
   "blocked_by": [
+    "ha9",
     "keh",
-    "mdw"
+    "mdw",
+    "qu3"
   ],
   "parent": "xte",
   "acceptance_criteria": "A dispatch profile exists pairing runner pi, executor cloudflare-sandbox and model cloudflare-workers-ai/@cf/zai-org/glm-5.3, both glm-5.3 and glm-5.3-flash are nameable as a worker model, no profile the container can select starts a claude process, and go test -short ./... passes",

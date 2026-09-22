@@ -237,9 +237,9 @@ FACTORY_MAX_INSTANCES = "3"
 # orchestrator container fall back to [roles.implement].model, which carries
 # pi's spelling (cloudflare-workers-ai/...) that this image's omp refuses (qu3).
 # workers-ai/... is omp's spelling of the same model.
-RUN_HARNESS = "omp"
+RUN_HARNESS = "pi"
 RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
-RUN_WORKER_HARNESS = "omp"
+RUN_WORKER_HARNESS = "pi"
 RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 
 # Where a run's live `run_event` stream is forwarded so a board can draw it
