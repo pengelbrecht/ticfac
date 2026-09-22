@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 55,
-  "state": "integrating",
-  "reason": "integrating avx attempt 6 into epic/xte",
-  "updated_at": "2026-09-22T23:45:33Z",
+  "sequence": 56,
+  "state": "gating",
+  "reason": "running the integrated gate for avx on 33a17fdcb630",
+  "updated_at": "2026-09-22T23:45:59Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "avx",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 6
     },
     {
