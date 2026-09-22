@@ -1124,3 +1124,5 @@
 {"ts":"2026-09-22T17:44:23.004319Z","tick":"ha9","action":"create","actor":"peter@engelbrecht.dk","epic":"xte","data":{"priority":1,"title":"The sandbox image carries pi, not only omp and claude","type":"task"}}
 {"ts":"2026-09-22T17:44:23.027304Z","tick":"njj","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["keh","mdw","qu3","ha9"],"title":"The dispatch profile is pi on GLM 5.3, executor cloudflare-sandbox"}}
 {"ts":"2026-09-22T17:44:23.047193Z","tick":"ha9","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["qu3"],"title":"The sandbox image carries pi, not only omp and claude"}}
+{"ts":"2026-09-22T17:44:37.740153Z","tick":"ha9","action":"unblock","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":[],"title":"The sandbox image carries pi, not only omp and claude"}}
+{"ts":"2026-09-22T17:44:37.759785Z","tick":"qu3","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["ha9"],"title":"One model spelling, or a translation with a test that boots a container"}}
