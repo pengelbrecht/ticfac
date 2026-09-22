@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 4,
-  "state": "dispatching",
-  "reason": "dispatching mrn as attempt 2",
-  "updated_at": "2026-09-22T13:33:29Z",
+  "sequence": 5,
+  "state": "running",
+  "reason": "mrn is running as attempt 2",
+  "updated_at": "2026-09-22T13:33:46Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -14,7 +14,8 @@
     },
     {
       "tick_id": "mrn",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 2
     },
     {
       "tick_id": "w9b",
