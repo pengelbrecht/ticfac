@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "0ju",
   "attempt": 1,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-09-22T14:13:27Z",
+  "triaged_at": "2026-09-22T16:18:19Z",
+  "triaged_by": "peter@engelbrecht.dk",
+  "fixed_as": "6a12473f",
   "provenance": {
     "run_id": "epic-wne",
     "tick_id": "0ju",
