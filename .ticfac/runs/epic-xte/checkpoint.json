@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 52,
-  "state": "dispatching",
-  "reason": "dispatching 84z as attempt 8",
-  "updated_at": "2026-09-22T23:06:49Z",
+  "sequence": 53,
+  "state": "running",
+  "reason": "84z is running as attempt 8",
+  "updated_at": "2026-09-22T23:07:10Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -47,7 +47,8 @@
     },
     {
       "tick_id": "84z",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     }
   ],
   "provenance": {
