@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 45,
-  "state": "gating",
-  "reason": "running the integrated gate for w9b on f3549494587c",
-  "updated_at": "2026-09-22T22:48:55Z",
+  "sequence": 46,
+  "state": "publishing",
+  "reason": "closing w9b behind the integrated gate on f3549494587c",
+  "updated_at": "2026-09-22T23:06:42Z",
   "ticks": [
     {
       "tick_id": "0ju",
