@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 6,
-  "state": "collecting",
-  "reason": "collecting 0ju attempt 1",
-  "updated_at": "2026-09-22T14:13:05Z",
+  "sequence": 7,
+  "state": "integrating",
+  "reason": "integrating 0ju attempt 1 into epic/wne",
+  "updated_at": "2026-09-22T14:13:51Z",
   "ticks": [
     {
       "tick_id": "0ju",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
