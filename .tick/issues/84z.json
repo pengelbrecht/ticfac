@@ -1,0 +1,17 @@
+{
+  "id": "84z",
+  "title": "No claude in the cloud, including review and closeout",
+  "description": "OPERATOR CONSTRAINT, 2026-09-22: 'everything OFF claude in the cloud.'\n\nThe rest of xte takes the IMPLEMENT role off claude. This tick takes the other two. [roles.review] and [roles.closeout] are both kind = claude, model = opus, and a cloud run reaching wave 4 would start a claude process in the container on exactly the path this epic exists to close.\n\nWHAT MAKES THIS MORE THAN AN EDIT, established 2026-09-22: role routing is SUBSTRATE-BLIND today. Config.Resolve(role, tier) in internal/runconfig/resolve.go takes a role and a tier and nothing else; [orchestration] substrate decides WHO ORCHESTRATES, never which model a role gets. And the container reads the target repo's own .tick/runners.toml, so cloud and local read one file. Change [roles.review] in place and local review loses opus too.\n\nThat is not obviously wanted. The config's own comment calls review 'the frontier-tier review at epic completion' and says opus 'is not available in pi at all'. A frontier review of a diff locally is a different judgement from what a cloud container can run, and collapsing them loses something real.\n\nSo: make role resolution substrate-aware, so the cloud can be fully off claude while a local run keeps its frontier review. Shape is open and is part of the work - a per-substrate overlay on [roles.*] is the obvious one, and it should look like the [roles.*.tiers.*] overlay that already exists rather than a second unrelated mechanism.\n\nTHE FAILURE THIS MUST NOT HAVE: a cloud run that silently falls back to a claude role because no cloud overlay was declared for it. Absent cloud routing for a role is a REFUSAL at run start, naming the role, not a default. hn0 reached claude by inheriting a default nobody chose, and this tick is downstream of that lesson.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "njj"
+  ],
+  "parent": "xte",
+  "acceptance_criteria": "A cloud run starts no claude process for any role including review and closeout; a role with no cloud routing declared refuses the run at start and names the role rather than falling back; a LOCAL run's review and closeout still resolve to opus from the same .tick/runners.toml; and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T13:35:16.182532Z",
+  "updated_at": "2026-09-22T13:35:16.182532Z"
+}
