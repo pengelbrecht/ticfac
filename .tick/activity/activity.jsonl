@@ -1115,3 +1115,4 @@
 {"ts":"2026-09-22T16:32:41.672584Z","tick":"ovh","action":"create","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"priority":1,"title":"Final review of the gvc diff","type":"task"}}
 {"ts":"2026-09-22T16:32:41.698681Z","tick":"9xp","action":"create","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"priority":1,"title":"Close out gvc: retro, then flesh out the next feasible epic","type":"task"}}
 {"ts":"2026-09-22T16:32:41.748419Z","tick":"gvc","action":"block","actor":"peter@engelbrecht.dk","data":{"blockers":["wne"],"title":"An unattended epic absorbs the defects it discovers"}}
+{"ts":"2026-09-22T16:42:54.918105Z","tick":"b1t","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"A worker hung on a dropped connection burns its whole wall clock","type":"bug"}}
