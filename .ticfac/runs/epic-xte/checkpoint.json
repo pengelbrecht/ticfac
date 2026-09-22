@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 43,
-  "state": "integrating",
-  "reason": "integrating 7fl attempt 5 into epic/xte",
-  "updated_at": "2026-09-22T22:40:09Z",
+  "sequence": 44,
+  "state": "gating",
+  "reason": "running the integrated gate for 7fl on 6f57a539a46e",
+  "updated_at": "2026-09-22T22:41:01Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "7fl",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
