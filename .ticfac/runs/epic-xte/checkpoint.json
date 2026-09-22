@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 12,
-  "state": "collecting",
-  "reason": "collecting 8ty attempt 1",
-  "updated_at": "2026-09-22T15:54:55Z",
+  "sequence": 13,
+  "state": "integrating",
+  "reason": "integrating 8ty attempt 1 into epic/xte",
+  "updated_at": "2026-09-22T15:55:30Z",
   "ticks": [
     {
       "tick_id": "8ty",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
