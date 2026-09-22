@@ -287,11 +287,20 @@ start_harness() {
 	# goes on doing what it does here: pushing whatever this checkout commits,
 	# and printing the heartbeat that is the only view an operator has of a
 	# container they cannot reach.
+	# --base is the SUBMITTED COMMIT, not the default branch (ticfac tick rf3).
+	# --base is where the integration branch is cut from, and the operator
+	# submitted a commit: cutting from the default branch instead threw the
+	# submission away, so an epic that exists only on the submitted branch was
+	# "not found" and the Workflow re-booted into the same failure. What flows
+	# IN afterwards is the remote's default branch, which the reconciler now
+	# resolves for itself (ticfac tick wvd) — asking the remote, since this
+	# checkout holds no origin/HEAD. The base branch is still fetched above so
+	# it is a ref this checkout holds.
 	local cmd=(
 		ticfac run-epic
 		--repo "$workdir"
 		--remote origin
-		--base "$base_branch"
+		--base "$base_sha"
 		--run-id "$run_id"
 		"$epic"
 	)
@@ -299,7 +308,7 @@ start_harness() {
 	# Started BEFORE the exec, watching this pid: exec keeps the pid, so the
 	# keeper is watching ticfac itself and dies when it does.
 	start_keeper "$$"
-	say "starting ticfac run-epic ${epic} on ${base_branch} — a deterministic reconciler, with no model deciding control flow"
+	say "starting ticfac run-epic ${epic} at ${base_sha:0:12}, refreshing from ${base_branch} — a deterministic reconciler, with no model deciding control flow"
 	# exec, so ticfac owns stdout directly: its output streams as it is produced
 	# and its exit status is the run's exit status.
 	exec "${cmd[@]}"

@@ -308,8 +308,8 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 // operator's --base when it named a ref, and `main` as the documented
 // convention when nothing else resolves.
 func (r *Reconciler) prBase() string {
-	if out, err := r.git.run("", "symbolic-ref", "--short", "refs/remotes/"+r.opts.Remote+"/HEAD"); err == nil && out != "" {
-		return strings.TrimPrefix(out, r.opts.Remote+"/")
+	if branch := r.remoteDefaultBranch(); branch != "" {
+		return branch
 	}
 	if out, err := r.git.run("", "symbolic-ref", "--short", "HEAD"); err == nil && out != "" {
 		return out

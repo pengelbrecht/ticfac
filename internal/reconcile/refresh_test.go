@@ -449,10 +449,13 @@ func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 	}
 }
 
-// A base branch this remote does not have is not a refusal: `--base HEAD` is
-// the default, and a run cut from a commit has nothing to fold. What it must
-// not be is silent.
-func TestARunWhoseBaseIsNotABranchSaysSoAndRunsOn(t *testing.T) {
+// A run cut from a COMMIT — `--base HEAD`, the default — still folds the
+// remote's default branch in (ticks wvd and rf3). Where the integration branch
+// was cut from and what flows into it afterwards are two different questions,
+// and answering the second with "nothing, the base is not a branch" left a
+// running epic blind to everything filed on main after it started. What it
+// folds is said in the feed, by name.
+func TestARunCutFromACommitFoldsTheRemotesDefaultBranch(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	r, result, err := f.run(f.Repo, fixtureOptions{})
@@ -468,8 +471,90 @@ func TestARunWhoseBaseIsNotABranchSaysSoAndRunsOn(t *testing.T) {
 			said = event.Detail
 		}
 	}
-	if !strings.Contains(said, "HEAD") {
-		t.Errorf("the run did not record why it folded nothing in: %q", said)
+	if !strings.Contains(said, "main") {
+		t.Errorf("the run did not say it refreshed from the remote's default branch: %q", said)
+	}
+	if strings.Contains(said, "has no branch HEAD") {
+		t.Errorf("the run treated --base HEAD as 'nothing to fold': %q", said)
+	}
+}
+
+// The incident this fixes, end to end: the epic declares NO base branch, the
+// run is told `--base HEAD`, and a tick filed on main after the fork is still
+// planned and dispatched — because the remote's default branch is what flows
+// in. The declared-base twin of this test is above; this is the case every
+// real epic in this repository was in.
+func TestATickFiledOnMainIsDispatchedWhenTheEpicDeclaresNoBase(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	tracker, _ := newRepoTracker(t, f.Repo.Dir)
+
+	seedTracker(t, f.Repo,
+		tk.Tick{ID: "qeu", Title: "the epic", Status: "open", Type: "epic"},
+		tk.Tick{ID: "a1", Title: "the tick the run was cut for", Status: "open", Type: "task", Parent: "qeu"},
+	)
+	forkIntegrationBranch(t, f.Repo, "epic/qeu")
+	commitOnBase(t, f.Repo, ".tick/issues/n1.json", recordJSON(t,
+		tk.Tick{ID: "n1", Title: "the follow-up filed on main", Status: "open", Type: "task", Parent: "qeu"}),
+		"file n1 on main")
+
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.Tracker = tracker
+	opts.BaseRef = "HEAD"
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := r.RunProtected(context.Background())
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	var dispatched []string
+	for _, event := range r.Journal() {
+		if event.Stage == StageDispatched {
+			dispatched = append(dispatched, event.Tick)
+		}
+	}
+	if strings.Join(dispatched, ",") != "a1,n1" {
+		t.Fatalf("the run dispatched %v; n1 was filed on main after the fork and an epic with no declared base never saw it",
+			dispatched)
+	}
+}
+
+// The same answer from a checkout that holds no refs/remotes/origin/HEAD —
+// which is what a cloud container's single-commit fetch is — comes from the
+// remote itself.
+func TestTheRemotesDefaultBranchIsAskedWhenTheCheckoutDoesNotHoldIt(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	mustRunAllowingFailure(f.Repo.Dir, "git", "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+	opts := f.options(f.Repo, fixtureOptions{})
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.remoteDefaultBranch(); got != "main" {
+		t.Errorf("remoteDefaultBranch() = %q with no origin/HEAD in the checkout, want main from ls-remote", got)
+	}
+}
+
+// isBranchRef is what decides whether --base is itself the base branch or only
+// the cut point.
+// short: a pure function over strings, no repository and no process
+func TestIsBranchRef(t *testing.T) {
+	t.Parallel()
+	for ref, want := range map[string]bool{
+		"": false, "HEAD": false, "521b4805": false,
+		"521b4805ff865a34265878c4d6b49ab113f61710": false,
+		"main": true, "origin/main": true, "refs/heads/epic/xte": true, "trunk": true,
+		"feature-abc": true,
+	} {
+		if got := isBranchRef(ref); got != want {
+			t.Errorf("isBranchRef(%q) = %v, want %v", ref, got, want)
+		}
 	}
 }
 
