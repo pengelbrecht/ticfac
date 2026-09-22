@@ -152,6 +152,39 @@ func WithNoAutoMaintenance(env []string) []string {
 	return append(out, "GIT_CONFIG_COUNT="+strconv.Itoa(count))
 }
 
+// WithoutPinnedConfig is WithNoAutoMaintenance's inverse, and exists for the
+// CONTROL half of a fixture rather than for production: it strips
+// GIT_CONFIG_COUNT and its numbered KEY/VALUE pairs so the returned
+// environment carries no env-pinned git configuration at all.
+//
+// It is needed because GIT_CONFIG_GLOBAL=/dev/null does NOT neutralise these.
+// Git reads the GIT_CONFIG_COUNT entries ABOVE every config file, which is the
+// property WithNoAutoMaintenance relies on; the cost is that a process running
+// under pins it inherited — a worker under the read-only source grade, say —
+// passes them to any git it starts, including one a test meant to be plain. A
+// fixture whose control run is silently pinned measures nothing and reports it
+// as a failure of the tree.
+//
+// Entries whose names are not part of the env-config mechanism are untouched,
+// so an operator's GIT_TERMINAL_PROMPT or authorship survives.
+func WithoutPinnedConfig(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			out = append(out, entry)
+			continue
+		}
+		if name == "GIT_CONFIG_COUNT" ||
+			strings.HasPrefix(name, "GIT_CONFIG_KEY_") ||
+			strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
 func resolve() string {
 	if named := strings.TrimSpace(os.Getenv("TICFAC_GIT")); named != "" {
 		return named
