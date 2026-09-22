@@ -180,10 +180,11 @@ export const MAX_CLOSEOUT_BOOTS = 2;
 /**
  * This deployment's `[[containers]] max_instances` ceiling, mirrored into a
  * `[vars]` string because wrangler does not hand a container application's own
- * config back to the Worker at runtime (tick b6e). Kept in step with
- * `wrangler.toml`'s `max_instances = 3` by hand; raising one without the
- * other reintroduces the exact silent serialization wave 3 measured, one
- * layer up.
+ * config back to the Worker at runtime (tick b6e). Not a third copy to
+ * maintain by hand (tick 7fl): the suite pins this default to the number
+ * wrangler.toml declares, and `ticfac factory deploy` refuses a config whose
+ * two declarations disagree, so a drift is a failing check — never the silent
+ * serialization wave 3 measured, one layer up.
  */
 export const DEFAULT_FACTORY_MAX_INSTANCES = 3;
 
