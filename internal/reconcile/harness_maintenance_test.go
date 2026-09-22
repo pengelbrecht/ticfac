@@ -306,7 +306,14 @@ func moveSource(t *testing.T, source, name string) {
 func unpinnedGit(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command(gitbin.Path(), args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	// UNPINNED has to be constructed, not inherited. os.Environ() carries
+	// whatever GIT_CONFIG_COUNT pins the process was started under — the
+	// read-only source grade pins maintenance.auto=false — and git reads those
+	// above every config file. A control run under them starts no maintenance,
+	// and the fixture reports that as the tree's failure instead of the
+	// environment's, which is the shape the learnings warn about: a gate
+	// verdict is about the tree only if the host is bounded.
+	cmd.Env = append(gitbin.WithoutPinnedConfig(os.Environ()), "GIT_TERMINAL_PROMPT=0")
 	return cmd
 }
 

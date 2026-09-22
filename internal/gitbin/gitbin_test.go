@@ -21,7 +21,12 @@ import (
 func TestAnAgentsCommitStartsNoMaintenance(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	base := append(os.Environ(),
+	// WithoutPinnedConfig, not merely GIT_CONFIG_GLOBAL=/dev/null: git reads
+	// GIT_CONFIG_COUNT's entries above every config file, so a control run
+	// inheriting the read-only grade's pins is already running with
+	// maintenance.auto=false and starts no maintenance — which this fixture
+	// would then report as "the arming does not work on this git".
+	base := append(WithoutPinnedConfig(os.Environ()),
 		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_TERMINAL_PROMPT=0",
 		"GIT_AUTHOR_NAME=ticfac test", "GIT_AUTHOR_EMAIL=ticfac@example.com",
 		"GIT_COMMITTER_NAME=ticfac test", "GIT_COMMITTER_EMAIL=ticfac@example.com",
@@ -98,5 +103,42 @@ func TestNoAutoMaintenanceIsAppendedAfterWhatIsAlreadyPinned(t *testing.T) {
 	bogus := []string{"GIT_CONFIG_COUNT=many"}
 	if got := WithNoAutoMaintenance(bogus); !slices.Equal(got, bogus) {
 		t.Errorf("an environment git would refuse was rewritten to %q; the error git reports would be masked", got)
+	}
+}
+
+// WithoutPinnedConfig removes the env-config mechanism and nothing else. The
+// "and nothing else" half is the point: a fixture that also lost authorship or
+// GIT_TERMINAL_PROMPT would trade one host dependency for another.
+func TestWithoutPinnedConfigStripsOnlyTheEnvConfigMechanism(t *testing.T) {
+	t.Parallel()
+	got := WithoutPinnedConfig([]string{
+		"PATH=/usr/bin",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=maintenance.auto",
+		"GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=gc.auto",
+		"GIT_CONFIG_VALUE_1=0",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_AUTHOR_NAME=ticfac test",
+	})
+	want := []string{
+		"PATH=/usr/bin",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_AUTHOR_NAME=ticfac test",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("WithoutPinnedConfig = %q, want %q", got, want)
+	}
+}
+
+// The round trip a control run depends on: pins applied and then stripped
+// leave an environment git reads as carrying no env config at all.
+func TestWithoutPinnedConfigUndoesWithNoAutoMaintenance(t *testing.T) {
+	t.Parallel()
+	base := []string{"PATH=/usr/bin", "GIT_TERMINAL_PROMPT=0"}
+	if got := WithoutPinnedConfig(WithNoAutoMaintenance(base)); !slices.Equal(got, base) {
+		t.Errorf("round trip = %q, want %q", got, base)
 	}
 }
