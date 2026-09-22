@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 16,
-  "state": "running",
-  "reason": "8ty is closed",
-  "updated_at": "2026-09-22T15:58:19Z",
+  "sequence": 17,
+  "state": "dispatching",
+  "reason": "dispatching keh as attempt 3",
+  "updated_at": "2026-09-22T15:59:53Z",
   "ticks": [
     {
       "tick_id": "8ty",
