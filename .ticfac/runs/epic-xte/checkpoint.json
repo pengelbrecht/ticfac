@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 15,
-  "state": "publishing",
-  "reason": "closing 8ty behind the integrated gate on 875bde9a2ac0",
-  "updated_at": "2026-09-22T15:57:14Z",
+  "sequence": 16,
+  "state": "running",
+  "reason": "8ty is closed",
+  "updated_at": "2026-09-22T15:58:19Z",
   "ticks": [
     {
       "tick_id": "8ty",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
