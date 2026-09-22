@@ -131,6 +131,18 @@ export function attemptSandboxName(runID: string, tickID: string, attempt: numbe
   return `${runID}-${tickID}-${attempt}`;
 }
 
+/**
+ * The job-protocol job_id of one attempt: `run-<run>/tick-<tick>/attempt-<n>`,
+ * in ONE place because two records must agree about it — the handle `start`
+ * returns and the status an identity-based lookup answers with. A client
+ * keying on job_id must find the same value whether it asked to start the
+ * attempt or to read it back, and a spelling written twice is how the two
+ * halves of that guarantee drift apart.
+ */
+export function attemptJobID(runID: string, tickID: string, attempt: number): string {
+  return `run-${runID}/tick-${tickID}/attempt-${attempt}`;
+}
+
 // -------------------------------------------------------------- the handle ---
 
 /**
@@ -295,11 +307,17 @@ async function findWorkProcess(sandbox: OrchestratorSandbox): Promise<{ id: stri
  * Workflow step replay must never boot a second worker over a live one,
  * which is the local executor's "never redispatch a live attempt" rule
  * restated for a substrate whose attempts cost real containers.
+ *
+ * Exported (tick 8ty) because this is no longer only the reconciler's in-isolate
+ * operation: the HTTP dispatch door (`sandbox-dispatch.ts`) is a second caller
+ * that needs the same adoption decision — and needs to KNOW which of the two
+ * happened, because "this attempt is already running" is a fact its caller
+ * records and must not be guessed back out of the handle's detail text.
  */
-async function startAttempt(
+export async function startNamedAttempt(
   deps: SandboxExecutorDeps,
   spec: AttemptSpec,
-): Promise<SandboxJobHandle> {
+): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
   const name = attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt);
   // The per-attempt landing branch the container derives from the boot
   // (worker-boot.ts puts the attempt in the epic slot): the work the
@@ -328,18 +346,21 @@ async function startAttempt(
   if (running !== null) {
     const boot = await deps.boot(spec);
     return {
-      schema_version: JOB_HANDLE_SCHEMA_VERSION,
-      job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
-      attempt: spec.attempt,
-      executor: SANDBOX_EXECUTOR_NAME,
-      issued_at: new Date().toISOString(),
       handle: {
-        ...payload,
-        base_sha: boot.base_sha,
-        process_id: running.id,
-        launched: true,
-        detail: "adopted: this container's work process was already running",
+        schema_version: JOB_HANDLE_SCHEMA_VERSION,
+        job_id: attemptJobID(spec.run_id, spec.tick_id, spec.attempt),
+        attempt: spec.attempt,
+        executor: SANDBOX_EXECUTOR_NAME,
+        issued_at: new Date().toISOString(),
+        handle: {
+          ...payload,
+          base_sha: boot.base_sha,
+          process_id: running.id,
+          launched: true,
+          detail: "adopted: this container's work process was already running",
+        },
       },
+      adopted: true,
     };
   }
 
@@ -348,18 +369,21 @@ async function startAttempt(
   const task = { tick_id: spec.tick_id, branch: landing, base_sha: boot.base_sha };
   const spawned = await spawnWorker(deps.binding, name, task, work, deps.spawn);
   return {
-    schema_version: JOB_HANDLE_SCHEMA_VERSION,
-    job_id: `run-${spec.run_id}/tick-${spec.tick_id}/attempt-${spec.attempt}`,
-    attempt: spec.attempt,
-    executor: SANDBOX_EXECUTOR_NAME,
-    issued_at: new Date().toISOString(),
     handle: {
-      ...payload,
-      base_sha: boot.base_sha,
-      process_id: spawned.process_id,
-      launched: spawned.launched,
-      detail: spawned.detail,
+      schema_version: JOB_HANDLE_SCHEMA_VERSION,
+      job_id: attemptJobID(spec.run_id, spec.tick_id, spec.attempt),
+      attempt: spec.attempt,
+      executor: SANDBOX_EXECUTOR_NAME,
+      issued_at: new Date().toISOString(),
+      handle: {
+        ...payload,
+        base_sha: boot.base_sha,
+        process_id: spawned.process_id,
+        launched: spawned.launched,
+        detail: spawned.detail,
+      },
     },
+    adopted: false,
   };
 }
 
@@ -447,6 +471,65 @@ async function inspectAttempt(
       return statusFromProcess({ state: "running", exit_code: null }, handle.job_id);
   }
   return statusFromProcess(null, handle.job_id);
+}
+
+// ----------------------------------------------------------------- read ---
+
+/**
+ * What one attempt's named container looks like from IDENTITY alone — no
+ * handle, nothing persisted by a caller that may since have died (tick 8ty).
+ *
+ * This is the operation the HTTP door's state route is: a restarted
+ * orchestrator that re-derived its state from git has an identity (run, tick,
+ * attempt) and no handle, and the question it needs answered is the one the
+ * tick spells: running, finished with a result, or absent. The container is
+ * re-addressed BY NAME — the same no-live-object-across-a-boundary rule the
+ * whole module is built around, restated for a caller that is on the far
+ * side of HTTP from the binding.
+ *
+ * The mapping, in the job_status contract's own vocabulary so the caller
+ * reads one vocabulary across executors:
+ *
+ *  - `running`    the named container holds a live work process.
+ *  - `succeeded`/`failed` — FINISHED, terminal, the exit code riding an
+ *                  `exited` observation: the result that exists at this
+ *                  layer. The tick's report lives in git, not here.
+ *  - `lost`       ABSENT — no container under this identity holds a work
+ *                  process: never started, or its record is `gone`. The
+ *                  contract's own words for `lost` are the point: it is a
+ *                  statement about the observer, not a verdict on the job,
+ *                  and recovery may re-adopt. A caller must never read it as
+ *                  "finished" and write the attempt off.
+ */
+export async function namedAttemptStatus(
+  binding: SandboxBinding,
+  identity: { run_id: string; tick_id: string; attempt: number },
+  jobID: string,
+  now: () => string = () => new Date().toISOString(),
+): Promise<AttemptStatus> {
+  const name = attemptSandboxName(identity.run_id, identity.tick_id, identity.attempt);
+  const sandbox = await namedSandbox(binding, name);
+  // The list, never a remembered id — the evidence-gap rule the seam documents
+  // and `inspectAttempt` already leans on: a caller with no handle has no id
+  // to ask about, and "I have no id for it" must never read as "nothing is
+  // running here". The LAST work process in the list is the live one when
+  // there is one: adoption means a container holds at most one.
+  const listed = await sandbox.listProcesses();
+  let work: { state: SandboxProcessState; exit_code: number | null } | null = null;
+  for (const view of listed ?? []) {
+    if (isWorkProcess(view)) work = view;
+  }
+  if (work === null || work.state === "gone") {
+    // Absent — and `lost`, never `failed`: a `gone` record is a container that
+    // lost its own knowledge of the process, which is an evidence gap about
+    // the OBSERVER, and the job's fate is exactly as unknown as when nothing
+    // was ever started.
+    return statusFromProcess(null, jobID, now);
+  }
+  if (work.state === "running") {
+    return statusFromProcess({ state: "running", exit_code: null }, jobID, now);
+  }
+  return statusFromProcess({ state: work.state, exit_code: work.exit_code }, jobID, now);
 }
 
 // ---------------------------------------------------------------- collect ---
@@ -584,7 +667,7 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
 export function sandboxExecutor(deps: SandboxExecutorDeps): AttemptExecutor {
   return {
     async start(spec: AttemptSpec): Promise<AttemptHandle> {
-      return (await startAttempt(deps, spec)) as unknown as AttemptHandle;
+      return (await startNamedAttempt(deps, spec)).handle as unknown as AttemptHandle;
     },
     async inspect(record: AttemptHandle): Promise<AttemptStatus> {
       return inspectAttempt(deps, jobHandleOf(record));
@@ -614,17 +697,30 @@ export type SandboxExecutorEnvInput = {
 };
 
 /**
- * The executor a deployment dispatches through, built from the deployment's
- * own bindings — or null, naming what is missing, so the Workflow refuses a
- * dispatch on a stated gap rather than on an executor nobody configured.
+ * The executor's wiring, stated as an answer either way (tick 8ty).
+ *
+ * `sandboxExecutorFromEnv` could not serve the HTTP dispatch door
+ * (`sandbox-dispatch.ts`): the door needs the SEAMS — to call
+ * `startNamedAttempt` directly and learn whether a dispatch adopted — not
+ * the closed four-operation interface, and a door that cannot boot a
+ * container must refuse with the missing pieces in its response body rather
+ * than only on the Worker's log. So the wiring is factored into a function
+ * that names its own refusal, and both callers — the Workflow's executor and
+ * the door — share one diagnosis of a deployment that cannot dispatch.
+ */
+export type SandboxExecutorWiring = { deps: SandboxExecutorDeps } | { refusal: string };
+
+/**
+ * The seams a dispatch needs, built from the deployment's own bindings — or
+ * the sentence that says which pieces are missing.
  *
  * The boot inputs are composed the way the orchestrator's boots are
  * (`run-workflow.ts`): a run-scoped gateway token minted per dispatch, and
  * git access through `planSandboxGit`'s write grade — the repository itself
  * on github.com with the operator's credential, exactly what a write run
  * has always been handed. A deployment missing any piece (the container
- * binding, the factory's own base URL, the epic base) gets no executor and
- * the reconciler's own refusal names it.
+ * binding, the factory's own base URL, the base the containers clone at)
+ * gets the refusal naming every gap.
  *
  * The token is minted per boot WITHOUT revocation (tick 53s):
  * `issueWorkerRunToken`, not the orchestrator's rotating `issueRunToken`.
@@ -642,10 +738,10 @@ export type SandboxExecutorEnvInput = {
  * rides the epic slot so every attempt lands its work on a branch of its
  * own — the cloud's half of the one-ref-per-attempt rule.
  */
-export function sandboxExecutorFromEnv(
+export function sandboxExecutorDepsFromEnv(
   env: Env,
   input: SandboxExecutorEnvInput,
-): AttemptExecutor | undefined {
+): SandboxExecutorWiring {
   const binding = sandboxBinding(env);
   const missing: string[] = [];
   if (binding === null) {
@@ -656,7 +752,7 @@ export function sandboxExecutorFromEnv(
   const base = (input.base_sha ?? "").trim();
   if (base === "") {
     missing.push(
-      "the epic base SHA (EpicReconcilerParams.base_sha — the commit every worker clones at)",
+      "the base SHA the attempt's worker clones at (the commit this dispatch was derived from)",
     );
   }
   const factory = factoryBaseURL(env);
@@ -667,8 +763,7 @@ export function sandboxExecutorFromEnv(
     missing.push("the D1 binding (run gateway credentials are minted and revoked through it)");
   }
   if (missing.length > 0) {
-    console.error(`factory sandbox-executor: no attempt executor is wired — ${missing.join("; ")}`);
-    return undefined;
+    return { refusal: missing.join("; ") };
   }
 
   const git = planSandboxGit({
@@ -679,46 +774,66 @@ export function sandboxExecutorFromEnv(
     direct_repo_url: repoURL(input.project),
   });
   if (!git.ok) {
-    console.error(`factory sandbox-executor: no attempt executor is wired — ${git.detail}`);
-    return undefined;
+    return { refusal: git.detail };
   }
 
-  return sandboxExecutor({
-    binding: binding as SandboxBinding,
-    collector: workerCollector(env, input.project),
-    // The attempt's own push goes through the deployment's git-data writer,
-    // or the seam a test injects (TICFAC_REF_WRITER) — same pattern as
-    // WORKER_COLLECTOR: the ordering is what needs testing.
-    refs: env.TICFAC_REF_WRITER ?? gitRefWriter(env, input.project),
-    boot: async (spec) => {
-      // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
-      // are parallel spenders, so a boot that rotated would cut every live
-      // sibling off at the next worker's start — including this executor's
-      // own adoption and cancel boots, which arrive while other workers are
-      // mid-tick. The credential is still per worker, never shared across
-      // attempts: one revocation cannot take it back from just this attempt.
-      const credential = await issueWorkerRunToken(env, {
-        run_id: spec.run_id,
-        tick_id: spec.tick_id,
-        attempt: spec.attempt,
-      });
-      return {
-        repo_url: git.plan.repo_url,
-        base_sha: base,
-        epic: spec.epic_id,
-        tick: spec.tick_id,
-        attempt: spec.attempt,
-        run_id: spec.run_id,
-        gateway_base_url: runGatewayEndpoint(factory as string),
-        gateway_token: credential.token,
-        harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
-        model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
-        github_token: containerGitToken(git.plan, env.GITHUB_TOKEN, credential.token),
-        sandbox_image: deploymentImage(env),
-        factory_url: factory as string,
-        factory_token: credential.token,
-        factory_project: input.project,
-      };
+  return {
+    deps: {
+      binding: binding as SandboxBinding,
+      collector: workerCollector(env, input.project),
+      // The attempt's own push goes through the deployment's git-data writer,
+      // or the seam a test injects (TICFAC_REF_WRITER) — same pattern as
+      // WORKER_COLLECTOR: the ordering is what needs testing.
+      refs: env.TICFAC_REF_WRITER ?? gitRefWriter(env, input.project),
+      boot: async (spec) => {
+        // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
+        // are parallel spenders, so a boot that rotated would cut every live
+        // sibling off at the next worker's start — including this executor's
+        // own adoption and cancel boots, which arrive while other workers are
+        // mid-tick. The credential is still per worker, never shared across
+        // attempts: one revocation cannot take it back from just this attempt.
+        const credential = await issueWorkerRunToken(env, {
+          run_id: spec.run_id,
+          tick_id: spec.tick_id,
+          attempt: spec.attempt,
+        });
+        return {
+          repo_url: git.plan.repo_url,
+          base_sha: base,
+          epic: spec.epic_id,
+          tick: spec.tick_id,
+          attempt: spec.attempt,
+          run_id: spec.run_id,
+          gateway_base_url: runGatewayEndpoint(factory as string),
+          gateway_token: credential.token,
+          harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
+          model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
+          github_token: containerGitToken(git.plan, env.GITHUB_TOKEN, credential.token),
+          sandbox_image: deploymentImage(env),
+          factory_url: factory as string,
+          factory_token: credential.token,
+          factory_project: input.project,
+        };
+      },
     },
-  });
+  };
+}
+
+/**
+ * The executor a deployment dispatches through, built from the deployment's
+ * own bindings — or undefined, naming what is missing, so the Workflow
+ * refuses a dispatch on a stated gap rather than on an executor nobody
+ * configured. See {@link sandboxExecutorDepsFromEnv} for how the boots this
+ * executor mints are composed.
+ */
+export function sandboxExecutorFromEnv(
+  env: Env,
+  input: SandboxExecutorEnvInput,
+): AttemptExecutor | undefined {
+  const wired = sandboxExecutorDepsFromEnv(env, input);
+  if ("refusal" in wired) {
+    console.error(`factory sandbox-executor: no attempt executor is wired — ${wired.refusal}`);
+    return undefined;
+  }
+  return sandboxExecutor(wired.deps);
 }

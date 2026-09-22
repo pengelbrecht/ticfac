@@ -51,7 +51,13 @@ import {
   readHarnessTail,
   readWorkerLogTail,
 } from "./artifacts";
-import { authenticateFactoryRequest, isAuthConfigured, isAuthExempt, WAVE_PATH } from "./auth";
+import {
+  authenticateFactoryRequest,
+  isAuthConfigured,
+  isAuthExempt,
+  SANDBOX_DISPATCH_PREFIX,
+  WAVE_PATH,
+} from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
 import { proxyGitRequest } from "./credentials";
@@ -101,6 +107,7 @@ import {
   stopRun,
   submitRun,
 } from "./runs";
+import { sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
 import { runDueSweeps } from "./sweep-dispatch";
 import {
@@ -1348,6 +1355,29 @@ export default {
     // `git push` stops: at the credential, not at an instruction.
     if (segments[0] === "api" && segments[1] === "git") {
       return await proxyGitRequest(env, request, segments.slice(2));
+    }
+
+    // The per-tick sandbox dispatch door (tick 8ty), beside the /api/git door
+    // and before the /api/runs table, for the reason the wave door sits where it
+    // does: it is authorized by a run credential rather than the operator's,
+    // and reading it as an /api/runs sub-path would put it behind the wrong
+    // gate. The orchestrator CONTAINER — whose Go executor cannot create a
+    // sibling Sandbox, because the binding is a Worker binding — starts and
+    // reads back one attempt's worker container here. The contract both
+    // consumers build to is documented in ONE place: src/sandbox-dispatch.ts.
+    if (
+      (url.pathname === SANDBOX_DISPATCH_PREFIX ||
+        url.pathname.startsWith(`${SANDBOX_DISPATCH_PREFIX}/`)) &&
+      segments[2] === "attempts"
+    ) {
+      const result = await sandboxAttemptRoute(request, env, segments.slice(3));
+      if (!result.ok) {
+        return Response.json(
+          { error: result.error, detail: result.detail },
+          { status: result.status },
+        );
+      }
+      return Response.json(result.body, { status: result.status });
     }
 
     // One read that draws a board frame for `tk factory dashboard` (tick t9s).
