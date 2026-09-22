@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 5,
-  "state": "running",
-  "reason": "mrn is running as attempt 2",
-  "updated_at": "2026-09-22T13:33:46Z",
+  "sequence": 6,
+  "state": "collecting",
+  "reason": "collecting 0ju attempt 1",
+  "updated_at": "2026-09-22T14:13:05Z",
   "ticks": [
     {
       "tick_id": "0ju",
