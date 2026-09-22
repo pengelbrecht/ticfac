@@ -1,0 +1,18 @@
+{
+  "id": "0mp",
+  "title": "Close out wne: retro, then flesh out the next feasible epic",
+  "description": "Run the epic-close retro, verifying the code against wne's acceptance outside-in. Then pick the next feasible epic in soft order, read its rough scope and partition it into child ticks including its own EPIC-SKELETON pair.\n\nSpecific to this epic: the flash/full threshold is still unmeasured against capability. State plainly in the retro that it remains provisional and name what would settle it - an epic run with [tier_policy] ON, where a failure is a capability failure rather than a wall clock. Do not report wne as having validated the boundary; it validated the mechanism.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "02p"
+  ],
+  "parent": "wne",
+  "role": "closeout",
+  "acceptance_criteria": "The retro verifies wne's definition of done item by item against the code, the threshold's provisional status is recorded with what would settle it, and the next feasible epic has child ticks and a skeleton",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T13:23:44.756782Z",
+  "updated_at": "2026-09-22T13:23:44.756782Z"
+}

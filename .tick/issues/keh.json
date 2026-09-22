@@ -1,0 +1,17 @@
+{
+  "id": "keh",
+  "title": "A cloudflare-sandbox executor that returns a handle, not a result",
+  "description": "internal/exec/ implements herdr and subprocess. runstate.Executors already reserves the NAME 'cloudflare-sandbox' with nothing behind it. This tick is the implementation, and it is the Go client of the route 8ty exposes.\n\nThe shape that matters, and it is yoh's principle rather than a preference: the executor returns a HANDLE, not a finished attempt. It starts work in a sandbox and comes back. Something else asks later whether that handle is done. An executor that blocks until an attempt finishes puts a wall clock inside a dispatch and is the thing 'nothing waits' exists to forbid.\n\nt5p already persisted the sandbox handle so an attempt survives a Workflow restart, which suggests the durable half of this is in place - read it before designing a new one.\n\nCheck internal/runconfig/kinds.go for what a runner kind is required to supply, and internal/exec/subprocess for the interface the local executor satisfies, because this one satisfies the same interface with a different substrate. Where the interface assumes a local process (signals, stdio, exit codes), the assumption IS the work - name each one you had to reinterpret in the tick's report rather than silently papering over it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "8ty"
+  ],
+  "parent": "xte",
+  "acceptance_criteria": "internal/exec gains a cloudflare-sandbox executor that satisfies the same interface as subprocess, starts an attempt through the Worker route and returns a handle without blocking, a handle can be re-queried for state after the process that created it is gone, and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T13:19:43.745354Z",
+  "updated_at": "2026-09-22T13:19:43.745354Z"
+}

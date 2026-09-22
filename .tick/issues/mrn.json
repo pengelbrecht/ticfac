@@ -1,0 +1,14 @@
+{
+  "id": "mrn",
+  "title": "The work-type enum and the factory's work-type to model table",
+  "description": "The vocabulary and the price list, which are deliberately two things.\n\nThe enum is settled and is in this epic's parent description: mechanical, translation, construction, diagnosis, design - ordered on the axis of how much must be worked out rather than carried out. Declare it as a closed enum the way the tier vocabulary already is (isKnownTier refuses anything else); a work type that is not one of these is a bug, not a fallback.\n\nThe table maps work type -\u003e model and lives in FACTORY CONFIG beside the existing [roles.*.tiers.*] overlays, because a work type is another key into that kind of table. With today's two models the mapping is mechanical/translation/construction -\u003e glm-5.3-flash and diagnosis/design -\u003e glm-5.3.\n\nTwo rules the table must obey:\n  - A work type with no mapping falls back to the default AND SAYS SO. Failing a dispatch on a table someone forgot to extend is the wrong failure.\n  - Changing the table must not invalidate a recorded classification. That separation is the whole reason Jev is asked what the work IS rather than what it is worth - so nothing may write a model name where a work type belongs.\n\nNo model call in this tick. This is vocabulary and config only.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "wne",
+  "acceptance_criteria": "A closed work-type enum refuses an unknown value, factory config maps each work type to a model, an unmapped work type resolves to the default and is reported as having done so, and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T13:22:49.808337Z",
+  "updated_at": "2026-09-22T13:22:49.808337Z"
+}

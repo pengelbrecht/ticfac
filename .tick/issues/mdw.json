@@ -1,0 +1,14 @@
+{
+  "id": "mdw",
+  "title": "Strip claude's requirements from the container boot",
+  "description": "hn0 added two things to the orchestrator boot that exist only because the worker was claude. Both are wrong once the worker is pi on GLM.\n\n  1. The boot REFUSES any run whose model is not on the Anthropic route, on the reasoning that 'ticfac dispatches its workers through the claude CLI, which speaks the Anthropic API'. Under pi that refusal rejects exactly the route we want.\n  2. IS_SANDBOX=1 is exported because the claude CLI refuses --permission-mode bypassPermissions under root and the container is root. Check whether pi has an equivalent check before removing it - if it does, the export stays and the COMMENT changes to say whose requirement it is.\n\nAlso: common.sh exports ANTHROPIC_BASE_URL for the claude route. pi on Workers AI needs the gateway's workers-ai route instead. internal/exec/subprocess/grade.go's modelCredentialPrefixes preserves ANTHROPIC_* through the source grade - confirm the equivalent holds for whatever pi reads, because a credential silently dropped by the grade is a failure that looks like a model error.\n\nThis is removal plus one substitution, and it is deliberately separated from the executor work so that neither waits on the other.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "xte",
+  "acceptance_criteria": "The boot no longer refuses a non-Anthropic route, the gateway's workers-ai route survives the source grade into a worker's environment (proven by a test, not by inspection), any surviving IS_SANDBOX export names whose requirement it is, and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T13:19:26.678078Z",
+  "updated_at": "2026-09-22T13:19:26.678078Z"
+}
