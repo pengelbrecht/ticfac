@@ -40,7 +40,7 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 	for _, want := range []string{
 		"exec \"${cmd[@]}\"",
 		"ticfac run-epic",
-		`--base "$base_branch"`,
+		`--base "$base_sha"`,
 		`--repo "$workdir"`,
 		// The container runs as root and every worker is launched with
 		// `--permission-mode bypassPermissions`, which the claude CLI refuses
@@ -190,6 +190,7 @@ EXIT_CONFIG=3; EXIT_CLONE=4; EXIT_MODEL=5
 ACTOR="cloud:orchestrator"
 workdir="` + dir + `"
 epic="e1"; run_id="r1"; run_branch="tick-run/e1"; run_pass=""
+base_sha="521b4805ff865a34265878c4d6b49ab113f61710"
 factory_url=""; factory_token=""; factory_project=""
 model="sonnet"
 phase="` + phase + `"
@@ -218,13 +219,16 @@ func TestOverrideExecsTicfacRunEpicOnTheRemotesDefaultBranch(t *testing.T) {
 	if !strings.Contains(out, "EXEC: ticfac run-epic") {
 		t.Fatalf("the override did not exec ticfac run-epic:\n%s", out)
 	}
-	// tick udu: --base must be a BRANCH. "HEAD" resolves to nothing and base
-	// refresh silently does nothing every round.
-	if !strings.Contains(out, "--base trunk") {
-		t.Errorf("the override did not pass the remote's default branch as --base:\n%s", out)
+	// tick rf3: --base is the SUBMITTED COMMIT — where the integration branch
+	// is cut from. Cutting from the default branch threw the submission away:
+	// an epic that existed only on the submitted branch was not found. (tick
+	// udu's concern, that refresh then folds nothing, is the reconciler's to
+	// answer now: it resolves the remote's default branch itself — tick wvd.)
+	if !strings.Contains(out, "--base 521b4805ff865a34265878c4d6b49ab113f61710") {
+		t.Errorf("the override did not cut the run from the submitted commit:\n%s", out)
 	}
-	if strings.Contains(out, "--base HEAD") {
-		t.Errorf("the override passed the literal HEAD as --base (tick udu):\n%s", out)
+	if strings.Contains(out, "--base trunk") || strings.Contains(out, "--base HEAD") {
+		t.Errorf("the override passed a branch or HEAD as the cut point instead of the submitted commit:\n%s", out)
 	}
 	// And the base has to be a ref the CHECKOUT holds: the clone is a fetch of
 	// one SHA, so rev-parse of a bare branch name fails until it is fetched,

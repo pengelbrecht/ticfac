@@ -151,7 +151,7 @@
       "id": "D32",
       "tick": "sz0",
       "title": "The close-out's PR base is named by the submitter, not resolved",
-      "go": "prBase resolves the merge base from the refs git holds: the remote's HEAD first, then the checkout's current branch, then the operator's --base, and main as the documented convention when nothing else resolves.",
+      "go": "prBase resolves the merge base as the remote's default branch — the remote's HEAD as the checkout holds it, else as the remote itself answers (git ls-remote --symref; a cloud container's single-commit checkout holds no origin/HEAD, ticks wvd and rf3) — then the checkout's current branch, then the operator's --base, and main as the documented convention when nothing else resolves.",
       "workflow": "The Workflow takes base_ref from the submission (default main) and never resolves the remote's HEAD: this host cannot run the git command that resolution is, so the submitter naming the base is the honest replacement for guessing.",
       "why": "Recorded in the parameter's own doc (tick cxk); this entry pins it. The consequence is a submission against a repository whose default branch is not main refusing at admission unless the submitter names the base — a typed failure, not a wrong merge.",
       "anchors": [
@@ -159,7 +159,7 @@
           "side": "go",
           "file": "internal/reconcile/closeout.go",
           "region": "prbase",
-          "digest": "sha256:e33660f3380aa6a5ece0bb3429d8a7c75e11b706489ec0672a3dc01f2a7a0c2a"
+          "digest": "sha256:238a82fc624dcac1de94c4cfc61b1fc6446a88ce3161e4a82bb345337e25ce69"
         },
         {
           "side": "ts",
