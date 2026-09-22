@@ -1124,3 +1124,4 @@
 {"ts":"2026-09-22T23:05:55.270749Z","tick":"njj","action":"close","actor":"ticfac","epic":"xte","data":{"title":"The dispatch profile is pi on GLM 5.3, executor cloudflare-sandbox"}}
 {"ts":"2026-09-22T23:07:03.617058Z","tick":"84z","action":"start","actor":"ticfac","epic":"xte","data":{"title":"No claude in the cloud, including review and closeout"}}
 {"ts":"2026-09-22T23:47:24.605679Z","tick":"avx","action":"note","actor":"ticfac","epic":"xte","data":{"note":"2026-09-23 01:47 - ticfac run epic-xte: attempt 6 merged into epic/xte as 33a17fdcb630; the integrated gate (go, ts) passed.","title":"Adoption recognises a running sandbox instead of dispatching a rival"}}
+{"ts":"2026-09-22T23:47:40.14971Z","tick":"avx","action":"close","actor":"ticfac","epic":"xte","data":{"title":"Adoption recognises a running sandbox instead of dispatching a rival"}}
