@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 44,
-  "state": "gating",
-  "reason": "running the integrated gate for 7fl on 6f57a539a46e",
-  "updated_at": "2026-09-22T22:41:01Z",
+  "sequence": 45,
+  "state": "publishing",
+  "reason": "closing 7fl behind the integrated gate on 6f57a539a46e",
+  "updated_at": "2026-09-22T22:43:23Z",
   "ticks": [
     {
       "tick_id": "8ty",
