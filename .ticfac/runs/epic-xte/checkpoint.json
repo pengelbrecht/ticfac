@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 57,
-  "state": "publishing",
-  "reason": "closing avx behind the integrated gate on 33a17fdcb630",
-  "updated_at": "2026-09-22T23:47:10Z",
+  "sequence": 58,
+  "state": "running",
+  "reason": "avx is closed",
+  "updated_at": "2026-09-22T23:47:46Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "avx",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
