@@ -1126,3 +1126,4 @@
 {"ts":"2026-09-22T17:44:23.047193Z","tick":"ha9","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["qu3"],"title":"The sandbox image carries pi, not only omp and claude"}}
 {"ts":"2026-09-22T17:44:37.740153Z","tick":"ha9","action":"unblock","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":[],"title":"The sandbox image carries pi, not only omp and claude"}}
 {"ts":"2026-09-22T17:44:37.759785Z","tick":"qu3","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["ha9"],"title":"One model spelling, or a translation with a test that boots a container"}}
+{"ts":"2026-09-22T20:36:22.730223Z","tick":"wvd","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"A running epic never sees tracker changes made on main","type":"bug"}}
