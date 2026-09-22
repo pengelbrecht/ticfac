@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 51,
-  "state": "running",
-  "reason": "njj is closed",
-  "updated_at": "2026-09-22T23:06:19Z",
+  "sequence": 52,
+  "state": "dispatching",
+  "reason": "dispatching 84z as attempt 8",
+  "updated_at": "2026-09-22T23:06:49Z",
   "ticks": [
     {
       "tick_id": "8ty",
