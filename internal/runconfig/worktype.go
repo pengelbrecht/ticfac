@@ -1,52 +1,73 @@
 package runconfig
 
-// WorkType is the KIND OF WORK a tick is, on the closed five-value enum the
-// wne epic declared (operator, 2026-09-22) — deliberately not a model and not
-// a tier. A classifier judges what the work IS; a table decides what that is
-// worth, so changing model policy never invalidates a recorded classification.
-//
-// The axis is INFERENCE UNDER UNCERTAINTY: how much of the work is deciding
-// what to do rather than doing it. Size and risk were considered and
-// rejected — a large mechanical edit is still mechanical, and a risky
-// one-line change is still one line. The order below is the axis, cheapest
-// first, and it is load-bearing: adding a third model later moves ONE
-// boundary instead of re-classifying anything, and the recorded
-// classifications stay valid.
-//
-// This vocabulary is shared by the epic's ticks: the classifier (internal/jev)
-// asks it, the factory's work-type-to-model table prices it, and routing
-// spends probability mass over it. A work type that is not one of these is a
-// bug, not a fallback — the enum is closed the way the tier vocabulary is
-// ([IsKnownWorkType] refuses anything else).
-type WorkType string
-
-// The work types, ordered on the axis above.
-const (
-	// WorkMechanical: the change is stated, not decided. Done is knowable by
-	// construction.
-	WorkMechanical WorkType = "mechanical"
-	// WorkTranslation: a known pattern applied to new material. Done is
-	// knowable by comparison.
-	WorkTranslation WorkType = "translation"
-	// WorkConstruction: build to a stated spec; decisions are local. Done is
-	// the acceptance.
-	WorkConstruction WorkType = "construction"
-	// WorkDiagnosis: cause unknown. Form and discard hypotheses against
-	// evidence. Done is knowable only once the cause is found.
-	WorkDiagnosis WorkType = "diagnosis"
-	// WorkDesign: the shape itself is in question, and the tick's own framing
-	// may be wrong. Done is knowable only by argument.
-	WorkDesign WorkType = "design"
+import (
+	"strconv"
+	"strings"
 )
 
-// WorkTypeNames is the work-type vocabulary in enum order. This slice is the
-// one authority for the closed set; nothing may hand-name a work type the
-// slice does not carry.
+// WorkType is one of the five kinds of work a tick's implementation can be
+// (tick mrn, epic wne), declared CLOSED the way the tier vocabulary is: the
+// names below are the whole enum, a value outside them is a bug rather than a
+// fallback, and every reader of the vocabulary refuses such a value instead
+// of quietly defaulting it.
+//
+// THE AXIS is inference under uncertainty — how much of the work is deciding
+// what to do rather than doing it. Size and risk were considered and rejected
+// when the vocabulary was proposed: a large mechanical edit is still
+// mechanical, and a risky one-line change is still one line.
+//
+//	mechanical    the change is stated, not decided. Done is knowable by
+//	              construction.
+//	translation   a known pattern applied to new material. Done is knowable by
+//	              comparison.
+//	construction  build to a stated spec; decisions are local. Done is the
+//	              acceptance.
+//	diagnosis     cause unknown. Form and discard hypotheses against evidence.
+//	              Done is knowable only once the cause is found.
+//	design        the shape itself is in question, and the tick's own framing
+//	              may be wrong. Done is knowable only by argument.
+//
+// The order of WorkTypeNames is that axis, least inference first, and is
+// load-bearing: adding a third model later moves ONE boundary instead of
+// re-classifying anything.
+//
+// WHY THIS IS NOT the tracker's `type` field. `task`/`bug`/`epic` describes
+// the TICKET; this describes the WORK. A bug can be mechanical (a typo with a
+// known fix) or diagnosis (an intermittent failure with no repro), and those
+// two want different models.
+//
+// WHY THIS IS NOT a model list. The vocabulary says what the work IS; which
+// model a work type is worth is a separate table — the factory's, in
+// internal/factory — so that changing a deployment's model lineup cannot
+// invalidate a classification recorded against these names. Nothing may write
+// a model name where a work type belongs; [WorkType.Valid] refusing a model
+// id is that rule's first line.
+type WorkType string
+
+// The work types, on the axis of how much must be worked out rather than
+// carried out.
+const (
+	WorkMechanical   WorkType = "mechanical"
+	WorkTranslation  WorkType = "translation"
+	WorkConstruction WorkType = "construction"
+	WorkDiagnosis    WorkType = "diagnosis"
+	WorkDesign       WorkType = "design"
+)
+
+// WorkTypeNames is the work-type vocabulary in axis order, the way TierNames
+// is the tier vocabulary in capability order.
 var WorkTypeNames = []WorkType{WorkMechanical, WorkTranslation, WorkConstruction, WorkDiagnosis, WorkDesign}
 
-// IsKnownWorkType reports whether name is one of the work types on the enum.
-// The refusal is the point: a probability on an unknown work type is a
-// protocol change to be reported, not a judgement call to be rounded off.
+// Valid reports whether w is one of [WorkTypeNames]. The vocabulary is
+// closed: a caller holding a value that fails this has a bug on its hands —
+// an invented work type, or a model name written where a work type belongs —
+// and must refuse it, never default it.
+func (w WorkType) Valid() bool {
+	return IsKnownWorkType(string(w))
+}
+
+// IsKnownWorkType reports whether name is one of the closed work-type
+// vocabulary. It is the work-type twin of the tier vocabulary's isKnownTier.
 func IsKnownWorkType(name string) bool {
 	for _, one := range WorkTypeNames {
 		if string(one) == name {
@@ -54,4 +75,20 @@ func IsKnownWorkType(name string) bool {
 		}
 	}
 	return false
+}
+
+// WorkTypeList renders the vocabulary for a message: quoted for a refusal
+// that echoes a rejected value back, bare for prose. Both spellings come from
+// one place, the way [SubstrateList] does for substrates, so two refusals
+// can never enumerate different work types.
+func WorkTypeList(quote bool) string {
+	parts := make([]string, 0, len(WorkTypeNames))
+	for _, one := range WorkTypeNames {
+		if quote {
+			parts = append(parts, strconv.Quote(string(one)))
+		} else {
+			parts = append(parts, string(one))
+		}
+	}
+	return strings.Join(parts, ", ")
 }

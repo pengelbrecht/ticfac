@@ -248,6 +248,19 @@ declare namespace Cloudflare {
     RUN_WORKER_HARNESS?: string;
     RUN_WORKER_MODEL?: string;
     /**
+     * What a classified work type costs on this deployment (tick mrn, epic
+     * wne): one `worktype=model` pair per entry, comma-separated, over the
+     * closed work-type vocabulary (mechanical, translation, construction,
+     * diagnosis, design — internal/runconfig on the Go side). The repository
+     * declares what the work IS; this table declares what it costs here, so
+     * re-tuning the lineup cannot invalidate a recorded classification. A
+     * work type with no mapping falls back to the default AND SAYS SO.
+     * Nothing reads it in TypeScript yet — the routing tick (wne's s45) wires
+     * it into dispatch — but the binding is declared now so the document and
+     * its type stay in sync.
+     */
+    RUN_WORKER_MODEL_BY_WORK_TYPE?: string;
+    /**
      * The `[[containers]] max_instances` ceiling from this file (tick b6e) —
      * a second declaration of the same number, because wrangler does not
      * expose a container application's own config back to the Worker at
