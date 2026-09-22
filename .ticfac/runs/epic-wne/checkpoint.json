@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 23,
-  "state": "integrating",
-  "reason": "integrating mrn attempt 2 into epic/wne",
-  "updated_at": "2026-09-22T16:15:04Z",
+  "sequence": 24,
+  "state": "gating",
+  "reason": "running the integrated gate for mrn on 4c054b21ad28",
+  "updated_at": "2026-09-22T16:15:24Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "mrn",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 2
     },
     {
