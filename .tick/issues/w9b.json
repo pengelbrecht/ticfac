@@ -3,7 +3,7 @@
   "title": "The classification is a decision record on the run branch",
   "description": "Jev is asked ONCE per tick. The answer is written to the run branch as a decision record, like the review and closeout exchanges already are, so a restart re-reads it instead of re-asking a model it already paid.\n\nThis is axiom 1, not thrift, and the distinction decides the acceptance. Cold reconstruction from git must reach the SAME dispatch as the warm process. A recorded classification does. A re-ask only probably does - Jev is probabilistic, and two calls on the same tick may differ, which would make a cold re-derivation dispatch a different model than the run it is reconstructing. That is an axiom 1 violation wearing the costume of a cache miss.\n\nRecord the full distribution and the model identity, not just the chosen work type. The distribution is what the routing rule consumes, and recording only the argmax would mean a threshold change could not be re-evaluated against runs that already happened.\n\nFollow whatever the review and closeout exchanges already do for record shape and location rather than inventing a third convention.",
   "notes": "2026-09-23 00:47 - ticfac run epic-wne: attempt 5 reported a finding drafted for triage — proposed-tick \"Wire a real classifier into run-epic: a jev.Client needs a credential source the operator must choose\" (key c6f918cc8606994e3f9bb2e4b899e360b376a7cb7f6cc4d72cfdba82aa73317d, severity medium, for this repository). Triage with `ticfac finding wne c6f918cc8606994e3f9bb2e4b899e360b376a7cb7f6cc4d72cfdba82aa73317d --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 00:48 - ticfac run epic-wne: attempt 5 reported a finding drafted for triage — defect \"runstate's maintenance-arm fixture fails on this host at the base commit\" (key d43758b0dc29f274833de4a9e590499ec1fa25a492349576c0e5c40d808c4f30, severity low, for this repository). Triage with `ticfac finding wne d43758b0dc29f274833de4a9e590499ec1fa25a492349576c0e5c40d808c4f30 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 01:06 - ticfac run epic-wne: attempt 5 merged into epic/wne as f3549494587c; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "A classification is written to the run branch once, later passes and a cold re-derivation from git read the record rather than calling the classifier, the recorded distribution is complete enough to re-evaluate a different threshold against it, and a re-derivation reaches the same dispatch as the warm process",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:23:14.055358Z",
-  "updated_at": "2026-09-22T23:06:55.468378Z",
-  "started_at": "2026-09-22T15:57:25.052916Z"
+  "updated_at": "2026-09-22T23:07:05.298261Z",
+  "closed_at": "2026-09-22T23:07:05.298261Z"
 }
