@@ -1117,3 +1117,4 @@
 {"ts":"2026-09-22T16:32:41.748419Z","tick":"gvc","action":"block","actor":"peter@engelbrecht.dk","data":{"blockers":["wne"],"title":"An unattended epic absorbs the defects it discovers"}}
 {"ts":"2026-09-22T16:42:54.918105Z","tick":"b1t","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"A worker hung on a dropped connection burns its whole wall clock","type":"bug"}}
 {"ts":"2026-09-22T17:13:41.910889Z","tick":"b1t","action":"update","actor":"peter@engelbrecht.dk","data":{"title":"The stall warning watches the worktree, so a working pi worker looks hung"}}
+{"ts":"2026-09-22T17:20:11.270747Z","tick":"h58","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"Human-facing run output leads with the tick's try, not the run's dispatch counter","type":"task"}}
