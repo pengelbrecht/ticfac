@@ -1,0 +1,13 @@
+{
+  "id": "m5t",
+  "title": "A timed-out submission leaves a run the operator cannot see",
+  "description": "'ticfac cloud run uzc' failed with:\n\n    factory request POST /api/runs failed: context deadline exceeded (Client.Timeout exceeded while awaiting headers)\n\nThe POST had ALREADY SUCCEEDED. The factory created the run; only the response was lost. The client printed a failure, the operator retried, and a SECOND run of the same epic started - two runs writing to one integration branch, which is exactly the collision the publish slot exists to arbitrate.\n\nObserved 2026-09-22: run_cd29a8813c05432a97679230e024f7c2 was created by the submission that 'failed', and run_de249a5660714070be340a647e931d5e by the retry. The first was already ahead - it had cut epic/uzc and recorded attempt 1 of f8l - so the retry was the one worth stopping, which an operator can only work out by listing runs and reading branch history.\n\nWhat makes it worse than a normal lost-response: nothing in the failure suggests the run might exist. 'context deadline exceeded while awaiting headers' reads as 'nothing happened'.\n\nDo:\n- Make the submission idempotent. The client should mint the run id (or a submission key) and send it, so a retry with the same key returns the EXISTING run rather than creating a second. The factory already keys runs by id; the client just does not choose it.\n- Failing that, a timeout must say what it cannot rule out: 'the factory may have accepted this submission - check ticfac cloud status before retrying'. A message that implies nothing happened, when something may have, is the defect.\n- Consider whether the dispatch lease should refuse a second run of the same epic outright rather than letting both reach 'starting'.\n\nFound while performing the first cloud run orchestrated by ticfac in the container.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A retried submission after a timeout returns the existing run rather than creating a second, or the timeout names the possibility explicitly; and two runs of one epic cannot both reach starting",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T11:37:39.262153Z",
+  "updated_at": "2026-09-22T11:37:39.262153Z"
+}
