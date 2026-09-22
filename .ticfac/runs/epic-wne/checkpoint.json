@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 34,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-22T16:56:39Z",
+  "sequence": 35,
+  "state": "collecting",
+  "reason": "collecting w9b attempt 4",
+  "updated_at": "2026-09-22T17:00:20Z",
   "ticks": [
     {
       "tick_id": "0ju",
