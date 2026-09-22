@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 7,
-  "state": "integrating",
-  "reason": "integrating mdw attempt 2 into epic/xte",
-  "updated_at": "2026-09-22T14:14:51Z",
+  "sequence": 8,
+  "state": "gating",
+  "reason": "running the integrated gate for mdw on 5829325256d4",
+  "updated_at": "2026-09-22T14:15:15Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "mdw",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 2
     },
     {
