@@ -73,7 +73,10 @@
 // carries and fails CLOSED on the other three, naming the decision, so a
 // run that reaches one of them stops honestly instead of half-acting.
 //
-// The executor is not yet wired into internal/cli's honoured set either: a
-// profile cannot name it until the collect-and-cancel decision lands, so
-// nothing in production can select an executor whose settle path refuses.
+// The executor is not yet wired into internal/cli's honoured set either:
+// profiles-cloudflare-sandbox/ names it (tick njj — the dispatch profile
+// pairing pi on GLM 5.3 with this executor), but no run can SELECT that
+// profile until the collect-and-cancel decision lands and a follow-on tick
+// registers this executor beside subprocess and herdr, so nothing in
+// production can dispatch through an executor whose settle path refuses.
 package cloudflaresandbox
