@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 54,
-  "state": "collecting",
-  "reason": "collecting avx attempt 6",
-  "updated_at": "2026-09-22T23:45:16Z",
+  "sequence": 55,
+  "state": "integrating",
+  "reason": "integrating avx attempt 6 into epic/xte",
+  "updated_at": "2026-09-22T23:45:33Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "avx",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
