@@ -194,7 +194,48 @@ func (r *Reconciler) baseBranch(ctx context.Context) string {
 			return declared
 		}
 	}
-	return r.opts.BaseRef
+	if isBranchRef(r.opts.BaseRef) {
+		return r.opts.BaseRef
+	}
+	// --base named a COMMIT — HEAD by default, or the submitted SHA a cloud
+	// container passes — which says where the integration branch was cut
+	// from, not what flows into it afterwards. What flows in is the remote's
+	// default branch (ticks wvd and rf3). Treating "cut from a commit" as "no
+	// branch to fold" is what left a running epic blind to every tick filed on
+	// main after it started, and made operator re-gating silently inert.
+	return r.remoteDefaultBranch()
+}
+
+// isBranchRef reports whether ref names a branch rather than a commit: not
+// empty, not HEAD, and not a bare hex object id.
+func isBranchRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || ref == "HEAD" {
+		return false
+	}
+	if len(ref) >= 7 && len(ref) <= 64 && strings.Trim(strings.ToLower(ref), "0123456789abcdef") == "" {
+		return false
+	}
+	return true
+}
+
+// remoteDefaultBranch is the remote's default branch as a branch NAME: the
+// remote's HEAD as this checkout holds it, else as the remote itself answers
+// (a cloud container's checkout is a fetch of one commit and holds no
+// refs/remotes/<remote>/HEAD), else "" — never guessed.
+func (r *Reconciler) remoteDefaultBranch() string {
+	if out, err := r.git.run("", "symbolic-ref", "--short", "refs/remotes/"+r.opts.Remote+"/HEAD"); err == nil && out != "" {
+		return strings.TrimPrefix(out, r.opts.Remote+"/")
+	}
+	if out, err := r.git.run("", "ls-remote", "--symref", r.opts.Remote, "HEAD"); err == nil {
+		for _, line := range strings.Split(out, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && fields[0] == "ref:" && strings.HasPrefix(fields[1], "refs/heads/") {
+				return strings.TrimPrefix(fields[1], "refs/heads/")
+			}
+		}
+	}
+	return ""
 }
 
 // branchName is a base as a BRANCH: `refs/heads/main`, `origin/main` and
