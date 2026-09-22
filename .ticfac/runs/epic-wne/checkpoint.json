@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 42,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-22T17:38:28Z",
+  "sequence": 43,
+  "state": "collecting",
+  "reason": "collecting w9b attempt 5",
+  "updated_at": "2026-09-22T22:47:39Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -40,7 +40,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/wne",
-    "source_sha": "539db8e859eece5680e0df35be4ec1765d016d26",
+    "source_sha": "f55a59541080ce24a02bb248e8f3d628c4ce9734",
     "integration_ref": "refs/heads/epic/wne",
     "phase": "worker",
     "executor": null,
