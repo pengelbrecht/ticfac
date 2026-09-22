@@ -2,6 +2,7 @@
   "id": "mdw",
   "title": "Strip claude's requirements from the container boot",
   "description": "hn0 added two things to the orchestrator boot that exist only because the worker was claude. Both are wrong once the worker is pi on GLM.\n\n  1. The boot REFUSES any run whose model is not on the Anthropic route, on the reasoning that 'ticfac dispatches its workers through the claude CLI, which speaks the Anthropic API'. Under pi that refusal rejects exactly the route we want.\n  2. IS_SANDBOX=1 is exported because the claude CLI refuses --permission-mode bypassPermissions under root and the container is root. Check whether pi has an equivalent check before removing it - if it does, the export stays and the COMMENT changes to say whose requirement it is.\n\nAlso: common.sh exports ANTHROPIC_BASE_URL for the claude route. pi on Workers AI needs the gateway's workers-ai route instead. internal/exec/subprocess/grade.go's modelCredentialPrefixes preserves ANTHROPIC_* through the source grade - confirm the equivalent holds for whatever pi reads, because a credential silently dropped by the grade is a failure that looks like a model error.\n\nThis is removal plus one substitution, and it is deliberately separated from the executor work so that neither waits on the other.",
+  "notes": "2026-09-22 16:14 - ticfac run epic-xte: attempt 2 reported a finding drafted for triage — defect \"internal/cli TestRunEpicFailsClosed fails in a linked worktree: gate config path is cwd-relative, not repo-rooted\" (key 88c1c4976b8e0c5fde6f88773bae5d0fd7f02ae47a1be3f0d0f239d7dbfa3a22, severity medium, for this repository). Triage with `ticfac finding xte 88c1c4976b8e0c5fde6f88773bae5d0fd7f02ae47a1be3f0d0f239d7dbfa3a22 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "The boot no longer refuses a non-Anthropic route, the gateway's workers-ai route survives the source grade into a worker's environment (proven by a test, not by inspection), any surviving IS_SANDBOX export names whose requirement it is, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:19:26.678078Z",
-  "updated_at": "2026-09-22T13:33:26.100047Z",
+  "updated_at": "2026-09-22T14:14:22.479866Z",
   "started_at": "2026-09-22T13:33:26.100047Z"
 }
