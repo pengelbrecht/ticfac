@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 50,
-  "state": "publishing",
-  "reason": "closing njj behind the integrated gate on 6963bd9ca036",
-  "updated_at": "2026-09-22T22:50:08Z",
+  "sequence": 51,
+  "state": "running",
+  "reason": "njj is closed",
+  "updated_at": "2026-09-22T23:06:19Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "njj",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
