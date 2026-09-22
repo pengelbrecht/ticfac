@@ -2,12 +2,14 @@
   "id": "h8u",
   "title": "ticfac factory deploy exits 0 when the deploy failed",
   "description": "On 2026-09-20 two consecutive factory deploys failed with a hard Cloudflare API error and  exited 0 both times:\n\n    ERROR  A request to the Cloudflare API (.../workers/scripts/ticks-factory) failed.\n    Cannot create binding for class 'RepoRoom' ... [code: 10061]\n    [exited with code 0]\n\nI only knew they had failed because I read the output. Anything that scripts a deploy records a failed deploy as a successful release - including .github/workflows/deploy-factory.yml, which exists precisely so there is ONE deploy path and which gates nothing else on the exit status.\n\nThe wrangler child process's status is being dropped. Whatever the deploy's own post-checks do, a non-zero wrangler must make the command non-zero.\n\nSame defect shape as atn (a test that fails without saying why) and udu (a refresh that can never work reporting as a note): the system knows the answer and does not put it in the channel anyone checks. A release pipeline is the worst possible place for it.\n\nWhile fixing, check the other direction too: the deploy prints 'Factory ready' and a version id on success, so a caller has something to assert on; make sure a partial failure cannot print that line.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A factory deploy whose wrangler invocation fails exits non-zero and does not print the ready banner, proven by a test with a wrangler stub that fails",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-20T18:52:27.489097Z",
-  "updated_at": "2026-09-20T18:52:27.489097Z"
+  "updated_at": "2026-09-22T06:16:33.029977Z",
+  "closed_at": "2026-09-22T06:16:33.029977Z",
+  "closed_reason": "WRONGLY FILED. Retracted after measuring it properly.\n\nticfac factory deploy exits 1 on a failed build:\n\n    $ ticfac factory deploy \u003e/dev/null 2\u003e\u00261; echo $?\n    1\n\nThe evidence I filed this on was my own shell plumbing. I ran the deploy through '| tail -N' and read the harness's '[exited with code 0]' - which reports on the whole pipeline, whose last command was tail, and a pipeline's status is its LAST command's unless pipefail is set. ticfac's exit code was never in that number.\n\nI then repeated the claim three more times across two days as if it were established, including telling the operator it meant CI would record a failed build as a release. It would not.\n\nThe lesson is the one this tick was supposedly about, turned around: I read a status from a channel that could not carry it, and did not check the channel. Exactly the 'system knows and does not say' shape I have been filing all week - except here the system did say, and I was not listening on the right wire.\n\nNo code change. Nothing to fix."
 }
