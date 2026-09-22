@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 48,
-  "state": "dispatching",
-  "reason": "dispatching s45 as attempt 6",
-  "updated_at": "2026-09-22T23:07:58Z",
+  "sequence": 49,
+  "state": "running",
+  "reason": "s45 is running as attempt 6",
+  "updated_at": "2026-09-22T23:08:25Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "s45",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "02p",
