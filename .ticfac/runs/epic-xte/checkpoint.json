@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 33,
-  "state": "gating",
-  "reason": "running the integrated gate for keh on e96cf66c4e9a",
-  "updated_at": "2026-09-22T17:40:13Z",
+  "sequence": 34,
+  "state": "publishing",
+  "reason": "closing keh behind the integrated gate on e96cf66c4e9a",
+  "updated_at": "2026-09-22T17:41:30Z",
   "ticks": [
     {
       "tick_id": "8ty",
