@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 14,
-  "state": "publishing",
-  "reason": "closing 0ju behind the integrated gate on 39e6a25dedd2",
-  "updated_at": "2026-09-22T15:56:35Z",
+  "sequence": 15,
+  "state": "running",
+  "reason": "0ju is closed",
+  "updated_at": "2026-09-22T15:56:55Z",
   "ticks": [
     {
       "tick_id": "0ju",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
