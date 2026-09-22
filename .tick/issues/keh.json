@@ -3,7 +3,7 @@
   "title": "A cloudflare-sandbox executor that returns a handle, not a result",
   "description": "internal/exec/ implements herdr and subprocess. runstate.Executors already reserves the NAME 'cloudflare-sandbox' with nothing behind it. This tick is the implementation, and it is the Go client of the route 8ty exposes.\n\nThe shape that matters, and it is yoh's principle rather than a preference: the executor returns a HANDLE, not a finished attempt. It starts work in a sandbox and comes back. Something else asks later whether that handle is done. An executor that blocks until an attempt finishes puts a wall clock inside a dispatch and is the thing 'nothing waits' exists to forbid.\n\nt5p already persisted the sandbox handle so an attempt survives a Workflow restart, which suggests the durable half of this is in place - read it before designing a new one.\n\nCheck internal/runconfig/kinds.go for what a runner kind is required to supply, and internal/exec/subprocess for the interface the local executor satisfies, because this one satisfies the same interface with a different substrate. Where the interface assumes a local process (signals, stdio, exit codes), the assumption IS the work - name each one you had to reinterpret in the tick's report rather than silently papering over it.",
   "notes": "2026-09-22 19:39 - ticfac run epic-xte: attempt 4 reported a finding drafted for triage — proposed-tick \"Wire cloudflare-sandbox into the honoured executor set once the collect-and-cancel decision lands\" (key a69a9747fa34ac03dfe9b137f68225beefe57036c772cb974fd4523f33690c8e, severity medium, for this repository). Triage with `ticfac finding xte a69a9747fa34ac03dfe9b137f68225beefe57036c772cb974fd4523f33690c8e --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-22 19:41 - ticfac run epic-xte: attempt 4 merged into epic/xte as e96cf66c4e9a; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "internal/exec gains a cloudflare-sandbox executor that satisfies the same interface as subprocess, starts an attempt through the Worker route and returns a handle without blocking, a handle can be re-queried for state after the process that created it is gone, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:19:43.745354Z",
-  "updated_at": "2026-09-22T17:41:42.371827Z",
-  "started_at": "2026-09-22T16:09:22.432096Z"
+  "updated_at": "2026-09-22T17:41:52.864278Z",
+  "closed_at": "2026-09-22T17:41:52.864278Z"
 }
