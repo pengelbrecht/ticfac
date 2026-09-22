@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 47,
-  "state": "running",
-  "reason": "w9b is closed",
-  "updated_at": "2026-09-22T23:07:11Z",
+  "sequence": 48,
+  "state": "dispatching",
+  "reason": "dispatching s45 as attempt 6",
+  "updated_at": "2026-09-22T23:07:58Z",
   "ticks": [
     {
       "tick_id": "0ju",
