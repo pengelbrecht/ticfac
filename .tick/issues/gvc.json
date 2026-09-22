@@ -6,8 +6,11 @@
   "priority": 1,
   "type": "epic",
   "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "wne"
+  ],
   "acceptance_criteria": "An epic run that discovers a defect GATING ITS OWN DEFINITION OF DONE absorbs it as a tick, fixes it and closes, with no person triaging; a finding the done is reachable without becomes a backlog tick with an owner instead. Where an acceptance item is runnable, running it is the authoritative verdict and no classifier overrides it; where it is not yet runnable, a classified prediction decides and is recorded AS a prediction, distinguishable from an observation. The absorption names which acceptance item was unreachable and is recorded on the run branch, so a cold re-derivation reaches the same epic. An epic with no stated done refuses to absorb rather than guessing, and says so. The recursion is bounded and exceeding the bound is what stops for a person. A prediction whose item later becomes runnable is scored against what the done actually did, and the close-out retro reports what was absorbed, against which acceptance item, and whether it was predicted or observed.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:19:19.946106Z",
-  "updated_at": "2026-09-22T16:24:35.026522Z"
+  "updated_at": "2026-09-22T16:32:41.747878Z"
 }
