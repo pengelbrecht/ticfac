@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 13,
-  "state": "gating",
-  "reason": "running the integrated gate for 0ju on 39e6a25dedd2",
-  "updated_at": "2026-09-22T15:55:12Z",
+  "sequence": 14,
+  "state": "publishing",
+  "reason": "closing 0ju behind the integrated gate on 39e6a25dedd2",
+  "updated_at": "2026-09-22T15:56:35Z",
   "ticks": [
     {
       "tick_id": "0ju",
