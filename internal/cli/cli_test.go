@@ -17,7 +17,18 @@ import (
 // says "no executor configured". A build with no executor behind the
 // four-operation protocol must refuse rather than report a run it did not
 // make — Appendix A #5's failure, in the smallest form it can take.
+//
+// "No executor" is CONSTRUCTED here, not inherited from the host. CheckExecutor
+// resolves ticfac-exec-subprocess beside the running binary and then on PATH,
+// so on a developer's machine — where that binary is installed, as it must be
+// for a run to work at all — the check PASSES and the command proceeds to fail
+// later on something unrelated. The test then reports the wrong refusal and the
+// gate is red at base. Pointing PATH at an empty directory is what makes this
+// assert the tree's behaviour rather than whether ticfac happens to be
+// installed on the host running the gate.
 func TestRunEpicFailsClosed(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"run-epic", "x"}, &stdout, &stderr)
 
