@@ -1109,3 +1109,4 @@
 {"ts":"2026-09-22T15:58:13.806879Z","tick":"8ty","action":"close","actor":"ticfac","epic":"xte","data":{"title":"Expose per-tick sandbox dispatch over HTTP from the Worker"}}
 {"ts":"2026-09-22T16:09:22.432431Z","tick":"keh","action":"start","actor":"ticfac","epic":"xte","data":{"title":"A cloudflare-sandbox executor that returns a handle, not a result"}}
 {"ts":"2026-09-22T16:11:37.172843Z","tick":"mdw","action":"note","actor":"ticfac","epic":"xte","data":{"note":"\n2026-09-22 18:11 - ticfac run epic-xte: attempt 2 merged into epic/xte as eb59d0c37715; the integrated gate (go, ts) passed.","title":"Strip claude's requirements from the container boot"}}
+{"ts":"2026-09-22T16:11:48.20079Z","tick":"mdw","action":"close","actor":"ticfac","epic":"xte","data":{"title":"Strip claude's requirements from the container boot"}}
