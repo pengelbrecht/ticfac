@@ -1115,3 +1115,4 @@
 {"ts":"2026-09-22T17:41:52.864642Z","tick":"keh","action":"close","actor":"ticfac","epic":"xte","data":{"title":"A cloudflare-sandbox executor that returns a handle, not a result"}}
 {"ts":"2026-09-22T17:42:41.543513Z","tick":"7fl","action":"start","actor":"ticfac","epic":"xte","data":{"title":"Wave width and sandbox capacity stop being two numbers"}}
 {"ts":"2026-09-22T17:43:49.573357Z","tick":"avx","action":"start","actor":"ticfac","epic":"xte","data":{"title":"Adoption recognises a running sandbox instead of dispatching a rival"}}
+{"ts":"2026-09-22T17:45:03.285705Z","tick":"njj","action":"start","actor":"ticfac","epic":"xte","data":{"title":"The dispatch profile is pi on GLM 5.3, executor cloudflare-sandbox"}}
