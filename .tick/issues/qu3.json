@@ -1,0 +1,14 @@
+{
+  "id": "qu3",
+  "title": "One model spelling, or a translation with a test that boots a container",
+  "description": "Found by mrn's worker while building the work-type table (finding 52f48872 on epic/wne), and verified 2026-09-22.\n\nTwo spellings of the same model are in the tree:\n\n  image/common.sh:256 accepts workers-ai/* and line 269 DIES on anything else:\n    'cannot tell which provider serves the model ... qualify it with one of\n     workers-ai/..., anthropic/..., openai/... or openrouter/...'\n  wrangler.toml's RUN_WORKER_MODEL examples use that same workers-ai/... prefix.\n\n  Everything else in this repository - profiles-herdr/, .tick/runners.toml's\n  [roles.implement], and the work-type table mrn just committed - spells it\n  cloudflare-workers-ai/@cf/zai-org/glm-5.3, which is the pi profile spelling.\n\nSo a work-type table value routed into a container boot is refused at startup on a\nmessage about providers, having nothing to do with the tick that was dispatched.\n\nThis belongs to xte because xte is where a model name first travels from ticfac's\nconfig INTO a container. njj pairs pi with the routing and is the tick that would\notherwise ship the mismatch.\n\nSettle it one of two ways, and say which in the tick's report:\n  - ONE spelling per consumer, with the translation at the boundary that crosses\n    between them, or\n  - one spelling everywhere, migrating whichever side is wrong.\n\nTHE PART THAT MATTERS MOST, and is why the finding says 'nothing in this tick's Go\ntests can catch it': no Go test boots a container, so the two spellings can disagree\nindefinitely without any gate going red. Whatever the resolution, it needs a test that\nexercises the actual boundary - common.sh's model parse against the value ticfac would\nreally hand it - rather than two sides each asserting their own spelling is fine.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "xte",
+  "acceptance_criteria": "A model name that ticfac's config can produce is accepted by image/common.sh's provider parse, proven by a test that runs the real parse against the real configured value rather than a fixture of either spelling; and the repository has one documented answer for which spelling each consumer uses",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T16:17:33.666919Z",
+  "updated_at": "2026-09-22T16:17:33.666919Z"
+}
