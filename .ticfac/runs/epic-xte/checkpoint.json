@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 56,
-  "state": "gating",
-  "reason": "running the integrated gate for avx on 33a17fdcb630",
-  "updated_at": "2026-09-22T23:45:59Z",
+  "sequence": 57,
+  "state": "publishing",
+  "reason": "closing avx behind the integrated gate on 33a17fdcb630",
+  "updated_at": "2026-09-22T23:47:10Z",
   "ticks": [
     {
       "tick_id": "8ty",
