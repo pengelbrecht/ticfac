@@ -161,7 +161,26 @@ export const GIT_PREFIX = "/api/git";
 export const REVIEW_PREFIX = "/api/review";
 
 /**
- * The branch-record door (tick t4y), exempt for the same reason as the four
+ * The per-tick sandbox dispatch door (tick 8ty), exempt from the FACTORY
+ * bearer token for exactly the reason `/api/wave` is: its caller is a
+ * container — the Go orchestrator's `cloudflare-sandbox` executor — and a
+ * container must never hold the operator's token.
+ *
+ * It carries the same run-scoped gateway credential and is authorized by the
+ * same function, so an operator's stop — which revokes that token — reaches a
+ * run's ability to start tick containers and not only its ability to spend.
+ *
+ * The HTTP contract itself — request and response shapes, refusal vocabulary
+ * — is documented in ONE place, `src/sandbox-dispatch.ts`, because the Go
+ * client (internal/exec's cloudflare-sandbox executor) and this route are
+ * the two consumers of one mechanism and the drift is what the prefix being
+ * declared here must never hide. Only the path lives here, with the rest of
+ * the path registry.
+ */
+export const SANDBOX_DISPATCH_PREFIX = "/api/sandbox";
+
+/**
+ * The branch-record door (tick t4y), exempt for the same reason as the five
  * above: its caller is a sandbox holding a run token, never the operator's.
  *
  * It is where a container records the branch it just created, which is what
@@ -348,6 +367,8 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === TELEGRAM_WEBHOOK_PATH) return true;
   if (pathname === GATEWAY_PREFIX || pathname.startsWith(`${GATEWAY_PREFIX}/`)) return true;
   if (pathname === WAVE_PATH) return true;
+  if (pathname === SANDBOX_DISPATCH_PREFIX || pathname.startsWith(`${SANDBOX_DISPATCH_PREFIX}/`))
+    return true;
   if (pathname === GIT_PREFIX || pathname.startsWith(`${GIT_PREFIX}/`)) return true;
   if (pathname === REVIEW_PREFIX) return true;
   if (pathname === BRANCH_CLAIM_PREFIX) return true;
