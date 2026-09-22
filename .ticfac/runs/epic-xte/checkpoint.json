@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 53,
-  "state": "running",
-  "reason": "84z is running as attempt 8",
-  "updated_at": "2026-09-22T23:07:10Z",
+  "sequence": 54,
+  "state": "collecting",
+  "reason": "collecting avx attempt 6",
+  "updated_at": "2026-09-22T23:45:16Z",
   "ticks": [
     {
       "tick_id": "8ty",
