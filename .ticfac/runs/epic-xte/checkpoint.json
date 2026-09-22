@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 40,
-  "state": "dispatching",
-  "reason": "dispatching njj as attempt 7",
-  "updated_at": "2026-09-22T17:44:37Z",
+  "sequence": 41,
+  "state": "running",
+  "reason": "njj is running as attempt 7",
+  "updated_at": "2026-09-22T17:45:11Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "njj",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 7
     },
     {
       "tick_id": "y3b",
