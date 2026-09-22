@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 28,
-  "state": "dispatching",
-  "reason": "dispatching keh as attempt 4",
-  "updated_at": "2026-09-22T16:41:47Z",
+  "sequence": 29,
+  "state": "running",
+  "reason": "keh is running as attempt 4",
+  "updated_at": "2026-09-22T16:42:18Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -19,8 +19,8 @@
     },
     {
       "tick_id": "keh",
-      "state": "ready",
-      "attempt": 3
+      "state": "dispatched",
+      "attempt": 4
     },
     {
       "tick_id": "7fl",
