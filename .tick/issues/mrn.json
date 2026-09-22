@@ -2,6 +2,7 @@
   "id": "mrn",
   "title": "The work-type enum and the factory's work-type to model table",
   "description": "The vocabulary and the price list, which are deliberately two things.\n\nThe enum is settled and is in this epic's parent description: mechanical, translation, construction, diagnosis, design - ordered on the axis of how much must be worked out rather than carried out. Declare it as a closed enum the way the tier vocabulary already is (isKnownTier refuses anything else); a work type that is not one of these is a bug, not a fallback.\n\nThe table maps work type -\u003e model and lives in FACTORY CONFIG beside the existing [roles.*.tiers.*] overlays, because a work type is another key into that kind of table. With today's two models the mapping is mechanical/translation/construction -\u003e glm-5.3-flash and diagnosis/design -\u003e glm-5.3.\n\nTwo rules the table must obey:\n  - A work type with no mapping falls back to the default AND SAYS SO. Failing a dispatch on a table someone forgot to extend is the wrong failure.\n  - Changing the table must not invalidate a recorded classification. That separation is the whole reason Jev is asked what the work IS rather than what it is worth - so nothing may write a model name where a work type belongs.\n\nNo model call in this tick. This is vocabulary and config only.",
+  "notes": "2026-09-22 17:58 - ticfac run epic-wne: attempt 2 reported a finding drafted for triage — proposed-tick \"The factory's work-type table pins model ids a container boot would refuse (cloudflare-workers-ai/... vs workers-ai/...)\" (key 52f4887286f7679edeff4eb8902941e85f88505224cdce4dd905128da5a25b1c, severity medium, for this repository). Triage with `ticfac finding wne 52f4887286f7679edeff4eb8902941e85f88505224cdce4dd905128da5a25b1c --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "A closed work-type enum refuses an unknown value, factory config maps each work type to a model, an unmapped work type resolves to the default and is reported as having done so, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:22:49.808337Z",
-  "updated_at": "2026-09-22T13:33:40.729897Z",
+  "updated_at": "2026-09-22T15:58:25.75694Z",
   "started_at": "2026-09-22T13:33:40.729896Z"
 }
