@@ -126,3 +126,28 @@ func TestTheRealImageIsRewritten(t *testing.T) {
 		t.Errorf("%d of %d downloads resume", n, found)
 	}
 }
+
+// A stalled connection must become a FAILURE, or the retries above are
+// unreachable (tick jge, second cut). The first version of this fix made
+// dropped transfers survivable and stalled ones permanent: a deploy sat on one
+// for eight hours overnight and produced nothing, which is worse than the
+// plain curl it replaced, because that would have died and let the build say so.
+func TestAStalledTransferIsFailedSoItCanBeRetried(t *testing.T) {
+	dir := stagedWith(t, twoDownloads)
+
+	if _, err := MakeSandboxDownloadsResumable(dir); err != nil {
+		t.Fatalf("making the staged downloads resumable: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, sandboxDockerfileName))
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	got := string(data)
+
+	if n := strings.Count(got, "--speed-limit"); n != 2 {
+		t.Errorf("%d downloads bound their minimum speed, want 2 — --retry only fires on a FAILURE, and a connection that stalls but stays open never fails:\n%s", n, got)
+	}
+	if n := strings.Count(got, "--speed-time"); n != 2 {
+		t.Errorf("%d downloads bound how long a stall may last, want 2:\n%s", n, got)
+	}
+}
