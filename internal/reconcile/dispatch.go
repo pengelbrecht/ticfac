@@ -482,6 +482,21 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return handle, executor, adoptableMarker, nil
 	}
 
+	// The classification exchange (tick w9b, epic wne), at the FIRST DISPATCH
+	// of a role-less tick and nowhere else: Jev is asked once per tick, the
+	// answer — the full probability distribution and the model identity — is
+	// written to the run branch as a decision record before anything is
+	// dispatched on top of it, and every later pass (including a cold
+	// re-derivation from git) reads the record instead of re-asking. It sits
+	// after the adoption walk on purpose: an attempt this run already
+	// dispatched was planned under whatever its incarnation knew, and an
+	// adopted attempt is never re-planned.
+	if entry.Role == "implement-tick" {
+		if _, err := r.classificationFor(ctx, entry); err != nil {
+			return nil, nil, attemptHandle{}, err
+		}
+	}
+
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
 		// The tick's own try for this dispatch (tick vw0): the same number the

@@ -136,6 +136,33 @@ var Roles = []string{
 	"plan-repair", "resolve-conflict", "closeout-epic", "evaluate-goal",
 }
 
+// RoleClassifyTick is the decision record's role value for the CLASSIFICATION
+// exchange (tick w9b, epic wne): the one model call a run makes that no dispatch
+// produces. The reconciler asks the classifier which KIND OF WORK a role-less
+// tick is, and the answer lands as a decision record for the same reason the
+// review and closeout answers do — a restart re-reads it instead of re-asking
+// a model the run already paid, and a cold reconstruction from git reaches the
+// same dispatch as the warm process while a re-ask only probably does.
+//
+// It is deliberately NOT a value of [Roles]: `$defs.role` is the vocabulary of
+// roles a DISPATCH carries, and the bundle — which this record's provenance
+// cites — is closed. Provenance for a classification therefore states role as
+// NULL, the reading that means "no dispatch produced this", and the model
+// identity rides the provenance Model field instead.
+const RoleClassifyTick = "classify-tick"
+
+// DecisionRoles is the closed vocabulary the decision record's OWN role field
+// may carry: every role-job exchange ([Roles]) plus the classification exchange.
+// schemas.decision's `role` is a free string the bundle leaves to the reader to
+// close, so closing it is this package's job — and it stays closed here rather
+// than growing with every new exchange: a decision claiming a role nothing
+// produces is refused exactly as one naming a role a dispatch never carried.
+func DecisionRoles() []string {
+	out := make([]string, 0, len(Roles)+1)
+	out = append(out, Roles...)
+	return append(out, RoleClassifyTick)
+}
+
 func (p Provenance) validate() error {
 	if p.RunID == "" {
 		return fmt.Errorf("provenance.run_id is empty")
@@ -277,7 +304,10 @@ func (a Attempt) Validate() error {
 
 // Decision is one role-job exchange, at
 // `.ticfac/runs/<run-id>/decisions/<n>.json`. Created if absent: a validated
-// decision is a thing a model was paid for once.
+// decision is a thing a model was paid for once. The classification exchange
+// (tick w9b) is recorded the same way, under [RoleClassifyTick]: same shape,
+// same location, same create-if-absent — a third convention would be a
+// record a later pass reads differently from the ones it already knows.
 type Decision struct {
 	SchemaVersion int            `json:"schema_version"`
 	Decision      int            `json:"decision"`
@@ -300,7 +330,7 @@ func (d Decision) Validate() error {
 	if d.Decision < 1 {
 		return fmt.Errorf("decision number %d is not 1-based", d.Decision)
 	}
-	if !oneOf(d.Role, Roles) {
+	if !oneOf(d.Role, DecisionRoles()) {
 		return fmt.Errorf("decision role %q is not one of the permitted values", d.Role)
 	}
 	if d.Request == nil || d.Response == nil {
