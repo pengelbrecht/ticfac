@@ -42,16 +42,20 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 		"ticfac run-epic",
 		`--base "$base_branch"`,
 		`--repo "$workdir"`,
-		// The container runs as root and every worker is launched with
-		// `--permission-mode bypassPermissions`, which the claude CLI refuses
-		// under root unless it is told it is in a sandbox. Proved by running:
-		// without it the harness probe died on "cannot be used with root/sudo
-		// privileges for security reasons".
-		"export IS_SANDBOX=1",
+		// The run's gateway token under the name pi's cloudflare-workers-ai
+		// provider reads (tick mdw): common.sh exports every vendor credential
+		// it knows, but pi reads one it does not.
+		`export CLOUDFLARE_API_KEY="$gateway_token"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the staged orchestrator entrypoint does not carry %q — it is not booting ticfac", want)
 		}
+	}
+	// The claude CLI's root check went with the claude worker (tick mdw): pi
+	// has no permission gate whose refusal IS_SANDBOX would answer, so an
+	// export that survives here is one that names nobody's requirement.
+	if strings.Contains(text, "export IS_SANDBOX") {
+		t.Error("the staged orchestrator entrypoint still exports IS_SANDBOX — that was the claude CLI's refusal of bypassPermissions under root, and pi has no equivalent check")
 	}
 
 	// Everything before the exec is KEPT. The keeper above all: it is why
@@ -192,13 +196,14 @@ workdir="` + dir + `"
 epic="e1"; run_id="r1"; run_branch="tick-run/e1"; run_pass=""
 factory_url=""; factory_token=""; factory_project=""
 model="sonnet"
+gateway_token="run-token"
 phase="` + phase + `"
 say() { printf 'say: %s\n' "$*"; }
 warn() { printf 'warn: %s\n' "$*"; }
 die() { shift; printf 'die: %s\n' "$*"; exit 1; }
 start_keeper() { printf 'keeper watching %s\n' "$1"; }
 start_harness() { printf 'HARNESS\n'; }
-exec() { printf 'EXEC: %s\n' "$*"; }
+exec() { printf 'CLOUDFLARE_API_KEY=%s\n' "${CLOUDFLARE_API_KEY:-}"; printf 'EXEC: %s\n' "$*"; }
 ` + extra + `
 ` + block + `
 start_harness
@@ -256,13 +261,25 @@ func TestOverrideLeavesTheReviewPhaseOnTheHarness(t *testing.T) {
 	}
 }
 
-func TestOverrideRefusesANonAnthropicRoute(t *testing.T) {
-	out := runOverride(t, "run", `TICKS_MODEL_PROVIDER="workers-ai"; export TICKS_MODEL_PROVIDER; model="workers-ai/@cf/x"`)
-	if !strings.Contains(out, "die:") || !strings.Contains(out, "Anthropic API") {
-		t.Fatalf("a run routed away from Anthropic was not refused:\n%s", out)
+// A run routed off the Anthropic route is exactly the run this container is
+// for (tick mdw): the worker is pi, which speaks the gateway's workers-ai
+// route, so the boot that used to refuse it — a refusal that existed only
+// because the worker was the claude CLI — now execs the reconciler and hands
+// the workers the token under the name pi reads.
+func TestOverrideExecsANonAnthropicRoute(t *testing.T) {
+	out := runOverride(t, "run", `TICKS_MODEL_PROVIDER="workers-ai"; export TICKS_MODEL_PROVIDER; model="cloudflare-workers-ai/@cf/zai-org/glm-5.3"`)
+	if !strings.Contains(out, "EXEC: ticfac run-epic") {
+		t.Fatalf("a run routed to workers-ai was not exec'd:\n%s", out)
 	}
-	if strings.Contains(out, "EXEC:") {
-		t.Errorf("it dispatched workers that could not have made one model call:\n%s", out)
+	if strings.Contains(out, "die:") {
+		t.Errorf("the boot refused a non-Anthropic route, which rejected exactly the workers-ai route this container wires:\n%s", out)
+	}
+	// The one substitution (tick mdw): the run's gateway token under
+	// CLOUDFLARE_API_KEY, the name pi's cloudflare-workers-ai provider reads —
+	// common.sh exports the token under every vendor name it knows, and pi's
+	// is the one it does not.
+	if !strings.Contains(out, "CLOUDFLARE_API_KEY=run-token") {
+		t.Errorf("the run's gateway token was not exported under the name pi reads:\n%s", out)
 	}
 }
 
