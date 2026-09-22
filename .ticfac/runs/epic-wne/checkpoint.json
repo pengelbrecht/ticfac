@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 36,
-  "state": "running",
-  "reason": "attempt 4 of w9b is rejected (missing-result): there is no report at the path this executor owns, so the attempt never said what it did",
-  "updated_at": "2026-09-22T17:00:28Z",
+  "sequence": 37,
+  "state": "failed",
+  "reason": "attempt 4 of w9b is missing-result: there is no report at the path this executor owns, so the attempt never said what it did",
+  "updated_at": "2026-09-22T17:00:39Z",
   "ticks": [
     {
       "tick_id": "0ju",
