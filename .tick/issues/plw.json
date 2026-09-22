@@ -1,0 +1,13 @@
+{
+  "id": "plw",
+  "title": "Smoke: one Cloudflare sandbox on omp and GLM 5.3",
+  "description": "Throwaway epic for the first per-tick Cloudflare sandbox test (2026-09-22). Lives only on branch smoke/xte-omp-glm and is never merged. One tick, dispatched with ticfac cloud run --tick-ids.",
+  "status": "open",
+  "priority": 3,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The one tick's worker, running in its own Cloudflare sandbox on omp with workers-ai/@cf/zai-org/glm-5.3, pushes a commit adding docs/smoke/hello.md",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T21:41:22.921829Z",
+  "updated_at": "2026-09-22T21:41:22.921829Z"
+}

@@ -231,6 +231,17 @@ FACTORY_MAX_INSTANCES = "3"
 #   RUN_WORKER_MODEL = "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"
 #   RUN_WORKER_HARNESS = "omp"
 
+# OPERATOR, 2026-09-22: workers run GLM 5.3 or GLM 5.3 Flash, nothing else, and
+# nothing in the cloud runs claude. Pinned explicitly so no default decides it:
+# the built-in worker default above is DeepSeek, and an unset RUN_MODEL lets the
+# orchestrator container fall back to [roles.implement].model, which carries
+# pi's spelling (cloudflare-workers-ai/...) that this image's omp refuses (qu3).
+# workers-ai/... is omp's spelling of the same model.
+RUN_HARNESS = "omp"
+RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+RUN_WORKER_HARNESS = "omp"
+RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+
 # Where a run's live `run_event` stream is forwarded so a board can draw it
 # (tick bne). Left unset on purpose: a factory is self-deployed into the
 # operator's own account and runs identically with no board — the stream is

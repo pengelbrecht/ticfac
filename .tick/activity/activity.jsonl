@@ -1116,3 +1116,5 @@
 {"ts":"2026-09-22T17:42:41.543513Z","tick":"7fl","action":"start","actor":"ticfac","epic":"xte","data":{"title":"Wave width and sandbox capacity stop being two numbers"}}
 {"ts":"2026-09-22T17:43:49.573357Z","tick":"avx","action":"start","actor":"ticfac","epic":"xte","data":{"title":"Adoption recognises a running sandbox instead of dispatching a rival"}}
 {"ts":"2026-09-22T17:45:03.285705Z","tick":"njj","action":"start","actor":"ticfac","epic":"xte","data":{"title":"The dispatch profile is pi on GLM 5.3, executor cloudflare-sandbox"}}
+{"ts":"2026-09-22T21:41:22.922163Z","tick":"plw","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":3,"title":"Smoke: one Cloudflare sandbox on omp and GLM 5.3","type":"epic"}}
+{"ts":"2026-09-22T21:41:22.945578Z","tick":"pg9","action":"create","actor":"peter@engelbrecht.dk","epic":"plw","data":{"priority":3,"title":"Add docs/smoke/hello.md with one line","type":"task"}}
