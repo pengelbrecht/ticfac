@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "mrn",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-22T15:58:19Z",
+  "triaged_at": "2026-09-22T16:18:37Z",
+  "triaged_by": "peter@engelbrecht.dk",
+  "promoted_as": "qu3",
   "provenance": {
     "run_id": "epic-wne",
     "tick_id": "mrn",
