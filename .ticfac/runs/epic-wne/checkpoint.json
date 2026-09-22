@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 40,
-  "state": "dispatching",
-  "reason": "dispatching w9b as attempt 5",
-  "updated_at": "2026-09-22T17:02:50Z",
+  "sequence": 41,
+  "state": "running",
+  "reason": "w9b is running as attempt 5",
+  "updated_at": "2026-09-22T17:03:21Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -19,8 +19,8 @@
     },
     {
       "tick_id": "w9b",
-      "state": "ready",
-      "attempt": 4
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "s45",
