@@ -2,6 +2,7 @@
   "id": "x0k",
   "title": "Wire the classifier into run-epic with a credential the operator chooses",
   "description": "Triaged 2026-09-23 from wne's close-out (operator's choice A: absorb into wne). The classifier is built and never runs: run-epic constructs no jev.Client because nothing says where its credential comes from (c6f918cc). Decide the source (the gateway route with the run token in the cloud; the operator's Cloudflare credential locally), wire it, and keep the documented fallback: no credential or an unreachable classifier degrades to [tier_policy.start].",
+  "notes": "2026-09-23 15:16 - ticfac run epic-wne: attempt 10 reported a finding drafted for triage — contract \"The credential-ownership bundle closes ~/.ticfacrc, so the operator cannot choose it as the local home for the classifier key\" (key 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e, severity low, for this repository). Triage with `ticfac finding wne 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "With [tier_policy] dear_work_types configured, a local run and a cloud run each classify a role-less tick through Jev and record the decision; with no credential the run falls back to [tier_policy.start] and says so; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.21623Z",
-  "updated_at": "2026-09-23T11:10:51.285915Z",
+  "updated_at": "2026-09-23T13:16:14.19224Z",
   "started_at": "2026-09-23T11:10:51.285915Z"
 }
