@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "0mp",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-23T05:50:53Z",
+  "triaged_at": "2026-09-23T11:05:26Z",
+  "triaged_by": "peter@engelbrecht.dk",
+  "promoted_as": "md6",
   "provenance": {
     "run_id": "epic-wne",
     "tick_id": "0mp",
