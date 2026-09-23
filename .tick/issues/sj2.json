@@ -1,0 +1,17 @@
+{
+  "id": "sj2",
+  "title": "Classify only at a role-less tick's first dispatch",
+  "description": "Triaged 2026-09-23 from wne's close-out. wne's done says Jev is asked ONCE per tick and later passes read the record. c0102b2d: a later attempt that finds no record must not ask - asking then makes a re-derivation reach a different dispatch than the run it reconstructs (axiom 1).",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "x0k"
+  ],
+  "parent": "wne",
+  "acceptance_criteria": "A later attempt of a tick with no classification record does not call the classifier and falls back as the policy says; a test drives it; and the full suites pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T10:57:51.260313Z",
+  "updated_at": "2026-09-23T10:57:51.260313Z"
+}
