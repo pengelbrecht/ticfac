@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 56,
-  "state": "running",
-  "reason": "02p is running as attempt 7",
-  "updated_at": "2026-09-23T00:55:24Z",
+  "sequence": 57,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for 02p",
+  "updated_at": "2026-09-23T01:01:35Z",
   "ticks": [
     {
       "tick_id": "0ju",
