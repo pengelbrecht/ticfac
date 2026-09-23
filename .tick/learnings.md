@@ -81,12 +81,6 @@ waiting"; GitHub had not created the check runs yet. **Rule:** Absence right aft
 yet". Bound a wait for the thing to APPEAR before calling it "never", and state what was checked
 rather than a guessed cause.
 
-<<<<<<< HEAD
-**Problem:** The 5-minute poll looked lazy; under a 20-minute wipe it IS the keepalive. **Rule:** Find
-what a slow interval holds open before speeding it up.
-
-=======
->>>>>>> origin/main
 ## Where a tick lives
 
 **Problem:** Ticks filed here to change the ticks repository were undispatchable, and xte's ha9
