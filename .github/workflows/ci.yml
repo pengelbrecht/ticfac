@@ -2,7 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # epic/** as well as main, and the reason is not coverage. An epic's
+    # close-out waits for check runs on its PR's head commit, and GitHub runs a
+    # pull_request workflow only while the PR is MERGEABLE by GitHub's own
+    # merge - which does not run tk's merge drivers. .tick/activity/
+    # activity.jsonl is appended on both sides, merges cleanly through tk and
+    # conflicts as plain text, so any epic whose run overlapped a tracker edit
+    # on main showed as conflicting and never got CI: both epic PRs sat
+    # 'closeout_ci_absent' for an hour on 2026-09-23. A push-triggered run
+    # attaches its check runs to the same head commit the close-out reads
+    # (commits/<sha>/check-runs), whatever GitHub thinks of the merge.
+    branches: [main, "epic/**"]
   pull_request:
 
 permissions:
