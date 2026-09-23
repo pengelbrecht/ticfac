@@ -10,8 +10,10 @@
   "target": "",
   "tick_id": "s45",
   "attempt": 6,
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-23T00:52:29Z",
+  "triaged_at": "2026-09-23T11:06:41Z",
+  "triaged_by": "peter@engelbrecht.dk",
   "provenance": {
     "run_id": "epic-wne",
     "tick_id": "s45",
