@@ -711,6 +711,12 @@ type fixtureOptions struct {
 	// minutes is testable in milliseconds without the minute being a
 	// test-only number.
 	gateHeartbeat time.Duration
+
+	// substrate pins the substrate this run executes on, the input role
+	// routing resolves against (tick 84z). Empty is the production default:
+	// the TICKS_SUBSTRATE override, else the config's own declaration
+	// through the decision procedure.
+	substrate string
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -803,6 +809,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		guardsOff:          opts.guardsOff,
 		stopAfter:          opts.stopAfter,
 		NewExecutor:        f.newExecutor,
+		Substrate:          opts.substrate,
 	}
 }
 

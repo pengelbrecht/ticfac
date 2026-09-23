@@ -20,7 +20,11 @@
 //     place. It routes the runner (`kind`) and the model, and nothing else: the
 //     other two fields of a profile are not a repository's to set.
 //
-//   - a tier, `[roles.<name>.tiers.<tier>]`, as an overlay on that role.
+//   - a tier, `[roles.<name>.tiers.<tier>]`, as an overlay on that role, and
+//     a substrate, `[roles.<name>.substrates.<substrate>]` (tick 84z), as an
+//     overlay between the role and any tier — the axis a cloud container
+//     resolves on, so the same file can keep a frontier review for local
+//     runs and a container-runnable worker for cloud ones.
 //
 // What comes out records where each of those came from, because "which profile
 // was this run made under" is a question an attempt record has to be able to
@@ -40,7 +44,15 @@ import (
 	"strings"
 
 	ticfac "github.com/pengelbrecht/ticfac"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
+
+// ErrNoCloudRouting is the refusal a cloud run gets for a role the target
+// repository declares no cloud routing for (tick 84z). It is the same
+// sentinel the config reader refuses with ([runconfig.ErrNoCloudRouting]),
+// re-exported so a caller that asks a profile gets one truth to match on,
+// not two spellings of one rule in two packages.
+var ErrNoCloudRouting = runconfig.ErrNoCloudRouting
 
 // SchemaVersion is the version every profile file carries.
 const SchemaVersion = 1
@@ -87,6 +99,17 @@ type Options struct {
 	// does not declare is REFUSED: an operator who asked for the economy tier
 	// and silently got the default paid for the default without being told.
 	Tier string
+
+	// Substrate is the substrate the run executes on, the axis the
+	// `[roles.<name>.substrates.<substrate>]` overlay resolves on (tick 84z).
+	// Empty is the substrate-blind resolution this package has always done;
+	// `cloud`, `herdr` and `harness` resolve against their cells. Under
+	// `cloud` the overlay is REQUIRED: a role the config declares no cloud
+	// cell for is REFUSED naming the role, never silently fallen back to the
+	// role's own values or the profile as shipped — the shipped review and
+	// close-out profiles ARE claude processes, and that fall back is how a
+	// cloud run reaches one nobody chose.
+	Substrate string
 }
 
 // Provenance is where a resolved profile came from. It travels into the attempt
@@ -104,6 +127,12 @@ type Provenance struct {
 
 	// Tier is the overlay that was applied, empty when none was asked for.
 	Tier string
+
+	// Substrate is the substrate the routing resolved against, empty when no
+	// substrate was named (tick 84z). It travels beside Tier because a cloud
+	// review and a local one are different judgements, and an attempt record
+	// that could not tell them apart would be evidence about neither.
+	Substrate string
 
 	// Digest is over what was RESOLVED — role, version and the four fields —
 	// so two runs of the same profile file under different routing do not
@@ -228,9 +257,13 @@ func Resolve(role string, opts Options) (*Profile, error) {
 			Source:       path.Join(base, name),
 			PromptSource: path.Join(base, decoded.Prompt),
 			Tier:         opts.Tier,
+			Substrate:    opts.Substrate,
 		},
 	}
 
+	if err := validateSubstrate(opts.Substrate, role); err != nil {
+		return nil, err
+	}
 	if err := route(resolved, opts); err != nil {
 		return nil, err
 	}
@@ -238,15 +271,41 @@ func Resolve(role string, opts Options) (*Profile, error) {
 	return resolved, nil
 }
 
-// route applies the target repository's `[roles.*]` and the tier overlay on top
-// of it. It touches the runner and the model only: the executor is the host's
-// and the prompt is this repository's, and neither is a target repository's to
-// redefine.
+// validateSubstrate refuses a substrate value a profile cannot be resolved
+// against: auto is a policy a decision procedure resolves, never the
+// substrate a run executes on, and anything else must be one of the
+// vocabulary's values.
+func validateSubstrate(substrate, role string) error {
+	if substrate == "" {
+		return nil
+	}
+	sub := runconfig.Substrate(substrate)
+	if sub == runconfig.SubstrateAuto {
+		return fmt.Errorf("profile %s: substrate %q is a policy, not a substrate: resolve the substrate (runconfig.Decide) before routing a profile against it", role, substrate)
+	}
+	if !sub.Valid() {
+		return fmt.Errorf("profile %s: %q is not a substrate a profile can be routed for (want one of %s)", role, substrate, runconfig.SubstrateList(true))
+	}
+	return nil
+}
+
+// route applies the target repository's `[roles.*]`, the substrate overlay
+// and the tier overlay on top of them. It touches the runner and the model
+// only: the executor is the host's and the prompt is this repository's, and
+// neither is a target repository's to redefine.
 func route(p *Profile, opts Options) error {
 	if opts.RunnersConfig == "" {
 		if opts.Tier != "" {
 			return fmt.Errorf("profile %s: tier %q was asked for and no runner configuration was named to declare it",
 				p.Role, opts.Tier)
+		}
+		// The cloud substrate has no silent answer when there is no config at
+		// all: the profile as shipped is the only routing there is, and the
+		// shipped review and close-out profiles ARE claude processes — the
+		// exact thing a container must refuse to start (tick 84z).
+		if opts.Substrate == string(runconfig.SubstrateCloud) {
+			return fmt.Errorf("profile %s: %w: no runner configuration was named, so nowhere declares the cloud routing role %q needs — a cloud run refuses rather than dispatching the profile as shipped",
+				p.Role, ErrNoCloudRouting, p.Role)
 		}
 		return nil
 	}
@@ -267,6 +326,10 @@ func route(p *Profile, opts Options) error {
 			return fmt.Errorf("profile %s: tier %q was asked for and %s declares no role it could overlay",
 				p.Role, opts.Tier, opts.RunnersConfig)
 		}
+		if opts.Substrate == string(runconfig.SubstrateCloud) {
+			return fmt.Errorf("profile %s: %w: %s declares no role %q could be routed under, so no [roles.<name>.substrates.cloud] cell can exist for it — a cloud run refuses rather than dispatching the profile as shipped",
+				p.Role, ErrNoCloudRouting, opts.RunnersConfig, p.Role)
+		}
 		return nil
 	}
 
@@ -282,6 +345,25 @@ func route(p *Profile, opts Options) error {
 	if role.Kind != "" || role.Model != "" {
 		apply(role.Kind, role.Model)
 		routed = append(routed, fmt.Sprintf("%s [roles.%s]", opts.RunnersConfig, name))
+	}
+
+	// The substrate overlay sits between the role's own values and any tier:
+	// the base cells say what a LOCAL run pays for, the substrate cell says
+	// what this run executes on, and the tier stays the more specific axis.
+	// Under the cloud substrate the overlay is REQUIRED — absent cloud
+	// routing is a refusal naming the role, never a fall back to the role's
+	// own values, which name a harness a container cannot run at all (tick 84z).
+	if opts.Substrate != "" {
+		overlay, declared := role.Substrates[opts.Substrate]
+		if !declared {
+			if opts.Substrate == string(runconfig.SubstrateCloud) {
+				return fmt.Errorf("profile %s: %w: [roles.%s] declares no [roles.%s.substrates.cloud] cell — a cloud run refuses rather than falling back to the role's own %q/%q",
+					p.Role, ErrNoCloudRouting, name, name, role.Kind, role.Model)
+			}
+		} else {
+			apply(overlay.Kind, overlay.Model)
+			routed = append(routed, fmt.Sprintf("[roles.%s.substrates.%s]", name, opts.Substrate))
+		}
 	}
 
 	if opts.Tier != "" {

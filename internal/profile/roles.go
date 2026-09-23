@@ -24,9 +24,13 @@ import (
 //     — a profile has nowhere to put them, and the herdr executor ticks that
 //     will consume them import the config package directly, not through here;
 //   - it keeps this package's own semantics for what a profile does with a
-//     routing: the alias candidates (implement-tick before implement), and
-//     the tier refusal — a tier an operator asked for that the config does not
-//     declare is still a refusal here, not a silent fall back to the role.
+//     routing: the alias candidates (implement-tick before implement), the
+//     tier refusal — a tier an operator asked for that the config does not
+//     declare is still a refusal here, not a silent fall back to the role —
+//     and the substrate refusal (tick 84z), whose rule the sentinel this
+//     package re-exports states: under the cloud substrate, a role the
+//     config declares no `[roles.<name>.substrates.cloud]` cell for is a
+//     refusal naming the role, never a fall back to the base cell.
 //
 // The honesty the adapter adds: a runners.toml that fails validation anywhere
 // in the EXECUTION half now fails profile resolution. A file tk refuses is a
@@ -36,13 +40,14 @@ import (
 // and is tolerated, exactly as in the config package.
 
 // Role is one `[roles.<name>]` declaration as a profile routes on it: the two
-// fields a profile has anywhere to put, plus the tier overlays that can change
-// them.
+// fields a profile has anywhere to put, plus the tier and substrate overlays
+// that can change them.
 type Role struct {
-	Name  string
-	Kind  string
-	Model string
-	Tiers map[string]Role
+	Name       string
+	Kind       string
+	Model      string
+	Tiers      map[string]Role
+	Substrates map[string]Role
 }
 
 // ReadRoles reads `[roles.*]` from a runners.toml file. A missing file is NOT
@@ -92,6 +97,15 @@ func rolesFrom(cfg *runconfig.Config) map[string]Role {
 					continue
 				}
 				entry.Tiers[tier] = Role{Name: tier, Kind: variant.Kind, Model: variant.Model}
+			}
+		}
+		if len(role.Substrates) > 0 {
+			entry.Substrates = make(map[string]Role, len(role.Substrates))
+			for sub, variant := range role.Substrates {
+				if variant == nil {
+					continue
+				}
+				entry.Substrates[sub] = Role{Name: sub, Kind: variant.Kind, Model: variant.Model}
 			}
 		}
 		out[name] = entry

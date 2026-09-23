@@ -46,6 +46,13 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 		// provider reads (tick mdw): common.sh exports every vendor credential
 		// it knows, but pi reads one it does not.
 		`export CLOUDFLARE_API_KEY="$gateway_token"`,
+		// The substrate the run executes on, stated by whatever booted it (tick
+		// 84z): role routing resolves against it, the cloud overlays in the
+		// target repo's [roles.*.substrates.cloud] apply, and a role nobody
+		// declared cloud routing for refuses the run at start — never a
+		// silent fall back to the base cell, which is how a container reached
+		// a claude process nobody chose.
+		`export TICKS_SUBSTRATE="cloud"`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the staged orchestrator entrypoint does not carry %q — it is not booting ticfac", want)

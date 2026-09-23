@@ -500,6 +500,21 @@ type Options struct {
 	// configuration does not declare is refused at construction.
 	Tier string
 
+	// Substrate is the substrate this run executes on, the axis role
+	// routing resolves against (tick 84z): under "cloud" the target
+	// repository's `[roles.<name>.substrates.cloud]` overlays apply, and a
+	// role nobody declared cloud routing for REFUSES the run at construction,
+	// naming the role — never a silent fall back to the base cell, which is
+	// how a cloud run reached a claude process nobody chose.
+	//
+	// Empty DERIVES it, the same way tk derives its own: the
+	// TICKS_SUBSTRATE override when whatever booted this run set one (a
+	// cloud container says so — the staged orchestrator entrypoint exports
+	// it), else the configured `[orchestration]` substrate through the
+	// decision procedure (config-first, probes when it must). The value is
+	// never auto: that is a policy, and it is resolved before any profile is.
+	Substrate string
+
 	Now func() time.Time
 
 	// Sleep is how the reconciler waits between polls. A test replaces it with
@@ -629,6 +644,11 @@ type Reconciler struct {
 	tierProfiles map[string]map[string]*profile.Profile
 	pinnedTier   string
 	hostWidth    int
+
+	// substrate is where this run executes, as runconfig spells it — the
+	// axis role routing resolved against (tick 84z). It is never auto by
+	// the time a Reconciler exists: New resolves it or refused the run.
+	substrate runconfig.Substrate
 }
 
 // Event is one thing the run did, in order. It is what makes "the gate ran
@@ -1009,12 +1029,26 @@ func New(opts Options) (*Reconciler, error) {
 			opts.RepoConfig, rule.Stated, forge.TokenEnv)
 	}
 
+	// The substrate this run executes on (tick 84z), resolved BEFORE any
+	// profile is: it is the axis role routing resolves against, and under
+	// "cloud" the target repository must have declared a
+	// `[roles.<name>.substrates.cloud]` cell for every role this run will
+	// dispatch — a missing cell is a refusal here, naming the role, rather
+	// than a fall back to the base cell three ticks into an epic. The base
+	// cells are what a LOCAL run pays for; the cloud cells are what a
+	// container can actually run; and neither may be substituted for the
+	// other.
+	substrate, err := resolveRunSubstrate(opts)
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+
 	// The role profiles, resolved BEFORE anything is dispatched. A profile that
 	// does not exist, names an executor this phase does not have or a runner
 	// this host cannot launch is a refusal here — three ticks into an epic is
 	// not when a run should discover it.
 	profiles, err := profile.ResolveAll(profile.Options{
-		Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: opts.Tier,
+		Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: opts.Tier, Substrate: string(substrate),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
@@ -1039,6 +1073,7 @@ func New(opts Options) (*Reconciler, error) {
 		branch: opts.IntegrationBranch,
 	}
 	r.pinnedTier = opts.Tier
+	r.substrate = substrate
 	if opts.Tier == "" {
 		cfg, err := runconfig.Load(opts.GateConfig)
 		if err != nil {
@@ -1059,7 +1094,7 @@ func New(opts Options) (*Reconciler, error) {
 			}
 			for tier := range tiers {
 				resolved, err := profile.Resolve(role, profile.Options{
-					Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: string(tier),
+					Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: string(tier), Substrate: string(substrate),
 				})
 				if err != nil {
 					return nil, fmt.Errorf("reconcile: %w", err)
@@ -1440,6 +1475,14 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		r.record("", StageBudgetSet, "the effective budget for this run is $%.2f", r.budget.Reported)
 	}
 	r.recordTierPolicy(plan)
+
+	// The substrate role routing resolved against (tick 84z), stated once at
+	// admission beside the other run-level policy lines: which substrate this
+	// run executes on, and — under cloud — that a role with no cloud routing
+	// would have refused the run at construction rather than falling back to
+	// the base cell. A routing nobody can read after the fact is a routing
+	// nobody can audit.
+	r.recordSubstrateRouting()
 
 	// The wave composition (tick 01u): checked at DISPATCH — here, at
 	// admission, before any tick is claimed, started or paid for. A wave that

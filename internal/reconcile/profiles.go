@@ -1,7 +1,9 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -20,6 +22,51 @@ import (
 // model and the prompt are carried in the profile's digest and in the
 // provenance of every record the dispatch produces, which is what makes "under
 // which profile was this decided" answerable after the fact.
+
+// resolveRunSubstrate is the substrate this run executes on, the axis role
+// routing resolves against (tick 84z).
+//
+// An explicit Options.Substrate wins: a caller that names it is whatever
+// booted the run, and the tracked config does not get to disagree with the
+// machine. auto is refused — it is a policy a decision procedure resolves,
+// and a caller that passes it has skipped the decision — and so is any value
+// outside the vocabulary.
+//
+// Otherwise the run derives it exactly the way tk derives its own:
+// the TICKS_SUBSTRATE override when whatever booted this run set one (a
+// cloud container states its substrate through it — the checkout is read,
+// never rewritten), else the configured [orchestration] substrate through
+// the same decision procedure (config-first; probes only when the answer is
+// not already terminal). The answer is always a substrate a role can be
+// resolved against — never auto, never a guess.
+func resolveRunSubstrate(opts Options) (runconfig.Substrate, error) {
+	if opts.Substrate != "" {
+		sub := runconfig.Substrate(opts.Substrate)
+		if sub == runconfig.SubstrateAuto {
+			return "", fmt.Errorf("substrate %q is a policy, not a substrate: the substrate decision resolves it, and a run cannot execute on it", opts.Substrate)
+		}
+		if !sub.Valid() {
+			return "", fmt.Errorf("substrate %q is not one of %s", opts.Substrate, runconfig.SubstrateList(false))
+		}
+		return sub, nil
+	}
+
+	override, err := runconfig.ParseOverride(os.Getenv(runconfig.SubstrateEnvVar), runconfig.SubstrateEnvVar)
+	if err != nil {
+		return "", err
+	}
+	var cfg *runconfig.Config
+	if cfg, err = runconfig.Load(opts.GateConfig); err != nil && os.IsNotExist(err) {
+		// A missing file declares no substrate, exactly as [LoadRepo] reads
+		// absence: auto, detect env-or-socket — the decision procedure's
+		// inputs, not a failure.
+		cfg = nil
+		err = nil
+	} else if err != nil {
+		return "", fmt.Errorf("read the runner routing to resolve the substrate: %w", err)
+	}
+	return runconfig.DecideOverride(context.Background(), cfg, nil, override).Substrate, nil
+}
 
 // profileFor is the profile one role is dispatched under. A role this phase
 // ships no profile for is implement-tick's — the same rule RoleOf applies to a
@@ -61,7 +108,7 @@ func (r *Reconciler) profileForTier(role, tier string) (*profile.Profile, error)
 	// the refusal names the config that failed, not the moment it failed; the
 	// caller — which knows the tick and the label — makes it loud.
 	p, err := profile.Resolve(role, profile.Options{
-		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier,
+		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
 	})
 	if err != nil {
 		return nil, err
@@ -105,6 +152,21 @@ func (r *Reconciler) deriveTier(entry planEntry, number, failed int) (string, st
 		return "", "", err
 	}
 	return string(outcome.Tier), outcome.Reason, nil
+}
+
+// recordSubstrateRouting writes the substrate role routing resolved against
+// into the journal at admission (tick 84z), following recordTierPolicy's
+// convention: the run-level routing decisions a person reads together.
+func (r *Reconciler) recordSubstrateRouting() {
+	if r.substrate == runconfig.SubstrateCloud {
+		r.record("", StagePolicyStated,
+			"role routing resolved against the cloud substrate: the [roles.*.substrates.cloud] overlays in %s applied to every dispatch, and a role with no such cell refused this run at construction — the base cells are a LOCAL run's routing, and never a fall back in a container",
+			runconfig.FileName)
+		return
+	}
+	r.record("", StagePolicyStated,
+		"role routing resolved against the %s substrate: the base cells of %s's [roles] table applied, and any [roles.*.substrates.%s] overlays declared for it",
+		string(r.substrate), runconfig.FileName, string(r.substrate))
 }
 
 // derivableTiers is the set of tiers the declared policy can ever route a
