@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 35,
-  "state": "failed",
-  "reason": "4c0911837b65 of main does not fold into epic/yoh: cloudflare/test/phase0-compat.test.ts. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
-  "updated_at": "2026-09-23T21:59:28Z",
+  "sequence": 36,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T22:11:42Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -80,7 +80,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "18c2552b231da7ec8aca179b3c46d9dc0e57908b",
+    "source_sha": "2e413c8a18c236d3a310dd995d93626d50d5c3f4",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
