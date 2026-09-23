@@ -1287,3 +1287,4 @@
 {"ts":"2026-09-23T19:41:13.186086Z","tick":"uqi","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"pi and GLM are the factory's defaults on main, and the factory deploys from main again"}}
 {"ts":"2026-09-23T19:41:47.723696Z","tick":"xev","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"Register cloudflare-sandbox as an honoured executor, and decide where collect, cancel and dispose live"}}
 {"ts":"2026-09-23T19:42:18.633595Z","tick":"7eq","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The orchestrator signals completion; the branch remains the truth"}}
+{"ts":"2026-09-23T19:42:50.515927Z","tick":"cr4","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The Workflow supervises a run and stops orchestrating it"}}
