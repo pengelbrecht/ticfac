@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-pg9-1-ts",
+  "provenance": {
+    "run_id": "run_0d2edef252834a40b89deabbd0ffec69",
+    "tick_id": "pg9",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/plw",
+    "source_sha": "d6e4c4d346331010740f289bcbd4ca436840712f",
+    "integration_ref": "refs/heads/epic/plw",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-09-23T05:24:54Z",
+  "finished_at": "2026-09-23T05:25:25Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "Lockfile is up to date, resolution step is skipped\nProgress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +93\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 93, reused 0, downloaded 0, added 0\nProgress: resolved 93, reused 0, downloaded 4, added 0\nProgress: resolved 93, reused 0, downloaded 15, added 0\nProgress: resolved 93, reused 0, downloaded 29, added 4\nProgress: resolved 93, reused 0, downloaded 34, added 8\nProgress: resolved 93, reused 0, downloaded 35, added 8\nProgress: resolved 93, reused 0, downloaded 54, added 12\nProgress: resolved 93, reused 0, downloaded 78, added 20\nProgress: resolved 93, reused 0, downloaded 81, added 20\nProgress: resolved 93, reused 0, downloaded 90, added 20\nProgress: resolved 93, reused 0, downloaded 91, added 24\nProgress: resolved 93, reused 0, downloaded 92, added 93, done\n.../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js\n.../node_modules/workerd postinstall$ node install.js\n.../node_modules/workerd postinstall$ node install.js\n.../esbuild@0.28.1/node_modules/esbuild postinstall: Done\n.../node_modules/workerd postinstall: Done\n.../node_modules/workerd postinstall: Done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.21.3\n+ @cloudflare/workers-types 5.20260819.1\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.124.0\n\nDone in 18.6s using pnpm v11.0.6\n\u001b[0m\u001b[34mChecked 135 files in 1502\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 15 contract(s) at bundle 5.2.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:13872a8494fa1d7fa495cfee4dca2b7e477e2473193387246995d08ed5314118",
+  "persistence_uri": "git:refs/heads/epic/plw:.ticfac/runs/run_0d2edef252834a40b89deabbd0ffec69/evidence/gate-pg9-1-ts.json"
+}
