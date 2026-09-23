@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 39,
-  "state": "failed",
-  "reason": "a08 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the tracker refused to claim a08: tk command \"claim\" refused: dispatch width exceeded: Error: wave width 4 is full: 4 implementer(s) already in flight under yoh (cr4, gbs, lkd, ppt). Claiming a08 would make 5. The width is .tick/runners.toml [orchestration].max_parallel, and it is enforced here rather than left to the prompt. Collect a finished worker and close or release its tick to free a slot, or raise max_parallel if this machine can carry more.\nUsage:\n  tk update <id> [flags]\n\nFlags:\n      --acceptance string      acceptance criteria\n      --actor string           override actor for this activity entry (overrides TK_ACTOR env)\n      --add-labels string      labels to add\n      --after string           soft ordering: prefer after these ticks, but do not block on them\n  -a, --awaiting string        wait state (work|approval|input|review|content|escalation|checkpoint, empty to clear)\n      --base-branch string     base branch for this epic run (epics only)\n      --defer string           defer until date (YYYY-MM-DD)\n      --description string     new description\n      --external-ref string    external reference\n      --from string            provenance of a --verdict: human (a runner relaying a human decision)\n  -h, --help                   help for update\n      --json                   output as JSON\n      --manual string          mark as requiring human intervention (true/false)\n      --notes string           replace notes\n      --owner string           new owner\n      --parent string          parent epic id (use empty string to clear)\n      --priority int           new priority\n      --remove-labels string   labels to remove\n  -r, --requires string        approval gate (approval|review|content, empty to clear)\n      --role string            process-tick role in an epic skeleton (review|closeout, empty to clear)\n      --status string          new status\n      --target-date string     target completion date (YYYY-MM-DD, empty to clear)\n      --title string           new title\n      --type string            new type\n  -v, --verdict string         set verdict and trigger processing (approved|rejected)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it. The run is HELD, not failed: nothing it was holding is lost — every dispatched attempt's marker is on origin and its commits are on its own branch, and running the epic again under this run id adopts them by identity rather than dispatching over them. A claim lives until its tick CLOSES, so the width frees itself as the ticks already in flight finish; if it does not, look at what else holds a claim under this epic",
-  "updated_at": "2026-09-23T22:12:17Z",
+  "sequence": 40,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T22:13:03Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -81,7 +81,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "2e413c8a18c236d3a310dd995d93626d50d5c3f4",
+    "source_sha": "396ac4b9080f8173f4765d31dae30e6a30c90c73",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
