@@ -206,8 +206,8 @@ func (r *Reconciler) undeclaredTouch(marker attemptHandle, head string) ([]strin
 		// needs are the ones this check needs, and a diff that cannot be
 		// read stops the run rather than merging an unchecked one.
 		return nil, fmt.Errorf(
-			"read the files attempt %d of %s touched between %s and %s to check its touch: declaration: %w",
-			marker.Attempt, marker.TickID, short(marker.BaseSHA), short(head), err)
+			"read the files %s touched between %s and %s to check its touch: declaration: %w",
+			r.attemptName(marker.TickID, marker.Attempt), short(marker.BaseSHA), short(head), err)
 	}
 	var undeclared []string
 	for _, file := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -240,9 +240,9 @@ func (r *Reconciler) checkDeclaredTouch(marker attemptHandle, head string) error
 		"touched %s, which the tick's touch: declaration (%s) does not name",
 		strings.Join(undeclared, ", "), strings.Join(marker.Touch, ", "))
 	return r.refuse(RefusedUndeclaredTouch, marker.TickID,
-		"attempt %d of %s touched %s, which its touch: declaration does not name (%s): a tick that declares the "+
+		"%s touched %s, which its touch: declaration does not name (%s): a tick that declares the "+
 			"files it expects to touch is held to the declaration, and an undeclared file is reported here — at "+
 			"the merge, before it reaches the integration branch — rather than discovered at the next tick's "+
 			"gate. Fix the declaration or the scope of the tick, and run the epic again",
-		marker.Attempt, marker.TickID, strings.Join(undeclared, ", "), strings.Join(marker.Touch, ", "))
+		r.attemptName(marker.TickID, marker.Attempt), strings.Join(undeclared, ", "), strings.Join(marker.Touch, ", "))
 }

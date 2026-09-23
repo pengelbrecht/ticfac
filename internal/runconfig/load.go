@@ -666,7 +666,13 @@ func validateTierPolicy(cfg *Config, md toml.MetaData, add addFunc) {
 			add(base+".tier", fmt.Sprintf("%q is not one of %s", string(rule.Tier), tierList()))
 		} else if defaultKnown && tierIndex(rule.Tier) > tierIndex(p.Default) {
 			// The one rule that makes the ladder a ladder rather than a wish:
-			// facts may make a first attempt CHEAPER, never dearer.
+			// start RULES may make a first attempt CHEAPER, never dearer. The
+			// rule is NARROWED, not deleted (tick s45, epic wne): a RECORDED
+			// classification — a closed-enum work type with a distribution, not
+			// prose — may start a first attempt above the default, bounded by
+			// the ceiling, through the dear_* cells validated below. A start
+			// rule is still a DESCRIPTION, and this refusal is still what stops
+			// one buying an expensive model.
 			add(base+".tier", fmt.Sprintf("%q is above the default %q: nothing starts high on a description — expense is earned by a failed attempt, not asserted by a rule",
 				string(rule.Tier), string(p.Default)))
 		}
@@ -729,6 +735,55 @@ func validateTierPolicy(cfg *Config, md toml.MetaData, add addFunc) {
 		if md.IsDefined("tier_policy", "rate_limit", "max_delay_ms") && p.RateLimit.MaxDelayMs < 1000 {
 			add("tier_policy.rate_limit.max_delay_ms", fmt.Sprintf("%dms is not a backoff ceiling (>= 1000): a per-minute provider cap needs roughly a minute of patience, not a pause shorter than the request that earned it", p.RateLimit.MaxDelayMs))
 		}
+	}
+
+	// The classification-routing cells (tick s45, epic wne): what lets a
+	// RECORDED classification start a first attempt above the default.
+	// Every refusal here is about the same thing as the rest of the table —
+	// a promotion nobody bounded, or a cell nobody can evaluate, is a
+	// per-dispatch judgement call wearing a config's clothes.
+	dearTypesDefined := md.IsDefined("tier_policy", "dear_work_types")
+	dearTierDefined := md.IsDefined("tier_policy", "dear_tier")
+	if dearTypesDefined && !dearTierDefined {
+		add("tier_policy.dear_tier", "required beside dear_work_types — a recorded classification would clear a threshold into a promotion the policy names no tier for")
+	}
+	if dearTierDefined && !dearTypesDefined {
+		add("tier_policy.dear_work_types", "required beside dear_tier — a dear tier with no work types to sum the mass over is a promotion nothing can reach, and a rule that cannot match is a typo'd rule")
+	}
+	if dearTypesDefined {
+		if len(p.DearWorkTypes) == 0 {
+			add("tier_policy.dear_work_types", "must not be empty — an empty list can never clear a threshold, and a rule that cannot match is a typo'd rule")
+		}
+		seen := map[WorkType]bool{}
+		for _, name := range p.DearWorkTypes {
+			if !IsKnownWorkType(string(name)) {
+				add("tier_policy.dear_work_types", fmt.Sprintf("%q is not one of the work types %s — a work type that is not one of these is a bug, not a fallback, and a model id written where a work type belongs is this refusal", string(name), WorkTypeList(true)))
+				continue
+			}
+			if seen[name] {
+				add("tier_policy.dear_work_types", fmt.Sprintf("%s is named twice — an operator who wrote it twice meant one thing, and the table has to say which", string(name)))
+				continue
+			}
+			seen[name] = true
+		}
+	}
+	if dearTierDefined {
+		if p.DearTier == "" {
+			add("tier_policy.dear_tier", "required — a promotion with no tier to promote to is a typo'd cell")
+		} else if !isKnownTier(string(p.DearTier)) {
+			add("tier_policy.dear_tier", fmt.Sprintf("%q is not one of %s", string(p.DearTier), tierList()))
+		} else if defaultKnown {
+			if tierIndex(p.DearTier) <= tierIndex(p.Default) {
+				add("tier_policy.dear_tier", fmt.Sprintf("%q is at or below the default %q: the classified route is a promotion, never a demotion — a cheaper start is what [[tier_policy.start]] is for, and the classifier is not a discount either",
+					string(p.DearTier), string(p.Default)))
+			} else if tierIndex(p.DearTier) > tierIndex(p.CeilingOrDefault()) {
+				add("tier_policy.dear_tier", fmt.Sprintf("%q is above the ceiling %q: the ceiling still bounds everything — at the ceiling the next actor is a person, not a bigger model, and a promotion the policy cannot bound is not one the ladder may start",
+					string(p.DearTier), string(p.CeilingOrDefault())))
+			}
+		}
+	}
+	if md.IsDefined("tier_policy", "mass_threshold") && (p.MassThreshold <= 0 || p.MassThreshold > 1) {
+		add("tier_policy.mass_threshold", fmt.Sprintf("%v is not a probability-mass threshold (0 < threshold <= 1): the rule routes dear when the mass on the dear work types is STRICTLY GREATER, and a threshold outside the unit interval is a cell the rule can never honour", p.MassThreshold))
 	}
 }
 

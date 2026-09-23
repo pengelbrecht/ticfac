@@ -85,7 +85,7 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	text := out.String()
-	if !strings.Contains(text, "attempt 1 of a1") {
+	if !strings.Contains(text, "a1 (run dispatch #1)") {
 		t.Errorf("the in-flight attempt is not named:\n%s", text)
 	}
 	if !strings.Contains(text, "last moved 3h0m") {
@@ -134,7 +134,7 @@ func TestTheGapChangesNoVerdict(t *testing.T) {
 	if !strings.Contains(out.String(), "not_running") {
 		t.Errorf("the liveness answer is not the headline:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "attempt 1 of a1") {
+	if !strings.Contains(out.String(), "a1 (run dispatch #1)") {
 		t.Errorf("a dead run's standing attempt is not reported — the leftover worktree is exactly the case the gaps exist for:\n%s", out.String())
 	}
 }

@@ -89,6 +89,32 @@ export const ROLES = [
   "evaluate-goal",
 ] as const;
 
+/**
+ * The classification exchange's role (tick w9b, epic wne): the one model
+ * call a run makes that no dispatch produces. The reconciler asks the
+ * classifier which KIND OF WORK a role-less tick is, and the answer lands as
+ * a decision record for the same reason the review and closeout answers do —
+ * a restart re-reads it instead of re-asking a model the run already paid.
+ *
+ * It is deliberately NOT a value of [ROLES]: `$defs.role` is the vocabulary of
+ * roles a DISPATCH carries, and the bundle — which this record's provenance
+ * cites — is closed. Provenance for a classification therefore states role
+ * as NULL, the reading that means "no dispatch produced this", and the model
+ * identity rides the provenance model field instead.
+ */
+export const ROLE_CLASSIFY_TICK = "classify-tick";
+
+/**
+ * The closed vocabulary the decision record's OWN role field may carry: every
+ * role-job exchange ([ROLES]) plus the classification exchange — mirrors
+ * `internal/runstate`'s DecisionRoles. The bundle leaves schemas.decision's
+ * `role` a free string the reader closes, so closing it is this module's job —
+ * and closing it with $defs.role alone refuses records a local run has
+ * already written on the same run branch (tick kl9): a classify-tick record
+ * is still a decision, still created-if-absent, still re-read on a resume.
+ */
+export const DECISION_ROLES = [...ROLES, ROLE_CLASSIFY_TICK] as const;
+
 /** A terminal checkpoint is one whose run is over; `failed` is still resumable. */
 export function terminalState(state: string): boolean {
   return state === "completed" || state === "cancelled";
@@ -168,7 +194,7 @@ export type DecisionRecord = {
   schema_version: number;
   /** 1-based, run-wide, the number the recorded exchange takes. */
   decision: number;
-  role: (typeof ROLES)[number];
+  role: (typeof DECISION_ROLES)[number];
   request: Record<string, unknown>;
   response: Record<string, unknown>;
   /** The VALIDATED response is what lands — never the raw answer. */
@@ -242,7 +268,7 @@ export function validateDecision(record: DecisionRecord): string | null {
   if (record.decision < 1) {
     return `decision number ${record.decision} is not 1-based`;
   }
-  if (!(ROLES as readonly string[]).includes(record.role)) {
+  if (!(DECISION_ROLES as readonly string[]).includes(record.role)) {
     return `decision role ${JSON.stringify(record.role)} is not one of the permitted values`;
   }
   if (record.request === null || typeof record.request !== "object") {

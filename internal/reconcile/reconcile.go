@@ -517,6 +517,14 @@ type Options struct {
 	// configuration does not declare is refused at construction.
 	Tier string
 
+	// Classifier is the work-type classifier behind the classification exchange
+	// (tick w9b, epic wne): *jev.Client satisfies it, and nil — the default —
+	// means this run classifies nothing and routes every dispatch at the start
+	// policy, exactly as it did before the exchange existed. A recorded
+	// classification on the run branch is read regardless: the record is the
+	// answer, not the capability to ask.
+	Classifier Classifier
+
 	// Substrate is the substrate this run executes on, the axis role
 	// routing resolves against (tick 84z): under "cloud" the target
 	// repository's `.tick/runners.cloud.toml` role cells apply (tick 5uo), and a
@@ -739,6 +747,12 @@ const (
 	// claimed, so "why was this expensive" is a question the run's own
 	// record answers.
 	StageTierDerived = "tier_derived"
+	// StageClassified is the record of one tick's classification EXCHANGE
+	// (tick w9b, epic wne) — asked once, answered on the run branch as a
+	// decision record like the review and closeout exchanges. Written only
+	// when the exchange ASKED; a later pass reading the record asks nothing
+	// and so says nothing, which is the point of the record.
+	StageClassified = "classified"
 	// StageReplanned is the line a run owes an operator when the plan it is
 	// working stops matching the graph it came from (tick g50): an attempt
 	// settled, the tracker was read again, and a tick that was sequenced
@@ -1973,6 +1987,15 @@ const (
 	// answer asked for.
 	RefusedRoleResult = "role_result_invalid"     // the role-result envelope did not validate
 	RefusedRoleAnswer = "role_answer_needs_human" // the answer is BLOCKED or NEEDS_CONTEXT
+
+	// The one the CLASSIFICATION exchange adds (tick w9b, epic wne): a tick
+	// has a recorded classification that cannot be read back. It is a refusal
+	// rather than a re-ask because the record is the authority — re-asking a
+	// model the run already paid would make a cold re-derivation reach a
+	// different answer than the warm process, which is an axiom 1 violation
+	// wearing the costume of a cache miss. It sends the next repair at the
+	// record, for a person: the tick is neither dispatched nor re-asked.
+	RefusedClassification = "classification_unreadable"
 
 	// The one an IMPLEMENTATION tick adds, and the one that closes repair G's
 	// false-close path: the attempt produced a branch that would merge, and its

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "",
+    "epic_id": "qeu",
+    "role": "classify-tick",
+    "tick_id": "a1",
+    "title": "tick a1"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.42,
+    "model": "jev-1",
+    "probabilities": {
+      "construction": 0.42,
+      "design": 0.4,
+      "diagnosis": 0.05,
+      "mechanical": 0.1,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0.00005,
+      "input_tokens": 1200,
+      "output_tokens": 40
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-09-23T09:41:00Z",
+  "answered_at": "2026-09-23T09:41:00Z",
+  "provenance": {
+    "run_id": "r-fixture",
+    "tick_id": "a1",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/qeu",
+    "source_sha": "0000000000000000000000000000000000000000",
+    "integration_ref": "refs/heads/epic/qeu",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:b197cb22aff2d74508226bdddd1c4422d75683751545ee69d7272bd0cb64e5ce",
+    "model": "jev-1",
+    "context_manifest_digest": "sha256:dbaeb2b6a70cdbd399e4c84838e86df9021fa4bf9df85f42079c11cfd46ad7f3",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

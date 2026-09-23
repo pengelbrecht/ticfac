@@ -145,7 +145,7 @@ func TestTheWallClockFiringIsAFeedEvent(t *testing.T) {
 	if !strings.Contains(wall.Detail, "wall clock of 10s") {
 		t.Errorf("the line does not name the bound that fired: %q", wall.Detail)
 	}
-	if !strings.Contains(wall.Detail, "attempt 1 of a1") {
+	if !strings.Contains(wall.Detail, "a1 try 1 (run dispatch #1)") {
 		t.Errorf("the line does not name the attempt it bounds: %q", wall.Detail)
 	}
 	// The executor's own last word rides the line, because it is the only

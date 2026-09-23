@@ -50,7 +50,7 @@ func TestTheStallWarningIsAFeedEvent(t *testing.T) {
 	if stall == nil {
 		t.Fatal("no stall warning for a1 on the journal")
 	}
-	if !strings.Contains(stall.Detail, "attempt 1 of a1") {
+	if !strings.Contains(stall.Detail, "a1 try 1 (run dispatch #1)") {
 		t.Errorf("the line does not name the attempt it watched: %q", stall.Detail)
 	}
 	if !strings.Contains(stall.Detail, "branch last moved") || !strings.Contains(stall.Detail, "worktree last changed") {

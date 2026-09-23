@@ -440,8 +440,8 @@ func TestStatusFollowIsTheLiveTable(t *testing.T) {
 	if !strings.Contains(frame, "a1") || !strings.Contains(frame, "b1") {
 		t.Fatalf("the table does not carry one line per tick: %q", frame)
 	}
-	if !strings.Contains(frame, "attempt 1") {
-		t.Errorf("the table's tick lines do not carry the attempt: %q", frame)
+	if !strings.Contains(frame, "tick a1 try 1 (run dispatch #1)") {
+		t.Errorf("the table's tick lines do not lead with the tick's try and label the dispatch number: %q", frame)
 	}
 	if !strings.Contains(frame, "2m") && !strings.Contains(frame, "1m") {
 		t.Errorf("the table's tick lines do not say how long each tick has been where it is: %q", frame)

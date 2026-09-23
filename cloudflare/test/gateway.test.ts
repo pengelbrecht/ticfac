@@ -440,6 +440,141 @@ describe("every model request carries run and tick metadata", () => {
   });
 });
 
+// ----------------------------------------------- the classifier route (x0k) ---
+
+/**
+ * A run's CLASSIFICATION calls ride the same gateway prefix and the same
+ * run token as its model calls, and leave the same way: exchanged here for
+ * the deployment's key, refused here when there is none or the deployment
+ * never opted into the spend, and killed here with the rest of the run's
+ * traffic on revocation. The one difference is the upstream: TypeSafe is not
+ * a provider the operator's AI Gateway can proxy, so the route goes
+ * vendor-direct to api.typesafe.ai — still through this Worker, still never
+ * holding anything but a run-scoped token in the sandbox.
+ */
+describe("the classifier route: Jev through the run token, vendor-direct", () => {
+  function classifyRequest(token: string, body = '{"state":"tick a1","questions":[]}'): Request {
+    return new Request(`${FACTORY}${GATEWAY_PATH_PREFIX}/jev/v1/answers`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body,
+    });
+  }
+
+  it("exchanges the run token for the deployment's classifier key and routes vendor-direct", async () => {
+    set(PROVIDER_OPT_IN_VAR, "jev");
+    set("TYPESAFE_API_KEY", "ts-operator-key");
+    const run = await liveRun();
+    const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
+    const gateway = new FakeGateway();
+
+    const response = await proxyModelRequest(
+      env,
+      classifyRequest(token),
+      ["jev", "v1", "answers"],
+      { fetcher: gateway.fetcher },
+    );
+
+    expect(response.status).toBe(200);
+    // The classifier's API root, not the operator's AI Gateway: TypeSafe is
+    // not a provider the gateway can proxy, so this one route is fixed here.
+    expect(gateway.last.url).toBe("https://api.typesafe.ai/v1/answers");
+    // The deployment's classifier key, never the run token, which dies with
+    // the run and is worthless anywhere else.
+    expect(gateway.last.headers.get("authorization")).toBe("Bearer ts-operator-key");
+    expect(JSON.stringify([...gateway.last.headers])).not.toContain(token);
+    // A vendor-direct route carries no gateway furniture: the cf-aig-*
+    // headers are the operator's AI Gateway's own language, the affinity key
+    // is for its instances, and above all the operator's Cloudflare token
+    // has no business reaching a vendor.
+    expect(gateway.last.headers.get("cf-aig-metadata")).toBeNull();
+    expect(gateway.last.headers.get("cf-aig-authorization")).toBeNull();
+    expect(gateway.last.headers.get(SESSION_AFFINITY_HEADER)).toBeNull();
+  });
+
+  it("is not opened by the key alone: the deployment opts into cash-billed classification", async () => {
+    // The key is stored, the opt-in is not named: a default factory routes
+    // workers-ai only, and TypeSafe bills in cash like any BYOK vendor.
+    set("TYPESAFE_API_KEY", "ts-operator-key");
+    const run = await liveRun();
+    const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
+    const gateway = new FakeGateway();
+
+    const response = await proxyModelRequest(
+      env,
+      classifyRequest(token),
+      ["jev", "v1", "answers"],
+      { fetcher: gateway.fetcher },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: "provider_not_opted_in" });
+    expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("refuses, naming setup, when the deployment holds no classifier key", async () => {
+    set(PROVIDER_OPT_IN_VAR, "jev");
+    set("TYPESAFE_API_KEY", undefined);
+    const run = await liveRun();
+    const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
+    const gateway = new FakeGateway();
+
+    const response = await proxyModelRequest(
+      env,
+      classifyRequest(token),
+      ["jev", "v1", "answers"],
+      { fetcher: gateway.fetcher },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: "provider_not_configured" });
+    expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("demands the run's token like any other model traffic", async () => {
+    set(PROVIDER_OPT_IN_VAR, "jev");
+    set("TYPESAFE_API_KEY", "ts-operator-key");
+    await liveRun();
+    const gateway = new FakeGateway();
+
+    const response = await proxyModelRequest(
+      env,
+      new Request(`${FACTORY}${GATEWAY_PATH_PREFIX}/jev/v1/answers`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+      ["jev", "v1", "answers"],
+      { fetcher: gateway.fetcher },
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({ error: "run_token_required" });
+    expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("dies with the run: a revoked token stops classification with the rest of the traffic", async () => {
+    set(PROVIDER_OPT_IN_VAR, "jev");
+    set("TYPESAFE_API_KEY", "ts-operator-key");
+    const run = await liveRun();
+    const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
+    const gateway = new FakeGateway();
+
+    expect(await revokeRunTokens(env, run.run_id, "stopped:operator")).toBe(1);
+
+    const response = await proxyModelRequest(
+      env,
+      classifyRequest(token),
+      ["jev", "v1", "answers"],
+      { fetcher: gateway.fetcher },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({ error: "run_token_revoked" });
+    expect(gateway.calls).toHaveLength(0);
+  });
+});
+
 // ---------------------------------------------------- the workers-ai dialect ---
 
 /**

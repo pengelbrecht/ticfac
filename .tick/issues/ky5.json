@@ -2,12 +2,14 @@
   "id": "ky5",
   "title": "A merge_failed refusal names no conflicting file",
   "description": "epic-wne stopped twice on this refusal, verbatim:\n\n  merge_failed: attempt 2 of mrn does not merge onto epic/wne:\n\nThe sentence ends in a colon and a space. The reason field is EMPTY.\n\nA merge conflict is the one refusal where 'which files' IS the answer. Every other stop\ncarries its evidence - a gate refusal names the check and keys the record to the commit\nit ran on, a stall warning names the branch and the worktree and how long each has been\nstill. This one names nothing, so the operator has to reconstruct the merge by hand to\nlearn anything at all. I did, and it took a worktree, a fetch of the attempt branch and\na --no-commit merge to find out the answer was two files:\n\n  CONFLICT (add/add): internal/runconfig/worktype.go\n  CONFLICT (add/add): internal/runconfig/worktype_test.go\n\nThat is information git printed and the reconciler discarded.\n\nWHAT TO FIX: carry git's conflict output into the refusal detail. At minimum the\nconflicting paths and the conflict kind (add/add, content, delete/modify), because the\nkind is what tells an operator whether this is two workers colliding or a rebase gone\nstale. The full merge output is better still - the refusal is already a paragraph, and\nnobody reading it is short of screen.\n\nWHY IT MATTERS BEYOND CONVENIENCE: an add/add conflict is the signature of a PLANNING\ndefect - two same-wave ticks creating one file, which is what happened here. A refusal\nthat named the kind would have said 'your wave is wrong' in the feed instead of leaving\nit to be diagnosed. The orchestrator can see this and is throwing it away.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "bug",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A merge_failed refusal carries the conflicting paths and the conflict kind from git's own output, an add/add conflict is distinguishable from a content conflict in the run feed without reproducing the merge, and a test asserts the detail is non-empty for a real conflict",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:14:32.085621Z",
-  "updated_at": "2026-09-22T16:14:32.085621Z"
+  "updated_at": "2026-09-23T20:38:34.062097Z",
+  "closed_at": "2026-09-23T20:38:34.062097Z",
+  "closed_reason": "#46"
 }

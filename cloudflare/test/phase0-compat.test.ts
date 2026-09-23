@@ -756,6 +756,16 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       RUN_STOP_GRACE_MS: "300000",
       RUN_WORKER_HARNESS: "pi",
       RUN_WORKER_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
+      // The work-type to model table (tick mrn, epic wne): what a classified
+      // work type costs on this deployment. The vocabulary it keys on is the
+      // repository's closed enum; this is the factory's price list, pinned
+      // here for the same reason as every other number that governs a run.
+      RUN_WORKER_MODEL_BY_WORK_TYPE:
+        "mechanical=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "translation=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "construction=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "diagnosis=cloudflare-workers-ai/@cf/zai-org/glm-5.3," +
+        "design=cloudflare-workers-ai/@cf/zai-org/glm-5.3",
       SIGNAL_COMMIT_RETRY_MS: "250",
       SWEEP_MAX_PROJECTS: "4",
       SWEEP_MAX_TICKS: "5",

@@ -101,7 +101,7 @@ func findingsCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s  %-9s %-12s %-6s  for %-19s  %s\n",
 			finding.Key, finding.Status, finding.Kind, finding.Severity,
 			findingTarget(finding.Target), finding.Title)
-		fmt.Fprintf(stdout, "    discovered by %s (tick %s, attempt %d)\n",
+		fmt.Fprintf(stdout, "    discovered by %s (tick %s, run dispatch #%d)\n",
 			finding.DiscoveredFrom, finding.TickID, finding.Attempt)
 		switch finding.Status {
 		case runstate.FindingPromoted:

@@ -233,7 +233,7 @@ func TestTheWriteRefCarriesRunTickAndAttempt(t *testing.T) {
 	}
 	r.base = f.Repo.Base
 
-	dispatch, marker, err := r.planDispatch(planEntry{TickID: "a1", Role: "implement-tick"}, 2, 1, 0, nil)
+	dispatch, marker, err := r.planDispatch(planEntry{TickID: "a1", Role: "implement-tick"}, 2, 1, 0, nil, nil)
 	if err != nil {
 		t.Fatalf("plan the dispatch: %v", err)
 	}

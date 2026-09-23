@@ -131,7 +131,9 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 	}
 	var order []string
 	latest := map[string]runfeed.Event{}
+	var tries runfeed.Tries
 	for _, line := range located {
+		tries.Observe(line.Event)
 		if runLevel(line.Event) {
 			continue
 		}
@@ -141,14 +143,18 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 		}
 		latest[id] = line.Event
 	}
+	// A tick's line leads with its own TRY and labels the run-wide number as
+	// the dispatch number it is (tick h58): "tick w9b attempt 5" read as w9b's
+	// fifth try when it was its third.
 	for _, id := range order {
 		event := latest[id]
-		attempt := "-"
+		who := "tick " + id
 		if event.Attempt != nil {
-			attempt = fmt.Sprintf("%d", *event.Attempt)
+			try, _ := tries.Of(id, *event.Attempt)
+			who = "tick " + reconcile.AttemptLabel(id, try, *event.Attempt)
 		}
-		lines = append(lines, fmt.Sprintf("tick %s attempt %s: %s for %s — %s",
-			id, attempt, event.Stage, ageOf(event.At, time.Now()), event.Detail))
+		lines = append(lines, fmt.Sprintf("%s: %s for %s — %s",
+			who, event.Stage, ageOf(event.At, time.Now()), event.Detail))
 	}
 
 	// The run's own last word, when it has said one at run level: what the
@@ -162,6 +168,22 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 		break
 	}
 	return ended, lines, nil
+}
+
+// feedTries counts each tick's tries from the run's local feed (tick h58). A
+// feed that cannot be read counts nothing, and the lines that asked fall back
+// to the dispatch number alone: the feed is exhaust, and an unreadable one may
+// cost a line its try but never the line.
+func feedTries(repo, runID string) *runfeed.Tries {
+	tries := &runfeed.Tries{}
+	events, err := runfeed.Read(runfeed.Path(repo, runID))
+	if err != nil {
+		return tries
+	}
+	for _, event := range events {
+		tries.Observe(event)
+	}
+	return tries
 }
 
 // ageOf says how long ago a stamp was, as a person reads it. A stamp that
@@ -240,9 +262,16 @@ func statusCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		// the feed's stall line carries — so the two surfaces a watcher reads
 		// cannot disagree about what was measured. "?" is the honest answer
 		// for a fact this attempt cannot show (tick 7zs).
+		//
+		// Each attempt is named by the tick's own try first (tick h58), counted
+		// from the run's feed; an attempt the feed never showed is named by its
+		// dispatch number alone rather than by a guessed try.
+		tries := feedTries(*repo, runID)
 		for _, a := range status.Attempts {
-			line := fmt.Sprintf("attempt %d of %s: branch %s last moved %s ago; worktree %s last changed %s ago",
-				a.Attempt, a.TickID, a.Branch, gapOf(a.BranchIdle), a.Worktree, gapOf(a.WorktreeIdle))
+			try, _ := tries.Of(a.TickID, a.Attempt)
+			line := fmt.Sprintf("%s: branch %s last moved %s ago; worktree %s last changed %s ago",
+				reconcile.AttemptLabel(a.TickID, try, a.Attempt), a.Branch, gapOf(a.BranchIdle), a.Worktree,
+				gapOf(a.WorktreeIdle))
 			// The attempt's own wall clock firing joins the line by the identity
 			// both carry (tick q1e): the run said the bound passed and the
 			// attempt is still in flight, so a watcher reading status — not

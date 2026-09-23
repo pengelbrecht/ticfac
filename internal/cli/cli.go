@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -96,6 +97,16 @@ ceiling — is printed before the run starts, while it can still be cancelled
 cheaply. It binds a METERED credential; the local subprocess executor issues a
 flat-rate one, so on this host the number travels with the job and is reported
 everywhere, and the wall clock is what actually stops one.
+
+Each role-less implementation tick is classified through Jev before its first
+dispatch, and the credential that call rides is resolved from the environment
+and printed at startup (tick x0k): inside a cloud sandbox it is the run's own
+gateway route (AI_GATEWAY_BASE_URL/jev) with the run token, locally it is the
+operator's own key in $TICFAC_JEV_API_KEY (an optional $TICFAC_JEV_API_BASE
+overrides the API root). No credential — or an unreachable, refused or
+misconfigured classifier — is the documented fallback, said at startup and
+recorded per ask: the run classifies nothing or records its no-answer, and
+every dispatch starts at [tier_policy.start].
 
 A long run wants the machine awake end to end. A machine that sleeps mid-run
 kills workers without settling them, and what it leaves — a held attempt, a
@@ -340,6 +351,17 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintf(stdout, "%s\n", budgetLine(clamped))
 	}
 
+	// The classifier's credential, resolved BEFORE anything is dispatched (tick
+	// x0k): inside a cloud sandbox the source is the run's own gateway route
+	// with the run token; locally it is the operator's own key in
+	// $TICFAC_JEV_API_KEY. An unconfigured source is the documented fallback —
+	// the run classifies nothing and every dispatch starts at [tier_policy.start]
+	// — and the note saying so is printed on the run's own stdout below, so a
+	// redirected invocation and run.log both carry it. Resolution happens here
+	// because the client is a constructor input; the SAY waits until the run
+	// exists, so a refusal writes no stdout of any kind.
+	classifier, classifierNote := classifierForRun()
+
 	if *runner == "" {
 		*runner = "claude"
 	}
@@ -388,6 +410,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		CeilingUSD:        *ceiling,
 		PullRequests:      pulls,
 		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
+		Classifier:        classifier,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
@@ -415,6 +438,14 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// and on the wrapped stdout, so the same line lands in run.log whether
 	// or not whoever launched the run captured its output.
 	fmt.Fprintf(stdout, "%s\n", startupLine(liveRun))
+
+	// Which credential the classifier rides — or that no source resolved and
+	// every dispatch starts at [tier_policy.start] — said on the same wrapped
+	// stdout, so it lands in run.log beside the startup line (tick x0k). A
+	// credential story belongs with the run it governs, and a redirected run
+	// that silently classifies nothing is exactly the silence the startup line
+	// exists to break.
+	fmt.Fprintf(stdout, "%s\n", classifierNote)
 
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
@@ -563,6 +594,21 @@ func startupLine(runID string) string {
 		"ticfac events %s --follow (what it is doing, as it does it)", runID, runID, runID)
 }
 
+// classifierForRun builds the classifier this run classifies with, from the
+// credential source the process found (tick x0k): the run's own gateway route
+// inside a cloud sandbox, the operator's key in $TICFAC_JEV_API_KEY locally,
+// and nil — with the note saying what the run does without one — when neither
+// resolves, which is the documented degradation to [tier_policy.start]. It is
+// a function of its own so the wiring is the same under test as in production:
+// what run-epic hands the reconciler is exactly what these tests build.
+func classifierForRun() (classifier reconcile.Classifier, note string) {
+	source := jev.ResolveCredential(os.Getenv)
+	if !source.Configured {
+		return nil, source.Note
+	}
+	return jev.New(source.Config, nil), source.Note
+}
+
 // feedFailureLine is the one sentence a run whose feed could not be written
 // owes its operator: what failed, that it is not a verdict about the work,
 // and what cannot happen as a result — `ticfac events <run-id> --follow` has
@@ -700,18 +746,22 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
 	}
+	// The released attempt is named the way every line written for a person
+	// names one (tick h58): the tick's own try first, the run-wide dispatch
+	// number — the one this command was addressed by — labelled after it.
+	released := reconcile.AttemptLabel(settled.TickID, settled.Try, settled.Attempt)
 	if !settled.Recorded {
-		fmt.Fprintf(stdout, "attempt %d of %s was already released by %s; nothing was written\n",
-			settled.Attempt, settled.TickID, settled.ReleasedBy)
+		fmt.Fprintf(stdout, "%s was already released by %s; nothing was written\n",
+			released, settled.ReleasedBy)
 		return 0
 	}
 	if settled.Carried {
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s, "+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s, "+
 			"CARRYING its work:\n"+
 			"the next run dispatches a new attempt based on the released commits at %s, so the next worker "+
 			"starts from them rather than redoing them. The gate still decides — nothing merges unproven — and "+
 			"the new attempt's records state where its work came from.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
 		return 0
 	}
 	// Where the released work can be found, said plainly (ticfac tick 55i):
@@ -720,21 +770,21 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	// work that was one worktree removal away from gone.
 	switch {
 	case settled.WorkSHA == "":
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt; this one left no commit beyond its base anywhere \u2014 \n"+
 			"add --carry-work to have said otherwise.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
 	case settled.WorkDurable:
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt; whatever this one committed is durable at %s on the remote \u2014 \n"+
 			"add --carry-work to have the next attempt start from it instead.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
 	default:
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt. Whatever this one committed is NOT on the remote: the commits \n"+
 			"are only the LOCAL branch %s in the checkout at %s — the worktree is gone and the teardown kept the \n"+
 			"branch, so that checkout is the only place they exist.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
 			settled.WorkRef, settled.WorkIn)
 	}
 	return 0

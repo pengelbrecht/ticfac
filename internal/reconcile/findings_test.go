@@ -624,9 +624,9 @@ func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	note := fmt.Sprintf("attempt %d", attempt)
+	note := fmt.Sprintf("rv try 1 (run dispatch #%d)", attempt)
 	if !strings.Contains(state.Ticks["rv"].Notes, note) {
-		t.Errorf("rv's close note does not name attempt %d, the attempt the recorded decision belongs "+
+		t.Errorf("rv's close note does not name run dispatch #%d as rv's try, the attempt the recorded decision belongs "+
 			"to: %q", attempt, state.Ticks["rv"].Notes)
 	}
 

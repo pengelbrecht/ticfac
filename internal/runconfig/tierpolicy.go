@@ -12,17 +12,50 @@ import (
 // aspirational, and what makes an over-tiered run a configuration defect that
 // can be named instead of a judgement call that can only be regretted.
 //
-// THE LADDER (the decision, logged — tick 5eq):
+// THE LADDER (the decision, logged — tick 5eq), and the one narrowing of it
+// a recorded classification makes (tick s45, epic wne):
 //
 //	A first attempt starts at the START tier: the first matching
 //	[[tier_policy.start]] rule, else the Default. No rule may name a tier
 //	above the Default — nothing starts high on a description. Expense is
 //	earned by failure.
 //
+//	THE NARROWING, and it is narrow: a RECORDED CLASSIFICATION — a closed-enum
+//	work type with a full probability distribution, recorded on the run
+//	branch by the classification exchange (tick w9b) — may start a first
+//	attempt ABOVE the Default when the probability mass on the policy's dear
+//	work types clears the mass threshold. What is NOT relaxed, and the
+//	reason promotion is safe at all:
+//
+//	  - A tick's own PROSE still cannot promote it. A start rule naming a
+//	    tier above the Default is refused exactly as before: the rule existed
+//	    to stop a DESCRIPTION buying an expensive model, and a classified
+//	    work type is not prose. The label override remains the operator's
+//	    explicit pin and still outranks the classifier.
+//	  - The CEILING still bounds everything: the dear tier is validated to
+//	    sit at or below it, and at the ceiling the next actor is a person,
+//	    not a bigger model.
+//	  - Failure still escalates underneath: the classification picks a
+//	    START, and a failed attempt still earns a rung above whatever the
+//	    classifier chose. A mis-classified construction tick fails on flash
+//	    and becomes full with nobody in the loop.
+//	  - No classification at all — none recorded, a recorded no-answer, a
+//	    policy that routes no classification — falls back to
+//	    [[tier_policy.start]] and the default. The feature degrades to
+//	    today's behaviour rather than stopping a run.
+//
+//	THE THRESHOLD IS PROVISIONAL. 0.50 is a starting point from one
+//	measurement (49 closed ticks, 2026-09-22), not a finding: that sample
+//	could not validate the flash/full boundary because every tick in it ran
+//	at its role's base model with no [tier_policy] declared, and its retries
+//	were wall-clock and hold failures rather than capability failures. It
+//	is configurable precisely so the next measurement can re-tune it against
+//	the recorded distributions without re-classifying anything.
+//
 //	Each FAILED prior attempt of the same tick earns Step rungs (default one)
-//	upward from the start tier, and never past the Ceiling. At the Ceiling the
-//	ladder is over by declaration: the next actor is a person, not a bigger
-//	model.
+//	upward from the start tier — wherever that start came from — and never
+//	past the Ceiling. At the Ceiling the ladder is over by declaration: the
+//	next actor is a person, not a bigger model.
 //
 // WHAT "FAILED" MEANS for the ladder — and the three things it deliberately
 // does not mean:
@@ -126,6 +159,32 @@ type tierLabel struct {
 // start high in it. A tick that DOES carry a tier label under a nil policy is
 // refused loudly rather than interpreted against a policy that does not exist.
 func (p *TierPolicy) Derive(facts TickFacts, attempt DeriveAttempt) (DeriveOutcome, error) {
+	return p.DeriveClassified(facts, attempt, nil)
+}
+
+// DeriveClassification is a RECORDED classification as the derivation sees
+// it: the probability distribution over the closed work-type enum, and
+// nothing else. The distribution — not the choice, not the confidence — is
+// what the mass rule consumes (tick s45): a tick split 0.45 design / 0.42
+// construction is not an unknown to be defaulted, it is a tick with 0.45 of
+// design in it, and the mass rule spends that number instead of discarding
+// it. A nil DeriveClassification is the absent classification: no answer at
+// all, an unreachable classifier, a recorded no-answer — all of which fall
+// back to the start policy rather than stopping a run.
+type DeriveClassification struct {
+	// Probabilities is the recorded distribution: one mass per work type
+	// the classifier put probability on. An empty map is the no-answer
+	// shape and routes nothing.
+	Probabilities map[WorkType]float64
+}
+
+// DeriveClassified is the pure function with its fourth input: (tick facts,
+// attempt, policy, recorded classification) → tier. It is the same ladder
+// [Derive] is — the classification can only move the START, never the rungs,
+// the ceiling or the override — which is the whole safety argument for
+// promotion: the classification picks where a first attempt begins and
+// failure still earns everything above it.
+func (p *TierPolicy) DeriveClassified(facts TickFacts, attempt DeriveAttempt, classification *DeriveClassification) (DeriveOutcome, error) {
 	if attempt.Number < 1 {
 		return DeriveOutcome{}, fmt.Errorf("tier derivation for %s: attempt number %d is not 1-based", facts.TickID, attempt.Number)
 	}
@@ -171,6 +230,16 @@ func (p *TierPolicy) Derive(facts TickFacts, attempt DeriveAttempt) (DeriveOutco
 	}
 	if !matched {
 		start, rule = p.Default, "the policy default"
+	}
+	// THE NARROWED RULE (tick s45): a recorded classification may start a
+	// first attempt dearer than the policy's own start, and nothing else may.
+	// The mass rule runs only for WORK — a role-carrying tick is never
+	// classified, and a role route has already returned above — and only
+	// when the policy declares where the dear model serves.
+	if isWorkRole(facts.Role) {
+		if dear, dearReason, classified := p.classifiedStart(classification); classified {
+			start, rule = dear, dearReason
+		}
 	}
 	step := p.StepOrDefault()
 	ceiling := p.CeilingOrDefault()
@@ -265,6 +334,79 @@ func (p *TierPolicy) startTier(facts TickFacts) (Tier, string, bool) {
 		return rule.Tier, fmt.Sprintf("start rule %d of [tier_policy.start]", i+1), true
 	}
 	return p.Default, "the policy default", false
+}
+
+// provisionalMassThreshold is the default the mass rule clears against,
+// and it is PROVISIONAL — a starting point from one measurement (49 closed
+// ticks, 2026-09-22, epic wne: mass routing sent 14 of 49 to the dear model
+// where argmax alone sent 17 and argmax-with-a-confidence-floor sent 26), not
+// a finding. That sample could not validate the flash/full boundary, for
+// the reason the [TierPolicy] comment states; the number is configurable
+// precisely so the next measurement can move it against the recorded
+// distributions without re-classifying anything. Whoever retunes it is
+// re-evaluating runs that already happened, which is why the record carries
+// the full distribution and not the argmax.
+const provisionalMassThreshold = 0.50
+
+// MassThresholdOrDefault is the declared mass threshold, defaulting to the
+// PROVISIONAL 0.50 of [provisionalMassThreshold]. The default is what the
+// measurement established as a starting point, and it must be re-tuned —
+// not re-affirmed — by the first epic that runs with the policy on.
+func (p *TierPolicy) MassThresholdOrDefault() float64 {
+	if p == nil || p.MassThreshold <= 0 || p.MassThreshold > 1 {
+		return provisionalMassThreshold
+	}
+	return p.MassThreshold
+}
+
+// classifiedStart is the mass rule (tick s45, epic wne): the recorded
+// distribution, summed over the policy's dear work types, against the mass
+// threshold — strictly greater routes the first attempt to the dear tier,
+// and everything else falls back to the start policy exactly as an absent
+// classification does.
+//
+// Why MASS and not the argmax plus a confidence floor: every low-confidence
+// case in the measurement was construction-vs-design or
+// mechanical-vs-diagnosis — the flash/full line itself, never a
+// cheap-vs-cheap confusion — so a tick split 0.45 design / 0.42 construction
+// is not an unknown to be defaulted; it is a tick with 0.45 of design in it.
+// The mass rule spends that number instead of discarding it, and it leaves
+// one tunable where the other shape has two.
+//
+// The comparison is spelled `!(mass > threshold)` rather than
+// `mass <= threshold` on purpose: a mass that is not a number the threshold
+// can be compared with (NaN from a corrupt record) is a NOT-clear, and a
+// not-clear falls back — a routing rule that answered "dear" to garbage
+// would be paying a dear model for a defect.
+//
+// The ceiling still bounds the result, mechanically and not just at load:
+// the load refuses a dear tier above the ceiling, but the derivation is
+// also a function of hand-built policies, and a ceiling a promotion can
+// walk around is not a ceiling. A dear tier somehow above it is clamped
+// DOWN to it, and the reason says so.
+func (p *TierPolicy) classifiedStart(classification *DeriveClassification) (Tier, string, bool) {
+	if p == nil || classification == nil || len(classification.Probabilities) == 0 || len(p.DearWorkTypes) == 0 {
+		return "", "", false
+	}
+	names := make([]string, 0, len(p.DearWorkTypes))
+	mass := 0.0
+	for _, workType := range p.DearWorkTypes {
+		names = append(names, string(workType))
+		mass += classification.Probabilities[workType]
+	}
+	threshold := p.MassThresholdOrDefault()
+	if !(mass > threshold) {
+		return "", "", false
+	}
+	ceiling := p.CeilingOrDefault()
+	if tierIndex(p.DearTier) > tierIndex(ceiling) {
+		return ceiling, fmt.Sprintf(
+			"the ceiling %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing the provisional mass threshold %.2f — and the policy's dear tier sits above the ceiling, which still bounds the result",
+			string(ceiling), mass, strings.Join(names, ", "), threshold), true
+	}
+	return p.DearTier, fmt.Sprintf(
+		"the dear tier %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing the provisional mass threshold %.2f",
+		string(p.DearTier), mass, strings.Join(names, ", "), threshold), true
 }
 
 // isWorkRole reports whether a role is WORK — the thing the Default is the

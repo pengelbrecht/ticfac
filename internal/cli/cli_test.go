@@ -132,7 +132,16 @@ func TestTheBuiltBinaryExitsTwo(t *testing.T) {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
 
+	// The refusal is "no executor", so the host's executor must not be
+	// findable: the binary looks for ticfac-exec-subprocess beside itself
+	// (a temp dir, so never) and then on PATH — and a developer who has
+	// installed ticfac has it on PATH, which made this test red on every
+	// such machine and green in CI (tick yjs). TestRunEpicFailsClosed
+	// empties PATH for the same reason. The cwd is a temp dir too: the test
+	// measures the binary, not whichever checkout it happens to run in.
 	cmd := exec.Command(binary, "run-epic", "x")
+	cmd.Env = append(os.Environ(), "PATH="+t.TempDir())
+	cmd.Dir = t.TempDir()
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("ticfac run-epic x succeeded:\n%s", out)

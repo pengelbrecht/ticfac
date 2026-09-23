@@ -463,10 +463,10 @@ func (r *Reconciler) excuseWindow(live []*inflightAttempt, gap time.Duration) {
 		r.announceStall(fl)
 		if gap > r.wipeThreshold {
 			r.record(fl.entry.TickID, StageWaiting,
-				"attempt %d of %s went unpolled for %s while another tick was being integrated and gated — "+
+				"%s went unpolled for %s while another tick was being integrated and gated — "+
 					"longer than the substrate's wipe threshold of %s. The gap is the run's own, so it is not "+
 					"read as a wipe; if the substrate did take the attempt away, its next inspection says so",
-				fl.marker.Attempt, fl.marker.TickID, gap.Round(time.Second), r.wipeThreshold)
+				r.attemptName(fl.marker.TickID, fl.marker.Attempt), gap.Round(time.Second), r.wipeThreshold)
 		}
 		r.noteAlive(fl.marker.JobID)
 	}
@@ -556,11 +556,11 @@ func (r *Reconciler) announceAbandonedWindow(w *held) {
 	}
 	for _, fl := range unfinished {
 		r.record(fl.entry.TickID, StageWaiting,
-			"attempt %d of %s had settled and was not finished when the run stopped for another tick's refusal: "+
+			"%s had settled and was not finished when the run stopped for another tick's refusal: "+
 				"nothing about it is lost — its marker is on the remote and its commits are on its own branch, and "+
 				"running the epic again under this run id adopts it by identity and finishes it rather than "+
 				"dispatching over it",
-			fl.marker.Attempt, fl.marker.TickID)
+			r.attemptName(fl.marker.TickID, fl.marker.Attempt))
 	}
 }
 
@@ -569,11 +569,11 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 		r.probeProgress(fl)
 		r.announceStall(fl)
 		r.record(fl.entry.TickID, StageWaiting,
-			"attempt %d of %s is still running and the run is stopping for another tick's refusal: "+
+			"%s is still running and the run is stopping for another tick's refusal: "+
 				"nothing about this attempt is lost — its marker is on the remote and its commits are on "+
 				"its own branch, and running the epic again under this run id adopts it by identity "+
 				"rather than dispatching over it",
-			fl.marker.Attempt, fl.marker.TickID)
+			r.attemptName(fl.marker.TickID, fl.marker.Attempt))
 	}
 }
 

@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-sj2-11-ts",
+  "provenance": {
+    "run_id": "epic-wne",
+    "tick_id": "sj2",
+    "attempt": 11,
+    "source_ref": "refs/heads/epic/wne",
+    "source_sha": "f88fb75442191e9a1096946fcd4b57a138435aed",
+    "integration_ref": "refs/heads/epic/wne",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-09-23T14:16:43Z",
+  "finished_at": "2026-09-23T14:16:58Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "✓ Lockfile passes supply-chain policies (verified 4d ago)\nLockfile is up to date, resolution step is skipped\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: \u003credacted-host-path\u003e/Library/pnpm/store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +94\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 94, reused 94, downloaded 0, added 94, done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.21.3\n+ @cloudflare/workers-types 5.20260819.1\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.124.0\n\nDone in 461ms using pnpm v12.3.4\n\u001b[0m\u001b[34mChecked 133 files in 856\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 15 contract(s) at bundle 5.2.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:8468a35e176181c5bf3dbb5110c4a88df5ede45605547e70edca9e7bde905c9d",
+  "persistence_uri": "git:refs/heads/epic/wne:.ticfac/runs/epic-wne/evidence/gate-sj2-11-ts.json"
+}

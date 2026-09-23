@@ -1,0 +1,75 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-wne",
+  "epic_id": "wne",
+  "sequence": 132,
+  "state": "completed",
+  "reason": "every tick of wne is closed behind the integrated gate",
+  "updated_at": "2026-09-23T19:39:35Z",
+  "ticks": [
+    {
+      "tick_id": "0ju",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "mrn",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "w9b",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "s45",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "02p",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "0mp",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "kl9",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "x0k",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "sj2",
+      "state": "closed",
+      "attempt": 11
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-wne",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/wne",
+    "source_sha": "8ee637a29cd8754bda1f31a85d3f9de8533f4106",
+    "integration_ref": "refs/heads/epic/wne",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:f96b10aefd58876b117f04711f6e6c34d3e72cc50549b5843ec31d68ce984a62",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

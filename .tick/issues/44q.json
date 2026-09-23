@@ -3,12 +3,14 @@
   "title": "A merge refusal must carry git's reason; z23's was empty",
   "description": "z23's attempt was refused with:\n\n    merge_failed: attempt 2 of z23 does not merge onto epic/ncv:\n\nNote the trailing colon with NOTHING after it. The refusal names no file, no conflict, no cause.\n\ngit's own output was precise and actionable — six 'file location' conflicts, each naming the source path, the rename, AND the suggested destination:\n\n    CONFLICT (file location): cloud/factory/src/epic-reconciler.ts added in\n    origin/z23a2 inside a directory that was renamed in HEAD, suggesting it\n    should perhaps be moved to cloudflare/src/epic-reconciler.ts.\n\nThat is a diagnosis and a repair instruction in one line, and the reconciler threw it away. An operator reading the feed sees a dead end; an operator who re-runs the merge by hand sees the answer immediately. The gap between those two experiences is the defect.\n\nWorse for unattended operation: a resolve-conflict job dispatched from this refusal would be handed a message with no information in it. The refusal is the ONLY durable record — the worktree is torn down on cleanup.\n\nWork:\n- Capture the merge command's stderr and carry it in the refusal, not just the exit status.\n- Truncate rather than drop: a long conflict list is still worth its first N lines.\n- Cover the empty-reason case with a test that FAILS if the detail is blank — an error message that can be empty will be.\n\nFound on 2026-09-18 resolving z23 in epic ncv.",
   "notes": "2026-09-20 11:40 - 2026-09-20 — SECOND occurrence, and the message was empty again:\n\n    merge_failed: attempt 5 of aqm does not merge onto epic/dha:\n\nTrailing colon, nothing after it. git's own output named the file immediately (a content conflict in internal/reconcile/findings.go, where aqm and 80x had rewritten the same refusal message from opposite ends) and the resolution took two minutes once seen.\n\nThe first occurrence (z23, epic ncv) was a rename conflict; this one is an ordinary content conflict, so the empty reason is not specific to one conflict kind — it is every merge refusal.\n\nWorth adding to the fix: in BOTH occurrences the conflict was in a file two ticks of the same epic had edited. That is the common case for an epic gate, not an exotic one, so the refusal that reports it is the one an operator reads most often.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A merge refusal carries the underlying git conflict output, and a test fails if the reason is empty",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T16:32:52.8263Z",
-  "updated_at": "2026-09-20T09:40:02.900835Z"
+  "updated_at": "2026-09-23T21:53:11.056132Z",
+  "closed_at": "2026-09-23T21:53:11.056132Z",
+  "closed_reason": "duplicate of ky5, fixed in #46"
 }

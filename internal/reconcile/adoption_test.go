@@ -203,7 +203,7 @@ func TestAHeldAttemptStopsTheRunEvenWhenANewerAttemptIsAdoptable(t *testing.T) {
 	if held.State != runstate.StateFailed || held.Failure == nil || held.Failure.Reason != RefusedRejectedWork {
 		t.Fatalf("the resume ended %s (%+v), want %s", held.State, held.Failure, RefusedRejectedWork)
 	}
-	if !strings.Contains(held.Failure.Message, "attempt 1 of a1") {
+	if !strings.Contains(held.Failure.Message, "a1 try 1 (run dispatch #1)") {
 		t.Errorf("the refusal does not name the held attempt: %s", held.Failure.Message)
 	}
 

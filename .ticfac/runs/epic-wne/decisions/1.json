@@ -1,0 +1,91 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "wne",
+    "job_id": "run-epic-wne/tick-02p/attempt-7",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "45068af03fa3c4d4806cbf17aab9f326a918a7c7",
+    "tick_id": "02p"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "internal/reconcile/dispatch.go claimDispatch calls classificationFor on every implement-tick claim, after counting failed prior attempts, and classificationFor asks whenever no record exists and a classifier is set. The comment there says 'at the FIRST DISPATCH ... and nowhere else' and the classify.go header says 'never configured' is recorded, but a nil classifier records nothing. So a run whose attempt 1 ran with no classifier and failed, resumed with one, asks at attempt 2 and dispatches at dear_tier plus one rung (e.g. strong) where the warm process dispatches at default plus one (balanced). That is a cold/warm divergence driven by state outside git, plus a rung the failure never earned. Fix: ask only when the tick has no prior attempt (otherwise read-or-fallback), or record a 'no classifier configured' no-answer at first dispatch; add a restart test where the classifier's presence changes between incarnations.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Classify only at a role-less tick's first dispatch: a later attempt with no record must not ask"
+      },
+      {
+        "body": "widthForWave (internal/reconcile/window.go) and recordTierPolicy (profiles.go) derive a wave's tiers with TierPolicy.Derive, which uses a nil classification, while dispatch uses DeriveClassified with the recorded one. With host width 3, concurrency.balanced = 1, and three role-less ticks whose recorded mass clears the threshold, width stays 3 and three dear-tier dispatches run concurrently, and the planning line says the wave is not narrowed. Read the recorded classification (read-only, never ask) when computing first-attempt tiers for width.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "tier_policy.concurrency ignores classification-promoted starts when sizing a wave"
+      },
+      {
+        "body": "Epic wne added RoleClassifyTick to runstate.DecisionRoles() in Go, but cloudflare/src/run-state-store.ts validateDecision still checks role against ROLES only. decision() throws 'unreadable decision', decisions() goes through decision() and throws too, and epic-reconciler.ts calls decisions() at lines 627 and 1041. A run branch carrying a classification therefore breaks every decisions() read on the Workflow host. It is latent until a classifier is wired, and it is a Go/TS parity break in stores documented as mirrors.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "TS run-state store throws on a classify-tick decision record the Go reconciler writes"
+      },
+      {
+        "body": "The gate runs go test -short, and 7 of the 10 tests exercising epic wne's exchange and routing (the four end-to-end classify_test.go exchange tests and the three tier_test.go mass-routing tests) skip under -short; only three pure record-parsing tests ran at each tick's gate. They pass in a full run (verified in review), but per-tick gates went green without exercising the change. Either give the gate a non-short run of the packages a tick touched, or make these fixture tests cheap enough not to skip.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "The in-run go gate skips every end-to-end classification and mass-routing test (-short)"
+      },
+      {
+        "body": "Under a review-epic launch's GIT_CONFIG_* env (url.ticfac-read-only-grade://...pushInsteadOf='/' and friends), internal/reconcile's TestAStopThatNeedsAPersonStillStopsUnderSupervision, TestAResumableRefusalIsContinuedByTheRunAndCountedAsAnIntervention and TestTheSameRefusalOverAnUnchangedTreeHaltsInsteadOfSpinning fail with 'remote-ticfac-read-only-grade is not a git command', because the fixtures' pushes to local temp origins are rewritten too. They pass with the env stripped. A read-only reviewer therefore cannot run the suite the gate runs; fixtures should scrub the inherited GIT_CONFIG_* push keys the way they pin maintenance.auto.",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Review launches' pushInsteadOf rewrite breaks three supervise_test fixtures that push to temp repos"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-wne/tick-02p/attempt-7",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-wne/02p/RESULT-02p.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-09-23T01:02:54Z",
+  "answered_at": "2026-09-23T01:02:54Z",
+  "provenance": {
+    "run_id": "epic-wne",
+    "tick_id": "02p",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/wne",
+    "source_sha": "45068af03fa3c4d4806cbf17aab9f326a918a7c7",
+    "integration_ref": "refs/heads/epic/wne",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "model": "opus",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
