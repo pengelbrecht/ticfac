@@ -106,7 +106,11 @@ effort = "high"
 # The command itself is UNCHANGED, and must stay byte-identical to the
 # Makefile's `gate` recipe: TestTheGateTargetMatchesTheDeclaredGate compares
 # the two.
-go ={ command = "go test -short -timeout 45m -parallel 12 ./...", description = "Go" }
+# gofmt and go vet first, exactly as CI's go job runs them: the gate is what a
+# worker's commit must pass, and a gate weaker than CI lets a tick close on a
+# tree CI then fails. An xte worker's unformatted test file did exactly that on
+# 2026-09-23 - gate green, epic PR red - and the close-out held on it.
+go = { command = "u=\"$(gofmt -l . | grep -v '^contracts/' || true)\"; if [ -n \"$u\" ]; then echo \"gofmt would change these files:\"; echo \"$u\"; exit 1; fi; go vet ./... && go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the
