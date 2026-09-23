@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 124,
-  "state": "running",
-  "reason": "rf3 is closed",
-  "updated_at": "2026-09-23T06:26:10Z",
+  "sequence": 125,
+  "state": "collecting",
+  "reason": "collecting ha9 attempt 17",
+  "updated_at": "2026-09-23T06:26:28Z",
   "ticks": [
     {
       "tick_id": "8ty",
