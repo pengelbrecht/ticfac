@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 34,
+  "sequence": 35,
   "state": "failed",
-  "reason": "cr4 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 4 of cr4 does not merge onto epic/yoh: ",
-  "updated_at": "2026-09-23T21:51:49Z",
+  "reason": "4c0911837b65 of main does not fold into epic/yoh: cloudflare/test/phase0-compat.test.ts. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
+  "updated_at": "2026-09-23T21:59:28Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -80,7 +80,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "c11bea88b626f340eeea2fec415ce54fdeaec906",
+    "source_sha": "18c2552b231da7ec8aca179b3c46d9dc0e57908b",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
