@@ -183,16 +183,24 @@ func (r *Reconciler) recordedClassification(tickID string) (*RecordedClassificat
 }
 
 // classificationFor is the whole exchange for one tick: read the record if
-// the run branch carries one, and otherwise ask the classifier once — once
-// per TICK, not per attempt — and record the outcome before anything is
-// dispatched on top of it.
+// the run branch carries one, and otherwise — only at the tick's FIRST
+// dispatch (tick sj2) — ask the classifier once, and record the outcome
+// before anything is dispatched on top of it.
 //
 // A role-carrying tick answers (nil, nil): never classified, per the
 // precondition above. An unconfigured classifier answers (nil, nil) the same
 // way when no record exists — the run degrades to the start policy, which is
 // today's behaviour, and a record an earlier incarnation DID write is still
-// read: the record is the answer, whatever this incarnation could ask.
-func (r *Reconciler) classificationFor(ctx context.Context, entry planEntry) (*RecordedClassification, error) {
+// read: the record is the answer, whatever this incarnation could ask. And a
+// LATER attempt that finds no record answers (nil, nil) too, for the same
+// axiom 1 reason the record exists: the first attempt was planned under
+// whatever its incarnation knew — nothing — and asking NOW would make the
+// re-derivation of this very run dispatch the later attempt on an answer the
+// first attempt never had, reaching a different dispatch than the run it
+// reconstructs. So the later attempt routes at the policy exactly as the
+// first one did, and the classifier is never asked past a tick's first
+// dispatch.
+func (r *Reconciler) classificationFor(ctx context.Context, entry planEntry, firstDispatch bool) (*RecordedClassification, error) {
 	if entry.Role != "implement-tick" {
 		return nil, nil
 	}
@@ -208,6 +216,18 @@ func (r *Reconciler) classificationFor(ctx context.Context, entry planEntry) (*R
 			entry.TickID, err)
 	} else if ok {
 		return existing, nil
+	}
+	if !firstDispatch {
+		// NOT this tick's first dispatch, and no record exists: the first
+		// attempt was planned under nothing, and it is too late to ask
+		// (tick sj2). An ask here would answer a question the run's own
+		// history says was already settled by the first attempt's fallback —
+		// and a cold re-derivation of this run, reading the record such an
+		// ask would write, would reach a different dispatch than the run it
+		// reconstructs. Nothing is asked and nothing is recorded: routing
+		// falls back to the start policy, exactly as it does when no
+		// classifier is configured at all.
+		return nil, nil
 	}
 	if r.opts.Classifier == nil {
 		// No classifier is configured: this run has no classification, and

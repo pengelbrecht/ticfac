@@ -265,7 +265,7 @@ func TestClassificationIsAskedOnceAndLandsOnTheRunBranch(t *testing.T) {
 	wireClassification(t, r, f)
 
 	entry := planEntry{TickID: "a1", Role: "implement-tick"}
-	classification, err := r.classificationFor(context.Background(), entry)
+	classification, err := r.classificationFor(context.Background(), entry, true)
 	if err != nil {
 		t.Fatalf("the exchange refused a role-less tick: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestClassificationIsAskedOnceAndLandsOnTheRunBranch(t *testing.T) {
 	// Role-carrying ticks answer (nil, nil) and are never sent: rv is review,
 	// co is closeout, and the enum has no right answer for either.
 	for _, role := range []string{"review-epic", "closeout-epic"} {
-		answer, err := r.classificationFor(context.Background(), planEntry{TickID: "rv", Role: role})
+		answer, err := r.classificationFor(context.Background(), planEntry{TickID: "rv", Role: role}, true)
 		if err != nil || answer != nil {
 			t.Errorf("a %s tick was classified (%v, %v)", role, answer, err)
 		}
@@ -358,7 +358,7 @@ func TestALaterPassReadsTheRecordInsteadOfReAsking(t *testing.T) {
 	wireClassification(t, r, f)
 
 	entry := planEntry{TickID: "a1", Role: "implement-tick"}
-	warm, err := r.classificationFor(context.Background(), entry)
+	warm, err := r.classificationFor(context.Background(), entry, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,9 +366,10 @@ func TestALaterPassReadsTheRecordInsteadOfReAsking(t *testing.T) {
 		t.Fatalf("the warm pass called the classifier %d times", classifier.count())
 	}
 
-	// The warm process reads its own record on the second attempt: a
-	// re-dispatched tick is not re-asked.
-	again, err := r.classificationFor(context.Background(), entry)
+	// The warm process reads its own record on the second attempt — a later
+	// dispatch (firstDispatch false), which is the shape the sj2 gate must not
+	// turn into a skip: the record is read wherever the attempt sits.
+	again, err := r.classificationFor(context.Background(), entry, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +391,7 @@ func TestALaterPassReadsTheRecordInsteadOfReAsking(t *testing.T) {
 		t.Fatal(err)
 	}
 	wireClassification(t, cold, f)
-	read, err := cold.classificationFor(context.Background(), entry)
+	read, err := cold.classificationFor(context.Background(), entry, false)
 	if err != nil {
 		t.Fatalf("the cold pass was refused reading the record: %v", err)
 	}
@@ -423,7 +424,7 @@ func TestAnUnavailableClassifierRecordsItsNoAnswerAndNothingReAsksIt(t *testing.
 	wireClassification(t, r, f)
 
 	entry := planEntry{TickID: "a1", Role: "implement-tick"}
-	answer, err := r.classificationFor(context.Background(), entry)
+	answer, err := r.classificationFor(context.Background(), entry, true)
 	if err != nil {
 		t.Fatalf("an unavailable classifier stopped the run: %v", err)
 	}
@@ -434,8 +435,8 @@ func TestAnUnavailableClassifierRecordsItsNoAnswerAndNothingReAsksIt(t *testing.
 		t.Fatalf("the classifier was called %d times", classifier.count())
 	}
 
-	// The second pass reads the no-answer and asks nothing.
-	again, err := r.classificationFor(context.Background(), entry)
+	// The second pass — a later dispatch — reads the no-answer and asks nothing.
+	again, err := r.classificationFor(context.Background(), entry, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +455,7 @@ func TestAnUnavailableClassifierRecordsItsNoAnswerAndNothingReAsksIt(t *testing.
 		t.Fatal(err)
 	}
 	wireClassification(t, cold, f)
-	read, err := cold.classificationFor(context.Background(), entry)
+	read, err := cold.classificationFor(context.Background(), entry, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +465,7 @@ func TestAnUnavailableClassifierRecordsItsNoAnswerAndNothingReAsksIt(t *testing.
 
 	// And a tick with no record and no classifier classifies nothing at all:
 	// the run degrades to the start policy, which is today's behaviour.
-	absent, err := cold.classificationFor(context.Background(), planEntry{TickID: "b1", Role: "implement-tick"})
+	absent, err := cold.classificationFor(context.Background(), planEntry{TickID: "b1", Role: "implement-tick"}, true)
 	if err != nil || absent != nil {
 		t.Errorf("an unconfigured run classified anyway: (%v, %v)", absent, err)
 	}
@@ -505,7 +506,7 @@ func TestAnUnreadableClassificationRecordIsRefusedNeverReAsked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = r.classificationFor(context.Background(), planEntry{TickID: "a1", Role: "implement-tick"})
+	_, err = r.classificationFor(context.Background(), planEntry{TickID: "a1", Role: "implement-tick"}, true)
 	if err == nil {
 		t.Fatal("an unreadable classification record was walked around")
 	}
@@ -587,5 +588,184 @@ func TestAWholeRunClassifiesEveryRoleLessTickOnce(t *testing.T) {
 	sort.Strings(stages)
 	if strings.Join(stages, ",") != "a1,a2,b1" {
 		t.Errorf("the journal says %v were classified, want a1, a2, b1", stages)
+	}
+}
+
+// THE FIRST-DISPATCH BOUND (tick sj2), at the exchange itself: a tick whose
+// first dispatch is past and whose record does not exist is never asked. The
+// first attempt was planned under nothing, and asking after the fact would
+// make the re-derivation of this very run dispatch the later attempt on an
+// answer the first attempt never had — an axiom 1 violation wearing the
+// costume of a cache miss. Nothing is asked and nothing is recorded; the
+// bound is the dispatch's position, not the classifier's willingness.
+func TestALaterAttemptWithNoRecordIsNeverAsked(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	classifier := &countingClassifier{answer: classificationAnswer}
+	opts.Classifier = classifier
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wireClassification(t, r, f)
+
+	// A later attempt — the tick's first dispatch is past — with a
+	// configured, willing classifier and no record: no classification.
+	entry := planEntry{TickID: "a1", Role: "implement-tick"}
+	answer, err := r.classificationFor(context.Background(), entry, false)
+	if err != nil {
+		t.Fatalf("the later attempt was refused rather than degraded: %v", err)
+	}
+	if answer != nil {
+		t.Fatalf("a later attempt with no record classified anyway: %+v", answer)
+	}
+	if calls := classifier.count(); calls != 0 {
+		t.Fatalf("the classifier was called %d time(s) by a later attempt: asking past the first dispatch would "+
+			"make the re-derivation of this run reach a different dispatch than the run it reconstructs", calls)
+	}
+	// Nothing was recorded either: no exchange happened, so the run branch
+	// carries nothing that would let a re-derivation read an answer the first
+	// attempt never had.
+	decisions, err := r.store.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decisions) != 0 {
+		t.Fatalf("%d decision(s) landed on the run branch for an exchange that never happened", len(decisions))
+	}
+
+	// The same tick at its first dispatch IS asked — the bound is the
+	// dispatch's position, not a suppression of the exchange itself.
+	first, err := r.classificationFor(context.Background(), entry, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == nil || classifier.count() != 1 {
+		t.Fatalf("the first dispatch was not asked: %+v after %d call(s)", first, classifier.count())
+	}
+}
+
+// THE BOUND, END TO END through the real dispatch path: a tick whose first
+// dispatch happened under NO classifier — so no record exists — is
+// redispatched by a later incarnation that HAS one, and the later attempt
+// neither asks nor records: it routes at the start policy exactly as its
+// first attempt did. Ticks whose first dispatch is still ahead (a2, then b1)
+// are asked as always, so the bound suppresses only the past. On the old
+// exchange the redispatch would have asked, answered 0.55 of dear mass, and
+// started a rung above the dear tier — a dispatch the re-derivation of this
+// run could never reproduce, because the first attempt it reconstructs
+// beside it had no answer at all.
+func TestALaterAttemptWithNoClassificationRecordFallsBackWithoutAsking(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: massGate, mode: "blocked-first"})
+	// a1's answer WOULD clear the mass threshold (0.55) — the point is that
+	// the later attempt never sends it, not that it could not answer.
+	answer := func(tick string) jev.Result {
+		if tick == "a1" {
+			return massAnswer(tick, runconfig.WorkDesign, distributionOf(0.02, 0.03, 0.40, 0.10, 0.45))
+		}
+		return massAnswer(tick, runconfig.WorkConstruction, distributionOf(0.05, 0.05, 0.60, 0.00, 0.30))
+	}
+
+	// Incarnation one: no classifier configured. a1's own first try blocks
+	// with nothing committed, the run rejects it and stops — a1 was dispatched
+	// under nothing, and no classification record exists.
+	first, firstResult, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the first run: %v", err)
+	}
+	if firstResult.State != runstate.StateFailed || firstResult.Failure == nil || firstResult.Failure.TickID != "a1" {
+		t.Fatalf("the first run ended %s (%+v), want a1's blocked first try to stop it",
+			firstResult.State, firstResult.Failure)
+	}
+	if got := markerTierOfTry(t, first, "a1", 1); got != "economy" {
+		t.Errorf("a1's first attempt recorded tier %q, want economy: with no classifier the start policy is the fallback", got)
+	}
+
+	// Incarnation two: a fresh clone, the same run id, and a classifier that
+	// would answer — to prove the redispatch is never allowed to ask.
+	clone := cloneRepo(t, f.Repo.Origin, f.Root+"/restarted")
+	laterClassifier := &countingClassifier{answer: answer}
+	laterOpts := f.options(clone, fixtureOptions{})
+	laterOpts.Classifier = laterClassifier
+	later, err := New(laterOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := later.RunProtected(context.Background())
+	if err != nil {
+		t.Fatalf("the second run: %v", err)
+	}
+	if second.State != runstate.StateFailed || second.Failure == nil || second.Failure.TickID != "a2" {
+		t.Fatalf("the second run ended %s (%+v), want a2's own first try to stop it after a1 settled",
+			second.State, second.Failure)
+	}
+
+	// a1's redispatch was never asked — a2's own first dispatch was, and it
+	// is the only ask of the incarnation.
+	if ids := laterClassifier.askedIDs(); strings.Join(ids, ",") != "a2" {
+		t.Fatalf("the second run asked the classifier for %v; want a2 only — a1's redispatch has no record and "+
+			"must not ask", ids)
+	}
+	// The redispatch routed at the START POLICY the first attempt fell back
+	// to, one rung up the ladder for the failed attempt — NOT at the dear
+	// tier a rung above the one its unsent answer would have started.
+	if got := markerTierOfTry(t, later, "a1", 2); got != "balanced" {
+		t.Errorf("a1's redispatch recorded tier %q, want balanced: the policy default escalated one rung — "+
+			"the fallback, not the mass rule", got)
+	}
+	detail, ok := journalLine(later, "a1", StageTierDerived)
+	if !ok {
+		t.Fatal("a1's redispatch recorded no tier derivation")
+	}
+	if !strings.Contains(detail, "the policy default") || !strings.Contains(detail, "escalated 1 rung(s) after 1 failed attempt(s)") {
+		t.Errorf("a1's redispatch derivation does not name the policy start it fell back to: %q", detail)
+	}
+	if _, classified := journalLine(later, "a1", StageClassified); classified {
+		t.Error("a1 was classified at a later attempt: the journal says the exchange ran after the first dispatch")
+	}
+	// No record landed either — the run branch carries no classification for
+	// a1 that a re-derivation could mistake for an answer the first attempt
+	// had.
+	if _, err := later.store.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := later.store.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range decisions {
+		if decisions[i].Role == runstate.RoleClassifyTick && classificationTickOf(&decisions[i]) == "a1" {
+			t.Errorf("a classification record for a1 is on the run branch, written by an attempt past the first dispatch")
+		}
+	}
+
+	// The settling run: report mode finishes the epic. a2's redispatch reads
+	// the record its own FIRST try wrote (never re-asked), and b1's first
+	// dispatch is asked live — the first dispatch of a tick is still the
+	// exchange's home, whatever happened to another tick's past.
+	f.Runner = fakeRunnerArgv(t, "report")
+	settleClassifier := &countingClassifier{answer: answer}
+	settleOpts := f.options(clone, fixtureOptions{})
+	settleOpts.Classifier = settleClassifier
+	settled, err := New(settleOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, err := settled.RunProtected(context.Background())
+	if err != nil {
+		t.Fatalf("the settling run: %v", err)
+	}
+	if done.State != runstate.StateCompleted {
+		t.Fatalf("the settling run ended %s: %s", done.State, done.Reason)
+	}
+	if ids := settleClassifier.askedIDs(); strings.Join(ids, ",") != "b1" {
+		t.Errorf("the settling run asked the classifier for %v; want b1 only — a2 reads the record its own first try wrote", ids)
+	}
+	// a1 closed on work dispatched under the fallback, never on an answer a
+	// later attempt bought behind the run's back.
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Errorf("a1 closed %d time(s), want 1", got)
 	}
 }
