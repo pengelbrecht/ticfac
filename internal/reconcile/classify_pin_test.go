@@ -68,7 +68,7 @@ func TestTheClassificationRecordIsPinnedAsItIsWritten(t *testing.T) {
 	}
 	wireClassification(t, r, f)
 	entry := planEntry{TickID: "a1", Role: "implement-tick"}
-	if _, err := r.classificationFor(context.Background(), entry); err != nil {
+	if _, err := r.classificationFor(context.Background(), entry, true); err != nil {
 		t.Fatalf("the exchange refused a role-less tick: %v", err)
 	}
 

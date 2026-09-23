@@ -492,6 +492,13 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// dispatched was planned under whatever its incarnation knew, and an
 	// adopted attempt is never re-planned.
 	//
+	// The ask itself is bounded to the FIRST dispatch (tick sj2): a later
+	// attempt that finds no record does not ask — the first attempt was
+	// planned under nothing, and asking after the fact would make the
+	// re-derivation of this run reach a different dispatch than the run it
+	// reconstructs — it routes at the start policy exactly as the first
+	// attempt did, and nothing is recorded.
+	//
 	// The record is an INPUT to the dispatch's own derivation (tick s45): the
 	// mass rule routes the start tier on the probability mass over the
 	// policy's dear work types, an absent or no-answer record falls back to
@@ -500,7 +507,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// an error: the exchange's degradations are by design.
 	var classification *RecordedClassification
 	if entry.Role == "implement-tick" {
-		if classification, err = r.classificationFor(ctx, entry); err != nil {
+		if classification, err = r.classificationFor(ctx, entry, len(mine) == 0); err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
 	}
