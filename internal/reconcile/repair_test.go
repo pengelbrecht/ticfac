@@ -829,6 +829,12 @@ func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 	if strings.Contains(result.Failure.Message, "missing-result") {
 		t.Errorf("the refusal blames a missing report rather than the conflict: %s", result.Failure.Message)
 	}
+	// And it says WHICH file and HOW (tick ky5): the worker and the
+	// integration branch each created work-a1.txt, which is an add/add
+	// conflict, and the refusal used to end at a colon with neither.
+	if !strings.Contains(result.Failure.Message, "add/add in work-a1.txt") {
+		t.Errorf("the merge refusal does not name the conflicting file and its kind: %s", result.Failure.Message)
+	}
 	stages := run.Stages("a1")
 	for _, forbidden := range []string{StageIntegrated, StageGatePassed, StageClosed} {
 		if contains(stages, forbidden) {
