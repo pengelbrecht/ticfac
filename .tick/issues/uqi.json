@@ -1,0 +1,14 @@
+{
+  "id": "uqi",
+  "title": "pi and GLM are the factory's defaults on main, and the factory deploys from main again",
+  "description": "OPERATOR, 2026-09-23, same reconciliation. Three layers decide a cloud worker's harness and model, and today they disagree:\n\n  - worker-boot.ts built-in defaults: WORKER_DEFAULT_HARNESS = 'omp', WORKER_DEFAULT_MODEL = 'workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813'\n  - wrangler.toml RUN_HARNESS / RUN_MODEL / RUN_WORKER_HARNESS / RUN_WORKER_MODEL: unset on main; set to pi + workers-ai/@cf/zai-org/glm-5.3 ONLY on the throwaway branch smoke/xte-omp-glm\n  - .tick/runners.toml roles and profiles-cloudflare-sandbox (xte): pi + GLM, substrate-aware so nothing in the cloud is claude (84z)\n\nThe deployed factory is running smoke/xte-omp-glm right now. That branch is the only reason a cloud run today gets pi and GLM rather than omp and DeepSeek, and it carries unmerged code.\n\nDO: make pi and GLM 5.3 the defaults on main at every layer that has one - the TS constants, and explicit RUN_* pins in wrangler.toml with the operator's rule as the comment (GLM 5.3 / 5.3 Flash via pi only; nothing in the cloud runs claude). Deploy the factory from main and confirm a cloud boot reports harness pi and model glm-5.3 'from the control plane'. Then delete smoke/xte-omp-glm and the throwaway epic plw/pg9 it carries (and epic/plw).\n\nLocal stays as it is: the compiled-in profiles/ default (claude) serves laptop runs, which the operator runs on claude by choice.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "yoh",
+  "acceptance_criteria": "On main, with no RUN_* override, a cloud worker and orchestrator boot on harness pi and model workers-ai/@cf/zai-org/glm-5.3; the factory is deployed from main and a boot says so; nothing in the TS defaults names omp, DeepSeek or claude for a cloud role; smoke/xte-omp-glm, epic/plw and the plw/pg9 ticks are gone; and the full suites pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T10:49:08.564104Z",
+  "updated_at": "2026-09-23T10:49:08.564104Z"
+}
