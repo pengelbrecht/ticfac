@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 30,
-  "state": "running",
-  "reason": "gbs is running as attempt 7",
-  "updated_at": "2026-09-23T21:50:20Z",
+  "sequence": 31,
+  "state": "collecting",
+  "reason": "collecting cr4 attempt 4",
+  "updated_at": "2026-09-23T21:51:16Z",
   "ticks": [
     {
       "tick_id": "uqi",
