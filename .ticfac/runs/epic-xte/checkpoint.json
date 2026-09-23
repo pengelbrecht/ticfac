@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 138,
-  "state": "running",
-  "reason": "ha9 is running as attempt 19",
-  "updated_at": "2026-09-23T06:36:39Z",
+  "sequence": 139,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T06:40:14Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -58,7 +58,7 @@
     },
     {
       "tick_id": "ha9",
-      "state": "dispatched",
+      "state": "closed",
       "attempt": 19
     },
     {
@@ -81,7 +81,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/xte",
-    "source_sha": "bce010b83792608be9880128060f328aa5f185ab",
+    "source_sha": "ffdb192bf031c2332f9d7412972993815d2f1f28",
     "integration_ref": "refs/heads/epic/xte",
     "phase": "worker",
     "executor": null,
