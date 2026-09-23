@@ -1298,14 +1298,16 @@ export async function stopRun(
     const revokedHere =
       requested.stop.mode === "hard"
         ? 0
-        : await revokeRunTokens(env, runID, `stopped:supervisor-${phase.status}:${requestedBy}`).catch(
-            (error: unknown) => {
-              console.error(
-                `factory runs: ${runID} could not revoke its gateway tokens finishing a stop: ${String(error)}`,
-              );
-              return 0;
-            },
-          );
+        : await revokeRunTokens(
+            env,
+            runID,
+            `stopped:supervisor-${phase.status}:${requestedBy}`,
+          ).catch((error: unknown) => {
+            console.error(
+              `factory runs: ${runID} could not revoke its gateway tokens finishing a stop: ${String(error)}`,
+            );
+            return 0;
+          });
     const finished = (await updateRunState(env.DB, runID, "stopped", new Date().toISOString())) ?? {
       ...updated,
       state: "stopped",
