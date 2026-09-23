@@ -1334,3 +1334,4 @@
 {"ts":"2026-09-23T19:40:13.785361Z","tick":"5uo","action":"close","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"reason":"#44","title":"Optional runners.local.toml and runners.cloud.toml override the common runners.toml"}}
 {"ts":"2026-09-23T20:00:17.400996Z","tick":"yjs","action":"close","actor":"peter@engelbrecht.dk","data":{"reason":"#45: the binary test found the host's executor on PATH","title":"Two internal/cli tests fail locally on unmodified main and pass in CI"}}
 {"ts":"2026-09-23T20:19:00.296633Z","tick":"wne","action":"close","actor":"peter@engelbrecht.dk","data":{"reason":"run epic-wne completed; epic PR #32 merged locally with the tk drivers","title":"Jev classifies a tick's kind of work; config maps work to model"}}
+{"ts":"2026-09-23T20:38:34.063943Z","tick":"ky5","action":"close","actor":"peter@engelbrecht.dk","data":{"reason":"#46","title":"A merge_failed refusal names no conflicting file"}}
