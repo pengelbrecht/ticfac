@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 94,
-  "state": "dispatching",
-  "reason": "dispatching x0k as attempt 10",
-  "updated_at": "2026-09-23T11:10:41Z",
+  "sequence": 95,
+  "state": "running",
+  "reason": "x0k is running as attempt 10",
+  "updated_at": "2026-09-23T11:10:56Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -44,7 +44,8 @@
     },
     {
       "tick_id": "x0k",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 10
     },
     {
       "tick_id": "sj2",
