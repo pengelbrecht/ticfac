@@ -3,7 +3,7 @@
   "title": "TestNewRefusesAnUnconfiguredDoor reads the host's environment",
   "description": "FOUND 2026-09-23 by the first pi smoke run to reach the gate (run_0d2edef252834a40b89deabbd0ffec69): the integrated Go gate ran INSIDE the factory container and failed\n\n    --- FAIL: TestNewRefusesAnUnconfiguredDoor\n        executor_test.go:519: a client with no factory to ask was built\n        executor_test.go:522: a client with no run credential was built\n    (internal/exec/cloudflaresandbox, from tick keh)\n\nThe test asserts that a client with no factory URL and no run credential is refused. In a factory container both ARE set in the environment (the container is a run), so the constructor finds them and builds a client. The test is measuring its host, not the code - the same class as TestRunEpicFailsClosed and the git-maintenance fixtures fixed on 2026-09-22.\n\nAbsorbed into xte because it gates xte's done: no cloud run can close a tick while the gate is red in the container, and every cloud gate runs in the container. Fix by CONSTRUCTING the unconfigured case (clear or override the variables with t.Setenv) rather than inheriting it.",
   "notes": "2026-09-23 07:50 - ticfac run epic-xte: attempt 13 reported a finding drafted for triage — proposed-tick \"internal/runstate maintenance fixture's control leg reads the host's git, red at base on this host\" (key ec119c6dd689d9a117aa18f4fdf8d1073902fa89c9cb704b67fc1716ac23db88, severity medium, for this repository). Triage with `ticfac finding xte ec119c6dd689d9a117aa18f4fdf8d1073902fa89c9cb704b67fc1716ac23db88 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 07:52 - ticfac run epic-xte: attempt 13 merged into epic/xte as 84ecc8194e51; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "bug",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "The test clears or overrides the factory URL and run-credential variables it depends on, so it passes both on a laptop and inside a factory container with them set; proven by running it with the variables exported",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T05:27:19.746648Z",
-  "updated_at": "2026-09-23T05:52:29.543818Z",
-  "started_at": "2026-09-23T05:33:32.307259Z"
+  "updated_at": "2026-09-23T05:52:36.457297Z",
+  "closed_at": "2026-09-23T05:52:36.457297Z"
 }
