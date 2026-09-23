@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 124,
+  "sequence": 125,
   "state": "running",
-  "reason": "the epic PR #32 (epic/wne → main) is open; close-out of wne waits on CI",
-  "updated_at": "2026-09-23T19:22:09Z",
+  "reason": "no check runs yet on the epic PR #32; the close-out of wne waits for CI to appear",
+  "updated_at": "2026-09-23T19:22:16Z",
   "ticks": [
     {
       "tick_id": "0ju",
