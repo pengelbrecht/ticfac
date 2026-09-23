@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 104,
-  "state": "gating",
-  "reason": "running the integrated gate for x0k on 2ecf27d097fb",
-  "updated_at": "2026-09-23T13:17:20Z",
+  "sequence": 105,
+  "state": "publishing",
+  "reason": "closing x0k behind the integrated gate on 2ecf27d097fb",
+  "updated_at": "2026-09-23T13:18:32Z",
   "ticks": [
     {
       "tick_id": "0ju",
