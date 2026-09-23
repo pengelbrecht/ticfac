@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "uqi",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-23T21:16:22Z",
+  "triaged_at": "2026-09-23T21:27:14Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pengelbrecht/ticks:ymg",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "uqi",
