@@ -160,12 +160,25 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	terminal := ""
 	followCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// The '<tick>#<n>' prefix names the tick's own TRY (tick h58), not the
+	// run-wide dispatch number the line's `attempt` field carries: "w9b#5"
+	// read as w9b's fifth try when it was its third. The try is counted from
+	// the feed's own lines, and the WHOLE standing feed is counted before the
+	// first line prints — a watch that joins a live run past its earlier
+	// incarnations still counts the tries those incarnations dispatched.
+	var tries runfeed.Tries
+	for _, line := range located {
+		tries.Observe(line.Event)
+	}
 	print := func(event runfeed.Event) {
+		tries.Observe(event)
 		who := "run"
 		if event.TickID != nil && *event.TickID != "" {
 			who = *event.TickID
 			if event.Attempt != nil {
-				who = fmt.Sprintf("%s#%d", who, *event.Attempt)
+				if try, ok := tries.Of(who, *event.Attempt); ok {
+					who = fmt.Sprintf("%s#%d", who, try)
+				}
 			}
 		}
 		fmt.Fprintf(stdout, "%s %-12s %s: %s\n", clockOf(event.At), who, event.Stage, event.Detail)
@@ -174,19 +187,25 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			// tick, which attempt, why — all read off the line's own fields,
 			// never out of its prose — and the command that moves the hold on.
 			held = true
-			tick, attempt := "-", "-"
+			tick, attempt, what := "-", "-", "-"
 			if event.TickID != nil {
 				tick = *event.TickID
+				what = "tick " + tick
 			}
 			if event.Attempt != nil {
+				// The settle command is addressed by the run-wide dispatch
+				// number — the attempt's identity — so that is the number the
+				// command carries; the sentence leads with the tick's try.
 				attempt = strconv.Itoa(*event.Attempt)
+				try, _ := tries.Of(tick, *event.Attempt)
+				what = reconcile.AttemptLabel(tick, try, *event.Attempt)
 			}
-			fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING tick %s (attempt %s) for a person:\n%s\n"+
+			fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
 				"Nothing proceeds until somebody decides. Release it with `ticfac settle <epic-id> %s %s "+
-				"--release \"<who>\"` — add --carry-work to base the next attempt on the commits the released "+
-				"attempt left — or answer what the tick is waiting for. The evidence is on the integration "+
-				"branch, not in this line.\n\n",
-				runID, tick, attempt, event.Detail, tick, attempt)
+				"--release \"<who>\"` — add --carry-work to base the "+
+				"next try on the commits the released one left — or answer what the tick is waiting for. The "+
+				"evidence is on the integration branch, not in this line.\n\n",
+				runID, what, event.Detail, tick, attempt)
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {
 			// The run's own last word ends the watch: a watcher must not

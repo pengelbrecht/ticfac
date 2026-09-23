@@ -165,7 +165,7 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
 		_, _, _ = r.git.try(dir, "merge", "--abort")
 		return "", r.refuse(RefusedMerge, tick,
-			"attempt %d of %s does not merge onto %s: %s", attempt, tick, r.branch,
+			"%s does not merge onto %s: %s", r.attemptName(tick, attempt), r.branch,
 			describeMergeFailure(stdout, stderr, unmerged, err))
 	}
 	return r.git.run(dir, "rev-parse", "HEAD")

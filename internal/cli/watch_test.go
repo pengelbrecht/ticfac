@@ -39,7 +39,7 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 	}
 	// What surfaces names WHICH TICK and WHY — the acceptance criterion —
 	// and says what moves the hold on, carry and all.
-	for _, want := range []string{"nkf", "attempt 3", "attempt_unaddressed", "--carry-work", "settle"} {
+	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle <epic-id> nkf 3 ", "attempt_unaddressed", "--carry-work", "settle"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("the alert does not name %q: %q", want, stderr.String())
 		}
@@ -48,6 +48,36 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 	// whole run, and the hold is visible on stdout too.
 	if !strings.Contains(stdout.String(), reconcile.StageRunHeld) {
 		t.Errorf("the held line never printed on stdout: %q", stdout.String())
+	}
+}
+
+// The '<tick>#<n>' prefix is the tick's own TRY (tick h58), not the run-wide
+// dispatch number the line's `attempt` field carries. The operator's run: 0ju
+// was dispatch 1, mrn 2, and w9b 3, 4 and 5 — so dispatch 5 is w9b#3, and a
+// prefix that said w9b#5 read as w9b's fifth try.
+func TestWatchPrefixShowsTheTicksTry(t *testing.T) {
+	repo := t.TempDir()
+	at := time.Date(2026, 9, 22, 17, 0, 0, 0, time.UTC)
+	for i, tick := range []string{"0ju", "mrn", "w9b", "w9b", "w9b"} {
+		n := i + 1
+		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(at.Add(time.Duration(i)*time.Minute), "r-1", tick, &n,
+			"dispatched", fmt.Sprintf("dispatch %d", n)))
+	}
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(at.Add(time.Hour), "r-1", "", nil, "run_finished", "completed"))
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit code %d; stderr %q", code, stderr.String())
+	}
+	for _, want := range []string{"0ju#1 ", "mrn#1 ", "w9b#1 ", "w9b#2 ", "w9b#3 "} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("the watch never printed the prefix %q: %q", want, stdout.String())
+		}
+	}
+	for _, unwanted := range []string{"w9b#4", "w9b#5", "mrn#2"} {
+		if strings.Contains(stdout.String(), unwanted) {
+			t.Errorf("the watch prefixed a line with the run dispatch number %q: %q", unwanted, stdout.String())
+		}
 	}
 }
 
@@ -132,7 +162,7 @@ func TestWatchFollowsUntilTheRunEnds(t *testing.T) {
 	if got != ExitHeld {
 		t.Fatalf("exit code %d, want %d", got, ExitHeld)
 	}
-	if !strings.Contains(stderr.String(), "HOLDING tick a1") {
+	if !strings.Contains(stderr.String(), "HOLDING a1 try 1 (run dispatch #2)") {
 		t.Errorf("the alert does not name the held tick: %q", stderr.String())
 	}
 }
@@ -252,15 +282,15 @@ func TestWatchStartedWhileTheRunHoldsReportsTheHoldItJoined(t *testing.T) {
 	// whole point, and it must not wait for the terminal line to say it.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if strings.Contains(stderr.String(), "HOLDING tick a2") {
+		if strings.Contains(stderr.String(), "HOLDING a2 try 1 (run dispatch #2)") {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if !strings.Contains(stderr.String(), "HOLDING tick a2") {
+	if !strings.Contains(stderr.String(), "HOLDING a2 try 1 (run dispatch #2)") {
 		t.Fatalf("the watch never reported the hold it joined: stderr %q stdout %q", stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "attempt 2") || !strings.Contains(stderr.String(), "attempt_unaddressed") {
+	if !strings.Contains(stderr.String(), "settle <epic-id> a2 2 ") || !strings.Contains(stderr.String(), "attempt_unaddressed") {
 		t.Errorf("the alert does not name the held attempt and why: %q", stderr.String())
 	}
 
