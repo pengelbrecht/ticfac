@@ -62,7 +62,7 @@ test:
 # notably for the drift guards that read .tick/runners.toml by absolute path,
 # which are the one place caching is known to be able to serve a stale pass.
 gate:
-	go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
 # The TypeScript half of the gate (tick odc). Kept as its own target, and its
 # own [testing.commands] entry, so each check records its own evidence and a

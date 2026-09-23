@@ -1,0 +1,17 @@
+{
+  "id": "l6t",
+  "title": "Delete the wave path: the Workflow no longer fans ticks out to worker containers",
+  "description": "OPERATOR, 2026-09-23: reconcile the orchestrators and executors - one orchestrator (ticfac run-epic), one cloud worker path (cloudflare-sandbox).\n\nThe wave path is a SECOND per-tick-container mechanism. ticfac cloud run --tick-ids makes the Run Workflow itself fan ticks out to worker containers (run-workflow.ts superviseWaveLoop, the CloudWavePlan built in the run context, worker-dispatch.ts / worker-boot.ts driving image/worker.sh). That is the Workflow ORCHESTRATING - choosing what runs and when - which yoh's own done forbids ('the Workflow only boots, budgets, watches, retries and finalizes'). Its replacement exists: ticfac run-epic in the container dispatches through the cloudflare-sandbox executor (keh) and the Worker's dispatch door (8ty). So under the gvc criterion this gates yoh's goal.\n\nDELETE: the --tick-ids submission field and ticfac cloud run's flag, the CloudWavePlan branch and superviseWaveLoop, and whatever in worker-dispatch.ts / worker-boot.ts only the wave path uses.\n\nKEEP, and this is the trap: the sandbox machinery the dispatch DOOR reuses. 8ty's route drives sandbox-executor.ts (namedSandbox, findWorkProcess, spawnWorker); some of that is shared with the wave path. Trace every caller before deleting a function - a function the door calls stays even if the wave path called it too.\n\nNote what depends on it today: the one-tick smoke runs of 2026-09-22/23 used --tick-ids. After this tick a one-tick smoke is simply an epic with one tick, run through the one path that remains - which is the point. image/worker.sh is VENDORED from ticks and ticfac does not edit image/; if the per-tick sandbox no longer launches worker.sh at all, say so in the report rather than editing it.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "cr4"
+  ],
+  "parent": "yoh",
+  "acceptance_criteria": "The Run Workflow dispatches no per-tick worker containers itself; ticfac cloud run has no --tick-ids; every function the cloudflare-sandbox dispatch door calls still exists and its tests pass; a one-tick epic runs to its gate through ticfac run-epic and the door; and the full Go and TypeScript suites pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T10:49:08.512024Z",
+  "updated_at": "2026-09-23T10:49:08.512024Z"
+}
