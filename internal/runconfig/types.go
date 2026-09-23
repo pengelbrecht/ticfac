@@ -283,6 +283,37 @@ type TierVariant struct {
 //     There is deliberately one vocabulary, and it is not "retry
 //     immediately": a 429 is a transient burst limit, and immediate retries
 //     convert a pause into a dead worker.
+//
+// The classification-routing cells (tick s45, epic wne) — the three fields
+// that let a RECORDED classification start a first attempt dearer than the
+// Default, which is the one narrowing of "nothing starts high on a
+// description" this table ever makes:
+//
+//   - DearWorkTypes are the work types whose combined probability mass in a
+//     recorded classification routes a first attempt to DearTier. With
+//     today's two-model lineup that is diagnosis and design — the work a
+//     dear model is for. Each name is validated against the closed work-type
+//     enum: an invented work type, or a model id written where a work type
+//     belongs, is refused at the key.
+//   - DearTier is the tier the dear model serves: where a first attempt
+//     whose dear mass clears MassThreshold starts. It is validated to be
+//     above the Default (a promotion, never a demotion) and at or below the
+//     Ceiling — the ceiling still bounds everything, and at the ceiling the
+//     next actor is a person, not a bigger model.
+//   - MassThreshold is the probability mass on the dear work types that
+//     clears the routing: strictly greater routes dear, anything else falls
+//     back to the start policy exactly as an absent classification does. It
+//     is ONE tunable where argmax-plus-a-confidence-floor would be two.
+//
+// THE THRESHOLD IS PROVISIONAL, AND SAYS SO WHEREVER IT IS WRITTEN: the 0.50
+// default is a starting point from ONE measurement (49 closed ticks,
+// 2026-09-22, epic wne), not a finding. That sample could not validate the
+// flash/full boundary — every tick in it ran at its role's base model with
+// no [tier_policy] declared, and its retries were wall-clock and hold
+// failures rather than capability failures — so the boundary can only be
+// settled by running an epic with the policy ON and re-tuning against the
+// recorded classifications, which is exactly why a record carries the full
+// distribution rather than the argmax.
 type TierPolicy struct {
 	Default     Tier             `toml:"default"`
 	Ceiling     Tier             `toml:"ceiling"`
@@ -292,6 +323,13 @@ type TierPolicy struct {
 	Roles       map[string]Tier  `toml:"roles"`
 	Concurrency map[string]int   `toml:"concurrency"`
 	RateLimit   *TierRateLimit   `toml:"rate_limit"`
+	// The classification-routing cells. An empty DearWorkTypes (the whole
+	// trio omitted) is the legitimate stance of a repository that routes no
+	// classification anywhere: a recorded classification then promotes
+	// nothing, and the ladder is exactly what it was.
+	DearWorkTypes []WorkType `toml:"dear_work_types"`
+	DearTier      Tier       `toml:"dear_tier"`
+	MassThreshold float64    `toml:"mass_threshold"`
 }
 
 // TierStartRule is one first-attempt rule of [[tier_policy.start]], in file

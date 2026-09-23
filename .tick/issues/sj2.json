@@ -2,10 +2,11 @@
   "id": "sj2",
   "title": "Classify only at a role-less tick's first dispatch",
   "description": "Triaged 2026-09-23 from wne's close-out. wne's done says Jev is asked ONCE per tick and later passes read the record. c0102b2d: a later attempt that finds no record must not ask - asking then makes a re-derivation reach a different dispatch than the run it reconstructs (axiom 1).",
-  "status": "open",
+  "notes": "2026-09-23 16:14 - ticfac run epic-wne: attempt 11 reported a finding drafted for triage — defect \"make test fails at base: TestTheBuiltBinaryExitsTwo gets exit 1 (gate config read) where it wants exit 2 (no executor configured)\" (key be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b, severity medium, for this repository). Triage with `ticfac finding wne be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 16:14 - ticfac run epic-wne: attempt 11 reported a finding drafted for triage — defect \"make test fails at base: runstate maintenance test's control fetch starts no auto maintenance on this host\" (key bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c, severity low, for this repository). Triage with `ticfac finding wne bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 16:17 - ticfac run epic-wne: attempt 11 merged into epic/wne as f88fb7544219; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "x0k"
   ],
@@ -13,5 +14,6 @@
   "acceptance_criteria": "A later attempt of a tick with no classification record does not call the classifier and falls back as the policy says; a test drives it; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.260313Z",
-  "updated_at": "2026-09-23T10:57:51.260313Z"
+  "updated_at": "2026-09-23T14:17:31.063611Z",
+  "closed_at": "2026-09-23T14:17:31.063611Z"
 }

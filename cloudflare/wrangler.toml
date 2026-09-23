@@ -174,6 +174,17 @@ GITHUB_CONSENT_LABEL = "tk"
 # here and redeploys — a stored key is not an opt-in.
 #
 #   GATEWAY_ALLOWED_PROVIDERS = "anthropic"
+#
+# `jev` — the classifier route (tick x0k, epic wne) — is opted into the same
+# way and for the same reason: TypeSafe bills in cash, so a deployment that
+# wants its runs to classify names it, puts the key in a Worker secret
+# (`wrangler secret put TYPESAFE_API_KEY`, never in this tracked file), and
+# redeploys. Without the opt-in a cloud run's classification calls stop at a
+# 403 naming this variable, and the run degrades to [tier_policy.start]:
+# a run that classifies nothing is a documented degradation, a run that spends
+# cash nobody opted into is not.
+#
+#   GATEWAY_ALLOWED_PROVIDERS = "jev"
 
 # Budget enforcement lives in the Run Workflow, never in a prompt (D14): a model
 # can be talked out of a budget, a Workflow step cannot. Both numbers are
@@ -240,6 +251,35 @@ FACTORY_MAX_INSTANCES = "3"
 #
 #   RUN_WORKER_MODEL = "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"
 #   RUN_WORKER_HARNESS = "omp"
+
+# What a CLASSIFIED work type costs on this deployment (tick mrn, epic wne):
+# which model serves each kind of work. The vocabulary — mechanical,
+# translation, construction, diagnosis, design, on the axis of how much of
+# the work is working out what to do rather than doing it — is the
+# REPOSITORY's, closed in internal/runconfig; this table is the FACTORY's,
+# the same kind of fact as RUN_WORKER_MODEL above and SWEEP_MAX_TIER below,
+# because the factory owns the gateway and a repository cannot name a model
+# it does not serve.
+#
+# The two documents are deliberately separable, which is the whole point: a
+# classification records a WORK TYPE, never a model, so re-tuning this table —
+# swapping the lineup, changing your mind about flash — cannot invalidate a
+# recorded classification. "This is a docs tick" stays true; "this deserves
+# flash" was only ever true against one lineup.
+#
+# One `worktype=model` pair per entry, comma-separated. A work type with no
+# mapping here falls back to the deployment's default (the run-submission >
+# RUN_WORKER_MODEL > built-in-default chain) AND SAYS SO in the dispatch's
+# own record — failing a dispatch on a table someone forgot to extend is the
+# wrong failure. A key outside the five is refused by the closed enum, never
+# silently ignored.
+#
+# With today's two models (the spellings the repository's own routing pins,
+# .tick/runners.toml [roles.implement]): cheap work is glm-5.3-flash, dear
+# work is glm-5.3. `construction` is deliberately the contentious one — the
+# boundary case, where the failure ladder earns its keep rather than where
+# classification has to be right.
+RUN_WORKER_MODEL_BY_WORK_TYPE = "mechanical=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash,translation=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash,construction=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash,diagnosis=cloudflare-workers-ai/@cf/zai-org/glm-5.3,design=cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 
 # Where a run's live `run_event` stream is forwarded so a board can draw it
 # (tick bne). Left unset on purpose: a factory is self-deployed into the

@@ -749,6 +749,16 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       RUN_MAX_WALL_CLOCK_MS: "14400000",
       RUN_QUEUE_TTL_MS: "1800000",
       RUN_STOP_GRACE_MS: "300000",
+      // The work-type to model table (tick mrn, epic wne): what a classified
+      // work type costs on this deployment. The vocabulary it keys on is the
+      // repository's closed enum; this is the factory's price list, pinned
+      // here for the same reason as every other number that governs a run.
+      RUN_WORKER_MODEL_BY_WORK_TYPE:
+        "mechanical=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "translation=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "construction=cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash," +
+        "diagnosis=cloudflare-workers-ai/@cf/zai-org/glm-5.3," +
+        "design=cloudflare-workers-ai/@cf/zai-org/glm-5.3",
       SIGNAL_COMMIT_RETRY_MS: "250",
       SWEEP_MAX_PROJECTS: "4",
       SWEEP_MAX_TICKS: "5",
@@ -760,8 +770,11 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // Deliberate, and documented in wrangler.toml: an unset
     // GATEWAY_ALLOWED_PROVIDERS is `workers-ai` alone — the rung billed to the
     // operator's own Cloudflare account rather than to a card — and an unset
-    // RUN_WORKER_* leaves WORKER_DEFAULT_*. Setting one of these is a
-    // deployment decision about spend, so a value appearing here is news.
+    // RUN_WORKER_MODEL/RUN_WORKER_HARNESS leaves WORKER_DEFAULT_*. (The
+    // RUN_WORKER_MODEL_BY_WORK_TYPE table above is the deliberate exception
+    // among RUN_WORKER_*: it is the per-work-type price list, not a single
+    // standing route.) Setting one of these is a deployment decision about
+    // spend, so a value appearing here is news.
     const vars = env as unknown as Record<string, unknown>;
     for (const name of [
       "GATEWAY_ALLOWED_PROVIDERS",

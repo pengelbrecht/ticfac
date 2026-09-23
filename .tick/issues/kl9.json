@@ -2,13 +2,15 @@
   "id": "kl9",
   "title": "The TypeScript run-state store accepts the classification decision record",
   "description": "Triaged 2026-09-23 from wne's close-out. The Go reconciler writes a classify-tick decision record the TypeScript run-state store throws on (7ef948eb), so any record the Worker reads back from a run that classified breaks it.",
-  "status": "open",
+  "notes": "2026-09-23 14:13 - ticfac run epic-wne: attempt 9 reported a finding drafted for triage — defect \"Full Go suite fails locally on two pre-existing tests (already tracked as ticks yjs and pqs)\" (key de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b, severity low, for this repository). Triage with `ticfac finding wne de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 14:15 - ticfac run epic-wne: attempt 9 merged into epic/wne as 87dc2de1ef6d; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "wne",
   "acceptance_criteria": "The TS run-state store parses a classify-tick decision record as the Go side writes it, proven by a shared fixture both sides test against; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.237903Z",
-  "updated_at": "2026-09-23T10:57:51.237903Z"
+  "updated_at": "2026-09-23T12:16:06.132969Z",
+  "closed_at": "2026-09-23T12:16:06.132969Z"
 }

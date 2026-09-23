@@ -1,0 +1,77 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "wne",
+    "job_id": "run-epic-wne/tick-0mp/attempt-8",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "d6f976061ee652323d55b6485b2fabd6110eac87",
+    "tick_id": "0mp"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "wne proved the classification mechanism but not the boundary: the 0.50 mass threshold and construction's side of the flash/full line rest on a 49-tick sample that ran with no tier_policy, where every retry was a wall-clock or hold failure. Run one epic with dear_work_types/dear_tier/mass_threshold declared and a real classifier wired, count flash-start failures that pass on the next rung as capability failures, and re-tune the threshold against that run's recorded distributions. Depends on the credential decision (c6f918cc) and on fixing first-dispatch-only classification (c0102b2d) and concurrency sizing (df6304e5); declaring the cells spends money, so the operator must approve it.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Settle the flash/full boundary: run one epic with [tier_policy] classification routing ON and re-tune mass_threshold"
+      },
+      {
+        "body": "wne's notes flagged this conflict to settle before building, and it was not settled: mrn added the factory's RUN_WORKER_MODEL_BY_WORK_TYPE table, while the local path routes classification through dear_tier into the repo's [roles.*.tiers] overlays. Two sources can now name a model for the same work. The options are (a) the factory wins, (b) the repo may override within what the factory serves, or (c) the repo declares work types only. Which one depends on whether enrolled repos really need different models, so it is an operator decision on architecture that outlives this epic.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Decide who owns work-type to model: factory table, repo [roles.*.tiers] overlays, or both (wne options a/b/c)"
+      },
+      {
+        "body": "bse's acceptance says it reuses the existing Jev client to classify a finding against an epic's own acceptance items plus 'none'. internal/jev is hard-wired to the five work types: fixed criteria in wire.go and results typed as runconfig.WorkType. bse needs a generic Choice over caller-supplied options with the same no-answer semantics, either in its own scope or as a tick in the wave before it (a vocabulary and its consumer belong in different waves).",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "gvc/bse: internal/jev only knows the work-type Choice; generalise it before bse classifies findings against [A<n>] items"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-wne/tick-0mp/attempt-8",
+      "commits": 1,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-wne/0mp/RESULT-0mp.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the final review's NOT READY is still unanswered in code: two confirmed medium gaps (c0102b2d, a restart can ask the classifier after attempt 1; df6304e5, concurrency ignores promoted starts) touch done items 3 and 6. No production run classifies anything yet (no classifier wired, no dear cells declared), and the flash/full threshold is still provisional."
+  },
+  "validated": true,
+  "requested_at": "2026-09-23T05:51:24Z",
+  "answered_at": "2026-09-23T05:51:24Z",
+  "provenance": {
+    "run_id": "epic-wne",
+    "tick_id": "0mp",
+    "attempt": 8,
+    "source_ref": "refs/heads/epic/wne",
+    "source_sha": "d6f976061ee652323d55b6485b2fabd6110eac87",
+    "integration_ref": "refs/heads/epic/wne",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "model": "opus",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

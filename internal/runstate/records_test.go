@@ -314,3 +314,52 @@ func shortWhy(why string) string {
 	}
 	return strings.ReplaceAll(strings.TrimSpace(why), " ", "-")
 }
+
+// The classification exchange's decision record (tick w9b). The decision
+// record's `role` field is where a record states WHICH exchange it is: a
+// role-job exchange uses $defs.role's closed values, and the classifier is a
+// reconciler-side exchange that enum has no value for — its provenance states
+// role as null, the "no dispatch produced this" reading the contract allows —
+// so the record's own vocabulary gains exactly one value, here, and stays
+// closed: a decision claiming a role nothing produces is still refused.
+// short: record validation, no repository is built
+func TestTheClassificationDecisionValidatesAndARoleNothingProducesIsRefused(t *testing.T) {
+	p := testProvenance(PhaseWorker)
+	p.Role = nil
+	p.Model = Ptr("jev-1")
+	classification := Decision{
+		SchemaVersion: SchemaVersion,
+		Decision:      1,
+		Role:          RoleClassifyTick,
+		Request:       map[string]any{"tick_id": "w9b", "question": "which work type is this tick"},
+		Response:      map[string]any{"choice": "construction", "probabilities": map[string]any{"mechanical": 0.02}},
+		Validated:     true,
+		RequestedAt:   "2026-09-22T16:13:00Z",
+		AnsweredAt:    "2026-09-22T16:13:00Z",
+		Provenance:    p,
+	}
+	if err := classification.Validate(); err != nil {
+		t.Fatalf("a classification decision did not validate: %v", err)
+	}
+	if !contains(DecisionRoles(), RoleClassifyTick) {
+		t.Errorf("DecisionRoles is %v and does not carry the classification exchange", DecisionRoles())
+	}
+	for _, role := range Roles {
+		if !contains(DecisionRoles(), role) {
+			t.Errorf("DecisionRoles is %v and dropped the role-job value %q", DecisionRoles(), role)
+		}
+	}
+
+	mistaken := testDecision(2, "proceed")
+	mistaken.Role = "classify-epic"
+	if err := mistaken.Validate(); err == nil {
+		t.Error("a decision whose role is neither a role-job's nor the classification's was accepted")
+	}
+
+	// The provenance of a classification names no dispatch, and the enum it
+	// would have named a role from has no value for it: role stays NULL, the
+	// model field carries the identity instead.
+	if p.Role != nil {
+		t.Error("the test built a classification whose provenance claims a role-job produced it")
+	}
+}

@@ -482,6 +482,36 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return handle, executor, adoptableMarker, nil
 	}
 
+	// The classification exchange (tick w9b, epic wne), at the FIRST DISPATCH
+	// of a role-less tick and nowhere else: Jev is asked once per tick, the
+	// answer — the full probability distribution and the model identity — is
+	// written to the run branch as a decision record before anything is
+	// dispatched on top of it, and every later pass (including a cold
+	// re-derivation from git) reads the record instead of re-asking. It sits
+	// after the adoption walk on purpose: an attempt this run already
+	// dispatched was planned under whatever its incarnation knew, and an
+	// adopted attempt is never re-planned.
+	//
+	// The ask itself is bounded to the FIRST dispatch (tick sj2): a later
+	// attempt that finds no record does not ask — the first attempt was
+	// planned under nothing, and asking after the fact would make the
+	// re-derivation of this run reach a different dispatch than the run it
+	// reconstructs — it routes at the start policy exactly as the first
+	// attempt did, and nothing is recorded.
+	//
+	// The record is an INPUT to the dispatch's own derivation (tick s45): the
+	// mass rule routes the start tier on the probability mass over the
+	// policy's dear work types, an absent or no-answer record falls back to
+	// the start policy, and the ladder and the ceiling still bound whatever
+	// the classifier chose. A nil classification here is that fallback, not
+	// an error: the exchange's degradations are by design.
+	var classification *RecordedClassification
+	if entry.Role == "implement-tick" {
+		if classification, err = r.classificationFor(ctx, entry, len(mine) == 0); err != nil {
+			return nil, nil, attemptHandle{}, err
+		}
+	}
+
 	number := nextAttemptNumber(attempts)
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
 		// The tick's own try for this dispatch (tick vw0): the same number the
@@ -490,7 +520,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		// attempt's identity; this one is its ordinal among the tick's own
 		// tries, and the two only coincide when nothing was dispatched first.
 		try := tryOf(attempts, tick, number)
-		dispatch, marker, err := r.planDispatch(entry, number, try, failed, carry)
+		dispatch, marker, err := r.planDispatch(entry, number, try, failed, carry, classification)
 		if err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
@@ -937,16 +967,17 @@ func (r *Reconciler) startFailure(tick string, err error) error {
 }
 
 // planDispatch decides everything about a dispatch before the executor is
-// asked for anything — the DERIVED TIER first (tick 5eq), then the budget,
-// which is clamped here so the job is issued the number that will govern.
-// It runs BEFORE the marker is written and the tick is claimed, so a refusal
-// here (a tier label the config cannot honour, say) spends nothing and
-// claims nothing.
-func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carry *carriedWork) (Dispatch, attemptHandle, error) {
+// asked for anything — the DERIVED TIER first (tick 5eq; since tick s45
+// derived from the recorded classification too, by probability mass over
+// the policy's dear work types), then the budget, which is clamped here so
+// the job is issued the number that will govern. It runs BEFORE the marker
+// is written and the tick is claimed, so a refusal here (a tier label the
+// config cannot honour, say) spends nothing and claims nothing.
+func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carry *carriedWork, classification *RecordedClassification) (Dispatch, attemptHandle, error) {
 	// Where the orchestrator stops choosing and starts deriving: the tier is
 	// a pure function of the tick's facts, this attempt's durable state and
 	// the declared policy — never a per-dispatch judgement, never a hunch.
-	tier, reason, err := r.deriveTier(entry, number, failed)
+	tier, reason, err := r.deriveTier(entry, number, failed, classification)
 	if err != nil {
 		// The loud refusal: the tick AND the label, never a silent fall-back
 		// to the default — a label is a weakly typed field the tracker cannot

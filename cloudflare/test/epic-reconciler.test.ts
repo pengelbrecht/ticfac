@@ -23,6 +23,7 @@ import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test"
 import { describe, expect, it } from "vitest";
 
 import runStateContract from "../../contracts/ticfac-run-state.json";
+import { finalReviewOf } from "../src/closeout";
 import {
   type AttemptExecutor,
   type AttemptHandle,
@@ -46,18 +47,23 @@ import {
   attemptPath,
   type Checkpoint,
   checkpointPath,
+  DECISION_ROLES,
+  type DecisionRecord,
   decisionPath,
   provenance,
+  ROLE_CLASSIFY_TICK,
   ROLES,
   RUN_STATE_SCHEMA_VERSION,
   RUN_STATES,
   RunStateStore,
   TICK_STATES,
   terminalState,
+  validateDecision,
 } from "../src/run-state-store";
 import { attemptSandboxName } from "../src/sandbox-executor";
 import { encodeTick, type Tick, TrackerClient } from "../src/tracker-client";
 import { attemptLandingBranch } from "../src/worker-boot";
+import classifyTickDecision from "./fixtures/classify-tick-decision.json";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // ------------------------------------------------------------ the contract ---
@@ -801,6 +807,52 @@ describe("the run state store, against the pinned contract", () => {
       store.recordDecision({ decision: 2, ...exchange, role: "not-a-role" as never }),
     ).rejects.toThrow(/role/);
     expect(await contents.read(decisionPath(RUN_ID, 2))).toBeNull();
+  });
+
+  it("reads a classify-tick decision record exactly as the Go reconciler writes it", async () => {
+    // The bundle leaves the decision record's own `role` a free string each
+    // reader closes. This side had closed it with $defs.role alone — the
+    // vocabulary of roles a DISPATCH carries — so the classification
+    // exchange's record, which no dispatch produced, made this store THROW on
+    // a run that had classified: the Worker read its own durable state and
+    // refused it. The fixture is pinned byte for byte from the real exchange
+    // by internal/reconcile, and both stores test against the same pin — so
+    // neither side can stay green on a record the other refuses.
+    expect(ROLES, "$defs.role is the dispatch vocabulary").not.toContain(ROLE_CLASSIFY_TICK);
+    expect(DECISION_ROLES).toEqual([...ROLES, ROLE_CLASSIFY_TICK]);
+
+    // The pin parses, validates, and satisfies the pinned schema the golden
+    // examples answer to — a role string the bundle deliberately leaves free
+    // is not a reason to leave its envelope unchecked. (The JSON import's
+    // role reads as the wide `string` TS infers from a document, so the cast
+    // is to the record type, never past the validator: what follows is
+    // checked against validateDecision and the pinned schema, not trusted.)
+    const record = classifyTickDecision as unknown as DecisionRecord;
+    expect(validateDecision(record)).toBeNull();
+    expectRecordValid(JSON.stringify(record), "decision");
+
+    // And the read that used to throw, through the store the Worker runs: the
+    // fixture's own run id names its directory, exactly as a real run's
+    // records do.
+    const contents = new MemoryContents({
+      [decisionPath(record.provenance.run_id, record.decision)]: JSON.stringify(record, null, 2),
+    });
+    const store = new RunStateStore(contents, {
+      run_id: record.provenance.run_id,
+      epic_id: (record.request as { epic_id: string }).epic_id,
+      now: () => record.answered_at,
+      provenance: record.provenance,
+    });
+    const read = await store.decision(1);
+    expect(read?.role).toBe(ROLE_CLASSIFY_TICK);
+    expect(read?.response).toMatchObject({ choice: "construction", model: "jev-1" });
+    await expect(store.decisions()).resolves.toHaveLength(1);
+
+    // A classification is not a role-job answer: the reconciler's readers key
+    // on role, so the record rides beside the run's own decisions without
+    // ever being adopted as one.
+    expect(isRoleJob(ROLE_CLASSIFY_TICK)).toBe(false);
+    expect(finalReviewOf([read!])).toBeNull();
   });
 
   it("terminal states: completed and cancelled end a run, failed is resumable", () => {
