@@ -727,18 +727,22 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
 	}
+	// The released attempt is named the way every line written for a person
+	// names one (tick h58): the tick's own try first, the run-wide dispatch
+	// number — the one this command was addressed by — labelled after it.
+	released := reconcile.AttemptLabel(settled.TickID, settled.Try, settled.Attempt)
 	if !settled.Recorded {
-		fmt.Fprintf(stdout, "attempt %d of %s was already released by %s; nothing was written\n",
-			settled.Attempt, settled.TickID, settled.ReleasedBy)
+		fmt.Fprintf(stdout, "%s was already released by %s; nothing was written\n",
+			released, settled.ReleasedBy)
 		return 0
 	}
 	if settled.Carried {
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s, "+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s, "+
 			"CARRYING its work:\n"+
 			"the next run dispatches a new attempt based on the released commits at %s, so the next worker "+
 			"starts from them rather than redoing them. The gate still decides — nothing merges unproven — and "+
 			"the new attempt's records state where its work came from.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.CarryRef)
 		return 0
 	}
 	// Where the released work can be found, said plainly (ticfac tick 55i):
@@ -747,21 +751,21 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	// work that was one worktree removal away from gone.
 	switch {
 	case settled.WorkSHA == "":
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt; this one left no commit beyond its base anywhere \u2014 \n"+
 			"add --carry-work to have said otherwise.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID)
 	case settled.WorkDurable:
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt; whatever this one committed is durable at %s on the remote \u2014 \n"+
 			"add --carry-work to have the next attempt start from it instead.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID, settled.WorkRef)
 	default:
-		fmt.Fprintf(stdout, "attempt %d of %s (%s) is released by %s, recorded as decision %d of run %s.\n"+
+		fmt.Fprintf(stdout, "%s (%s) is released by %s, recorded as decision %d of run %s.\n"+
 			"The next run dispatches a new attempt. Whatever this one committed is NOT on the remote: the commits \n"+
 			"are only the LOCAL branch %s in the checkout at %s — the worktree is gone and the teardown kept the \n"+
 			"branch, so that checkout is the only place they exist.\n",
-			settled.Attempt, settled.TickID, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
+			released, settled.State, settled.ReleasedBy, settled.Decision, settled.RunID,
 			settled.WorkRef, settled.WorkIn)
 	}
 	return 0

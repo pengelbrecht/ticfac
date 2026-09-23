@@ -63,8 +63,8 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 	}
 	if integrated != "" {
 		r.record(entry.TickID, StageCollected,
-			"the %s job's attempt %d is already merged into %s at %s; it is not collected a second time",
-			entry.Role, marker.Attempt, r.branch, short(integrated))
+			"the %s job, %s, is already merged into %s at %s; it is not collected a second time",
+			entry.Role, r.attemptName(entry.TickID, marker.Attempt), r.branch, short(integrated))
 		merged, err := r.integrate(marker, nil)
 		if err != nil {
 			r.disposeRefused(handle, executor, marker, err)
@@ -189,9 +189,9 @@ func (r *Reconciler) closeBehindRecordedDecision(ctx context.Context, entry plan
 	}
 	r.setAttempt(tick, attempt)
 	r.record(tick, StageAdopted,
-		"attempt %d (%s) already answered, and its validated %s decision is recorded; the resume closes "+
+		"%s already answered, and its validated %s decision is recorded; the resume closes "+
 			"behind it rather than dispatching the review again",
-		attempt, tick, answer.Status)
+		r.attemptName(tick, attempt), answer.Status)
 
 	// closeRoleTick re-checks the findings gate against ORIGIN, so a triage
 	// that has not happened yet is still a hold — one that stops the run
@@ -506,8 +506,9 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 				"%d untriaged finding(s) ride to the close-out: the tick closes and the hold is the close-out's",
 				carried)
 		}
-		note := fmt.Sprintf("ticfac run %s: the %s job (attempt %d) returned a validated %s envelope at %s — %s: %s",
-			r.runID, answer.Role, marker.Attempt, answer.SchemaID, short(marker.BaseSHA), answer.Status, answer.Summary)
+		note := fmt.Sprintf("ticfac run %s: the %s job, %s, returned a validated %s envelope at %s — %s: %s",
+			r.runID, answer.Role, r.attemptName(tick, marker.Attempt), answer.SchemaID, short(marker.BaseSHA),
+			answer.Status, answer.Summary)
 		if _, err := r.tracker.Note(ctx, tick, note); err != nil {
 			return fmt.Errorf("note the %s answer on %s: %w", answer.Role, tick, err)
 		}

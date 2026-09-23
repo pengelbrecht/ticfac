@@ -149,8 +149,8 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 	}
 	if integrated != "" {
 		r.record(tick, StageCollected,
-			"attempt %d is already merged into %s at %s; it is not collected a second time",
-			marker.Attempt, r.branch, short(integrated))
+			"%s is already merged into %s at %s; it is not collected a second time",
+			r.attemptName(tick, marker.Attempt), r.branch, short(integrated))
 		// Nothing was collected, so nothing is durable that was not already:
 		// this attempt's worker is held to the end, exactly as it was before,
 		// and the close retires it. There is no evidence to stand the early
@@ -246,10 +246,10 @@ func (r *Reconciler) releaseWorker(f *finishing) {
 	}
 	f.released = true
 	r.tearDown(fl.handle, fl.executor, fl.marker, fmt.Sprintf(
-		"attempt %d of %s is collected: its commits are on %s and its report is archived beside its attempt "+
+		"%s is collected: its commits are on %s and its report is archived beside its attempt "+
 			"record, so the worker is finished and its credential and worktree go now rather than after an "+
 			"integrate, a gate and a close it is no part of. The branch is kept; the close retires it",
-		fl.marker.Attempt, fl.marker.TickID, r.opts.Remote), true)
+		r.attemptName(fl.marker.TickID, fl.marker.Attempt), r.opts.Remote), true)
 }
 
 // disposeFinished is disposeRefused for a finish whose worker may already be
@@ -271,9 +271,9 @@ func (r *Reconciler) disposeFinished(f *finishing, err error) {
 		return
 	}
 	r.record(f.fl.marker.TickID, StageCleanedUp,
-		"attempt %d of %s was refused (%s): %s. Its worktree and credential went when it was collected; its "+
+		"%s was refused (%s): %s. Its worktree and credential went when it was collected; its "+
 			"branch is still there, with the commits the refusal is about",
-		f.fl.marker.Attempt, f.fl.marker.TickID, refusal.Reason, firstLine(refusal.Message))
+		r.attemptName(f.fl.marker.TickID, f.fl.marker.Attempt), refusal.Reason, firstLine(refusal.Message))
 }
 
 // The blocking finish driver that used to live here — finishTick, and

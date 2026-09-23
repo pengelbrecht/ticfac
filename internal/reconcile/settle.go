@@ -98,9 +98,13 @@ const settleRole = "triage-failure"
 
 // Settlement is what a settlement did, for the operator who asked for it.
 type Settlement struct {
-	RunID      string
-	TickID     string
-	Attempt    int
+	RunID   string
+	TickID  string
+	Attempt int
+	// Try is the tick's own try the released attempt was (tick h58): the
+	// number a person reads first. Attempt is the run-wide dispatch number,
+	// the attempt's identity and the one `ticfac settle` is addressed by.
+	Try        int
 	ReleasedBy string
 
 	// State is the executor's last word about the attempt at the moment it was
@@ -217,17 +221,17 @@ func (r *Reconciler) keepReleaseIdentity(marker attemptHandle, by, at string) er
 		Handle: releaseHandle(by), ReleasedBy: by, At: at,
 	})
 	if err != nil {
-		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s: %w",
-			marker.Attempt, marker.TickID, err)
+		return fmt.Errorf("reconcile: keep the release identity for %s: %w",
+			r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	path := r.releaseRecordPath(marker.TickID, marker.Attempt)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
-			"repository: %w", marker.Attempt, marker.TickID, err)
+		return fmt.Errorf("reconcile: keep the release identity for %s outside the "+
+			"repository: %w", r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
-		return fmt.Errorf("reconcile: keep the release identity for attempt %d of %s outside the "+
-			"repository: %w", marker.Attempt, marker.TickID, err)
+		return fmt.Errorf("reconcile: keep the release identity for %s outside the "+
+			"repository: %w", r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	return nil
 }
@@ -323,11 +327,11 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("reconcile: run %s has no attempt %d on %s: there is nothing under that number to "+
+		return nil, fmt.Errorf("reconcile: run %s has no run dispatch #%d on %s: there is nothing under that number to "+
 			"settle", r.runID, attempt, r.opts.Remote)
 	}
 	if record.TickID != tickID {
-		return nil, fmt.Errorf("reconcile: attempt %d of run %s is %s's, not %s's: attempt numbers are run-wide, "+
+		return nil, fmt.Errorf("reconcile: run dispatch #%d of run %s is %s's, not %s's: dispatch numbers are run-wide, "+
 			"and settling one under another tick's name would release a job nobody looked at",
 			attempt, r.runID, record.TickID, tickID)
 	}
@@ -352,13 +356,13 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 		}
 		if carry && !was.carry {
 			return nil, fmt.Errorf(
-				"reconcile: attempt %d of %s was already released by %s without carrying its work, and a "+
+				"reconcile: %s was already released by %s without carrying its work, and a "+
 					"decision is created if absent and never rewritten: the release stands as it was made. "+
 					"The work is still on %s — a person who wants it to go forward can merge it by hand, or "+
 					"push it where the next run will branch from it",
-				attempt, tickID, by, was.carryRef)
+				r.attemptName(tickID, attempt), by, was.carryRef)
 		}
-		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
+		return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, Try: r.tryOfAttempt(tickID, attempt), ReleasedBy: by,
 			State: subprocess.StateLost, Recorded: false, Carried: was.carry, CarryRef: was.carryRef}, nil
 	}
 
@@ -379,18 +383,18 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 		branch := branchOf(marker.WriteRef)
 		head, err := r.remoteWork(branch, marker.BaseSHA)
 		if err != nil {
-			return nil, fmt.Errorf("reconcile: read %s on %s to carry the work of attempt %d of %s: %w",
-				branch, r.opts.Remote, attempt, tickID, err)
+			return nil, fmt.Errorf("reconcile: read %s on %s to carry the work of %s: %w",
+				branch, r.opts.Remote, r.attemptName(tickID, attempt), err)
 		}
 		if head == "" {
 			head = r.attemptWorkHead(marker)
 		}
 		if head == "" {
 			return nil, fmt.Errorf(
-				"reconcile: attempt %d of %s left no commit beyond its base on %s: there is no work to "+
+				"reconcile: %s left no commit beyond its base on %s: there is no work to "+
 					"carry, so release it without --carry-work — the next run dispatches a new attempt from "+
 					"the integration branch",
-				attempt, tickID, branch)
+				r.attemptName(tickID, attempt), branch)
 		}
 		carryRef, carrySHA = marker.WriteRef, head
 	}
@@ -424,13 +428,13 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 	if handle != nil && executor != nil {
 		if _, err := executor.Cancel(handle); err == nil {
 			disposed = executor.Dispose(handle, subprocess.DisposeOptions{
-				Reason:     fmt.Sprintf("attempt %d of %s was released by %s", attempt, tickID, by),
+				Reason:     fmt.Sprintf("%s was released by %s", r.attemptName(tickID, attempt), by),
 				KeepBranch: true,
 			}) == nil
 		}
 	}
 
-	return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, ReleasedBy: by,
+	return &Settlement{RunID: r.runID, TickID: tickID, Attempt: attempt, Try: r.tryOfAttempt(tickID, attempt), ReleasedBy: by,
 		State: state, Decision: number, Recorded: true, Disposed: disposed,
 		Carried: carry, CarryRef: carryRef, CarrySHA: carrySHA,
 		WorkRef: workRef, WorkSHA: workSHA, WorkDurable: workDurable, WorkIn: workIn}, nil
@@ -477,9 +481,9 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 	state, found := findAttemptState(marker.StateRoot)
 	if !found {
 		return nil, nil, "", fmt.Errorf(
-			"reconcile: this host holds no state for attempt %d of %s: nothing was started here, so the next run "+
+			"reconcile: this host holds no state for %s: nothing was started here, so the next run "+
 				"starts it rather than holding it — there is nothing to release",
-			marker.Attempt, marker.TickID)
+			r.attemptName(marker.TickID, marker.Attempt))
 	}
 	// The handle names the executor the attempt was DISPATCHED under, from its
 	// own durable marker. It used to be hardcoded to the local subprocess
@@ -501,7 +505,7 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 	}
 	status, err := executor.Inspect(handle, "")
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("reconcile: inspect attempt %d of %s: %w", marker.Attempt, marker.TickID, err)
+		return nil, nil, "", fmt.Errorf("reconcile: inspect %s: %w", r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	switch {
 	case status.Terminal && r.rejectedDurably(marker):
@@ -526,26 +530,26 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 			return nil, nil, status.State, err
 		} else if merged {
 			return nil, nil, status.State, fmt.Errorf(
-				"reconcile: attempt %d of %s was rejected, but %s already carries its work: releasing it would "+
+				"reconcile: %s was rejected, but %s already carries its work: releasing it would "+
 					"dispatch a fresh attempt from a base that already has the work, and there would be nothing "+
 					"for it to do. Nothing is released. The gate is what refused, and its evidence is keyed by the "+
 					"SOURCE it ran on: fix the check or the tree, push it to %s, and run the epic again under this "+
 					"run id — the gate runs again because the tree is a different tree. (If the work was REVERTED "+
 					"on %s, this refusal is asking the wrong question: containment survives a revert, so it still "+
 					"reads as merged. There is no release for that case yet — ticfac tick z8b)",
-				marker.Attempt, marker.TickID, r.branch, r.branch, r.branch)
+				r.attemptName(marker.TickID, marker.Attempt), r.branch, r.branch, r.branch)
 		}
 		return handle, executor, status.State, nil
 	case status.Terminal:
 		return nil, nil, status.State, fmt.Errorf(
-			"reconcile: attempt %d of %s settled itself as %s and this run has not rejected it: the next run "+
+			"reconcile: %s settled itself as %s and this run has not rejected it: the next run "+
 				"collects it, and releasing a settled attempt would throw away the report it left",
-			marker.Attempt, marker.TickID, status.State)
+			r.attemptName(marker.TickID, marker.Attempt), status.State)
 	case status.State != subprocess.StateLost:
 		return nil, nil, status.State, fmt.Errorf(
-			"reconcile: attempt %d of %s is %s — the executor can still address it. A live attempt is cancelled, "+
+			"reconcile: %s is %s — the executor can still address it. A live attempt is cancelled, "+
 				"never released: Appendix A #6 is not an operator's to waive",
-			marker.Attempt, marker.TickID, status.State)
+			r.attemptName(marker.TickID, marker.Attempt), status.State)
 	}
 	return handle, executor, status.State, nil
 }
@@ -575,8 +579,8 @@ func (r *Reconciler) rejectedDurably(marker attemptHandle) bool {
 func (r *Reconciler) attemptIsMerged(marker attemptHandle) (bool, error) {
 	head, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA)
 	if err != nil {
-		return false, fmt.Errorf("reconcile: read %s on %s to see whether attempt %d of %s is already merged: %w",
-			branchOf(marker.WriteRef), r.opts.Remote, marker.Attempt, marker.TickID, err)
+		return false, fmt.Errorf("reconcile: read %s on %s to see whether %s is already merged: %w",
+			branchOf(marker.WriteRef), r.opts.Remote, r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	if head == "" {
 		return false, nil
@@ -645,8 +649,8 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string, ca
 		Provenance:  r.attemptProvenance(dispatch),
 	})
 	if err != nil {
-		return 0, fmt.Errorf("reconcile: record the release of attempt %d of %s: %w",
-			marker.Attempt, marker.TickID, err)
+		return 0, fmt.Errorf("reconcile: record the release of %s: %w",
+			r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	if !outcome.EffectPermitted() {
 		return 0, fmt.Errorf("reconcile: decision %d was taken on %s while this release was being recorded: "+

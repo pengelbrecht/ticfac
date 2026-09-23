@@ -79,10 +79,10 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		r.record(marker.TickID, StageRejected, "the report carried a findings block that could not be read: %s",
 			collected.FindingsProblem)
 		return r.refuse(RefusedFindingInvalid, marker.TickID,
-			"attempt %d of %s reported a findings block this reconciler cannot read: %s. The tick is NOT closed: "+
+			"%s reported a findings block this reconciler cannot read: %s. The tick is NOT closed: "+
 				"dropping findings nobody could parse is the failure the channel exists to remove — fix the block and "+
 				"the run again dispatches the tick",
-			marker.Attempt, marker.TickID, collected.FindingsProblem)
+			r.attemptName(marker.TickID, marker.Attempt), collected.FindingsProblem)
 	}
 	if len(collected.Findings) == 0 {
 		return nil
@@ -98,7 +98,7 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 	for _, finding := range collected.Findings {
 		if err := finding.Validate(); err != nil {
 			return r.refuse(RefusedFindingInvalid, marker.TickID,
-				"attempt %d of %s reported a finding this reconciler cannot draft: %v", marker.Attempt, marker.TickID, err)
+				"%s reported a finding this reconciler cannot draft: %v", r.attemptName(marker.TickID, marker.Attempt), err)
 		}
 		key := findingKey(finding)
 		draft := runstate.Finding{
@@ -134,22 +134,23 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 					key, marker.TickID, err)
 			}
 			r.record(marker.TickID, StageFindingDuplicate,
-				"finding %s (%q) was already drafted by attempt %d of %s and is %s: nothing new is proposed",
-				key, finding.Title, original.Attempt, original.TickID, original.Status)
+				"finding %s (%q) was already drafted by %s and is %s: nothing new is proposed",
+				key, finding.Title, r.attemptName(original.TickID, original.Attempt), original.Status)
 			continue
 		}
 		r.record(marker.TickID, StageFindingFiled,
-			"finding %s drafted for triage: %s %q, severity %s, for %s (discovered by attempt %d)",
-			key, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target), marker.Attempt)
+			"finding %s drafted for triage: %s %q, severity %s, for %s (discovered by %s)",
+			key, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target),
+			r.attemptName(marker.TickID, marker.Attempt))
 		// The tick's own record names the draft, so a person reading the
 		// tracker — not only the run state — sees that a finding is waiting
 		// for them, and sees where to triage it.
-		note := fmt.Sprintf("ticfac run %s: attempt %d reported a finding drafted for triage — %s %q "+
+		note := fmt.Sprintf("ticfac run %s: %s reported a finding drafted for triage — %s %q "+
 			"(key %s, severity %s, for %s). Triage with `ticfac finding %s %s --promote-as <tick> --by "+
 			"\"<who>\"`, `--discard --by \"<who>\"`, or — when it was repaired inside this epic — "+
 			"`--fixed-as <commit> --by \"<who>\"`; the tick closes and the finding rides to the close-out, "+
 			"which does not hand over while it is untriaged.",
-			r.runID, marker.Attempt, finding.Kind, finding.Title, key, finding.Severity,
+			r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key, finding.Severity,
 			targetName(finding.Target), r.opts.EpicID, key)
 		if _, err := r.tracker.Note(ctx, marker.TickID, note); err != nil {
 			return fmt.Errorf("note the drafted finding %s on %s: %w", key, marker.TickID, err)

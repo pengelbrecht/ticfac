@@ -687,8 +687,8 @@ func (r *Reconciler) closeTick(ctx context.Context, entry planEntry, marker atte
 				"%d untriaged finding(s) ride to the close-out: the tick closes and the hold is the close-out's",
 				carried)
 		}
-		note := fmt.Sprintf("ticfac run %s: attempt %d merged into %s as %s; the integrated gate (%s) passed.",
-			r.runID, marker.Attempt, r.branch, short(merged.GateSHA), r.gate)
+		note := fmt.Sprintf("ticfac run %s: %s merged into %s as %s; the integrated gate (%s) passed.",
+			r.runID, r.attemptName(tick, marker.Attempt), r.branch, short(merged.GateSHA), r.gate)
 		if _, err := r.tracker.Note(ctx, tick, note); err != nil {
 			return fmt.Errorf("note the gate evidence on %s: %w", tick, err)
 		}

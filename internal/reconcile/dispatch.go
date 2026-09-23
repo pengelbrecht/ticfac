@@ -390,16 +390,17 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					carry = &carriedWork{marker: marker, by: was.by, at: was.at}
 				}
 				r.record(tick, StageSettled,
-					"attempt %d was released by %s at %s carrying its work; the next attempt starts from %s",
-					existing.Attempt, was.by, was.at, branchOf(marker.WriteRef))
+					"%s was released by %s at %s carrying its work; the next try starts from %s",
+					attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), was.by, was.at,
+					branchOf(marker.WriteRef))
 				continue
 			}
 			// A person settled it. It is not adopted — nobody could address it,
 			// which is why they were asked — and whatever it left on its own
 			// write ref stays there: a new attempt gets a ref of its own.
 			r.record(tick, StageSettled,
-				"attempt %d was released by %s at %s; a new attempt is dispatched rather than the released one adopted",
-				existing.Attempt, was.by, was.at)
+				"%s was released by %s at %s; a new try is dispatched rather than the released one adopted",
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), was.by, was.at)
 			continue
 		}
 		if !r.guarded(guardNeverRedispatchLive) {
@@ -417,9 +418,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// a worker that answered BLOCKED about an open blocker worth
 			// dispatching again once that blocker is closed.
 			r.record(tick, StageRedispatched,
-				"attempt %d (%s try %d) settled with nothing on %s and was rejected; a new attempt is dispatched "+
+				"%s settled with nothing on %s and was rejected; a new try is dispatched "+
 					"rather than the spent one adopted",
-				existing.Attempt, tick, tryOf(attempts, tick, existing.Attempt), branchOf(marker.WriteRef))
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), branchOf(marker.WriteRef))
 			// The rung this attempt earned for the ladder: the work was
 			// dispatched, it had its chance, and it did not pass.
 			failed++
@@ -437,23 +438,25 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// person reading the feed is asking.
 			r.setAttempt(tick, existing.Attempt)
 			r.record(tick, StageRejected,
-				"attempt %d was rejected and its commits are still there (%s); it is neither adopted nor "+
-					"redispatched", existing.Attempt, where)
+				"%s was rejected and its commits are still there (%s); it is neither adopted nor "+
+					"redispatched", attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where)
 			// The teardown, in case the incarnation that rejected this attempt
 			// never reached its own: the rejection is recorded on origin before
 			// anything is torn down, so a run killed in between leaves a live
 			// credential and a registered worktree that nothing else would ever
 			// come back for. It is idempotent, and it keeps the branch.
 			r.tearDownSettled(marker, fmt.Sprintf(
-				"attempt %d of %s was rejected and holds commits nothing merged", existing.Attempt, tick))
+				"%s was rejected and holds commits nothing merged",
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)))
 			return nil, nil, marker, r.refuse(RefusedRejectedWork, tick,
-				"attempt %d of %s was rejected and the work it committed is still there — %s — and nothing merged "+
+				"%s was rejected and the work it committed is still there — %s — and nothing merged "+
 					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
 					"attempt's worktree, so a second collect would report a missing report rather than the verdict "+
 					"the attempt really had) nor dispatches over it (that would orphan the only copy). Read the "+
 					"branch; then take the work, or release the attempt with "+
 					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt",
-				existing.Attempt, tick, where, r.opts.EpicID, tick, existing.Attempt)
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.opts.EpicID,
+				tick, existing.Attempt)
 		}
 		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
 		// the highest-numbered one, which is the one the pass remembers — the
@@ -477,8 +480,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		if err != nil {
 			return nil, nil, adoptableMarker, err
 		}
-		r.record(tick, StageAdopted, "attempt %d (%s try %d) was already dispatched; it is adopted by identity, never redispatched",
-			adoptable.Attempt, tick, tryOf(attempts, tick, adoptable.Attempt))
+		r.record(tick, StageAdopted, "%s was already dispatched; it is adopted by identity, never redispatched",
+			attemptLabel(tick, tryOf(attempts, tick, adoptable.Attempt), adoptable.Attempt))
 		return handle, executor, adoptableMarker, nil
 	}
 
@@ -586,8 +589,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		if _, ok, err := r.store.Attempt(number); err != nil || !ok {
 			return nil, nil, marker, fmt.Errorf(
-				"the dispatch marker for %s attempt %d did not land on %s: nothing is started behind a record that "+
-					"does not exist (%v)", tick, number, r.opts.Remote, err)
+				"the dispatch marker for %s did not land on %s: nothing is started behind a record that "+
+					"does not exist (%v)", attemptLabel(tick, try, number), r.opts.Remote, err)
 		}
 
 		// The attempt is THIS dispatch's from the moment its marker is durable
@@ -634,9 +637,11 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		// this line is what a person reading the run reads it from.
 		if marker.ResumedFrom != nil {
 			r.record(tick, StageCarried,
-				"attempt %d starts from the work attempt %d left on %s (released by %s): the next worker "+
+				"%s starts from the work %s left on %s (released by %s): the next worker "+
 					"continues that work rather than redoing it, and the gate still decides what merges",
-				number, marker.ResumedFrom.Attempt, branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+				attemptLabel(tick, try, number),
+				attemptLabel(tick, tryOf(attempts, tick, marker.ResumedFrom.Attempt), marker.ResumedFrom.Attempt),
+				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
 		}
 
 		handle, err := executor.Start(r.jobSpec(dispatch))
@@ -645,8 +650,12 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		r.noteAlive(dispatch.JobID)
 		r.setTick(tick, "dispatched")
-		r.record(tick, StageDispatched, "attempt %d started as %s (%s try %d; attempt numbers count this run's dispatches)",
-			number, dispatch.JobID, tick, try)
+		// The tick's own try leads and the run-wide number is labelled as the
+		// dispatch counter it is (tick h58): "w9b try 3 dispatched (run
+		// dispatch #5, branch …)" needs no footnote, where "attempt 5 started
+		// as …" needed one and was misread anyway.
+		r.record(tick, StageDispatched, "%s try %d dispatched (run dispatch #%d, branch %s)",
+			tick, try, number, branchOf(marker.WriteRef))
 		if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is running as attempt %d", tick, number)); err != nil {
 			return nil, nil, marker, err
 		}
@@ -672,7 +681,9 @@ const maxDispatchConflicts = 8
 // (…/tick-nvn/attempt-12), its durable marker, and the argument to
 // `ticfac settle <epic> <tick> <n>`. That is right for identity and misleading
 // in a sentence — "attempt 12 of nvn" reads as eleven failures at nvn when it
-// is nvn's first try and the run's twelfth dispatch. So the feed says both.
+// is nvn's first try and the run's twelfth dispatch. So a line written for a
+// person says both, the try FIRST ([AttemptLabel], tick h58), and the feed's
+// `attempt` field keeps the identity.
 func tryOf(attempts []runstate.Attempt, tick string, number int) int {
 	try := 1
 	for _, existing := range attempts {
@@ -681,6 +692,51 @@ func tryOf(attempts []runstate.Attempt, tick string, number int) int {
 		}
 	}
 	return try
+}
+
+// AttemptLabel is how a line written for a PERSON names one attempt (tick
+// h58): the tick's own try first, and the run-wide number after it, labelled
+// as what it is — "w9b try 3 (run dispatch #5)". The run-wide number is the
+// attempt's IDENTITY and stays so everywhere a program keys on it (branch
+// names, WIP refs, adoption, the feed's `attempt` field, `ticfac settle`'s
+// argument); what changes is only which number a sentence LEADS with. The
+// line an operator misread said "attempt 5 … (w9b try 3; attempt numbers
+// count this run's dispatches)" and they read it as w9b's fifth try: a
+// message that has to footnote its own headline number has the numbers the
+// wrong way round.
+//
+// A try below 1 is a try nobody could count, and the label then says only
+// what it knows — the dispatch number, still labelled as one.
+func AttemptLabel(tick string, try, number int) string {
+	if try < 1 {
+		return fmt.Sprintf("%s (run dispatch #%d)", tick, number)
+	}
+	return fmt.Sprintf("%s try %d (run dispatch #%d)", tick, try, number)
+}
+
+// attemptLabel is [AttemptLabel] for this package's own lines.
+func attemptLabel(tick string, try, number int) string { return AttemptLabel(tick, try, number) }
+
+// attemptName is [attemptLabel] for a line that holds only the attempt's
+// identity: the tick's try is counted from the attempt records the run state
+// holds, which is the same count the dispatch took it from.
+func (r *Reconciler) attemptName(tick string, number int) string {
+	return attemptLabel(tick, r.tryOfAttempt(tick, number), number)
+}
+
+// tryOfAttempt is [tryOf] against the run state this reconciler holds. A
+// store that is not there yet, or cannot be read, answers 0 — it costs a line
+// its try and never the line: the dispatch number still names the attempt
+// exactly.
+func (r *Reconciler) tryOfAttempt(tick string, number int) int {
+	if r.store == nil {
+		return 0
+	}
+	attempts, err := r.store.Attempts()
+	if err != nil {
+		return 0
+	}
+	return tryOf(attempts, tick, number)
 }
 
 func nextAttemptNumber(attempts []runstate.Attempt) int {
@@ -712,11 +768,11 @@ func (r *Reconciler) adoptConflicted(ctx context.Context, tick string, number in
 	recorded, ok, err := r.store.Attempt(number)
 	if err != nil || !ok {
 		return nil, nil, attemptHandle{}, false, fmt.Errorf(
-			"attempt %d of %s is on origin and unreadable: %v", number, tick, err)
+			"run dispatch #%d is on origin and unreadable while %s was being dispatched: %v", number, tick, err)
 	}
 	if recorded.TickID != tick {
 		r.record(tick, StageRedispatched,
-			"attempt %d on origin is %s's, not %s's; the number is recomputed rather than another tick's job adopted",
+			"run dispatch #%d on origin is %s's, not %s's; the number is recomputed rather than another tick's job adopted",
 			number, recorded.TickID, tick)
 		return nil, nil, attemptHandle{}, false, nil
 	}
@@ -870,8 +926,8 @@ func (r *Reconciler) integratedOn(commit string) (bool, error) {
 func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 	head, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA)
 	if err != nil {
-		return "", fmt.Errorf("read %s on %s to see whether attempt %d of %s is already integrated: %w",
-			branchOf(marker.WriteRef), r.opts.Remote, marker.Attempt, marker.TickID, err)
+		return "", fmt.Errorf("read %s on %s to see whether %s is already integrated: %w",
+			branchOf(marker.WriteRef), r.opts.Remote, r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	if head == "" {
 		return "", nil
@@ -939,7 +995,7 @@ func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
 func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string) error {
 	r.setTick(marker.TickID, "rejected")
 	_, err := r.checkpoint(runstate.StateRunning,
-		fmt.Sprintf("attempt %d of %s is rejected (%s): %s", marker.Attempt, marker.TickID, verdict, firstLine(message)))
+		fmt.Sprintf("%s is rejected (%s): %s", r.attemptName(marker.TickID, marker.Attempt), verdict, firstLine(message)))
 	return err
 }
 
@@ -1001,8 +1057,8 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 	if r.budget.Effective > 0 {
 		budgetNote = fmt.Sprintf(", with the effective budget $%.2f (the clamp governs spend, the tier governs routing, and neither silently modifies the other)", r.budget.Effective)
 	}
-	r.record(entry.TickID, StageTierDerived, "attempt %d of %s runs at tier %q (%s)%s",
-		number, entry.TickID, tier, reason, budgetNote)
+	r.record(entry.TickID, StageTierDerived, "%s runs at tier %q (%s)%s",
+		attemptLabel(entry.TickID, try, number), tier, reason, budgetNote)
 
 	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
 	stateDir := r.execStateDir(entry.TickID, number)
@@ -1208,8 +1264,8 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	}
 	if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
 		return nil, nil, r.refuse(RefusedUnaddressed, marker.TickID,
-			"attempt %d of %s cannot be addressed and has not settled: it is held, never redispatched",
-			marker.Attempt, marker.TickID)
+			"%s cannot be addressed and has not settled: it is held, never redispatched",
+			r.attemptName(marker.TickID, marker.Attempt))
 	}
 	r.noteAlive(marker.JobID)
 	return handle, executor, nil
@@ -1295,8 +1351,8 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// running attempt with a different model.
 	profile, err := r.profileForTier(dispatch.Role, marker.Tier)
 	if err != nil {
-		return Dispatch{}, fmt.Errorf("attempt %d of %s recorded tier %q and no profile resolves against the "+
-			"runner configuration as it stands: %w", marker.Attempt, marker.TickID, marker.Tier, err)
+		return Dispatch{}, fmt.Errorf("%s recorded tier %q and no profile resolves against the "+
+			"runner configuration as it stands: %w", r.attemptName(marker.TickID, marker.Attempt), marker.Tier, err)
 	}
 	dispatch.Profile = profile
 	return dispatch, nil
@@ -1315,18 +1371,18 @@ func (r *Reconciler) carryHead(marker attemptHandle) (string, error) {
 	branch := branchOf(marker.WriteRef)
 	head, err := r.remoteWork(branch, marker.BaseSHA)
 	if err != nil {
-		return "", fmt.Errorf("reconcile: read %s on %s to carry the work of attempt %d of %s: %w",
-			branch, r.opts.Remote, marker.Attempt, marker.TickID, err)
+		return "", fmt.Errorf("reconcile: read %s on %s to carry the work of %s: %w",
+			branch, r.opts.Remote, r.attemptName(marker.TickID, marker.Attempt), err)
 	}
 	if head == "" {
 		head = r.attemptWorkHead(marker)
 	}
 	if head == "" {
 		return "", fmt.Errorf(
-			"reconcile: the release of attempt %d of %s carries its work, but %s carries no commit beyond the "+
-				"base it was cut from: there is nothing to start the next attempt from. The settlement stands; "+
+			"reconcile: the release of %s carries its work, but %s carries no commit beyond the "+
+				"base it was cut from: there is nothing to start the next try from. The settlement stands; "+
 				"re-release without --carry-work, or put the work back on %s and run the epic again",
-			marker.Attempt, marker.TickID, branch, branch)
+			r.attemptName(marker.TickID, marker.Attempt), branch, branch)
 	}
 	return head, nil
 }
@@ -1738,8 +1794,8 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 
 		if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"attempt %d of %s cannot be addressed and has not settled: nobody can say whether it is running, "+
-					"which is not the same as nothing running", marker.Attempt, marker.TickID)
+				"%s cannot be addressed and has not settled: nobody can say whether it is running, "+
+					"which is not the same as nothing running", r.attemptName(marker.TickID, marker.Attempt))
 		}
 
 		// The wall clock's FIRING is a feed event, not only an observation in
@@ -1783,11 +1839,11 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			// re-delivered at every poll, and a refusal about a dead supervisor
 			// sent the reader at the wrong problem (tick emk).
 			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"attempt %d of %s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
+				"%s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
 					"watched it for %s without it settling. Its executor could not settle it: %s. Nobody can say "+
 					"it is finished; look at it, stop whatever is still running, then release it with "+
 					"`ticfac settle %s %s %d --release \"<who>\"`",
-				marker.Attempt, marker.TickID, status.State, over.Round(time.Second),
+				r.attemptName(marker.TickID, marker.Attempt), status.State, over.Round(time.Second),
 				r.opts.WallSeconds, watched.Round(time.Second), lastObservation(status),
 				r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
@@ -1797,8 +1853,8 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		// gone, whatever the last status said.
 		if r.Poll(marker.JobID) == Wiped {
 			return nil, r.refuse(RefusedWiped, marker.TickID,
-				"attempt %d of %s went unaddressed for longer than the substrate's wipe threshold of %s",
-				marker.Attempt, marker.TickID, r.wipeThreshold)
+				"%s went unaddressed for longer than the substrate's wipe threshold of %s",
+				r.attemptName(marker.TickID, marker.Attempt), r.wipeThreshold)
 		}
 
 	}
@@ -1878,8 +1934,8 @@ func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobSt
 		break
 	}
 	r.record(marker.TickID, StageWallClock,
-		"the wall clock of %ds fired %s ago and attempt %d of %s has not settled: the executor is stopping it — %s",
-		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), marker.Attempt, marker.TickID,
+		"the wall clock of %ds fired %s ago and %s has not settled: the executor is stopping it — %s",
+		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), r.attemptName(marker.TickID, marker.Attempt),
 		lastObservation(status))
 }
 
@@ -1952,10 +2008,10 @@ func (r *Reconciler) announceStall(fl *inflightAttempt) {
 		return
 	}
 	r.record(marker.TickID, StageStallWarned,
-		"attempt %d of %s is alive but has produced nothing durable for %s: its branch last moved %s ago, its "+
+		"%s is alive but has produced nothing durable for %s: its branch last moved %s ago, its "+
 			"worktree last changed %s ago, and %s — a reason to look, not a verdict; the wall clock of %ds is "+
 			"still the bound",
-		marker.Attempt, marker.TickID, idle,
+		r.attemptName(marker.TickID, marker.Attempt), idle,
 		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), writtenOf(gap.ChangedFiles), r.opts.WallSeconds)
 }
 
@@ -2144,9 +2200,9 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 			short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
 		r.disposeRejected(handle, executor, marker, "the collected base is not the base this run dispatched")
 		return nil, r.refuse(RefusedBoundary, marker.TickID,
-			"attempt %d of %s was collected against base %s, but this run dispatched it at %s: the diff the boundary "+
+			"%s was collected against base %s, but this run dispatched it at %s: the diff the boundary "+
 				"check read is not the diff of this attempt, so nothing it reports about it can be believed",
-			marker.Attempt, marker.TickID, short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
+			r.attemptName(marker.TickID, marker.Attempt), short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
 	}
 
 	// The findings channel (tick 7vn), BEFORE the verdict checks: a finding is
@@ -2171,8 +2227,8 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 			r.record(marker.TickID, StageRejected, "boundary violation: %s", strings.Join(collected.BoundaryViolations, ", "))
 			r.disposeRejected(handle, executor, marker, "the attempt wrote under an authority that is not its own")
 			return nil, r.refuse(RefusedBoundary, marker.TickID,
-				"attempt %d of %s wrote under an authority that is not its own (%s): %s",
-				marker.Attempt, marker.TickID, strings.Join(collected.BoundaryViolations, ", "), collected.Message)
+				"%s wrote under an authority that is not its own (%s): %s",
+				r.attemptName(marker.TickID, marker.Attempt), strings.Join(collected.BoundaryViolations, ", "), collected.Message)
 		}
 		// The negative control: nothing is reported and nothing is refused, so
 		// the attempt's tracker writes reach the integration branch unnoticed —
@@ -2186,8 +2242,8 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 		r.record(marker.TickID, StageRejected, "%s: %s", collected.Verdict, collected.Message)
 		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
 			" is "+collected.Verdict)
-		return nil, r.refuse(RefusedCollect, marker.TickID, "attempt %d of %s is %s: %s",
-			marker.Attempt, marker.TickID, collected.Verdict, collected.Message)
+		return nil, r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
+			r.attemptName(marker.TickID, marker.Attempt), collected.Verdict, collected.Message)
 	}
 
 	// The branch would merge. What the worker SAID is the other half of the
@@ -2217,9 +2273,9 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
 			" answered "+answer.Status)
 		return nil, r.refuse(RefusedNeedsHuman, marker.TickID,
-			"attempt %d of %s answered %s: %s. Its work is on %s and is NOT merged and the tick is NOT closed: a "+
+			"%s answered %s: %s. Its work is on %s and is NOT merged and the tick is NOT closed: a "+
 				"worker that asks for a person is not answered by merging what it wrote and closing the tick behind it",
-			marker.Attempt, marker.TickID, answer.Status, answer.Summary, branchOf(marker.WriteRef))
+			r.attemptName(marker.TickID, marker.Attempt), answer.Status, answer.Summary, branchOf(marker.WriteRef))
 	}
 	_ = status
 	return collected, nil
@@ -2243,8 +2299,8 @@ func needsHuman(status string) bool {
 // then is the attempt torn down. A container torn down before its credential is
 // revoked can spend on the way out.
 func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, marker attemptHandle) {
-	reason := fmt.Sprintf("attempt %d of %s is merged into %s and the tick is closed",
-		marker.Attempt, marker.TickID, r.branch)
+	reason := fmt.Sprintf("%s is merged into %s and the tick is closed",
+		r.attemptName(marker.TickID, marker.Attempt), r.branch)
 	r.tearDown(handle, executor, marker, reason, false)
 }
 
@@ -2288,8 +2344,8 @@ func (r *Reconciler) disposeRefused(handle *subprocess.JobHandle, executor Execu
 	if !asRefusal(err, &refusal) {
 		return
 	}
-	r.disposeRejected(handle, executor, marker, fmt.Sprintf("attempt %d of %s was refused (%s): %s",
-		marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message)))
+	r.disposeRejected(handle, executor, marker, fmt.Sprintf("%s was refused (%s): %s",
+		r.attemptName(marker.TickID, marker.Attempt), refusal.Reason, firstLine(refusal.Message)))
 }
 
 // tearDownSettled tears an attempt down without addressing it first.
