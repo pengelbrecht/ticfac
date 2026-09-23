@@ -207,6 +207,62 @@ func TestTheReadOnlySandboxScrubsSourceCredentialsAndKeepsTheModelGrant(t *testi
 	}
 }
 
+// The gateway's workers-ai route survives a read-only source grade (tick mdw).
+//
+// A worker on that route is pi reading CLOUDFLARE_API_KEY, with the route's
+// own variables under WORKERS_AI_* — common.sh exports WORKERS_AI_BASE_URL,
+// and the run's gateway token is the credential under every name it travels.
+// None of that is a push credential, and the symptom of losing it is not a
+// missing grant: it is a worker that fails at its first model call looking
+// like a model error, which is why the property is a test rather than a
+// reading of the prefix list.
+func TestTheWorkersAiRouteSurvivesTheReadOnlyGrade(t *testing.T) {
+	base := []string{
+		"PATH=/usr/bin",
+		"HOME=/home/worker",
+		// The route as a worker's environment carries it: the base URL
+		// common.sh exports, the credential under pi's name, and the same
+		// token under a TOKEN-shaped name in the route's own namespace — the
+		// exact shape the substring sweep takes when the prefix list does not
+		// own the namespace.
+		"WORKERS_AI_BASE_URL=https://gateway.example.com/workers-ai",
+		"WORKERS_AI_API_TOKEN=run-token",
+		"CLOUDFLARE_API_KEY=run-token",
+		"CLOUDFLARE_ACCOUNT_ID=example",
+		// The operator's own Cloudflare credential: same vendor, different
+		// grant. It must NOT ride a model prefix into a read-only runner.
+		"CLOUDFLARE_API_TOKEN=cf-operator-token",
+		"GITHUB_TOKEN=ghp_notreal",
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=credential.helper",
+		"GIT_CONFIG_VALUE_0=store",
+	}
+	readOnly := &attemptRecord{SourceGrade: gradeReadOnly}
+	box := sandboxFor(base, readOnly, remoteSet{})
+	env := envMap(box.Env)
+
+	for _, kept := range []string{
+		"WORKERS_AI_BASE_URL", "WORKERS_AI_API_TOKEN",
+		"CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID",
+	} {
+		if _, ok := env[kept]; !ok {
+			t.Errorf("%s was scrubbed: the gateway's workers-ai route is the MODEL grant, and the source grade does not own it", kept)
+		}
+	}
+	if _, ok := env["CLOUDFLARE_API_TOKEN"]; ok {
+		t.Error("CLOUDFLARE_API_TOKEN survived into a read-only runner's environment: it is the operator's wrangler credential — a SOURCE grant — so the model prefix must name CLOUDFLARE_API_KEY exactly, not the vendor namespace")
+	}
+	if _, ok := env["GITHUB_TOKEN"]; ok {
+		t.Error("GITHUB_TOKEN survived into a read-only runner's environment")
+	}
+
+	// A write grade keeps the whole environment, route included.
+	write := sandboxFor(base, &attemptRecord{SourceGrade: gradeWrite}, remoteSet{})
+	if len(write.Env) != len(base) {
+		t.Errorf("a write grade's environment was modified: %d entries, want %d", len(write.Env), len(base))
+	}
+}
+
 func envMap(env []string) map[string]string {
 	out := map[string]string{}
 	for _, entry := range env {

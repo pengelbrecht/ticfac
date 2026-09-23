@@ -96,6 +96,12 @@ image = "../image/Dockerfile"
 # creates (the replacement is addressed before the dead one is destroyed) and
 # for a second project's run holding its own lease. Raising it is a deployment
 # decision bounded by the account's container limits, not a code change.
+#
+# This is the SOURCE for [vars] FACTORY_MAX_INSTANCES below — the one copy a
+# maintainer raises (tick 7fl). The agreement is not a comment to remember:
+# `ticfac factory deploy` refuses to ship a config where the two disagree, and
+# the suite pins the mirror (and the Worker's compiled default) to this
+# number.
 max_instances = 3
 # standard-3: 2 vCPU, 8 GiB memory, 16 GB disk. Disk is the binding constraint —
 # the batteries-included image is multi-GB before a checkout, a module cache or
@@ -212,9 +218,13 @@ RUN_CLOSEOUT_MS = "1800000"
 # `[[containers]] max_instances` above. Wrangler does not hand a container
 # application's own config back to the Worker at runtime, so a cloud wave's
 # dispatch width — bounded so it never books more concurrent containers than
-# the account can actually run — needs its own copy of the number. Raise both
-# together, bounded by the account's real container limit, or a wave wider
-# than this silently serializes exactly the way wave 3 measured for Phase 1.
+# the account can actually run — needs its own copy of the number. The two are
+# not kept in step by hand (tick 7fl): `ticfac factory deploy` refuses to ship
+# a config where they disagree, and the suite pins this mirror to the ceiling,
+# so a wave wider than the account can host is a deploy-time stop naming both
+# numbers — never the silent serialization wave 3 measured for Phase 1.
+# Raise the ceiling, then this mirror, bounded by the account's real container
+# limit.
 FACTORY_MAX_INSTANCES = "3"
 
 # Which harness and model a per-tick WORKER container runs (tick 1cd). Left

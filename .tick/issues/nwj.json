@@ -1,0 +1,14 @@
+{
+  "id": "nwj",
+  "title": "The command surface on cobra + fang: styled help, errors, version, completions and man pages",
+  "description": "OPERATOR, 2026-09-23: fang (github.com/charmbracelet/fang) for the CLI. ticfac's commands are hand-rolled on flag.NewFlagSet (eleven of them in internal/cli). Move the command tree to cobra - the framework tk already uses, so the two tools behave alike - and wrap it with fang.Execute: styled help and usage, styled errors without the repeated usage dump, --version from build info, a completion command and man pages.\n\nKeep every existing command, flag, exit code and output contract byte-for-byte where a test or a script depends on it (exit codes are asserted: ExitNoExecutor and friends). Fang is marked experimental; pin it and keep the wrapper thin enough to drop.\n\nThis is the foundation 89m (ticfac watch) and the skills/MCP work stand on: one command tree that the help, the completions, the generated skill and an MCP surface (ophis) can all be derived from.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "2jn",
+  "acceptance_criteria": "Every ticfac command runs on cobra wrapped by fang with styled help and errors, --version, completions and man pages; every existing exit code and scripted output is unchanged, proven by the existing tests; and fang is pinned",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T12:23:50.981549Z",
+  "updated_at": "2026-09-23T12:23:50.981549Z"
+}

@@ -265,9 +265,11 @@ declare namespace Cloudflare {
      * a second declaration of the same number, because wrangler does not
      * expose a container application's own config back to the Worker at
      * runtime. A cloud wave's dispatch width is bounded by it, so raising the
-     * ceiling without raising this reintroduces exactly the silent
-     * serialization wave 3 measured, just one layer up. Bounds and the
-     * default live in src/run-workflow.ts.
+     * ceiling without raising this would reintroduce exactly the silent
+     * serialization wave 3 measured, just one layer up — which is why the two
+     * are not kept in step by hand (tick 7fl): `ticfac factory deploy` refuses
+     * to ship a config where they disagree, and the suite pins them together.
+     * Bounds and the default live in src/run-workflow.ts.
      */
     FACTORY_MAX_INSTANCES?: string;
     /**

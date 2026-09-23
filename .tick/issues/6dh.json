@@ -1,0 +1,17 @@
+{
+  "id": "6dh",
+  "title": "ticfac status --json: one model of every run - lifecycle, waves, ticks, liveness, and what it waits on",
+  "description": "OPERATOR, 2026-09-23 (design worked through from first principles with the operator): the status VIEW is a renderer, not a source. This tick builds the model every surface renders - ticfac watch (89m), an agent checking in, a phone, the run feed idea n0r.\n\nWHO READS IT, and the questions in priority order - an unattended factory is GLANCED at, not watched:\n  1. does anything need a person? (untriaged findings, a decision, a merge, a halted run, a failed gate)\n  2. is it healthy? (moving, retrying, stalled; interventions counted)\n  3. how far along the WHOLE epic, and how much is left?\n  4. what is happening now?\n  5. what happened, what is next?\n\nTHE MODEL, per epic:\n  - lifecycle: plan -\u003e wave 1..n -\u003e review -\u003e close-out -\u003e CI -\u003e merge (a person); the current phase and each phase's state\n  - waves: every wave (done, active, upcoming) with its ticks, from the same layering tk graph computes; absorbed ticks marked as such\n  - per tick: state from DURABLE records only (never a worker's own claim), try number (h58's language) and prior tries' outcomes, tier/model/executor, elapsed\n  - per live worker: seconds since the runner's last turn (pi's session log - the signal b1t moves to) and that turn's summary\n  - waits_on: what the run is blocked on, since when, and the command that unblocks it when it needs a person\n  - health: remote retries and interventions, gate and CI state per check per head\n  - cost so far; remaining time ONLY where measured tick durations support it, marked approximate\nVersioned and stable (a contract like run-event-feed.json), for local and cloud runs alike.\n\nIt reads only what exists - run feed and events, attempt records, checkpoints, pi session logs, GitHub check runs, ticfac cloud status - and adds no new source of truth.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "nwj"
+  ],
+  "parent": "2jn",
+  "acceptance_criteria": "ticfac status --json emits a versioned model covering every local and cloud run: epic lifecycle phase, every wave with its ticks, per-tick state from durable records with try history, tier/model/executor and elapsed, per-worker silence and last turn, what the run waits on with an unblocking command when a person is needed, retries/interventions, CI per check per head, and cost; a contract fixture pins its shape; and it reads only existing records",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T12:41:19.922879Z",
+  "updated_at": "2026-09-23T12:41:20.073123Z"
+}

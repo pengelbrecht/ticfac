@@ -1,0 +1,13 @@
+{
+  "id": "tum",
+  "title": "The classifier key gets a verified setup path: a ~/.ticfacrc home and a ticfac factory setup rung",
+  "description": "Triaged 2026-09-23 from wne's close-out (findings 8e6b611b, adb8b0fb). x0k shipped the classifier key as $TICFAC_JEV_API_KEY locally and the TYPESAFE_API_KEY factory secret. Two gaps: (1) contracts/credential-ownership.json is closed (additionalProperties: false) and the Go constants must match it, so a factory_jev_api_key in ~/.ticfacrc needs a bundle change plus the matching constant, mirror and Worker secret; (2) every other factory credential is walked by 'ticfac factory setup' one verified rung at a time, while this one is set by hand and first noticed when a run degrades to a recorded no-answer. Add the home and a rung that verifies the key with one real, cheap classification before storing it.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The classifier key can live in ~/.ticfacrc under a key the credential-ownership contract declares; ticfac factory setup has a rung that verifies it with a real classification before writing it; and the contract and Go constants agree",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T17:35:35.330807Z",
+  "updated_at": "2026-09-23T17:35:35.330807Z"
+}

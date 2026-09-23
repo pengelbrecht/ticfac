@@ -529,10 +529,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	if result.LivenessError != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, livenessFailureLine(result.RunID, result.LivenessError))
 	}
-	if result.State != "completed" {
-		return 1
-	}
-	return 0
+	return resultExitCode(result)
 }
 
 // autoResumeCap turns the operator's two flags into the one number the

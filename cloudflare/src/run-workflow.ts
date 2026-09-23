@@ -138,6 +138,7 @@ import {
   type SandboxProcessState,
   sandboxBinding,
   sandboxName,
+  terminalExitReason,
 } from "./sandbox";
 import { MAX_RUN_WAVES } from "./wave-request";
 import {
@@ -180,10 +181,11 @@ export const MAX_CLOSEOUT_BOOTS = 2;
 /**
  * This deployment's `[[containers]] max_instances` ceiling, mirrored into a
  * `[vars]` string because wrangler does not hand a container application's own
- * config back to the Worker at runtime (tick b6e). Kept in step with
- * `wrangler.toml`'s `max_instances = 3` by hand; raising one without the
- * other reintroduces the exact silent serialization wave 3 measured, one
- * layer up.
+ * config back to the Worker at runtime (tick b6e). Not a third copy to
+ * maintain by hand (tick 7fl): the suite pins this default to the number
+ * wrangler.toml declares, and `ticfac factory deploy` refuses a config whose
+ * two declarations disagree, so a drift is a failing check — never the silent
+ * serialization wave 3 measured, one layer up.
  */
 export const DEFAULT_FACTORY_MAX_INSTANCES = 3;
 
@@ -1748,12 +1750,15 @@ async function supervisePass(
             ? `the orchestrator sandbox died (boot ${boot})`
             : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
         if (isTerminalExit(code)) {
-          // A configuration verdict from the entrypoint: the SHA still will not
-          // check out, the pre-flight still fails. Another container reaches the
-          // identical answer and only costs money.
+          // A configuration verdict from the boot: the SHA still will not check
+          // out, the pre-flight still fails, the epic the run was submitted
+          // for is still missing from the submitted tree. Another container
+          // reaches the identical answer and only costs money — so the reason
+          // the run STOPS with names the class, not just the code
+          // (terminalExitReason, ticfac tick rf3).
           return {
             kind: "failed",
-            detail: `${lastDetail} — a configuration failure, so no sandbox was rebooted`,
+            detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
             boots: counter.next - 1,
           };
         }

@@ -75,6 +75,15 @@ func (t *repoTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) 
 	if err != nil {
 		return tk.Graph{}, err
 	}
+	// tk's own refusal, as the first per-tick Cloudflare smoke run met it
+	// (ticfac tick rf3): the epic's record is a file, and a graph read of an
+	// epic the tree does not carry fails on opening it. A fake that answered
+	// an empty graph here would hide exactly the failure the smoke run
+	// burned boots on.
+	if _, ok := records[epicID]; !ok {
+		return tk.Graph{}, fmt.Errorf("open %s: no such file or directory",
+			filepath.Join(t.dir, ".tick", "issues", epicID+".json"))
+	}
 	var ids []string
 	for id, tick := range records {
 		if tick.Parent == epicID && tick.Status != "closed" {

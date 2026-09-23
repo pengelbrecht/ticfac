@@ -108,3 +108,51 @@ func TestRepoRunnersConfigResolvesEveryRole(t *testing.T) {
 		t.Errorf("Label() = %q, want the tier cell named", w.Label())
 	}
 }
+
+// The operator constraint this repository's cloud routing exists to honour
+// (tick 84z): everything OFF claude in the cloud, for every role — while a
+// LOCAL run keeps the frontier review and close-out on opus, which a Max
+// subscription pays for at the margin and a container can neither run nor
+// afford. Both halves are asserted against the file that routes the very
+// workers building ticfac.
+func TestRepoRunnersConfigKeepsClaudeOffTheCloud(t *testing.T) {
+	cfg, err := LoadRepo(repoRootForTest(t))
+	if err != nil {
+		t.Fatalf("LoadRepo: %v", err)
+	}
+	for _, role := range []string{RoleImplement, "review", "closeout"} {
+		for _, tier := range []Tier{"", TierEconomy, TierBalanced, TierStrong, TierFrontier} {
+			w, err := cfg.ResolveOn(SubstrateCloud, role, tier)
+			if err != nil {
+				t.Errorf("ResolveOn(cloud, %q, %q): %v — a cloud run would refuse at start over this cell", role, tier, err)
+				continue
+			}
+			if w.Kind == "claude" {
+				t.Errorf("ResolveOn(cloud, %q, %q) routes the claude harness into a container", role, tier)
+			}
+		}
+	}
+}
+
+// The local half of the same constraint: herdr and harness are where this
+// file's base cells were written for, and the frontier review and close-out
+// stay on opus there — taking opus out of the file altogether would be the
+// one-line fix that loses exactly this.
+func TestRepoRunnersConfigKeepsTheLocalFrontierReviewOnOpus(t *testing.T) {
+	cfg, err := LoadRepo(repoRootForTest(t))
+	if err != nil {
+		t.Fatalf("LoadRepo: %v", err)
+	}
+	for _, sub := range []Substrate{SubstrateHerdr, SubstrateHarness} {
+		for _, role := range []string{"review", "closeout"} {
+			w, err := cfg.ResolveOn(sub, role, "")
+			if err != nil {
+				t.Errorf("ResolveOn(%s, %q): %v", sub, role, err)
+				continue
+			}
+			if w.Kind != "claude" || w.Model != "opus" {
+				t.Errorf("ResolveOn(%s, %q) = %s/%s, want the frontier claude/opus", sub, role, w.Kind, w.Model)
+			}
+		}
+	}
+}

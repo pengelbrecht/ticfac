@@ -1,0 +1,154 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "xte",
+    "job_id": "run-epic-xte/tick-7q2/attempt-20",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "71c2086fea63ecc5454e3c807c9d20e85d9f5050",
+    "tick_id": "7q2"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Parent xte; the FIRST tick of the repair wave. internal/cli/executor.go knownExecutors/executorFactory know only local-subprocess and herdr, so internal/exec/cloudflaresandbox is unreachable from run-epic and every cloudflare-sandbox profile is refused. Register it (Runners: pi; AcceptsModel; the cloud PollInterval) and settle where collect, cancel and dispose live (supersedes findings a35ff202 and a69a9747).",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "xte W1: register cloudflare-sandbox in the CLI's honoured executors and decide collect/cancel/dispose"
+      },
+      {
+        "body": "Parent xte; blocked by W1. internal/factory/ticfacentrypoint.go:321-328 execs ticfac run-epic with no --profiles, so the compiled-in profiles/ (local-subprocess) resolve and every worker runs inside the orchestrator container (y3b finding 5d5e3f93). Point it at profiles-cloudflare-sandbox and the cloud substrate. The acceptance is a test that boots the STAGED entrypoint and asserts executor cloudflare-sandbox for every role.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "xte W2: the staged container entrypoint runs run-epic with the cloud profiles and substrate, tested through the staged script"
+      },
+      {
+        "body": "Parent xte. internal/profile/profile.go route applies the tier overlay after the cloud overlay and never re-checks. This repo's own runners.toml [roles.implement.tiers.balanced] kind=codex would route codex in the container under cloud, and a cloud cell without kind inherits the role's claude (findings dd60e88c, ea1a62d3). Check the resolved runner/model at construction under cloud, and require the cloud cell to state kind and model.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "xte W3: refuse a cloud run whose FINAL resolved runner is not pi on GLM, after tier overlays"
+      },
+      {
+        "body": "Parent xte. The review found that pi-ai hard-codes the Cloudflare accounts URL, needs CLOUDFLARE_ACCOUNT_ID and ignores WORKERS_AI_BASE_URL, so a worker either fails its first call or sends the run token straight to Cloudflare (finding a6d74684). ha9/qu3 landed pi and its spelling upstream, but nothing on this branch shows the gateway leg. Needs a provider override and a live probe, not an export-only test.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "xte W4: prove pi's cloudflare-workers-ai provider reaches Workers AI through the metered gateway, not api.cloudflare.com"
+      },
+      {
+        "body": "Parent xte; blocked by W1. The door's start body carries no model, so a cloud profile's recorded model rests on the factory agreeing with it (finding b7e18ccf). The acceptance names the per-attempt provider trace, so the model must travel with the dispatch and be observed back.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "xte W5: the sandbox dispatch door carries the model, so the recorded model is the one that ran"
+      },
+      {
+        "body": "Parent xte. The factory's phase=review path boots the ticks harness, which is claude when the deploy routes it, with no runners.toml routing (finding 8814e085). xte's acceptance says no claude process for any role, review and closeout included.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "xte W6: the factory's phase=review escape routes through runners.toml instead of booting the ticks harness"
+      },
+      {
+        "body": "Parent xte; blocked by W1-W6. This is the named tick that PERFORMS xte's gate: one sandbox per tick, pi on GLM per attempt in the trace, no claude process in the container, and a restart that adopts the running sandbox via the real cloudflaresandbox.Executor rather than dispatching a rival (subsumes dccd84cf). It touches a live system, so it needs the operator's go-ahead. It is also mn7's precondition.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "xte W7 (gate run): run a cloud epic on the deployed factory, restart the orchestrator mid-run, and record the provider per attempt"
+      },
+      {
+        "body": "Parent xte, role review; blocked by W7. Review the repair wave against xte's acceptance clause by clause, with the W7 run's trace as the evidence. The first review (y3b) returned NOT READY and the run went on to close-out anyway.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "xte skeleton: final review of the xte repair diff"
+      },
+      {
+        "body": "Parent xte, role closeout; blocked by the repair-wave review. Re-verify the acceptance outside-in, confirm sandbox-executor.ts's caller is exercised in production (not only through SELF.fetch), and release mn7.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "xte skeleton: close out xte (second pass): retro and next feasible epic"
+      },
+      {
+        "body": "cloudflare/src/sandbox-executor.ts:63-69 imports type AttemptExecutor, AttemptHandle, AttemptReport, AttemptSpec and AttemptStatus from ./epic-reconciler, and sandbox-dispatch.ts:131 imports AttemptSpec. Deleting epic-reconciler.ts, as mn7 plans, breaks the build of the surviving door. Add this to mn7 (or a tick before it): relocate the types, then delete. mn7 also stays blocked until the xte gate run (W7) exists.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "mn7 must move AttemptSpec and friends out of epic-reconciler.ts before deleting it"
+      },
+      {
+        "body": "Eight xte findings are one shape: fixtures inherit the host's git config or version or cwd, and go red at base on Apple git or in a linked worktree (1bb7d876, 75456c24, e6926fcb, ec119c6d, 88c1c497, c2848449, e24708aa, ad9dcff8). ad9dcff8 alone broke 20+ tests in the review's run. Grep for the shape and pin the git environment in fixtures, folding in the existing 82e and yjs.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Go test fixtures read the host's git (auto-maintenance, config, cwd): make them hermetic in one sweep"
+      },
+      {
+        "body": "ha9 was closed outside the run and dispatched seven times anyway (findings 90080478, c6239277, c96a5427). 8lg fixed the merge driver that lost the close. Verify whether claim still re-reads tick state on the folded main before dispatch, and add a guard test if not.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A dispatch can claim a tick the operator already closed outside the run"
+      },
+      {
+        "body": "84z added [roles.<x>.substrates.cloud] cells to ticfac's runners.toml, and ticks' own runconfig reader does not know the key (finding 1d6b5baf). The two readers must agree, or tk refuses this repository's config.",
+        "kind": "upstream-tick",
+        "severity": "medium",
+        "target": "pengelbrecht/ticks",
+        "title": "ticks' runconfig copy needs the roles.<x>.substrates overlay or tk refuses ticfac's runners.toml"
+      },
+      {
+        "body": "Every killed orphan inside the factory container stays a zombie forever, because PID 1 does not reap (finding c315f3f4). 58z made ticfac's gate tolerate this, but the image should run an init (tini or --init) so the process table does not grow unboundedly across a long run.",
+        "kind": "upstream-tick",
+        "severity": "low",
+        "target": "pengelbrecht/ticks",
+        "title": "ticks' sandbox image never reaps orphans: PID 1 is the Node control server"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-xte/tick-7q2/attempt-20",
+      "commits": 1,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-xte/7q2/RESULT-7q2.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "xte's definition of done is NOT met (cloudflare-sandbox is not registered in internal/cli, and the container's run-epic resolves the local-subprocess profiles; no cloud run was performed; the review said NOT READY), so do not merge PR #33 as \"xte done\" and do not release mn7; the repair wave above needs promoting, and 23 run findings are still untriaged."
+  },
+  "validated": true,
+  "requested_at": "2026-09-23T09:26:24Z",
+  "answered_at": "2026-09-23T09:26:24Z",
+  "provenance": {
+    "run_id": "epic-xte",
+    "tick_id": "7q2",
+    "attempt": 20,
+    "source_ref": "refs/heads/epic/xte",
+    "source_sha": "71c2086fea63ecc5454e3c807c9d20e85d9f5050",
+    "integration_ref": "refs/heads/epic/xte",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "model": "opus",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -31,7 +31,7 @@ import {
   resolveDispatchWidth,
   summarizeCloudWave,
 } from "../src/run-workflow";
-import { roomFor, runStatus, startRun, stopRun, submitRun } from "../src/runs";
+import { roomFor, runStatus, runWorkflowBinding, startRun, stopRun, submitRun } from "../src/runs";
 import {
   DEFAULT_SANDBOX_IMAGE,
   ORCHESTRATOR_COMMAND,
@@ -568,6 +568,63 @@ function failEveryDispatchLogInsert(matches: (decision: string) => boolean): {
   return { attempts: () => attempts };
 }
 
+// A run a test started must not outlive the test (ticfac tick 3cq).
+//
+// The Workflow engine is shared by every test in this file, and each test
+// installs a fresh FakeSandboxes. When one test times out with its run still
+// going - on CI under load: 'run run_wf_59 to finish - saw: row=stopping
+// workflow=running' - that Workflow keeps booting containers, and they land in
+// the NEXT test's fake: 'the orchestrator to start - saw: run_wf_59-3(0 proc),
+// run_wf_61-1(1 proc), ...'. The next test watched booted[0], a stranger with
+// no process, and timed out too, and so on down the file - one slow test
+// became four to six failures, a different block each time. The fix is
+// containment, not a longer wait: whatever a test started and did not finish
+// is terminated when it ends, and firstProcess only ever looks at this test's
+// own runs.
+let runsBeforeThisTest = new Set<string>();
+const WORKFLOW_OVER = new Set(["complete", "errored", "terminated"]);
+
+async function allRunIDs(): Promise<string[]> {
+  const rows = await env.DB.prepare("SELECT run_id FROM runs").all<{ run_id: string }>();
+  return (rows.results ?? []).map((row) => row.run_id);
+}
+
+/** A sandbox that belongs to a run started before this test - a stranger here. */
+function fromAnEarlierTest(sandbox: FakeSandbox): boolean {
+  for (const id of runsBeforeThisTest) {
+    if (sandbox.name === id || sandbox.name.startsWith(`${id}-`)) return true;
+  }
+  return false;
+}
+
+beforeEach(async () => {
+  runsBeforeThisTest = new Set(await allRunIDs());
+});
+
+afterEach(async () => {
+  const workflow = runWorkflowBinding(env);
+  if (workflow === null) return;
+  for (const id of (await allRunIDs()).filter((run) => !runsBeforeThisTest.has(run))) {
+    let instance: Awaited<ReturnType<typeof workflow.get>>;
+    try {
+      instance = await workflow.get(id);
+    } catch {
+      continue; // no Workflow was ever created for this row
+    }
+    let status: string;
+    try {
+      status = (await instance.status()).status;
+    } catch {
+      continue; // an engine that never started has nothing to leak
+    }
+    if (!WORKFLOW_OVER.has(status)) {
+      await (instance as unknown as { terminate(): Promise<void> })
+        .terminate()
+        .catch(() => undefined);
+    }
+  }
+});
+
 beforeEach(() => {
   sandboxes = new FakeSandboxes();
   set("SANDBOXES", sandboxes);
@@ -711,14 +768,47 @@ async function waitFor<T>(
   what: string,
   probe: () => Promise<T | null | undefined | false>,
   timeoutMs = 15_000,
+  describe?: () => Promise<string>,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const value = await probe();
     if (value !== null && value !== undefined && value !== false) return value;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    if (Date.now() > deadline) {
+      // What the wait SAW, not only that it ran out (ticfac tick 3cq): these
+      // timeouts appear only under CI load, a different test each time, and
+      // "timed out" alone has never been enough to say why.
+      const seen =
+        describe === undefined
+          ? ""
+          : await describe().catch((error: unknown) => `(could not describe: ${String(error)})`);
+      throw new Error(`timed out waiting for ${what}${seen === "" ? "" : ` - saw: ${seen}`}`);
+    }
     await scheduler.wait(10);
   }
+}
+
+/** The fake's sandboxes as a waiting test sees them: name and process count, in boot order. */
+function describeSandboxes(): Promise<string> {
+  const list = sandboxes.booted.map(
+    (sandbox) => `${sandbox.name}(${sandbox.processes.length} proc)`,
+  );
+  return Promise.resolve(list.length === 0 ? "no sandbox booted" : list.join(", "));
+}
+
+/** A run's row state and its Workflow instance's own status. */
+async function describeRun(runID: string): Promise<string> {
+  const row = (await getRun(env.DB, runID))?.state ?? "no row";
+  let workflow = "no instance";
+  const binding = runWorkflowBinding(env);
+  if (binding !== null) {
+    try {
+      workflow = (await (await binding.get(runID)).status()).status;
+    } catch (error) {
+      workflow = `status unreadable: ${String(error)}`;
+    }
+  }
+  return `run ${runID} row=${row} workflow=${workflow}; sandboxes: ${await describeSandboxes()}`;
 }
 
 const runState = (runID: string) => getRun(env.DB, runID).then((run) => run?.state ?? null);
@@ -814,11 +904,19 @@ function stubLogsAPI(
 }
 
 async function settled(runID: string) {
-  return waitFor(`run ${runID} to finish`, async () => {
-    const run = await getRun(env.DB, runID);
-    if (run === null) return null;
-    return ["completed", "stopped", "failed"].includes(run.state) ? run : null;
-  });
+  return waitFor(
+    `run ${runID} to finish`,
+    async () => {
+      const run = await getRun(env.DB, runID);
+      if (run === null) return null;
+      return ["completed", "stopped", "failed"].includes(run.state) ? run : null;
+    },
+    // A stop or a closeout under CI load legitimately takes longer than a
+    // boot does; the containment above is what keeps a slow one from
+    // becoming a cascade, not this number.
+    45_000,
+    () => describeRun(runID),
+  );
 }
 
 /** The SHA an orchestrator's pushed work lands at. */
@@ -887,10 +985,14 @@ async function requestNextWave(
 
 /** Waits until a sandbox has been booted and started the orchestrator. */
 async function firstProcess(): Promise<FakeProcess> {
-  return waitFor("the orchestrator to start", async () =>
-    sandboxes.booted.length > 0 && sandboxes.booted[0]!.processes.length > 0
-      ? sandboxes.booted[0]!.current
-      : null,
+  return waitFor(
+    "the orchestrator to start",
+    async () => {
+      const first = sandboxes.booted.find((sandbox) => !fromAnEarlierTest(sandbox));
+      return first !== undefined && first.processes.length > 0 ? first.current : null;
+    },
+    undefined,
+    describeSandboxes,
   );
 }
 
@@ -1355,6 +1457,27 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     const run = await settled(runID);
     expect(run.state).toBe("failed");
     expect(sandboxes.booted).toHaveLength(1);
+  });
+
+  it("does not reboot when the reconciler answers not-found: the epic is absent from the submitted tree", async () => {
+    const { runID, project } = await ignite();
+    // Exit 4: the orchestrator entrypoint execs `ticfac run-epic`, which exits
+    // with tk's not-found code when the epic does not exist on the submitted
+    // tree — a verdict the cut of the next container's checkout reproduces
+    // byte for byte (ticfac tick rf3). The first per-tick Cloudflare smoke run
+    // re-booted into this identical failure until a person stopped it by hand.
+    (await firstProcess()).exit(4);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(1);
+
+    // And the run's record says WHY it stopped, as a class an operator can act
+    // on — not just "exited 4": the durable reason is the refusal the
+    // reconciler recorded, and this is the supervisor's own account of it.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("the epic does not exist on the submitted tree");
+    expect(record.detail).toContain("no sandbox was rebooted");
   });
 
   it("gives up after a bounded number of boots rather than looping forever", async () => {

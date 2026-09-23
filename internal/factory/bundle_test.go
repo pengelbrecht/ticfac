@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -41,9 +42,11 @@ func requireEmbeddedPayload(t *testing.T) {
 }
 
 // fakeBundle is a minimal factory bundle and orchestrator image context,
-// shaped to exercise every rewrite this package performs on them:
-// wrangler.toml carries the placeholder database_id, one container binding
-// and a bucket; the Dockerfile carries both tk ARGs to pin.
+// shaped to exercise every rewrite and every check this package performs on
+// them: wrangler.toml carries the placeholder database_id, one container
+// binding, the capacity numbers whose agreement the deploy refuses to ship
+// without (tick 7fl), and a bucket; the Dockerfile carries both tk ARGs to
+// pin.
 //
 // The bytes are fixtures, not copies: the REAL files' content is what the
 // payload-guarded tests assert once the payload lands.
@@ -59,9 +62,12 @@ database_id = "` + placeholderDatabaseID + `"
 class_name = "Sandbox"
 new_sqlite_classes = ["Sandbox"]
 image = "../image/Dockerfile"
+max_instances = 3
 [[r2_buckets]]
 binding = "ARTIFACTS"
 bucket_name = "ticks-factory-artifacts"
+[vars]
+FACTORY_MAX_INSTANCES = "3"
 `)},
 		"cloudflare/src/index.ts":             &fstest.MapFile{Data: []byte("export {};")},
 		"cloudflare/src/auth.ts":              &fstest.MapFile{Data: []byte("export {};")},
@@ -332,6 +338,63 @@ func TestBundleDeclaresTheContainerBinding(t *testing.T) {
 	} {
 		if !strings.Contains(toml, want) {
 			t.Errorf("wrangler.toml does not declare %s:\n%s", want, toml)
+		}
+	}
+}
+
+// The committed config's two declarations of the sandbox capacity —
+// `[[containers]] max_instances`, the account-level ceiling Cloudflare enforces
+// on concurrent containers, and `[vars] FACTORY_MAX_INSTANCES`, the mirror a
+// cloud wave's dispatch width is bounded by because wrangler does not hand a
+// container application's own config back to the Worker at runtime — must say
+// one number (tick 7fl). Two numbers that must agree and are maintained
+// separately drift, and the failure when they do is a wave that books more
+// containers than the account can host, surfacing as sandbox creation
+// failures attributed to whichever tick happened to be fourth, never as a
+// capacity message. This is the content half of the check: the deploy's
+// refusal to ship a disagreement is covered in deploy_test.go.
+func TestCommittedCapacityNumbersAgree(t *testing.T) {
+	requireEmbeddedPayload(t)
+	data, err := ReadBundleFile(WranglerConfigFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyContainerCapacity(data); err != nil {
+		t.Errorf("the committed wrangler.toml's capacity numbers disagree: %v", err)
+	}
+}
+
+// The mechanics of the check, on bytes written for the purpose: an agreeing
+// pair passes, and a disagreement, a missing ceiling or a missing mirror is a
+// stop that names both numbers — never a shrug that lets a deploy proceed on
+// half a check.
+func TestVerifyContainerCapacityNamesEveryStop(t *testing.T) {
+	const pair = "[[containers]]\nmax_instances = %s\n[vars]\nFACTORY_MAX_INSTANCES = \"%s\"\n"
+
+	agreeing := fmt.Sprintf(pair, "3", "3")
+	if err := VerifyContainerCapacity([]byte(agreeing)); err != nil {
+		t.Errorf("an agreeing pair was refused: %v", err)
+	}
+
+	disagreeing := fmt.Sprintf(pair, "3", "2")
+	err := VerifyContainerCapacity([]byte(disagreeing))
+	if err == nil {
+		t.Fatalf("max_instances = 3 against FACTORY_MAX_INSTANCES = \"2\" was accepted")
+	}
+	for _, want := range []string{"max_instances = 3", `FACTORY_MAX_INSTANCES = "2"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the disagreement stop does not name %s: %v", want, err)
+		}
+	}
+
+	for name, missing := range map[string]string{
+		"no [[containers]] max_instances": "[vars]\nFACTORY_MAX_INSTANCES = \"3\"\n",
+		"no [vars] FACTORY_MAX_INSTANCES": "[[containers]]\nmax_instances = 3\n",
+	} {
+		if err := VerifyContainerCapacity([]byte(missing)); err == nil {
+			t.Errorf("wrangler.toml with %s was accepted:\n%s", name, missing)
+		} else if !strings.Contains(err.Error(), name) {
+			t.Errorf("the %s stop does not say so: %v", name, err)
 		}
 	}
 }

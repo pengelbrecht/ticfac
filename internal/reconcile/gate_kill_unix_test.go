@@ -27,6 +27,19 @@ import (
 // bound into scheduler noise rather than a fact about the kill path. It is
 // the only test in this package that measures the host's own responsiveness.
 // short: one shell with a 300ms bound; the bound is the whole cost
+//
+// INSIDE THE FACTORY CONTAINER this test failed red while the gate was doing
+// exactly its job (tick 58z, run_0d2edef252834a40b89deabbd0ffec69,
+// 2026-09-23). PID 1 there is the sandbox control server, and it never
+// reaps, so the group-killed child — proven killed, no live descendant left
+// — reparented to PID 1 and stayed a ZOMBIE, and signal 0 reads a zombie as
+// alive. On the Mac, PID 1 is launchd and reaps in milliseconds, which is
+// why the same test passed there. processAlive now answers dead for a zombie
+// (kill_unix_test.go, zombie_linux_test.go), so what this test asserts is
+// the honest property on BOTH hosts: the gate's child is not RUNNING once
+// the timeout has taken its shell. Whether anyone collects the corpse
+// afterwards is the host's business, not the gate's — a reaped child and an
+// unreaped one are equally dead.
 func TestAGateThatTimesOutTakesItsChildrenWithIt(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "child.pid")

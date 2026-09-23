@@ -217,6 +217,17 @@ start_harness() {
 	if [[ -n $factory_url ]]; then export TICKS_FACTORY_URL="$factory_url"; fi
 	if [[ -n $factory_token ]]; then export TICKS_FACTORY_TOKEN="$factory_token"; fi
 	if [[ -n $factory_project ]]; then export TICKS_FACTORY_PROJECT="$factory_project"; fi
+
+	# The substrate this run executes on (tick 84z), stated the way every
+	# reader of the substrate honours: the override, never a rewrite of the
+	# tracked config the run's workers commit against. This container IS the
+	# cloud — role routing resolves against it, the [roles.*.substrates.cloud]
+	# overlays of the target repository's .tick/runners.toml apply to every
+	# role including review and close-out, and a role nobody declared cloud
+	# routing for REFUSES the run at start, naming the role — never a silent
+	# fall back to the base cell, which is how a container once reached a
+	# claude process nobody chose.
+	export TICKS_SUBSTRATE="cloud"
 	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
 
 	# The two binaries, both required. ticfac refuses to start without the
@@ -231,35 +242,37 @@ start_harness() {
 		die $EXIT_CONFIG "this image does not carry ${missing[*]} — the orchestrator IS ticfac, so there is nothing for this container to run. Rebuild the image from a deploy that stages it (internal/factory/ticfacbin.go)."
 	fi
 
-	# ticfac's workers are ` + "`claude`" + ` processes in THIS container, launched by the
-	# local-subprocess executor, and they inherit this environment: common.sh has
-	# already pointed ANTHROPIC_BASE_URL at the gateway and set every vendor
-	# credential to the run's gateway token, and the executor's source grade
-	# preserves exactly those variables. So a worker's model call is the
-	# gateway-backed one the factory already pays for, metered against this run.
-	#
-	# That only holds on the Anthropic route. A run whose [orchestrator].model is
-	# served by Workers AI or OpenAI would dispatch workers that cannot make one
-	# call, so it is refused here rather than discovered at the first attempt —
-	# the same rule, for the same reason, that select_model_route applies to the
-	# claude harness.
-	if [[ ${TICKS_MODEL_PROVIDER:-anthropic} != "anthropic" ]]; then
-		die $EXIT_MODEL "ticfac dispatches its workers through the claude CLI, which speaks the Anthropic API, but '$model' is served by ${TICKS_MODEL_PROVIDER} — route [orchestrator].model to an Anthropic model for a run this container orchestrates."
-	fi
+	# The workers this container dispatches are ` + "`pi`" + ` processes (tick xte),
+	# launched by the local-subprocess executor
+	# (internal/exec/subprocess/runner.go), and they inherit this environment.
+	# common.sh has already exported WORKERS_AI_BASE_URL — the gateway's
+	# workers-ai route — and set every vendor credential it knows to the run's
+	# gateway token, but pi reads its Workers AI credential under a name
+	# common.sh does not carry: its cloudflare-workers-ai provider reads
+	# CLOUDFLARE_API_KEY (pi's Providers doc). Exporting the run's token under
+	# that name is the one substitution this boot makes, and the executor's
+	# source grade preserves it through a read-only worker's environment
+	# (modelCredentialPrefixes, internal/exec/subprocess/grade.go) — so a
+	# worker's model call is the gateway-backed one the factory already pays
+	# for, metered against this run.
+	export CLOUDFLARE_API_KEY="$gateway_token"
 
-	# The container runs as root, and the claude CLI REFUSES
-	# ` + "`--permission-mode bypassPermissions`" + ` under root unless it is told it is
-	# in a sandbox: "cannot be used with root/sudo privileges for security
-	# reasons". Every ticfac worker here is launched with that flag
-	# (internal/runconfig/kinds.go), so without this every dispatch would fail
-	# at exec with a message about privileges and nothing about the run.
+	# Two requirements the claude worker used to impose on this boot are
+	# deliberately NOT here any more (tick mdw).
 	#
-	# The statement is true rather than convenient: this IS a disposable
-	# container with an ephemeral disk, which is the condition the variable
-	# names. The ticks harness never met this because its default kind is omp,
-	# which has no such check — so the escape hatch belongs to ticfac's boot and
-	# is set here, where the processes that need it inherit it.
-	export IS_SANDBOX=1
+	# No route refusal. The boot used to die on any model not on the Anthropic
+	# route, on the reasoning that the worker was the claude CLI, which speaks
+	# the Anthropic API — a refusal that rejected exactly the workers-ai route
+	# this block now wires. Whether a routed model can be called is answered
+	# where the route is selected and probed (select_model_route, probe_model,
+	# before this line ever runs), not by the worker CLI.
+	#
+	# No IS_SANDBOX export. That was the claude CLI's requirement: it refuses
+	# ` + "`--permission-mode bypassPermissions`" + ` under root unless told it is in a
+	# sandbox. pi has no equivalent check — it has no permission gate at all;
+	# its only approval-shaped flag (` + "`--approve`" + `) is trust of project-local
+	# files, verified live 2026-09-10 (tick gjk; herdr-kinds.md's pi section,
+	# kinds.go's pi row) — so the requirement went with the CLI that had it.
 
 	# The base branch, and the LOCAL ref that makes it resolvable.
 	#

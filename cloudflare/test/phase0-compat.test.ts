@@ -33,7 +33,7 @@ import {
 } from "../src/auth";
 import { getDeploymentImage, getRunImage, insertRunImage, listRunGatewayTokens } from "../src/db";
 import { authorizeRunCredential, issueRunToken, revokeRunTokens } from "../src/gateway";
-import { effectiveRunBudget } from "../src/run-workflow";
+import { DEFAULT_FACTORY_MAX_INSTANCES, effectiveRunBudget } from "../src/run-workflow";
 // The two deployable files this suite pins strings out of. Vite inlines a
 // `?raw` import at transform time, which is what makes reading them possible
 // at all in a suite that executes inside workerd with no filesystem — and it
@@ -632,6 +632,42 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     else env.SANDBOX_IMAGE = originalImage;
   });
 
+  // `[[containers]] max_instances`, read out of wrangler.toml rather than
+  // restated here. It is the account-level ceiling Cloudflare enforces on
+  // concurrent containers AND the one number the dispatch width's `[vars]`
+  // mirror has to equal, so a literal here would be a third copy of the same
+  // number to maintain (tick 7fl).
+  const declaredMaxInstances = () => {
+    const declared = /^\s*max_instances\s*=\s*(\d+)\s*$/m.exec(WRANGLER_TOML);
+    if (declared === null) {
+      throw new Error("wrangler.toml declares no [[containers]] max_instances");
+    }
+    return declared[1];
+  };
+
+  it("keeps the sandbox capacity and the dispatch width one number, not two", () => {
+    // `[[containers]] max_instances` is the ceiling Cloudflare actually
+    // enforces; `[vars] FACTORY_MAX_INSTANCES` is the copy the Worker bounds a
+    // cloud wave's dispatch width by, because wrangler does not hand a
+    // container application's own config back at runtime. Two numbers that
+    // must agree and are maintained separately drift (tick 7fl), and the
+    // failure when they do is a wave that books more containers than the
+    // account can host — surfacing as sandbox creation failures attributed
+    // to whichever tick happened to be fourth, never as a capacity message.
+    // This is the suite's half of the mechanical check; `ticfac factory
+    // deploy` refuses to ship a config whose two numbers disagree.
+    const ceiling = declaredMaxInstances();
+    const mirror = /^\s*FACTORY_MAX_INSTANCES\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
+    expect(mirror, "wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES mirror").not.toBeNull();
+
+    expect(mirror![1], "the dispatch width's copy of the container ceiling disagrees").toBe(
+      ceiling,
+    );
+    // The compiled default the width falls back to when the var is absent is
+    // the same number again — a copy nothing can check at runtime.
+    expect(DEFAULT_FACTORY_MAX_INSTANCES).toBe(Number(ceiling));
+  });
+
   it("names the container application wrangler.toml declares", () => {
     // `[[containers]] name` in wrangler.toml, READ OUT OF wrangler.toml. The
     // image is fixed by the deploy on this substrate, so this string is what a
@@ -694,6 +730,10 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // These are read from the real `env` inside workerd, so this is the
     // deployable config rather than a copy of it. They are the numbers that
     // govern a run: change one and every future run changes with it.
+    // FACTORY_MAX_INSTANCES is the one value NOT restated as a literal: it is
+    // `[[containers]] max_instances declared a second time (tick 7fl), so
+    // the pin for it is the ceiling itself and the two can no longer be
+    // raised apart.
     const vars = env as unknown as Record<string, unknown>;
     const declared = Object.fromEntries(
       Object.keys(vars)
@@ -702,7 +742,7 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
         .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
-      FACTORY_MAX_INSTANCES: "3",
+      FACTORY_MAX_INSTANCES: declaredMaxInstances(),
       GITHUB_CONSENT_LABEL: "tk",
       RUN_CLOSEOUT_MS: "1800000",
       RUN_MAX_COST_USD: "40",
