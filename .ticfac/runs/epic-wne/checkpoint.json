@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 119,
-  "state": "gating",
-  "reason": "running the integrated gate for 0mp on ec40c4891975",
-  "updated_at": "2026-09-23T14:49:29Z",
+  "sequence": 120,
+  "state": "failed",
+  "reason": "6 finding(s) this run drafted are still waiting for a person — \"The credential-ownership bundle closes ~/.ticfacrc, so the operator cannot choose it as the local home for the classifier key\" (contract, severity low, tick x0k, for this repository); \"ticfac factory setup has no classifier rung: TYPESAFE_API_KEY is set by hand and never verified\" (proposed-tick, severity low, tick x0k, for this repository); \"make test fails at base: runstate maintenance test's control fetch starts no auto maintenance on this host\" (defect, severity low, tick sj2, for this repository); \"make test fails at base: TestTheBuiltBinaryExitsTwo gets exit 1 (gate config read) where it wants exit 2 (no executor configured)\" (defect, severity medium, tick sj2, for this repository); \"Classifier spend is invisible to RUN_MAX_COST_USD: the jev route is vendor-direct, so its cost never reaches the gateway logs the budget acts on\" (proposed-tick, severity low, tick x0k, for this repository); \"Full Go suite fails locally on two pre-existing tests (already tracked as ticks yjs and pqs)\" (defect, severity low, tick kl9, for this repository) — and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode here, and this is the one decision point. Triage each with `ticfac finding wne 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e|adb8b0fb439d6dfebe517175998b0e2699886d9b854689f841033d6cc7096e06|bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c|be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b|c74c4fda0e0f46e19b034ab077ef1c23aa895b954e0db9a4eece22e5dac4f6f4|de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding wne 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e|adb8b0fb439d6dfebe517175998b0e2699886d9b854689f841033d6cc7096e06|bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c|be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b|c74c4fda0e0f46e19b034ab077ef1c23aa895b954e0db9a4eece22e5dac4f6f4|de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding wne 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e|adb8b0fb439d6dfebe517175998b0e2699886d9b854689f841033d6cc7096e06|bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c|be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b|c74c4fda0e0f46e19b034ab077ef1c23aa895b954e0db9a4eece22e5dac4f6f4|de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close-out's close is the only step left — and the resume closes each role tick behind its recorded decision, it does not dispatch the job again (tick 80x). The drafts are keys 8e6b611bf07bc311ffeea26dac08573fa6186b8597830600dac65e819276de5e, adb8b0fb439d6dfebe517175998b0e2699886d9b854689f841033d6cc7096e06, bab9d041096e430d0cfd18e54a7042b721f768d6f4911e170ca553ac1a85ba7c, be028ce1f841b3216b43510697c11546fec7c83e017d5c60fb45fc39f282c54b, c74c4fda0e0f46e19b034ab077ef1c23aa895b954e0db9a4eece22e5dac4f6f4, de710d73d155e42933f37cb9da91cb0d23bfbfdb739ad7697f1e36086312e59b under .ticfac/runs/epic-wne/findings/ on origin, listed by `ticfac findings wne` and the epic PR #32 carries each one's full text",
+  "updated_at": "2026-09-23T14:50:27Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "0mp",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 8
     },
     {
