@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_0d2edef252834a40b89deabbd0ffec69",
   "epic_id": "plw",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching pg9 as attempt 1",
-  "updated_at": "2026-09-23T05:22:14Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "pg9 is running as attempt 1",
+  "updated_at": "2026-09-23T05:22:20Z",
   "ticks": [
     {
       "tick_id": "pg9",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     }
   ],
   "provenance": {
