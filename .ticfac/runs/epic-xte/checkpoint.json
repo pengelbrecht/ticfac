@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 92,
-  "state": "publishing",
-  "reason": "closing w33 behind the integrated gate on 84ecc8194e51",
-  "updated_at": "2026-09-23T05:52:20Z",
+  "sequence": 93,
+  "state": "running",
+  "reason": "w33 is closed",
+  "updated_at": "2026-09-23T05:52:40Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -68,7 +68,7 @@
     },
     {
       "tick_id": "w33",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 13
     },
     {
