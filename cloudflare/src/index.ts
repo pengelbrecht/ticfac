@@ -27,6 +27,9 @@
  *                             on its own run's gateway token (tick t4y); this
  *                             is what makes branch ownership a lookup rather
  *                             than a naming convention
+ * - POST /api/done          - a finished orchestrator waking its Run Workflow
+ *                             through the Worker (tick 7eq); best effort — the
+ *                             pushed branch, never the event, is the truth
  * - GET/POST/DELETE /api/ci/branches - a person answering the same question,
  *                             on the operator's token; the only door that may
  *                             say a branch is a HUMAN's
@@ -53,6 +56,7 @@ import {
 } from "./artifacts";
 import {
   authenticateFactoryRequest,
+  DONE_PATH,
   isAuthConfigured,
   isAuthExempt,
   SANDBOX_DISPATCH_PREFIX,
@@ -85,6 +89,7 @@ import { runDailyDigest } from "./loop-digest";
 import { observeRoute } from "./observe";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
+import { signalRunDone } from "./run-done";
 import { readRunFeed } from "./run-feed";
 import {
   type MessageRef,
@@ -1259,6 +1264,31 @@ export default {
         );
       }
       return Response.json({ wave: result.request }, { status: 202 });
+    }
+
+    // The completion door (tick 7eq). Beside the other run-credential doors
+    // and for the same reason: its caller is the orchestrator container,
+    // holding its run's own gateway token, never the operator's. A container
+    // invoking the Workflow binding DIRECTLY is unverified platform ground,
+    // so it POSTs here and the Worker — which does hold the binding — turns
+    // the POST into `instance.sendEvent()`. Answered 202 whether or not the
+    // event was taken: the door is an optimisation, and the pushed branch —
+    // never the event — is the source of truth.
+    if (url.pathname === DONE_PATH) {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      const signalled = await signalRunDone(env, request);
+      if (!signalled.ok) {
+        return Response.json(
+          { error: signalled.error, detail: signalled.detail },
+          { status: signalled.status },
+        );
+      }
+      return Response.json(
+        { delivered: signalled.delivered, detail: signalled.detail },
+        {
+          status: 202,
+        },
+      );
     }
 
     // A container recording the branch it just created (tick t4y). Beside

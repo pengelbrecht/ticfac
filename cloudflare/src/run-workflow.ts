@@ -51,6 +51,16 @@
  *    outcome rather than as a trip, so a wave that went perfectly is not
  *    recorded — in the index row, the dispatch log or `run.json` — as a run
  *    somebody stopped. `state` alone has to be readable.
+ * 8. **The completion signal wakes the watch; the branch decides (tick
+ *    7eq).** A finished orchestrator POSTs the factory's done door, the
+ *    Worker turns that into `instance.sendEvent()`, and the next wait
+ *    returns immediately — no polling for a finish that has already
+ *    happened. The event is buffered by the platform, so a container that
+ *    finished before its supervisor resumed loses nothing; and it decides
+ *    nothing, because the container may still die after finishing and
+ *    before its callback lands. The looks still read the process and the
+ *    budgets, and the verdict still comes from the durable layer. The event
+ *    is the optimisation; the pushed branch is the truth.
  *
  * See docs/design/cloud-factory.md (Phase 1, UC1, UC1b, D14, D15, D19, D20).
  */
@@ -107,6 +117,7 @@ import {
   settledOutcome,
 } from "./reconcile";
 import { readDeclaredMaxParallel, readDeclaredSandboxImage } from "./repo-config";
+import { DONE_EVENT_TYPE, type DoneSignal, readDoneSignal } from "./run-done";
 import {
   epicCompleted,
   epicStarted,
@@ -177,6 +188,20 @@ export const MAX_SANDBOX_BOOTS = 3;
 
 /** The closeout pass gets its own, smaller allowance for the same reason. */
 export const MAX_CLOSEOUT_BOOTS = 2;
+
+/**
+ * The floor on a `step.waitForEvent` timeout (tick 7eq).
+ *
+ * The platform's event timeouts are documented as settable between one second
+ * and 365 days — below the floor is a value the deployed platform may refuse
+ * or clamp, and a request-shape error is never a place to learn the platform's
+ * real bound (`.tick/learnings.md`: a bodyless 4xx is REQUEST SHAPE until
+ * proven otherwise). The supervisor's look cadence is slower than this in
+ * every real deployment (the default backoff starts at fifteen seconds), so
+ * the floor only bites a test configuration — which takes the plain `sleep`
+ * path instead, losing the wake-up and nothing else. Pinned by the suite.
+ */
+export const MIN_EVENT_WAIT_MS = 1_000;
 
 /**
  * This deployment's `[[containers]] max_instances` ceiling, mirrored into a
@@ -1470,6 +1495,51 @@ type PassOptions = {
 type BootCounter = { next: number };
 
 /**
+ * One wait between looks (tick 7eq): the completion signal when it lands,
+ * the poll cadence otherwise.
+ *
+ * The orchestrator POSTs the factory's done door when it finishes, the Worker
+ * turns that into `instance.sendEvent()`, and this step returns the moment it
+ * does — the look happens immediately rather than at the next cadence tick.
+ * Events are BUFFERED by the platform, so a container that finished before
+ * this wait started loses nothing.
+ *
+ * The catch on the timeout is the design, not a defeat: a timed-out wait IS
+ * the cadence sleep (a run whose callback never lands is concluded by the
+ * looks — the branch is the source of truth), and the signal itself decides
+ * nothing — the look that follows reads the process state and the durable
+ * layer exactly as it would have a cadence tick later. A `waitForEvent`
+ * timeout throws on this platform; catching it here is what keeps the throw
+ * from failing the whole instance.
+ *
+ * A cadence below the platform's documented timeout floor takes the plain
+ * sleep instead ({@link MIN_EVENT_WAIT_MS}) — a sub-second poll interval is a
+ * test configuration, and it must not become a platform request-shape error.
+ */
+async function waitDoneSignal(
+  step: WorkflowStep,
+  label: string,
+  attempt: number,
+  look: number,
+  pollMs: number,
+): Promise<DoneSignal | null> {
+  if (pollMs < MIN_EVENT_WAIT_MS) {
+    await step.sleep(`${label}:wait:${attempt}:${look}`, pollMs);
+    return null;
+  }
+  try {
+    const event = await step.waitForEvent(`${label}:signal:${attempt}:${look}`, {
+      type: DONE_EVENT_TYPE,
+      timeout: pollMs,
+    });
+    return readDoneSignal(event.payload);
+  } catch {
+    // The timeout is the look cadence, not a failure: fall through to the look.
+    return null;
+  }
+}
+
+/**
  * Boot an orchestrator, watch it, reboot it if it dies — until it finishes,
  * trips, or runs out of allowances.
  */
@@ -1581,15 +1651,19 @@ async function supervisePass(
           ...(context.config.harness === null ? {} : { harness: context.config.harness }),
           ...(context.config.model === null ? {} : { model: context.config.model }),
           sandbox_image: image,
-          // The dispatch half (tick wiy). Given per PASS, never per run: a
-          // container that may not ask for a wave is not told how to, and a
-          // closeout cannot be talked into starting one because it has no
-          // pass number, no substrate override and no factory URL to ask.
+          // The dispatch half (tick wiy). The WAVE REQUEST is per PASS: a
+          // container that may not ask for a wave has no TICKS_PASS, and the
+          // dispatch door refuses a request carrying no pass number. The
+          // factory URL itself is given per BOOT now (tick 7eq): every
+          // orchestrator reports its own finish to the done door, and the
+          // door — not a withheld URL — is what keeps a non-wave pass from
+          // dispatching: `POST /api/wave` answers 400 without a recorded wave
+          // request for the pass, whatever the container holds.
           ...(options.substrate === undefined ? {} : { substrate: options.substrate }),
           ...(options.pass === undefined ? {} : { pass: options.pass }),
           ...(options.wave_ticks === undefined ? {} : { wave_ticks: options.wave_ticks }),
           ...(options.wave_base_sha === undefined ? {} : { wave_base_sha: options.wave_base_sha }),
-          ...(options.pass === undefined || factoryBaseURL(env) === null
+          ...(factoryBaseURL(env) === null
             ? {}
             : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
           // The review half (tick v7g). Given per BOOT, from the run's own row
@@ -1681,7 +1755,26 @@ async function supervisePass(
         deadline_ms: cadenceDeadline,
         spend,
       });
-      await step.sleep(`${options.label}:wait:${attempt}:${look}`, pollMs);
+      // The completion signal, or the cadence (tick 7eq): whichever lands
+      // first. The event only collapses the wait — the look below still
+      // reads the process and the budgets, and the run's verdict still
+      // comes from the durable layer, never from the container's claim.
+      const signal = await waitDoneSignal(step, options.label, attempt, look, pollMs);
+      if (signal !== null) {
+        // Recorded, never trusted: the one durable trace that the callback
+        // landed and was consumed, for whoever asks later why a run settled
+        // without a reboot. The payload itself rides the checkpointed
+        // `signal` step's own output, which `GET /api/runs/:id` serves.
+        await step.do(`${options.label}:heard:${attempt}:${look}`, OBSERVE_RETRIES, async () => {
+          await logDispatch(env, {
+            run_id: params.run_id,
+            epic: params.epic,
+            decision: "signal:done",
+            reason: null,
+          });
+          return { heard: signal };
+        });
+      }
 
       const seen = await step.do(
         `${options.label}:watch:${attempt}:${look}`,
