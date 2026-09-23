@@ -1148,3 +1148,4 @@
 {"ts":"2026-09-23T06:08:51.646043Z","tick":"yin","action":"close","actor":"peter@engelbrecht.dk","data":{"title":"The pr-89 review run failed at the pi probe"}}
 {"ts":"2026-09-23T06:08:51.737776Z","tick":"owf","action":"block","actor":"peter@engelbrecht.dk","data":{"blockers":["mn7"],"title":"The epic-reconciler lease-lapse test fails under full-suite load"}}
 {"ts":"2026-09-23T06:23:53.142259Z","tick":"b6u","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"An epic PR that GitHub thinks conflicts never gets CI, so close-out never completes","type":"bug"}}
+{"ts":"2026-09-23T06:37:17.841365Z","tick":"3cq","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"The cloud-wave budget test fails intermittently under CI load","type":"bug"}}
