@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 76,
-  "state": "dispatching",
-  "reason": "dispatching ha9 as attempt 11",
-  "updated_at": "2026-09-23T05:32:21Z",
+  "sequence": 77,
+  "state": "running",
+  "reason": "ha9 is running as attempt 11",
+  "updated_at": "2026-09-23T05:32:36Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -58,7 +58,8 @@
     },
     {
       "tick_id": "ha9",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 11
     },
     {
       "tick_id": "rf3",
