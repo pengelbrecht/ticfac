@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 70,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for 0mp",
-  "updated_at": "2026-09-23T05:50:37Z",
+  "sequence": 71,
+  "state": "integrating",
+  "reason": "integrating 0mp attempt 8 into epic/wne",
+  "updated_at": "2026-09-23T05:51:27Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "0mp",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 8
     }
   ],
