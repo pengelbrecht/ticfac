@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 106,
-  "state": "running",
-  "reason": "x0k is closed",
-  "updated_at": "2026-09-23T13:18:55Z",
+  "sequence": 107,
+  "state": "dispatching",
+  "reason": "dispatching sj2 as attempt 11",
+  "updated_at": "2026-09-23T13:19:12Z",
   "ticks": [
     {
       "tick_id": "0ju",
