@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "y3b",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-23T01:32:39Z",
+  "triaged_at": "2026-09-23T11:00:23Z",
+  "triaged_by": "peter@engelbrecht.dk",
+  "promoted_as": "6gr",
   "provenance": {
     "run_id": "epic-xte",
     "tick_id": "y3b",
