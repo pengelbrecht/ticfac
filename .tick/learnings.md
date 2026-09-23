@@ -1,17 +1,22 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the Phase 4 (ncv) close-out, 2026-09-19.
+Seeded from ticks' learnings 2026-09-02; last compacted at the xte close-out, 2026-09-23.
 
 ## Planning an epic
 
-**Problem:** Phase 4 delivered every component of the Cloudflare host — the move, the Workflow
-reconciler, run records out of D1, the serialized publisher, the sandbox executor — each tick green
-against its own acceptance, and NOTHING drove them: no route created the Workflow, so the gate run
-could not be performed, and the review was the first to notice. The epic itself ran on local herdr,
-so its sixteen resumes proved the Go reconciler, not the host it was building. **Rule:** When an
-epic's gate is a run, the FIRST tick wires the thinnest end-to-end path on the target host, and a
-named tick PERFORMS the gate run before the review. Evidence from the old host is about the old host.
+**Problem:** TWICE now (Phase 4, then xte) every component tick closed green and NOTHING drove them.
+Phase 4: no route created the Workflow. xte: the door, the Go executor, the cloud profiles and
+adoption all landed, but internal/cli never registered the executor and the container's
+`run-epic` never named the cloud profiles — so a cloud run still dispatched local subprocesses.
+Both epics ran on the old host, proving the old host. **Rule:** When an epic's gate is a run, the
+FIRST tick wires the thinnest end-to-end path through the PRODUCTION entry point (tested through
+the staged entrypoint, not a package), and a named tick PERFORMS the gate run before the review.
+A partition of components with no wiring tick is refused at planning.
+
+**Problem:** xte's "a cloud run never routes claude" held per layer and failed in the whole: the
+cloud overlay was checked, then a tier overlay applied after it (`balanced` → codex). **Rule:**
+Check a policy on the FINAL resolved value, after every overlay, never on one input layer.
 
 **Problem:** A reconciler that never persisted its sandbox handle, and an executor whose boot revoked
 every sibling's token, were both green: FakeExecutor keyed on job_id, and the tests stubbed boot.
@@ -78,14 +83,12 @@ waiting"; GitHub had not created the check runs yet. **Rule:** Absence right aft
 yet". Bound a wait for the thing to APPEAR before calling it "never", and state what was checked
 rather than a guessed cause.
 
-**Problem:** The 5-minute poll looks lazy; under a 20-minute wipe threshold it IS the keepalive.
-**Rule:** Find what a slow interval holds open before speeding it up; it belongs to the executor.
-
 ## Where a tick lives
 
-**Problem:** Ticks filed in ticfac's tracker to change the ticks repository were undispatchable —
-`tk herd spawn` worktrees the repo whose tracker holds the tick. **Rule:** A tick goes in the tracker
-of the repo whose CODE it changes. Cross-repo work is a second epic, run with `--repo <dir>`.
+**Problem:** Ticks filed here to change the ticks repository were undispatchable, and xte's ha9
+(pi in the ticks sandbox image) was dispatched SEVEN times: no ticfac worker could make it. **Rule:**
+A tick goes in the tracker of the repo whose CODE it changes; another repo's change is an
+`upstream-tick`, never a child of this epic. Cross-repo work is a second epic, `--repo <dir>`.
 
 ## Provider and model configuration
 
@@ -135,12 +138,9 @@ commits its RESULT even with no source change; "settled" or `done` means "look n
 
 ## Tracker hygiene
 
-**Problem:** Backticks in `tk create -d "..."` were shell-substituted; `git add .tick/ && git commit`
-captured foreign staged files. **Rule:** Heredoc tick text; `git commit .tick/`; check `MERGE_HEAD`.
-
 **Problem:** `tk close` on a parked tick printed usage; the real error showed only with `--reason`.
 **Rule:** A close that prints usage is a REFUSAL — re-run with `--reason done` to read it. A tick
-parked with `tk ask` needs `--from human` once answered.
+parked with `tk ask` needs `--from human` once answered. Heredoc tick text; `git commit .tick/`.
 
 **Problem:** Phase 4's triage promoted ~20 findings into ticks that existed only as untracked files in
 the operator's checkout, so the run branch's `promoted_as` ids resolved in no committed tracker.
