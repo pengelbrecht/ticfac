@@ -65,6 +65,8 @@ func mergeDetail(t *testing.T, dir string, g *repoGit) string {
 
 // Two ticks of one wave that each CREATE the same file: the add/add conflict
 // that stopped epic-wne twice, and the one whose kind is a planning verdict.
+//
+// short: one small git repository and a single merge, no harness, no runner
 func TestAnAddAddConflictIsNamedWithItsPathAndKind(t *testing.T) {
 	t.Parallel()
 	dir, g := mergeConflictRepo(t,
@@ -90,6 +92,8 @@ func TestAnAddAddConflictIsNamedWithItsPathAndKind(t *testing.T) {
 
 // Both sides edit a file that already existed: a content conflict, and it has
 // to read as one — distinguishable from add/add without reproducing the merge.
+//
+// short: one small git repository and a single merge, no harness, no runner
 func TestAContentConflictIsDistinguishableFromAnAddAddConflict(t *testing.T) {
 	t.Parallel()
 	dir, g := mergeConflictRepo(t,
@@ -109,6 +113,8 @@ func TestAContentConflictIsDistinguishableFromAnAddAddConflict(t *testing.T) {
 
 // A kind whose git line is not "Merge conflict in <path>" keeps git's own
 // wording, and every conflict in one merge is named — not the first alone.
+//
+// short: one small git repository and a single merge, no harness, no runner
 func TestEveryConflictOfOneMergeIsNamedWithGitsOwnWording(t *testing.T) {
 	t.Parallel()
 	dir, g := mergeConflictRepo(t,
@@ -132,6 +138,8 @@ func TestEveryConflictOfOneMergeIsNamedWithGitsOwnWording(t *testing.T) {
 
 // Output this parse does not recognise still names its files, from the index,
 // and an empty merge output never becomes an empty reason.
+//
+// short: one small git repository and a single merge, no harness, no runner
 func TestAMergeFailureWithoutConflictLinesIsNeverEmpty(t *testing.T) {
 	t.Parallel()
 	if got := describeMergeFailure("", "", "a.go\nb.go", nil); !strings.Contains(got, "unmerged a.go") ||
