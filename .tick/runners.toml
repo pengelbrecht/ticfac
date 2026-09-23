@@ -39,22 +39,6 @@ model = "gpt-5.6-luna"
 effort = "max"
 args = []
 
-# Claude as the top rung of the implement ladder (operator, 2026-09-23: "if a
-# tick is complex you can consider using a claude executor locally. It should
-# be significantly stronger than pi/glm"). A tick starts on GLM 5.3; a FAILED
-# attempt earns a rung, and above strong is this. Local only by intent: it is
-# here in the common file until yoh tick 5uo lands runners.local.toml, and it
-# moves there then. No cloud epic runs before that - u9h waits on yoh.
-[roles.implement.tiers.frontier]
-kind = "claude"
-model = "opus"
-effort = "high"
-
-[tier_policy]
-default = "strong"
-ceiling = "frontier"
-step = 1
-
 # The frontier-tier review at epic completion.
 [roles.review]
 kind = "claude"
