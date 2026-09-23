@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 24,
-  "state": "collecting",
-  "reason": "collecting xev attempt 2",
-  "updated_at": "2026-09-23T21:46:58Z",
+  "sequence": 25,
+  "state": "integrating",
+  "reason": "integrating xev attempt 2 into epic/yoh",
+  "updated_at": "2026-09-23T21:47:49Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "xev",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 2
     },
     {
