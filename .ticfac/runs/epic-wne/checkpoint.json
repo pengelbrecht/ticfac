@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 57,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for 02p",
-  "updated_at": "2026-09-23T01:01:35Z",
+  "sequence": 58,
+  "state": "publishing",
+  "reason": "closing 02p behind its validated review-epic answer",
+  "updated_at": "2026-09-23T01:02:58Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "02p",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 7
     },
     {
