@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 53,
-  "state": "publishing",
-  "reason": "closing s45 behind the integrated gate on e15c544475ec",
-  "updated_at": "2026-09-23T00:54:24Z",
+  "sequence": 54,
+  "state": "running",
+  "reason": "s45 is closed",
+  "updated_at": "2026-09-23T00:54:46Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "s45",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
