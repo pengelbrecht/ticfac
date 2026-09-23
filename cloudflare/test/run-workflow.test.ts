@@ -31,7 +31,7 @@ import {
   resolveDispatchWidth,
   summarizeCloudWave,
 } from "../src/run-workflow";
-import { roomFor, runStatus, startRun, stopRun, submitRun } from "../src/runs";
+import { roomFor, runStatus, runWorkflowBinding, startRun, stopRun, submitRun } from "../src/runs";
 import {
   DEFAULT_SANDBOX_IMAGE,
   ORCHESTRATOR_COMMAND,
@@ -711,14 +711,47 @@ async function waitFor<T>(
   what: string,
   probe: () => Promise<T | null | undefined | false>,
   timeoutMs = 15_000,
+  describe?: () => Promise<string>,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const value = await probe();
     if (value !== null && value !== undefined && value !== false) return value;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    if (Date.now() > deadline) {
+      // What the wait SAW, not only that it ran out (ticfac tick 3cq): these
+      // timeouts appear only under CI load, a different test each time, and
+      // "timed out" alone has never been enough to say why.
+      const seen =
+        describe === undefined
+          ? ""
+          : await describe().catch((error: unknown) => `(could not describe: ${String(error)})`);
+      throw new Error(`timed out waiting for ${what}${seen === "" ? "" : ` - saw: ${seen}`}`);
+    }
     await scheduler.wait(10);
   }
+}
+
+/** The fake's sandboxes as a waiting test sees them: name and process count, in boot order. */
+function describeSandboxes(): Promise<string> {
+  const list = sandboxes.booted.map(
+    (sandbox) => `${sandbox.name}(${sandbox.processes.length} proc)`,
+  );
+  return Promise.resolve(list.length === 0 ? "no sandbox booted" : list.join(", "));
+}
+
+/** A run's row state and its Workflow instance's own status. */
+async function describeRun(runID: string): Promise<string> {
+  const row = (await getRun(env.DB, runID))?.state ?? "no row";
+  let workflow = "no instance";
+  const binding = runWorkflowBinding(env);
+  if (binding !== null) {
+    try {
+      workflow = (await (await binding.get(runID)).status()).status;
+    } catch (error) {
+      workflow = `status unreadable: ${String(error)}`;
+    }
+  }
+  return `run ${runID} row=${row} workflow=${workflow}; sandboxes: ${await describeSandboxes()}`;
 }
 
 const runState = (runID: string) => getRun(env.DB, runID).then((run) => run?.state ?? null);
@@ -814,11 +847,16 @@ function stubLogsAPI(
 }
 
 async function settled(runID: string) {
-  return waitFor(`run ${runID} to finish`, async () => {
-    const run = await getRun(env.DB, runID);
-    if (run === null) return null;
-    return ["completed", "stopped", "failed"].includes(run.state) ? run : null;
-  });
+  return waitFor(
+    `run ${runID} to finish`,
+    async () => {
+      const run = await getRun(env.DB, runID);
+      if (run === null) return null;
+      return ["completed", "stopped", "failed"].includes(run.state) ? run : null;
+    },
+    undefined,
+    () => describeRun(runID),
+  );
 }
 
 /** The SHA an orchestrator's pushed work lands at. */
@@ -887,10 +925,14 @@ async function requestNextWave(
 
 /** Waits until a sandbox has been booted and started the orchestrator. */
 async function firstProcess(): Promise<FakeProcess> {
-  return waitFor("the orchestrator to start", async () =>
-    sandboxes.booted.length > 0 && sandboxes.booted[0]!.processes.length > 0
-      ? sandboxes.booted[0]!.current
-      : null,
+  return waitFor(
+    "the orchestrator to start",
+    async () =>
+      sandboxes.booted.length > 0 && sandboxes.booted[0]!.processes.length > 0
+        ? sandboxes.booted[0]!.current
+        : null,
+    undefined,
+    describeSandboxes,
   );
 }
 
