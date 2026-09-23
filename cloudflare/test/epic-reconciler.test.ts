@@ -34,6 +34,7 @@ import {
   isRoleJob,
   nextAttemptNumber,
   nextDecisionNumber,
+  PASS_RETRIES,
   planFrom,
   roleOf,
   skeletonRank,
@@ -2312,6 +2313,123 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
   });
 });
 
+describe("the pass step's retry policy is deliberate (cr4)", () => {
+  /**
+   * A pass step can START PAID WORK — it is the step that dispatches worker
+   * containers — and a config-less step inherits the platform's default of
+   * FIVE retries, ten seconds apart, exponentially: a pass that dies partway
+   * (a timed-out step, a blip mid-dispatch) re-ran the whole pass up to six
+   * times, re-reading the tracker and re-addressing containers on every one
+   * of them. That is very likely what exhausted the GitHub hourly budget
+   * (tick uim). These hold the deliberate policy the pass step now carries:
+   * a transient failure is re-derived ONCE, and a persistent one ends the
+   * run after two attempts rather than six.
+   */
+  it("survives a transient executor failure: the pass is re-derived once and the run completes", async () => {
+    const contents = sharedContents();
+    const executor = new FlakyInspectExecutor();
+    const integration = new FakeIntegration();
+
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: executor,
+      TICFAC_INTEGRATION: integration,
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    const runID = `${RUN_ID}-flaky-pass`;
+    const instance = await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+      },
+    });
+
+    const deadline = Date.now() + 30_000;
+    let checkpoint: Checkpoint | null = null;
+    for (;;) {
+      const file = await contents.read(checkpointPath(runID));
+      if (file !== null) {
+        checkpoint = JSON.parse(file.content) as Checkpoint;
+        if (checkpoint.state === "completed" || checkpoint.state === "failed") break;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the Workflow; checkpoint: ${JSON.stringify(checkpoint)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+    expect(checkpoint?.state).toBe("completed");
+    // The blip was answered by ONE re-derivation: the first inspect threw, the
+    // retry re-derived the pass from the durable layer and inspected again.
+    expect(executor.inspections).toBeGreaterThanOrEqual(2);
+    const statusDeadline = Date.now() + 20_000;
+    for (;;) {
+      const status = (await instance.status()) as { status?: string };
+      if (String(status.status) !== "running" && String(status.status) !== "queued") break;
+      if (Date.now() > statusDeadline) throw new Error("timed out waiting for the engine");
+      await scheduler.wait(20);
+    }
+  });
+
+  it("gives up after its deliberate limit, not the platform default of five", async () => {
+    const contents = sharedContents();
+    const executor = new RefusingInspectExecutor();
+    const integration = new FakeIntegration();
+
+    Object.assign(env, {
+      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICFAC_EXECUTOR: executor,
+      TICFAC_INTEGRATION: integration,
+      TICFAC_RECONCILE_POLL_MS: 5,
+    });
+
+    const runID = `${RUN_ID}-refused-pass`;
+    const instance = await env.EPIC_RECONCILER!.create({
+      id: runID,
+      params: {
+        run_id: runID,
+        epic_id: EPIC_ID,
+        project: PROJECT,
+        branch: BRANCH,
+        poll_interval_ms: 5,
+      },
+    });
+
+    // The instance's own status is the durable evidence the run is over —
+    // the pass step exhausted its retries and nothing caught the throw.
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      const status = (await instance.status()) as { status?: string };
+      if (String(status.status) === "errored") break;
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timed out waiting for the instance to error; status: ${String(status.status)}`,
+        );
+      }
+      await scheduler.wait(20);
+    }
+
+    // limit 1 means TWO executions of the pass step — the attempt and the one
+    // re-derivation. The platform default it must NOT carry would have run it
+    // six times (limit 5), each one re-reading the tracker and re-addressing
+    // containers: the exposure tick uim is about, at pass scale.
+    expect(executor.inspections).toBe(PASS_RETRIES.retries.limit + 1);
+  });
+
+  it("pins the policy itself: a pass step that can start paid work never inherits the default", () => {
+    // The deliberate policy, asserted on its own shape: a bounded limit, a
+    // constant backoff, and nothing a config-less step would have inherited.
+    expect(PASS_RETRIES.retries.limit).toBeLessThan(5);
+    expect(PASS_RETRIES.retries.backoff).toBe("constant");
+  });
+});
+
 /** An executor whose containers finish on their own: what a healthy wave looks like. */
 class AutoFinishExecutor implements AttemptExecutor {
   readonly started: Array<{ tick_id: string; attempt: number }> = [];
@@ -2378,4 +2496,38 @@ class AutoFinishExecutor implements AttemptExecutor {
   }
 
   async cancel(): Promise<void> {}
+}
+
+/**
+ * An executor whose inspect fails ONCE, then answers (cr4): the shape of a
+ * blip mid-pass — a cold DO, a dropped connection — that a deliberate retry
+ * policy must survive by re-deriving the pass, without re-dispatching what
+ * the failed attempt already recorded.
+ */
+class FlakyInspectExecutor extends AutoFinishExecutor {
+  inspections = 0;
+  #flaked = false;
+
+  override async inspect(handle: AttemptHandle): Promise<AttemptStatus> {
+    this.inspections += 1;
+    if (!this.#flaked) {
+      this.#flaked = true;
+      throw new Error("the executor did not answer");
+    }
+    return super.inspect(handle);
+  }
+}
+
+/**
+ * An executor whose inspect NEVER answers (cr4): the step that carries it has
+ * to stop at its own deliberate limit rather than re-running the pass the
+ * platform-default five times.
+ */
+class RefusingInspectExecutor extends AutoFinishExecutor {
+  inspections = 0;
+
+  override async inspect(_handle: AttemptHandle): Promise<AttemptStatus> {
+    this.inspections += 1;
+    throw new Error("the executor could not be reached");
+  }
 }

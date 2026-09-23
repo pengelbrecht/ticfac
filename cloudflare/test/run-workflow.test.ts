@@ -27,6 +27,7 @@ import {
   describeCloudWaveLoss,
   leaseLostTrip,
   MAX_SANDBOX_BOOTS,
+  ORCHESTRATOR_DONE_EVENT,
   type RunOutcome,
   resolveDispatchWidth,
   summarizeCloudWave,
@@ -40,6 +41,7 @@ import {
   type SandboxOutput,
   type SandboxProcessState,
   type SandboxProcessView,
+  sandboxName,
 } from "../src/sandbox";
 import { EPIC_TYPE, type TrackerReader } from "../src/tick-membership";
 import {
@@ -99,6 +101,8 @@ class FakeSandbox implements OrchestratorSandbox {
   destroyed = false;
   /** The container died and came back empty: it no longer knows its process. */
   vanished = false;
+  /** cr4: how many times the watch loop asked this container for its process. */
+  looked = 0;
   /**
    * tick b6e: a worker's probe/work command completes the instant it starts —
    * true for every test that does not care about batch timing. Set false to
@@ -154,6 +158,7 @@ class FakeSandbox implements OrchestratorSandbox {
   }
 
   async getProcess(id: string): Promise<SandboxProcessView | null> {
+    this.looked += 1;
     if (this.vanished) return null;
     const process = this.processes.find((p) => p.id === id);
     return process === undefined ? null : process.view;
@@ -199,6 +204,8 @@ class FakeSandboxes implements SandboxBinding {
   readonly booted: FakeSandbox[] = [];
   /** The image each `get` asked for — the boot's own parameter, per tick 3q2. */
   readonly requestedImages: (string | undefined)[] = [];
+  /** cr4: the keepAlive each `get` asked for, in boot order. */
+  readonly requestedKeepAlive: (boolean | undefined)[] = [];
   /** tick b6e: propagated to every worker sandbox this creates from here on. */
   autoCompleteWorkers = true;
   /** tick k24: propagated the same way — worker containers that keep running. */
@@ -228,7 +235,10 @@ class FakeSandboxes implements SandboxBinding {
     this.#byName.delete(name);
   }
 
-  async get(name: string, options?: { image?: string }): Promise<OrchestratorSandbox> {
+  async get(
+    name: string,
+    options?: { image?: string; keepAlive?: boolean },
+  ): Promise<OrchestratorSandbox> {
     const nth = (this.#gets.get(name) ?? 0) + 1;
     this.#gets.set(name, nth);
     if (this.failGetAt !== null && this.failGetAt.name === name && this.failGetAt.nth === nth) {
@@ -240,6 +250,7 @@ class FakeSandboxes implements SandboxBinding {
       throw new Error(`the supervisor lost ${name} mid-wave`);
     }
     this.requestedImages.push(options?.image);
+    this.requestedKeepAlive.push(options?.keepAlive);
     let sandbox = this.#byName.get(name);
     if (sandbox === undefined) {
       sandbox = new FakeSandbox(name);
@@ -1526,6 +1537,133 @@ describe("a run that outlives what one instance can watch", () => {
 // indefinitely — counted as active — because their Workflow had errored on a
 // boot that could not get a container. The row is frozen here the way theirs
 // were: the supervisor is finished, the record still says the run is live.
+// ------------------------------------- the supervisor watches, it does not orchestrate (cr4) ---
+
+/**
+ * The Run Workflow's job is boot, budget, watch, retry, finalize — and the
+ * watching half is `step.waitForEvent` on the orchestrator's completion
+ * (tick cr4): the event is an OPTIMISATION that avoids polling, the branch
+ * and the process remain the truth, and a wait that expires is the CADENCE,
+ * never a verdict. These hold the platform facts the tick is built on:
+ *
+ *  - a container booted `keepAlive` never idles away mid-run, and must be
+ *    explicitly destroyed — every ending of a boot destroys its container;
+ *  - waiting instances cost no concurrency, and a `waitForEvent` that expires
+ *    THROWS, which is the signal to look again (and re-boot into resume when
+ *    the container is gone) — never to conclude the run failed;
+ *  - the completion event (sent by the route tick 7eq wires) wakes the wait
+ *    immediately, so a finished orchestrator is not held up by a poll delay.
+ */
+describe("the supervisor watches, it does not orchestrate (cr4)", () => {
+  it("boots the orchestrator under keepAlive so no idle shutdown can kill a live run, and destroys it when the run ends", async () => {
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+
+    // keepAlive is the boot's own parameter, exactly as the image is: a
+    // container that heartbeats every 30s does not die of idleness while the
+    // orchestrator works for hours — and the price is that ONLY destroy()
+    // ever ends it, which the finalize sweep still pays as the backstop.
+    expect(sandboxes.requestedKeepAlive[0]).toBe(true);
+    // The worker containers a wave boots are NOT the orchestrator: they keep
+    // the sleep-after ceiling a leaked one needs. (Their dispatch path is
+    // tick l6t's to delete, not this one's to re-policy.)
+
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(sandboxes.booted[0]!.destroyed).toBe(true);
+  });
+
+  it("destroys the container when its pass ends, before the next one boots — a keepAlive container bills until someone destroys it", async () => {
+    const { runID } = await ignite();
+    const work = await firstProcess();
+    work.say("orchestrator: wave 1 in flight\n");
+    const stopped = await stopRun(env, runID, "operator");
+    expect(stopped.outcome).toBe("stopping");
+
+    const closeout = await waitFor("the closeout orchestrator", async () =>
+      sandboxes.phase("closeout"),
+    );
+    // The WORK container was destroyed — not killed, destroyed — before the
+    // closeout boot started: with keepAlive, a container the supervisor has
+    // stopped watching would otherwise bill until an operator noticed.
+    expect(sandboxes.booted[0]!.destroyed).toBe(true);
+    expect(work.killed).toBe(true);
+
+    closeout.exit(0);
+    expect((await settled(runID)).state).toBe("stopped");
+    for (const sandbox of sandboxes.booted) expect(sandbox.destroyed).toBe(true);
+  });
+
+  it("learns the orchestrator finished from the completion event instead of waiting out the poll", async () => {
+    // A poll interval the run could never wait out inside the test budget:
+    // if the wait completes in time, the EVENT is what woke it — the branch
+    // and process were already terminal, and the wait did not expire first.
+    set("RUN_POLL_INTERVAL_MS", "60000");
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+    orchestratorPushedWork(epic);
+    process.exit(0);
+
+    const binding = runWorkflowBinding(env);
+    expect(binding).not.toBeNull();
+    const instance = await binding!.get(runID);
+    // The event is buffered by the platform when it lands before the wait
+    // starts, so this races nothing: sent now, it is delivered to the first
+    // `waitForEvent` the Workflow reaches.
+    await instance.sendEvent!({ type: ORCHESTRATOR_DONE_EVENT, payload: {} });
+
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+  });
+
+  it("treats a wait that times out as the cadence, never a verdict: a live orchestrator is watched on", async () => {
+    // A cadence at the platform's own waitForEvent floor, so this exercises
+    // the REAL wait-and-throw path, not the sub-second sleep the tight test
+    // cadence falls back to.
+    set("RUN_POLL_INTERVAL_MS", "1000");
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+
+    // Two looks happened while the orchestrator stayed alive: two waits
+    // expired and each one concluded NOTHING — the run is still running, the
+    // container is still alive, and no failure was inferred from a timeout.
+    await waitFor("two looks at the live orchestrator", async () =>
+      sandboxes.booted[0]!.looked >= 2 ? true : null,
+    );
+    expect(await runState(runID)).toBe("running");
+    expect(process.state).toBe("running");
+
+    // And the cadence is what notices the completion, exactly as before.
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+  });
+
+  it("retries a transient boot failure from a deliberate policy, not the platform default of five", async () => {
+    const { runID, epic } = await ignite({
+      beforeStart: (id) => {
+        // The FIRST address of the orchestrator's sandbox fails — the shape
+        // of a cold-start blip — and the boot step's own retry policy decides
+        // what happens next: one re-run, from BOOT_RETRIES, not five from the
+        // platform default a config-less step inherits.
+        sandboxes.failGetAt = { name: sandboxName(id, 1), nth: 1 };
+      },
+    });
+
+    const process = await firstProcess();
+    // The boot step ran at least twice: the first address failed and its
+    // deliberate policy re-ran it once rather than ending the run.
+    expect(sandboxes.addressed(sandboxName(runID, 1))).toBeGreaterThanOrEqual(2);
+    expect(sandboxes.booted).toHaveLength(1);
+
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+  });
+});
+
 describe("a stop whose supervisor has already ended", () => {
   it("finishes the stop itself instead of leaving the run in stopping", async () => {
     const { runID, epic } = await ignite();
