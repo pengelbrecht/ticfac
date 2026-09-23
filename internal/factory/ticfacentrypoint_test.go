@@ -181,6 +181,7 @@ func runOverride(t *testing.T, phase string, extra string) string {
 	gitStub := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
 		"  *symbolic-ref*) exit 1 ;;\n" +
+		"  *is-shallow-repository*) echo true ; exit 0 ;;\n" +
 		"  *ls-remote*) printf 'ref: refs/heads/trunk\\tHEAD\\n' ; exit 0 ;;\n" +
 		"  *fetch*) printf 'GIT-FETCH: %s\\n' \"$*\" ; exit 0 ;;\n" +
 		"esac\nexit 0\n"
@@ -242,6 +243,12 @@ func TestOverrideExecsTicfacRunEpicOnTheRemotesDefaultBranch(t *testing.T) {
 	// epic/lf0 is not a commit this checkout has".
 	if !strings.Contains(out, "GIT-FETCH: ") || !strings.Contains(out, "refs/heads/trunk:refs/heads/trunk") {
 		t.Errorf("the override did not fetch the base branch into the checkout:\n%s", out)
+	}
+	// ticfac merges the default branch into the integration branch, and the
+	// ticks clone is depth 1: without full history git refuses the merge as
+	// "unrelated histories". A shallow checkout is unshallowed before the exec.
+	if !strings.Contains(out, "--unshallow") {
+		t.Errorf("the override did not fetch full history into a shallow checkout:\n%s", out)
 	}
 	if !strings.Contains(out, "--run-id r1") || !strings.HasSuffix(strings.TrimSpace(out), "e1") {
 		t.Errorf("the override did not name the run and the epic:\n%s", out)

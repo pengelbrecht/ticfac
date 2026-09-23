@@ -278,6 +278,18 @@ start_harness() {
 		die $EXIT_CLONE "cannot fetch the base branch ${base_branch} from origin — ticfac cuts the epic's integration branch from it, and a base the checkout does not hold is refused before any tick is claimed"
 	fi
 
+	# Full history, because ticfac MERGES. The clone above is a depth-1 fetch
+	# of one commit, which is all a harness ever needed; ticfac folds the
+	# default branch into the integration branch on every refresh (tick wvd),
+	# and a merge needs the common ancestor. In a depth-1 checkout there is
+	# none, and git refuses: "refusing to merge unrelated histories" — the
+	# first pi smoke run to reach the reconciler stopped on exactly that.
+	if [[ "$(git -C "$workdir" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+		if ! git -C "$workdir" fetch -q --unshallow origin; then
+			die $EXIT_CLONE "cannot fetch the repository's history from origin — ticfac merges the default branch into the epic's integration branch, and a merge in a depth-1 checkout has no common ancestor to find"
+		fi
+	fi
+
 	# --branch is left at ticfac's default, epic/<epic-id>, and NOT pointed at
 	# ${run_branch}: the reconciler requires its integration branch to be checked
 	# out nowhere (internal/reconcile/git.go, worktreeAt), and adopt_run_branch
