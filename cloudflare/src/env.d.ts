@@ -310,14 +310,23 @@ declare namespace Cloudflare {
      * Unset — the default — routes `workers-ai` only, because that is the one
      * rung billed to the operator's own Cloudflare account rather than by a
      * vendor in cash. Naming `anthropic`, `openai` or `openrouter` here is the
-     * deployment saying it accepts that spend; a configured key is not, and
-     * never opens a route on its own. See src/gateway.ts.
+     * deployment saying it accepts that spend; naming `jev` opts a deployment
+     * into cash-billed classification the same way. A configured key is not,
+     * and never opens a route on its own. See src/gateway.ts.
      */
     GATEWAY_ALLOWED_PROVIDERS?: string;
     /** Provider key behind the gateway; absent for the Workers AI rung. */
     ANTHROPIC_API_KEY?: string;
     OPENAI_API_KEY?: string;
     OPENROUTER_API_KEY?: string;
+    /**
+     * The classifier's key (tick x0k, epic wne): what the `jev` gateway route
+     * exchanges a run's token for before forwarding a classification call
+     * vendor-direct to TypeSafe. Absent means the route answers 503 and the
+     * run degrades — no classification, every dispatch at [tier_policy.start]
+     * — exactly as a run with no BYOK key degrades for that provider.
+     */
+    TYPESAFE_API_KEY?: string;
     /**
      * A Cloudflare API token that can read the gateway's logs (and open an
      * authenticated gateway). It is what makes `runs.cost_usd` ground truth

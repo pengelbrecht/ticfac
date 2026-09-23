@@ -168,6 +168,17 @@ GITHUB_CONSENT_LABEL = "tk"
 # here and redeploys — a stored key is not an opt-in.
 #
 #   GATEWAY_ALLOWED_PROVIDERS = "anthropic"
+#
+# `jev` — the classifier route (tick x0k, epic wne) — is opted into the same
+# way and for the same reason: TypeSafe bills in cash, so a deployment that
+# wants its runs to classify names it, puts the key in a Worker secret
+# (`wrangler secret put TYPESAFE_API_KEY`, never in this tracked file), and
+# redeploys. Without the opt-in a cloud run's classification calls stop at a
+# 403 naming this variable, and the run degrades to [tier_policy.start]:
+# a run that classifies nothing is a documented degradation, a run that spends
+# cash nobody opted into is not.
+#
+#   GATEWAY_ALLOWED_PROVIDERS = "jev"
 
 # Budget enforcement lives in the Run Workflow, never in a prompt (D14): a model
 # can be talked out of a budget, a Workflow step cannot. Both numbers are

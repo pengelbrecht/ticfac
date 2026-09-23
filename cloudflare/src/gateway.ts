@@ -30,6 +30,14 @@
  *    that states the billing consequence rather than moving a run's spend onto
  *    a card (tick fw6).
  *
+ * One route breaks the first sentence's letter and keeps its spirit: the
+ * `jev` route (tick x0k, epic wne), which serves a run's CLASSIFIER calls. Its
+ * upstream is fixed in code (see JEV_API_BASE) because the operator's AI
+ * Gateway has no TypeSafe provider to proxy — so it does not go through the
+ * gateway — but it enters through this Worker and nowhere else, presents the
+ * run token this Worker exchanges, and dies with it on revocation, which is
+ * the whole of what D17 asks of a run's model path.
+ *
  * Cost is read back from the gateway's own logs, never from the agent and
  * never from a response body: an agent can misreport, an invoice cannot. That
  * number is what `runs.cost_usd` holds and what budget enforcement acts on.
@@ -63,14 +71,39 @@ export const GATEWAY_PATH_PREFIX = "/api/gateway";
  * what lets `entrypoint.sh` point every vendor base URL at this prefix with no
  * per-vendor knowledge in the container.
  */
-export type ProviderSlug = "anthropic" | "openai" | "openrouter" | "workers-ai";
+export type ProviderSlug = "anthropic" | "openai" | "openrouter" | "workers-ai" | "jev";
 
 type ProviderSpec = {
   /** The Worker secret holding the operator's key for this provider. */
-  secret: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "OPENROUTER_API_KEY" | "CLOUDFLARE_API_TOKEN";
+  secret:
+    | "ANTHROPIC_API_KEY"
+    | "OPENAI_API_KEY"
+    | "OPENROUTER_API_KEY"
+    | "CLOUDFLARE_API_TOKEN"
+    | "TYPESAFE_API_KEY";
   /** How the vendor wants the credential presented. */
   scheme: "x-api-key" | "bearer";
+  /**
+   * A FIXED upstream base, for routes the operator's AI Gateway cannot proxy:
+   * the request goes vendor-direct to this root, keeping the exchange, the
+   * kill switch and the refusal story that live in this Worker either way.
+   * Undefined means the operator's AI Gateway, as it has always meant.
+   */
+  upstream?: string;
 };
+
+/**
+ * The classifier's API root (tick x0k, epic wne): where Jev answers.
+ *
+ * Declared here because the operator's AI Gateway has no TypeSafe provider to
+ * proxy — `/v1/answers` is neither OpenAI- nor Anthropic-shaped — so this one
+ * route goes vendor-direct. Everything the run token buys still happens in
+ * this Worker: the exchange of the run-scoped token for the deployment's
+ * `TYPESAFE_API_KEY` secret, and the kill switch a revocation pulls. The Go
+ * client pins the same root as its default (internal/jev's DefaultAPIBase),
+ * and a parity test there fails the build if either side drifts.
+ */
+const JEV_API_BASE = "https://api.typesafe.ai";
 
 const PROVIDERS: Record<ProviderSlug, ProviderSpec> = {
   anthropic: { secret: "ANTHROPIC_API_KEY", scheme: "x-api-key" },
@@ -79,6 +112,15 @@ const PROVIDERS: Record<ProviderSlug, ProviderSpec> = {
   // Workers AI bills to the operator's own Cloudflare account, so its
   // credential is the account API token rather than a vendor key.
   "workers-ai": { secret: "CLOUDFLARE_API_TOKEN", scheme: "bearer" },
+  // The classifier route (tick x0k, epic wne): a run's orchestrator asks Jev
+  // which KIND OF WORK each role-less tick is before its first dispatch. It
+  // rides the same gateway prefix and the same run token as every other model
+  // call, but its upstream is fixed: the operator's AI Gateway has no
+  // TypeSafe provider to proxy, so this one route goes vendor-direct while
+  // the token exchange and the kill switch stay here. Cash-billed like the
+  // three BYOK rungs, so it is opted into with GATEWAY_ALLOWED_PROVIDERS the
+  // same way, never by the key alone.
+  jev: { secret: "TYPESAFE_API_KEY", scheme: "bearer", upstream: JEV_API_BASE },
 };
 
 export const PROVIDER_SLUGS = Object.keys(PROVIDERS) as ProviderSlug[];
@@ -808,20 +850,33 @@ export async function proxyModelRequest(
   }
 
   const upstream = new URL(request.url);
-  const target = `${config.config.base_url}/${path.join("/")}${upstream.search}`;
+  const target =
+    provider.upstream !== undefined
+      ? `${provider.upstream}/${path.slice(1).join("/")}${upstream.search}`
+      : `${config.config.base_url}/${path.join("/")}${upstream.search}`;
 
   const headers = sanitizedHeaders(request);
   if (provider.scheme === "x-api-key") headers.set("x-api-key", key);
   else headers.set("authorization", `Bearer ${key}`);
-  // Attribution the caller cannot forge or suppress (D17).
-  headers.set("cf-aig-metadata", JSON.stringify(gatewayMetadata(authorized.token, authorized.run)));
-  // One run, one model instance, so its unchanging prompt prefix stays cached
-  // on that instance instead of being re-processed at full price every turn.
-  headers.set(SESSION_AFFINITY_HEADER, sessionAffinityKey(authorized.run));
-  // The operator's gateway may itself be authenticated; when it is, the same
-  // account token that reads its logs is what opens it.
-  const gatewayAuth = textVar(env.CLOUDFLARE_API_TOKEN);
-  if (gatewayAuth !== null) headers.set("cf-aig-authorization", `Bearer ${gatewayAuth}`);
+  // Attribution is the AI Gateway's own language: `cf-aig-*` headers and the
+  // session affinity key are for the operator's gateway to read and stamp in
+  // its logs. A vendor-direct route has no such reader — and must not carry
+  // the operator's Cloudflare token to a vendor — so the exchange's credential
+  // is the only thing these requests carry beyond what the caller sent.
+  if (provider.upstream === undefined) {
+    // Attribution the caller cannot forge or suppress (D17).
+    headers.set(
+      "cf-aig-metadata",
+      JSON.stringify(gatewayMetadata(authorized.token, authorized.run)),
+    );
+    // One run, one model instance, so its unchanging prompt prefix stays cached
+    // on that instance instead of being re-processed at full price every turn.
+    headers.set(SESSION_AFFINITY_HEADER, sessionAffinityKey(authorized.run));
+    // The operator's gateway may itself be authenticated; when it is, the same
+    // account token that reads its logs is what opens it.
+    const gatewayAuth = textVar(env.CLOUDFLARE_API_TOKEN);
+    if (gatewayAuth !== null) headers.set("cf-aig-authorization", `Bearer ${gatewayAuth}`);
+  }
 
   let body: BodyInit | null =
     request.method === "GET" || request.method === "HEAD" ? null : request.body;
