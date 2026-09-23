@@ -1,0 +1,34 @@
+{
+  "schema_version": 3,
+  "run_id": "run_cabf35ccda2342eea3bc46b530e6988b",
+  "epic_id": "plw",
+  "sequence": 1,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T05:19:25Z",
+  "ticks": [
+    {
+      "tick_id": "pg9",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "run_cabf35ccda2342eea3bc46b530e6988b",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/plw",
+    "source_sha": "cad0ef93d227dd0380ed0cb80c440ebc5b2fc475",
+    "integration_ref": "refs/heads/epic/plw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:f96b10aefd58876b117f04711f6e6c34d3e72cc50549b5843ec31d68ce984a62",
+    "model": null,
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
