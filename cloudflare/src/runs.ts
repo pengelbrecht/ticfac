@@ -1201,6 +1201,13 @@ export type StopResult =
       mode: StopMode;
       /** Live gateway credentials this stop killed. Always 0 for a clean stop. */
       tokens_revoked: number;
+      /**
+       * Set when the run's supervisor had ALREADY ENDED (errored, terminated
+       * or complete) when the stop arrived: there was nobody left to honour
+       * it, so this request finished the stop itself and `run.state` is
+       * `stopped`. The value is the supervisor's status.
+       */
+      supervisor_ended?: string;
     }
   | { outcome: "unknown_run" }
   | { outcome: "not_active"; run: Run }
@@ -1274,6 +1281,47 @@ export async function stopRun(
 
   const notified = await deliverStopEvent(env, runID, requested.stop);
 
+  // A stop is HONOURED by the run's own supervisor: the flip above says
+  // `stopping`, and the supervisor's finalize is what makes it `stopped`. A
+  // supervisor that has already ended — errored (a boot that could not get a
+  // container: "Maximum number of running container instances exceeded"),
+  // terminated, or complete — will never read the stop, so the record froze
+  // at `stopping` and stayed there, counted as ACTIVE, until somebody noticed.
+  // Four runs were found that way on 2026-09-23. Nothing is left to hand the
+  // stop to, so it is finished here: the credential dies (a clean stop's
+  // revocation would have been the supervisor's) and the row goes terminal.
+  // Only a CONFIRMED ended status does this; a supervisor that cannot be read
+  // is left alone, because finishing a live run's record on a failed read
+  // would be worse than a stuck one.
+  const phase = await endedSupervisor(env, updated);
+  if (phase !== null) {
+    const revokedHere =
+      requested.stop.mode === "hard"
+        ? 0
+        : await revokeRunTokens(env, runID, `stopped:supervisor-${phase.status}:${requestedBy}`).catch(
+            (error: unknown) => {
+              console.error(
+                `factory runs: ${runID} could not revoke its gateway tokens finishing a stop: ${String(error)}`,
+              );
+              return 0;
+            },
+          );
+    const finished = (await updateRunState(env.DB, runID, "stopped", new Date().toISOString())) ?? {
+      ...updated,
+      state: "stopped",
+    };
+    return {
+      outcome: "stopping",
+      run: finished,
+      stop: requested.stop,
+      already: requested.already,
+      workflow_notified: notified,
+      mode: requested.stop.mode,
+      tokens_revoked: tokensRevoked + revokedHere,
+      supervisor_ended: phase.status,
+    };
+  }
+
   return {
     outcome: "stopping",
     run: updated,
@@ -1339,6 +1387,38 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
     image,
     progress,
   };
+}
+
+/** Workflow instance statuses after which nothing will ever read a stop. */
+const SUPERVISOR_ENDED: ReadonlySet<string> = new Set(["errored", "terminated", "complete"]);
+
+/**
+ * The run's supervisor, when it has CERTAINLY ended; null otherwise.
+ *
+ * A run's instance lives on ONE of the two Workflow bindings, and asking the
+ * other one does not reliably throw — it can hand back an instance that
+ * reports an ended status for an id it never ran. So the first answer is not
+ * the answer (which is how the first cut of this finished LIVE runs' stops):
+ * every binding is asked, and the supervisor counts as ended only when at
+ * least one instance was found and NONE of them reports anything but an ended
+ * status. Any live-looking answer — running, queued, waiting, paused, or a
+ * status that could not be read — leaves the stop to the supervisor.
+ */
+async function endedSupervisor(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
+  let ended: { id: string; status: string } | null = null;
+  for (const workflow of [epicReconcilerBinding(env), runWorkflowBinding(env)]) {
+    if (workflow === null) continue;
+    let instance: Awaited<ReturnType<typeof workflow.get>>;
+    try {
+      instance = await workflow.get(run.run_id);
+    } catch {
+      continue;
+    }
+    const status = await instanceStatus(instance);
+    if (!SUPERVISOR_ENDED.has(status)) return null;
+    ended ??= { id: instance.id, status };
+  }
+  return ended;
 }
 
 async function workflowPhase(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
