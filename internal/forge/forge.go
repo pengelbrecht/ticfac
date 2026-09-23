@@ -31,6 +31,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -92,6 +93,22 @@ const (
 type CIReport struct {
 	State   CIState
 	Failing []string
+	// FailingRuns are the Actions workflow runs behind the failing checks,
+	// for a caller that may re-run them (CIRerunner). Empty when the forge
+	// could not tell which run a check belongs to.
+	FailingRuns []int64
+}
+
+// CIRerunner is the optional half of the CI seam: re-run the failed jobs of
+// workflow runs, ONCE each. A forge that cannot is simply not one, and the
+// close-out then refuses red CI exactly as it always did.
+//
+// Once is durable without any state of ours: GitHub numbers a workflow run's
+// attempts (run_attempt), so a run already past its first attempt is left
+// alone. A restarted reconciler therefore cannot retry a second time, and a
+// genuinely red job fails the close-out on its second red, as it should.
+type CIRerunner interface {
+	RerunFailedOnce(ctx context.Context, runIDs []int64) (rerun []int64, err error)
 }
 
 // PullRequests is the seam the close-out rule needs: find the PR for the
@@ -334,13 +351,16 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 	if pr.HeadSHA == "" {
 		return CIReport{}, fmt.Errorf("the PR #%d names no head sha to read CI from", pr.Number)
 	}
+	type checkRun struct {
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+		Conclusion string `json:"conclusion"`
+		StartedAt  string `json:"started_at"`
+		DetailsURL string `json:"details_url"`
+	}
 	var answer struct {
-		TotalCount int `json:"total_count"`
-		CheckRuns  []struct {
-			Name       string `json:"name"`
-			Status     string `json:"status"`
-			Conclusion string `json:"conclusion"`
-		} `json:"check_runs"`
+		TotalCount int        `json:"total_count"`
+		CheckRuns  []checkRun `json:"check_runs"`
 	}
 	if err := g.call(ctx, http.MethodGet, "/repos/"+g.Repo+"/commits/"+pr.HeadSHA+"/check-runs", nil, &answer); err != nil {
 		return CIReport{}, err
@@ -348,8 +368,28 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 	if len(answer.CheckRuns) == 0 {
 		return CIReport{State: CINone}, nil
 	}
-	report := CIReport{State: CIGreen}
+	// The LATEST run of each check decides, not every run ever made. One head
+	// carries several runs of the same job: CI triggers on both push and
+	// pull_request for an epic branch, and a re-run adds another. Counting
+	// all of them let one old failure veto a green re-run forever - an epic
+	// close-out held red on 'go failed' while the same job had passed on the
+	// same head (wne, 2026-09-23). started_at is RFC 3339, so it orders as a
+	// string; a run not yet started sorts first and so only wins alone.
+	latest := map[string]checkRun{}
+	var order []string
 	for _, run := range answer.CheckRuns {
+		prev, seen := latest[run.Name]
+		if !seen {
+			order = append(order, run.Name)
+		}
+		if !seen || run.StartedAt > prev.StartedAt {
+			latest[run.Name] = run
+		}
+	}
+	report := CIReport{State: CIGreen}
+	seenRun := map[int64]bool{}
+	for _, name := range order {
+		run := latest[name]
 		if run.Status != "completed" {
 			report.State = CIPending
 			continue
@@ -360,6 +400,10 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 				report.State = CIRed
 			}
 			report.Failing = append(report.Failing, run.Name)
+			if id := actionsRunID(run.DetailsURL); id != 0 && !seenRun[id] {
+				seenRun[id] = true
+				report.FailingRuns = append(report.FailingRuns, id)
+			}
 		case "success", "neutral", "skipped":
 			// Neither fails the report nor rescues a pending one.
 		default:
@@ -373,6 +417,46 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 		}
 	}
 	return report, nil
+}
+
+// actionsRunIDPattern finds the workflow run in a check run's details URL:
+// https://github.com/<owner>/<repo>/actions/runs/<run>/job/<job>.
+var actionsRunIDPattern = regexp.MustCompile(`/actions/runs/([0-9]+)`)
+
+func actionsRunID(detailsURL string) int64 {
+	m := actionsRunIDPattern.FindStringSubmatch(detailsURL)
+	if m == nil {
+		return 0
+	}
+	id, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
+// RerunFailedOnce re-runs the failed jobs of each workflow run still on its
+// FIRST attempt, and answers which it re-ran. A run already re-run is left
+// alone: once, by GitHub's own count.
+func (g GitHub) RerunFailedOnce(ctx context.Context, runIDs []int64) ([]int64, error) {
+	var rerun []int64
+	for _, id := range runIDs {
+		var run struct {
+			RunAttempt int `json:"run_attempt"`
+		}
+		path := "/repos/" + g.Repo + "/actions/runs/" + strconv.FormatInt(id, 10)
+		if err := g.call(ctx, http.MethodGet, path, nil, &run); err != nil {
+			return rerun, err
+		}
+		if run.RunAttempt > 1 {
+			continue
+		}
+		if err := g.call(ctx, http.MethodPost, path+"/rerun-failed-jobs", nil, nil); err != nil {
+			return rerun, err
+		}
+		rerun = append(rerun, id)
+	}
+	return rerun, nil
 }
 
 func splitRepo(repo string) (owner, name string, ok bool) {
