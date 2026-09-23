@@ -2,6 +2,7 @@
   "id": "y3b",
   "title": "Final review of the xte diff",
   "description": "Review the epic's full diff and resolve or route every finding before close-out unblocks.\n\nTwo things to weigh beyond the usual, because they are what this epic could plausibly get wrong:\n  - Is there any path by which the container still starts a claude process? The operator constraint is absolute, and hn0 reached the wrong worker not by deciding to but by inheriting a default. Look for the inherited default, not for an explicit choice.\n  - Does anything block waiting for an attempt to finish? A handle that is polled in a loop inside a dispatch is a wall clock wearing a handle's clothes.",
+  "notes": "2026-09-23 03:31 - ticfac run epic-xte: attempt 9 reported a finding drafted for triage — defect \"Cloud routing inherits claude: a cloud cell without kind, or a tier applied after it, dispatches the claude CLI in the container\" (key dd60e88c675dbd8ad46cfaaa2f1c3006e1fc024aa4d898cf3eb09b37a84069a0, severity high, for this repository). Triage with `ticfac finding xte dd60e88c675dbd8ad46cfaaa2f1c3006e1fc024aa4d898cf3eb09b37a84069a0 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -17,6 +18,6 @@
   "acceptance_criteria": "Every finding is resolved or filed with an owner, and the epic's diff is confirmed against xte's definition of done item by item",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:21:05.637109Z",
-  "updated_at": "2026-09-23T01:26:50.506906Z",
+  "updated_at": "2026-09-23T01:31:58.512169Z",
   "started_at": "2026-09-23T01:26:50.506905Z"
 }
