@@ -1448,6 +1448,40 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 
 	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
 	if err != nil {
+		// The one read failure that is a VERDICT ABOUT THE SUBMISSION and not
+		// an operational fault: the epic's own record is absent from the tree
+		// the tracker just read (ticfac tick rf3). The graph read syncs the
+		// tracker's worktree to origin's integration branch first, so this
+		// looks at exactly what the tracker looked at — a tree cut from the
+		// submitted commit with the base branch folded in, which is what every
+		// boot of this run will read. A missing epic there is missing on every
+		// boot, so it is a refusal with its own reason rather than the error a
+		// caller re-runs and a cloud supervisor re-boots.
+		//
+		// The evidence is the FILE, not the tracker's prose: the record is a
+		// file in the tree (the same layout the durable tracker commits and
+		// the fold merges), so an absent one is a fact about the tree, read
+		// directly rather than recovered by matching on the error's message —
+		// which is Appendix A #9's failure wearing a graph error's clothes.
+		if _, statErr := os.Stat(trackerRecordPath(r.trackerTree.dir, r.opts.EpicID)); os.IsNotExist(statErr) {
+			// The record is named by its path IN THE TREE, never by the temp
+			// worktree that holds it: this message rides the durable checkpoint,
+			// and a host-absolute path in a durable record is tick 0x1's failure.
+			record := filepath.Join(trackerRoot, "issues", r.opts.EpicID+".json")
+			refusal := r.refuse(RefusedEpicAbsent, "",
+				"the epic %s does not exist on the tree this run reads its tracker from: %s is absent, and the "+
+					"tracker could not read the epic graph (%s). The integration branch was cut from %s, so the "+
+					"submitted commit does not carry the epic — resubmit from a commit that carries it, or file the "+
+					"epic on the base branch. No boot of this run can find it",
+				r.opts.EpicID, record, firstLine(err.Error()), short(r.base))
+			r.failure = refusal
+			stopped := refusal.Error() + autoResumeNote(r.priorResumes)
+			if _, cErr := r.checkpoint(runstate.StateFailed, stopped); cErr != nil {
+				return nil, cErr
+			}
+			r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, stopped)
+			return r.result(runstate.StateFailed, stopped), nil
+		}
 		return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 	}
 	plan := planFrom(graph)
@@ -1864,6 +1898,21 @@ const (
 	// the next repair somewhere else — at the base, and at whoever wrote both
 	// sides of the conflicting file, not at an attempt.
 	RefusedBaseRefresh = "base_refresh_conflict"
+
+	// The other one a RUN adds before any tick is planned: the epic does not
+	// exist on the tree this run reads its tracker from — the integration
+	// branch is cut from the SUBMITTED COMMIT, and that commit carries no
+	// .tick/issues/<epic>.json (ticfac tick rf3). It is a refusal and not an
+	// operational error because it is a verdict about the submission that
+	// nothing downstream can repair: a replacement container cuts from the
+	// same commit and reads the same absence, a supervisor retypes into it,
+	// and the first per-tick Cloudflare smoke run re-booted into this
+	// identical failure until a person stopped it by hand. The repair is a
+	// person's: resubmit from a commit that carries the epic, or file the
+	// epic on the base branch. It is distinct from RefusedBaseRefresh
+	// because that one is about two trees that disagree and this one is
+	// about a tree that does not hold the epic at all.
+	RefusedEpicAbsent = "epic_absent"
 
 	// The two a ROLE job adds. Its deliverable is an answer, so its failures
 	// are the answer's: one nobody could validate, and one that validated and

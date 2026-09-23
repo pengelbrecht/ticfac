@@ -138,6 +138,7 @@ import {
   type SandboxProcessState,
   sandboxBinding,
   sandboxName,
+  terminalExitReason,
 } from "./sandbox";
 import { MAX_RUN_WAVES } from "./wave-request";
 import {
@@ -1749,12 +1750,15 @@ async function supervisePass(
             ? `the orchestrator sandbox died (boot ${boot})`
             : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
         if (isTerminalExit(code)) {
-          // A configuration verdict from the entrypoint: the SHA still will not
-          // check out, the pre-flight still fails. Another container reaches the
-          // identical answer and only costs money.
+          // A configuration verdict from the boot: the SHA still will not check
+          // out, the pre-flight still fails, the epic the run was submitted
+          // for is still missing from the submitted tree. Another container
+          // reaches the identical answer and only costs money — so the reason
+          // the run STOPS with names the class, not just the code
+          // (terminalExitReason, ticfac tick rf3).
           return {
             kind: "failed",
-            detail: `${lastDetail} — a configuration failure, so no sandbox was rebooted`,
+            detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
             boots: counter.next - 1,
           };
         }

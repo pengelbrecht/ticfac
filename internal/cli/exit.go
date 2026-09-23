@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
 
 // The exit codes the cloud and factory commands share with ticks' tk, so a
@@ -73,4 +75,30 @@ func reportCommand(name string, err error, stderr io.Writer) int {
 		return exitCodeOf(err)
 	}
 	return exitSuccess
+}
+
+// resultExitCode maps a `run-epic` result to the process code, because one of
+// its failures is a verdict a caller can branch on (ticfac tick rf3).
+//
+// A run that stopped because the epic does not exist on the submitted tree
+// exits NOT-FOUND — tk's code 4 — which is the code the factory's Run Workflow
+// reads as a TERMINAL configuration verdict (TERMINAL_EXIT_CODES,
+// cloudflare/src/sandbox.ts) and answers by refusing to reboot the container:
+// the tracker's tree is cut from the submitted commit, so the epic is missing
+// on every boot, and the first per-tick Cloudflare smoke run re-booted into
+// that identical failure until a person stopped it by hand. Any other stop
+// stays generic: a merge conflict, a gate that did not pass and a worker that
+// answered BLOCKED are all repairs a person makes that a reboot may then
+// adopt.
+func resultExitCode(result *reconcile.Result) int {
+	if result == nil {
+		return exitGeneric
+	}
+	if result.State == "completed" {
+		return exitSuccess
+	}
+	if result.Failure != nil && result.Failure.Reason == reconcile.RefusedEpicAbsent {
+		return exitNotFound
+	}
+	return exitGeneric
 }
