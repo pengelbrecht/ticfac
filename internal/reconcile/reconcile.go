@@ -640,7 +640,10 @@ type Reconciler struct {
 	// operator's --tier: when set, every dispatch runs at it and the ladder
 	// does not run. hostWidth is [orchestration].max_parallel — the ONE
 	// host-wide number the per-tier bounds narrow.
-	tierPolicy   *runconfig.TierPolicy
+	tierPolicy *runconfig.TierPolicy
+	// overrideFile is the per-world override merged over runners.toml
+	// (tick 5uo), "" when none was; the run states it at admission.
+	overrideFile string
 	tierProfiles map[string]map[string]*profile.Profile
 	pinnedTier   string
 	hostWidth    int
@@ -1083,6 +1086,7 @@ func New(opts Options) (*Reconciler, error) {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}
 		r.tierPolicy = cfg.TierPolicy
+		r.overrideFile = cfg.OverrideFile
 		r.hostWidth = cfg.MaxParallel()
 		// Per-role, because a policy is only honest when what it
 		// pre-resolves is what it can actually derive (profiles.go):
