@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 153,
+  "sequence": 154,
   "state": "running",
-  "reason": "CI on the epic PR #33 is none on the head that includes the close-out's own commits; the close-out of xte is held",
-  "updated_at": "2026-09-23T09:27:44Z",
+  "reason": "CI on the epic PR #33 is pending on the head that includes the close-out's own commits; the close-out of xte is held",
+  "updated_at": "2026-09-23T09:32:48Z",
   "ticks": [
     {
       "tick_id": "8ty",
