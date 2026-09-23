@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 173,
+  "sequence": 174,
   "state": "running",
-  "reason": "CI on the epic PR #33 is pending; the close-out of xte is held",
-  "updated_at": "2026-09-23T12:07:48Z",
+  "reason": "CI is green on the epic PR #33; the close-out of xte is admitted",
+  "updated_at": "2026-09-23T12:22:55Z",
   "ticks": [
     {
       "tick_id": "8ty",
