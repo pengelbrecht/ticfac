@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_0d2edef252834a40b89deabbd0ffec69",
   "epic_id": "plw",
-  "sequence": 5,
-  "state": "integrating",
-  "reason": "integrating pg9 attempt 1 into epic/plw",
-  "updated_at": "2026-09-23T05:23:02Z",
+  "sequence": 6,
+  "state": "gating",
+  "reason": "running the integrated gate for pg9 on d6e4c4d34633",
+  "updated_at": "2026-09-23T05:23:12Z",
   "ticks": [
     {
       "tick_id": "pg9",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     }
   ],
