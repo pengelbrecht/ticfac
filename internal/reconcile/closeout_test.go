@@ -825,3 +825,79 @@ func TestCloseoutClosesBehindGreenCIOnItsOwnCommits(t *testing.T) {
 		t.Errorf("co is %s, want closed behind green CI on its own commits", current.Status)
 	}
 }
+
+// rerunningForge is a fakeForge that can also re-run failed CI jobs, once per
+// workflow run - the forge.CIRerunner half GitHub implements.
+type rerunningForge struct {
+	*fakeForge
+	attempts map[int64]int
+	reruns   []int64
+}
+
+var _ forge.CIRerunner = (*rerunningForge)(nil)
+
+func (f *rerunningForge) RerunFailedOnce(_ context.Context, runIDs []int64) ([]int64, error) {
+	var rerun []int64
+	for _, id := range runIDs {
+		if f.attempts[id] > 0 {
+			continue // already past its first attempt
+		}
+		f.attempts[id]++
+		f.reruns = append(f.reruns, id)
+		rerun = append(rerun, id)
+	}
+	return rerun, nil
+}
+
+// Red CI that passes on a re-run of the same head no longer stops the run for a
+// person (ticfac 3cq): the close-out re-runs the failed jobs ONCE, says so in
+// the feed, and is admitted when the re-run is green.
+func TestRedCIIsRerunOnceAndAdmittedWhenTheRerunIsGreen(t *testing.T) {
+	t.Parallel()
+	pr := &rerunningForge{attempts: map[int64]int{}, fakeForge: &fakeForge{exists: true, pr: openPR(),
+		ci: []forge.CIReport{
+			{State: forge.CIRed, Failing: []string{"typescript"}, FailingRuns: []int64{42}},
+			{State: forge.CIGreen},
+		}}}
+	f := newFixture(t, fixtureOptions{pullRequests: pr})
+	declareCloseoutRule(t, f.Repo)
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v); a red CI that passed on its one re-run should be admitted", result.State, result.Failure)
+	}
+	if fmt.Sprint(pr.reruns) != "[42]" {
+		t.Errorf("re-ran %v, want exactly workflow run 42 once", pr.reruns)
+	}
+	var said bool
+	for _, e := range r.Journal() {
+		if e.Stage == StageCloseoutHeld && strings.Contains(e.Detail, "re-run ONCE") {
+			said = true
+		}
+	}
+	if !said {
+		t.Error("the feed does not record that the failed jobs were re-run - a silent re-run could hide a real failure")
+	}
+}
+
+// Once means once: a job red again after its re-run refuses the close-out
+// exactly as red CI always did, naming the job.
+func TestRedCIAlreadyRerunStillRefusesTheCloseout(t *testing.T) {
+	t.Parallel()
+	pr := &rerunningForge{attempts: map[int64]int{42: 1}, fakeForge: &fakeForge{exists: true, pr: openPR(),
+		ci: []forge.CIReport{{State: forge.CIRed, Failing: []string{"typescript"}, FailingRuns: []int64{42}}}}}
+	f := newFixture(t, fixtureOptions{pullRequests: pr})
+	declareCloseoutRule(t, f.Repo)
+	_, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCI {
+		t.Fatalf("the failure is %+v, want a %s refusal after the one re-run", result.Failure, RefusedCloseoutCI)
+	}
+	if len(pr.reruns) != 0 {
+		t.Errorf("re-ran %v a second time", pr.reruns)
+	}
+}

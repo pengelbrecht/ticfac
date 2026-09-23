@@ -3,6 +3,7 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -306,5 +307,75 @@ func TestNoTokenIsRefusedNamingTheFix(t *testing.T) {
 	if _, err := g.Find(context.Background(), "epic/9pd", "main"); err == nil ||
 		!strings.Contains(err.Error(), TokenEnv) {
 		t.Fatalf("the no-token refusal does not name the fix: %v", err)
+	}
+}
+
+// The LATEST run of each check decides. An epic head carries a push run and a
+// pull_request run of every job, and a re-run adds another: an old failure
+// must not veto a later green run of the same job (wne's close-out held red on
+// 'go failed' while go had passed on the same head, 2026-09-23).
+func TestCIReadsOnlyTheLatestRunOfEachCheck(t *testing.T) {
+	t.Parallel()
+	failed := map[string]string{"name": "go", "status": "completed", "conclusion": "failure",
+		"started_at": "2026-09-23T10:00:00Z", "details_url": "https://github.com/example/example/actions/runs/111/job/9"}
+	passed := map[string]string{"name": "go", "status": "completed", "conclusion": "success",
+		"started_at": "2026-09-23T10:05:00Z", "details_url": "https://github.com/example/example/actions/runs/222/job/8"}
+	for _, tc := range []struct {
+		name     string
+		runs     []map[string]string
+		want     CIState
+		wantRuns []int64
+	}{
+		{"a later green run supersedes an earlier failure", []map[string]string{failed, passed}, CIGreen, nil},
+		{"order in the answer does not matter", []map[string]string{passed, failed}, CIGreen, nil},
+		{"a later failure is red and names its workflow run", []map[string]string{
+			{"name": "go", "status": "completed", "conclusion": "success", "started_at": "2026-09-23T09:00:00Z"},
+			failed,
+		}, CIRed, []int64{111}},
+	} {
+		runs := tc.runs
+		g, _ := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, http.StatusOK, map[string]any{"total_count": len(runs), "check_runs": runs})
+		})
+		report, err := g.CI(context.Background(), PullRequest{Number: 7, HeadSHA: "abc123"})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if report.State != tc.want {
+			t.Errorf("%s: state = %q, want %q", tc.name, report.State, tc.want)
+		}
+		if fmt.Sprint(report.FailingRuns) != fmt.Sprint(tc.wantRuns) && !(len(report.FailingRuns) == 0 && len(tc.wantRuns) == 0) {
+			t.Errorf("%s: failing runs = %v, want %v", tc.name, report.FailingRuns, tc.wantRuns)
+		}
+	}
+}
+
+// Once, by GitHub's own count: a run on its first attempt is re-run, a run
+// already re-run is left alone - so a restarted reconciler cannot retry twice.
+func TestRerunFailedOnceSkipsARunAlreadyRetried(t *testing.T) {
+	t.Parallel()
+	g, seen := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/actions/runs/1"):
+			writeJSON(t, w, http.StatusOK, map[string]any{"id": 1, "run_attempt": 1})
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/actions/runs/2"):
+			writeJSON(t, w, http.StatusOK, map[string]any{"id": 2, "run_attempt": 2})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/rerun-failed-jobs"):
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	rerun, err := g.RerunFailedOnce(context.Background(), []int64{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(rerun) != "[1]" {
+		t.Errorf("re-ran %v, want only [1]", rerun)
+	}
+	for _, call := range *seen {
+		if call == "POST /repos/example/example/actions/runs/2/rerun-failed-jobs" {
+			t.Error("re-ran a workflow run already on its second attempt")
+		}
 	}
 }

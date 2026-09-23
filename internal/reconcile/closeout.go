@@ -234,6 +234,9 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 				"the close-out cannot be admitted: CI on the epic PR #%d could not be read: %v. The rule the "+
 					"repository declares is: %s", pr.Number, ciErr, r.closeoutRule.Stated)
 		}
+		if report.State == forge.CIRed && r.rerunRedCIOnce(ctx, tick, pr, report) {
+			report.State = forge.CIPending
+		}
 		switch report.State {
 		case forge.CIGreen:
 			r.record(tick, StageCloseoutAdmitted, "CI is green on %s; the close-out is admitted",
@@ -400,6 +403,9 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 			return r.refuse(RefusedCloseoutPR, tick,
 				"the close-out of %s cannot be gated on CI: CI on the epic PR #%d could not be read: %v. "+
 					"The rule the repository declares is: %s", tick, pr.Number, ciErr, r.closeoutRule.Stated)
+		}
+		if report.State == forge.CIRed && r.rerunRedCIOnce(ctx, tick, pr, report) {
+			report.State = forge.CIPending
 		}
 		switch report.State {
 		case forge.CIGreen:
@@ -589,4 +595,37 @@ func (r *Reconciler) gateCloseoutCarriesFindings(ctx context.Context, tick, head
 			"or a PR body somebody stripped — and re-running the epic under this run id recomposes and rewrites the "+
 			"body from the record before checking again. The rule the repository declares is: %s",
 		pr.Number, pr.URL, len(missing), strings.Join(missing, "; "), r.closeoutRule.Stated)
+}
+
+// rerunRedCIOnce re-runs the failed CI jobs behind a red report ONCE, and
+// answers whether it did - in which case the caller holds as pending and the
+// ordinary bounded wait takes over.
+//
+// Why at all: on 2026-09-23 four epic close-outs stopped on red CI that passed
+// on a plain re-run of the same head (ticfac 3cq, a load-dependent timing
+// failure in the TypeScript suite). Each stop needed a person to resume the
+// run, which an unattended factory cannot wait for.
+//
+// Why only once, and why it is recorded: a re-run can hide a real
+// intermittent failure. GitHub's own run_attempt makes 'once' durable - a
+// restarted run cannot retry again - so a job red twice still refuses the
+// close-out, and the feed says a re-run happened.
+func (r *Reconciler) rerunRedCIOnce(ctx context.Context, tick string, pr *forge.PullRequest, report forge.CIReport) bool {
+	rerunner, ok := r.opts.PullRequests.(forge.CIRerunner)
+	if !ok || len(report.FailingRuns) == 0 {
+		return false
+	}
+	rerun, err := rerunner.RerunFailedOnce(ctx, report.FailingRuns)
+	if err != nil {
+		r.record(tick, StageCloseoutHeld, "CI on the epic PR #%d is red (%s) and its failed jobs could not be re-run: %v",
+			pr.Number, strings.Join(report.Failing, ", "), err)
+	}
+	if len(rerun) == 0 {
+		return false
+	}
+	r.record(tick, StageCloseoutHeld,
+		"CI on the epic PR #%d is red (%s); the failed jobs of workflow run(s) %v were re-run ONCE - an automatic "+
+			"intervention, recorded because a re-run can hide a real intermittent failure. A second red refuses the "+
+			"close-out", pr.Number, strings.Join(report.Failing, ", "), rerun)
+	return true
 }
