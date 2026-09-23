@@ -1,0 +1,13 @@
+{
+  "id": "3cq",
+  "title": "The cloud-wave budget test fails intermittently under CI load",
+  "description": "FOUND 2026-09-23 on PR #38's CI: run-workflow.test.ts \u003e 'a cloud wave in flight answers to a stop and to a budget \u003e stops dispatching further batches once the cost budget is spent' FAILED on the CI runner. The same commit's re-run passed; main's CI on the same code passed; the whole file passed 88/88 three times locally. #38 changed only .github/workflows/ci.yml.\n\nSo it is load- or timing-dependent - the same class as owf (the epic-reconciler lease-lapse test). Per the flaky-means-bug rule it is a defect: a test that samples a condition it should wait for, or races wall time. Reproduce it deterministically (under CPU contention or with the fake clock pinned) before changing anything; do not raise a timeout to make it pass.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The failure is reproduced deterministically and its cause named; the test no longer depends on wall time or scheduling under load; the file passes repeatedly under induced CPU contention",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T06:37:17.840828Z",
+  "updated_at": "2026-09-23T06:37:17.840828Z"
+}

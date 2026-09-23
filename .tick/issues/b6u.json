@@ -1,0 +1,13 @@
+{
+  "id": "b6u",
+  "title": "An epic PR that GitHub thinks conflicts never gets CI, so close-out never completes",
+  "description": "FOUND 2026-09-23: both epic PRs (#32 wne, #33 xte) had every implementation tick and the final review closed, and sat in close-out 'closeout_ci_absent' - 'no CI has appeared on the epic PR ... waited 1h0m0s'.\n\nCAUSE: GitHub runs a pull_request workflow only while the PR is mergeable by GitHub's own merge, which does NOT run tk's merge drivers. .tick/activity/activity.jsonl is appended on both sides; it merges cleanly through tk's union driver and conflicts as plain text. So any epic whose run overlapped a tracker edit on main showed as CONFLICTING on GitHub and never got a pull_request run, while plain git with the drivers merged it cleanly. It recurs whenever main's tracker moves during an epic, which is always.\n\nFIX (ticfac #38): CI also triggers on pushes to epic/**. A push-triggered run attaches its check runs to the PR's head commit, which is exactly what the close-out reads (internal/forge: commits/\u003csha\u003e/check-runs), whatever GitHub thinks of the merge.\n\nNOT fixed by this, and worth knowing: the PR still LOOKS conflicting to a person on GitHub, and GitHub's merge button will refuse it. The merge is the operator's by design (.tick/config.md), and a local merge with tk's drivers is clean - but the GitHub UI will not say so.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An epic PR whose only GitHub-side conflict is in tracker files the tk drivers merge still gets CI on its head commit, and its close-out completes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T06:23:53.141976Z",
+  "updated_at": "2026-09-23T06:23:53.141976Z"
+}

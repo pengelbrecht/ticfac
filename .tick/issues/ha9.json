@@ -2,7 +2,8 @@
   "id": "ha9",
   "title": "The sandbox image carries pi, not only omp and claude",
   "description": "FOUND 2026-09-22 when the operator asked 'assume it's with pi and not omp?' The answer today is NO.\n\nThe sandbox image carries two harnesses and pi is not one of them:\n  image/common.sh:64    harness=\"${TICKS_HARNESS:-omp}\"\n  image/common.sh:145   'unknown harness kind … — this image carries omp and claude'\nomp is oh-my-pi (github.com/can1357/oh-my-pi), a Bun-runtime fork of pi, installed in the ticks image's Dockerfile from a pinned release with a checksum.\n\nSo every per-tick sandbox xte builds would run omp. xte's definition of done says pi on GLM 5.3, and njj pairs 'runner pi, executor cloudflare-sandbox' - a pairing the image cannot currently execute. This GATES xte's done, which is why it is absorbed here rather than filed to the backlog (the gvc criterion).\n\nTHE REPO BOUNDARY: image/ in this repository is VENDORED byte-for-byte from the ticks repository's cloud/sandbox/, and ticfac does not edit it. The change is made in ticks (cloud/sandbox/Dockerfile to install pi at a pinned version with a checksum, exactly as omp is; common.sh and worker.sh to accept a 'pi' harness kind with its own launch and provider-config cases) and then re-vendored here.\n\nqu3 IS THE SAME FACT SEEN FROM THE OTHER SIDE. workers-ai/… is omp's model spelling and cloudflare-workers-ai/… is pi's. The two spellings are two harnesses, not a typo. Settle qu3 together with this tick: once the sandbox runs pi, pi's own spelling is the one the boot must accept.\n\npi's non-interactive shape is already verified in this repo (internal/runconfig/kinds.go, tick gjk): pi -p --model \u003cprovider/model\u003e '\u003cprompt\u003e', with --approve for an untrusted path.",
-  "status": "open",
+  "notes": "2026-09-23 07:32 - DONE outside the run, 2026-09-23. ticks #88 (pi harness kind) and #89 (GLM 5.3 catalog correction), vendored into ticfac by #31 and #34. Proven live: smoke run run_0d2edef252834a40b89deabbd0ffec69 booted a factory container on harness pi, its probe answered READY through the gateway on @cf/zai-org/glm-5.3, and the pi worker ticfac dispatched implemented tick pg9 - docs/smoke/hello.md landed on epic/plw with the requested line, no claude process anywhere. Caveat worth keeping: that worker ran under local-subprocess INSIDE the orchestrator container, not in its own per-tick sandbox - the per-tick path is njj/keh's, and worker.sh's pi launch is covered by TestWorkerRunsPiOnTheTicksOwnPrompt rather than by a live run yet.",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -10,5 +11,6 @@
   "acceptance_criteria": "The sandbox image installs pi at a pinned version with a verified checksum; common.sh and worker.sh accept TICKS_HARNESS=pi and launch it non-interactively; a sandbox worker booted with the pi harness completes a trivial tick on cloudflare-workers-ai/@cf/zai-org/glm-5.3 with no claude process; the change lands in the ticks repository's cloud/sandbox and is re-vendored into image/ byte-for-byte; and qu3's spelling question is settled on pi's spelling",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T17:44:23.004091Z",
-  "updated_at": "2026-09-22T17:44:37.739898Z"
+  "updated_at": "2026-09-23T05:32:38.547708Z",
+  "closed_at": "2026-09-23T05:32:38.547708Z"
 }
