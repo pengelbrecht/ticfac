@@ -20,6 +20,7 @@ import {
 } from "../src/artifacts";
 import {
   BRANCH_CLAIM_PREFIX,
+  DONE_PATH,
   deriveTokenHash,
   GATEWAY_PREFIX,
   GIT_PREFIX,
@@ -173,6 +174,7 @@ type Grade =
 const ROUTES: ReadonlyArray<{ path: string; grade: Grade }> = [
   { path: "/health", grade: "open" },
   { path: "/api/wave", grade: "run-token" },
+  { path: "/api/done", grade: "run-token" },
   { path: "/api/branches", grade: "run-token" },
   { path: "/api/review", grade: "run-token" },
   { path: "/api/gateway/v1/messages", grade: "run-token" },
@@ -211,6 +213,7 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     // the spellings every other module is pinned to.
     expect(HEALTH_PATH).toBe("/health");
     expect(WAVE_PATH).toBe("/api/wave");
+    expect(DONE_PATH).toBe("/api/done");
     expect(BRANCH_CLAIM_PREFIX).toBe("/api/branches");
     expect(REVIEW_PREFIX).toBe("/api/review");
     expect(GATEWAY_PREFIX).toBe("/api/gateway");

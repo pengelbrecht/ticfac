@@ -24,6 +24,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runsignal"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -466,6 +467,11 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		died(err.Error())
 		life.Release("died: " + err.Error())
+		// The completion signal (tick 7eq): a dead run wants its supervisor
+		// woken just as much as a finished one, so the reboot does not wait out
+		// a whole cadence to learn what the container already knew. The branch
+		// may never have landed — the door takes a signal with no head.
+		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
 		return 1
 	}
 	defer life.Release(string(result.State))
@@ -498,6 +504,15 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	if result.LivenessError != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, livenessFailureLine(result.RunID, result.LivenessError))
 	}
+	// The completion signal (tick 7eq), sent on this path and the error path
+	// both: a run that errored has as much reason to wake its supervisor
+	// immediately as one that finished — the replacement (or the refusal) is a
+	// cadence look away otherwise. Best effort by construction: the pushed
+	// branch is the source of truth, so FromEnv's nil — a local run with no
+	// factory in its environment — makes this a no-op, and a signal that cannot
+	// be delivered is said to the log (which is run.log here, the stream the
+	// Workflow drains to R2) and swallowed, never an exit code.
+	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
 	return resultExitCode(result)
 }
 

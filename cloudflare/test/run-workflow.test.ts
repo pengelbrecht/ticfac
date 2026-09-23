@@ -3708,3 +3708,142 @@ describe("a supervisor that dies mid-wave adopts live workers instead of redispa
     expect(completed[0]!.event.success).toBe(true);
   }, 15_000);
 });
+
+// ------------------------------------------------- the completion signal ---
+//
+// Tick 7eq: a finished orchestrator POSTs /api/done, the Worker turns that
+// into instance.sendEvent(), and the Run Workflow's wait returns immediately —
+// the run is not concluded by polling for a finish that already happened. The
+// signal is buffered by the platform, so a container that finished before its
+// supervisor resumed loses nothing; and it decides NOTHING, because the
+// container may still die after finishing and before its callback lands. The
+// second half of the acceptance is exactly that case: no callback, and the run
+// is still concluded correctly — from the branch, the way every verdict here
+// is concluded (tick ehy's rule, applied to the wake-up rather than the
+// verdict).
+describe("the completion signal (tick 7eq)", () => {
+  /** The POST a finished orchestrator makes: the done door, on its run token. */
+  function postDoneSignal(
+    token: string,
+    body: { branch: string; head?: string },
+  ): Promise<Response> {
+    return SELF.fetch("https://factory.example.com/api/done", {
+      method: "POST",
+      headers: {
+        // Exactly what the container holds: TICKS_FACTORY_TOKEN is the run's
+        // gateway token, never the operator's factory token — the same
+        // credential the wave door takes.
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("tells every orchestrator boot where the factory is, not just wave passes", async () => {
+    const { runID } = await ignite();
+
+    const process = await firstProcess();
+    // A plain `run` pass used to be booted without TICKS_FACTORY_URL ("a
+    // container that may not ask for a wave is not told how to"). Every pass
+    // reports its own finish now, so every boot knows the door — and the wave
+    // half stays gated by the door's own refusal of a pass with no recorded
+    // wave request, not by withholding a URL.
+    expect(process.env.TICKS_FACTORY_URL).toBe(FACTORY);
+    expect(process.env.TICKS_FACTORY_TOKEN).toBe(process.env.AI_GATEWAY_TOKEN);
+
+    // The run still concludes; nothing about the boot changed otherwise.
+    orchestratorPushedWork();
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+  });
+
+  it("wakes a finished run without polling — the signal, not the cadence", async () => {
+    // A cadence the test could never wait out: if this settles at all, it was
+    // the event that woke the look, because the first cadence look is ten
+    // minutes away.
+    set("RUN_POLL_INTERVAL_MS", "600000");
+    const { runID, epic } = await ignite();
+
+    const process = await firstProcess();
+    const token = process.env.TICKS_FACTORY_TOKEN!;
+    orchestratorPushedWork(epic);
+    process.exit(0);
+
+    // The container is already finished when its callback lands — the harshest
+    // ordering, and the one buffering exists for. The event is buffered, the
+    // next wait returns with it, and the look observes an exit that already
+    // happened instead of sleeping to it.
+    const answered = await postDoneSignal(token, { branch: `epic/${epic}`, head: PUSHED_SHA });
+    expect(answered.status).toBe(202);
+    expect(((await answered.json()) as { delivered: boolean }).delivered).toBe(true);
+
+    // Not "eventually" — within the test's own budget, an order of magnitude
+    // below the cadence.
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+
+    // The one durable trace that the callback landed and was consumed: the
+    // run's own dispatch log says the signal was heard, whatever the payload
+    // claimed.
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "signal:done")).toBe(true);
+    // The verdict still came from the durable layer: the branch moved, and the
+    // progress record says so.
+    const progress = await getRunProgress(env.DB, runID);
+    expect(progress?.progress).toBe("advanced");
+  });
+
+  it("concludes correctly from the branch when the callback never lands", async () => {
+    // Above MIN_EVENT_WAIT_MS, so the wait is the EVENT wait, exercising the
+    // timeout path this is about: no callback arrives, the wait throws its
+    // timeout, the supervisor catches it, and the look happens anyway.
+    set("RUN_POLL_INTERVAL_MS", "2000");
+    const { runID, epic } = await ignite();
+
+    const process = await firstProcess();
+    // The container finishes and pushes — and then dies before its callback
+    // can land, which is the exact gap event buffering does NOT close.
+    orchestratorPushedWork(epic);
+    process.exit(0);
+
+    const run = await settled(runID);
+    // Concluded correctly, from the branch: the exit status only ended the
+    // wait, and `completed` is the durable layer agreeing the epic moved
+    // (tick ehy — an exit status alone would have read `stopped`).
+    expect(run.state).toBe("completed");
+    const progress = await getRunProgress(env.DB, runID);
+    expect(progress?.progress).toBe("advanced");
+
+    // And the signal row is absent, proving this run concluded with no
+    // callback at all — the branch, never the event, is the source of truth.
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "signal:done")).toBe(false);
+  });
+
+  it("never trusts the signal: an event claiming a finish does not conclude the run", async () => {
+    set("RUN_POLL_INTERVAL_MS", "2000");
+    const { runID, epic } = await ignite();
+
+    const process = await firstProcess();
+    // A lying or early signal: the orchestrator is STILL RUNNING, nothing has
+    // been pushed, and the container has not exited. The wake-up must fall
+    // through to a look that reads exactly that.
+    const answered = await postDoneSignal(process.env.TICKS_FACTORY_TOKEN!, {
+      branch: `epic/${epic}`,
+      head: PUSHED_SHA,
+    });
+    expect(answered.status).toBe(202);
+
+    // The run is NOT concluded by the claim: it keeps being supervised until
+    // the orchestrator actually finishes — and then the verdict comes from the
+    // branch, which moved, so `completed` stands.
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "signal:done")).toBe(true);
+  });
+});

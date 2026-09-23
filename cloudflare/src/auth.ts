@@ -132,6 +132,20 @@ export const GATEWAY_PREFIX = "/api/gateway";
 export const WAVE_PATH = "/api/wave";
 
 /**
+ * The completion door (tick 7eq), exempt for the same reason as the four above:
+ * its caller is an orchestrator container holding its run's own gateway token,
+ * never the operator's.
+ *
+ * A container invoking a Workflow binding DIRECTLY is unverified platform
+ * ground, so the orchestrator POSTs here and the Worker — which does hold the
+ * binding — turns the POST into `instance.sendEvent()`. The event is an
+ * optimisation that lets the Run Workflow learn the orchestrator finished
+ * without polling for it; the pushed branch remains the source of truth, so
+ * delivery here is best effort and never load-bearing.
+ */
+export const DONE_PATH = "/api/done";
+
+/**
  * The read-only git door (D11, tick pzf), exempt for the same reason as the
  * two above: its caller is a sandbox holding a run token, never the operator's.
  *
@@ -367,6 +381,7 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === TELEGRAM_WEBHOOK_PATH) return true;
   if (pathname === GATEWAY_PREFIX || pathname.startsWith(`${GATEWAY_PREFIX}/`)) return true;
   if (pathname === WAVE_PATH) return true;
+  if (pathname === DONE_PATH) return true;
   if (pathname === SANDBOX_DISPATCH_PREFIX || pathname.startsWith(`${SANDBOX_DISPATCH_PREFIX}/`))
     return true;
   if (pathname === GIT_PREFIX || pathname.startsWith(`${GIT_PREFIX}/`)) return true;

@@ -543,7 +543,14 @@ export type OrchestratorEnvInput = {
   pass?: number;
   /**
    * The factory this run belongs to, so `tk` inside the container can reach
-   * its own control plane (`tk cloud spawn`, `tk ask`).
+   * its own control plane (`tk cloud spawn`, `tk ask`) — and, since tick 7eq,
+   * so `ticfac run-epic` can report its own finish to the done door and wake
+   * its Run Workflow without the Workflow polling for it.
+   *
+   * Given per BOOT now: every orchestrator pass reports completion. The wave
+   * half of what the URL unlocks stays gated per PASS (TICKS_PASS, and the
+   * dispatch door's refusal of a pass with no recorded wave request), not by
+   * withholding the URL — see the boot call site in run-workflow.ts.
    *
    * Note what the token is NOT: the operator's factory token. A container
    * holding that could enrol projects, submit runs and read every other run's
