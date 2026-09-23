@@ -221,9 +221,9 @@ start_harness() {
 	# The substrate this run executes on (tick 84z), stated the way every
 	# reader of the substrate honours: the override, never a rewrite of the
 	# tracked config the run's workers commit against. This container IS the
-	# cloud — role routing resolves against it, the [roles.*.substrates.cloud]
-	# overlays of the target repository's .tick/runners.toml apply to every
-	# role including review and close-out, and a role nobody declared cloud
+	# cloud — role routing resolves against it, the target repository's
+	# .tick/runners.cloud.toml role cells apply last, over .tick/runners.toml,
+	# to every role including review and close-out, and a role nobody declared cloud
 	# routing for REFUSES the run at start, naming the role — never a silent
 	# fall back to the base cell, which is how a container once reached a
 	# claude process nobody chose.

@@ -135,7 +135,9 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 // model alone.
 func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, error) {
 	w := runconfig.Worker{Role: d.Role, Kind: d.Profile.Runner, Model: d.Profile.Model}
-	cfg, err := runconfig.Load(gate)
+	// A herdr dispatch runs on this machine, so runners.local.toml merges
+	// over the common file (tick 5uo) — its tiers are real here.
+	cfg, err := runconfig.LoadFor(gate, runconfig.SubstrateHerdr)
 	if err != nil && !os.IsNotExist(err) {
 		// A MISSING file routes nothing — the profile ships as written. A
 		// file that EXISTS and fails validation is a stop, never a silent
@@ -145,7 +147,7 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 	if cfg != nil {
 		for _, candidate := range profile.RunnersRoleCandidates(d.Role) {
 			if entry, ok := cfg.Roles[candidate]; ok && entry != nil {
-				resolved, resolveErr := cfg.Resolve(candidate, runconfig.Tier(d.Tier))
+				resolved, resolveErr := cfg.ResolveOn(runconfig.SubstrateHerdr, candidate, runconfig.Tier(d.Tier))
 				if resolveErr != nil {
 					return nil, nil, resolveErr
 				}

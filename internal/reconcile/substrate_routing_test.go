@@ -118,7 +118,7 @@ func TestACloudRunRefusesAtStartOverARoleWithNoCloudRouting(t *testing.T) {
 	// The role is named — the fix is a config edit, and an operator reading
 	// the refusal has to know which cell to write. ResolveAll resolves the
 	// roles in dispatch order, so the first unroutable one is the one named.
-	for _, want := range []string{"implement", "substrates.cloud"} {
+	for _, want := range []string{"implement", "runners.cloud.toml"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q: %v", want, err)
 		}
@@ -138,30 +138,36 @@ func TestACloudRunRoutesEveryRoleOffClaude(t *testing.T) {
 kind = "claude"
 model = "sonnet"
 
-[roles.implement.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-
 [roles.review]
 kind = "claude"
 model = "opus"
-
-[roles.review.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 
 [roles.closeout]
 kind = "claude"
 model = "opus"
 
-[roles.closeout.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-
 [testing.commands]
 tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
 `
+	// The cloud's cells live in their own file (tick 5uo), beside the gate.
+	const cloudCells = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.closeout]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`
 	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.cloud.toml"), []byte(cloudCells), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_, result, err := f.run(f.Repo, fixtureOptions{gate: cloudGate, substrate: "cloud"})
 	if err != nil {
 		t.Fatalf("the cloud run did not finish: %v", err)

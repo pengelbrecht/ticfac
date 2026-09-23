@@ -1,0 +1,37 @@
+# Overrides for runs on the CLOUD substrate (tick 5uo): merged over
+# .tick/runners.toml, with these role cells applied LAST — over each role's
+# own values and over any tier the common file declares. Tables merge
+# field-wise; arrays replace.
+#
+# The operator's rule: nothing in the cloud runs claude. Cloud workers are pi
+# on GLM 5.3 / GLM 5.3 Flash through the factory's Workers AI gateway, and
+# nothing else. A role this file does not declare is REFUSED at run start
+# under the cloud substrate (ErrNoCloudRouting), never a fall back to the
+# common cell, which names a harness a container cannot run at a price nobody
+# agreed to (hn0). Every role declared here must name its kind.
+#
+# The container is TOLD its substrate by whatever boots it
+# (TICKS_SUBSTRATE=cloud, set by the staged orchestrator entrypoint) — this
+# file is read, never rewritten. A tier declared only in runners.local.toml
+# does not exist here: the cloud never reads that file.
+version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+args = ["--approve"]
+
+[roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.closeout]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"

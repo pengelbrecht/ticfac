@@ -173,10 +173,30 @@ func Parse(data []byte) (*Config, error) {
 		// are stops, reported with the parser's own message.
 		return nil, ValidationErrors{{Msg: err.Error()}}
 	}
-	if errs := validate(&cfg, md, presentForeignTables(data)); len(errs) > 0 {
+	if errs := validate(&cfg, md, presentForeignTables(data), false); len(errs) > 0 {
 		return nil, errs
 	}
 	return &cfg, nil
+}
+
+// parsePartial validates an override file on its own (tick 5uo): the same
+// schema and the same per-key rules, minus the whole-file requirements an
+// override cannot meet by itself — [roles.implement], a role's kind, and the
+// cross-table command references, which may resolve in the common file.
+// Those are checked again on the merged document, where they can.
+func parsePartial(data []byte) (*Config, toml.MetaData, error) {
+	if err := checkVersion(data); err != nil {
+		return nil, toml.MetaData{}, err
+	}
+	var cfg Config
+	md, err := toml.Decode(string(data), &cfg)
+	if err != nil {
+		return nil, md, ValidationErrors{{Msg: err.Error()}}
+	}
+	if errs := validate(&cfg, md, presentForeignTables(data), true); len(errs) > 0 {
+		return nil, md, errs
+	}
+	return &cfg, md, nil
 }
 
 // presentForeignTables reports which of [foreignTables] this document
@@ -243,7 +263,7 @@ func checkVersion(data []byte) error {
 // the tables THIS reader owns. It uses the decode metadata rather than zero
 // values so that a present-but-empty key (`model = ""`) is distinguishable
 // from an omitted one.
-func validate(cfg *Config, md toml.MetaData, foreign map[string]bool) ValidationErrors {
+func validate(cfg *Config, md toml.MetaData, foreign map[string]bool, partial bool) ValidationErrors {
 	var errs ValidationErrors
 	add := func(path, msg string) { errs = append(errs, ValidationError{Path: path, Msg: msg}) }
 
@@ -255,6 +275,11 @@ func validate(cfg *Config, md toml.MetaData, foreign map[string]bool) Validation
 	// split: a legal file on ticks' side of the file is not a typo'd key on
 	// this side.
 	for _, key := range undecodedKeys(md, foreign) {
+		// Everything under a retired inline substrates table is reported
+		// once, as the move it is (validateRoles), not key by key.
+		if parts := strings.Split(key, "."); len(parts) > 3 && parts[0] == "roles" && parts[2] == "substrates" {
+			continue
+		}
 		add(key, "unknown key (a typo'd key is an error, never silently ignored)")
 	}
 
@@ -266,9 +291,11 @@ func validate(cfg *Config, md toml.MetaData, foreign map[string]bool) Validation
 
 	validateOrchestrator(cfg, md, add)
 	validateOrchestration(cfg, md, add)
-	validateRoles(cfg, md, add)
-	validateCommands(cfg, md, add)
-	validateTierPolicy(cfg, md, add)
+	validateRoles(cfg, md, add, partial)
+	if !partial {
+		validateCommands(cfg, md, add)
+		validateTierPolicy(cfg, md, add)
+	}
 
 	sort.SliceStable(errs, func(i, j int) bool { return errs[i].Path < errs[j].Path })
 	return errs
@@ -328,12 +355,15 @@ func validateOrchestration(cfg *Config, md toml.MetaData, add addFunc) {
 	}
 }
 
-func validateRoles(cfg *Config, md toml.MetaData, add addFunc) {
+func validateRoles(cfg *Config, md toml.MetaData, add addFunc, partial bool) {
+	if partial && len(cfg.Roles) == 0 {
+		return
+	}
 	if !md.IsDefined("roles") || len(cfg.Roles) == 0 {
 		add("roles", "required — a config must define at least [roles.implement]")
 		return
 	}
-	if _, ok := cfg.Roles[RoleImplement]; !ok {
+	if _, ok := cfg.Roles[RoleImplement]; !ok && !partial {
 		add("roles.implement", "required — it is the fallback for every unlisted role")
 	}
 
@@ -349,7 +379,9 @@ func validateRoles(cfg *Config, md toml.MetaData, add addFunc) {
 		}
 
 		if !md.IsDefined("roles", name, "kind") || role.Kind == "" {
-			add(base+".kind", "required")
+			if !partial {
+				add(base+".kind", "required")
+			}
 		} else {
 			checkPattern(add, base+".kind", role.Kind, kindPattern, "a lowercase herdr kind name")
 		}
@@ -393,43 +425,12 @@ func validateRoles(cfg *Config, md toml.MetaData, add addFunc) {
 			}
 		}
 
-		// The per-substrate overlays (tick 84z): the same variant shape and
-		// the same per-cell rules as the tiers above, on the substrate axis.
-		// The keys are the substrate vocabulary minus auto — auto is a policy
-		// a decision procedure resolves, never the substrate a role is routed
-		// for, so a cell named for it cannot be reached and is refused instead
-		// of silently dead.
-		for _, sub := range sortedKeys(role.Substrates) {
-			variant := role.Substrates[sub]
-			sbase := base + ".substrates." + sub
-			if !Substrate(sub).Valid() {
-				add(sbase, fmt.Sprintf("%q is not one of %s", sub, SubstrateList(false)))
-			}
-			if sub == string(SubstrateAuto) {
-				add(sbase, "auto is a policy the substrate decision resolves, never a substrate a role can be routed for — declare the cell for a substrate a run can actually execute on")
-			}
-			if variant == nil {
-				add(sbase, "must be a table")
-				continue
-			}
-			hasAny := false
-			for _, field := range []string{"kind", "model", "effort", "args"} {
-				if md.IsDefined("roles", name, "substrates", sub, field) {
-					hasAny = true
-				}
-			}
-			if !hasAny {
-				add(sbase, "must set at least one of kind/model/effort/args — an empty substrate overlay is meaningless")
-			}
-			if md.IsDefined("roles", name, "substrates", sub, "kind") {
-				checkPattern(add, sbase+".kind", variant.Kind, kindPattern, "a lowercase herdr kind name")
-			}
-			if md.IsDefined("roles", name, "substrates", sub, "model") {
-				checkModel(add, sbase+".model", variant.Model)
-			}
-			if md.IsDefined("roles", name, "substrates", sub, "effort") {
-				checkEffort(add, sbase+".effort", variant.Effort)
-			}
+		// The inline per-substrate overlay 84z shipped is retired (tick 5uo):
+		// the cloud's routing lives in its own file now, and a file that
+		// still says it inline is told where it went rather than having two
+		// places the same routing could drift apart in.
+		if md.IsDefined("roles", name, "substrates") {
+			add(base+".substrates", "moved: a substrate's routing lives in its own file now — .tick/runners.cloud.toml for the cloud, .tick/runners.local.toml for herdr and harness — as a plain [roles."+name+"] cell (tick 5uo)")
 		}
 	}
 }

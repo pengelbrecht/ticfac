@@ -160,13 +160,13 @@ func (r *Reconciler) deriveTier(entry planEntry, number, failed int) (string, st
 func (r *Reconciler) recordSubstrateRouting() {
 	if r.substrate == runconfig.SubstrateCloud {
 		r.record("", StagePolicyStated,
-			"role routing resolved against the cloud substrate: the [roles.*.substrates.cloud] overlays in %s applied to every dispatch, and a role with no such cell refused this run at construction — the base cells are a LOCAL run's routing, and never a fall back in a container",
-			runconfig.FileName)
+			"role routing resolved against the cloud substrate: the role cells of %s applied last, over %s, to every dispatch, and a role with no such cell refused this run at construction — the common cells are a LOCAL run's routing, and never a fall back in a container",
+			runconfig.OverrideFileName(runconfig.SubstrateCloud), runconfig.FileName)
 		return
 	}
 	r.record("", StagePolicyStated,
-		"role routing resolved against the %s substrate: the base cells of %s's [roles] table applied, and any [roles.*.substrates.%s] overlays declared for it",
-		string(r.substrate), runconfig.FileName, string(r.substrate))
+		"role routing resolved against the %s substrate: the cells of %s's [roles] table applied, with %s merged over them when it exists",
+		string(r.substrate), runconfig.FileName, runconfig.OverrideFileName(r.substrate))
 }
 
 // derivableTiers is the set of tiers the declared policy can ever route a

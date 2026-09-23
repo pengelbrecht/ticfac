@@ -1,0 +1,21 @@
+# Overrides for runs on THIS machine — herdr and harness substrates (tick
+# 5uo): merged over .tick/runners.toml. The cloud never reads this file.
+#
+# The operator, 2026-09-23: "if a tick is complex you can consider using a
+# claude executor locally. It should be significantly stronger than pi/glm" —
+# local claude bills to the operator's Max subscription. So a local run's
+# implement ladder starts on GLM 5.3 and climbs to claude after one failed
+# attempt: attempt 1 -> strong (pi on glm-5.3), after a failure -> frontier
+# (claude opus), capped there.
+version = 2
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+effort = "high"
+args = []
+
+[tier_policy]
+default = "strong"
+ceiling = "frontier"
+step = 1

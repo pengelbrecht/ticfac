@@ -2,13 +2,14 @@ package profile
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// The substrate half of profile routing (tick 84z): the same `.tick/runners.toml`
-// that routes a role's runner and model routes them PER SUBSTRATE, through the
-// `[roles.<name>.substrates.<substrate>]` overlay — so a local run keeps its
+// The substrate half of profile routing (ticks 84z, 5uo): the role cells of
+// `.tick/runners.cloud.toml`, beside the common runners.toml, route a cloud
+// run's runner and model, applied last — so a local run keeps its
 // frontier review on opus while a cloud container runs a worker it can actually
 // call, off the claude harness entirely.
 //
@@ -22,29 +23,40 @@ const cloudRoutingDocument = `version = 2
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 
-[roles.implement.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-
 [roles.review]
 kind = "claude"
 model = "opus"
-
-[roles.review.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 
 [roles.closeout]
 kind = "claude"
 model = "opus"
 `
 
+const cloudCellsDocument = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`
+
+// writeCloudRouting writes the common document and the cloud file beside it.
+func writeCloudRouting(t *testing.T) string {
+	t.Helper()
+	config := writeConfig(t, cloudRoutingDocument)
+	write(t, filepath.Join(filepath.Dir(config), "runners.cloud.toml"), cloudCellsDocument)
+	return config
+}
+
 // A declared cloud overlay is what a cloud run resolves against; the local
 // substrates keep the role's own cells. The provenance names the overlay, and
 // records which substrate was resolved against, so an attempt record can say
 // what routed its worker.
 func TestTheSubstrateOverlayRoutesTheProfile(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 
 	cloud, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
 	if err != nil {
@@ -53,7 +65,7 @@ func TestTheSubstrateOverlayRoutesTheProfile(t *testing.T) {
 	if cloud.Runner != "pi" || cloud.Model != "cloudflare-workers-ai/@cf/zai-org/glm-5.3" {
 		t.Errorf("cloud review-epic routed to %s/%s", cloud.Runner, cloud.Model)
 	}
-	if !strings.Contains(cloud.Routed, "roles.review.substrates.cloud") {
+	if !strings.Contains(cloud.Routed, "runners.cloud.toml [roles.review]") {
 		t.Errorf("the provenance does not name the cloud overlay: %q", cloud.Routed)
 	}
 	if cloud.Provenance.Substrate != "cloud" {
@@ -76,7 +88,7 @@ func TestTheSubstrateOverlayRoutesTheProfile(t *testing.T) {
 // profile it was made under, and a cloud review and a local review are
 // different judgements, not two spellings of one.
 func TestTheSubstrateChangesTheDigest(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 	cloud, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
 	if err != nil {
 		t.Fatal(err)
@@ -94,13 +106,13 @@ func TestTheSubstrateChangesTheDigest(t *testing.T) {
 // role's own values — the closeout cell above declares none, and the claude
 // process its base cell names is exactly what a container must not start.
 func TestCloudRoutingThatIsAbsentIsARefusalNotAFallback(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 
 	_, err := Resolve("closeout-epic", Options{RunnersConfig: config, Substrate: "cloud"})
 	if err == nil {
 		t.Fatal("a role with no cloud overlay resolved anyway, falling back to its own claude routing")
 	}
-	for _, want := range []string{"closeout", "roles.closeout", "substrates.cloud"} {
+	for _, want := range []string{"closeout", "roles.closeout", "runners.cloud.toml"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q: %v", want, err)
 		}
@@ -144,7 +156,7 @@ func TestTheCloudSubstrateRefusesWhenNoConfigWasNamed(t *testing.T) {
 // auto is a policy a decision procedure resolves, not a substrate a profile
 // resolves against; a caller passing it has skipped the decision.
 func TestAutoIsNotASubstrateAProfileResolvesAgainst(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 	_, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "auto"})
 	if err == nil || !strings.Contains(err.Error(), "auto") {
 		t.Fatalf("auto was accepted as a substrate to route a profile against: %v", err)
@@ -155,7 +167,7 @@ func TestAutoIsNotASubstrateAProfileResolvesAgainst(t *testing.T) {
 // had: a caller that knows no substrate keeps the historical behaviour
 // exactly, byte for byte.
 func TestNoSubstrateIsTheSubstrateBlindResolution(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 	blind, err := Resolve("review-epic", Options{RunnersConfig: config})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +184,7 @@ func TestNoSubstrateIsTheSubstrateBlindResolution(t *testing.T) {
 // that wants to distinguish "the cloud refused this role" from every other
 // routing failure gets a sentinel to ask.
 func TestTheCloudRefusalIsRecognisableAsErrNoCloudRouting(t *testing.T) {
-	config := writeConfig(t, cloudRoutingDocument)
+	config := writeCloudRouting(t)
 	_, err := Resolve("closeout-epic", Options{RunnersConfig: config, Substrate: "cloud"})
 	if err == nil {
 		t.Fatal("closeout resolved on the cloud substrate without cloud routing")
