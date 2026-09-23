@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "84z",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-23T01:23:12Z",
+  "triaged_at": "2026-09-23T11:05:54Z",
+  "triaged_by": "peter@engelbrecht.dk",
+  "promoted_as": "pengelbrecht/ticks:uep",
   "provenance": {
     "run_id": "epic-xte",
     "tick_id": "84z",
