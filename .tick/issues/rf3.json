@@ -3,13 +3,14 @@
   "title": "A cloud run ignores the commit it was submitted at",
   "description": "FOUND 2026-09-22 by the first per-tick Cloudflare smoke run (run_ce54ab2a2f88492aa2b2eeaa23203f2b).\n\nticfac cloud run pushes the current branch and submits its commit (here 521b4805 on smoke/xte-omp-glm, which carries epic plw). The container boot then runs:\n\n    ticfac run-epic --base \"$base_branch\" …   (internal/factory/ticfacentrypoint.go:291-294)\n\nwith base_branch resolved to the REMOTE'S DEFAULT BRANCH (main). The run is cut from main and its tracker read from main, so the submitted commit is ignored:\n\n    ticfac run-epic plw: reconcile: read the epic graph: … open …/tree/.tick/issues/plw.json: no such file or directory\n\nThe Workflow then re-booted the container into the identical failure until the run was stopped by hand.\n\n--base is doing two jobs. It is WHERE THE INTEGRATION BRANCH IS CUT FROM (which must be the submitted commit: that is what the operator submitted) and WHAT IS FOLDED IN ON REFRESH (which should be the default branch, per wvd). The entrypoint chose the second meaning and lost the first. wvd is the same confusion seen from the local side: there --base HEAD cuts correctly and folds nothing.\n\nAlso: a deterministic failure like this should not be re-booted. A missing epic on the submitted tree will be missing on every boot.",
   "notes": "2026-09-23 01:47 - PARTLY FIXED by PR #30 (c6a037f8): the container now passes the submitted SHA as --base, and refresh folds the remote's default branch. STILL OPEN from the acceptance: a boot that fails because the epic does not exist on the submitted tree still re-boots rather than stopping with that reason.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "bug",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "xte",
   "acceptance_criteria": "A cloud run's integration branch is cut from, and its tracker read from, the submitted commit, while refresh still folds the remote's default branch; an epic that exists only on the submitted branch runs; a boot that fails because the epic does not exist on the submitted tree stops the run with that reason instead of re-booting; and the change is covered by a test of the entrypoint's argv",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T22:19:05.731657Z",
-  "updated_at": "2026-09-22T23:47:09.157079Z"
+  "updated_at": "2026-09-23T05:33:02.626631Z",
+  "started_at": "2026-09-23T05:33:02.626631Z"
 }
