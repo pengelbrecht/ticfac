@@ -180,6 +180,22 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
+	// The bundle's two declarations of the sandbox capacity — the account's
+	// real container ceiling and the `[vars]` mirror a cloud wave's dispatch
+	// width is bounded by — are checked before anything is probed, staged or
+	// created (tick 7fl): a disagreement is a property of this binary's
+	// payload, not of the account, and shipping one anyway is a wave that
+	// books more containers than the account can host — discovered as sandbox
+	// creation failures attributed to whichever tick happened to be fourth,
+	// never as a capacity message.
+	config, err := ReadBundleFile(WranglerConfigFile)
+	if err != nil {
+		return nil, err
+	}
+	if err := VerifyContainerCapacity(config); err != nil {
+		return nil, fmt.Errorf("factory deploy: %w", err)
+	}
+
 	// Preconditions first: a missing prerequisite is a stop, and settling them
 	// before the first `create` keeps a half-provisioned account impossible.
 	// Nothing on disk is touched until they pass.

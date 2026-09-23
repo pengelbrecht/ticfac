@@ -72,7 +72,11 @@
 //
 //  1. What does this repo's config say? — [Load] / [LoadRepo] parse the file
 //     and enforce the format's shape rules in Go.
-//  2. Which worker serves this role at this tier? — [Config.Resolve].
+//  2. Which worker serves this role at this tier? — [Config.Resolve], or
+//     [Config.ResolveOn] when the caller knows which substrate the run
+//     executes on (tick 84z): the per-substrate overlay applies between the
+//     role's own values and any tier, and under the cloud substrate absent
+//     routing is a refusal naming the role, never a fall back.
 //  3. Which substrate orchestrates the run? — [Decide], or [DecideOverride]
 //     when whatever booted the run states the substrate explicitly (a cloud
 //     sandbox has no herdr server to probe for; see [SubstrateEnvVar]).

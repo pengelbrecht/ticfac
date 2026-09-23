@@ -1357,6 +1357,27 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     expect(sandboxes.booted).toHaveLength(1);
   });
 
+  it("does not reboot when the reconciler answers not-found: the epic is absent from the submitted tree", async () => {
+    const { runID, project } = await ignite();
+    // Exit 4: the orchestrator entrypoint execs `ticfac run-epic`, which exits
+    // with tk's not-found code when the epic does not exist on the submitted
+    // tree — a verdict the cut of the next container's checkout reproduces
+    // byte for byte (ticfac tick rf3). The first per-tick Cloudflare smoke run
+    // re-booted into this identical failure until a person stopped it by hand.
+    (await firstProcess()).exit(4);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(1);
+
+    // And the run's record says WHY it stopped, as a class an operator can act
+    // on — not just "exited 4": the durable reason is the refusal the
+    // reconciler recorded, and this is the supervisor's own account of it.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("the epic does not exist on the submitted tree");
+    expect(record.detail).toContain("no sandbox was rebooted");
+  });
+
   it("gives up after a bounded number of boots rather than looping forever", async () => {
     const { runID } = await ignite();
     // Every orchestrator this run is allowed crashes. A container that cannot

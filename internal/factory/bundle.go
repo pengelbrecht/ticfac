@@ -402,6 +402,53 @@ func SetDatabaseID(dir, id string) error {
 	return nil
 }
 
+// containerMaxInstancesPattern matches the `max_instances` assignment in the
+// `[[containers]]` block: the account-level ceiling Cloudflare enforces on
+// concurrent orchestrator containers. A regex rather than a TOML parser, for
+// the same reason the test-side containerImagePath helper gives: the assertion
+// is about one literal line, and a parser here would be a second grammar to
+// keep honest.
+var containerMaxInstancesPattern = regexp.MustCompile(`(?m)^\s*max_instances\s*=\s*([0-9]+)\s*(?:#.*)?$`)
+
+// factoryMaxInstancesVarPattern matches the `[vars]` mirror of that ceiling,
+// quoted because a wrangler var is a string.
+var factoryMaxInstancesVarPattern = regexp.MustCompile(`(?m)^\s*FACTORY_MAX_INSTANCES\s*=\s*"([0-9]+)"\s*(?:#.*)?$`)
+
+// VerifyContainerCapacity checks that wrangler.toml's two declarations of the
+// sandbox capacity say one number (tick 7fl): `[[containers]] max_instances —
+// the ceiling Cloudflare actually enforces, which the Worker cannot read at
+// runtime because wrangler does not hand a container application's own config
+// back — and its `[vars] FACTORY_MAX_INSTANCES` mirror, which is what bounds a
+// cloud wave's dispatch width. Two numbers that must agree and are maintained
+// separately drift, and a deployment shipped with them apart is a wave that
+// books more containers than the account can host: the overflow surfaces as
+// sandbox creation failures attributed to whichever tick happened to be fourth,
+// never as a capacity message. The deploy calls this before anything is probed
+// or created, so a disagreement is a stop naming both numbers, not a mid-wave
+// discovery.
+func VerifyContainerCapacity(data []byte) error {
+	instances := containerMaxInstancesPattern.FindSubmatch(data)
+	if instances == nil {
+		return fmt.Errorf("wrangler.toml declares no [[containers]] max_instances, " +
+			"so there is no sandbox capacity for the dispatch width's mirror to be checked against")
+	}
+	mirror := factoryMaxInstancesVarPattern.FindSubmatch(data)
+	if mirror == nil {
+		return fmt.Errorf("wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES to check against "+
+			"[[containers]] max_instances = %s — the dispatch width would fall back to a "+
+			"compiled default this deploy cannot verify", instances[1])
+	}
+	if string(instances[1]) != string(mirror[1]) {
+		return fmt.Errorf("wrangler.toml disagrees with itself: [[containers]] max_instances = %s "+
+			"but [vars] FACTORY_MAX_INSTANCES = %q. A cloud wave would dispatch wider than "+
+			"the account can host, and the overflow would surface as sandbox creation "+
+			"failures attributed to whichever tick happened to be fourth, not as a "+
+			"capacity message. Raise or lower the two together in cloudflare/wrangler.toml "+
+			"and deploy again", instances[1], mirror[1])
+	}
+	return nil
+}
+
 // tkVersionArgPattern / tkSourceRefArgPattern match the two tk pins in the
 // image's Dockerfile: the version the image labels itself with, and the source
 // the image builds that tk from.

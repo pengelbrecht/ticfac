@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 18,
+  "tick_id": "ha9",
+  "dispatched_at": "2026-09-23T06:29:37Z",
+  "job_handle": {
+    "attempt": 18,
+    "base_sha": "5dcbaa72b6c639892d1ffa0f7e90a5e10cfcecb2",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-xte/tick-ha9/attempt-18",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:3d229556d593db5060d6a8d6bfb1599b620b3e49921ea7abfa6616f4761279b1",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "ha9",
+    "tier": "",
+    "touch": null,
+    "try": 6,
+    "write_ref": "refs/heads/ticfac/run-epic-xte/tick-ha9/attempt-18"
+  },
+  "provenance": {
+    "run_id": "epic-xte",
+    "tick_id": "ha9",
+    "attempt": 18,
+    "source_ref": "refs/heads/epic/xte",
+    "source_sha": "5dcbaa72b6c639892d1ffa0f7e90a5e10cfcecb2",
+    "integration_ref": "refs/heads/epic/xte",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

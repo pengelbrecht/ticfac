@@ -31,6 +31,7 @@ import {
   isTerminalExit,
   orchestratorEnv,
   sandboxName,
+  terminalExitReason,
 } from "../src/sandbox";
 import {
   DEFAULT_WORKER_HARNESS_BUDGET_MS,
@@ -483,6 +484,23 @@ describe("the image contract", () => {
     // A crashed harness is a reboot, not a verdict.
     for (const code of [1, 42, 137, 143]) expect(isTerminalExit(code)).toBe(false);
     expect(isTerminalExit(null)).toBe(false);
+  });
+
+  it("names the class of configuration verdict each terminal exit carries", () => {
+    // The run's recorded reason is built from this, so it has to name WHAT
+    // failed. Code 4 is the load-bearing one (ticfac tick rf3): the
+    // reconciler's not-found — an epic absent from the submitted tree — has to
+    // be distinguishable in run.json from a wrong tk version without going to
+    // read the container's flushed log first.
+    for (const [code, want] of [
+      [2, "a required input is missing or malformed"],
+      [3, "the clone or checkout of the submitted SHA failed"],
+      [4, "the epic does not exist on the submitted tree"],
+      [5, "an Environment pre-flight check failed"],
+      [6, "the repository's own [sandbox] setup failed"],
+    ] as const) {
+      expect(terminalExitReason(code)).toContain(want);
+    }
   });
 
   it("names a fresh sandbox per boot", () => {

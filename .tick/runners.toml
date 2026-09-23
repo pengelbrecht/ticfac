@@ -50,6 +50,42 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
+# Cloud routing (tick 84z): everything OFF claude in the cloud, for every
+# role — while the cells above stay what a LOCAL run pays for. This is
+# economics, not principle: a local claude run bills against the operator's
+# Max subscription and is free at the margin, a cloud run bills per token
+# against the factory's own credentials, and pi cannot run opus in a
+# container at all — so the frontier-tier review and the close-out are
+# wanted locally, where they are affordable, and are unaffordable and
+# unavailable where the cloud would dispatch them.
+#
+# Role resolution is substrate-aware: under substrate = "cloud" these
+# overlays apply — field-wise over each role's own values, the same shape and
+# the same rules as the [roles.*.tiers.*] overlay, with a tier still the more
+# specific axis — and a role with no [roles.<role>.substrates.cloud] cell is
+# a REFUSAL at run start naming the role, never a silent fall back to the
+# base cell. That fall back is exactly how a cloud run once reached a claude
+# process nobody chose (hn0): the base cells name a harness a container
+# cannot run at a price nobody agreed to.
+#
+# The container is TOLD its substrate by whatever boots it
+# (TICKS_SUBSTRATE=cloud, set by the staged orchestrator entrypoint), the
+# same override tk honours — this file is read, never rewritten.
+[roles.implement.substrates.cloud]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.review.substrates.cloud]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.closeout.substrates.cloud]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
 [testing.commands]
 # Spelled out, not `make gate`: this file is what says what the gate runs, and a
 # reader must be able to see it here. The Makefile's `gate` target carries the

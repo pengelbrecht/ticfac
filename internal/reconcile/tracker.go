@@ -46,6 +46,16 @@ import (
 // its records; nothing else in the tree is any of a tracker write's business.
 const trackerRoot = ".tick"
 
+// trackerRecordPath is where the tracker keeps one record — epic or tick —
+// in a checkout it reads: `.tick/issues/<id>.json`, the layout the durable
+// tracker commits against, the fold merges through tk's drivers, and tk
+// itself opens (the first per-tick Cloudflare smoke run failed on exactly
+// this file). It is evidence about a TREE, not a tracker API: reading it
+// answers "does this record exist here", which no manifest command asks.
+func trackerRecordPath(dir, id string) string {
+	return filepath.Join(dir, trackerRoot, "issues", id+".json")
+}
+
 // maxTrackerPushes bounds the rebuild-on-a-lost-lease loop, for
 // internal/runstate's reason: a ref moving forever under a writer is an
 // operational problem to report, not a conflict to spin on.
