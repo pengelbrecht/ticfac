@@ -2,6 +2,7 @@
   "id": "02p",
   "title": "Final review of the wne diff",
   "description": "Review the epic's full diff and resolve or route every finding before close-out unblocks.\n\nThree things specific to this epic:\n  - Does anything write a MODEL NAME where a WORK TYPE belongs? The whole architecture rests on the classifier judging the work and the table judging the cost. One leak and changing the table starts invalidating recorded classifications.\n  - Can a cold re-derivation from git reach a different dispatch than the warm process? That is the axiom 1 question and it is the one this epic could most plausibly get subtly wrong.\n  - Is the provisional threshold labelled as provisional everywhere it appears, including in config comments? A number measured once and then treated as settled is how a starting point becomes folklore.",
+  "notes": "2026-09-23 03:01 - ticfac run epic-wne: attempt 7 reported a finding drafted for triage — proposed-tick \"Classify only at a role-less tick's first dispatch: a later attempt with no record must not ask\" (key c0102b2d6417ddfa480a8d4748c9686f953086a5df4e1966300eb1725cd05bb3, severity medium, for this repository). Triage with `ticfac finding wne c0102b2d6417ddfa480a8d4748c9686f953086a5df4e1966300eb1725cd05bb3 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -14,6 +15,6 @@
   "acceptance_criteria": "Every finding is resolved or filed with an owner, and the epic's diff is confirmed against wne's definition of done item by item",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T13:23:44.723893Z",
-  "updated_at": "2026-09-23T00:55:18.722877Z",
+  "updated_at": "2026-09-23T01:01:45.143994Z",
   "started_at": "2026-09-23T00:55:18.722876Z"
 }
