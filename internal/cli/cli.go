@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -91,6 +92,16 @@ ceiling — is printed before the run starts, while it can still be cancelled
 cheaply. It binds a METERED credential; the local subprocess executor issues a
 flat-rate one, so on this host the number travels with the job and is reported
 everywhere, and the wall clock is what actually stops one.
+
+Each role-less implementation tick is classified through Jev before its first
+dispatch, and the credential that call rides is resolved from the environment
+and printed at startup (tick x0k): inside a cloud sandbox it is the run's own
+gateway route (AI_GATEWAY_BASE_URL/jev) with the run token, locally it is the
+operator's own key in $TICFAC_JEV_API_KEY (an optional $TICFAC_JEV_API_BASE
+overrides the API root). No credential — or an unreachable, refused or
+misconfigured classifier — is the documented fallback, said at startup and
+recorded per ask: the run classifies nothing or records its no-answer, and
+every dispatch starts at [tier_policy.start].
 
 A long run wants the machine awake end to end. A machine that sleeps mid-run
 kills workers without settling them, and what it leaves — a held attempt, a
@@ -335,6 +346,17 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintf(stdout, "%s\n", budgetLine(clamped))
 	}
 
+	// The classifier's credential, resolved BEFORE anything is dispatched (tick
+	// x0k): inside a cloud sandbox the source is the run's own gateway route
+	// with the run token; locally it is the operator's own key in
+	// $TICFAC_JEV_API_KEY. An unconfigured source is the documented fallback —
+	// the run classifies nothing and every dispatch starts at [tier_policy.start]
+	// — and the note saying so is printed on the run's own stdout below, so a
+	// redirected invocation and run.log both carry it. Resolution happens here
+	// because the client is a constructor input; the SAY waits until the run
+	// exists, so a refusal writes no stdout of any kind.
+	classifier, classifierNote := classifierForRun()
+
 	if *runner == "" {
 		*runner = "claude"
 	}
@@ -383,6 +405,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		CeilingUSD:        *ceiling,
 		PullRequests:      pulls,
 		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
+		Classifier:        classifier,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
@@ -410,6 +433,14 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// and on the wrapped stdout, so the same line lands in run.log whether
 	// or not whoever launched the run captured its output.
 	fmt.Fprintf(stdout, "%s\n", startupLine(liveRun))
+
+	// Which credential the classifier rides — or that no source resolved and
+	// every dispatch starts at [tier_policy.start] — said on the same wrapped
+	// stdout, so it lands in run.log beside the startup line (tick x0k). A
+	// credential story belongs with the run it governs, and a redirected run
+	// that silently classifies nothing is exactly the silence the startup line
+	// exists to break.
+	fmt.Fprintf(stdout, "%s\n", classifierNote)
 
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
@@ -545,6 +576,21 @@ func resumeLine(result *reconcile.Result) string {
 func startupLine(runID string) string {
 	return fmt.Sprintf("run %s starting — follow it: ticfac status %s (is it alive), "+
 		"ticfac events %s --follow (what it is doing, as it does it)", runID, runID, runID)
+}
+
+// classifierForRun builds the classifier this run classifies with, from the
+// credential source the process found (tick x0k): the run's own gateway route
+// inside a cloud sandbox, the operator's key in $TICFAC_JEV_API_KEY locally,
+// and nil — with the note saying what the run does without one — when neither
+// resolves, which is the documented degradation to [tier_policy.start]. It is
+// a function of its own so the wiring is the same under test as in production:
+// what run-epic hands the reconciler is exactly what these tests build.
+func classifierForRun() (classifier reconcile.Classifier, note string) {
+	source := jev.ResolveCredential(os.Getenv)
+	if !source.Configured {
+		return nil, source.Note
+	}
+	return jev.New(source.Config, nil), source.Note
 }
 
 // feedFailureLine is the one sentence a run whose feed could not be written
