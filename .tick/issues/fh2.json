@@ -1,0 +1,13 @@
+{
+  "id": "fh2",
+  "title": "An operator's close of a tick the run has claimed does not survive the next fold",
+  "description": "Triaged 2026-09-23 from xte's close-out (c6239277, c96a5427 - 'ha9 rediscovered for a sixth time'; 90080478). The operator closed ha9 on main while the run had it claimed; folding main in kept the run's in_progress, because the record merge prefers the later update and every re-claim bumps it - so the run redispatched a finished tick seven times. The merge driver bug (8lg) made it worse, but this is the RULE: a close by a person should beat a claim by a run. Decide the precedence and make a dispatch check the tick's current status on origin before claiming.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A tick an operator closes on the base branch while a run holds its claim is closed on the run's next fold and is not redispatched; the precedence rule is written down; a test drives it",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T10:57:51.301539Z",
+  "updated_at": "2026-09-23T10:57:51.301539Z"
+}

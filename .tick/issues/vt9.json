@@ -1,0 +1,13 @@
+{
+  "id": "vt9",
+  "title": "Settle the flash/full boundary from a real run with classification routing on",
+  "description": "Triaged 2026-09-23 from wne's close-out (2597e684). wne left mass_threshold 0.50 PROVISIONAL on purpose: the 49-tick sample could not validate it. Run an epic with [tier_policy] classification ON and re-tune from what the done actually did. Candidate: the yoh run itself, if W1 lands first.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "One epic has run with classification routing on, its recorded predictions are compared with outcomes, and mass_threshold is re-set from that evidence with the reasoning recorded",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T10:57:51.342949Z",
+  "updated_at": "2026-09-23T10:57:51.342949Z"
+}
