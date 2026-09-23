@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 33,
+  "sequence": 34,
   "state": "failed",
-  "reason": "attempt 4 of cr4 does not merge onto epic/yoh: ",
-  "updated_at": "2026-09-23T21:51:41Z",
+  "reason": "cr4 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 4 of cr4 does not merge onto epic/yoh: ",
+  "updated_at": "2026-09-23T21:51:49Z",
   "ticks": [
     {
       "tick_id": "uqi",
