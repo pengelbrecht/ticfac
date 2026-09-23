@@ -1,0 +1,14 @@
+{
+  "id": "w33",
+  "title": "TestNewRefusesAnUnconfiguredDoor reads the host's environment",
+  "description": "FOUND 2026-09-23 by the first pi smoke run to reach the gate (run_0d2edef252834a40b89deabbd0ffec69): the integrated Go gate ran INSIDE the factory container and failed\n\n    --- FAIL: TestNewRefusesAnUnconfiguredDoor\n        executor_test.go:519: a client with no factory to ask was built\n        executor_test.go:522: a client with no run credential was built\n    (internal/exec/cloudflaresandbox, from tick keh)\n\nThe test asserts that a client with no factory URL and no run credential is refused. In a factory container both ARE set in the environment (the container is a run), so the constructor finds them and builds a client. The test is measuring its host, not the code - the same class as TestRunEpicFailsClosed and the git-maintenance fixtures fixed on 2026-09-22.\n\nAbsorbed into xte because it gates xte's done: no cloud run can close a tick while the gate is red in the container, and every cloud gate runs in the container. Fix by CONSTRUCTING the unconfigured case (clear or override the variables with t.Setenv) rather than inheriting it.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "xte",
+  "acceptance_criteria": "The test clears or overrides the factory URL and run-credential variables it depends on, so it passes both on a laptop and inside a factory container with them set; proven by running it with the variables exported",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T05:27:19.746648Z",
+  "updated_at": "2026-09-23T05:27:19.746648Z"
+}

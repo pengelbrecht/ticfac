@@ -40,7 +40,7 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 	for _, want := range []string{
 		"exec \"${cmd[@]}\"",
 		"ticfac run-epic",
-		`--base "$base_branch"`,
+		`--base "$base_sha"`,
 		`--repo "$workdir"`,
 		// The run's gateway token under the name pi's cloudflare-workers-ai
 		// provider reads (tick mdw): common.sh exports every vendor credential
@@ -188,6 +188,7 @@ func runOverride(t *testing.T, phase string, extra string) string {
 	gitStub := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
 		"  *symbolic-ref*) exit 1 ;;\n" +
+		"  *is-shallow-repository*) echo true ; exit 0 ;;\n" +
 		"  *ls-remote*) printf 'ref: refs/heads/trunk\\tHEAD\\n' ; exit 0 ;;\n" +
 		"  *fetch*) printf 'GIT-FETCH: %s\\n' \"$*\" ; exit 0 ;;\n" +
 		"esac\nexit 0\n"
@@ -201,6 +202,7 @@ EXIT_CONFIG=3; EXIT_CLONE=4; EXIT_MODEL=5
 ACTOR="cloud:orchestrator"
 workdir="` + dir + `"
 epic="e1"; run_id="r1"; run_branch="tick-run/e1"; run_pass=""
+base_sha="521b4805ff865a34265878c4d6b49ab113f61710"
 factory_url=""; factory_token=""; factory_project=""
 model="sonnet"
 gateway_token="run-token"
@@ -230,13 +232,16 @@ func TestOverrideExecsTicfacRunEpicOnTheRemotesDefaultBranch(t *testing.T) {
 	if !strings.Contains(out, "EXEC: ticfac run-epic") {
 		t.Fatalf("the override did not exec ticfac run-epic:\n%s", out)
 	}
-	// tick udu: --base must be a BRANCH. "HEAD" resolves to nothing and base
-	// refresh silently does nothing every round.
-	if !strings.Contains(out, "--base trunk") {
-		t.Errorf("the override did not pass the remote's default branch as --base:\n%s", out)
+	// tick rf3: --base is the SUBMITTED COMMIT — where the integration branch
+	// is cut from. Cutting from the default branch threw the submission away:
+	// an epic that existed only on the submitted branch was not found. (tick
+	// udu's concern, that refresh then folds nothing, is the reconciler's to
+	// answer now: it resolves the remote's default branch itself — tick wvd.)
+	if !strings.Contains(out, "--base 521b4805ff865a34265878c4d6b49ab113f61710") {
+		t.Errorf("the override did not cut the run from the submitted commit:\n%s", out)
 	}
-	if strings.Contains(out, "--base HEAD") {
-		t.Errorf("the override passed the literal HEAD as --base (tick udu):\n%s", out)
+	if strings.Contains(out, "--base trunk") || strings.Contains(out, "--base HEAD") {
+		t.Errorf("the override passed a branch or HEAD as the cut point instead of the submitted commit:\n%s", out)
 	}
 	// And the base has to be a ref the CHECKOUT holds: the clone is a fetch of
 	// one SHA, so rev-parse of a bare branch name fails until it is fetched,
@@ -245,6 +250,12 @@ func TestOverrideExecsTicfacRunEpicOnTheRemotesDefaultBranch(t *testing.T) {
 	// epic/lf0 is not a commit this checkout has".
 	if !strings.Contains(out, "GIT-FETCH: ") || !strings.Contains(out, "refs/heads/trunk:refs/heads/trunk") {
 		t.Errorf("the override did not fetch the base branch into the checkout:\n%s", out)
+	}
+	// ticfac merges the default branch into the integration branch, and the
+	// ticks clone is depth 1: without full history git refuses the merge as
+	// "unrelated histories". A shallow checkout is unshallowed before the exec.
+	if !strings.Contains(out, "--unshallow") {
+		t.Errorf("the override did not fetch full history into a shallow checkout:\n%s", out)
 	}
 	if !strings.Contains(out, "--run-id r1") || !strings.HasSuffix(strings.TrimSpace(out), "e1") {
 		t.Errorf("the override did not name the run and the epic:\n%s", out)

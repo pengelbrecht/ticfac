@@ -2,7 +2,7 @@
   "$comment": "How ticfac gets the sandbox image's build context. ticks owns the tree (its internal/sandbox suite runs those scripts from its copy at cloud/sandbox); this tree is ticfac's vendored copy, the embedded image context the factory deploys (embedded.go's sandboxFS), vendored at image/ since SPEC §12 Phase 4 item 4 moved it there from cloud/sandbox — a move and nothing else: the bytes are unchanged, so `ref` still names the last ticks commit that changed the tree and the digests still verify across the move. The 5bp ownership decision SURVIVES the move, restated so it cannot be lost in the relocation: ticks authors the tree; ticfac never edits a file under image/ — change it in ticks, move `ref`, and run `go run ./cmd/sandbox sync`, then commit image/ and this file together. `ref` is the immutable ticks commit whose cloud/sandbox tree (the path `directory` still names in ticks) the vendored bytes are — a later ticks commit that does not touch it moves nothing this pin claims — and `digests` plus `modes` record the whole tree, bytes and git exec bits together. `go run ./cmd/sandbox check` verifies all of it offline on every test run; CI's verify-upstream fetches ticks at `ref` and compares byte for byte. Two repositories carrying one tree with no check between them is how the shipped image diverges from the tested one.",
   "mode": "pinned",
   "repository": "pengelbrecht/ticks",
-  "ref": "e1146e6da773e2b7d6ad9178faa1fd367466d5b8",
+  "ref": "d5dbfbc427273f5a51f58789cc1509a3ca39f6d2",
   "directory": "cloud/sandbox",
   "files": [
     "Dockerfile",
@@ -15,14 +15,14 @@
     "worker.sh"
   ],
   "digests": {
-    "Dockerfile": "d6975f3b89f994b507721b518068d1953b7985d026d62061c4e4ab6019645b45",
-    "README.md": "8827c0ac5b83d19eb32c83de6e3bff04cd4771a06f8225b38825e5b31cc14ffd",
+    "Dockerfile": "ed732ffc7d5770f70d726944f5b23f9cc9540b50d5c72ea5defa14fc0b605ff2",
+    "README.md": "f4e57a5548718825749266687312ab2773e07a43fbd8cc6be4eb8515f1403178",
     "build.sh": "d02fd0103ccb7e8ea7fafab1e64a2c84c8118b0938095b5305f3254a56e424f5",
-    "common.sh": "ff889a4df0b2e717daac12d7b3c7c0df80b198a00aaa94a0efbf67b4a6d4b0c6",
-    "entrypoint.sh": "52df7b1f0eff37f90901376ccfbdda58f142c7f1184a9ba48150c3ea48a3e574",
+    "common.sh": "df73949ce8ab64486444a6499951ee41b933a6e233b397d2e179e244a64a8f6b",
+    "entrypoint.sh": "dd501cd349bc6517a144aa34fcd191bfad0d27d2d4b884f79652680f86930f81",
     "preflight.sh": "00d5663fcc5ed37120644ebbeda9a7dbb191a9604fa97a4e0a6359db27ab69d9",
     "required-tk-commands": "a62f6567dc9646c91995bd76c64b070b494da67fa51bea0069fcf5709788c3c1",
-    "worker.sh": "2eea6f30f08340a97276330cae16dea94e795e677d556e0c68397f0024cb8b48"
+    "worker.sh": "639f35f748d1cb1e497b553623daf12ba9d6d77e64a75bfccd428ee79f45cb85"
   },
   "modes": {
     "Dockerfile": "0644",
