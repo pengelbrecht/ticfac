@@ -1191,3 +1191,4 @@
 {"ts":"2026-09-23T11:33:25.13445Z","tick":"nwn","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["gbs","5uo"],"title":"Nothing in a cloud run can resolve to claude: refuse any run whose FINAL resolved runner is not pi on GLM"}}
 {"ts":"2026-09-23T11:33:25.179717Z","tick":"gbs","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["xev","5uo"],"title":"The container's run-epic dispatches with the cloud profiles, so no worker shares the orchestrator's container"}}
 {"ts":"2026-09-23T11:34:07.496598Z","tick":"5uo","action":"update","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"title":"Optional runners.local.toml and runners.cloud.toml override the common runners.toml"}}
+{"ts":"2026-09-23T12:20:47.46621Z","tick":"89m","action":"create","actor":"peter@engelbrecht.dk","epic":"2jn","data":{"priority":1,"title":"ticfac watch: a live status TUI for runs, workers, gates, CI and findings","type":"task"}}

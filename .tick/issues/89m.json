@@ -1,0 +1,14 @@
+{
+  "id": "89m",
+  "title": "ticfac watch: a live status TUI for runs, workers, gates, CI and findings",
+  "description": "OPERATOR, 2026-09-23: yes to a status TUI, on the Go stack ticfac and tk already share (Bubble Tea + Lip Gloss + Bubbles, already ticfac dependencies; move to v2 together with tk). Crust (TypeScript/Bun) was evaluated and rejected: ticfac and tk are Go.\n\nWHY, from one day of operating runs by hand (2026-09-22/23): nearly every miss came from running blind. Hand-parsing ticfac events JSON; a script (~/.local/bin/pi-follow) written to see pi's turns; a watcher that woke only on run end and let remote retries scroll past unseen; stall warnings on the wrong signal read as hangs, and healthy workers killed; close-outs held on CI that nobody saw was red, and on 48 untriaged findings nobody saw piling up.\n\nONE SCREEN, for every run on this machine and in the factory:\n  - epics and runs: state, wave, what the run is waiting on (CI, triage, a gate, a person) and since when\n  - per tick: attempt/try (h58's language), tier and model, executor, elapsed\n  - per live worker: its runner's own last turns, pi-follow built in (the session log is also the liveness signal b1t moves to), silence duration\n  - gates and CI: per check, per head, including the push vs pull_request duplicates close-out reads\n  - findings: untriaged count per epic, and a keyboard triage view (promote / fixed-as / discard) - huh forms - because triage is the one step that still needs a person until gvc\n  - remote health: retries and interventions counted, so a flaky connection is visible rather than inferred\n\nReads what already exists - the run feed and events (contracts run-event-feed.json), attempt records, pi session logs, GitHub check runs, ticfac cloud status - it adds no new source of truth. Local first; cloud runs through the factory's status and feed.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "2jn",
+  "acceptance_criteria": "ticfac watch opens one live TUI over every run on this machine and in the factory, showing per run what it waits on, per tick its try, tier, model and elapsed time, per worker its last runner turns and silence, gate and CI state per head, and untriaged findings with a keyboard triage action; it reads only existing records; and it degrades to a plain text view when not on a TTY",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T12:20:47.465084Z",
+  "updated_at": "2026-09-23T12:20:47.465084Z"
+}
