@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 122,
-  "state": "failed",
-  "reason": "7b18c61159d1 of main does not fold into epic/wne: .tick/learnings.md, internal/reconcile/reconcile.go. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
-  "updated_at": "2026-09-23T18:58:22Z",
+  "sequence": 123,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T19:22:00Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -58,7 +58,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/wne",
-    "source_sha": "f05710f19b186d82947a3dd2ba3d5d27a0e33904",
+    "source_sha": "8ee637a29cd8754bda1f31a85d3f9de8533f4106",
     "integration_ref": "refs/heads/epic/wne",
     "phase": "worker",
     "executor": null,
