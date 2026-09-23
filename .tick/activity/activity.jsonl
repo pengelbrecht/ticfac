@@ -1176,3 +1176,4 @@
 {"ts":"2026-09-23T05:27:19.771552Z","tick":"58z","action":"create","actor":"peter@engelbrecht.dk","epic":"xte","data":{"priority":1,"title":"A gate's timed-out child outlives its shell inside the factory container","type":"bug"}}
 {"ts":"2026-09-23T05:27:19.795665Z","tick":"y3b","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["njj","avx","7fl","84z","w33"],"title":"Final review of the xte diff"}}
 {"ts":"2026-09-23T05:27:19.817141Z","tick":"y3b","action":"block","actor":"peter@engelbrecht.dk","epic":"xte","data":{"blockers":["njj","avx","7fl","84z","w33","58z"],"title":"Final review of the xte diff"}}
+{"ts":"2026-09-23T05:32:00.604687Z","tick":"58z","action":"start","actor":"ticfac","epic":"xte","data":{"title":"A gate's timed-out child outlives its shell inside the factory container"}}
