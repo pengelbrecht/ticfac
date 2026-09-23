@@ -1,0 +1,14 @@
+{
+  "id": "klq",
+  "title": "An epic's definition of done becomes enumerable items",
+  "description": "Absorption is decided by the done, so the done has to be a THING rather than a paragraph. Today every epic here - xte, wne, gvc itself - states its acceptance as prose with no item structure, so nothing can be run and nothing can be pointed at.\n\nThe machinery is half-built and should be finished rather than replaced:\n  - internal/runconfig already carries Evidence.Acceptance, a map from an acceptance\n    item id (A\u003cn\u003e, acceptanceItemPattern in load.go) to the id of the one command that\n    proves it, capped at maxAcceptanceItems = 64.\n  - The ticks guidance already says a fact sheet marks items [A\u003cn\u003e] in the container's\n    acceptance and that ids stay unique across containers.\n  - What is missing is the two ends meeting: no epic in this repo marks its acceptance,\n    and .tick/runners.toml declares no [evidence.acceptance] at all.\n\nSo: an epic's acceptance parses into items with stable ids, each optionally bound to a\ncommand that proves it. An item with no command is UNVERIFIED and must be visibly so -\nthat is the state that later decides classifier versus oracle, and collapsing it into\n'false' would silently make every unrunnable item non-gating, which is the false\nnegative gvc exists to prevent.\n\nTHE REFUSAL THAT BELONGS HERE: an epic whose acceptance carries no items cannot decide\nabsorption at all. It must refuse to absorb and say so, rather than guessing. Build that\nrefusal in this tick, next to the parser, so it is impossible to ship the absorption\nmachinery without it.\n\nMark this repository's own open epics while here - xte, wne, gvc - because they are the\nfirst runs that will exercise it.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "gvc",
+  "acceptance_criteria": "An epic's acceptance parses into stable [A\u003cn\u003e] items; an item bound to a command in [evidence.acceptance] is runnable and an unbound item reports as UNVERIFIED rather than false; an epic with no items refuses to absorb and names that as the reason; xte, wne and gvc carry marked acceptance; and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T16:30:24.809692Z",
+  "updated_at": "2026-09-22T16:30:24.809692Z"
+}

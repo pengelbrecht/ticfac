@@ -276,6 +276,18 @@ start_harness() {
 		die $EXIT_CLONE "cannot fetch the base branch ${base_branch} from origin — ticfac cuts the epic's integration branch from it, and a base the checkout does not hold is refused before any tick is claimed"
 	fi
 
+	# Full history, because ticfac MERGES. The clone above is a depth-1 fetch
+	# of one commit, which is all a harness ever needed; ticfac folds the
+	# default branch into the integration branch on every refresh (tick wvd),
+	# and a merge needs the common ancestor. In a depth-1 checkout there is
+	# none, and git refuses: "refusing to merge unrelated histories" — the
+	# first pi smoke run to reach the reconciler stopped on exactly that.
+	if [[ "$(git -C "$workdir" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+		if ! git -C "$workdir" fetch -q --unshallow origin; then
+			die $EXIT_CLONE "cannot fetch the repository's history from origin — ticfac merges the default branch into the epic's integration branch, and a merge in a depth-1 checkout has no common ancestor to find"
+		fi
+	fi
+
 	# --branch is left at ticfac's default, epic/<epic-id>, and NOT pointed at
 	# ${run_branch}: the reconciler requires its integration branch to be checked
 	# out nowhere (internal/reconcile/git.go, worktreeAt), and adopt_run_branch
@@ -285,11 +297,20 @@ start_harness() {
 	# goes on doing what it does here: pushing whatever this checkout commits,
 	# and printing the heartbeat that is the only view an operator has of a
 	# container they cannot reach.
+	# --base is the SUBMITTED COMMIT, not the default branch (ticfac tick rf3).
+	# --base is where the integration branch is cut from, and the operator
+	# submitted a commit: cutting from the default branch instead threw the
+	# submission away, so an epic that exists only on the submitted branch was
+	# "not found" and the Workflow re-booted into the same failure. What flows
+	# IN afterwards is the remote's default branch, which the reconciler now
+	# resolves for itself (ticfac tick wvd) — asking the remote, since this
+	# checkout holds no origin/HEAD. The base branch is still fetched above so
+	# it is a ref this checkout holds.
 	local cmd=(
 		ticfac run-epic
 		--repo "$workdir"
 		--remote origin
-		--base "$base_branch"
+		--base "$base_sha"
 		--run-id "$run_id"
 		"$epic"
 	)
@@ -297,7 +318,7 @@ start_harness() {
 	# Started BEFORE the exec, watching this pid: exec keeps the pid, so the
 	# keeper is watching ticfac itself and dies when it does.
 	start_keeper "$$"
-	say "starting ticfac run-epic ${epic} on ${base_branch} — a deterministic reconciler, with no model deciding control flow"
+	say "starting ticfac run-epic ${epic} at ${base_sha:0:12}, refreshing from ${base_branch} — a deterministic reconciler, with no model deciding control flow"
 	# exec, so ticfac owns stdout directly: its output streams as it is produced
 	# and its exit status is the run's exit status.
 	exec "${cmd[@]}"

@@ -1,0 +1,14 @@
+{
+  "id": "58z",
+  "title": "A gate's timed-out child outlives its shell inside the factory container",
+  "description": "FOUND 2026-09-23 by the same smoke run (run_0d2edef252834a40b89deabbd0ffec69). Inside the factory container:\n\n    --- FAIL: TestAGateThatTimesOutTakesItsChildrenWithIt (3.31s)\n        gate_kill_unix_test.go:64: the gate's child (pid 13680) outlived the timeout that killed its shell\n\nIt passes on the Mac. So either the gate's process-group kill does not reach the child in the container, or the child is left as an unreaped zombie that the test reads as alive (a container whose PID 1 does not reap is the usual cause). The first is a real gate defect - a timed-out gate leaving work running in a shared container - and the second is a test that cannot tell dead from reaped. Find out which before fixing; do not relax the assertion to get it green.\n\nAbsorbed into xte: it gates xte's done for the same reason as its sibling - every cloud gate runs in the container.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "xte",
+  "acceptance_criteria": "The cause is established (kill not reaching the child vs. an unreaped zombie) and recorded; a gate that times out inside the factory container leaves no live descendant; the test distinguishes a dead child from a live one on both the Mac and the container",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T05:27:19.771311Z",
+  "updated_at": "2026-09-23T05:27:19.771311Z"
+}

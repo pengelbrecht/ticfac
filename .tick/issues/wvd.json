@@ -1,0 +1,15 @@
+{
+  "id": "wvd",
+  "title": "A running epic never sees tracker changes made on main",
+  "description": "FOUND 2026-09-22 on epic-xte. Ticks added or re-gated on main after a run starts are invisible to that run.\n\nEvidence: ha9 (sandbox image carries pi) and qu3 (one model spelling) were filed on main and njj was gated on both. The run's own checkpoint on epic/xte lists neither tick, and it dispatched njj as attempt 7 while main's tracker says njj is blocked.\n\nCause, in internal/reconcile/refresh.go refreshFromBase: base := branchName(r.baseBranch(ctx), remote); with the default --base HEAD the base is the literal name HEAD, remoteHead finds no BRANCH called HEAD, and the function records 'origin has no branch HEAD: there is nothing to refresh epic/\u003cid\u003e from' and returns nil. The fold from main into the epic branch never happens. That is also why main's fixture fixes had to be merged into both epic branches by hand today.\n\nOrigin DOES have a default branch - git ls-remote --symref origin HEAD answers 'ref: refs/heads/main'. The code comment treats --base HEAD as 'the run was cut from a commit, there is no branch to fold', but HEAD at submission time was main's tip, and the operator's intent is that main keeps flowing in.\n\nWhy this is P1 and not cosmetic: it defeats absorption. gvc's whole design is that findings are absorbed into the RUNNING epic as ticks; a running epic that cannot see new ticks cannot absorb anything, and operator re-gating (as with njj) is silently ignored. It also means a fix landed on main never reaches the gate an epic is failing.\n\nFix direction: resolve --base HEAD to origin's default branch (origin/HEAD, else ls-remote --symref, the same ladder hn0 built for the container boot) and fold it, keeping the existing typed refusal on conflict.",
+  "notes": "2026-09-23 01:47 - FIXED by PR #30 (c6a037f8). baseBranch() uses --base only when it names a branch and otherwise resolves the remote's default branch (origin/HEAD, else ls-remote --symref). TestATickFiledOnMainIsDispatchedWhenTheEpicDeclaresNoBase reproduced the live symptom against the old code ('the run dispatched [a1]') and passes now. NOTE: runs already in flight use the ticfac binary they were started with; they pick this up only when restarted on a rebuilt binary.",
+  "status": "closed",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run started with the default --base folds origin's default branch into the epic branch on refresh; a tick added or re-gated on main after the run starts is honoured by that run's next dispatch decision, proven by a test that edits the base tracker mid-run; a conflict is still a typed refusal; and go test -short ./... passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-22T20:36:22.729871Z",
+  "updated_at": "2026-09-22T23:47:09.092554Z",
+  "closed_at": "2026-09-22T23:47:09.092554Z"
+}
