@@ -15,15 +15,27 @@ func syscallKillGroup(pid int) error {
 	return nil
 }
 
-// processAlive is signal 0: does this pid still exist? It is what makes the
-// teardown WAIT rather than merely signal — a kill sent and not waited for is
-// not the same fact as a process being gone. EPERM is alive too: a process this
-// test may not signal is still a process writing into the directory about to be
-// removed.
+// processAlive is whether a process is LIVE. Signal 0 asks whether the pid
+// exists, and a ZOMBIE answers — a dead child the factory container's PID 1
+// (the sandbox control server, which never reaps) leaves pending forever
+// (tick 58z, zombie_linux_test.go). Existence is therefore not life: a
+// process is dead the moment the kernel has read its exit status, whether or
+// not anyone ever collects it. On Linux, /proc says which; on the other
+// unices there is no /proc and no gap to close — the host's init reaps in
+// milliseconds, which is the whole reason the container failure never showed
+// on a laptop.
+//
+// It is what makes the teardown WAIT rather than merely signal — a kill sent
+// and not waited for is not the same fact as a process being gone. EPERM is
+// alive too: a process this test may not signal is still a process writing
+// into the directory about to be removed.
 func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
 	err := syscall.Kill(pid, 0)
-	return err == nil || err == syscall.EPERM
+	if err != nil && err != syscall.EPERM {
+		return false
+	}
+	return !processZombie(pid)
 }
