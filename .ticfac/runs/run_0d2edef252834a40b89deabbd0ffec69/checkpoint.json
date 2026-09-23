@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_0d2edef252834a40b89deabbd0ffec69",
   "epic_id": "plw",
-  "sequence": 6,
-  "state": "gating",
-  "reason": "running the integrated gate for pg9 on d6e4c4d34633",
-  "updated_at": "2026-09-23T05:23:12Z",
+  "sequence": 7,
+  "state": "failed",
+  "reason": "the integrated gate on d6e4c4d34633 did not pass for pg9: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/plw, so the repair is to fix the check or the tree, push it to epic/plw, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+  "updated_at": "2026-09-23T05:25:31Z",
   "ticks": [
     {
       "tick_id": "pg9",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 1
     }
   ],
