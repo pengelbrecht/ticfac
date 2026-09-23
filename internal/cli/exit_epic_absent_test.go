@@ -29,7 +29,7 @@ func TestARunStoppedForAnEpicAbsentFromTheSubmittedTreeExitsNotFound(t *testing.
 		Failure: &reconcile.Refusal{Reason: reconcile.RefusedEpicAbsent},
 	}
 	if code := resultExitCode(stopped); code != exitNotFound {
-		t.Errorf("exit code %d, want %d — the Workflow re-boots anything else, and a missing epic is " +
+		t.Errorf("exit code %d, want %d — the Workflow re-boots anything else, and a missing epic is "+
 			"missing on every boot", code, exitNotFound)
 	}
 
