@@ -108,14 +108,48 @@
  *     `lost` either (tick avx's rule: unreachable is not absent, and the
  *     distinction lives in the client's error handling, not in this body).
  *
- * ### What is deliberately NOT here
+ * ### Where each of the other operations lives (DECIDED, tick xev)
  *
- * Collect and cancel are not part of this door yet. Collect reads the durable
- * layer (git), which the Go reconciler can do itself from inside the
- * repository, and cancel is a salvage door plus a teardown the Worker-side
- * executor already owns (`cancelAttempt`). When the Go executor needs either
- * over this boundary, they land here beside the two routes above — in this
- * file, the one place the contract lives — rather than in a second module.
+ * Which of the four operations cross this door and which the Go side does
+ * from git was the open question the door shipped with (the finding triaged
+ * against tick 8ty); it is decided, and this is the decision recorded where
+ * the executor's doc says the contract lives — this file, the one place the
+ * HTTP contract lives:
+ *
+ *   - **dispatch and inspect cross the door**, as built. A container cannot
+ *     create a sibling sandbox — the binding is a Worker binding — so the
+ *     door is the only route to boot one attempt's container and to
+ *     re-address it by identity. Nothing about that is new.
+ *   - **collect is the Go side's, from git, and NEVER a door route.** The
+ *     orchestrator holds the clone; the worker's container pushes its
+ *     per-attempt landing branch with the report its own entrypoint commits
+ *     at `RESULT-<tick>.md` (image/worker.sh — in this substrate the report
+ *     has to be committed, because the container is destroyed and collect
+ *     reads the file off the pushed branch); the Go executor reads that
+ *     durable layer (internal/exec/cloudflaresandbox/collect.go) exactly the
+ *     way `worker-collect.ts` reads it through GitHub's API — commits, the
+ *     changed-file list, the report — only through git, because the Go side
+ *     has the clone. A collect route here would be a second mechanism
+ *     beside the one the durable layer already is.
+ *   - **cancel stays with the factory, and the Go executor refuses it
+ *     typed.** The credential a sandbox attempt holds is the run's OWN
+ *     gateway token (D17) — one credential shared by every attempt of the
+ *     run, revoked only as the run-level kill switch this door already
+ *     honours (`403 run_token_revoked`) — so the local executor's
+ *     revoke-then-signal contract has nothing to revoke on this side of the
+ *     boundary. Stopping one container is the salvage door and teardown
+ *     `worker-boot.ts`/`worker-dispatch.ts` already own, and the
+ *     queue-expiry sweep behind them; a per-tick cancel route would only
+ *     ever half-exist beside machinery that already does the whole job.
+ *   - **dispose has nothing to act on across this boundary, and is refused
+ *     typed.** The Go executor owns no worktree, no local branch and no
+ *     credential; the container belongs to the factory that booted it; the
+ *     branch the work landed on is retired by the close.
+ *
+ * The door therefore stays exactly two routes BY DECISION, not by omission:
+ * `POST /api/sandbox/attempts` and
+ * `GET /api/sandbox/attempts/:tick_id/:attempt` are the whole of it, and a
+ * third route is a change to this contract that starts here.
  *
  * ### The lease (D4)
  *

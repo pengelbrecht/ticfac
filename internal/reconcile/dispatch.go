@@ -1010,6 +1010,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		Try: try, JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
+		BaseRef: r.opts.BaseRef, Title: entry.Title,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
 		ResumedFrom: resumed,
 		// What the tick's earlier attempts found (tick nvn): the reports a
@@ -1224,6 +1225,7 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		Try:   marker.Try,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
+		BaseRef: r.opts.BaseRef, Title: r.titleOf(marker.TickID),
 		Tier: marker.Tier,
 		// The executor the attempt RAN ON, off the marker — never the one a
 		// profile re-resolved today would name (tick d6s): a later leg must
@@ -1269,6 +1271,18 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	}
 	dispatch.Profile = profile
 	return dispatch, nil
+}
+
+// titleOf is the tick's title as the plan read it from the tracker, for a
+// dispatch rebuilt from a marker (the marker carries the identity, not the
+// prose). Empty when the plan no longer carries the tick — a leg that never
+// starts work — and the executor that requires a title refuses such a start
+// loudly rather than minting one from anywhere else.
+func (r *Reconciler) titleOf(tickID string) string {
+	if r.titles == nil {
+		return ""
+	}
+	return r.titles[tickID]
 }
 
 // carryHead is the commit a dispatch CARRIED from a released attempt starts

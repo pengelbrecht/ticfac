@@ -82,10 +82,14 @@ run-epic flags:
   --wall <seconds>    the wall clock one job is bounded by
 
 Each dispatch goes through the executor its resolved profile names — a profile
-naming the herdr executor launches the attempt in a herdr workspace, and every
-record it produces states herdr's protocol and server version in its
-provenance; this build honours two executors, the local subprocess one and
-herdr, and refuses a profile naming any other before anything is claimed.
+naming the herdr executor launches the attempt in a herdr workspace, a profile
+naming cloudflare-sandbox asks the factory's per-tick sandbox door to boot one
+attempt's worker container (the factory's base URL and the run's own gateway
+token come from TICKS_FACTORY_URL and TICKS_FACTORY_TOKEN), and the wall
+clock, the report and the boundary are judged from the branch and the report
+in git at collect. This build honours three executors — local-subprocess,
+herdr and cloudflare-sandbox — and refuses a profile naming any other before
+anything is claimed.
 
 The effective budget — what an operator asked for, clamped to the deployment
 ceiling — is printed before the run starts, while it can still be cancelled

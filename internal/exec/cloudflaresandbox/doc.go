@@ -36,9 +36,10 @@
 //     to signal and no exit code to read directly: "it exited 0" arrives
 //     as the door's `succeeded`/`failed` state with the exit code riding an
 //     `exited` observation's detail text. Cancel, whose whole contract is
-//     revoke-then-signal, has no door to go through yet and is REFUSED
-//     (see below) rather than half-implemented as a best-effort request
-//     nothing acknowledges.
+//     revoke-then-signal, is REFUSED with the decided reason (see below):
+//     there is no per-attempt credential on this substrate to revoke and no
+//     process on this side of the boundary to signal, so a best-effort
+//     request nothing acknowledges is never made.
 //   - STDIO BECOMES NOTHING AT ALL. The container's terminal output is not
 //     reachable through this door and is deliberately not missed: the
 //     completion contract is the branch and the RESULT report in git, the
@@ -58,25 +59,48 @@
 //     container is still running (tick avx's rule, held in the client's
 //     error handling where the route's own header says it lives).
 //
-// # What is deliberately not here yet
+// # What is deliberately not here, and where each operation LIVES
 //
-// Collect, cancel and dispose are not part of the door, and this executor
-// refuses all three with a typed refusal rather than inventing a second
-// mechanism beside the one the door's own header says is the only place the
-// contract may grow ("when the Go executor needs either over this boundary,
-// they land here beside the two routes above"). Collect reads the durable
-// layer — git, which the orchestrator's own container holds a clone of —
-// and cancel is a salvage door plus a teardown the Worker-side executor
-// already owns; where each of those operations lives is an open decision
-// this tick was told not to make for the whole seam (the finding triaged
-// against tick 8ty), so this package implements the two operations the door
-// carries and fails CLOSED on the other three, naming the decision, so a
-// run that reaches one of them stops honestly instead of half-acting.
+// Which of the four operations cross the Worker door and which the Go side
+// does from git was the open decision this package refused collect, cancel
+// and dispose for; it is DECIDED (tick xev, absorbing the findings against
+// 8ty) and recorded where the executor's doc says the contract lives — the
+// "What is deliberately NOT here" section of cloudflare/src/sandbox-dispatch.ts,
+// the one place the HTTP contract lives:
 //
-// The executor is not yet wired into internal/cli's honoured set either:
-// profiles-cloudflare-sandbox/ names it (tick njj — the dispatch profile
-// pairing pi on GLM 5.3 with this executor), but no run can SELECT that
-// profile until the collect-and-cancel decision lands and a follow-on tick
-// registers this executor beside subprocess and herdr, so nothing in
-// production can dispatch through an executor whose settle path refuses.
+//   - DISPATCH and INSPECT cross the door, as built: a container cannot
+//     create a sibling sandbox — the binding is a Worker binding — and the
+//     door is the only route to boot or re-address one.
+//   - COLLECT is the GO side's, from git, and never a door route. The
+//     orchestrator holds the clone; the worker's container pushed its
+//     landing branch with the report its own entrypoint committed at
+//     RESULT-<tick>.md; the collect reads that durable layer (collect.go)
+//     exactly the way worker-collect.ts reads it through GitHub's API. The
+//     door stays two routes by decision, not by omission.
+//   - CANCEL is the FACTORY's, and this executor refuses it typed
+//     (RefusedCancelOwnedByFactory): the credential a container holds is the
+//     run's own gateway token (D17), whose revocation is the run-level kill
+//     switch the door already honours — there is no per-attempt dispatch to
+//     revoke — and stopping one container is the teardown the Worker-side
+//     executor and the queue-expiry sweep already own.
+//   - DISPOSE has nothing to act on on this side of the boundary, and is
+//     refused typed (RefusedNothingLocalToDispose): no worktree, no local
+//     branch, no credential; the container belongs to the factory that
+//     booted it, and the branch the work landed on is retired by the close.
+//
+// The reconciler's teardown treats a Cancel refusal as a recorded line and
+// continues, so a run through this executor stays honest without a cancel
+// door that would only ever half-exist.
+//
+// The executor is registered in internal/cli's honoured set beside
+// subprocess and herdr: a profile naming cloudflare-sandbox (the ones in
+// profiles-cloudflare-sandbox/, tick njj — dispatching pi on GLM 5.3 through
+// this executor) resolves, and the factory routes its dispatches here. The
+// factory configuration — the factory's base URL and the run's own gateway
+// token — comes from the container boot's TICKS_FACTORY_URL and
+// TICKS_FACTORY_TOKEN (or the same variables on a laptop driving cloud
+// workers, the local-judgement-cloud-hands shape), and the repository the
+// collect reads is the orchestrator's own checkout, which is why it enters
+// the options here rather than the dispatch's spec: the sandbox container
+// is the worker's whole environment, but the COLLECT is this side's.
 package cloudflaresandbox
