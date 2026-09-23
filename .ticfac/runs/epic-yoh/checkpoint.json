@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 26,
-  "state": "gating",
-  "reason": "running the integrated gate for xev on fa0fb26eb0eb",
-  "updated_at": "2026-09-23T21:48:11Z",
+  "sequence": 27,
+  "state": "publishing",
+  "reason": "closing xev behind the integrated gate on fa0fb26eb0eb",
+  "updated_at": "2026-09-23T21:49:23Z",
   "ticks": [
     {
       "tick_id": "uqi",
