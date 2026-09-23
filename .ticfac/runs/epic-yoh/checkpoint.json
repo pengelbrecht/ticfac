@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 28,
-  "state": "running",
-  "reason": "xev is closed",
-  "updated_at": "2026-09-23T21:49:46Z",
+  "sequence": 29,
+  "state": "dispatching",
+  "reason": "dispatching gbs as attempt 7",
+  "updated_at": "2026-09-23T21:50:05Z",
   "ticks": [
     {
       "tick_id": "uqi",
