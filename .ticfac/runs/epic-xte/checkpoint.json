@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 64,
-  "state": "dispatching",
-  "reason": "dispatching y3b as attempt 9",
-  "updated_at": "2026-09-23T01:26:39Z",
+  "sequence": 65,
+  "state": "running",
+  "reason": "y3b is running as attempt 9",
+  "updated_at": "2026-09-23T01:26:56Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -39,7 +39,8 @@
     },
     {
       "tick_id": "y3b",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "7q2",
