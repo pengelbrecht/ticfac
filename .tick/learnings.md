@@ -1,7 +1,7 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the Phase 4 (ncv) close-out, 2026-09-19.
+Seeded from ticks' learnings 2026-09-02; last compacted at the wne close-out, 2026-09-23.
 
 ## Planning an epic
 
@@ -12,16 +12,21 @@ could not be performed, and the review was the first to notice. The epic itself 
 so its sixteen resumes proved the Go reconciler, not the host it was building. **Rule:** When an
 epic's gate is a run, the FIRST tick wires the thinnest end-to-end path on the target host, and a
 named tick PERFORMS the gate run before the review. Evidence from the old host is about the old host.
+wne repeated the shape: an injectable classifier nothing constructs, a factory table nothing reads. A
+seam is not delivery — a tick wires it, or the done says in words that production is out of scope.
 
-**Problem:** A reconciler that never persisted its sandbox handle, and an executor whose boot revoked
-every sibling's token, were both green: FakeExecutor keyed on job_id, and the tests stubbed boot.
-**Rule:** A fake must demand the identity the real thing demands. A fake more forgiving than production
-certifies the defect it hides — fix the fake in the same change as the bug.
+**Problem:** wne put the work-type enum (mrn) and the classifier that uses it (0ju) in one wave; 0ju
+had to create the enum too, and mrn died on an add/add conflict. **Rule:** A tick that DECLARES a
+vocabulary and one that CONSUMES it are different waves, even when neither lists the other's file.
+
+**Problem:** A lost sandbox handle and a boot revoking every sibling's token were green: the fake keyed
+on job_id and the tests stubbed boot. **Rule:** A fake must demand the identity the real thing
+demands; a more forgiving fake certifies the defect it hides — fix it in the same change.
 
 ## Orchestration
 
-**Problem:** Wave-2 agents branched from a base missing wave-1's merge and redid its work. **Rule:**
-Name the prerequisite SHA and verify with `git merge-base --is-ancestor`.
+**Problem:** Wave-2 agents branched from a base missing wave-1's merge. **Rule:** Name the prerequisite
+SHA and verify with `git merge-base --is-ancestor`.
 
 **Problem:** Two additions to one file were cut by two same-wave ticks. **Rule:** Two additions to one
 file are a union in INTENT, not in text — hand the resolve to a worker holding the context. A
@@ -31,12 +36,9 @@ versioned artifact has ONE owner per wave.
 the substrate can enforce must not rest on instruction-following — make it impossible and REPORT
 every attempt.
 
-**Problem:** Two parallel ticks sharing a return shape were each green alone and broken together.
-**Rule:** When parallel ticks share a contract, the merge gate is the only thing that tests it.
-
-**Problem:** A state meaning "in flight" was left forever when its writer died. **Rule:** Settle it
-from durable evidence (does the thing exist?) by whoever finds it next, never by trusting the
-claimer to return.
+**Problem:** Parallel ticks sharing a return shape were each green alone, broken together; an "in
+flight" state outlived its dead writer. **Rule:** The merge gate is the only test of a shared contract.
+Settle in-flight state from durable evidence by whoever finds it, never by trusting the claimer.
 
 **Problem:** epic-ncv stopped EIGHT times for nothing but untriaged findings, and after each triage the
 resume re-dispatched the review instead of closing it — three frontier reviews of byte-identical
@@ -56,30 +58,26 @@ resolve a ref through process-global git state. Fetch into a private per-run ref
 `--no-write-fetch-head --refmap=`. When a defect is a SHAPE (global state, unbounded retry, swallowed
 error), grep for the shape, leave a guard test, and prove the fix by reproducing on the old code.
 
-**Problem:** A run merge was refused with rerere's `Recorded preimage` chatter: the host's global
-`rerere.enabled` shares `.git/rr-cache` with a person's hand resolutions, so a human's old resolve can
-silently replay into a machine merge. **Rule:** The run states its own git environment
-(`-c rerere.enabled=false`, like `GIT_TERMINAL_PROMPT=0`); host config must not reach a run's merge.
+**Problem:** Host `rerere.enabled` replayed a person's old resolve into a machine merge. **Rule:** The
+run states its own git environment (`-c rerere.enabled=false`); host config must not reach a run's merge.
 
 ## Waiting and watching
 
-**Problem:** Blind `sleep 300` loops, and three hand-rolled watchers that were each wrong (fired on a
-warning line, matched a name the agent lacks, expired while work ran on). **Rule:** Wait on a
-CONDITION over durable evidence, a push stream, or a held PID's exit. A watcher covers every terminal
-state — reported, blocked, died-without-reporting — or its silence means nothing.
+**Problem:** Blind `sleep 300` loops, and three hand-rolled watchers that were each wrong. **Rule:** Wait
+on a CONDITION over durable evidence, a push stream, or a held PID's exit. A watcher covers every
+terminal state — reported, blocked, died-without-reporting — or its silence means nothing.
 
-**Problem:** A watcher piped through `tail` delivered nothing for eleven minutes (block buffering);
-a `pgrep -f "ticfac run-epic"` read ALIVE for ten minutes after death because it matched its own argv.
-**Rule:** No `tail`/`head` in a watcher pipeline — filter in-script, flush per line. Never identify a
-process by a pattern the observer matches: hold the PID and check its start time.
+**Problem:** A watcher piped through `tail` delivered nothing (block buffering); `pgrep -f` read ALIVE
+after death by matching its own argv. **Rule:** No `tail`/`head` in a watcher pipeline; flush per line.
+Never identify a process by a pattern the observer matches: hold the PID and check its start time.
 
 **Problem:** The close-out opened PR #11 and in the same second refused it as "CI unsatisfiable by
 waiting"; GitHub had not created the check runs yet. **Rule:** Absence right after creation is "not
 yet". Bound a wait for the thing to APPEAR before calling it "never", and state what was checked
 rather than a guessed cause.
 
-**Problem:** The 5-minute poll looks lazy; under a 20-minute wipe threshold it IS the keepalive.
-**Rule:** Find what a slow interval holds open before speeding it up; it belongs to the executor.
+**Problem:** The 5-minute poll looked lazy; under a 20-minute wipe it IS the keepalive. **Rule:** Find
+what a slow interval holds open before speeding it up.
 
 ## Where a tick lives
 
@@ -89,9 +87,8 @@ of the repo whose CODE it changes. Cross-repo work is a second epic, run with `-
 
 ## Provider and model configuration
 
-**Problem:** A 1,000,000 max-output made Cloudflare answer a bodyless 400 that pi read as context
-overflow; 8,192 then truncated GLM mid-answer (it reasons in millions of tokens at thinking=high).
-**Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable, probe both ends.
+**Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
+GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable, probe both ends.
 
 **Problem:** GLM served through `cloudflare-workers-ai` leaked `<think>` tags and looped: pi detects
 reasoning providers by name or baseUrl. **Rule:** A model served off its vendor's endpoint loses that
@@ -115,13 +112,17 @@ run writes to what it measures, key evidence by the SOURCE (tree minus the run's
 derived key a function of the thing it identifies, not of the history that produced it.
 
 **Problem:** Across 9pd and ncv the integrated gate refused innocent work six times, each through a
-wall-clock test measuring the host, not the tree. **Rule:** A gate verdict is about the tree only if the host is
-bounded; record the host's conditions with the verdict, and never let a gate share a host unbounded.
+wall-clock test measuring the host, not the tree. **Rule:** A gate verdict is about the tree only if
+the host is bounded; record the host's conditions with the verdict.
+
+**Problem:** wne's per-tick gates went green while 7 of the 10 tests exercising the change skipped
+under `-short`; the review was the first to run them. **Rule:** A tick's evidence runs under the gate's
+own flags. A test that skips there is not evidence — make it cheap, or name it in the acceptance.
 
 ## Fixtures
 
-**Problem:** Two identical fixture commits inside one second got one SHA. **Rule:** Make them differ
-by something intentional and assert the property you rely on.
+**Problem:** Two identical fixture commits in one second got one SHA. **Rule:** Make them differ on
+purpose and assert the property you rely on.
 
 **Problem:** fake-runner's blocked-first modes keyed on TICFAC_ATTEMPT — the RUN's counter — and
 passed only because the first tick drew 1. **Rule:** "The tick's first try" keys on `$TICFAC_TRY`;
@@ -129,9 +130,8 @@ attempt numbers are identity (branch, marker, `ticfac settle`), never an ordinal
 
 ## Verification ticks
 
-**Problem:** Verification workers left `RESULT-<id>.md` uncommitted, so collect saw `no-commits`, and
-`tk herd wait` called agents settled that had neither. **Rule:** A tick whose output is evidence
-commits its RESULT even with no source change; "settled" or `done` means "look now", not finished.
+**Problem:** Verification workers left `RESULT-<id>.md` uncommitted, so collect saw `no-commits`.
+**Rule:** Evidence output is committed even with no source change; "settled" means "look now", not done.
 
 ## Tracker hygiene
 
@@ -146,5 +146,5 @@ parked with `tk ask` needs `--from human` once answered.
 the operator's checkout, so the run branch's `promoted_as` ids resolved in no committed tracker.
 **Rule:** A promotion is finished when the tick is COMMITTED where the next run reads it.
 
-**Problem:** A spawn reported "the probe never reached the composer" while the account was at 93% of
-its session limit. **Rule:** Before believing a spawn's diagnosis, send text to the pane by hand.
+**Problem:** A spawn blamed "the probe" while the account sat at 93% of its session limit. **Rule:**
+Before believing a spawn's diagnosis, send text to the pane by hand.
