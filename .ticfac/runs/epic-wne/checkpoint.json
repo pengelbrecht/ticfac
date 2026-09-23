@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 107,
-  "state": "dispatching",
-  "reason": "dispatching sj2 as attempt 11",
-  "updated_at": "2026-09-23T13:19:12Z",
+  "sequence": 108,
+  "state": "running",
+  "reason": "sj2 is running as attempt 11",
+  "updated_at": "2026-09-23T13:19:30Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -49,7 +49,8 @@
     },
     {
       "tick_id": "sj2",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 11
     }
   ],
   "provenance": {
