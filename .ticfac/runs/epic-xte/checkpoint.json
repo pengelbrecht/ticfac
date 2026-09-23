@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 104,
-  "state": "publishing",
-  "reason": "closing 58z behind the integrated gate on 191c6780270e",
-  "updated_at": "2026-09-23T06:12:05Z",
+  "sequence": 105,
+  "state": "running",
+  "reason": "58z is closed",
+  "updated_at": "2026-09-23T06:12:26Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -53,7 +53,7 @@
     },
     {
       "tick_id": "58z",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 10
     },
     {
