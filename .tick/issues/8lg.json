@@ -1,0 +1,14 @@
+{
+  "id": "8lg",
+  "title": "A merge of tick records silently keeps one side",
+  "description": "FOUND 2026-09-23. A local xte run's merged record for njj (closed + the run's notes from epic/xte, blocked_by ha9/qu3 from main) appeared as an UNCOMMITTED change in the main checkout, which never edited it.\n\nCAUSE: tk merge-file, the git merge driver for .tick/issues/*.json, is registered as 'tk merge-file %O %A %B %P' and wrote its result to %P. git reads a driver's result from %A only; %P is the file's logical path. So:\n  - the commit kept %A untouched (OURS): every tick record both sides of a merge changed lost the other side's change, with no conflict and no marker;\n  - the correct merge was written into the working tree at %P and left unstaged.\nReproduced with plain git and the real tk: one branch closed a tick, the other set its priority; the merge commit carried the close and NOT the priority, and 'git status' showed M .tick/issues/abc.json.\n\nEvery reconciler integrate and every refresh merges tick records through this driver, so tracker edits have been dropped at merge time for as long as the driver has existed. merge-activity (the activity-log driver) was already correct.\n\nFIXED: ticks #90 (cb852e91) writes to %A with a test that pins git's contract; the local ~/.local/bin/tk is rebuilt from it; ticfac #37 pins the factory image's tk to it; ticks #91 corrects the published contract (bundle 6.0.0), which described the bug as the rule - that last one was raised by the factory's own pi review of #90.",
+  "status": "closed",
+  "priority": 0,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "tk merge-file writes to %A and never to %P, pinned by a test; a real git merge of two sides' changes to one tick record commits both; the local tk and the factory image's tk include the fix; the published contract describes %A",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T06:08:51.303273Z",
+  "updated_at": "2026-09-23T06:08:51.523293Z",
+  "closed_at": "2026-09-23T06:08:51.523293Z"
+}

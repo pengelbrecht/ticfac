@@ -1,0 +1,14 @@
+{
+  "id": "yin",
+  "title": "The pr-89 review run failed at the pi probe",
+  "description": "FOUND 2026-09-23: the factory's automated review of ticks #89 (run_72d10c49bb554187bd355304f826f55d) failed: 'the pi harness exited 0 without answering the probe'.\n\nSame cause as the first pi smoke run: pi's catalog overstates GLM 5.3's output limit, Workers AI answers HTTP 400, and pi -p prints nothing. The run booted at 04:46 UTC on an image built before the GLM correction (ticks #89 / ticfac #34) was deployed.\n\nVERIFIED FIXED: the review of ticks #90 (run_21e63eadc1db490984af1a896a4f512e) ran after the correction - 'harness probe green: pi answered READY' - and posted review comment 5789830319, which found a real defect (the published merge-file contract) that became ticks #91.",
+  "status": "closed",
+  "priority": 2,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A factory PR review on pi/GLM 5.3 boots, answers its probe and posts a review",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T06:08:51.412724Z",
+  "updated_at": "2026-09-23T06:08:51.644056Z",
+  "closed_at": "2026-09-23T06:08:51.644056Z"
+}
