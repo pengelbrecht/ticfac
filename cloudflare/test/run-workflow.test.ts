@@ -568,6 +568,63 @@ function failEveryDispatchLogInsert(matches: (decision: string) => boolean): {
   return { attempts: () => attempts };
 }
 
+// A run a test started must not outlive the test (ticfac tick 3cq).
+//
+// The Workflow engine is shared by every test in this file, and each test
+// installs a fresh FakeSandboxes. When one test times out with its run still
+// going - on CI under load: 'run run_wf_59 to finish - saw: row=stopping
+// workflow=running' - that Workflow keeps booting containers, and they land in
+// the NEXT test's fake: 'the orchestrator to start - saw: run_wf_59-3(0 proc),
+// run_wf_61-1(1 proc), ...'. The next test watched booted[0], a stranger with
+// no process, and timed out too, and so on down the file - one slow test
+// became four to six failures, a different block each time. The fix is
+// containment, not a longer wait: whatever a test started and did not finish
+// is terminated when it ends, and firstProcess only ever looks at this test's
+// own runs.
+let runsBeforeThisTest = new Set<string>();
+const WORKFLOW_OVER = new Set(["complete", "errored", "terminated"]);
+
+async function allRunIDs(): Promise<string[]> {
+  const rows = await env.DB.prepare("SELECT run_id FROM runs").all<{ run_id: string }>();
+  return (rows.results ?? []).map((row) => row.run_id);
+}
+
+/** A sandbox that belongs to a run started before this test - a stranger here. */
+function fromAnEarlierTest(sandbox: FakeSandbox): boolean {
+  for (const id of runsBeforeThisTest) {
+    if (sandbox.name === id || sandbox.name.startsWith(`${id}-`)) return true;
+  }
+  return false;
+}
+
+beforeEach(async () => {
+  runsBeforeThisTest = new Set(await allRunIDs());
+});
+
+afterEach(async () => {
+  const workflow = runWorkflowBinding(env);
+  if (workflow === null) return;
+  for (const id of (await allRunIDs()).filter((run) => !runsBeforeThisTest.has(run))) {
+    let instance: Awaited<ReturnType<typeof workflow.get>>;
+    try {
+      instance = await workflow.get(id);
+    } catch {
+      continue; // no Workflow was ever created for this row
+    }
+    let status: string;
+    try {
+      status = (await instance.status()).status;
+    } catch {
+      continue; // an engine that never started has nothing to leak
+    }
+    if (!WORKFLOW_OVER.has(status)) {
+      await (instance as unknown as { terminate(): Promise<void> })
+        .terminate()
+        .catch(() => undefined);
+    }
+  }
+});
+
 beforeEach(() => {
   sandboxes = new FakeSandboxes();
   set("SANDBOXES", sandboxes);
@@ -854,7 +911,10 @@ async function settled(runID: string) {
       if (run === null) return null;
       return ["completed", "stopped", "failed"].includes(run.state) ? run : null;
     },
-    undefined,
+    // A stop or a closeout under CI load legitimately takes longer than a
+    // boot does; the containment above is what keeps a slow one from
+    // becoming a cascade, not this number.
+    45_000,
     () => describeRun(runID),
   );
 }
@@ -927,10 +987,10 @@ async function requestNextWave(
 async function firstProcess(): Promise<FakeProcess> {
   return waitFor(
     "the orchestrator to start",
-    async () =>
-      sandboxes.booted.length > 0 && sandboxes.booted[0]!.processes.length > 0
-        ? sandboxes.booted[0]!.current
-        : null,
+    async () => {
+      const first = sandboxes.booted.find((sandbox) => !fromAnEarlierTest(sandbox));
+      return first !== undefined && first.processes.length > 0 ? first.current : null;
+    },
     undefined,
     describeSandboxes,
   );
