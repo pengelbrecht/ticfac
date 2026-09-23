@@ -82,24 +82,43 @@ func (r *Reconciler) profileForTier(role, tier string) (*profile.Profile, error)
 
 // deriveTier is where the orchestrator stops CHOOSING a tier and starts
 // DERIVING one (tick 5eq): a pure function of the tick's facts, the attempt's
-// own durable state, and the declared policy. The only thing that outranks it
-// is an operator's explicit pin (--tier), which is recorded as exactly that.
+// own durable state, the declared policy, and — since tick s45 — the tick's
+// RECORDED CLASSIFICATION. The only thing that outranks it is an operator's
+// explicit pin (--tier), which is recorded as exactly that.
+//
+// The classification moves only the START (tick s45): the probability mass
+// over the policy's dear work types, against the provisional mass threshold,
+// starts a first attempt at the dear tier; a record that is absent, a
+// no-answer, or a policy that routes no classification all fall back to the
+// start policy — the degradation the exchange is designed for, never an
+// error. The rungs, the ceiling and the label override are exactly what
+// they were: a failed attempt still earns a rung above whatever the
+// classifier chose.
 //
 // The BUDGET is deliberately not an input, and that is the answer to "which
 // wins": neither. The tier routes MODELS, the budget clamps DOLLARS, and a
 // dispatch at a derived tier is issued the effective budget whatever the
 // tier. Where the two meet — a clamped budget beside an escalated tier — the
 // dispatch's own record states both numbers rather than downgrading either.
-func (r *Reconciler) deriveTier(entry planEntry, number, failed int) (string, string, error) {
+func (r *Reconciler) deriveTier(entry planEntry, number, failed int, classification *RecordedClassification) (string, string, error) {
 	if r.pinnedTier != "" {
 		return r.pinnedTier, "the operator pinned this tier for every dispatch of the run (--tier); the ladder does not run", nil
 	}
-	outcome, err := r.tierPolicy.Derive(
+	// The routing rule's input is the record's DISTRIBUTION and nothing else:
+	// a no-answer record has none, and routes nothing — it falls back to the
+	// start policy for the same reason the warm process did, so the cold
+	// re-derivation that reads the same record reaches the same dispatch.
+	var recorded *runconfig.DeriveClassification
+	if classification != nil && classification.NoAnswer == "" && len(classification.Probabilities) > 0 {
+		recorded = &runconfig.DeriveClassification{Probabilities: classification.Probabilities}
+	}
+	outcome, err := r.tierPolicy.DeriveClassified(
 		runconfig.TickFacts{
 			TickID: entry.TickID, Priority: entry.Priority, Type: entry.Type,
 			Role: entry.Role, Labels: entry.Labels, Wave: entry.Wave, Blocks: entry.Blocks,
 		},
 		runconfig.DeriveAttempt{Number: number, Failed: failed},
+		recorded,
 	)
 	if err != nil {
 		return "", "", err
@@ -229,6 +248,23 @@ func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 	r.record("", StagePolicyStated,
 		"the declared tier policy answers a provider rate limit by backing off and retrying (up to %d attempts, at most %dms apart): a 429 is a pause, not a death — an attempt that still cannot settle is a refusal for a person, never an abandoned worker",
 		stance.MaxAttempts, stance.MaxDelayMs)
+
+	// The classification-routing stance (tick s45), stated at admission so the
+	// operator reading the run can cancel cheaply: a recorded classification
+	// starts a first attempt dearer when the mass on the dear work types
+	// clears the threshold — and the threshold is PROVISIONAL, said here in
+	// the one place a person tuning it reads it, because 0.50 is a starting
+	// point from one measurement and not a finding.
+	if len(r.tierPolicy.DearWorkTypes) > 0 {
+		names := make([]string, 0, len(r.tierPolicy.DearWorkTypes))
+		for _, workType := range r.tierPolicy.DearWorkTypes {
+			names = append(names, string(workType))
+		}
+		r.record("", StagePolicyStated,
+			"a recorded classification starts a first attempt at tier %q when the probability mass on the dear work types (%s) clears %.2f — the mass threshold is PROVISIONAL, a starting point from one measurement, to be re-tuned against the recorded distributions rather than re-affirmed; the ceiling %q still bounds the result and a failed attempt still earns its rungs above whatever the classifier chose",
+			string(r.tierPolicy.DearTier), strings.Join(names, ", "), r.tierPolicy.MassThresholdOrDefault(),
+			string(r.tierPolicy.CeilingOrDefault()))
+	}
 
 	// Per-wave width: derive each wave's tiers as a first attempt would (the
 	// width is a planning number; a wave's dispatches may escalate later, and

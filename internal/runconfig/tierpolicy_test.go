@@ -152,6 +152,21 @@ func TestAMalformedTierPolicyIsRefusedNamingTheCell(t *testing.T) {
 		{"rate limit answers immediately", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nresponse = \"retry-immediately\"\n", "backoff-and-retry is the only one"},
 		{"rate limit without patience", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nmax_delay_ms = 100\n", "not a backoff ceiling"},
 		{"rate limit with no attempts", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nmax_attempts = 0\n", "not a retry budget"},
+		// The classification-routing cells (tick s45): every way a promotion
+		// nobody bounded or a cell nobody can evaluate can be written.
+		{"dear work types with no tier to promote to", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"diagnosis\", \"design\"]\n", "tier_policy.dear_tier"},
+		{"a dear tier no mass can reach", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_tier = \"balanced\"\n", "tier_policy.dear_work_types"},
+		{"an empty dear work-type list", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = []\ndear_tier = \"balanced\"\n", "must not be empty"},
+		{"a work type off the closed enum", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\", \"refactoring\"]\ndear_tier = \"balanced\"\n", "is not one of the work types"},
+		{"a model id where a work type belongs", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"glm-5.3\"]\ndear_tier = \"balanced\"\n", "is not one of the work types"},
+		{"a work type named twice", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\", \"design\"]\ndear_tier = \"balanced\"\n", "named twice"},
+		{"a dear tier that is not a tier", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"premium\"\n", "is not one of"},
+		{"an empty dear tier", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"\"\n", "required \u2014 a promotion with no tier"},
+		{"a dear tier below the default is a demotion", "[tier_policy]\ndefault = \"balanced\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"economy\"\n", "at or below the default"},
+		{"a dear tier above the ceiling", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"frontier\"\n", "above the ceiling"},
+		{"a dear tier above a default ceiling", "[tier_policy]\ndefault = \"balanced\"\ndear_work_types = [\"design\"]\ndear_tier = \"strong\"\n", "above the ceiling"},
+		{"a mass threshold of zero", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"balanced\"\nmass_threshold = 0\n", "not a probability-mass threshold"},
+		{"a mass threshold above one", "[tier_policy]\ndefault = \"economy\"\nceiling = \"strong\"\ndear_work_types = [\"design\"]\ndear_tier = \"balanced\"\nmass_threshold = 1.5\n", "not a probability-mass threshold"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -449,5 +464,280 @@ func TestTheRateLimitStanceDefaultsToBackoffAndRetry(t *testing.T) {
 		"max_attempts = 3"))
 	if stance := declared.RateLimitOrDefault(); stance.MaxAttempts != 3 || stance.MaxDelayMs != 90000 {
 		t.Errorf("a partial declaration did not default the rest: %+v", stance)
+	}
+}
+
+// --------------------------------------------- the mass rule (tick s45, wne) ---
+//
+// THE ROUTING RULE the recorded classification feeds: probability mass over
+// the policy's dear work types against a configurable threshold — not the
+// argmax, and not the argmax with a confidence floor underneath it. The gate
+// under test is the operator's own lineup in miniature: a cheap default, a
+// dear tier one rung up that the classifier may start a first attempt at, and
+// a ceiling one rung above that.
+
+const massPolicyDoc = `
+version = 2
+
+[roles.implement]
+kind = "pi"
+model = "glm-5.3"
+
+[roles.implement.tiers.economy]
+model = "glm-5.3-flash"
+
+[roles.implement.tiers.balanced]
+model = "glm-5.3"
+
+[roles.implement.tiers.strong]
+model = "glm-5.3"
+effort = "high"
+
+[tier_policy]
+default = "economy"
+ceiling = "strong"
+dear_work_types = ["diagnosis", "design"]
+dear_tier = "balanced"
+mass_threshold = 0.50
+
+[[tier_policy.start]]
+tier = "economy"
+types = ["task"]
+max_priority = 3
+max_blocks = 0
+
+[testing.commands]
+tree = { command = "true", description = "the tree" }
+`
+
+// distribution builds one recorded classification's input: a full map over
+// the closed enum, the shape the decision record reads back as.
+func distribution(mechanical, translation, construction, diagnosis, design float64) *DeriveClassification {
+	return &DeriveClassification{Probabilities: map[WorkType]float64{
+		WorkMechanical:   mechanical,
+		WorkTranslation:  translation,
+		WorkConstruction: construction,
+		WorkDiagnosis:    diagnosis,
+		WorkDesign:       design,
+	}}
+}
+
+// The cells load cell for cell, and the threshold's default is the
+// PROVISIONAL 0.50 — a starting point from one measurement, not a finding,
+// which is why it is the accessor's documented job to say so wherever the
+// number is read.
+func TestTheMassRoutingCellsLoadCellForCell(t *testing.T) {
+	p := loadPolicy(t, massPolicyDoc)
+	if len(p.DearWorkTypes) != 2 || p.DearWorkTypes[0] != WorkDiagnosis || p.DearWorkTypes[1] != WorkDesign {
+		t.Errorf("dear_work_types = %v, want diagnosis and design in file order", p.DearWorkTypes)
+	}
+	if p.DearTier != TierBalanced {
+		t.Errorf("dear_tier = %q, want balanced", string(p.DearTier))
+	}
+	if p.MassThresholdOrDefault() != 0.50 {
+		t.Errorf("mass_threshold = %v, want the declared 0.50", p.MassThresholdOrDefault())
+	}
+	undeclared := loadPolicy(t, strings.ReplaceAll(massPolicyDoc, "mass_threshold = 0.50", ""))
+	if undeclared.MassThresholdOrDefault() != 0.50 {
+		t.Errorf("an undeclared threshold defaulted to %v, want the provisional 0.50", undeclared.MassThresholdOrDefault())
+	}
+}
+
+// THE RULE ITSELF. The dear tier is chosen when the mass on the dear work
+// types clears the threshold — strictly greater — and nothing else about the
+// distribution matters: not the argmax, not the confidence, not how split
+// the distribution is. The measured cases are all here: the split tick
+// (0.45 design / 0.42 construction) is the one the argmax-with-a-floor shape
+// would have discarded, and the mass rule spends.
+func TestTheMassRuleRoutesOnProbabilityMassNotTheArgmax(t *testing.T) {
+	p := loadPolicy(t, massPolicyDoc)
+
+	cases := []struct {
+		name           string
+		classification *DeriveClassification
+		want           Tier
+		wantReason     string
+	}{
+		{"a design tick clears on its own", distribution(0.02, 0.03, 0.15, 0.05, 0.55), TierBalanced, "0.60 of probability mass"},
+		{"a diagnosis tick clears on its own", distribution(0.02, 0.03, 0.15, 0.70, 0.05), TierBalanced, "0.75 of probability mass"},
+		{"mass exactly at the threshold does not clear", distribution(0.10, 0.03, 0.42, 0.05, 0.45), TierEconomy, ""},
+		{"the argmax is not the rule: construction wins the argmax and still routes cheap under the threshold",
+			distribution(0.05, 0.03, 0.45, 0.07, 0.40), TierEconomy, ""},
+		{"the split tick spends its 0.45 of design once the threshold is reached for",
+			distribution(0.03, 0.05, 0.42, 0.00, 0.45), TierBalanced, "0.45 of probability mass"},
+		{"a no-answer distribution routes nothing", &DeriveClassification{}, TierEconomy, ""},
+		{"an absent classification falls back to the start policy", nil, TierEconomy, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// The split tick only clears once the threshold is re-tuned —
+			// which is the thing a recorded distribution is FOR (a threshold
+			// change re-evaluated against runs that already happened).
+			policy := p
+			if strings.Contains(tc.name, "once the threshold is reached for") {
+				policy = loadPolicy(t, strings.ReplaceAll(massPolicyDoc, "mass_threshold = 0.50", "mass_threshold = 0.40"))
+			}
+			got, err := policy.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, tc.classification)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Tier != tc.want {
+				t.Errorf("derived %q (%s), want %q", string(got.Tier), got.Reason, string(tc.want))
+			}
+			if tc.wantReason != "" && !strings.Contains(got.Reason, tc.wantReason) {
+				t.Errorf("the reason %q does not say %q", got.Reason, tc.wantReason)
+			}
+		})
+	}
+
+	// A policy that routes no classification anywhere — the whole trio
+	// omitted — is the legitimate stance: the same distribution promotes
+	// nothing, because the config, not the classifier, decides what a work
+	// type costs.
+	plain := loadPolicy(t, strings.ReplaceAll(massPolicyDoc,
+		"dear_work_types = [\"diagnosis\", \"design\"]\ndear_tier = \"balanced\"\nmass_threshold = 0.50", ""))
+	got, err := plain.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, distribution(0, 0, 0, 0.3, 0.7))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierEconomy {
+		t.Errorf("a policy that declares no dear routing promoted to %q", string(got.Tier))
+	}
+
+	// And no policy at all is more legitimate still: base values, whatever
+	// the classifier said, because there is no table to ask what a work
+	// type is worth.
+	var none *TierPolicy
+	got, err = none.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, distribution(0, 0, 0, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != "" || !strings.Contains(got.Reason, "no [tier_policy] is declared") {
+		t.Errorf("no policy derived %q (%q), want base values", string(got.Tier), got.Reason)
+	}
+}
+
+// The one thing the rule must NOT be able to walk around: the start rules,
+// the override label and the process-role route all still outrank or bound
+// the classifier, exactly as before — the narrowing admits the classifier as
+// a START, never as a fourth authority.
+func TestTheMassRuleMovesOnlyTheStart(t *testing.T) {
+	p := loadPolicy(t, massPolicyDoc)
+	clears := distribution(0, 0, 0, 0.1, 0.9)
+
+	// The label override outranks the classifier: an operator's explicit pin,
+	// and the loud refusal for a typo'd one is unchanged.
+	got, err := p.DeriveClassified(TickFacts{
+		TickID: "t", Priority: 2, Type: "task", Role: "implement-tick",
+		Labels: []string{"tier:economy"}, Wave: 2, Blocks: 3,
+	}, DeriveAttempt{Number: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierEconomy || !strings.Contains(got.Reason, "overrides the ladder") {
+		t.Errorf("a label did not outrank a clearing classification: %q (%q)", string(got.Tier), got.Reason)
+	}
+	if _, err := p.DeriveClassified(TickFacts{
+		TickID: "t", Priority: 2, Type: "task", Role: "implement-tick",
+		Labels: []string{"tier:premium"}, Wave: 2, Blocks: 3,
+	}, DeriveAttempt{Number: 1}, clears); err == nil {
+		t.Error("an unrecognised label was accepted because a classification was present")
+	}
+
+	// A start rule that matches is the start policy's answer about this
+	// tick, and the classification is the better judgement that REPLACES it:
+	// the start policy is what an absent or below-threshold classification
+	// "falls back to", so a rule — a structural proxy — does not outvote a
+	// recorded distribution. (The rule below routes economy; the clearing
+	// classification starts the tick at the dear tier above it.)
+	blocked := TickFacts{TickID: "t", Priority: 3, Type: "task", Role: "implement-tick", Wave: 2, Blocks: 0}
+	got, err = p.DeriveClassified(blocked, DeriveAttempt{Number: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierBalanced || !strings.Contains(got.Reason, "probability mass") {
+		t.Errorf("a clearing classification did not replace the matching start rule: %q (%q)", string(got.Tier), got.Reason)
+	}
+	// The same facts with NO classification take the rule — the fallback is
+	// exactly the start policy, which is the degradation the rule exists for.
+	got, err = p.DeriveClassified(blocked, DeriveAttempt{Number: 1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierEconomy || !strings.Contains(got.Reason, "start rule 1") {
+		t.Errorf("without a classification the start rule did not route: %q (%q)", string(got.Tier), got.Reason)
+	}
+}
+
+// THE LADDER UNDERNEATH, which is the reason promotion is safe at all: the
+// classification picks a START, a failed attempt still earns a rung above
+// whatever the classifier chose, and the ceiling still bounds the result —
+// at the ceiling the next actor is a person, not a bigger model.
+func TestAMassRoutedStartStillEarnsItsRungsBoundedByTheCeiling(t *testing.T) {
+	p := loadPolicy(t, massPolicyDoc)
+	clears := distribution(0, 0, 0, 0.1, 0.9)
+
+	// First attempt: the classified start.
+	got, err := p.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierBalanced || !strings.Contains(got.Reason, "provisional mass threshold 0.50") {
+		t.Fatalf("a clearing classification started at %q (%q), want the dear tier and the provisional threshold named", string(got.Tier), got.Reason)
+	}
+	// One failed attempt: a rung ABOVE the classified start.
+	got, err = p.DeriveClassified(workFacts(), DeriveAttempt{Number: 2, Failed: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierStrong || !strings.Contains(got.Reason, "escalated 1 rung(s) after 1 failed attempt(s)") {
+		t.Errorf("a failed attempt did not earn its rung above the classified start: %q (%q)", string(got.Tier), got.Reason)
+	}
+	// However many more failures: the ceiling holds, and says the ladder is
+	// over.
+	got, err = p.DeriveClassified(workFacts(), DeriveAttempt{Number: 9, Failed: 8}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierStrong || !strings.Contains(got.Reason, "the ladder is over") {
+		t.Errorf("eight failures derived %q (%q), want the ceiling and the ladder over", string(got.Tier), got.Reason)
+	}
+
+	// A dear tier AT the ceiling is a classified start with no rungs above
+	// it: the second failure is a person's, exactly as an earned one is.
+	atCeiling := loadPolicy(t, strings.ReplaceAll(massPolicyDoc, "dear_tier = \"balanced\"", "dear_tier = \"strong\""))
+	got, err = atCeiling.DeriveClassified(workFacts(), DeriveAttempt{Number: 2, Failed: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierStrong || !strings.Contains(got.Reason, "the next actor is a person") {
+		t.Errorf("a classified start at the ceiling escalated: %q (%q)", string(got.Tier), got.Reason)
+	}
+
+	// And the ceiling bounds the RESULT mechanically, not only at load: a
+	// hand-built policy whose dear tier sits above its ceiling is clamped
+	// down, because a ceiling a promotion can walk around is not a ceiling.
+	handBuilt := loadPolicy(t, massPolicyDoc)
+	handBuilt.DearTier = TierFrontier
+	got, err = handBuilt.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tier != TierStrong || !strings.Contains(got.Reason, "which still bounds the result") {
+		t.Errorf("a dear tier above the ceiling derived %q (%q), want the ceiling", string(got.Tier), got.Reason)
+	}
+
+	// Purity, the acceptance's own shape: the same tick, the same attempt,
+	// the same classification, twice — byte for byte, reason included.
+	first, err := p.DeriveClassified(workFacts(), DeriveAttempt{Number: 2, Failed: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := p.DeriveClassified(workFacts(), DeriveAttempt{Number: 2, Failed: 1}, clears)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Errorf("the classified derivation is not a function: %+v then %+v", first, second)
 	}
 }
