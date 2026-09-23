@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -156,12 +157,111 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 
 	message := fmt.Sprintf("Merge branch '%s' into %s\n\nticfac run %s: tick %s attempt %d",
 		branch, r.branch, r.runID, tick, attempt)
-	if _, stderr, err := r.git.try(dir, "merge", "--no-ff", "--no-edit", "-m", message, head); err != nil {
+	if stdout, stderr, err := r.git.try(dir, "merge", "--no-ff", "--no-edit", "-m", message, head); err != nil {
+		// The unmerged paths are read BEFORE the abort, which is what erases
+		// them. They are the index's answer to "which files", and they back up
+		// git's printed CONFLICT lines rather than replace them (see
+		// describeMergeFailure).
+		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
 		_, _, _ = r.git.try(dir, "merge", "--abort")
 		return "", r.refuse(RefusedMerge, tick,
-			"attempt %d of %s does not merge onto %s: %s", attempt, tick, r.branch, firstLine(stderr))
+			"attempt %d of %s does not merge onto %s: %s", attempt, tick, r.branch,
+			describeMergeFailure(stdout, stderr, unmerged, err))
 	}
 	return r.git.run(dir, "rev-parse", "HEAD")
+}
+
+// describeMergeFailure is the sentence a merge_failed refusal ends with: which
+// files did not merge, and HOW each one did not (tick ky5).
+//
+// It used to be firstLine(stderr), and that was empty every time it mattered.
+// git merge prints its CONFLICT lines on STDOUT — "CONFLICT (add/add): Merge
+// conflict in x.go" is ordinary progress output as far as git is concerned —
+// and with rerere switched off for the run (gitbin.NoRerere) nothing at all
+// reaches stderr on a plain conflict. So the refusal read "does not merge onto
+// epic/wne: " and stopped, and the operator of epic-wne rebuilt the merge by
+// hand in a worktree of their own to learn what git had already printed and
+// the reconciler had thrown away.
+//
+// The KIND is carried, not just the path, because the kind is the diagnosis:
+//
+//   - add/add: both sides CREATED the file. Inside one epic that is two ticks
+//     of one wave writing the same new path — a planning defect, and the fix is
+//     the wave, not the merge.
+//   - content: both sides edited a file that already existed. Ordinary
+//     overlap, or an attempt built on a base the branch has since moved past.
+//   - modify/delete, rename/delete, file/directory, …: one side's change
+//     makes the other's meaningless; a person decides which one stands.
+//
+// git's own wording is kept for every kind whose line is not the plain "Merge
+// conflict in <path>" — it names the sides and says what was left in the
+// tree, and a paraphrase of it could only lose something. The unmerged paths
+// from the index are appended when no CONFLICT line mentions them, so a git
+// whose output this parse does not recognise still names its files; and when
+// there is neither, the merge's whole output is the detail, because an empty
+// reason is the one answer this refusal may never give again.
+func describeMergeFailure(stdout, stderr, unmerged string, err error) string {
+	var conflicts []string
+	named := map[string]bool{}
+	addAdd := false
+	for _, line := range strings.Split(stdout+"\n"+stderr, "\n") {
+		line = strings.Join(strings.Fields(line), " ")
+		rest, ok := strings.CutPrefix(line, "CONFLICT (")
+		if !ok {
+			continue
+		}
+		kind, text, ok := strings.Cut(rest, "): ")
+		if !ok {
+			conflicts = append(conflicts, line)
+			continue
+		}
+		if kind == "add/add" {
+			addAdd = true
+		}
+		if path, ok := strings.CutPrefix(text, "Merge conflict in "); ok {
+			named[path] = true
+			conflicts = append(conflicts, kind+" in "+path)
+			continue
+		}
+		conflicts = append(conflicts, kind+": "+text)
+	}
+	for _, path := range strings.Split(unmerged, "\n") {
+		path = strings.TrimSpace(path)
+		if path == "" || named[path] {
+			continue
+		}
+		mentioned := false
+		for _, c := range conflicts {
+			if strings.Contains(c, path) {
+				mentioned = true
+				break
+			}
+		}
+		if !mentioned {
+			conflicts = append(conflicts, "unmerged "+path)
+		}
+	}
+
+	if len(conflicts) == 0 {
+		output := strings.Join(strings.Fields(strings.TrimSpace(stdout+"\n"+stderr)), " ")
+		if output == "" && err != nil {
+			output = err.Error()
+		}
+		if output == "" {
+			output = "git merge failed and printed nothing"
+		}
+		return output
+	}
+	noun := "conflicts"
+	if len(conflicts) == 1 {
+		noun = "conflict"
+	}
+	detail := fmt.Sprintf("%d %s: %s", len(conflicts), noun, strings.Join(conflicts, "; "))
+	if addAdd {
+		detail += ". An add/add conflict means both sides created the same file: two ticks planned into one " +
+			"wave that each write one new path is a planning defect, and the fix is the wave, not the merge"
+	}
+	return detail
 }
 
 // durableAttemptHead is the commit the merge is of. It is the head that was
