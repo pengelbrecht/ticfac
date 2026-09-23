@@ -216,30 +216,34 @@ RUN_CLOSEOUT_MS = "1800000"
 # limit.
 FACTORY_MAX_INSTANCES = "3"
 
-# Which harness and model a per-tick WORKER container runs (tick 1cd). Left
-# unset on purpose: the default lives in `src/worker-boot.ts`
-# (`WORKER_DEFAULT_HARNESS` = `omp`, `WORKER_DEFAULT_MODEL` =
-# `workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813`) so an unconfigured
-# deployment still boots a worker that can reach the gateway — the repository's
-# own `[roles.implement]` routes to Anthropic and this gateway serves Workers
-# AI only (tick ys3). What these vars buy is that the choice is no longer a
-# SOURCE EDIT: before them, changing the worker model meant editing TypeScript
-# and redeploying the factory.
+# Which harness and model the cloud runs (tick 1cd added the vars; tick uqi
+# pinned them). The built-in defaults live in `src/worker-boot.ts`
+# (`WORKER_DEFAULT_HARNESS` = `pi`, `WORKER_DEFAULT_MODEL` =
+# `workers-ai/@cf/zai-org/glm-5.3`) so an unconfigured deployment still boots
+# a worker that can reach the gateway — the repository's own
+# `[roles.implement]` routes to a vendor a cloud container has no credential
+# for, and this gateway serves Workers AI only (tick ys3). What these vars
+# buy is that the choice is no longer a SOURCE EDIT: before them, changing
+# the worker model meant editing TypeScript and redeploying the factory.
 #
-# The default moved flash -> pro on run_215b7cbff9's evidence: three real ticks
-# at 90 minutes each on `deepseek-v4-flash-0731` and only ONE converged (201
-# and 5qj both hit the bound at exit 124 with no work commits). Pro costs
-# roughly 3x flash per completed tick on y45's model ($0.851 against $0.283)
-# and caches worse under load (12/24 post-warm hits against flash's 23/23), so
-# the real multiple on a long run is worse than 3x — but a worker that does not
-# converge costs 100% of its tokens for 0% of the work, which is the comparison
-# that decided it. Both models are Workers AI, so both stay on the credit.
+# OPERATOR, 2026-09-23 (tick uqi): the cloud runs GLM 5.3 or GLM 5.3 Flash,
+# via pi only — nothing in the cloud runs claude. Pinned explicitly below
+# rather than left to the built-in default, so the deployable config says
+# the rule and no silent default change can decide it: an unset RUN_MODEL
+# would let the orchestrator container fall back to the repository's
+# role/tier routing (the LOCAL worker CLI's route, not one this gateway
+# serves), and an unset RUN_WORKER_MODEL would leave the workers to the TS
+# constants.
 #
-# Set RUN_WORKER_MODEL to route a wave of small ticks back to flash. Order is
-# run submission (`--model`/RUN_MODEL) > this var > the built-in default.
+# Order is run submission (`--model`/RUN_MODEL) > this var > the built-in
+# default. Route a wave of cheap ticks to GLM 5.3 Flash with RUN_WORKER_MODEL:
 #
-#   RUN_WORKER_MODEL = "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"
-#   RUN_WORKER_HARNESS = "omp"
+#   RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3-flash"
+
+RUN_HARNESS = "pi"
+RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+RUN_WORKER_HARNESS = "pi"
+RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 
 # Where a run's live `run_event` stream is forwarded so a board can draw it
 # (tick bne). Left unset on purpose: a factory is self-deployed into the
