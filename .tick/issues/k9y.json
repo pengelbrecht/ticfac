@@ -1,0 +1,13 @@
+{
+  "id": "k9y",
+  "title": "A hard-stopped run whose supervisor already died stays 'stopping' forever",
+  "description": "FOUND 2026-09-23: runs sat in 'stopping' indefinitely after a hard stop, counted as ACTIVE. 'ticfac cloud supervisor' named it: the run's Workflow had errored (ContainerUnavailableError: Maximum number of running container instances exceeded), and 'the record is written BY the supervisor, so it is frozen at the last value one wrote'.\n\nstopRun flips the run to 'stopping' and relies on the supervisor's finalize to make it 'stopped'. A supervisor that has already ended never reads the stop.\n\nFIXED by ticfac #36: stopRun asks every Workflow binding and, when at least one instance is found and NONE reports anything but errored/terminated/complete, finishes the stop itself (credential revoked, row 'stopped'). The first cut trusted the first binding's answer and finished LIVE runs' stops, because the binding that does not drive a run can report an ended status for an id it never ran - caught by the existing stop tests. Tests: frozen 'stopping' + finished supervisor -\u003e stopped (fails without the fix); a live supervisor's stop still completes through closeout.\n\nStuck runs are cleaned up by stopping them again once #36 is deployed.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A stop on a run whose supervisor has ended leaves the run 'stopped'; a stop on a live run is still finished by its supervisor; the runs stuck in 'stopping' on 2026-09-23 are stopped",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T06:08:51.357755Z",
+  "updated_at": "2026-09-23T06:08:51.357755Z"
+}
