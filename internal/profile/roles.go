@@ -29,7 +29,7 @@ import (
 //     declare is still a refusal here, not a silent fall back to the role —
 //     and the substrate refusal (tick 84z), whose rule the sentinel this
 //     package re-exports states: under the cloud substrate, a role the
-//     config declares no `[roles.<name>.substrates.cloud]` cell for is a
+//     `.tick/runners.cloud.toml` declares no [roles.<name>] cell for is a
 //     refusal naming the role, never a fall back to the base cell.
 //
 // The honesty the adapter adds: a runners.toml that fails validation anywhere
@@ -48,6 +48,12 @@ type Role struct {
 	Model      string
 	Tiers      map[string]Role
 	Substrates map[string]Role
+	// SubstrateTiers is the substrate override file's own tier cells, keyed
+	// by substrate then tier (tick 5uo): applied after the override's role
+	// cell, never beaten by a tier from the common file.
+	SubstrateTiers map[string]map[string]Role
+	// OverrideFile is the override the roles were read with, "" for none.
+	OverrideFile string
 }
 
 // ReadRoles reads `[roles.*]` from a runners.toml file. A missing file is NOT
@@ -55,13 +61,19 @@ type Role struct {
 // caller decides what that means — here it means the profiles ship as written.
 // A file that exists and fails validation IS an error; see the package comment.
 func ReadRoles(path string) (map[string]Role, error) {
+	return ReadRolesFor(path, "")
+}
+
+// ReadRolesFor is [ReadRoles] with the substrate's override file merged over
+// the common one (tick 5uo): the roles a run on sub actually routes on.
+func ReadRolesFor(path string, sub runconfig.Substrate) (map[string]Role, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return map[string]Role{}, nil
 		}
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
-	cfg, err := runconfig.Load(path)
+	cfg, err := runconfig.LoadFor(path, sub)
 	if err != nil {
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
@@ -89,7 +101,7 @@ func rolesFrom(cfg *runconfig.Config) map[string]Role {
 		if role == nil {
 			continue
 		}
-		entry := Role{Name: name, Kind: role.Kind, Model: role.Model}
+		entry := Role{Name: name, Kind: role.Kind, Model: role.Model, OverrideFile: cfg.OverrideFile}
 		if len(role.Tiers) > 0 {
 			entry.Tiers = make(map[string]Role, len(role.Tiers))
 			for tier, variant := range role.Tiers {
@@ -106,6 +118,18 @@ func rolesFrom(cfg *runconfig.Config) map[string]Role {
 					continue
 				}
 				entry.Substrates[sub] = Role{Name: sub, Kind: variant.Kind, Model: variant.Model}
+			}
+		}
+		if len(role.SubstrateTiers) > 0 {
+			entry.SubstrateTiers = make(map[string]map[string]Role, len(role.SubstrateTiers))
+			for sub, tiers := range role.SubstrateTiers {
+				entry.SubstrateTiers[sub] = make(map[string]Role, len(tiers))
+				for tier, variant := range tiers {
+					if variant == nil {
+						continue
+					}
+					entry.SubstrateTiers[sub][tier] = Role{Name: tier, Kind: variant.Kind, Model: variant.Model}
+				}
 			}
 		}
 		out[name] = entry

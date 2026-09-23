@@ -16,8 +16,8 @@ var ErrNoConfig = errors.New("herd/config: no .tick/runners.toml")
 // cell is not a default — it is a routing for a different world, written for
 // runs whose economics a container does not share — so its silent use is how
 // a cloud run reaches a harness nobody chose. The refusal names the role and
-// the `[roles.<name>.substrates.cloud]` cell that is missing; declaring that
-// cell is the whole fix.
+// the `.tick/runners.cloud.toml` [roles.<name>] cell that is missing;
+// declaring that cell is the whole fix (tick 5uo).
 var ErrNoCloudRouting = errors.New("herd/config: no cloud routing declared for the role")
 
 // Worker is the resolved routing for one role at one tier: the two explicit
@@ -46,6 +46,9 @@ type Worker struct {
 	// absent cloud routing is a refusal, never a missing overlay silently
 	// skipped.
 	SubstrateApplied bool
+	// SubstrateTierApplied reports whether the override file's own
+	// `tiers.<Tier>` cell applied after its role cell.
+	SubstrateTierApplied bool
 
 	Kind   string
 	Model  string
@@ -54,26 +57,15 @@ type Worker struct {
 }
 
 // Resolve applies runners-config.md's resolution order for a tick with role
-// R and chosen tier T, substrate-BLIND: the [roles] table exactly as written,
-// with no substrate overlay applied. It is the historical view and the seam
+// R and chosen tier T, substrate-BLIND: the [roles] table exactly as loaded,
+// with no substrate override applied. It is the historical view and the seam
 // ticks' internal/sandbox reads through; a caller that knows which substrate
-// the run executes on resolves through [Config.ResolveOn] instead, which is
-// this order with the substrate overlay between the role's own values and
-// any tier:
+// the run executes on resolves through [Config.ResolveOn] instead.
 //
-//  1. roles.R.substrates.<substrate> when the run's substrate declares one →
-//     applied field-wise over the role's own values. Under the cloud
-//     substrate an ABSENT overlay is a refusal naming the role
-//     ([ErrNoCloudRouting]), never a fall back to the base cell — that fall
-//     back is how a cloud run reached a claude process nobody chose. The
-//     herdr and harness substrates have no such refusal: the base cells
-//     were written for them, and an overlay is optional refinement there.
-//  2. roles.R.tiers.T if present → for each of kind, model, effort, args
-//     independently: the tier's value if it sets one, else the
-//     substrate-adjusted role's. The tier is the more specific axis, so it
-//     applies last.
-//  3. Otherwise roles.R.kind + roles.R.model + roles.R.effort + roles.R.args.
-//  4. If role R has no entry, resolve against `implement` by the same steps.
+//  1. roles.R.tiers.T if present → for each of kind, model, effort, args
+//     independently: the tier's value if it sets one, else the role's.
+//  2. Otherwise roles.R.kind + roles.R.model + roles.R.effort + roles.R.args.
+//  3. If role R has no entry, resolve against `implement` by the same steps.
 //
 // kind, model and effort are scalars and override field-wise: a tier that
 // sets only effort = "high" keeps the role's kind and model. Args replace,
@@ -86,11 +78,12 @@ func (c *Config) Resolve(role string, tier Tier) (Worker, error) {
 	return c.ResolveOn("", role, tier)
 }
 
-// ResolveOn is [Config.Resolve] for one substrate: the per-substrate overlay
-// (tick 84z) applies between the role's own values and any tier overlay, and
-// — under the cloud substrate only — its absence is a refusal naming the
-// role rather than a fall back. See [Resolve] for the order and
-// [ErrNoCloudRouting] for the refusal.
+// ResolveOn is [Config.Resolve] for one substrate, on a config [LoadFor]
+// loaded for it: after the role and the tier, the substrate override file's
+// cell for the role applies LAST, and then that file's own cell for the tier
+// (tick 5uo; layered.go has the rules). Under the cloud substrate a role the
+// cloud file does not declare is a refusal naming the role
+// ([ErrNoCloudRouting]), never a fall back to the common cell.
 func (c *Config) ResolveOn(sub Substrate, role string, tier Tier) (Worker, error) {
 	if sub == "" {
 		w, _, entry, err := c.resolveBase(role, tier)
@@ -120,33 +113,45 @@ func (c *Config) ResolveOn(sub Substrate, role string, tier Tier) (Worker, error
 	if err != nil {
 		return Worker{}, err
 	}
+	if w, err = c.applyTier(w, entry, tier); err != nil {
+		return Worker{}, err
+	}
 	variant := entry.Substrates[string(sub)]
 	if variant == nil {
 		if sub != SubstrateCloud {
-			// herdr and harness: the base cells were written for the world
-			// the run executes in, and an overlay is optional refinement.
+			// herdr and harness: the common cells were written for the world
+			// the run executes in, and an override is optional refinement.
 			return w, nil
 		}
-		return Worker{}, fmt.Errorf("%w: [roles.%s] declares no [roles.%s.substrates.cloud] cell for role %q — a cloud run refuses rather than falling back to the role's own %q/%q", ErrNoCloudRouting, resolved, resolved, role, entry.Kind, entry.Model)
+		return Worker{}, fmt.Errorf("%w: %s declares no [roles.%s] cell for role %q — a cloud run refuses rather than falling back to %s's %q/%q", ErrNoCloudRouting, OverrideFileName(SubstrateCloud), resolved, role, FileName, entry.Kind, entry.Model)
 	}
 	w.Substrate = sub
 	w.SubstrateApplied = true
-	if variant.Kind != "" {
-		w.Kind = variant.Kind
+	w.overlay(variant)
+	if tier != "" {
+		if tv := entry.SubstrateTiers[string(sub)][string(tier)]; tv != nil {
+			w.SubstrateTierApplied = true
+			w.overlay(tv)
+		}
 	}
-	if variant.Model != "" {
-		w.Model = variant.Model
+	return w, nil
+}
+
+// overlay applies one variant field-wise: scalars override when set, args
+// REPLACE when present (presence, not emptiness: `args = []` clears).
+func (w *Worker) overlay(v *TierVariant) {
+	if v.Kind != "" {
+		w.Kind = v.Kind
 	}
-	if variant.Effort != "" {
-		w.Effort = variant.Effort
+	if v.Model != "" {
+		w.Model = v.Model
 	}
-	// Args REPLACE, never merge — the tier overlay's rule, verbatim.
-	if variant.Args != nil {
-		w.Args = variant.Args
+	if v.Effort != "" {
+		w.Effort = v.Effort
 	}
-	// The tier is the more specific axis: it applies over the substrate
-	// overlay, so a per-tier model still narrows a cloud role.
-	return c.applyTier(w, entry, tier)
+	if v.Args != nil {
+		w.Args = v.Args
+	}
 }
 
 // resolveBase is the substrate-blind half of resolution: the role entry
@@ -211,19 +216,25 @@ func (c *Config) applyTier(w Worker, entry *Role, tier Tier) (Worker, error) {
 	return w, nil
 }
 
-// Label names the cell the values actually came from, the way the fail-closed
-// refusal messages do: `roles.implement.tiers.strong`, or `roles.review` when
-// no overlay contributed. Overlays are named in the order they apply — the
-// substrate cell inside the tier — so the label is always a real config path.
-// Pointing at the table the user must edit is the whole job of the label, so a
-// requested-but-undefined tier is not named.
+// Label names the cells the values actually came from, the way the
+// fail-closed refusal messages do: `roles.implement.tiers.strong`, or
+// `roles.review` when no overlay contributed, and — when a substrate override
+// applied — the override file's cell after a " + ", since it applied last:
+// `roles.implement.tiers.frontier + .tick/runners.cloud.toml roles.implement`.
+// Pointing at the table the user must edit is the whole job of the label, so
+// a requested-but-undefined tier is not named.
 func (w Worker) Label() string {
 	base := "roles." + w.ResolvedRole
+	label := base
+	if w.TierApplied {
+		label += ".tiers." + string(w.Tier)
+	}
 	if w.SubstrateApplied {
-		base += ".substrates." + string(w.Substrate)
+		cell := base
+		if w.SubstrateTierApplied {
+			cell += ".tiers." + string(w.Tier)
+		}
+		label += " + " + OverrideFileName(w.Substrate) + " " + cell
 	}
-	if !w.TierApplied {
-		return base
-	}
-	return base + ".tiers." + string(w.Tier)
+	return label
 }

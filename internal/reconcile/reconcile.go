@@ -502,7 +502,7 @@ type Options struct {
 
 	// Substrate is the substrate this run executes on, the axis role
 	// routing resolves against (tick 84z): under "cloud" the target
-	// repository's `[roles.<name>.substrates.cloud]` overlays apply, and a
+	// repository's `.tick/runners.cloud.toml` role cells apply (tick 5uo), and a
 	// role nobody declared cloud routing for REFUSES the run at construction,
 	// naming the role — never a silent fall back to the base cell, which is
 	// how a cloud run reached a claude process nobody chose.
@@ -640,7 +640,10 @@ type Reconciler struct {
 	// operator's --tier: when set, every dispatch runs at it and the ladder
 	// does not run. hostWidth is [orchestration].max_parallel — the ONE
 	// host-wide number the per-tier bounds narrow.
-	tierPolicy   *runconfig.TierPolicy
+	tierPolicy *runconfig.TierPolicy
+	// overrideFile is the per-world override merged over runners.toml
+	// (tick 5uo), "" when none was; the run states it at admission.
+	overrideFile string
 	tierProfiles map[string]map[string]*profile.Profile
 	pinnedTier   string
 	hostWidth    int
@@ -1032,7 +1035,7 @@ func New(opts Options) (*Reconciler, error) {
 	// The substrate this run executes on (tick 84z), resolved BEFORE any
 	// profile is: it is the axis role routing resolves against, and under
 	// "cloud" the target repository must have declared a
-	// `[roles.<name>.substrates.cloud]` cell for every role this run will
+	// `.tick/runners.cloud.toml` [roles.<name>] cell for every role this run will
 	// dispatch — a missing cell is a refusal here, naming the role, rather
 	// than a fall back to the base cell three ticks into an epic. The base
 	// cells are what a LOCAL run pays for; the cloud cells are what a
@@ -1075,11 +1078,15 @@ func New(opts Options) (*Reconciler, error) {
 	r.pinnedTier = opts.Tier
 	r.substrate = substrate
 	if opts.Tier == "" {
-		cfg, err := runconfig.Load(opts.GateConfig)
+		// The substrate's override file merges over the common one here
+		// (tick 5uo): a ladder declared in runners.local.toml is a local
+		// run's policy and does not exist for a cloud run.
+		cfg, err := runconfig.LoadFor(opts.GateConfig, substrate)
 		if err != nil {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}
 		r.tierPolicy = cfg.TierPolicy
+		r.overrideFile = cfg.OverrideFile
 		r.hostWidth = cfg.MaxParallel()
 		// Per-role, because a policy is only honest when what it
 		// pre-resolves is what it can actually derive (profiles.go):

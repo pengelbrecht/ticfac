@@ -21,10 +21,11 @@
 //     other two fields of a profile are not a repository's to set.
 //
 //   - a tier, `[roles.<name>.tiers.<tier>]`, as an overlay on that role, and
-//     a substrate, `[roles.<name>.substrates.<substrate>]` (tick 84z), as an
-//     overlay between the role and any tier — the axis a cloud container
-//     resolves on, so the same file can keep a frontier review for local
-//     runs and a container-runnable worker for cloud ones.
+//     a substrate's override file (ticks 84z, 5uo) — `.tick/runners.cloud.toml`
+//     or `.tick/runners.local.toml` — whose role cell applies LAST, over the
+//     role and any tier: the axis a cloud container resolves on, so the
+//     common file can keep a frontier review for local runs and the cloud
+//     file a container-runnable worker for cloud ones.
 //
 // What comes out records where each of those came from, because "which profile
 // was this run made under" is a question an attempt record has to be able to
@@ -100,8 +101,8 @@ type Options struct {
 	// and silently got the default paid for the default without being told.
 	Tier string
 
-	// Substrate is the substrate the run executes on, the axis the
-	// `[roles.<name>.substrates.<substrate>]` overlay resolves on (tick 84z).
+	// Substrate is the substrate the run executes on, which picks the
+	// override file merged over RunnersConfig (ticks 84z, 5uo).
 	// Empty is the substrate-blind resolution this package has always done;
 	// `cloud`, `herdr` and `harness` resolve against their cells. Under
 	// `cloud` the overlay is REQUIRED: a role the config declares no cloud
@@ -309,7 +310,7 @@ func route(p *Profile, opts Options) error {
 		}
 		return nil
 	}
-	roles, err := ReadRoles(opts.RunnersConfig)
+	roles, err := ReadRolesFor(opts.RunnersConfig, runconfig.Substrate(opts.Substrate))
 	if err != nil {
 		return fmt.Errorf("profile %s: %w", p.Role, err)
 	}
@@ -327,8 +328,8 @@ func route(p *Profile, opts Options) error {
 				p.Role, opts.Tier, opts.RunnersConfig)
 		}
 		if opts.Substrate == string(runconfig.SubstrateCloud) {
-			return fmt.Errorf("profile %s: %w: %s declares no role %q could be routed under, so no [roles.<name>.substrates.cloud] cell can exist for it — a cloud run refuses rather than dispatching the profile as shipped",
-				p.Role, ErrNoCloudRouting, opts.RunnersConfig, p.Role)
+			return fmt.Errorf("profile %s: %w: %s declares no role %q could be routed under, so %s can declare no cell for it — a cloud run refuses rather than dispatching the profile as shipped",
+				p.Role, ErrNoCloudRouting, opts.RunnersConfig, p.Role, runconfig.OverrideFileName(runconfig.SubstrateCloud))
 		}
 		return nil
 	}
@@ -347,44 +348,63 @@ func route(p *Profile, opts Options) error {
 		routed = append(routed, fmt.Sprintf("%s [roles.%s]", opts.RunnersConfig, name))
 	}
 
-	// The substrate overlay sits between the role's own values and any tier:
-	// the base cells say what a LOCAL run pays for, the substrate cell says
-	// what this run executes on, and the tier stays the more specific axis.
-	// Under the cloud substrate the overlay is REQUIRED — absent cloud
-	// routing is a refusal naming the role, never a fall back to the role's
-	// own values, which name a harness a container cannot run at all (tick 84z).
+	if opts.Tier != "" {
+		overlay, ok := role.Tiers[opts.Tier]
+		_, subOK := role.SubstrateTiers[opts.Substrate][opts.Tier]
+		if !ok && !subOK {
+			return fmt.Errorf("profile %s: [roles.%s] declares no tier %q (%s): a tier that silently falls back to "+
+				"the role is a tier an operator paid for and did not get", p.Role, name, opts.Tier, declaredTiers(role, opts.Substrate))
+		}
+		if ok {
+			apply(overlay.Kind, overlay.Model)
+			routed = append(routed, fmt.Sprintf("[roles.%s.tiers.%s]", name, opts.Tier))
+		}
+	}
+
+	// The substrate override applies LAST (tick 5uo): its role cell over the
+	// role's own values AND any tier, then its own tier cell. The common
+	// cells say what a LOCAL run pays for; the override says what this run
+	// executes on, and nothing the common file says about a tier can win
+	// over it — a claude frontier tier cannot reach a cloud run whose
+	// runners.cloud.toml routes the role to pi (finding ea1a62d3). Under the
+	// cloud substrate the override cell is REQUIRED — absent cloud routing is
+	// a refusal naming the role, never a fall back to the role's own values,
+	// which name a harness a container cannot run at all (tick 84z).
 	if opts.Substrate != "" {
 		overlay, declared := role.Substrates[opts.Substrate]
 		if !declared {
 			if opts.Substrate == string(runconfig.SubstrateCloud) {
-				return fmt.Errorf("profile %s: %w: [roles.%s] declares no [roles.%s.substrates.cloud] cell — a cloud run refuses rather than falling back to the role's own %q/%q",
-					p.Role, ErrNoCloudRouting, name, name, role.Kind, role.Model)
+				return fmt.Errorf("profile %s: %w: %s declares no [roles.%s] cell — a cloud run refuses rather than falling back to the role's own %q/%q",
+					p.Role, ErrNoCloudRouting, runconfig.OverrideFileName(runconfig.SubstrateCloud), name, role.Kind, role.Model)
 			}
 		} else {
 			apply(overlay.Kind, overlay.Model)
-			routed = append(routed, fmt.Sprintf("[roles.%s.substrates.%s]", name, opts.Substrate))
+			routed = append(routed, fmt.Sprintf("%s [roles.%s]", role.OverrideFile, name))
+			if opts.Tier != "" {
+				if tv, ok := role.SubstrateTiers[opts.Substrate][opts.Tier]; ok {
+					apply(tv.Kind, tv.Model)
+					routed = append(routed, fmt.Sprintf("%s [roles.%s.tiers.%s]", role.OverrideFile, name, opts.Tier))
+				}
+			}
 		}
-	}
-
-	if opts.Tier != "" {
-		overlay, ok := role.Tiers[opts.Tier]
-		if !ok {
-			return fmt.Errorf("profile %s: [roles.%s] declares no tier %q (%s): a tier that silently falls back to "+
-				"the role is a tier an operator paid for and did not get", p.Role, name, opts.Tier, declaredTiers(role))
-		}
-		apply(overlay.Kind, overlay.Model)
-		routed = append(routed, fmt.Sprintf("[roles.%s.tiers.%s]", name, opts.Tier))
 	}
 	p.Routed = strings.Join(routed, " + ")
 	return nil
 }
 
-func declaredTiers(role Role) string {
-	if len(role.Tiers) == 0 {
+func declaredTiers(role Role, substrate string) string {
+	seen := map[string]bool{}
+	for name := range role.Tiers {
+		seen[name] = true
+	}
+	for name := range role.SubstrateTiers[substrate] {
+		seen[name] = true
+	}
+	if len(seen) == 0 {
 		return "it declares no tiers at all"
 	}
-	names := make([]string, 0, len(role.Tiers))
-	for name := range role.Tiers {
+	names := make([]string, 0, len(seen))
+	for name := range seen {
 		names = append(names, name)
 	}
 	sort.Strings(names)

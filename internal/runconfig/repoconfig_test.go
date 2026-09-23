@@ -116,7 +116,7 @@ func TestRepoRunnersConfigResolvesEveryRole(t *testing.T) {
 // afford. Both halves are asserted against the file that routes the very
 // workers building ticfac.
 func TestRepoRunnersConfigKeepsClaudeOffTheCloud(t *testing.T) {
-	cfg, err := LoadRepo(repoRootForTest(t))
+	cfg, err := LoadRepoFor(repoRootForTest(t), SubstrateCloud)
 	if err != nil {
 		t.Fatalf("LoadRepo: %v", err)
 	}
@@ -139,11 +139,11 @@ func TestRepoRunnersConfigKeepsClaudeOffTheCloud(t *testing.T) {
 // stay on opus there — taking opus out of the file altogether would be the
 // one-line fix that loses exactly this.
 func TestRepoRunnersConfigKeepsTheLocalFrontierReviewOnOpus(t *testing.T) {
-	cfg, err := LoadRepo(repoRootForTest(t))
-	if err != nil {
-		t.Fatalf("LoadRepo: %v", err)
-	}
 	for _, sub := range []Substrate{SubstrateHerdr, SubstrateHarness} {
+		cfg, err := LoadRepoFor(repoRootForTest(t), sub)
+		if err != nil {
+			t.Fatalf("LoadRepoFor(%s): %v", sub, err)
+		}
 		for _, role := range []string{"review", "closeout"} {
 			w, err := cfg.ResolveOn(sub, role, "")
 			if err != nil {
@@ -154,5 +154,43 @@ func TestRepoRunnersConfigKeepsTheLocalFrontierReviewOnOpus(t *testing.T) {
 				t.Errorf("ResolveOn(%s, %q) = %s/%s, want the frontier claude/opus", sub, role, w.Kind, w.Model)
 			}
 		}
+	}
+}
+
+// The local claude ladder (tick 5uo), from the operator: "if a tick is
+// complex you can consider using a claude executor locally" — and "the thing
+// you must avoid is to invoke claude models from cf cloud executors". A local
+// run's implement ladder climbs from GLM to claude; the cloud's never can,
+// because the cloud never reads runners.local.toml.
+func TestRepoRunnersConfigLadderClimbsToClaudeOnlyLocally(t *testing.T) {
+	for _, sub := range []Substrate{SubstrateHerdr, SubstrateHarness} {
+		cfg, err := LoadRepoFor(repoRootForTest(t), sub)
+		if err != nil {
+			t.Fatalf("LoadRepoFor(%s): %v", sub, err)
+		}
+		if cfg.TierPolicy == nil || cfg.TierPolicy.Default != TierStrong || cfg.TierPolicy.Ceiling != TierFrontier {
+			t.Fatalf("%s: tier policy = %+v, want strong climbing to frontier", sub, cfg.TierPolicy)
+		}
+		first, err := cfg.ResolveOn(sub, RoleImplement, TierStrong)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first.Kind != "pi" {
+			t.Errorf("%s: a first attempt resolves %s, want pi on GLM", sub, first.Kind)
+		}
+		top, err := cfg.ResolveOn(sub, RoleImplement, TierFrontier)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if top.Kind != "claude" {
+			t.Errorf("%s: the top of the ladder resolves %s, want claude", sub, top.Kind)
+		}
+	}
+	cloud, err := LoadRepoFor(repoRootForTest(t), SubstrateCloud)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cloud.TierPolicy != nil && cloud.TierPolicy.Ceiling == TierFrontier {
+		t.Errorf("a cloud run sees a ladder to frontier: %+v", cloud.TierPolicy)
 	}
 }

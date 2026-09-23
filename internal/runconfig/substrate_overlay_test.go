@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// The per-substrate overlay (tick 84z): `[roles.<role>.substrates.<substrate>]`,
-// the same four-field variant shape the tier overlay uses, applied between
-// the role's own values and any tier overlay.
+// The per-substrate overlay (ticks 84z, 5uo): the role cells of
+// `.tick/runners.cloud.toml`, the same four-field variant shape the tier
+// overlay uses, applied LAST — over the role's own values and any tier.
 //
 // The reason this exists is economics, not principle: a local claude run
 // bills against a subscription and is free at the margin, a cloud run bills
@@ -29,10 +29,6 @@ kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
 
-[roles.implement.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-
 [roles.implement.tiers.economy]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
 
@@ -41,19 +37,28 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
-[roles.review.substrates.cloud]
-kind = "pi"
-model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-
 [roles.closeout]
 kind = "claude"
 model = "opus"
 effort = "high"
 `
 
+const overlayCloudDocument = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`
+
+const cloudFile = ".tick/runners.cloud.toml"
+
 func parseOverlayConfig(t *testing.T) *Config {
 	t.Helper()
-	cfg, err := Parse([]byte(overlayDocument))
+	cfg, err := ParseFor([]byte(overlayDocument), []byte(overlayCloudDocument), cloudFile, SubstrateCloud)
 	if err != nil {
 		t.Fatalf("parse the overlay document: %v", err)
 	}
@@ -82,15 +87,19 @@ func TestResolveOnAppliesTheSubstrateOverlay(t *testing.T) {
 	if !w.SubstrateApplied || w.Substrate != SubstrateCloud {
 		t.Errorf("the substrate overlay's application went unrecorded: %+v", w)
 	}
-	if w.Label() != "roles.review.substrates.cloud" {
+	if w.Label() != "roles.review + .tick/runners.cloud.toml roles.review" {
 		t.Errorf("Label() = %q, want the cloud cell named", w.Label())
 	}
 
 	// The local substrates keep the role's own values: herdr and harness are
-	// where the base table was written for, and an overlay declared for cloud
-	// changes nothing for them.
+	// where the base table was written for, and a local run never reads the
+	// cloud file — a config is loaded FOR a substrate (LoadFor).
+	local, err := Parse([]byte(overlayDocument))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, sub := range []Substrate{SubstrateHerdr, SubstrateHarness} {
-		w, err := cfg.ResolveOn(sub, "review", "")
+		w, err := local.ResolveOn(sub, "review", "")
 		if err != nil {
 			t.Fatalf("ResolveOn(%s, review): %v", sub, err)
 		}
@@ -103,10 +112,10 @@ func TestResolveOnAppliesTheSubstrateOverlay(t *testing.T) {
 	}
 }
 
-// The tier overlay applies on top of the substrate overlay — most specific
-// last — so a per-tier model still narrows a cloud role. The label names the
-// whole cell the values came from.
-func TestResolveOnAppliesTheTierOverlayOverTheSubstrateOverlay(t *testing.T) {
+// The cloud file's role cell applies OVER a tier the common file declares
+// (tick 5uo, finding ea1a62d3): the common file's economy tier narrows a
+// local run, and cannot move a cloud run off what the cloud file routes.
+func TestTheCloudCellAppliesOverTheCommonTier(t *testing.T) {
 	t.Parallel()
 	cfg := parseOverlayConfig(t)
 
@@ -114,13 +123,13 @@ func TestResolveOnAppliesTheTierOverlayOverTheSubstrateOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveOn(cloud, implement, economy): %v", err)
 	}
-	if w.Model != "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash" {
-		t.Errorf("the economy tier resolved model %q over the cloud overlay", w.Model)
+	if w.Model != "cloudflare-workers-ai/@cf/zai-org/glm-5.3" {
+		t.Errorf("the common economy tier resolved model %q over the cloud cell", w.Model)
 	}
 	if !w.SubstrateApplied || !w.TierApplied {
 		t.Errorf("overlay applications went unrecorded: %+v", w)
 	}
-	if want := "roles.implement.substrates.cloud.tiers.economy"; w.Label() != want {
+	if want := "roles.implement.tiers.economy + .tick/runners.cloud.toml roles.implement"; w.Label() != want {
 		t.Errorf("Label() = %q, want %q", w.Label(), want)
 	}
 }
@@ -139,7 +148,7 @@ func TestResolveOnRefusesARoleWithNoCloudRouting(t *testing.T) {
 	if !errors.Is(err, ErrNoCloudRouting) {
 		t.Errorf("the refusal is not recognisable as ErrNoCloudRouting: %v", err)
 	}
-	for _, want := range []string{"closeout", "roles.closeout", "substrates.cloud"} {
+	for _, want := range []string{"closeout", "[roles.closeout]", "runners.cloud.toml"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q: %v", want, err)
 		}
@@ -151,7 +160,7 @@ func TestResolveOnRefusesARoleWithNoCloudRouting(t *testing.T) {
 // cell that is missing beside the role that was asked for.
 func TestResolveOnRefusesAFallbackRoleWithoutCloudRouting(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse([]byte(`version = 2
+	cfg, err := ParseFor([]byte(`version = 2
 
 [roles.implement]
 kind = "pi"
@@ -160,11 +169,12 @@ model = "glm"
 [roles.review]
 kind = "claude"
 model = "opus"
+`), []byte(`version = 2
 
-[roles.review.substrates.cloud]
+[roles.review]
 kind = "pi"
 model = "glm"
-`))
+`), cloudFile, SubstrateCloud)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -178,7 +188,7 @@ model = "glm"
 	}
 	// The cell the fix belongs in, and the role the caller asked for: both,
 	// because neither alone tells an operator what to edit.
-	if !strings.Contains(err.Error(), "roles.implement.substrates.cloud") {
+	if !strings.Contains(err.Error(), "[roles.implement]") || !strings.Contains(err.Error(), "runners.cloud.toml") {
 		t.Errorf("the refusal does not name the missing cell: %v", err)
 	}
 	if !strings.Contains(err.Error(), `"plan"`) {
@@ -265,16 +275,18 @@ func TestResolveOnCloudWithNoConfigIsNotARouting(t *testing.T) {
 // well-defined, so presence replaces.
 func TestASubstrateOverlayReplacesArgs(t *testing.T) {
 	t.Parallel()
-	cfg, err := Parse([]byte(`version = 2
+	cfg, err := ParseFor([]byte(`version = 2
 
 [roles.implement]
 kind = "pi"
 model = "glm"
 args = ["--approve"]
+`), []byte(`version = 2
 
-[roles.implement.substrates.cloud]
+[roles.implement]
+kind = "pi"
 args = []
-`))
+`), cloudFile, SubstrateCloud)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -285,49 +297,21 @@ args = []
 	if len(w.Args) != 0 {
 		t.Errorf("an overlay declaring args = [] left %v in place", w.Args)
 	}
-	local, err := cfg.ResolveOn(SubstrateHarness, RoleImplement, "")
+	localCfg, err := Parse([]byte(`version = 2
+
+[roles.implement]
+kind = "pi"
+model = "glm"
+args = ["--approve"]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := localCfg.ResolveOn(SubstrateHarness, RoleImplement, "")
 	if err != nil {
 		t.Fatalf("ResolveOn(harness, implement): %v", err)
 	}
 	if len(local.Args) != 1 || local.Args[0] != "--approve" {
 		t.Errorf("the local substrate lost the role's own args: %v", local.Args)
-	}
-}
-
-// ------------------------------------------------------- load validation ---
-
-// The overlay's keys are substrates — the same vocabulary [orchestration]
-// reads — and auto is not one a role can be routed for: it is a policy that
-// resolves, never the answer.
-func TestALoadedConfigRefusesAnOverlayKeyThatIsNotASubstrate(t *testing.T) {
-	t.Parallel()
-	for key, want := range map[string]string{
-		"edge": `"edge" is not one of`,
-		"auto": `auto`,
-	} {
-		_, err := Parse([]byte("version = 2\n\n[roles.implement]\nkind = \"pi\"\n\n" +
-			"[roles.implement.substrates." + key + "]\nmodel = \"glm\"\n"))
-		if err == nil {
-			t.Errorf("substrates.%s was accepted as an overlay key", key)
-			continue
-		}
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the refusal for substrates.%s does not say %q: %v", key, want, err)
-		}
-	}
-}
-
-// An empty substrate overlay is refused for the same reason an empty tier
-// table is: a cell that changes nothing is a cell nobody can tell whether it
-// was meant to.
-func TestALoadedConfigRefusesAnEmptySubstrateOverlay(t *testing.T) {
-	t.Parallel()
-	_, err := Parse([]byte("version = 2\n\n[roles.implement]\nkind = \"pi\"\n\n" +
-		"[roles.implement.substrates.cloud]\n"))
-	if err == nil {
-		t.Fatal("an empty substrate overlay was accepted")
-	}
-	if !strings.Contains(err.Error(), "at least one") {
-		t.Errorf("the refusal does not say what an overlay must set: %v", err)
 	}
 }
