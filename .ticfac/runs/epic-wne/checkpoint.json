@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 129,
-  "state": "gating",
-  "reason": "running the integrated gate for 0mp on b124da74b7be",
-  "updated_at": "2026-09-23T19:38:05Z",
+  "sequence": 130,
+  "state": "publishing",
+  "reason": "closing 0mp behind the integrated gate on b124da74b7be",
+  "updated_at": "2026-09-23T19:39:06Z",
   "ticks": [
     {
       "tick_id": "0ju",
