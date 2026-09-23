@@ -613,8 +613,8 @@ describe("the per-repo sandbox declaration", () => {
  *
  * These pin both halves of the fix: the budget follows the run's wall-clock
  * allowance, and the default it falls back to clears the measurement (tick
- * y45: a COMPLETE one-tick epic at 78 minutes on deepseek-v4-pro, which tick
- * 1cd made the worker default model).
+ * y45: a COMPLETE one-tick epic at 78 minutes on deepseek-v4-pro, the
+ * worker default from tick 1cd until tick uqi moved the default to GLM 5.3).
  */
 describe("a cloud wave's worker budget", () => {
   const MINUTE = 60_000;
@@ -683,27 +683,27 @@ describe("a cloud wave's worker budget", () => {
    * redeploying the factory. These pin the var and the precedence.
    */
   describe("the worker model and harness are deployment vars (tick 1cd)", () => {
-    const PRO = "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813";
-    const FLASH = "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731";
+    const GLM = "workers-ai/@cf/zai-org/glm-5.3";
+    const GLM_FLASH = "workers-ai/@cf/zai-org/glm-5.3-flash";
 
     it("is null when the deployment names none, so the built-in default stands", () => {
       const config = runConfig({} as never);
       expect(config.worker_model).toBeNull();
       expect(config.worker_harness).toBeNull();
       expect(workerModel(config.model, config.worker_model)).toBe(WORKER_DEFAULT_MODEL);
-      expect(workerModel(config.model, config.worker_model)).toBe(PRO);
+      expect(workerModel(config.model, config.worker_model)).toBe(GLM);
       expect(workerHarness(config.harness, config.worker_harness)).toBe(WORKER_DEFAULT_HARNESS);
     });
 
     it("reads RUN_WORKER_MODEL / RUN_WORKER_HARNESS from the deployment", () => {
       const config = runConfig({
-        RUN_WORKER_MODEL: FLASH,
+        RUN_WORKER_MODEL: GLM_FLASH,
         RUN_WORKER_HARNESS: "codex",
       } as never);
 
-      expect(config.worker_model).toBe(FLASH);
+      expect(config.worker_model).toBe(GLM_FLASH);
       expect(config.worker_harness).toBe("codex");
-      expect(workerModel(config.model, config.worker_model)).toBe(FLASH);
+      expect(workerModel(config.model, config.worker_model)).toBe(GLM_FLASH);
       expect(workerHarness(config.harness, config.worker_harness)).toBe("codex");
     });
 
@@ -719,8 +719,8 @@ describe("a cloud wave's worker budget", () => {
     // run's own `RUN_MODEL`/`--model` was already winning before this tick and
     // must go on winning — a per-run choice outranks a standing one.
     it("lets the run's own model outrank the deployment's worker var", () => {
-      const config = runConfig({ RUN_MODEL: FLASH, RUN_WORKER_MODEL: PRO } as never);
-      expect(workerModel(config.model, config.worker_model)).toBe(FLASH);
+      const config = runConfig({ RUN_MODEL: GLM_FLASH, RUN_WORKER_MODEL: GLM } as never);
+      expect(workerModel(config.model, config.worker_model)).toBe(GLM_FLASH);
     });
   });
 });
