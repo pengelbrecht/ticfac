@@ -1,0 +1,91 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "xte",
+    "job_id": "run-epic-xte/tick-y3b/attempt-9",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "abce8d6f5390733b649debef18c5c15441609b39",
+    "tick_id": "y3b"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "profile.route applies [roles.X.substrates.cloud] field-wise and then any tier overlay, and only refuses an ABSENT cloud cell. Verified against profile.Resolve with Substrate=cloud: [roles.review] kind=claude + a cloud cell with only model=glm-5.3 resolves runner=claude; [roles.implement.tiers.strong] kind=claude resolves runner=claude model=opus under cloud. The fix is a construction-time check of the FINAL resolved runner/model under cloud (refuse claude, and require the cloud cell to state kind and model); this supersedes 84z's low-severity finding ea1a62d3.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Cloud routing inherits claude: a cloud cell without kind, or a tier applied after it, dispatches the claude CLI in the container"
+      },
+      {
+        "body": "The staged entrypoint (internal/factory/ticfacentrypoint.go) execs ticfac run-epic with no --profiles, so profiles/ (executor local-subprocess) is resolved and the cloud overlay only swaps the runner to pi; internal/cli knownExecutors/executorFactory do not know cloudflare-sandbox, so profiles-cloudflare-sandbox/ would be refused anyway. xte's core clause (one sandbox per tick, no worker in the orchestrator's container) needs the executor registered, collect/cancel/dispose decided (a35ff202, a69a9747), and the container pointed at the cloud profile set, with a test that the STAGED entrypoint resolves executor cloudflare-sandbox.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "The container's run-epic resolves the compiled-in local-subprocess profiles, so every cloud worker runs inside the orchestrator container"
+      },
+      {
+        "body": "The installed @earendil-works/pi-ai hard-codes https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1 for cloudflare-workers-ai and throws if CLOUDFLARE_ACCOUNT_ID is unset; nothing reads WORKERS_AI_BASE_URL. mdw's boot exports only CLOUDFLARE_API_KEY=<run gateway token>, so a pi worker either fails at its first call or sends the run token to Cloudflare's API directly instead of the metered gateway. Needs a pi models.json/provider override pointing at $gateway/workers-ai (or the gateway's compat route) and a live probe, not an export-only test.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "pi's cloudflare-workers-ai provider bypasses the gateway: it needs CLOUDFLARE_ACCOUNT_ID and never reads WORKERS_AI_BASE_URL"
+      },
+      {
+        "body": "internal/reconcile/sandbox_adoption_test.go proves avx's acceptance through a fixture executor that restates the door's semantics, because reconcile may not import cloudflaresandbox and the production factory cannot build that executor. Once the executor is wired, a test (or a recorded cloud run) should kill and re-derive an orchestrator whose dispatch goes through cloudflaresandbox.Executor against the door (or its TS test double over HTTP), so the adoption guarantee covers the code that will actually run.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Prove sandbox adoption end-to-end through the real Go executor and the real door, not a restated fixture"
+      },
+      {
+        "body": "Run under this attempt's GIT_CONFIG_* (url.*.pushInsteadOf -> ticfac-read-only-grade://), 20+ tests in internal/exec/subprocess and internal/reconcile fail at 'git push origin main' into their own temp bare repos; with the env removed they pass. Fixtures should scrub GIT_CONFIG_COUNT/GIT_CONFIG_KEY_*/GIT_CONFIG_GLOBAL for their own git invocations, so a review or read-only attempt can run the suite it is judging.",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Go test fixtures that push to temp repos inherit the caller's git config and fail under a read-only grade"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-xte/tick-y3b/attempt-9",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-xte/y3b/RESULT-y3b.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the Go suite passed only after I removed this attempt's GIT_CONFIG_* push-refusal env from the test process (with it left in, 20+ tests fail because fixture pushes are refused), and I did not run the TS suite in this worktree (no node_modules)"
+  },
+  "validated": true,
+  "requested_at": "2026-09-23T01:33:18Z",
+  "answered_at": "2026-09-23T01:33:18Z",
+  "provenance": {
+    "run_id": "epic-xte",
+    "tick_id": "y3b",
+    "attempt": 9,
+    "source_ref": "refs/heads/epic/xte",
+    "source_sha": "abce8d6f5390733b649debef18c5c15441609b39",
+    "integration_ref": "refs/heads/epic/xte",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "model": "opus",
+    "context_manifest_digest": "sha256:04fbdf19f2570e5919ec100085d4257d9effabc191fd616b3950db0b74501e6e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
