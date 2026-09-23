@@ -487,22 +487,29 @@ func (e *doorExecutor) Inspect(h *subprocess.JobHandle, _ string) (*subprocess.J
 	return status, nil
 }
 
-// The three operations the door does not carry, refused typed and naming the
-// open decision they are held for — exactly as the real executor refuses
-// them, so a run that reaches one stops honestly instead of half-acting.
+// The three operations this fixture's executor does not implement, refused
+// typed. Cancel and dispose carry the real executor's DECIDED reasons (tick
+// xev) so the tests' teardown paths read what production reads; collect is
+// the one place this fake is deliberately narrower than production — the
+// real collect reads the durable layer from git (the executor's own
+// collect.go, tick xev) and this fixture's tests stop at adoption and never
+// collect — so its refusal names the fake, never the seam.
 func (e *doorExecutor) Cancel(*subprocess.JobHandle) (*subprocess.CancelAck, error) {
-	return nil, &subprocess.Refusal{Reason: "no_cancel_door", Message: "the sandbox dispatch door carries no " +
-		"cancel route yet (the open decision against tick 8ty): refusing rather than half-cancelling"}
+	return nil, &subprocess.Refusal{Reason: "cancel_owned_by_factory", Message: "cancel is the factory's, not this " +
+		"executor's (decided, tick xev): the credential a sandbox attempt holds is the run's own gateway token, and " +
+		"the container's teardown belongs to the factory that booted it"}
 }
 
 func (e *doorExecutor) CollectDetail(*subprocess.JobHandle) (*subprocess.Collection, error) {
-	return nil, &subprocess.Refusal{Reason: "no_collect_door", Message: "the cloudflare-sandbox executor does not " +
-		"collect yet (the open decision against tick 8ty): the completion contract is the branch and the report in git"}
+	return nil, &subprocess.Refusal{Reason: "no_collect_door", Message: "this fixture's executor does not " +
+		"collect: the tests it serves stop at adoption, and the real executor reads the durable layer from git " +
+		"(tick xev)"}
 }
 
 func (e *doorExecutor) Dispose(*subprocess.JobHandle, subprocess.DisposeOptions) error {
-	return &subprocess.Refusal{Reason: "no_dispose_door", Message: "the sandbox dispatch door carries no dispose " +
-		"route yet (the open decision against tick 8ty): the container belongs to the factory that booted it"}
+	return &subprocess.Refusal{Reason: "nothing_local_to_dispose", Message: "there is nothing on this side of the " +
+		"boundary to dispose of (decided, tick xev): the container belongs to the factory that booted it, and the " +
+		"branch the work landed on is retired by the close"}
 }
 
 // doorOptions builds one reconciler incarnation's options for a run whose

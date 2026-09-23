@@ -244,6 +244,23 @@ type Dispatch struct {
 	WriteRef string
 	BaseSHA  string
 
+	// BaseRef is the epic's base branch as the run was cut from it. It is
+	// run configuration rather than a per-dispatch decision — but it rides
+	// the dispatch because a substrate whose worker boots at a factory needs
+	// it carried: the sandbox dispatch door takes a base_ref per start, for
+	// a later boot's re-derivation (cloudflare/src/sandbox-dispatch.ts), and
+	// the executor that asks that door reads it from here rather than
+	// re-deriving what the run already knows.
+	BaseRef string
+
+	// Title is the tick's title, read from the tracker at planning time and
+	// carried for the same reason BaseRef is: the sandbox dispatch door takes
+	// it per start, for a later boot's re-derivation, and a title the executor
+	// re-derived from anywhere else would be a title the dispatch record does
+	// not name. Empty on a dispatch rebuilt from a marker whose tick the plan
+	// no longer carries — a leg that never starts work.
+	Title string
+
 	// Try is which try of its OWN tick this dispatch is (tick vw0): 1 for the
 	// tick's first dispatch, 2 for the redispatch after a spent attempt —
 	// the number tryOf computes for the feed lines, whatever number the
@@ -573,6 +590,15 @@ type Reconciler struct {
 	// SET the run was made under.
 	profiles   map[string]*profile.Profile
 	profileSet string
+
+	// titles is the tick titles the plan carried, keyed by tick id, read at
+	// planning time from the graph. A dispatch rebuilt from a marker (an
+	// adopt, a settle) reaches for the title here because the marker does not
+	// carry one and the sandbox dispatch door requires it: the executor that
+	// boots a worker container hands the door the tick's title for a later
+	// boot's re-derivation, and a title taken from anywhere but the tracker
+	// would be a title the dispatch record does not name.
+	titles map[string]string
 
 	pollInterval  time.Duration
 	wipeThreshold time.Duration
@@ -1496,6 +1522,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("reconcile: epic %s has no dispatchable tick", r.opts.EpicID)
 	}
 	r.seedTicks(plan)
+	r.seedTitles(plan)
 
 	// The checkpoint rows the plan does not carry because the tracker has
 	// closed their ticks: settled from the tracker's own answer before the
@@ -1734,6 +1761,23 @@ func (r *Reconciler) seedTicks(plan []planEntry) {
 	for _, entry := range plan {
 		if !known[entry.TickID] {
 			r.ticks = append(r.ticks, runstate.TickState{TickID: entry.TickID, State: "ready"})
+		}
+	}
+}
+
+// seedTitles keeps the tick titles the plan carried for the dispatches that
+// are rebuilt from markers rather than cut from a plan entry (an adopt, a
+// settle): the sandbox dispatch door requires a title per start, and the
+// title it is handed must be the tracker's own words, not a re-derivation.
+// Titles never leave the process; a resumed run re-reads them from the graph
+// with everything else it cold-derives.
+func (r *Reconciler) seedTitles(plan []planEntry) {
+	if r.titles == nil {
+		r.titles = map[string]string{}
+	}
+	for _, entry := range plan {
+		if entry.Title != "" {
+			r.titles[entry.TickID] = entry.Title
 		}
 	}
 }
