@@ -6,11 +6,13 @@ import {
   deploymentImage,
   isSandboxNamespace,
   resolveSandboxImage,
+  SANDBOX_SLEEP_AFTER,
   type SandboxBinding,
   type SdkProcess,
   type SdkSandbox,
   sameImageReference,
   sandboxBinding,
+  sdkBootOptions,
 } from "../src/sandbox";
 
 /**
@@ -219,6 +221,21 @@ describe("sandboxBinding", () => {
 
     expect(binding).not.toBeNull();
     expect(binding).not.toBe(env.SANDBOXES);
+  });
+
+  it("translates the seam's keepAlive into the SDK's own two lifetimes (cr4)", () => {
+    // An orchestrator boot asks for keepAlive — a container that heartbeats
+    // every 30s cannot be killed by idleness mid-run, and the price is that
+    // only destroy() ever ends it (the Workflow destroys in a finally).
+    // Everything else keeps the sleepAfter ceiling, which is the bound a
+    // leaked container dies inside of instead of billing until an operator
+    // notices.
+    expect(sdkBootOptions({ keepAlive: true })).toEqual({ keepAlive: true });
+    expect(sdkBootOptions({})).toEqual({ sleepAfter: SANDBOX_SLEEP_AFTER });
+    expect(sdkBootOptions(undefined)).toEqual({ sleepAfter: SANDBOX_SLEEP_AFTER });
+    // The two lifetimes are mutually exclusive at the SDK: sleepAfter is
+    // ignored when keepAlive is set, so the keepAlive arm must not carry one.
+    expect("sleepAfter" in sdkBootOptions({ keepAlive: true })).toBe(false);
   });
 });
 

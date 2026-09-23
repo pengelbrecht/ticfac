@@ -190,20 +190,6 @@ export const MAX_SANDBOX_BOOTS = 3;
 export const MAX_CLOSEOUT_BOOTS = 2;
 
 /**
- * The floor on a `step.waitForEvent` timeout (tick 7eq).
- *
- * The platform's event timeouts are documented as settable between one second
- * and 365 days — below the floor is a value the deployed platform may refuse
- * or clamp, and a request-shape error is never a place to learn the platform's
- * real bound (`.tick/learnings.md`: a bodyless 4xx is REQUEST SHAPE until
- * proven otherwise). The supervisor's look cadence is slower than this in
- * every real deployment (the default backoff starts at fifteen seconds), so
- * the floor only bites a test configuration — which takes the plain `sleep`
- * path instead, losing the wake-up and nothing else. Pinned by the suite.
- */
-export const MIN_EVENT_WAIT_MS = 1_000;
-
-/**
  * This deployment's `[[containers]] max_instances` ceiling, mirrored into a
  * `[vars]` string because wrangler does not hand a container application's own
  * config back to the Worker at runtime (tick b6e). Not a third copy to
@@ -297,6 +283,38 @@ const CONTEXT_RETRIES = { retries: { limit: 3, delay: 1_000, backoff: "exponenti
 const BOOT_RETRIES = { retries: { limit: 2, delay: 2_000, backoff: "exponential" } } as const;
 const OBSERVE_RETRIES = { retries: { limit: 3, delay: 500, backoff: "constant" } } as const;
 const FINALIZE_RETRIES = { retries: { limit: 5, delay: 1_000, backoff: "exponential" } } as const;
+
+/**
+ * How long the boot step — the one step that starts paid work — may run (cr4).
+ *
+ * A config-less step inherits not one default but two: ten minutes of
+ * timeout and FIVE retries ten seconds apart, exponentially. The retry half
+ * is the dangerous one and is fixed by carrying a deliberate policy (the
+ * `BOOT_RETRIES` this step already had); the timeout half is fixed here, by
+ * sizing the step for what it actually does. Starting a process in a fresh
+ * container is a cold image pull and a spawn — minutes at the outside, never
+ * ten — and a step that hangs must fail inside this window so the run can
+ * end (or re-boot) rather than holding an orchestrator nobody can reach.
+ */
+const BOOT_STEP_TIMEOUT_MS = 300_000;
+
+/**
+ * The floor on a `step.waitForEvent` timeout (ticks 7eq, cr4).
+ *
+ * The platform's event timeouts are documented as settable between one second
+ * and 365 days — below the floor is a value the deployed platform may refuse
+ * or clamp, and a request-shape error is never a place to learn the platform's
+ * real bound (`.tick/learnings.md`: a bodyless 4xx is REQUEST SHAPE until
+ * proven otherwise). The supervisor's look cadence is slower than this in
+ * every real deployment (the default backoff starts at fifteen seconds), so
+ * the floor only bites a test configuration — which takes the plain `sleep`
+ * path instead, losing the wake-up and nothing else. Pinned by the suite.
+ *
+ * The event type the wait listens for is `DONE_EVENT_TYPE` (src/run-done.ts):
+ * the done door that sends it and this wait that receives it share the one
+ * constant, so the two halves cannot drift apart.
+ */
+export const MIN_EVENT_WAIT_MS = 1_000;
 
 // ------------------------------------------------------------ the config ---
 
@@ -1289,6 +1307,64 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   };
 }
 
+/**
+ * One wait between looks (ticks 7eq and cr4): the completion signal when it
+ * lands, the poll cadence otherwise.
+ *
+ * The orchestrator POSTs the factory's done door when it finishes, the Worker
+ * turns that into `instance.sendEvent()`, and this step returns the moment it
+ * does — the look happens immediately rather than at the next cadence tick.
+ * Events are BUFFERED by the platform, so a container that finished before
+ * this wait started loses nothing. Waiting instances consume no concurrency
+ * slots.
+ *
+ * `step.waitForEvent` THROWS on expiry and the throw is CAUGHT here, because
+ * expiry is the normal cadence — not a verdict, not a failure, and never a
+ * reason to conclude anything about the run. A run whose callback never lands
+ * is concluded by the looks: the look that follows this wait reads the process
+ * and the durable layer (the branch) exactly as it would have a cadence tick
+ * later, and a gone container re-boots into resume. The signal itself decides
+ * nothing either way — the event is the optimisation, the branch the truth.
+ *
+ * Because the catch is the cadence, it must not silently eat a wait that
+ * failed for some OTHER reason — an engine that refuses the call outright is
+ * complained about by name, so a degraded wait is legible in the log rather
+ * than a run that appears to poll at full speed for no reason.
+ *
+ * A cadence below the platform's documented timeout floor takes the plain
+ * sleep instead ({@link MIN_EVENT_WAIT_MS}) — a sub-second poll interval is a
+ * test configuration, and it must not become a platform request-shape error.
+ */
+async function waitDoneSignal(
+  step: WorkflowStep,
+  label: string,
+  attempt: number,
+  look: number,
+  pollMs: number,
+): Promise<DoneSignal | null> {
+  if (pollMs < MIN_EVENT_WAIT_MS) {
+    await step.sleep(`${label}:wait:${attempt}:${look}`, pollMs);
+    return null;
+  }
+  try {
+    const event = await step.waitForEvent(`${label}:signal:${attempt}:${look}`, {
+      type: DONE_EVENT_TYPE,
+      timeout: pollMs,
+    });
+    return readDoneSignal(event.payload);
+  } catch (error) {
+    // The timeout is the look cadence, not a failure: fall through to the look.
+    const message = String((error as { message?: unknown }).message ?? error);
+    if (!/timed?\s*out|timeout/i.test(message)) {
+      console.error(
+        "factory run-workflow: waiting for the orchestrator's completion did not time out " +
+          `cleanly (${message}); the watch continues on its cadence`,
+      );
+    }
+    return null;
+  }
+}
+
 function passDeadlineTrip(input: ObserveInput, at: number): Trip | null {
   if (input.pass_deadline_ms === null || at < input.pass_deadline_ms) return null;
   return {
@@ -1495,51 +1571,6 @@ type PassOptions = {
 type BootCounter = { next: number };
 
 /**
- * One wait between looks (tick 7eq): the completion signal when it lands,
- * the poll cadence otherwise.
- *
- * The orchestrator POSTs the factory's done door when it finishes, the Worker
- * turns that into `instance.sendEvent()`, and this step returns the moment it
- * does — the look happens immediately rather than at the next cadence tick.
- * Events are BUFFERED by the platform, so a container that finished before
- * this wait started loses nothing.
- *
- * The catch on the timeout is the design, not a defeat: a timed-out wait IS
- * the cadence sleep (a run whose callback never lands is concluded by the
- * looks — the branch is the source of truth), and the signal itself decides
- * nothing — the look that follows reads the process state and the durable
- * layer exactly as it would have a cadence tick later. A `waitForEvent`
- * timeout throws on this platform; catching it here is what keeps the throw
- * from failing the whole instance.
- *
- * A cadence below the platform's documented timeout floor takes the plain
- * sleep instead ({@link MIN_EVENT_WAIT_MS}) — a sub-second poll interval is a
- * test configuration, and it must not become a platform request-shape error.
- */
-async function waitDoneSignal(
-  step: WorkflowStep,
-  label: string,
-  attempt: number,
-  look: number,
-  pollMs: number,
-): Promise<DoneSignal | null> {
-  if (pollMs < MIN_EVENT_WAIT_MS) {
-    await step.sleep(`${label}:wait:${attempt}:${look}`, pollMs);
-    return null;
-  }
-  try {
-    const event = await step.waitForEvent(`${label}:signal:${attempt}:${look}`, {
-      type: DONE_EVENT_TYPE,
-      timeout: pollMs,
-    });
-    return readDoneSignal(event.payload);
-  } catch {
-    // The timeout is the look cadence, not a failure: fall through to the look.
-    return null;
-  }
-}
-
-/**
  * Boot an orchestrator, watch it, reboot it if it dies — until it finishes,
  * trips, or runs out of allowances.
  */
@@ -1608,81 +1639,100 @@ async function supervisePass(
           ? "run"
           : "reconcile";
 
-    const booted = await step.do(`${options.label}:boot:${attempt}`, BOOT_RETRIES, async () => {
-      const binding = sandboxBinding(env);
-      if (binding === null) throw new Error("the SANDBOXES binding disappeared mid-run");
-      // Every boot rotates the run's gateway credential (D17). The container
-      // being replaced may still be alive somewhere; its token dies before the
-      // replacement's is live, so two orchestrators can never both spend
-      // against one run — and the token this one gets carries the run and tick
-      // ids that stamp every model request it makes.
-      const credential = await issueRunToken(env, {
-        run_id: params.run_id,
-        tick_id: params.epic,
-        attempt: boot,
-      });
-      // The image is a parameter of the boot, not a constant of the call site
-      // (tick 3q2's seam), and since tick x3v the value can be the
-      // repository's own: `acquireContext` resolved it from the tracked config
-      // at the submitted SHA, and refused the run outright if this deployment
-      // could not serve it. The container is told which image it got, so its
-      // own reader can refuse a boot that is not what the repository declared.
-      const image = context.sandbox_image;
-      const sandbox = await binding.get(name, { image });
-      const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
-        env: orchestratorEnv({
+    const booted = await step.do(
+      `${options.label}:boot:${attempt}`,
+      // A deliberate policy on the one step that starts paid work (cr4): a
+      // config-less step inherits ten minutes of timeout AND five retries —
+      // the retry default re-ran the whole pass and re-dispatched model work
+      // up to five times, which is very likely what exhausted the GitHub
+      // hourly budget (uim). `BOOT_RETRIES` is the deliberate retry policy;
+      // `BOOT_STEP_TIMEOUT_MS` is the deliberate timeout, sized for what a
+      // boot is (a cold pull and a spawn) rather than the platform's default.
+      { ...BOOT_RETRIES, timeout: BOOT_STEP_TIMEOUT_MS },
+      async () => {
+        const binding = sandboxBinding(env);
+        if (binding === null) throw new Error("the SANDBOXES binding disappeared mid-run");
+        // Every boot rotates the run's gateway credential (D17). The container
+        // being replaced may still be alive somewhere; its token dies before the
+        // replacement's is live, so two orchestrators can never both spend
+        // against one run — and the token this one gets carries the run and tick
+        // ids that stamp every model request it makes.
+        const credential = await issueRunToken(env, {
           run_id: params.run_id,
-          epic: params.epic,
-          base_sha: params.base_sha,
-          repo_url: context.repo_url,
-          gateway_base_url: context.gateway_base_url,
-          gateway_token: credential.token,
-          phase,
-          // The chain this container belongs to (tick hyi). Every boot of the
-          // orchestrator carries it, including a reconcile's replacement: the
-          // replacement is the same causal chain as the sandbox it succeeds.
-          ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          ...(options.stop_reason === undefined ? {} : { stop_reason: options.stop_reason }),
-          // The grade's teeth (tick pzf): `operator` hands over the token
-          // that can push, `run` hands over this run's own `tkr_` credential,
-          // which github.com will not accept and this factory's git door will
-          // not forward a push for.
-          github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
-          ...(context.config.harness === null ? {} : { harness: context.config.harness }),
-          ...(context.config.model === null ? {} : { model: context.config.model }),
-          sandbox_image: image,
-          // The dispatch half (tick wiy). The WAVE REQUEST is per PASS: a
-          // container that may not ask for a wave has no TICKS_PASS, and the
-          // dispatch door refuses a request carrying no pass number. The
-          // factory URL itself is given per BOOT now (tick 7eq): every
-          // orchestrator reports its own finish to the done door, and the
-          // door — not a withheld URL — is what keeps a non-wave pass from
-          // dispatching: `POST /api/wave` answers 400 without a recorded wave
-          // request for the pass, whatever the container holds.
-          ...(options.substrate === undefined ? {} : { substrate: options.substrate }),
-          ...(options.pass === undefined ? {} : { pass: options.pass }),
-          ...(options.wave_ticks === undefined ? {} : { wave_ticks: options.wave_ticks }),
-          ...(options.wave_base_sha === undefined ? {} : { wave_base_sha: options.wave_base_sha }),
-          ...(factoryBaseURL(env) === null
-            ? {}
-            : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
-          // The review half (tick v7g). Given per BOOT, from the run's own row
-          // — a container is told which pull request it is reading, and there
-          // is no other way for it to find out. The factory URL comes with it
-          // because that is where the findings go; a review container that
-          // could not reach the door would have nowhere to put its one output.
-          ...(context.review === null || factoryBaseURL(env) === null
-            ? {}
-            : {
-                review_pr: context.review.pr_number,
-                review_head_sha: context.review.head_sha,
-                factory_url: factoryBaseURL(env)!,
-                factory_project: params.project,
-              }),
-        }),
-      });
-      return { process_id: started.id, at_ms: Date.now() };
-    });
+          tick_id: params.epic,
+          attempt: boot,
+        });
+        // The image is a parameter of the boot, not a constant of the call site
+        // (tick 3q2's seam), and since tick x3v the value can be the
+        // repository's own: `acquireContext` resolved it from the tracked config
+        // at the submitted SHA, and refused the run outright if this deployment
+        // could not serve it. The container is told which image it got, so its
+        // own reader can refuse a boot that is not what the repository declared.
+        const image = context.sandbox_image;
+        // keepAlive (tick cr4): this container heartbeats every 30 seconds and
+        // so cannot be killed by idleness while the orchestrator works — the
+        // platform's own doc is the trade: a container under keepAlive "must be
+        // explicitly destroyed... to prevent containers running indefinitely
+        // and counting toward your account limits". Every ending of a boot
+        // destroys it in the finally below, and `finalize` sweeps as backstop.
+        const sandbox = await binding.get(name, { image, keepAlive: true });
+        const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
+          env: orchestratorEnv({
+            run_id: params.run_id,
+            epic: params.epic,
+            base_sha: params.base_sha,
+            repo_url: context.repo_url,
+            gateway_base_url: context.gateway_base_url,
+            gateway_token: credential.token,
+            phase,
+            // The chain this container belongs to (tick hyi). Every boot of the
+            // orchestrator carries it, including a reconcile's replacement: the
+            // replacement is the same causal chain as the sandbox it succeeds.
+            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
+            ...(options.stop_reason === undefined ? {} : { stop_reason: options.stop_reason }),
+            // The grade's teeth (tick pzf): `operator` hands over the token
+            // that can push, `run` hands over this run's own `tkr_` credential,
+            // which github.com will not accept and this factory's git door will
+            // not forward a push for.
+            github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
+            ...(context.config.harness === null ? {} : { harness: context.config.harness }),
+            ...(context.config.model === null ? {} : { model: context.config.model }),
+            sandbox_image: image,
+            // The dispatch half (tick wiy). The WAVE REQUEST is per PASS: a
+            // container that may not ask for a wave has no TICKS_PASS, and the
+            // dispatch door refuses a request carrying no pass number. The
+            // factory URL itself is given per BOOT now (tick 7eq): every
+            // orchestrator reports its own finish to the done door, and the
+            // door — not a withheld URL — is what keeps a non-wave pass from
+            // dispatching: `POST /api/wave` answers 400 without a recorded wave
+            // request for the pass, whatever the container holds.
+            ...(options.substrate === undefined ? {} : { substrate: options.substrate }),
+            ...(options.pass === undefined ? {} : { pass: options.pass }),
+            ...(options.wave_ticks === undefined ? {} : { wave_ticks: options.wave_ticks }),
+            ...(options.wave_base_sha === undefined
+              ? {}
+              : { wave_base_sha: options.wave_base_sha }),
+            ...(factoryBaseURL(env) === null
+              ? {}
+              : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
+            // The review half (tick v7g). Given per BOOT, from the run's own row
+            // — a container is told which pull request it is reading, and there
+            // is no other way for it to find out. The factory URL comes with it
+            // because that is where the findings go; a review container that
+            // could not reach the door would have nowhere to put its one output.
+            ...(context.review === null || factoryBaseURL(env) === null
+              ? {}
+              : {
+                  review_pr: context.review.pr_number,
+                  review_head_sha: context.review.head_sha,
+                  factory_url: factoryBaseURL(env)!,
+                  factory_project: params.project,
+                }),
+          }),
+        });
+        return { process_id: started.id, at_ms: Date.now() };
+      },
+    );
 
     // Renew the lease the moment the container is up, BEFORE the first sleep.
     //
@@ -1728,188 +1778,212 @@ async function supervisePass(
       return { ok: false, lost: renewal.lost, holder: renewal.holder, detail: renewal.detail };
     });
 
-    const deadline = options.pass_max_ms === null ? null : booted.at_ms + options.pass_max_ms;
-    // Every absolute deadline a sleep on this pass must not run past: the run's
-    // wall clock while budgets are enforced, this pass's own window otherwise.
-    // Whichever comes first is the one the cadence stops at.
-    const cadenceDeadline = earliestDeadline(
-      options.enforce_budgets ? context.started_at_ms + context.config.max_wall_clock_ms : null,
-      deadline,
-    );
+    // The container exists and is credentialed, so from here on every ending
+    // of this boot — completed, tripped, out of looks, dead, thrown — destroys
+    // it in the finally below (tick cr4). A container booted under keepAlive
+    // NEVER idles away, which is the point of the boot above and the whole of
+    // the price: without this finally the run would leave it billing until an
+    // operator noticed, and `finalize`'s sweep would arrive far too late to be
+    // the only destroy.
+    try {
+      const deadline = options.pass_max_ms === null ? null : booted.at_ms + options.pass_max_ms;
+      // Every absolute deadline a sleep on this pass must not run past: the run's
+      // wall clock while budgets are enforced, this pass's own window otherwise.
+      // Whichever comes first is the one the cadence stops at.
+      const cadenceDeadline = earliestDeadline(
+        options.enforce_budgets ? context.started_at_ms + context.config.max_wall_clock_ms : null,
+        deadline,
+      );
 
-    let offset = 0;
-    let seq = 1;
-    // Assume the container outlives the watch until an observation says
-    // otherwise: falling out of the loop with this unchanged means the
-    // orchestrator is still ALIVE, which is a different problem from a dead one.
-    let ending: "dead" | "exhausted" = "exhausted";
-    // What the last look knew about spend, and when it knew it. Both come from
-    // checkpointed step results, never a live `Date.now()`, so a replayed
-    // Workflow recomputes the identical cadence.
-    let spend: SpendSample | null = null;
-    let lastAt = booted.at_ms;
+      let offset = 0;
+      let seq = 1;
+      // Assume the container outlives the watch until an observation says
+      // otherwise: falling out of the loop with this unchanged means the
+      // orchestrator is still ALIVE, which is a different problem from a dead one.
+      let ending: "dead" | "exhausted" = "exhausted";
+      // What the last look knew about spend, and when it knew it. Both come from
+      // checkpointed step results, never a live `Date.now()`, so a replayed
+      // Workflow recomputes the identical cadence.
+      let spend: SpendSample | null = null;
+      let lastAt = booted.at_ms;
 
-    for (let look = 0; look < context.config.max_observations; look++) {
-      const pollMs = pollDelay(context.config, look, {
-        now_ms: lastAt,
-        deadline_ms: cadenceDeadline,
-        spend,
-      });
-      // The completion signal, or the cadence (tick 7eq): whichever lands
-      // first. The event only collapses the wait — the look below still
-      // reads the process and the budgets, and the run's verdict still
-      // comes from the durable layer, never from the container's claim.
-      const signal = await waitDoneSignal(step, options.label, attempt, look, pollMs);
-      if (signal !== null) {
-        // Recorded, never trusted: the one durable trace that the callback
-        // landed and was consumed, for whoever asks later why a run settled
-        // without a reboot. The payload itself rides the checkpointed
-        // `signal` step's own output, which `GET /api/runs/:id` serves.
-        await step.do(`${options.label}:heard:${attempt}:${look}`, OBSERVE_RETRIES, async () => {
-          await logDispatch(env, {
-            run_id: params.run_id,
-            epic: params.epic,
-            decision: "signal:done",
-            reason: null,
-          });
-          return { heard: signal };
+      for (let look = 0; look < context.config.max_observations; look++) {
+        const pollMs = pollDelay(context.config, look, {
+          now_ms: lastAt,
+          deadline_ms: cadenceDeadline,
+          spend,
         });
+        // The wait for THIS look (ticks cr4 and 7eq): `step.waitForEvent` on
+        // the orchestrator's completion signal, with the poll cadence as its
+        // timeout — whichever lands first. The container's own "I am done"
+        // (the done door) wakes the supervisor the moment it lands instead of
+        // at the next cadence slice, while a run with nothing to say is still
+        // looked at on the cadence the budgets below are enforced on. The
+        // timeout THROWING is not a verdict — it is the cadence — and the
+        // event only collapses the wait: the look below still reads the
+        // process and the budgets, and the run's verdict still comes from the
+        // durable layer, never from the container's claim.
+        const signal = await waitDoneSignal(step, options.label, attempt, look, pollMs);
+        if (signal !== null) {
+          // Recorded, never trusted: the one durable trace that the callback
+          // landed and was consumed, for whoever asks later why a run settled
+          // without a reboot. The payload itself rides the checkpointed
+          // `signal` step's own output, which `GET /api/runs/:id` serves.
+          await step.do(`${options.label}:heard:${attempt}:${look}`, OBSERVE_RETRIES, async () => {
+            await logDispatch(env, {
+              run_id: params.run_id,
+              epic: params.epic,
+              decision: "signal:done",
+              reason: null,
+            });
+            return { heard: signal };
+          });
+        }
+
+        const seen = await step.do(
+          `${options.label}:watch:${attempt}:${look}`,
+          OBSERVE_RETRIES,
+          async () =>
+            observe(env, {
+              params,
+              context,
+              boot,
+              sandbox: name,
+              process_id: booted.process_id,
+              offset,
+              seq,
+              poll_ms: pollMs,
+              pass_deadline_ms: deadline,
+              enforce_budgets: options.enforce_budgets,
+            }),
+        );
+        offset = seen.offset;
+        seq = seen.seq;
+        spend = spendSample(spend, seen.cost_usd, seen.at_ms);
+        lastAt = seen.at_ms;
+
+        if (seen.trip !== null) {
+          const trip = seen.trip;
+          const reason = tripRevokeReason(trip);
+          const revoke = (label: string) =>
+            step.do(`${options.label}:${label}:${attempt}`, OBSERVE_RETRIES, async () => {
+              const revoked = await revokeRunTokens(env, params.run_id, reason);
+              return { revoked };
+            });
+
+          // The kill switch, at the layer that does not need the agent's
+          // cooperation (D17): whatever survived the kill cannot spend another
+          // cent, because its gateway token is dead.
+          //
+          // WHEN it fires is the difference a live run paid for. A clean stop
+          // revokes after the grace window, because the point of that window is
+          // to let in-flight work land. A budget breach or an operator kill has
+          // no such claim on the money: the run is already over its allowance,
+          // so the credential dies FIRST and the unwind happens on a container
+          // that can no longer spend (tick gyl).
+          if (trip.hard) await revoke("revoke");
+          // The in-flight work still gets its bounded window to land, then the
+          // orchestrator is killed and closeout takes over. Nothing durable is
+          // lost either way — tracker state is committed to the run branch.
+          await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
+          await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
+            drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+          );
+          // The closeout boot mints a fresh credential — a stop must still reach
+          // review and closeout (D15) — unless a hard stop stands, which the
+          // boot guard above refuses.
+          if (!trip.hard) await revoke("revoke:clean");
+          return { kind: "tripped", trip, boots: counter.next - 1 };
+        }
+
+        if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
+          return { kind: "completed", boots: counter.next - 1 };
+        }
+
+        if (seen.process === "completed" || seen.process === "failed" || seen.process === "gone") {
+          const code = seen.exit_code;
+          lastDetail =
+            seen.process === "gone"
+              ? `the orchestrator sandbox died (boot ${boot})`
+              : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
+          if (isTerminalExit(code)) {
+            // A configuration verdict from the boot: the SHA still will not check
+            // out, the pre-flight still fails, the epic the run was submitted
+            // for is still missing from the submitted tree. Another container
+            // reaches the identical answer and only costs money — so the reason
+            // the run STOPS with names the class, not just the code
+            // (terminalExitReason, ticfac tick rf3).
+            return {
+              kind: "failed",
+              detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
+              boots: counter.next - 1,
+            };
+          }
+          lastSeen = { state: seen.process, exit_code: code };
+          ending = "dead";
+          break;
+        }
       }
 
-      const seen = await step.do(
-        `${options.label}:watch:${attempt}:${look}`,
-        OBSERVE_RETRIES,
-        async () =>
-          observe(env, {
-            params,
-            context,
-            boot,
-            sandbox: name,
-            process_id: booted.process_id,
-            offset,
-            seq,
-            poll_ms: pollMs,
-            pass_deadline_ms: deadline,
-            enforce_budgets: options.enforce_budgets,
-          }),
-      );
-      offset = seen.offset;
-      seq = seen.seq;
-      spend = spendSample(spend, seen.cost_usd, seen.at_ms);
-      lastAt = seen.at_ms;
-
-      if (seen.trip !== null) {
-        const trip = seen.trip;
-        const reason = tripRevokeReason(trip);
-        const revoke = (label: string) =>
-          step.do(`${options.label}:${label}:${attempt}`, OBSERVE_RETRIES, async () => {
-            const revoked = await revokeRunTokens(env, params.run_id, reason);
-            return { revoked };
-          });
-
-        // The kill switch, at the layer that does not need the agent's
-        // cooperation (D17): whatever survived the kill cannot spend another
-        // cent, because its gateway token is dead.
-        //
-        // WHEN it fires is the difference a live run paid for. A clean stop
-        // revokes after the grace window, because the point of that window is
-        // to let in-flight work land. A budget breach or an operator kill has
-        // no such claim on the money: the run is already over its allowance,
-        // so the credential dies FIRST and the unwind happens on a container
-        // that can no longer spend (tick gyl).
-        if (trip.hard) await revoke("revoke");
-        // The in-flight work still gets its bounded window to land, then the
-        // orchestrator is killed and closeout takes over. Nothing durable is
-        // lost either way — tracker state is committed to the run branch.
-        await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
+      if (ending === "exhausted") {
+        // The orchestrator is still running and this instance is out of looks.
+        // Stop it cleanly — never boot a replacement beside a live one.
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
           drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
         );
-        // The closeout boot mints a fresh credential — a stop must still reach
-        // review and closeout (D15) — unless a hard stop stands, which the
-        // boot guard above refuses.
-        if (!trip.hard) await revoke("revoke:clean");
-        return { kind: "tripped", trip, boots: counter.next - 1 };
+        const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
+        return options.on_exhausted === "fail"
+          ? { kind: "failed", detail, boots: counter.next - 1 }
+          : {
+              kind: "tripped",
+              trip: { kind: "budget", budget: "wall_clock", hard: true, detail },
+              boots: counter.next - 1,
+            };
       }
 
-      if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
-        return { kind: "completed", boots: counter.next - 1 };
-      }
-
-      if (seen.process === "completed" || seen.process === "failed" || seen.process === "gone") {
-        const code = seen.exit_code;
-        lastDetail =
-          seen.process === "gone"
-            ? `the orchestrator sandbox died (boot ${boot})`
-            : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
-        if (isTerminalExit(code)) {
-          // A configuration verdict from the boot: the SHA still will not check
-          // out, the pre-flight still fails, the epic the run was submitted
-          // for is still missing from the submitted tree. Another container
-          // reaches the identical answer and only costs money — so the reason
-          // the run STOPS with names the class, not just the code
-          // (terminalExitReason, ticfac tick rf3).
-          return {
-            kind: "failed",
-            detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
-            boots: counter.next - 1,
-          };
-        }
-        lastSeen = { state: seen.process, exit_code: code };
-        ending = "dead";
-        break;
-      }
-    }
-
-    if (ending === "exhausted") {
-      // The orchestrator is still running and this instance is out of looks.
-      // Stop it cleanly — never boot a replacement beside a live one.
-      await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-        drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
-      );
-      const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
-      return options.on_exhausted === "fail"
-        ? { kind: "failed", detail, boots: counter.next - 1 }
-        : {
-            kind: "tripped",
-            trip: { kind: "budget", budget: "wall_clock", hard: true, detail },
-            boots: counter.next - 1,
-          };
-    }
-
-    // The container is done for. Record why, then boot a replacement whose
-    // first instruction reconciles.
-    if (attempt < options.max_boots) {
-      await step.do(`${options.label}:reconcile:${attempt}`, OBSERVE_RETRIES, async () => {
-        await writeReconcileRecord(env.ARTIFACTS, params.project, {
-          run_id: params.run_id,
-          attempt: boot,
-          at: new Date().toISOString(),
-          previous: lastSeen,
-          detail: lastDetail,
+      // The container is done for. Record why, then boot a replacement whose
+      // first instruction reconciles.
+      if (attempt < options.max_boots) {
+        await step.do(`${options.label}:reconcile:${attempt}`, OBSERVE_RETRIES, async () => {
+          await writeReconcileRecord(env.ARTIFACTS, params.project, {
+            run_id: params.run_id,
+            attempt: boot,
+            at: new Date().toISOString(),
+            previous: lastSeen,
+            detail: lastDetail,
+          });
+          await logDispatch(env, {
+            run_id: params.run_id,
+            epic: params.epic,
+            decision: `reboot:${boot}`,
+            reason: null,
+          });
+          // The dying container itself is destroyed by the finally below, the
+          // moment this step returns — before the replacement is booted — so the
+          // orchestrator inside it cannot come back to life beside its
+          // replacement: exactly one `.tick/` writer per project (D4).
+          return { logged: true };
         });
-        await logDispatch(env, {
-          run_id: params.run_id,
-          epic: params.epic,
-          decision: `reboot:${boot}`,
-          reason: null,
-        });
-        // Stop paying for the container being written off, and make sure the
-        // orchestrator inside it cannot come back to life beside its
-        // replacement: exactly one `.tick/` writer per project (D4).
+      }
+    } finally {
+      // A container booted keepAlive must be explicitly destroyed (the SDK's
+      // own rule). This runs on every path that leaves this boot's watch, so
+      // the only way a keepAlive container outlives the Workflow is a Workflow
+      // instance that never runs again at all — and `finalize`'s sweep still
+      // destroys every boot as the backstop for exactly that case.
+      await step.do(`${options.label}:destroy:${attempt}`, OBSERVE_RETRIES, async () => {
         const binding = sandboxBinding(env);
-        if (binding !== null) {
-          try {
-            const dying = await binding.get(name);
-            await dying.killProcess(booted.process_id);
-            await dying.destroy();
-          } catch (error) {
-            console.error(
-              `factory run-workflow: ${params.run_id} could not tear down sandbox ${boot}: ${String(error)}`,
-            );
-          }
+        if (binding === null) return { destroyed: false };
+        try {
+          const sandbox = await binding.get(name);
+          await sandbox.destroy();
+          return { destroyed: true };
+        } catch (error) {
+          console.error(
+            `factory run-workflow: ${params.run_id} could not destroy sandbox ${boot}: ${String(error)}`,
+          );
+          return { destroyed: false };
         }
-        return { logged: true };
       });
     }
   }

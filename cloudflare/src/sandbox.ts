@@ -281,7 +281,10 @@ export interface OrchestratorSandbox {
  * the point, not a warm one.
  */
 export interface SandboxBinding {
-  get(name: string, options?: { image?: string }): Promise<OrchestratorSandbox>;
+  get(
+    name: string,
+    options?: { image?: string; keepAlive?: boolean },
+  ): Promise<OrchestratorSandbox>;
 }
 
 /**
@@ -303,14 +306,37 @@ export function sandboxBinding(env: Env): SandboxBinding | null {
 /**
  * How long a sandbox may go unaddressed before the platform stops it.
  *
- * Not `keepAlive`. A container that never sleeps has to be destroyed by
- * something, and the thing that would destroy it is the Workflow instance that
- * may itself have died — so an orchestrator whose supervisor is gone would bill
- * until an operator noticed. The observation loop addresses its sandbox at most
- * every MAX_POLL_MS (5 minutes, src/run-workflow.ts), so a window several times
- * that keeps a live run awake while still putting a ceiling on a leaked one.
+ * The ceiling for every boot EXCEPT the orchestrator's (see
+ * {@link sdkBootOptions}, tick cr4): a container the supervisor is not
+ * actively watching — a worker container, a leaked one — dies inside this
+ * window rather than billing until an operator noticed. The observation loop
+ * addresses its sandbox at most every MAX_POLL_MS (5 minutes,
+ * src/run-workflow.ts), so a window several times that keeps a live run
+ * awake while still putting a ceiling on one nobody is watching.
  */
 export const SANDBOX_SLEEP_AFTER = "20m";
+
+/**
+ * The SDK lifetime a boot asks for, from the seam's own vocabulary (tick cr4).
+ *
+ * An orchestrator boot passes `keepAlive: true` and the SDK heartbeats the
+ * container every 30 seconds so no idle shutdown can kill a live run — the
+ * platform kills containers at arbitrary moments anyway, and idleness was one
+ * death we did not have to accept. The price is exact and the SDK's own docs
+ * say it: a container under keepAlive "must be explicitly destroyed" — it
+ * never idles away, so the Workflow destroys every boot in a `finally` and
+ * `finalize` still sweeps as the backstop. Everything else keeps the
+ * `sleepAfter` ceiling above, which is the bound a LEAKED container dies
+ * inside of instead of billing until an operator notices. The two lifetimes
+ * are mutually exclusive at the SDK (`sleepAfter` is ignored when
+ * `keepAlive` is set), so the keepAlive arm carries no `sleepAfter` of its
+ * own.
+ */
+export function sdkBootOptions(options?: {
+  keepAlive?: boolean;
+}): { keepAlive: true } | { sleepAfter: string } {
+  return options?.keepAlive === true ? { keepAlive: true } : { sleepAfter: SANDBOX_SLEEP_AFTER };
+}
 
 /**
  * The command modifier that puts one boot's whole output in one buffer.
@@ -383,8 +409,11 @@ export function isSandboxNamespace(
  */
 export function sdkSandboxBinding(namespace: SandboxNamespace): SandboxBinding {
   return {
-    async get(name: string): Promise<OrchestratorSandbox> {
-      return adaptSandbox(getSandbox(namespace, name, { sleepAfter: SANDBOX_SLEEP_AFTER }));
+    async get(
+      name: string,
+      options?: { image?: string; keepAlive?: boolean },
+    ): Promise<OrchestratorSandbox> {
+      return adaptSandbox(getSandbox(namespace, name, sdkBootOptions(options)));
     },
   };
 }

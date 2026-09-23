@@ -1459,55 +1459,24 @@ export type EpicReconcilerParams = {
 export const DEFAULT_RECONCILE_POLL_MS = 60_000;
 
 /**
- * What fraction of a lease's life may pass between heartbeats (tick q35).
+ * The pass step's retry policy (tick cr4) — DELIBERATE, never the default.
  *
- * A third, so a beat may be missed entirely — a slow round trip, a retry —
- * and the lease still outlives the gap. Beating at the TTL itself would make
- * every late beat an expiry.
+ * A pass step can START PAID WORK: it is the step that dispatches worker
+ * containers. A config-less step inherits the platform's default of FIVE
+ * retries, ten seconds apart, exponentially — so a pass that died partway (a
+ * timed-out step, a blip mid-dispatch) re-ran the WHOLE pass up to six
+ * times, re-reading the tracker and re-addressing containers on every one,
+ * which is very likely what exhausted the GitHub hourly budget (tick uim).
+ *
+ * One re-derivation: a pass is idempotent by construction — it re-derives
+ * the world from the durable layer and adopts what a failed attempt already
+ * recorded — so a second attempt is safe and a third is spend without
+ * cover. Constant backoff, no exponential growth: the first retry is a blip
+ * catch, not a budget.
  */
-export const HEARTBEAT_FRACTION = 3;
-
-/** A beat that keeps something alive while other work runs, and stops with it. */
-export type Heartbeat = { stop: () => void };
-
-/**
- * Calls `beat` every `ttlMs / HEARTBEAT_FRACTION` until stopped, or until a
- * beat answers false.
- *
- * This exists because a lease renewed only at the START of a piece of work
- * cannot cover work whose length is set by a model (tick q35): a seven-minute
- * pass published under a three-minute slot and was refused. The answer is to
- * keep beating, not to raise the TTL — the TTL is how long a DEAD run may
- * wedge a repository, and that number wants to stay small.
- *
- * Deliberately not a step: a Workflow step's retry re-runs its whole callback,
- * and a heartbeat that could be replayed would renew a lease for a pass that
- * is no longer running.
- */
-export function heartbeat(beat: () => Promise<boolean>, ttlMs: number): Heartbeat {
-  // The cadence IS the ratio. An absolute floor large enough to matter would
-  // silently override it — a 1s floor against a 300ms lease beats once a
-  // second and lets the lease die, which is the bug this function exists to
-  // fix, reintroduced inside it. The floor here only stops a pathological
-  // busy loop on a lease measured in milliseconds.
-  const every = Math.max(25, Math.floor(ttlMs / HEARTBEAT_FRACTION));
-  let live = true;
-  const timer = setInterval(() => {
-    if (!live) return;
-    // A beat that throws must not take the pass with it: the pass's own write
-    // is what reports a slot it no longer holds.
-    void beat()
-      .then((keep) => {
-        if (!keep) stop();
-      })
-      .catch(() => stop());
-  }, every);
-  const stop = () => {
-    live = false;
-    clearInterval(timer);
-  };
-  return { stop };
-}
+export const PASS_RETRIES = {
+  retries: { limit: 1, delay: 2_000, backoff: "constant" },
+} as const;
 
 /**
  * The reconciler's Workflow: one instance per EpicRun, keyed by run id
@@ -1665,140 +1634,121 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
 
     let pass = 0;
     for (;;) {
-      const result = await step.do(pass === 0 ? "plan" : `reconcile-pass-${pass}`, async () => {
-        // The slot's heartbeat, renewed INSIDE the step so a pass never writes
-        // under a slot it has not just confirmed — and so a token the room
-        // rotated (a re-acquire after a lapse) is carried in the step's durable
-        // result, where a restarted isolate re-reads it.
-        const renewal = await room().renewSlot({
-          run_id: holder.run_id,
-          token: holder.token,
-          ttl_ms: slotTtlMs,
-        });
-        let token = holder.token;
-        let slotFailure: string | null = null;
-        if (renewal.ok) {
-          token = renewal.lease.token;
-        } else if (renewal.error === "lease_lost" && renewal.lost === "expired") {
-          // reconciler-decision:D30:begin:lapse — a lapsed (not taken) slot
-          // is re-acquired under the room's CAS and the run continues, where
-          // the local host rebuilds a lost push lease rather than ending
-          // (decisions/reconciler-parity.json, D30).
-          // Lapsed, not taken: re-derive, under the room's own CAS — another
-          // run may have taken the slot in the gap, and then this acquire
-          // refuses naming it, which is the run stopping, below.
-          const again = await room().acquireSlot({
-            run_id: params.run_id,
-            epic: params.epic_id,
-            origin: "cloud",
+      const result = await step.do(
+        pass === 0 ? "plan" : `reconcile-pass-${pass}`,
+        // The deliberate policy above (cr4): this step dispatches worker
+        // containers, so it must never inherit the platform's default of
+        // five retries re-running the whole pass.
+        PASS_RETRIES,
+        async () => {
+          // The slot's heartbeat, renewed INSIDE the step so a pass never writes
+          // under a slot it has not just confirmed — and so a token the room
+          // rotated (a re-acquire after a lapse) is carried in the step's durable
+          // result, where a restarted isolate re-reads it.
+          const renewal = await room().renewSlot({
+            run_id: holder.run_id,
+            token: holder.token,
             ttl_ms: slotTtlMs,
           });
-          if (again.ok) token = again.lease.token;
-          else
-            slotFailure =
-              again.error === "lease_held"
-                ? `the publish slot for ${params.project} was taken over by run ${again.holder.run_id} while this run lapsed`
-                : `the publish slot for ${params.project} refused this run: ${again.detail}`;
-          // reconciler-decision:D30:end:lapse
-        } else if (renewal.error === "lease_lost") {
-          // Taken: another run is this repository's writer now.
-          slotFailure =
-            `the publish slot for ${params.project} was lost to run ${renewal.holder?.run_id ?? "unknown"}: ` +
-            renewal.detail;
-        } else {
-          slotFailure = `the publish slot for ${params.project} refused the heartbeat: ${renewal.detail}`;
-        }
-        if (slotFailure !== null) {
-          return {
-            terminal: true,
-            state: "failed",
-            reason: slotFailure,
-            dispatched: [],
-            slot_token: token,
-          };
-        }
-
-        // The confirmed token is THIS pass's write credential, not only its
-        // durable result (tick e9n). The repository view reads `holder` at
-        // every write, and a re-acquire after a lapse mints a NEW token that
-        // the publisher compares from the first write on — assigning it only
-        // AFTER the step returned meant the pass whose heartbeat re-acquired
-        // still wrote under the stale token, every publish of that pass was
-        // refused `not_holder`, and a lease lapse — the normal case for a
-        // run that outlives its slot, not an edge — ended the run. The
-        // assignment below the step stays: a replayed step never re-runs
-        // this callback, and the token is recovered from its durable result.
-        holder = { run_id: params.run_id, token };
-
-        // The DISPATCH lease, renewed in the same step for the same reason
-        // the slot's heartbeat is: a run that never renewed it would let the
-        // room's alarm read BOOT_LEASE_TTL as a release and ignite a queued
-        // submission beside a live run. The renewal is the Run Workflow's
-        // own (reused, not re-answered: the same reclaim-on-lapse rule, the
-        // same take-is-a-stop rule), inside the step so a replayed step never
-        // re-runs it.
-        if (params.lease_token !== undefined) {
-          const renewal = await renewRunLease(
-            env,
-            {
+          let token = holder.token;
+          let slotFailure: string | null = null;
+          if (renewal.ok) {
+            token = renewal.lease.token;
+          } else if (renewal.error === "lease_lost" && renewal.lost === "expired") {
+            // reconciler-decision:D30:begin:lapse — a lapsed (not taken) slot
+            // is re-acquired under the room's CAS and the run continues, where
+            // the local host rebuilds a lost push lease rather than ending
+            // (decisions/reconciler-parity.json, D30).
+            // Lapsed, not taken: re-derive, under the room's own CAS — another
+            // run may have taken the slot in the gap, and then this acquire
+            // refuses naming it, which is the run stopping, below.
+            const again = await room().acquireSlot({
               run_id: params.run_id,
-              project: params.project,
               epic: params.epic_id,
-              requested_by: params.requested_by ?? "",
-              base_sha: params.base_sha ?? "",
-              lease_token: params.lease_token,
-            },
-            renewalTtl(pollMs),
-          );
-          if (renewal !== null && !renewal.ok) {
-            // D4 is one arbiter per project, and a run that is not the
-            // arbiter must not keep writing. Like the slot refusal above, it
-            // cannot even record its own failure — a checkpoint write would
-            // be a publish.
-            const trip = leaseLostTrip(renewal);
+              origin: "cloud",
+              ttl_ms: slotTtlMs,
+            });
+            if (again.ok) token = again.lease.token;
+            else
+              slotFailure =
+                again.error === "lease_held"
+                  ? `the publish slot for ${params.project} was taken over by run ${again.holder.run_id} while this run lapsed`
+                  : `the publish slot for ${params.project} refused this run: ${again.detail}`;
+            // reconciler-decision:D30:end:lapse
+          } else if (renewal.error === "lease_lost") {
+            // Taken: another run is this repository's writer now.
+            slotFailure =
+              `the publish slot for ${params.project} was lost to run ${renewal.holder?.run_id ?? "unknown"}: ` +
+              renewal.detail;
+          } else {
+            slotFailure = `the publish slot for ${params.project} refused the heartbeat: ${renewal.detail}`;
+          }
+          if (slotFailure !== null) {
             return {
               terminal: true,
               state: "failed",
-              reason: `run ${params.run_id} stopped: ${trip.detail}`,
+              reason: slotFailure,
               dispatched: [],
               slot_token: token,
             };
           }
-        }
 
-        // The slot has to survive the PASS, not just start it (tick q35).
-        // A pass is as long as the work inside it: the first cloud run to
-        // reach a dispatched worker spent seven minutes here while a model
-        // deleted two files, and published under a slot that had expired
-        // four minutes earlier. Renewing once at the top cannot cover that,
-        // and a longer TTL is the wrong answer — the TTL is how long a DEAD
-        // run may wedge the repository, and that number should stay small.
-        //
-        // So beat while the pass runs. The token the room hands back is
-        // carried into `token`, because a renewal may rotate it and the
-        // publish at the end must use the current one.
-        const beat = heartbeat(async () => {
-          const again = await room().renewSlot({
-            run_id: params.run_id,
-            token,
-            ttl_ms: slotTtlMs,
-          });
-          if (again.ok) {
-            token = again.lease.token;
-            holder = { run_id: params.run_id, token };
-            return true;
+          // The confirmed token is THIS pass's write credential, not only its
+          // durable result (tick e9n). The repository view reads `holder` at
+          // every write, and a re-acquire after a lapse mints a NEW token that
+          // the publisher compares from the first write on — assigning it only
+          // AFTER the step returned meant the pass whose heartbeat re-acquired
+          // still wrote under the stale token, every publish of that pass was
+          // refused `not_holder`, and a lease lapse — the normal case for a
+          // run that outlives its slot, not an edge — ended the run. The
+          // assignment below the step stays: a replayed step never re-runs
+          // this callback, and the token is recovered from its durable result.
+          holder = { run_id: params.run_id, token };
+
+          // The DISPATCH lease, renewed in the same step for the same reason
+          // the slot's heartbeat is: a run that never renewed it would let the
+          // room's alarm read BOOT_LEASE_TTL as a release and ignite a queued
+          // submission beside a live run. The renewal is the Run Workflow's
+          // own (reused, not re-answered: the same reclaim-on-lapse rule, the
+          // same take-is-a-stop rule), inside the step so a replayed step never
+          // re-runs it.
+          if (params.lease_token !== undefined) {
+            const renewal = await renewRunLease(
+              env,
+              {
+                run_id: params.run_id,
+                project: params.project,
+                epic: params.epic_id,
+                requested_by: params.requested_by ?? "",
+                base_sha: params.base_sha ?? "",
+                lease_token: params.lease_token,
+              },
+              renewalTtl(pollMs),
+            );
+            if (renewal !== null && !renewal.ok) {
+              // D4 is one arbiter per project, and a run that is not the
+              // arbiter must not keep writing. Like the slot refusal above, it
+              // cannot even record its own failure — a checkpoint write would
+              // be a publish.
+              const trip = leaseLostTrip(renewal);
+              return {
+                terminal: true,
+                state: "failed",
+                reason: `run ${params.run_id} stopped: ${trip.detail}`,
+                dispatched: [],
+                slot_token: token,
+              };
+            }
           }
-          // A slot lost mid-pass is not this beat's to resolve: the pass is
-          // already writing, and the publisher refuses a write with no slot
-          // (which is how q35 was found). Say so and stop beating; the pass's
-          // own refusal carries the verdict.
-          console.error(
-            `run ${params.run_id} lost the publish slot for ${params.project} mid-pass: ${again.detail}`,
-          );
-          return false;
-        }, slotTtlMs);
 
-        try {
+          // The slot has to survive the PASS, not just start it — and since tick
+          // cr4 its TTL stands unassisted: the mid-pass heartbeat that kept a
+          // seven-minute pass alive (q35) was scaffolding for a shape this epic
+          // has left, and it is removed. The slot is renewed at the top of every
+          // pass and re-acquired under the room's own compare-and-swap when a
+          // pass boundary finds it lapsed (D30); a pass that outlives its TTL
+          // publishes under a slot the room will refuse, and the pass's own
+          // refusal carries the verdict.
           const outcome = await reconciler.reconcilePass();
           return {
             terminal: outcome.terminal,
@@ -1807,10 +1757,8 @@ export class EpicReconcilerWorkflow extends WorkflowEntrypoint<Env, EpicReconcil
             dispatched: outcome.dispatched,
             slot_token: token,
           };
-        } finally {
-          beat.stop();
-        }
-      });
+        },
+      );
       holder = { run_id: params.run_id, token: result.slot_token };
       if (result.terminal) {
         // Best effort and its own steps: a release that fails (the slot or the
