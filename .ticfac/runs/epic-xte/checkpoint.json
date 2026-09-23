@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 97,
-  "state": "failed",
-  "reason": "ha9 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: attempt 14 of ha9 is no-commits: the attempt branch carries no commit beyond the base it was cut from (0b7f88740999). This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-09-23T06:06:53Z",
+  "sequence": 98,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-23T06:07:55Z",
   "ticks": [
     {
       "tick_id": "8ty",
@@ -81,7 +81,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/xte",
-    "source_sha": "25729a3ec84587f9c3dd47578ed5e82400700a1c",
+    "source_sha": "4db639a32df57971db569da940b6c626f6aa76dc",
     "integration_ref": "refs/heads/epic/xte",
     "phase": "worker",
     "executor": null,
