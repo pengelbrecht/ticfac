@@ -1398,6 +1398,57 @@ describe("a run that outlives what one instance can watch", () => {
   });
 });
 
+// A stop is honoured by the run's own supervisor, and a supervisor that has
+// already ended never reads it. On 2026-09-23 four runs sat in `stopping`
+// indefinitely — counted as active — because their Workflow had errored on a
+// boot that could not get a container. The row is frozen here the way theirs
+// were: the supervisor is finished, the record still says the run is live.
+describe("a stop whose supervisor has already ended", () => {
+  it("finishes the stop itself instead of leaving the run in stopping", async () => {
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+    await waitFor("the run to be running", async () => (await runState(runID)) === "running");
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+
+    // The frozen record: supervisor complete, row still active.
+    await env.DB.prepare("UPDATE runs SET state = 'stopping', ended_at = NULL WHERE run_id = ?")
+      .bind(runID)
+      .run();
+
+    const stop = await stopRun(env, runID, "operator");
+    expect(stop.outcome).toBe("stopping");
+    if (stop.outcome === "stopping") {
+      expect(stop.supervisor_ended).toBe("complete");
+      expect(stop.run.state).toBe("stopped");
+      expect(stop.run.ended_at).not.toBeNull();
+    }
+    expect(await runState(runID)).toBe("stopped");
+  });
+
+  it("leaves a run whose supervisor is alive to its supervisor", async () => {
+    const { runID } = await ignite();
+    await firstProcess();
+    await waitFor("the run to be running", async () => (await runState(runID)) === "running");
+
+    const stop = await stopRun(env, runID, "operator");
+    expect(stop.outcome).toBe("stopping");
+    if (stop.outcome === "stopping") {
+      expect(stop.supervisor_ended).toBeUndefined();
+      expect(stop.run.state).toBe("stopping");
+    }
+
+    // And the live supervisor does finish it, through its own closeout —
+    // driven to the end so no run of this test outlives it.
+    const closeout = await waitFor("the closeout orchestrator", async () =>
+      sandboxes.phase("closeout"),
+    );
+    closeout.exit(0);
+    expect((await settled(runID)).state).toBe("stopped");
+  });
+});
+
 describe("a clean stop runs review and closeout", () => {
   it("stops on the operator's request and still closes the run out", async () => {
     const { runID, project, epic } = await ignite();
