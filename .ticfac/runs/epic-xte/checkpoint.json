@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 131,
-  "state": "running",
-  "reason": "ha9 is running as attempt 18",
-  "updated_at": "2026-09-23T06:29:50Z",
+  "sequence": 132,
+  "state": "collecting",
+  "reason": "collecting ha9 attempt 18",
+  "updated_at": "2026-09-23T06:33:06Z",
   "ticks": [
     {
       "tick_id": "8ty",
