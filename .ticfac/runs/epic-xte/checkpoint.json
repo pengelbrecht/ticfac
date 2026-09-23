@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 114,
-  "state": "running",
-  "reason": "attempt 16 of ha9 is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (2475868d8c3c)",
-  "updated_at": "2026-09-23T06:19:46Z",
+  "sequence": 115,
+  "state": "failed",
+  "reason": "attempt 16 of ha9 is no-commits: the attempt branch carries no commit beyond the base it was cut from (2475868d8c3c)",
+  "updated_at": "2026-09-23T06:19:49Z",
   "ticks": [
     {
       "tick_id": "8ty",
