@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-7q2-20-go-9591e443c6d7-99aa0c821cd1-8984f1739a74",
+  "provenance": {
+    "run_id": "epic-xte",
+    "tick_id": "7q2",
+    "attempt": 20,
+    "source_ref": "refs/heads/epic/xte",
+    "source_sha": "5a5d2fdd33c7c61e858aba51140937cb331fed31",
+    "integration_ref": "refs/heads/epic/xte",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-23T11:16:00Z",
+  "finished_at": "2026-09-23T11:16:28Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.659s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t1.223s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t0.886s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t24.882s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t0.975s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t1.466s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tkcorpus\t(cached)\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:90694348fffc2e0923a8d43c1bf55214d9519a12b337391fccf8f09e493b2426",
+  "persistence_uri": "git:refs/heads/epic/xte:.ticfac/runs/epic-xte/evidence/gate-7q2-20-go-9591e443c6d7-99aa0c821cd1-8984f1739a74.json"
+}
