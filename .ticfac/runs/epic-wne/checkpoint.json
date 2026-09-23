@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 131,
-  "state": "running",
-  "reason": "0mp is closed",
-  "updated_at": "2026-09-23T19:39:27Z",
+  "sequence": 132,
+  "state": "completed",
+  "reason": "every tick of wne is closed behind the integrated gate",
+  "updated_at": "2026-09-23T19:39:35Z",
   "ticks": [
     {
       "tick_id": "0ju",
