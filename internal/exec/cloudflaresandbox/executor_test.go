@@ -514,7 +514,18 @@ func TestCancelCollectAndDisposeAreRefusedNamingTheDecision(t *testing.T) {
 }
 
 // short: no door at all.
+//
+// "Unconfigured" is CONSTRUCTED here, not inherited from the host. New
+// fills a missing FactoryURL or Token from TICKS_FACTORY_URL and
+// TICKS_FACTORY_TOKEN, and inside a factory container both ARE set in the
+// environment — the container is a run — so the constructor finds them and
+// builds a client, and the test would report the host it runs on, not the
+// tree. Clearing the variables with t.Setenv (which forbids t.Parallel) is
+// what makes this assert the tree's behaviour on a laptop and in the
+// container alike.
 func TestNewRefusesAnUnconfiguredDoor(t *testing.T) {
+	t.Setenv("TICKS_FACTORY_URL", "")
+	t.Setenv("TICKS_FACTORY_TOKEN", "")
 	if _, err := New(Options{Token: "t", StateDir: t.TempDir()}); err == nil {
 		t.Error("a client with no factory to ask was built")
 	}
