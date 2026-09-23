@@ -196,7 +196,8 @@ type Orchestration struct {
 }
 
 // Role routes one task role along the harness dimension (Kind) and the
-// capability dimension (Model + Effort), optionally varied per tier.
+// capability dimension (Model + Effort), optionally varied per tier and
+// per substrate.
 type Role struct {
 	Kind    string                  `toml:"kind"`
 	Model   string                  `toml:"model"`
@@ -204,6 +205,21 @@ type Role struct {
 	Args    []string                `toml:"args"`
 	Harness string                  `toml:"harness"`
 	Tiers   map[string]*TierVariant `toml:"tiers"`
+	// Substrates is the per-substrate overlay (tick 84z):
+	// `[roles.<name>.substrates.<substrate>]`, keyed by the substrate values
+	// of [Substrates] minus auto. The variant shape is the tier overlay's —
+	// the overlay is the same mechanism on a second axis, not a second
+	// mechanism — so it applies field-wise over the role's own values, args
+	// replace rather than merge, and a tier overlay applies on top of it.
+	//
+	// The axis exists because the base cells are where a run's LOCAL
+	// economics live (a subscription-billed frontier review, say) and a cloud
+	// container is a different world: nothing there can run the base cell's
+	// harness at all. A cloud overlay is therefore not optional in meaning —
+	// under the cloud substrate a role with no overlay is a REFUSAL naming the
+	// role ([ErrNoCloudRouting]), never a fall back to the base cell, which
+	// is how a cloud run reached a claude process nobody chose.
+	Substrates map[string]*TierVariant `toml:"substrates"`
 }
 
 // TierVariant is one tier's overrides for a role. At least one of its four

@@ -217,6 +217,17 @@ start_harness() {
 	if [[ -n $factory_url ]]; then export TICKS_FACTORY_URL="$factory_url"; fi
 	if [[ -n $factory_token ]]; then export TICKS_FACTORY_TOKEN="$factory_token"; fi
 	if [[ -n $factory_project ]]; then export TICKS_FACTORY_PROJECT="$factory_project"; fi
+
+	# The substrate this run executes on (tick 84z), stated the way every
+	# reader of the substrate honours: the override, never a rewrite of the
+	# tracked config the run's workers commit against. This container IS the
+	# cloud — role routing resolves against it, the [roles.*.substrates.cloud]
+	# overlays of the target repository's .tick/runners.toml apply to every
+	# role including review and close-out, and a role nobody declared cloud
+	# routing for REFUSES the run at start, naming the role — never a silent
+	# fall back to the base cell, which is how a container once reached a
+	# claude process nobody chose.
+	export TICKS_SUBSTRATE="cloud"
 	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
 
 	# The two binaries, both required. ticfac refuses to start without the

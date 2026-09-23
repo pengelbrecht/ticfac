@@ -392,6 +392,45 @@ func validateRoles(cfg *Config, md toml.MetaData, add addFunc) {
 				checkEffort(add, tbase+".effort", variant.Effort)
 			}
 		}
+
+		// The per-substrate overlays (tick 84z): the same variant shape and
+		// the same per-cell rules as the tiers above, on the substrate axis.
+		// The keys are the substrate vocabulary minus auto — auto is a policy
+		// a decision procedure resolves, never the substrate a role is routed
+		// for, so a cell named for it cannot be reached and is refused instead
+		// of silently dead.
+		for _, sub := range sortedKeys(role.Substrates) {
+			variant := role.Substrates[sub]
+			sbase := base + ".substrates." + sub
+			if !Substrate(sub).Valid() {
+				add(sbase, fmt.Sprintf("%q is not one of %s", sub, SubstrateList(false)))
+			}
+			if sub == string(SubstrateAuto) {
+				add(sbase, "auto is a policy the substrate decision resolves, never a substrate a role can be routed for — declare the cell for a substrate a run can actually execute on")
+			}
+			if variant == nil {
+				add(sbase, "must be a table")
+				continue
+			}
+			hasAny := false
+			for _, field := range []string{"kind", "model", "effort", "args"} {
+				if md.IsDefined("roles", name, "substrates", sub, field) {
+					hasAny = true
+				}
+			}
+			if !hasAny {
+				add(sbase, "must set at least one of kind/model/effort/args — an empty substrate overlay is meaningless")
+			}
+			if md.IsDefined("roles", name, "substrates", sub, "kind") {
+				checkPattern(add, sbase+".kind", variant.Kind, kindPattern, "a lowercase herdr kind name")
+			}
+			if md.IsDefined("roles", name, "substrates", sub, "model") {
+				checkModel(add, sbase+".model", variant.Model)
+			}
+			if md.IsDefined("roles", name, "substrates", sub, "effort") {
+				checkEffort(add, sbase+".effort", variant.Effort)
+			}
+		}
 	}
 }
 
