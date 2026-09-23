@@ -351,6 +351,32 @@ touch-undeclared)
 	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: undeclared ${TICFAC_TICK}" >/dev/null 2>&1
 	report
 	;;
+durable-hang)
+	# The disk-loss shape (tick lkd): a2's worker — the fixture graph's
+	# second wave-1 tick, dispatched beside a1 — does part of its tick's work,
+	# makes it DURABLE, and is killed with its whole container before it can
+	# finish. The commit is pushed by hand — the supervisor's timer would push
+	# it too, but the test that uses this mode waits on the ref, never on a
+	# duration — and then the worker hangs forever, because a container that
+	# dies mid-tick does not get to say goodbye. Every other tick behaves like
+	# the plain report mode, so the killed container is the fixture's one cost.
+	#
+	# The file is deliberately distinctive, not the usual work-<tick>.txt: a
+	# replacement that continues from the pushed branch carries it into the
+	# integrated tree, and one that silently redid the work does not — the file
+	# is the dead worker's signature, and only continuation can carry it.
+	if [ "$TICFAC_TICK" = "a2" ]; then
+		printf 'durable work of %s, attempt %s\n' "$TICFAC_TICK" "$TICFAC_ATTEMPT" \
+			> "$TICFAC_WORKTREE/durable-${TICFAC_TICK}.txt"
+		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: durable ${TICFAC_TICK}" >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" push -q origin "HEAD:refs/heads/$TICFAC_BRANCH" >/dev/null 2>&1
+		exec sleep 86400
+	else
+		commit
+		report
+	fi
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process

@@ -337,6 +337,50 @@ func pushBranch(worktree, remote, branch string) error {
 	return err
 }
 
+// pushedHead is this attempt's own branch on the remote, fetched into a ref
+// this process owns and nothing else writes, so the answer names a commit
+// that is definitely in this repository afterwards.
+//
+// --no-write-fetch-head and --refmap= keep the fetch off the two pieces of
+// process-global git state every other git in the checkout also writes:
+// FETCH_HEAD, and the remote-tracking ref git updates opportunistically. An
+// operator's `git fetch origin` shares both, and handing either back here
+// would answer this attempt's question with another branch's head (the same
+// race the run-state store guards against in its own fetches, tick wdb).
+// Only the refspec on this command line is updated.
+//
+// Empty means the remote does not have the branch, which is the first boot's
+// answer: nothing to continue from.
+func pushedHead(repo, remote, branch string) (string, error) {
+	// ls-remote first, so "the branch is not there" and "the remote could not
+	// be reached" are different answers rather than one error.
+	out, err := git(repo, "ls-remote", remote, "refs/heads/"+branch)
+	if err != nil {
+		return "", fmt.Errorf("read branch %s on %s: %w", branch, remote, err)
+	}
+	if len(strings.Fields(out)) == 0 {
+		return "", nil
+	}
+	private := "refs/ticfac-exec/fetched/" + branch
+	if _, err := git(repo, "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", remote,
+		"+refs/heads/"+branch+":"+private); err != nil {
+		// The branch may have been deleted between the ls-remote and the fetch
+		// — the owner pushing a disposal, for instance — which is the same
+		// as never having been there. Only a branch that is still there while
+		// its fetch fails is a fetch that failed.
+		recheck, recheckErr := git(repo, "ls-remote", remote, "refs/heads/"+branch)
+		if recheckErr == nil && len(strings.Fields(recheck)) == 0 {
+			return "", nil
+		}
+		return "", fmt.Errorf("fetch branch %s from %s: %w", branch, remote, err)
+	}
+	head, err := resolveCommit(repo, private)
+	if err != nil {
+		return "", fmt.Errorf("resolve the fetched branch %s: %w", branch, err)
+	}
+	return head, nil
+}
+
 // isAncestor answers whether a commit is already reachable from a ref — the
 // question disposal asks before it deletes a branch.
 func isAncestor(repo, commit, ref string) bool {
