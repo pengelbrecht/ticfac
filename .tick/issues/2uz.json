@@ -1,0 +1,13 @@
+{
+  "id": "2uz",
+  "title": "Classifier spend counts toward a run's cost budget",
+  "description": "Triaged 2026-09-23 from wne's close-out (finding c74c4fda). The budget acts on the AI Gateway's logs, and the Jev route bypasses the gateway, so a run's cost_usd understates by its classification spend (~$0.001 per tick, recorded per call in the decision record's usage field). Either have the budget add the recorded classification usage, or document the ceiling and why it is acceptable.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A run's reported cost includes its recorded classification spend, or the budget's documentation states the exclusion and its bound",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-23T17:35:35.357825Z",
+  "updated_at": "2026-09-23T17:35:35.357825Z"
+}
