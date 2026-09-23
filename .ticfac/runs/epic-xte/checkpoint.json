@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-xte",
   "epic_id": "xte",
-  "sequence": 65,
-  "state": "running",
-  "reason": "y3b is running as attempt 9",
-  "updated_at": "2026-09-23T01:26:56Z",
+  "sequence": 66,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for y3b",
+  "updated_at": "2026-09-23T01:31:48Z",
   "ticks": [
     {
       "tick_id": "8ty",
