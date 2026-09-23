@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-wne",
   "epic_id": "wne",
-  "sequence": 55,
-  "state": "dispatching",
-  "reason": "dispatching 02p as attempt 7",
-  "updated_at": "2026-09-23T00:55:06Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "02p is running as attempt 7",
+  "updated_at": "2026-09-23T00:55:24Z",
   "ticks": [
     {
       "tick_id": "0ju",
@@ -29,7 +29,8 @@
     },
     {
       "tick_id": "02p",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 7
     },
     {
       "tick_id": "0mp",
