@@ -1465,3 +1465,4 @@
 {"ts":"2026-09-24T13:00:43.049758Z","tick":"4lv","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"A Run Workflow whose boot step exhausts its retries still finalizes"}}
 {"ts":"2026-09-24T13:01:24.618342Z","tick":"0ye","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"Every step of superviseRun that can throw still ends in finalize"}}
 {"ts":"2026-09-24T13:07:58.893325Z","tick":"78v","action":"note","actor":"ticfac","epic":"yoh","data":{"note":"2026-09-24 15:07 - ticfac run epic-yoh: 78v try 1 (run dispatch #20) merged into epic/yoh as 7645a0500739; the integrated gate (go, ts) passed.","title":"The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate"}}
+{"ts":"2026-09-24T13:08:06.594313Z","tick":"78v","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate"}}
