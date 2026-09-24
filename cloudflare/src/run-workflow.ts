@@ -148,14 +148,14 @@ export const MAX_SANDBOX_BOOTS = 3;
 
 /*
  * The closeout pass that used to follow a trip had its own, smaller boot
- * allowance (MAX_CLOSEOUT_BOOTS) and its own window (RUN_CLOSEOUT_MS). Tick dl8
- * deleted that pass: since hn0 the container execs `ticfac run-epic`, which
- * ignores TICKS_PHASE and TICKS_STOP_REASON, so a closeout boot re-ran the
- * epic instead of winding it down — an agent-orchestrator path that no
- * orchestrator exists to serve. A tripped run now ends (revoke, grace, drain,
- * kill) and no second container is booted, so both constants are gone. The
- * names live on here only until the pinned lifecycle-invariants bundle names
- * them out (A11 cross-references MAX_CLOSEOUT_BOOTS; a re-cut is filed).
+ * allowance and its own window. Tick dl8 deleted that pass: since hn0 the
+ * container execs `ticfac run-epic`, which ignores TICKS_PHASE and
+ * TICKS_STOP_REASON, so a closeout boot re-ran the epic instead of winding it
+ * down — an agent-orchestrator path that no orchestrator exists to serve. A
+ * tripped run now ends (revoke, grace, drain, kill) and no second container is
+ * booted, so both constants are gone, and since contracts 6.2.0 the
+ * lifecycle invariants no longer name them either: MAX_SANDBOX_BOOTS above is
+ * the one boot bound left.
  */
 
 /**

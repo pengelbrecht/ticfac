@@ -1,9 +1,9 @@
 {
   "$comment": "How ticfac gets contracts/. Read CONTRACTS.md before editing. `bundleVersion` is the EXACT contracts/bundle.json version this repository's code is written against (SPEC 3.2), checked on every test run; `ref` is the immutable ticks commit the vendored bytes were fetched at. They are different claims and move independently. Regenerate `files` and `digests` with `go run ./cmd/contracts sync`; never hand-edit a vendored fixture.",
-  "bundleVersion": "6.1.0",
+  "bundleVersion": "6.2.0",
   "mode": "pinned",
   "repository": "pengelbrecht/ticks",
-  "ref": "75255e0ea3f58e03aa11ecaa10881ad5851a911f",
+  "ref": "c0f19aa7047c503ebfa267996fa1280377d57919",
   "directory": "contracts",
   "files": [
     "collect-vocabulary.json",
@@ -23,13 +23,13 @@
     "worker-boot-contract.json"
   ],
   "digests": {
-    "CHANGELOG.md": "66e6fc73ccf12a98a6dadd13f418e9a5da43b45aff06f15db8b13055c5ab13cb",
+    "CHANGELOG.md": "06a6dc450790a90da6817300dd7689b486edc580355fd4dc5c0af439a8926ccd",
     "README.md": "d16d244f6efcc3c536549e4c36101763e0196607b16a33a1d3880d731c45e99c",
-    "bundle.json": "73781803e463e8d039b1cd1d65494d87be71b87a3af99c56d9cd25989ed31f3a",
+    "bundle.json": "cbf8d84ad35465fe55e98bb1fcb996808dd7daeec99295308a97716efd63cca4",
     "collect-vocabulary.json": "b2094cfbeec03ea2d6df78dab40eb6cbe8b0a9c256b7fe91c10ab679759e705e",
     "credential-ownership.json": "2648e83088dfe42ab626ffed07985205996d9b317a5c0bfe6833bc44cc67a3ba",
     "job-protocol.json": "ce5110a5bf27ce55e2e277f887b3ec7cf334ab6928c19c72bf3e218967677e7a",
-    "lifecycle-invariants.json": "3bdf856a0abc810dde9e4cd982ca8bd94269d1bf4e73384861b5fe996a6f8f28",
+    "lifecycle-invariants.json": "26306e2afba5ead25eefa05d9f1b48b6deef4ea736e41ac973dbd020c1845d60",
     "message-context.json": "9cceb63c00266692fc1938d60b7c61162d22794c2a64184167635938060581d5",
     "run-event-feed.json": "c97bd6ee166e6f5aaae45fe24aaf6c75f354748a0cd52618c1b073f3afd57296",
     "runners-config-contract.json": "976b17f81f84a54cc3ed503c465bc3bcbd27bfaa001b1c930e4115d7684334c6",
