@@ -1437,3 +1437,6 @@
 {"ts":"2026-09-24T12:11:39.572557Z","tick":"4lv","action":"create","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"priority":1,"title":"A Run Workflow whose boot step exhausts its retries still finalizes","type":"task"}}
 {"ts":"2026-09-24T12:11:39.61984Z","tick":"dyo","action":"create","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"priority":1,"title":"The cloudflare-sandbox executor tells the truth on collect and adoption","type":"task"}}
 {"ts":"2026-09-24T12:11:39.670003Z","tick":"78v","action":"create","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"priority":1,"title":"The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate","type":"task"}}
+{"ts":"2026-09-24T12:11:50.216371Z","tick":"r1t","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["cs1","9iz","4lv"],"title":"Close out yoh: retro, and what the next epic is"}}
+{"ts":"2026-09-24T12:11:50.259217Z","tick":"r1t","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["cs1","9iz","4lv","dyo"],"title":"Close out yoh: retro, and what the next epic is"}}
+{"ts":"2026-09-24T12:11:50.301229Z","tick":"r1t","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["cs1","9iz","4lv","dyo","78v"],"title":"Close out yoh: retro, and what the next epic is"}}
