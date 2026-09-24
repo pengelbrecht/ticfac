@@ -2,7 +2,7 @@
   "id": "pqs",
   "title": "Make the Go test fixtures hermetic: no test reads the host's git, config or working directory",
   "description": "Triaged 2026-09-23 from the xte and wne close-outs: TWELVE findings are one defect class - a test measuring its host instead of the tree - found by workers running in linked worktrees, under the read-only grade, and on Apple git 2.50.1 (f4a3888a proposes exactly this sweep). The instances: git auto-maintenance fixtures on hosts whose git never auto-starts maintenance (75456c24, e6926fcb, ec119c6d, 1bb7d876, d43758b0); fixtures pushing to temp repos inheriting the caller's git config (ad9dcff8, ba9cd986 - the review launch's pushInsteadOf); cwd-relative paths in a linked worktree (88c1c497, c2848449, e24708aa - TestTheBuiltBinaryExitsTwo reads the gate before the executor refusal); and zombie-as-alive inside the container (003d902c). Two of these were fixed one at a time on 2026-09-22 (6a12473f); the class keeps producing more. Fix it as a class: a helper every git-running fixture uses, and a guard test that fails when one does not.",
-  "notes": "2026-09-24 14:55 - 2026-09-24: the worst instance of this class yet - TestFactoryDeployAndSetupAreWired ran the REAL factory deploy with the host PATH/TK_HOME/cwd and deployed version fb63650f of ticks-factory to the operator's Cloudflare account from a gate run (fixed in #52 by giving it its siblings' hermetic setup). The guard test this tick adds must also fail when a test can reach wrangler, gh or a live network endpoint without an explicit opt-in.",
+  "notes": "2026-09-24 14:55 - 2026-09-24: the worst instance of this class yet - TestFactoryDeployAndSetupAreWired ran the REAL factory deploy with the host PATH/TK_HOME/cwd and deployed version fb63650f of ticks-factory to the operator's Cloudflare account from a gate run (fixed in #52 by giving it its siblings' hermetic setup). The guard test this tick adds must also fail when a test can reach wrangler, gh or a live network endpoint without an explicit opt-in.\n2026-09-24 18:11 - 2026-09-24, yoh close-out: lkd's freshdisk tests committed in a scratch clone with no identity and passed every local gate (the laptop has a global git identity) but failed CI (exit 128). Reproducible locally with HOME=\u003cempty\u003e GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true. The per-tick gate should run under that same stripped git environment so it measures what CI measures.",
   "status": "open",
   "priority": 1,
   "type": "task",
@@ -11,5 +11,5 @@
   "acceptance_criteria": "Every Go fixture that runs git goes through one hermetic helper (no inherited GIT_CONFIG_*, global config, or host maintenance), no test reads the caller's working directory for a repository path, a guard test fails when a new fixture bypasses the helper, and the suite passes in a linked worktree, under the read-only grade, and on Apple git",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.280691Z",
-  "updated_at": "2026-09-24T12:55:23.344096Z"
+  "updated_at": "2026-09-24T16:11:04.386742Z"
 }

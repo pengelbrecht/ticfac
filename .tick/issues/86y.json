@@ -1,0 +1,13 @@
+{
+  "id": "86y",
+  "title": "Door-dispatched workers keep their log tail and carry a harness budget",
+  "description": "From yoh findings 127240d6 and b21c18d0 (9iz). A door-dispatched worker's log output after the confirm window goes nowhere, and the door carries no per-worker harness budget (TICKS_WORKER_TIMEOUT), which the wave path used to set. For an unattended cloud run both matter: the tail is where a failed worker says why, and a budget is the runaway guard (liveness itself is b1t's: pi's session log, not a wall clock).",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A door-dispatched worker's whole log reaches the run's logs; the door carries a harness budget taken from config and the worker honours it; tests cover both",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T16:48:46.558751Z",
+  "updated_at": "2026-09-24T16:48:46.558751Z"
+}
