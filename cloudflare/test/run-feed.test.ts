@@ -9,12 +9,14 @@ import {
   type FeedEvent,
   FINAL_FEED_SEQ,
   feedSegmentKey,
+  orchestratorUnanswerableFeedEvent,
   readRunFeed,
   runFinishedFeedEvent,
   runStartedFeedEvent,
   START_FEED_SEQ,
   tickCollectedFeedEvent,
   tickDispatchedFeedEvent,
+  UNANSWERABLE_FEED_SEQ,
   waveFeedSeq,
 } from "../src/run-feed";
 import { type Defs, parseDefs, parseSchema, type Schema, validate } from "./json-schema";
@@ -79,6 +81,12 @@ describe("the cloud run's feed lines", () => {
     assertContractLine(
       runFinishedFeedEvent({ run_id: "run_62c289d1", detail: "completed: every tick closed" }),
     );
+    assertContractLine(
+      orchestratorUnanswerableFeedEvent({
+        run_id: "run_62c289d1",
+        detail: "failed: the orchestrator's container could not be asked how it was doing",
+      }),
+    );
   });
 
   it("states tick_id and attempt as required-and-null, never omits them", () => {
@@ -136,6 +144,16 @@ describe("the feed's segment keys", () => {
   it("places the run's start before every wave and its finish after all of them", () => {
     expect(START_FEED_SEQ).toBeLessThan(waveFeedSeq(0, 0, false)!);
     expect(FINAL_FEED_SEQ).toBeGreaterThan(waveFeedSeq(11, 9998, true)!);
+  });
+
+  it("places the unanswerable line after every wave and before the finish, one slot per run", () => {
+    // A run-level line the watch writes mid-run (tick 3ed): above every wave
+    // segment so it cannot interleave one, below the terminal line so it is
+    // readable while the run is still unwinding, and one fixed key per run —
+    // the work pass or the closeout pass can hold, never both, and a replayed
+    // step rewrites the same key rather than appending a second copy.
+    expect(UNANSWERABLE_FEED_SEQ).toBeGreaterThan(waveFeedSeq(86, 9998, true)!);
+    expect(UNANSWERABLE_FEED_SEQ).toBeLessThan(FINAL_FEED_SEQ);
   });
 
   it("refuses a run past the spacing rather than interleaving its segments", () => {
