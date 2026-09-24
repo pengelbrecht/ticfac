@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 74,
-  "state": "gating",
-  "reason": "running the integrated gate for ppt on 17ec8990af04",
-  "updated_at": "2026-09-24T05:30:37Z",
+  "sequence": 75,
+  "state": "publishing",
+  "reason": "closing ppt behind the integrated gate on 17ec8990af04",
+  "updated_at": "2026-09-24T05:32:21Z",
   "ticks": [
     {
       "tick_id": "uqi",
