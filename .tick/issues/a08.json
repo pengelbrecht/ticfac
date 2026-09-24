@@ -2,10 +2,10 @@
   "id": "a08",
   "title": "The sandbox dispatch door carries the model, so the recorded model is the one that ran",
   "description": "Triaged 2026-09-23 from xte's close-out, which held on untriaged findings; the finding keys it absorbs are in this tick's notes. xte was merged as building blocks (operator's choice B) and its unmet goal moved here, because it is the same single cloud path yoh reconciles.\n\nThe door takes no model (b7e18ccf): a cloud profile's recorded model rests on the factory's own default agreeing with it, and they have disagreed (the factory defaults were omp/DeepSeek). The request carries the resolved model, the sandbox is booted with it, and the attempt record states the model that actually ran (f7552ca1) - which is what lets a trace show the provider per attempt.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "xev"
   ],
@@ -13,5 +13,6 @@
   "acceptance_criteria": "A dispatch through the door carries the resolved model, the worker boots on that model, and the attempt record names it; a test proves a model in the request reaches the worker's environment; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.172334Z",
-  "updated_at": "2026-09-23T10:57:51.172334Z"
+  "updated_at": "2026-09-24T04:45:08.011663Z",
+  "started_at": "2026-09-24T04:45:08.011663Z"
 }

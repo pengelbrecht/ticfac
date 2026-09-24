@@ -1362,3 +1362,4 @@
 {"ts":"2026-09-23T23:10:51.554425Z","tick":"oel","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"A worker the executor refused to start earns no escalation rung","type":"task"}}
 {"ts":"2026-09-24T04:44:18.91853Z","tick":"cr4","action":"note","actor":"ticfac","epic":"yoh","data":{"note":"2026-09-24 06:44 - ticfac run epic-yoh: cr4 try 1 (run dispatch #4) merged into epic/yoh as 86e918eddc42; the integrated gate (go, ts) passed.","title":"The Workflow supervises a run and stops orchestrating it"}}
 {"ts":"2026-09-24T04:44:32.242155Z","tick":"cr4","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"The Workflow supervises a run and stops orchestrating it"}}
+{"ts":"2026-09-24T04:45:08.012075Z","tick":"a08","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The sandbox dispatch door carries the model, so the recorded model is the one that ran"}}
