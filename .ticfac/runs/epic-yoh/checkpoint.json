@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 209,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for r1t",
-  "updated_at": "2026-09-24T16:31:21Z",
+  "sequence": 210,
+  "state": "integrating",
+  "reason": "integrating r1t attempt 25 into epic/yoh",
+  "updated_at": "2026-09-24T16:31:47Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "r1t",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 25
     },
     {
