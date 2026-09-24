@@ -2262,96 +2262,204 @@ export async function superviseReview(
 }
 
 /**
+ * The name of the step currently in flight (tick 0ye), so the net under
+ * {@link superviseRun} names the step that tore it.
+ *
+ * The run's steps are not all in `superviseRun`'s own body: the review job
+ * and the supervised passes run their own — the boot step 4lv caught has
+ * ten siblings — and the net has to name whichever one threw without every
+ * call site saying so. `superviseRun` therefore hands every callee this
+ * wrapper, which records the name of the step about to run before it
+ * delegates to the engine. Every method that carries a step name (`do`,
+ * `sleep`, `sleepUntil`, `waitForEvent`) is intercepted; nothing else is
+ * touched, and a replay hands back journaled results through the same calls
+ * in the same order, so the recorded name is exactly as deterministic as
+ * the steps themselves.
+ */
+function namingSteps(step: WorkflowStep): { step: WorkflowStep; current: () => string } {
+  // The first step `superviseRun` attempts, so a throw before any step has
+  // run still names a step rather than nothing.
+  let current = "context";
+  const carriesName = new Set(["do", "sleep", "sleepUntil", "waitForEvent"]);
+  return {
+    step: new Proxy(step, {
+      get(target, property) {
+        const method = Reflect.get(target, property, target);
+        if (
+          typeof property !== "string" ||
+          !carriesName.has(property) ||
+          typeof method !== "function"
+        ) {
+          return method;
+        }
+        return (...args: unknown[]) => {
+          if (typeof args[0] === "string") current = args[0];
+          // Reflect.apply, never `method.apply`: the engine's step methods are
+          // RPC stubs, and a stub's own `apply`/`bind`/`call` lookups dispatch
+          // as RPC method names of their own ("The RPC receiver does not
+          // implement the method \"apply\""), not as the Function prototypes
+          // they shadow here.
+          return Reflect.apply(method as (...rest: unknown[]) => unknown, target, args);
+        };
+      },
+    }),
+    current: () => current,
+  };
+}
+
+/**
  * The whole lifecycle, exported so it reads as one thing rather than as a class
  * body: context, work, clean stop if something tripped, finalize.
+ *
+ * Since tick 0ye the whole body runs under ONE net, because every ending of a
+ * run is finalize's ending — not only the endings that return. 4lv caught the
+ * one step that starts paid work where it stood, and its finding (yoh
+ * 5882bf18) was that every OTHER step could still throw straight out of this
+ * function: a `context` step that exhausts `CONTEXT_RETRIES`, a `progress`
+ * step that exhausts `OBSERVE_RETRIES`, the stop record, the finalize itself.
+ * A throw that escapes here leaves exactly what a skipped finalize leaves —
+ * gateway tokens live (D17), the index row frozen in a live state (A2: four
+ * real runs sat `stopping` indefinitely because a boot could not get a
+ * container), and any container the run provisioned left billing under
+ * keepAlive. The catch is the single try/finally the tick asks for, done as a
+ * catch so it runs finalize on exactly the endings that would otherwise skip
+ * it: every return path above has already finalized, so the catch is the only
+ * ending left, and the `namingSteps` wrapper names the step that threw in the
+ * reason it settles under.
  */
 export async function superviseRun(
   env: Env,
   params: RunWorkflowParams,
   step: WorkflowStep,
 ): Promise<RunOutcome> {
-  const acquired = await step.do("context", CONTEXT_RETRIES, () => acquireContext(env, params));
-  if (!acquired.ok) {
-    const outcome: RunOutcome = { state: "failed", detail: acquired.detail, boots: 0 };
-    const never = unverifiedProgress(
-      "the run never booted an orchestrator, so nothing could have advanced the epic",
+  const named = namingSteps(step);
+  // Both live ABOVE the net because the catch needs them: how many boots this
+  // run has already counted (a boot is counted before its step runs, so a
+  // throw from any boot's own step still sweeps the container it may have
+  // provisioned — the 4lv rule), and why gateway cost telemetry could not be
+  // read, so the closing record carries it when the context step got far
+  // enough to learn it.
+  const counter: BootCounter = { next: 1 };
+  let costTelemetry: string | null = null;
+
+  try {
+    const acquired = await named.step.do("context", CONTEXT_RETRIES, () =>
+      acquireContext(env, params),
     );
-    await step.do("finalize", FINALIZE_RETRIES, async () => {
-      await finalize(env, params, outcome, 0, null, never);
+    if (!acquired.ok) {
+      const outcome: RunOutcome = { state: "failed", detail: acquired.detail, boots: 0 };
+      const never = unverifiedProgress(
+        "the run never booted an orchestrator, so nothing could have advanced the epic",
+      );
+      await named.step.do("finalize", FINALIZE_RETRIES, async () => {
+        await finalize(env, params, outcome, 0, null, never);
+        return { finalized: true };
+      });
+
+      return outcome;
+    }
+    const context = acquired.context;
+    costTelemetry = context.cost_telemetry;
+
+    // The PR review job (UC5, tick v7g): one container, one comment, done. It
+    // is checked FIRST because it is the narrower fact: a review run implements
+    // no ticks — and giving it the epic path below would boot a container to
+    // close out an epic that does not exist.
+    if (context.review !== null) {
+      return await superviseReview(env, named.step, params, context, counter);
+    }
+
+    // One orchestrator container, supervised (tick l6t): the container runs
+    // `ticfac run-epic` and dispatches every tick's worker itself, through the
+    // cloudflare-sandbox executor and the per-tick sandbox door. The Workflow
+    // boots, budgets, watches, retries and finalizes — it does not orchestrate.
+    const work = await supervisePass(env, named.step, params, context, counter, {
+      label: "work",
+      job: "orchestrator",
+      max_boots: MAX_SANDBOX_BOOTS,
+      on_exhausted: "stop",
+    });
+
+    let outcome: RunOutcome;
+    if (work.kind === "completed") {
+      outcome = {
+        state: "completed",
+        detail: work.detail ?? "the orchestrator finished the epic",
+        boots: work.boots,
+      };
+    } else if (work.kind === "failed") {
+      outcome = { state: "failed", detail: work.detail, boots: work.boots };
+    } else {
+      // `tripped` is an interruption: the clean stop, identical for a budget and
+      // for an operator (D15). The run ENDS here (tick dl8): the pass above has
+      // already revoked, given the work its grace window, drained and killed the
+      // container, and the branch — pushed as the run worked — is the state a
+      // new run re-derives from. No second container is booted; a closeout boot
+      // would only re-run the epic, because `ticfac run-epic` reads no phase and
+      // no stop reason. What is recorded is the reason, and nothing else.
+      const trip = work.trip;
+
+      await named.step.do("stop:record", OBSERVE_RETRIES, async () => {
+        await logDispatch(env, {
+          run_id: params.run_id,
+          epic: params.epic,
+          decision: trip.kind === "budget" ? `stopping:budget:${trip.budget}` : "stopping:operator",
+          reason: tripReason(trip),
+        });
+        await updateRunState(env.DB, params.run_id, "stopping");
+        return { logged: true };
+      });
+
+      // A run that was stopped is `stopped`: the stop is the truer fact about it.
+      outcome = { state: "stopped", detail: trip.detail, boots: work.boots };
+    }
+
+    // Nothing above this line may call the run complete. The passes report what
+    // the PROCESS did; the durable layer reports what the RUN did, and only the
+    // second one can promote an exit into a completion (tick ehy).
+    const progress = await named.step.do("progress", OBSERVE_RETRIES, () =>
+      assessProgress(env, params, context),
+    );
+    outcome = applyProgress(outcome, progress);
+
+    await named.step.do("finalize", FINALIZE_RETRIES, async () => {
+      await finalize(env, params, outcome, outcome.boots, context.cost_telemetry, progress);
       return { finalized: true };
     });
-
+    return outcome;
+  } catch (error) {
+    // A step that exhausted its retries is a verdict about this run, and is
+    // not allowed to throw out of the Workflow (tick 0ye, from yoh's finding
+    // 5882bf18). The engine journals an exhausted step's error, so this catch
+    // fires deterministically again on any replay — the same property 4lv
+    // pinned for the boot step.
+    const message = String((error as { message?: unknown }).message ?? error);
+    // The step that tore the net, captured before anything below can move the
+    // name on: the wrapper recorded it at the step's own call site, so the
+    // reason names the step rather than the run's last durable verb.
+    const at = named.current();
+    const boots = counter.next - 1;
+    const outcome: RunOutcome = {
+      state: "failed",
+      detail:
+        `the ${at} step threw after exhausting its retries (${message}); ` +
+        "the run ended in finalize rather than throwing past it",
+      boots,
+    };
+    const unassessed = unverifiedProgress(
+      `the run ended before its progress was assessed: the ${at} step threw (${message})`,
+    );
+    // A FRESH step name, never `finalize`: the throw may have come from the
+    // finalize step itself, and re-entering the very step that just exhausted
+    // its retries replays the same failure — the fresh name is the run's own
+    // ending given its own step, under the same FINALIZE_RETRIES the happy
+    // path gets.
+    await named.step.do("finalize:failed", FINALIZE_RETRIES, async () => {
+      await finalize(env, params, outcome, boots, costTelemetry, unassessed);
+      return { finalized: true };
+    });
     return outcome;
   }
-  const context = acquired.context;
-  const counter: BootCounter = { next: 1 };
-
-  // The PR review job (UC5, tick v7g): one container, one comment, done. It
-  // is checked FIRST because it is the narrower fact: a review run implements
-  // no ticks — and giving it the epic path below would boot a container to
-  // close out an epic that does not exist.
-  if (context.review !== null) {
-    return await superviseReview(env, step, params, context, counter);
-  }
-
-  // One orchestrator container, supervised (tick l6t): the container runs
-  // `ticfac run-epic` and dispatches every tick's worker itself, through the
-  // cloudflare-sandbox executor and the per-tick sandbox door. The Workflow
-  // boots, budgets, watches, retries and finalizes — it does not orchestrate.
-  const work = await supervisePass(env, step, params, context, counter, {
-    label: "work",
-    job: "orchestrator",
-    max_boots: MAX_SANDBOX_BOOTS,
-    on_exhausted: "stop",
-  });
-
-  let outcome: RunOutcome;
-  if (work.kind === "completed") {
-    outcome = {
-      state: "completed",
-      detail: work.detail ?? "the orchestrator finished the epic",
-      boots: work.boots,
-    };
-  } else if (work.kind === "failed") {
-    outcome = { state: "failed", detail: work.detail, boots: work.boots };
-  } else {
-    // `tripped` is an interruption: the clean stop, identical for a budget and
-    // for an operator (D15). The run ENDS here (tick dl8): the pass above has
-    // already revoked, given the work its grace window, drained and killed the
-    // container, and the branch — pushed as the run worked — is the state a
-    // new run re-derives from. No second container is booted; a closeout boot
-    // would only re-run the epic, because `ticfac run-epic` reads no phase and
-    // no stop reason. What is recorded is the reason, and nothing else.
-    const trip = work.trip;
-
-    await step.do("stop:record", OBSERVE_RETRIES, async () => {
-      await logDispatch(env, {
-        run_id: params.run_id,
-        epic: params.epic,
-        decision: trip.kind === "budget" ? `stopping:budget:${trip.budget}` : "stopping:operator",
-        reason: tripReason(trip),
-      });
-      await updateRunState(env.DB, params.run_id, "stopping");
-      return { logged: true };
-    });
-
-    // A run that was stopped is `stopped`: the stop is the truer fact about it.
-    outcome = { state: "stopped", detail: trip.detail, boots: work.boots };
-  }
-
-  // Nothing above this line may call the run complete. The passes report what
-  // the PROCESS did; the durable layer reports what the RUN did, and only the
-  // second one can promote an exit into a completion (tick ehy).
-  const progress = await step.do("progress", OBSERVE_RETRIES, () =>
-    assessProgress(env, params, context),
-  );
-  outcome = applyProgress(outcome, progress);
-
-  await step.do("finalize", FINALIZE_RETRIES, async () => {
-    await finalize(env, params, outcome, outcome.boots, context.cost_telemetry, progress);
-    return { finalized: true };
-  });
-  return outcome;
 }
 
 /**
