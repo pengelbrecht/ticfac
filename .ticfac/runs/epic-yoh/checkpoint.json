@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 108,
-  "state": "gating",
-  "reason": "running the integrated gate for l6t on fdaf8f3be41c",
-  "updated_at": "2026-09-24T08:18:18Z",
+  "sequence": 109,
+  "state": "publishing",
+  "reason": "closing l6t behind the integrated gate on fdaf8f3be41c",
+  "updated_at": "2026-09-24T08:19:44Z",
   "ticks": [
     {
       "tick_id": "uqi",
