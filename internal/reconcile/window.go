@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -104,7 +105,10 @@ func (h *held) claims() int { return len(h.holders()) }
 func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, error) {
 	var failed []string
 	var window held
-	queue := plan
+	queue, err := r.adoptionFirst(plan)
+	if err != nil {
+		return nil, err
+	}
 	// When the window was last polled. The excuse a finish owes the attempts
 	// that waited through it is measured from here rather than from the
 	// finish's own start, because a finish no longer stops the polling.
@@ -131,7 +135,7 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	reject := func(tick string, refusal *Refusal) error {
 		failed = append(failed, tick)
 		r.failure = refusal
-		r.setTick(tick, "rejected")
+		r.setTick(tick, refusedTickState(refusal))
 		// Two answers to one question, from tick 0z0 and tick emk, kept
 		// together because they are not the same claim.
 		//
@@ -188,7 +192,13 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				}
 				break
 			}
-			if fl != nil {
+			switch {
+			case fl == nil:
+			case fl.integrated:
+				// Already merged by somebody else: nothing to poll, so it
+				// waits its turn to be finished like any settled attempt.
+				window.settled = append(window.settled, &settledAttempt{fl: fl})
+			default:
 				window.live = append(window.live, fl)
 			}
 		}
@@ -290,6 +300,75 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	}
 }
 
+// adoptionFirst is the order a pass takes the plan in: every tick this run
+// already has a LIVE attempt of first, then every other tick the tracker says
+// is claimed and this run has dispatched before, then the plan as planned.
+//
+// The plan's own order is the tracker's layering — wave, then priority — and
+// says nothing about what is already in flight. The window adopted an
+// in-flight attempt only when the queue happened to reach its tick, and
+// counted only what it was holding, so a resumed pass could claim NEW work
+// while live attempts of its own sat unadopted further down the queue: on
+// epic-yoh the plan read gbs, a08, cr4, lkd, ppt; gbs was adopted, a08 was
+// admitted into what the window believed were three free slots of four, and
+// tk refused the claim because cr4, lkd and ppt held them. lkd and ppt were
+// this run's own live workers; the pass never reached them.
+//
+// Adopting first makes the window's count the tracker's before anything new
+// is asked for. The claimed-but-not-live ticks (rejected, or a marker whose
+// start never happened) come next because they hold claims too: resolving them
+// — finished from the branch, held, or redispatched into the claim they
+// already have — is what frees width, and a hold is a hold wherever it sits.
+// Role jobs keep their place: they run alone, after the work.
+func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
+	attempts, err := r.store.Attempts()
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: read the attempts this run already dispatched: %w", err)
+	}
+	dispatched := map[string]bool{}
+	for _, attempt := range attempts {
+		dispatched[attempt.TickID] = true
+	}
+	rank := func(entry planEntry) int {
+		if !dispatched[entry.TickID] || isRoleJob(entry.Role) {
+			return 2
+		}
+		switch r.tickState(entry.TickID) {
+		case "dispatched", "reported", "integrated":
+			return 0
+		}
+		if entry.Claimed {
+			return 1
+		}
+		return 2
+	}
+	out := append([]planEntry{}, plan...)
+	for i := range out {
+		out[i].InFlight = rank(out[i]) == 0
+	}
+	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
+	return out, nil
+}
+
+// refusedTickState is the checkpoint state a refusal leaves its tick in.
+//
+// Every refusal REJECTS its tick — except a claim the tracker refused. That
+// refusal is raised after the dispatch marker is on origin (the marker comes
+// first; it is the compare-and-swap) and before any worker started, so the
+// attempt it names never ran. Recording the tick "rejected" made the next
+// resume read the marker as a spent attempt that "settled with nothing":
+// redispatched under a new number, counted as a failed try, and escalated a
+// rung on the tier ladder — epic-yoh's a08 went to frontier on its first real
+// try for a claim nobody's work had anything to do with. Left "ready", the
+// marker is adopted on resume: its claim is replayed, and the very attempt the
+// refusal interrupted is started at the tier it was planned at.
+func refusedTickState(refusal *Refusal) string {
+	if refusal != nil && refusal.Reason == RefusedClaimWidth {
+		return "ready"
+	}
+	return "rejected"
+}
+
 // replan re-derives what the run has left to do from a fresh read of the epic
 // graph, and reports the plan and the remaining queue to work from.
 //
@@ -329,6 +408,10 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 	for _, entry := range planFrom(graph) {
 		fresh[entry.TickID] = entry
 	}
+
+	// Who holds a claim is re-read whether or not any wave moved: a close is
+	// exactly when a claim ends, and the width is counted from these.
+	plan, queue = refreshClaims(plan, fresh), refreshClaims(queue, fresh)
 
 	rederived := resequence(plan, fresh)
 	moved := movedTicks(plan, rederived)
@@ -386,6 +469,18 @@ func resequence(entries []planEntry, fresh map[string]planEntry) []planEntry {
 		}
 	}
 	sortPlan(out)
+	return out
+}
+
+// refreshClaims re-reads each entry's Claimed from a fresh reading of the
+// graph. An entry the fresh graph does not carry is a tick the tracker closed,
+// and a closed tick holds no claim.
+func refreshClaims(entries []planEntry, fresh map[string]planEntry) []planEntry {
+	out := append([]planEntry{}, entries...)
+	for i := range out {
+		now, ok := fresh[out[i].TickID]
+		out[i].Claimed = ok && now.Claimed
+	}
 	return out
 }
 
@@ -616,6 +711,19 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 	if len(holders) == 0 {
 		return true
 	}
+	// An attempt this run already has in flight is ADOPTED, not dispatched: it
+	// takes no new claim and starts no new work, so neither the width nor a
+	// graph boundary is a reason to leave it unaddressed — only a role job the
+	// window is holding, which runs alone (runPlan puts these first, so in
+	// practice they are admitted before anything else is held).
+	if next.InFlight && !isRoleJob(next.Role) {
+		for _, fl := range holders {
+			if isRoleJob(fl.entry.Role) {
+				return false
+			}
+		}
+		return true
+	}
 	// reconciler-decision:D27:begin:isrole-next — a role job is admitted only
 	// when the window holds nothing; the Workflow host's admission carries no
 	// such rule (decisions/reconciler-parity.json, D27).
@@ -652,7 +760,33 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 	// integrating, this may count workers again and the slot a settled attempt
 	// frees becomes admissible in the moment it frees it (9pz's gain, and
 	// TestE3cWillRestoreAdmissionWhileASettledAttemptIsBeingFinished).
-	return window.claims() < r.widthForWave(plan, next.Wave)
+	//
+	// And the claims the window is NOT holding count too, because tk counts
+	// them (epic-yoh): a tick claimed under this epic and not yet closed —
+	// rejected and waiting for a person, adopted later in the queue, or held
+	// by somebody else entirely. A tick that already holds a claim is the one
+	// exception: admitting it takes no new one.
+	if next.Claimed {
+		return true
+	}
+	return r.claimsHeld(window, plan) < r.widthForWave(plan, next.Wave)
+}
+
+// claimsHeld is how many claims tk counts under this epic as the window sees
+// it: every attempt the window holds, plus every tick of the plan the tracker
+// reads as claimed that the window is not holding.
+func (r *Reconciler) claimsHeld(window *held, plan []planEntry) int {
+	count := window.claims()
+	holding := map[string]bool{}
+	for _, fl := range window.holders() {
+		holding[fl.entry.TickID] = true
+	}
+	for _, entry := range plan {
+		if entry.Claimed && !holding[entry.TickID] && r.tickState(entry.TickID) != "closed" {
+			count++
+		}
+	}
+	return count
 }
 
 // widthForWave is the width this wave may run at: the host's declared number,
