@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 221,
-  "state": "integrating",
-  "reason": "integrating r1t attempt 25 into epic/yoh",
-  "updated_at": "2026-09-24T17:05:26Z",
+  "sequence": 222,
+  "state": "gating",
+  "reason": "running the integrated gate for r1t on b200a61209cd",
+  "updated_at": "2026-09-24T17:05:30Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "r1t",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 25
     },
     {
