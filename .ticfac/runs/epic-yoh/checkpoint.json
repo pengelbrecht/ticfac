@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 191,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-24T15:35:19Z",
+  "sequence": 192,
+  "state": "collecting",
+  "reason": "collecting 94u attempt 24",
+  "updated_at": "2026-09-24T15:51:07Z",
   "ticks": [
     {
       "tick_id": "uqi",
