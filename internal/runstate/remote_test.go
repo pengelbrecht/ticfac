@@ -59,6 +59,13 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 			want:   RemoteTransient,
 		},
 		{
+			// git's HTTPS transport when the TCP connect never completed
+			// (this host's IPv4 flapping, 2026-09-24).
+			name:   "an https connect that never completed",
+			stderr: "fatal: unable to access 'https://github.com/o/r.git/': Failed to connect to github.com port 443 after 62 ms: Couldn't connect to server",
+			want:   RemoteTransient,
+		},
+		{
 			// The same tail line as the reset above. Everything rests on the
 			// terminal markers being read first.
 			name: "a key the remote rejected",
