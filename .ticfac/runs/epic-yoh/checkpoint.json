@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 156,
-  "state": "gating",
-  "reason": "running the integrated gate for 4lv on 6456e01626e0",
-  "updated_at": "2026-09-24T12:56:36Z",
+  "sequence": 157,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-24T12:58:04Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -105,6 +105,10 @@
       "tick_id": "dyo",
       "state": "dispatched",
       "attempt": 22
+    },
+    {
+      "tick_id": "0ye",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -112,7 +116,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "c9d145a78081620ad71db21da6c5c8ed256585f4",
+    "source_sha": "a2360e90aed4387789213302e73882fee81d380f",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
