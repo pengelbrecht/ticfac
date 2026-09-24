@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 64,
-  "state": "running",
-  "reason": "nwn is running as attempt 11",
-  "updated_at": "2026-09-24T05:24:06Z",
+  "sequence": 65,
+  "state": "collecting",
+  "reason": "collecting a08 attempt 9",
+  "updated_at": "2026-09-24T05:24:24Z",
   "ticks": [
     {
       "tick_id": "uqi",
