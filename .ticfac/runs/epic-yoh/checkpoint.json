@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 131,
-  "state": "publishing",
-  "reason": "closing mn7 behind the integrated gate on 44e0758ef998",
-  "updated_at": "2026-09-24T11:10:44Z",
+  "sequence": 132,
+  "state": "running",
+  "reason": "mn7 is closed",
+  "updated_at": "2026-09-24T11:11:11Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "mn7",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 16
     },
     {
