@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 60,
-  "state": "gating",
-  "reason": "running the integrated gate for lkd on a9f4786ab43f",
-  "updated_at": "2026-09-24T05:20:58Z",
+  "sequence": 61,
+  "state": "publishing",
+  "reason": "closing lkd behind the integrated gate on a9f4786ab43f",
+  "updated_at": "2026-09-24T05:22:26Z",
   "ticks": [
     {
       "tick_id": "uqi",
