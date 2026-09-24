@@ -2,13 +2,14 @@
   "id": "4lv",
   "title": "A Run Workflow whose boot step exhausts its retries still finalizes",
   "description": "Absorbed from yoh final-review finding 0c110874 (cs1, high). After cr4 gave the boot step a deliberate retry policy, a boot that exhausts its retries throws out of supervisePass and the run never reaches finalize: tokens are not revoked, the run row is never settled, the container sweep never runs. The Workflow's whole job after yoh is boot, budget, watch, retry, finalize - so a run that cannot finalize breaks yoh's definition of done.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "yoh",
   "acceptance_criteria": "A boot that exhausts its retries ends in finalize (tokens revoked, run row settled with a reason naming the boot failure, containers swept); a vitest drives it; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:11:39.572217Z",
-  "updated_at": "2026-09-24T12:11:39.572217Z"
+  "updated_at": "2026-09-24T12:15:12.262756Z",
+  "started_at": "2026-09-24T12:15:12.262755Z"
 }
