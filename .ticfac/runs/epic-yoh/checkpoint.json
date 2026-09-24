@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 107,
-  "state": "integrating",
-  "reason": "integrating l6t attempt 10 into epic/yoh",
-  "updated_at": "2026-09-24T08:18:03Z",
+  "sequence": 108,
+  "state": "gating",
+  "reason": "running the integrated gate for l6t on fdaf8f3be41c",
+  "updated_at": "2026-09-24T08:18:18Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "l6t",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 10
     },
     {
