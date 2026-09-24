@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 106,
-  "state": "running",
-  "reason": "mn7 is running as attempt 16",
-  "updated_at": "2026-09-24T08:17:47Z",
+  "sequence": 107,
+  "state": "integrating",
+  "reason": "integrating l6t attempt 10 into epic/yoh",
+  "updated_at": "2026-09-24T08:18:03Z",
   "ticks": [
     {
       "tick_id": "uqi",
