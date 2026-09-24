@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "4lv",
   "attempt": 19,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T12:55:18Z",
+  "triaged_at": "2026-09-24T12:56:52Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "0ye",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "4lv",
