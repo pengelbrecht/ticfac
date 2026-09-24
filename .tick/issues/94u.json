@@ -3,7 +3,7 @@
   "title": "The door's TypeScript collect refuses a report-only worker too",
   "description": "Absorbed from yoh finding a0447d05 (dyo). dyo made the Go cloudflare-sandbox executor refuse an attempt whose only commit is the worker's report. But cloudflare/src/worker-collect.ts, which sandbox-executor.ts still calls on the door's collect path (workerCollector, sandbox-executor.ts ~line 831), still merges a report-only worker. If the door's collect is what the Go executor relies on, dyo's guarantee is incomplete: a worker that did nothing can still read as ready-to-merge. Make the TS collect refuse it with the same verdict the Go side uses, or prove the Go side's refusal covers every path and delete the TS merge.",
   "notes": "2026-09-24 17:51 - ticfac run epic-yoh: 94u try 1 (run dispatch #24) reported a finding drafted for triage — proposed-tick \"The TS collect has no role, so its no-commits rule cannot exempt review-epic the way the Go side's does\" (key aee05bd7bd1ef161d8454e301f685d4d144291a26eab06d5ab24c988bda11817, severity low, for this repository). Triage with `ticfac finding yoh aee05bd7bd1ef161d8454e301f685d4d144291a26eab06d5ab24c988bda11817 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 17:51 - ticfac run epic-yoh: 94u try 1 (run dispatch #24) reported a finding drafted for triage — proposed-tick \"herdr's collect has no report-only check; a herdr worker that commits only its report collects as ready-to-merge\" (key 240bad0740649f3db5426471d85fbbeccebd47883d5ad482c6975a3875fc02eb, severity low, for this repository). Triage with `ticfac finding yoh 240bad0740649f3db5426471d85fbbeccebd47883d5ad482c6975a3875fc02eb --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 17:52 - ticfac run epic-yoh: 94u try 1 (run dispatch #24) merged into epic/yoh as ca826da66cef; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "No collect path (Go executor or the door's TypeScript collect) reports a worker whose only commit is its report as ready-to-merge; a vitest drives a report-only worker through the door's collect and asserts the refusal; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T14:53:53.217169Z",
-  "updated_at": "2026-09-24T15:52:47.662454Z",
-  "started_at": "2026-09-24T14:59:29.622937Z"
+  "updated_at": "2026-09-24T15:52:51.413745Z",
+  "closed_at": "2026-09-24T15:52:51.413745Z"
 }
