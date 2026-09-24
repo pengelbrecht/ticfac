@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 135,
-  "state": "gating",
-  "reason": "running the integrated gate for dl8 on 0fbca1a785ea",
-  "updated_at": "2026-09-24T11:15:18Z",
+  "sequence": 136,
+  "state": "publishing",
+  "reason": "closing dl8 behind the integrated gate on 0fbca1a785ea",
+  "updated_at": "2026-09-24T11:16:32Z",
   "ticks": [
     {
       "tick_id": "uqi",
