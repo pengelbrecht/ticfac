@@ -175,6 +175,14 @@ const jobStatusSchema = parseSchema(
   "$",
 );
 
+/**
+ * The model a dispatch names (tick a08): pi's spelling of GLM 5.3 Flash, as a
+ * cloud profile resolves it — deliberately NOT the deployment's
+ * `RUN_WORKER_MODEL` nor the built-in default, so a container booted on either
+ * of those is told apart from one booted on what the request carried.
+ */
+const REQUESTED_MODEL = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash";
+
 /** The start body every test fills around, in the door's documented shape. */
 function startBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -186,6 +194,7 @@ function startBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     base_ref: `refs/heads/epic/${EPIC}`,
     title: "Expose per-tick sandbox dispatch over HTTP from the Worker",
     base_sha: BASE_SHA,
+    model: REQUESTED_MODEL,
     ...overrides,
   };
 }
@@ -387,6 +396,47 @@ describe("start", () => {
     // NOTHING WAITED: the handle came back while the work process is still
     // running — the door's answer is a handle, not the attempt's fate.
     expect(work?.state).toBe("running");
+  });
+
+  it("boots the worker on the model the request carries, and the handle names it (tick a08)", async () => {
+    // The deployment's standing choice says something else: the request's
+    // model is a choice about THIS attempt, and it outranks a standing one.
+    set("RUN_WORKER_MODEL", "workers-ai/@cf/zai-org/some-other-model");
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle; adopted: boolean };
+
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+    // The handle states the model the container was booted with, so the
+    // record a caller keeps names the model that actually ran.
+    expect(body.handle.handle.model).toBe(REQUESTED_MODEL);
+    expect(body.handle.handle.model).toBe(work?.env.TICKS_MODEL);
+
+    // An adoption names it too — the same attempt, the same model.
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(200);
+    const adopted = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(adopted.adopted).toBe(true);
+    expect(adopted.handle.handle.model).toBe(REQUESTED_MODEL);
+  });
+
+  it("refuses a start that names no model rather than booting the factory's own", async () => {
+    // A request with no model would boot on RUN_WORKER_MODEL or the default,
+    // and the caller's record would name a model that never ran.
+    const { model: _dropped, ...withoutModel } = startBody();
+    for (const body of [
+      withoutModel,
+      startBody({ model: "" }),
+      startBody({ model: "has space" }),
+    ]) {
+      const response = await postStart(runToken, body);
+      expect(response.status, JSON.stringify(body.model)).toBe(400);
+      const denial = await denialOf(response);
+      expect(denial.error).toBe("invalid_request");
+      expect(denial.detail).toContain("model");
+    }
+    expect(binding.addressed).toEqual([]);
   });
 
   it("a second call with the same identity returns the SAME running attempt, not a rival", async () => {

@@ -56,6 +56,14 @@ type Options struct {
 	// Title is the tick's title, carried for the same re-derivation.
 	Title string
 
+	// Model is the model the dispatch's profile resolved (tick a08). The door
+	// boots the worker container on exactly this and names it back in the
+	// handle, and Start refuses a handle that names another — so the model a
+	// run records for the attempt is the model that ran, never the factory's
+	// own default agreeing with it by luck. Required: the door refuses a start
+	// without one.
+	Model string
+
 	// Repo is the ORCHESTRATOR'S OWN CHECKOUT of the project the worker
 	// pushed to — the clone the reconciler runs in. It is not among the
 	// fields Start needs (that dispatch creates no worktree and runs no
@@ -265,6 +273,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		BaseRef:  e.opts.BaseRef,
 		Title:    e.opts.Title,
 		BaseSHA:  spec.Source.BaseSHA,
+		Model:    e.opts.Model,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -336,6 +345,15 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	if err != nil {
 		return nil, err
 	}
+	// The door names the model it booted the worker on. Anything but the one
+	// asked for — an adoption of a container some other start booted, a door
+	// that fell back to its own default — is refused before a record is
+	// written, because the record's model is what every trace reads.
+	if payload.Model != req.Model {
+		return nil, fmt.Errorf("the door booted attempt %d of %s on model %q, not the %q its dispatch resolved: "+
+			"a record naming the requested model over a worker running another is a provenance that lies",
+			attempt, spec.JobID, payload.Model, req.Model)
+	}
 	record := &attemptRecord{
 		SchemaVersion: stateSchemaVersion,
 		JobID:         handle.JobID,
@@ -355,6 +373,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Project:       payload.Project,
 		BaseRef:       payload.BaseRef,
 		Title:         payload.Title,
+		Model:         payload.Model,
 		Adopted:       adopted,
 		Spec:          spec,
 		IssuedAt:      handle.IssuedAt,

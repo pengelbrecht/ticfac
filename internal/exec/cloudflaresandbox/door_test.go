@@ -47,6 +47,12 @@ type fakeDoor struct {
 	// half-reads.
 	script func(w http.ResponseWriter, r *http.Request)
 
+	// bootedModel, when set, is the model the door says it booted the
+	// container on INSTEAD of the one the request carried — a door (or an
+	// adoption) that disagrees with the caller, for the tests that prove the
+	// client refuses a handle naming a model it did not ask for.
+	bootedModel string
+
 	starts      int
 	statusReads int
 	lastBody    map[string]any
@@ -237,6 +243,12 @@ func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) m
 	title, _ := body["title"].(string)
 	baseSHA, _ := body["base_sha"].(string)
 	epic, _ := body["epic"].(string)
+	model, _ := body["model"].(string)
+	d.mu.Lock()
+	if d.bootedModel != "" {
+		model = d.bootedModel
+	}
+	d.mu.Unlock()
 	processID := fmt.Sprintf("proc-%s-%d", tickID, attempt)
 	return map[string]any{
 		"schema_version": subprocess.SchemaVersion,
@@ -259,6 +271,7 @@ func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) m
 			"project":    d.project,
 			"base_ref":   baseRef,
 			"title":      title,
+			"model":      model,
 		},
 	}
 }
@@ -287,6 +300,10 @@ func (d *fakeDoor) answerGarbage(status int) {
 }
 
 // ---------------------------------------------------------------- harness ---
+
+// testModel is the model the harness's profile resolved: pi's spelling of GLM
+// 5.3, the cloud profiles' own.
+const testModel = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 
 // harness is one executor pointed at one door, with the spec the reconciler
 // would build for one tick.
@@ -328,6 +345,7 @@ func (h *harness) newExecutor(state string) *Executor {
 		EpicID:     "xte",
 		BaseRef:    "epic/xte",
 		Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
+		Model:      testModel,
 		Attempt:    1,
 		StateDir:   state,
 		Now:        func() time.Time { return time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC) },

@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -183,5 +186,66 @@ func TestTheDoorFieldsRideTheDispatch(t *testing.T) {
 			"executor invented would be a title the dispatch record does not name")
 	} else if !strings.Contains(err.Error(), "title") {
 		t.Errorf("the refusal does not name the missing title: %v", err)
+	}
+}
+
+// The model the dispatch's PROFILE resolved is the model the door is asked to
+// boot the worker on (tick a08): a cloud profile's recorded model rests on
+// nothing but this request, never on the factory's own default agreeing.
+// Asserted at the door's end of the wire — a fake door that reads the start
+// body — because the claim is about what crosses it.
+//
+// short: one httptest door; no real network.
+func TestTheProfilesModelRidesTheDispatchToTheDoor(t *testing.T) {
+	var asked map[string]any
+	door := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// The identity has never started: the door's `lost`.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"schema_version": 1, "job_id": "run-r1/tick-xev/attempt-1", "state": "lost",
+				"terminal": false, "observed_at": "2026-09-24T00:00:00Z", "cursor": nil,
+			})
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&asked)
+		// Refused after reading: the body is the evidence, the start's fate is not.
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "sandbox_dispatch_not_wired", "detail": "test door"})
+	}))
+	defer door.Close()
+	t.Setenv("TICKS_FACTORY_URL", door.URL)
+	t.Setenv("TICKS_FACTORY_TOKEN", "run-r1-token")
+
+	d := cloudDispatch(t)
+	d.Profile.Model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+	executor, _, err := executorFactory("pi", "")(d)
+	if err != nil {
+		t.Fatalf("the factory refused a dispatch the honoured set names: %v", err)
+	}
+	spec := &subprocess.JobSpec{
+		SchemaVersion:  subprocess.SchemaVersion,
+		JobID:          d.JobID,
+		Role:           d.Role,
+		Source:         subprocess.Source{Repository: d.Repo, BaseSHA: d.BaseSHA, WriteRef: d.WriteRef},
+		Capabilities:   subprocess.Capabilities{Persistence: "durable", Isolation: "process", Network: "restricted"},
+		Inputs:         []subprocess.Input{{Kind: "tick", ID: d.TickID}},
+		OutputSchema:   "ticfac.job-result.implement-tick.v1",
+		ArtifactPrefix: "runs/" + d.RunID + "/" + d.TickID + "/",
+		Credentials: subprocess.Credentials{
+			Model: subprocess.ModelCredential{Shorthand: "issued-by-host"},
+			Source: subprocess.SourceCredential{Grant: &subprocess.SourceGrant{
+				Issuer: "host", Grade: "write", WriteRefPrefix: "refs/heads/ticfac/",
+			}},
+		},
+		Limits: subprocess.Limits{WallSeconds: 3600},
+	}
+	if _, err := executor.Start(spec); err == nil {
+		t.Fatal("a start the test door refused was reported as started")
+	}
+	if asked == nil {
+		t.Fatal("the door was never asked to start the attempt")
+	}
+	if got := asked["model"]; got != d.Profile.Model {
+		t.Errorf("the door was asked to boot model %v, want the profile's %q", got, d.Profile.Model)
 	}
 }

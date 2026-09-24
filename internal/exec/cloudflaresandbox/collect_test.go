@@ -142,6 +142,7 @@ func (h *harness) newExecutorWithRepo(state, repo string) *Executor {
 		EpicID:     "xte",
 		BaseRef:    "epic/xte",
 		Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
+		Model:      testModel,
 		Attempt:    1,
 		StateDir:   state,
 		Repo:       repo,
