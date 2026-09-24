@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 105,
-  "state": "dispatching",
-  "reason": "dispatching mn7 as attempt 16",
-  "updated_at": "2026-09-24T08:17:32Z",
+  "sequence": 106,
+  "state": "running",
+  "reason": "mn7 is running as attempt 16",
+  "updated_at": "2026-09-24T08:17:47Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -54,7 +54,8 @@
     },
     {
       "tick_id": "mn7",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 16
     },
     {
       "tick_id": "nwn",
