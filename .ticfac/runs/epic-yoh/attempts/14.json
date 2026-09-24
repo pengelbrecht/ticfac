@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 14,
+  "tick_id": "6gr",
+  "dispatched_at": "2026-09-24T05:53:54Z",
+  "job_handle": {
+    "attempt": 14,
+    "base_sha": "94a8fe6f5b70949c9a069d8c68817cd427394e38",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-yoh/tick-6gr/attempt-14",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:3d229556d593db5060d6a8d6bfb1599b620b3e49921ea7abfa6616f4761279b1",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "6gr",
+    "tier": "strong",
+    "touch": null,
+    "try": 1,
+    "write_ref": "refs/heads/ticfac/run-epic-yoh/tick-6gr/attempt-14"
+  },
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "6gr",
+    "attempt": 14,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "94a8fe6f5b70949c9a069d8c68817cd427394e38",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
