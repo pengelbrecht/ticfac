@@ -1463,3 +1463,4 @@
 {"ts":"2026-09-24T12:56:29.698826Z","tick":"r1t","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["cs1","9iz","4lv","dyo","78v","0ye"],"title":"Close out yoh: retro, and what the next epic is"}}
 {"ts":"2026-09-24T13:00:35.017461Z","tick":"4lv","action":"note","actor":"ticfac","epic":"yoh","data":{"note":"\n2026-09-24 15:00 - ticfac run epic-yoh: 4lv try 1 (run dispatch #19) merged into epic/yoh as c9b67641ee01; the integrated gate (go, ts) passed.","title":"A Run Workflow whose boot step exhausts its retries still finalizes"}}
 {"ts":"2026-09-24T13:00:43.049758Z","tick":"4lv","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"A Run Workflow whose boot step exhausts its retries still finalizes"}}
+{"ts":"2026-09-24T13:01:24.618342Z","tick":"0ye","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"Every step of superviseRun that can throw still ends in finalize"}}
