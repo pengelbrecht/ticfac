@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 154,
-  "state": "collecting",
-  "reason": "collecting 4lv attempt 19",
-  "updated_at": "2026-09-24T12:55:09Z",
+  "sequence": 155,
+  "state": "integrating",
+  "reason": "integrating 4lv attempt 19 into epic/yoh",
+  "updated_at": "2026-09-24T12:56:04Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -88,7 +88,7 @@
     },
     {
       "tick_id": "4lv",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 19
     },
     {
