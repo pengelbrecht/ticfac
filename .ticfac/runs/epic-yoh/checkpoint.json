@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 168,
-  "state": "running",
-  "reason": "78v is closed",
-  "updated_at": "2026-09-24T13:08:11Z",
+  "sequence": 169,
+  "state": "collecting",
+  "reason": "collecting 0ye attempt 23",
+  "updated_at": "2026-09-24T13:39:13Z",
   "ticks": [
     {
       "tick_id": "uqi",
