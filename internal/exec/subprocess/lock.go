@@ -3,6 +3,7 @@ package subprocess
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -245,6 +246,55 @@ func stopProven(st *store, stop func(pgid int, alive func() bool)) (bool, error)
 		stopped = true
 	}
 	return stopped, nil
+}
+
+// ------------------------------------------------------------ evacuation ---
+//
+// Two reads a SIGTERM's final flush (ticfac tick ppt) needs from an attempt's
+// state directory, exported because the names they read are this package's
+// contract with itself while the flush itself lives in the reconciler. The
+// reconciler already walks for attempt.json itself (findAttemptState,
+// attemptFacts); what it could not spell was runner.exit — the settle marker
+// — and the fields of the record that say where an attempt's work IS.
+
+// AttemptSettled reports whether the attempt in stateDir has settled: the
+// supervisor recorded its runner's exit. A settled attempt's durability the
+// run has already seen to — its final push happens before settlement is
+// recorded — so an evacuation reads this to spend its bounded budget only on
+// attempts whose work exists nowhere but this container's disk.
+func AttemptSettled(stateDir string) bool {
+	return newStore(stateDir).settled()
+}
+
+// AttemptWork is where one attempt's work lives, as the attempt record
+// states it: the worktree whose loss an evacuation exists to make survivable,
+// the branch that work is committed on, and the remote it is pushed to.
+type AttemptWork struct {
+	TickID   string `json:"tick_id"`
+	Attempt  int    `json:"attempt"`
+	JobID    string `json:"job_id"`
+	Branch   string `json:"branch"`
+	Worktree string `json:"worktree"`
+	Remote   string `json:"remote"`
+}
+
+// ReadAttemptWork reads those fields out of one attempt's record. It is the
+// minimal decode, not readAttempt: the whole record is closed and carries a
+// JobSpec the flush has no use for, and a strict read would refuse a record
+// from an older attempt for reasons the flush does not care about.
+func ReadAttemptWork(stateDir string) (AttemptWork, error) {
+	var work AttemptWork
+	raw, err := os.ReadFile(filepath.Join(stateDir, fileAttempt))
+	if err != nil {
+		return work, err
+	}
+	if err := json.Unmarshal(raw, &work); err != nil {
+		return work, fmt.Errorf("the attempt record at %s: %w", stateDir, err)
+	}
+	if work.Worktree == "" || work.Branch == "" {
+		return work, fmt.Errorf("the attempt record at %s names no worktree or no branch", stateDir)
+	}
+	return work, nil
 }
 
 // KillLiveProcesses SIGKILLs the process group of every process this attempt's
