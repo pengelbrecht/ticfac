@@ -75,6 +75,9 @@ func TestAFreshDiskStartRefusesAPushedHeadThatIsNotThisAttemptSWork(t *testing.T
 	// under this attempt's write ref.
 	scratch := filepath.Join(f.Repo.Root, "scratch")
 	runGit(t, f.Repo.Root, "clone", "--quiet", f.Repo.Origin, scratch)
+	// A clone carries no identity of its own; CI has no global one either.
+	runGit(t, scratch, "config", "user.name", "ticfac test")
+	runGit(t, scratch, "config", "user.email", "test@example.com")
 	runGit(t, scratch, "checkout", "--quiet", "--orphan", "foreign")
 	if err := os.WriteFile(filepath.Join(scratch, "foreign.txt"), []byte("someone else's work\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -121,6 +124,9 @@ func pushDurableWork(t *testing.T, repo *testRepo, branch, file, body string) st
 	t.Helper()
 	scratch := filepath.Join(repo.Root, "scratch")
 	runGit(t, repo.Root, "clone", "--quiet", repo.Origin, scratch)
+	// A clone carries no identity of its own; CI has no global one either.
+	runGit(t, scratch, "config", "user.name", "ticfac test")
+	runGit(t, scratch, "config", "user.email", "test@example.com")
 	runGit(t, scratch, "checkout", "--quiet", "-b", branch, repo.Base)
 	if err := os.WriteFile(filepath.Join(scratch, file), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
