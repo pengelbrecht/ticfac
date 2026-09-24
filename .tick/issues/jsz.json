@@ -1,0 +1,13 @@
+{
+  "id": "jsz",
+  "title": "An SSH auth refusal during a network flap is classified, not an unclassified stop",
+  "description": "epic-yoh, 2026-09-24 14:34 UTC: during a burst of network trouble (DNS failures minutes earlier), one git fetch of dyo's attempt branch got 'git@github.com: Permission denied (publickey)'. The same fetch succeeded a minute later with nothing changed. The run treated it as 'a stop this run has no classification for' and halted for a person. Classify git auth refusals: retry once or twice within the remote-transient bound, then refuse with a named class (remote_auth_refused) that says what to check (ssh-agent, key, deploy access). Never an unclassified stop.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A git auth refusal is retried within the transient bound and, if it persists, refused as its own named class with remediation text; a test injects a one-off publickey refusal and the run continues",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T14:35:32.786854Z",
+  "updated_at": "2026-09-24T14:35:32.786854Z"
+}
