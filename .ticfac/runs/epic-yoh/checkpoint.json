@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 52,
-  "state": "dispatching",
-  "reason": "dispatching l6t as attempt 10",
-  "updated_at": "2026-09-24T05:03:20Z",
+  "sequence": 53,
+  "state": "running",
+  "reason": "l6t is running as attempt 10",
+  "updated_at": "2026-09-24T05:03:41Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -44,7 +44,8 @@
     },
     {
       "tick_id": "l6t",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 10
     },
     {
       "tick_id": "a08",
