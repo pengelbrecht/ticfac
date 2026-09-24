@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 57,
-  "state": "failed",
-  "reason": "lkd did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: lkd try 1 (run dispatch #5) does not merge onto epic/yoh: 1 conflict: content in internal/reconcile/dispatch.go",
-  "updated_at": "2026-09-24T05:16:15Z",
+  "sequence": 58,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-24T05:19:42Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -82,7 +82,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "746b596f24782fd5b690002feea80f469d673ce6",
+    "source_sha": "32ca66462d3e11f6ed33c34cb86c5756ad27c16e",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
