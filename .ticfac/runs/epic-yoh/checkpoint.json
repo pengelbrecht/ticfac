@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 189,
-  "state": "publishing",
-  "reason": "closing dyo behind the integrated gate on 5dd1b0e0ffc9",
-  "updated_at": "2026-09-24T15:01:02Z",
+  "sequence": 190,
+  "state": "running",
+  "reason": "dyo is closed",
+  "updated_at": "2026-09-24T15:01:20Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -103,7 +103,7 @@
     },
     {
       "tick_id": "dyo",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 22
     },
     {
