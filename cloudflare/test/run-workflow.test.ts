@@ -92,6 +92,17 @@ class FakeSandbox implements OrchestratorSandbox {
   destroyed = false;
   /** The container died and came back empty: it no longer knows its process. */
   vanished = false;
+  /**
+   * tick 4lv: this container refuses every `startProcess`, so the boot step
+   * exhausts `BOOT_RETRIES` and what the run does about THAT is the test.
+   *
+   * The container still EXISTS — the `get` that precedes `startProcess` is
+   * what provisions it, under keepAlive — because a failed boot that has
+   * already provisioned a container is the expensive case a finalize must
+   * sweep, and a fake that refused at `get` instead would model only the
+   * cheap one where nothing was ever created.
+   */
+  neverStarts = false;
   /** cr4: how many times the watch loop asked this container for its process. */
   looked = 0;
   /** tick s7f: how many times the reconcile has read this container's process list. */
@@ -113,6 +124,9 @@ class FakeSandbox implements OrchestratorSandbox {
     command: string,
     options: { env: Record<string, string> },
   ): Promise<SandboxProcessView> {
+    if (this.neverStarts) {
+      throw new Error(`the sandbox api refused to start anything in ${this.name}`);
+    }
     const process = new FakeProcess(`${this.name}-p${++this.#next}`, command, options.env);
     this.processes.push(process);
     return process.view;
@@ -191,6 +205,15 @@ class FakeSandboxes implements SandboxBinding {
   readonly #byName = new Map<string, FakeSandbox>();
 
   /**
+   * tick 4lv: the exact name whose container refuses every `startProcess` —
+   * a boot failure that is a property of the platform rather than a
+   * transient a retry could outlive. Keyed on the full sandbox name because
+   * the fake must demand the identity the real thing would: a boot failure
+   * is a fact about ONE boot of ONE run, not about the binding.
+   */
+  neverStartsFor: string | null = null;
+
+  /**
    * tick s7f: the container is evicted and no snapshot restores it. Addressing
    * the same name again provisions an EMPTY container, which is what a cold
    * recovery actually looks like.
@@ -221,6 +244,7 @@ class FakeSandboxes implements SandboxBinding {
       this.#byName.set(name, sandbox);
       this.booted.push(sandbox);
     }
+    if (this.neverStartsFor === name) sandbox.neverStarts = true;
     return sandbox;
   }
 
@@ -1390,6 +1414,56 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     const run = await settled(runID);
     expect(run.state).toBe("failed");
     expect(sandboxes.booted).toHaveLength(MAX_SANDBOX_BOOTS);
+  });
+
+  // tick 4lv (yoh final-review finding 0c110874): the boot step carries a
+  // deliberate retry policy (cr4), and a boot that exhausts it used to throw
+  // out of supervisePass — the run never reached finalize, so its gateway
+  // tokens stayed live, its row never settled and the keepAlive container
+  // the failed boot had already provisioned kept billing with nothing to
+  // sweep it. The Workflow's whole job is boot, budget, watch, retry,
+  // finalize: an ending that skips the last verb is not an ending, whatever
+  // the process did before it died.
+  it("still finalizes when the boot step exhausts its retries", async () => {
+    const { runID, project, epic } = await ignite({
+      // The container is provisioned (the `get` that starts a boot is what
+      // provisions it) but refuses to start anything, every attempt — a boot
+      // failure that is a property of the platform, not a transient a retry
+      // could outlive.
+      beforeStart: (id) => {
+        sandboxes.neverStartsFor = sandboxName(id, 1);
+      },
+    });
+
+    // The run settles, and the record's reason names the boot failure —
+    // the error the step died of, not the silence of a Workflow that died
+    // mid-verb.
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(run.ended_at).not.toBeNull();
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.state).toBe("failed");
+    expect(record.detail).toContain("could not be booted");
+    expect(record.detail).toContain("boot 1");
+    expect(record.detail).toContain("refused to start anything");
+
+    // BOOT_RETRIES is limit 2, so the step ran three times and minted a
+    // credential on each attempt — every one of them revoked by the finalize
+    // the throw used to skip. Minted before the container refused, because
+    // the credential precedes the container in the boot, which is what makes
+    // a skipped finalize a live credential rather than a clean one.
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens).toHaveLength(3);
+    expect(tokens.every((token) => token.revoked_at !== null)).toBe(true);
+
+    // The keepAlive container the failed boot provisioned is swept, and the
+    // audit trail says both what failed and that the run finished saying so.
+    const container = sandboxes.named(sandboxName(runID, 1));
+    expect(container.processes).toHaveLength(0);
+    expect(container.destroyed).toBe(true);
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.map((entry) => entry.decision)).toContain("unbootable:1");
+    expect(logged.at(-1)!.decision).toBe("finished:failed");
   });
 });
 
