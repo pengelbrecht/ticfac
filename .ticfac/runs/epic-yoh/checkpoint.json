@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 183,
-  "state": "failed",
-  "reason": "dyo did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: dyo try 1 (run dispatch #22) does not merge onto epic/yoh: 4 conflicts: content in cloudflare/src/sandbox-dispatch.ts; content in cloudflare/src/sandbox-executor.ts; content in internal/exec/cloudflaresandbox/adoption_e2e_test.go; content in internal/exec/cloudflaresandbox/door_test.go",
-  "updated_at": "2026-09-24T14:53:08Z",
+  "sequence": 184,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-24T14:59:08Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -110,6 +110,10 @@
       "tick_id": "0ye",
       "state": "closed",
       "attempt": 23
+    },
+    {
+      "tick_id": "94u",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -117,7 +121,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "0f15356a7fbc7097e09fcc033114ac3ea89fe195",
+    "source_sha": "d8e56c159dd660ee1ea3181f058aa827f3d12851",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
