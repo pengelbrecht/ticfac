@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 140,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for cs1",
-  "updated_at": "2026-09-24T11:34:45Z",
+  "sequence": 141,
+  "state": "publishing",
+  "reason": "closing cs1 behind its validated review-epic answer",
+  "updated_at": "2026-09-24T11:53:40Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -74,7 +74,7 @@
     },
     {
       "tick_id": "cs1",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 18
     },
     {
