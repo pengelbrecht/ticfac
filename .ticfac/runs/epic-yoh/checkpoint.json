@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 99,
-  "state": "gating",
-  "reason": "running the integrated gate for l6t on 65ed80e7cce6",
-  "updated_at": "2026-09-24T08:00:40Z",
+  "sequence": 100,
+  "state": "failed",
+  "reason": "the integrated gate on 65ed80e7cce6 did not pass for l6t: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/yoh, so the repair is to fix the check or the tree, push it to epic/yoh, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit",
+  "updated_at": "2026-09-24T08:01:46Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "l6t",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 10
     },
     {
