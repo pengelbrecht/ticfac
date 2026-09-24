@@ -340,6 +340,19 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Where this attempt's worktree is cut. A boot with no state directory
+	// under it — the fresh-disk boot a replacement container makes, and the
+	// same path a first boot takes — must still be the SAME path, and the
+	// attempt's own branch on the remote is the durable half of the attempt:
+	// the commits the dead worker pushed before its disk went. Cutting the
+	// worktree at the base while the remote is ahead would silently throw
+	// that work away AND leave this attempt's every push refused as a
+	// non-fast-forward, so the pushed head is the start point when there is
+	// one and the base when there is not.
+	start, err := e.startPoint(spec, branch, base)
+	if err != nil {
+		return nil, err
+	}
 
 	record := &attemptRecord{
 		SchemaVersion:  stateSchemaVersion,
@@ -398,7 +411,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	}
 	record.RunnerArgv = argv
 
-	if err := e.makeWorktree(record); err != nil {
+	if err := e.makeWorktree(record, start); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
@@ -479,7 +492,41 @@ func (e *Executor) writePID(st *store, pid int) error {
 	return nil
 }
 
-func (e *Executor) makeWorktree(record *attemptRecord) error {
+// startPoint is where a fresh attempt's worktree is cut: the base it was
+// dispatched from, unless the remote already carries THIS attempt's branch
+// beyond that base — the durable work of an incarnation whose whole disk was
+// lost with its container. The first boot is the same path, a no-op: there
+// is nothing on the remote yet, and the base is the answer.
+//
+// A head that does not descend from this attempt's base is not this
+// attempt's work at any point in its life — the write-ref namespace is one
+// run's, so this can only be a ref that something else has moved — and it
+// is refused rather than merged over, exactly as a local branch another
+// ref owns is.
+func (e *Executor) startPoint(spec *JobSpec, branch, base string) (string, error) {
+	remote := e.remoteFor(spec)
+	if remote == "" {
+		// No remote to continue from: a read-only review never pushed
+		// anything, and a repository without remotes has nowhere durable to
+		// have pushed to. The base is all there is.
+		return base, nil
+	}
+	head, err := pushedHead(e.repo, remote, branch)
+	if err != nil {
+		return "", err
+	}
+	if head == "" || head == base {
+		return base, nil
+	}
+	if !isAncestor(e.repo, base, head) {
+		return "", refuse(RefusedLive,
+			"branch %s on %s carries %s, which is not work cut from this attempt's base %s: this attempt would write a ref something else has moved",
+			branch, remote, short(head), short(base))
+	}
+	return head, nil
+}
+
+func (e *Executor) makeWorktree(record *attemptRecord, start string) error {
 	if _, err := os.Stat(record.Worktree); err == nil {
 		return nil
 	}
@@ -488,7 +535,7 @@ func (e *Executor) makeWorktree(record *attemptRecord) error {
 			"branch %s already exists in %s: this attempt would write a ref another one owns",
 			record.Branch, e.repo)
 	}
-	if err := worktreeAdd(e.repo, record.Worktree, record.Branch, record.BaseSHA); err != nil {
+	if err := worktreeAdd(e.repo, record.Worktree, record.Branch, start); err != nil {
 		return fmt.Errorf("create the attempt worktree: %w", err)
 	}
 	// The RESULT artifact is this executor's own report, read from the
