@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 206,
-  "state": "running",
-  "reason": "CI is green on the epic PR #51; the close-out of yoh is admitted",
-  "updated_at": "2026-09-24T16:26:24Z",
+  "sequence": 207,
+  "state": "dispatching",
+  "reason": "dispatching r1t as attempt 25",
+  "updated_at": "2026-09-24T16:26:28Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "r1t",
-      "state": "rejected"
+      "state": "ready"
     },
     {
       "tick_id": "3ed",
