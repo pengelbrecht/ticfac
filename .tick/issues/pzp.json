@@ -9,9 +9,12 @@
   "blocked_by": [
     "klq"
   ],
+  "after": [
+    "nfo"
+  ],
   "parent": "gvc",
   "acceptance_criteria": "Given a finding and an epic's acceptance, every runnable item is run and the finding is reported GATING or NOT GATING as an OBSERVED verdict naming the item and its evidence; unrunnable items come back unresolved rather than assumed either way; the verdict is keyed by the commit it ran on; and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:30:54.936508Z",
-  "updated_at": "2026-09-22T16:30:54.936508Z"
+  "updated_at": "2026-09-24T12:17:17.784639Z"
 }
