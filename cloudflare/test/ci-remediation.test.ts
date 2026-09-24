@@ -20,13 +20,13 @@ import {
   type FactoryOwnedBranch,
   FLAKE_GATE_CONFIRMATIONS,
   factoryOwnedBranch,
+  REMEDIATION_CREDENTIAL_GRADE,
   remediateCheckFailure,
   STRIKE_BUDGET,
   STRIKE_WINDOW_MS,
 } from "../src/ci-remediation";
 import { CHECK_RUN_EVENT } from "../src/ci-webhook";
 import { enrolProject, listRecentDispatch } from "../src/db";
-import type { EpicReconcilerParams } from "../src/epic-reconciler";
 import { GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
 import type { RunWorkflowInstance, RunWorkflowParams } from "../src/runs";
 import { WORKER_BRANCH_PREFIX } from "../src/worker-boot";
@@ -129,9 +129,8 @@ class FakeChecks implements CheckHistoryReader {
   }
 }
 
+/** The Run Workflow binding's stand-in — a remediation re-runs the epic behind the failing branch. */
 let workflow: FakeWorkflow<RunWorkflowParams>;
-/** The reconciler binding's stand-in — a remediation re-runs an epic, which is the reconciler's to drive since tick nu9. */
-let reconciler: FakeWorkflow<EpicReconcilerParams>;
 let checks: FakeChecks;
 /** The operator's own credential, for the release route. Minted once: PBKDF2 is not cheap. */
 let operatorToken: string;
@@ -174,10 +173,8 @@ function fakeBotAPI(): void {
 
 beforeEach(() => {
   workflow = new FakeWorkflow();
-  reconciler = new FakeWorkflow();
   checks = new FakeChecks();
   set("RUN_WORKFLOW", workflow);
-  set("EPIC_RECONCILER", reconciler);
   set("CHECK_HISTORY", checks);
   set("GITHUB_WEBHOOK_SECRET", SECRET);
   set("FACTORY_BASE_URL", BASE);
@@ -483,7 +480,7 @@ describe("ownership is decided by a record of creation", () => {
     // The refusal says what to do about it. A refusal that does not is a
     // refusal people work around.
     expect(body.detail).toContain(CI_BRANCHES_PATH);
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
 
     // And the same branch name, once a record says the factory created it, is
     // work: two failing deliveries reproduce it and a run ignites.
@@ -491,7 +488,7 @@ describe("ownership is decided by a record of creation", () => {
     await deliver(checkRunPayload(project));
     const dispatched = await deliver(checkRunPayload(project));
     expect(dispatched.status).toBe(201);
-    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toHaveLength(1);
   });
 
   it("reaches the digest instead of only the dispatch log", async () => {
@@ -545,7 +542,7 @@ describe("ownership is decided by a record of creation", () => {
     expect((await response.json()) as { reason: string }).toMatchObject({
       reason: "branch_disclaimed",
     });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     // A decided branch is not a finding. The digest reports questions, not
     // answers — this one has been answered, and repeating it daily would be
     // the cry-wolf failure zaw's design exists to avoid.
@@ -616,7 +613,7 @@ describe("nothing can dispatch against a human-owned branch", () => {
       dispatched: false,
       reason: "human_owned_branch",
     });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     expect(await runsFor(project)).toBe(0);
     // Not even the evidence table: a human's branch stops before the factory
     // starts keeping a file on it.
@@ -650,7 +647,7 @@ describe("nothing can dispatch against a human-owned branch", () => {
     await expect(dispatchRemediation(env, forged, { strikes: 0 })).rejects.toThrow(
       /not a factory-owned branch/,
     );
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     expect(await runsFor(project)).toBe(0);
   });
 });
@@ -664,7 +661,7 @@ describe("the flake gate", () => {
     const first = await deliver(checkRunPayload(project));
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({ dispatched: false, reason: "unconfirmed" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     // The first failure buys a re-run, not a run: that re-run's delivery is
     // the second observation the gate is waiting for.
     expect(checks.reruns).toHaveLength(1);
@@ -675,20 +672,20 @@ describe("the flake gate", () => {
     expect(body.run_id).toBeTruthy();
     expect(body.strikes).toBe(1);
 
-    expect(reconciler.created).toHaveLength(1);
-    const params = reconciler.created[0]!.params;
+    expect(workflow.created).toHaveLength(1);
+    const params = workflow.created[0]!.params;
     expect(params.project).toBe(project);
     expect(params.run_id).toBe(body.run_id);
-    // A remediation re-runs the epic behind the failing branch, which is the
-    // reconciler's to drive (tick nu9): the instance is the run, keyed by it.
-    expect(params.epic_id).toBe("szp");
-    expect(params.branch).toBe("epic/szp");
+    // A remediation re-runs the epic behind the failing branch (tick mn7:
+    // one driver — the run IS the orchestrator container, and the instance
+    // is the run, keyed by it).
+    expect(params.epic).toBe("szp");
     // The failing commit itself. A fix for a failure you cannot reproduce is
     // a guess; a fix aimed at a different tree is not even that.
     expect(params.base_sha).toBe(HEAD);
-    // The container agent — the driver a remediation no longer rides — was
-    // asked for nothing.
-    expect(workflow.created).toEqual([]);
+    // The remediation's held grade rides to the container: a remediation
+    // cannot push is a remediation that cannot remediate.
+    expect(params.credential_grade).toBe(REMEDIATION_CREDENTIAL_GRADE);
 
     expect(await attemptsFor(project, OWNED)).toBe(1);
   });
@@ -711,7 +708,7 @@ describe("the flake gate", () => {
     const again = await deliver(payload);
     expect(again.status).toBe(200);
     expect(await again.json()).toMatchObject({ dispatched: false, reason: "duplicate_delivery" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     expect(await runsFor(project)).toBe(0);
   });
 
@@ -735,7 +732,7 @@ describe("the flake gate", () => {
     const third = await deliver(checkRunPayload(project));
     expect(await third.json()).toMatchObject({ reason: "flaky" });
 
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     expect(await runsFor(project)).toBe(0);
     expect(await attemptsFor(project, OWNED)).toBe(0);
   });
@@ -749,7 +746,7 @@ describe("the flake gate", () => {
     await deliver(checkRunPayload(project));
     const second = await deliver(checkRunPayload(project));
     expect(await second.json()).toMatchObject({ dispatched: false, reason: "flaky" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("parks a failure that is already red on the base branch", async () => {
@@ -760,7 +757,7 @@ describe("the flake gate", () => {
     const second = await deliver(checkRunPayload(project));
     expect(second.status).toBe(200);
     expect(await second.json()).toMatchObject({ dispatched: false, reason: "red_on_base" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
 
     const log = await listRecentDispatch(env.DB, 20);
     expect(log.some((e) => e.reason === "flake_gate")).toBe(true);
@@ -773,7 +770,7 @@ describe("the flake gate", () => {
     await deliver(checkRunPayload(project));
     const second = await deliver(checkRunPayload(project));
     expect(second.status).toBe(201);
-    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toHaveLength(1);
   });
 
   it("reaches no verdict at all when GitHub cannot be asked", async () => {
@@ -790,7 +787,7 @@ describe("the flake gate", () => {
       dispatched: false,
       reason: "check_history_unavailable",
     });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     // Nothing was requested either: an unreachable GitHub does not get asked
     // to re-run a check.
     expect(checks.reruns).toHaveLength(0);
@@ -820,14 +817,14 @@ describe("the flake gate", () => {
     const response = await deliver(checkRunPayload(project, { check_run: { node_id: "" } }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ reason: "invalid_payload" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("refuses a project this factory was never pointed at", async () => {
     const response = await deliver(checkRunPayload("stranger/repo"));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ reason: "not_enrolled" });
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 });
 
@@ -908,7 +905,7 @@ describe("the strike budget", () => {
     const response = await reproduce(project);
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ dispatched: true, strikes: STRIKE_BUDGET });
-    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toHaveLength(1);
   });
 
   it("escalates instead of retrying once the budget is spent", async () => {
@@ -928,7 +925,7 @@ describe("the strike budget", () => {
     });
     // The branch is still failing and the loop would happily keep buying runs.
     // The budget is the only thing that stops it.
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
     expect(await attemptsFor(project, OWNED)).toBe(STRIKE_BUDGET);
   });
 
@@ -975,7 +972,7 @@ describe("the strike budget", () => {
     // Replacing an unbounded spend loop with an unbounded notification loop
     // would not be a fix.
     expect(sent().slice(before)).toHaveLength(1);
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("records the escalation even when the channel cannot be reached", async () => {
@@ -996,7 +993,7 @@ describe("the strike budget", () => {
       .first<{ strikes: number; notified_at: string | null }>();
     expect(row?.strikes).toBe(STRIKE_BUDGET);
     expect(row?.notified_at).toBeNull();
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("counts per branch, so one branch cannot spend another's budget", async () => {
@@ -1006,7 +1003,7 @@ describe("the strike budget", () => {
 
     const response = await reproduce(project, { head_branch: "tick/szp/v7g" });
     expect(response.status).toBe(201);
-    expect(reconciler.created).toHaveLength(1);
+    expect(workflow.created).toHaveLength(1);
   });
 
   it("forgets attempts older than the window", async () => {
@@ -1115,7 +1112,7 @@ describe("the strike budget", () => {
         escalated: true,
         opened: false,
       });
-      expect(reconciler.created).toHaveLength(0);
+      expect(workflow.created).toHaveLength(0);
       expect(await attemptsFor(project, OWNED)).toBe(STRIKE_BUDGET);
       // And still silent: the person was told once and nothing has changed.
       expect(sent().slice(before)).toHaveLength(0);
@@ -1165,7 +1162,7 @@ describe("the strike budget", () => {
       const response = await reproduce(project, { head_sha: FRESH });
       expect(response.status).toBe(201);
       expect(await response.json()).toMatchObject({ dispatched: true, strikes: 1 });
-      expect(reconciler.created).toHaveLength(1);
+      expect(workflow.created).toHaveLength(1);
     });
 
     it("records who released it, and refuses to release twice", async () => {
@@ -1290,7 +1287,7 @@ describe("the door itself", () => {
       body: raw,
     });
     expect(response.status).toBe(401);
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("leaves the issues door working unchanged", async () => {
@@ -1431,7 +1428,7 @@ describe("when the door breaks in a way it has no rule for", () => {
     await deliver(checkRunPayload(project));
     await deliver(checkRunPayload(project));
 
-    expect(reconciler.created).toHaveLength(0);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("lists the fault for an operator and pages again once they clear it", async () => {

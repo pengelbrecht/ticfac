@@ -1,6 +1,6 @@
 /**
  * The sandbox compatibility executor (SPEC §12 Phase 4 item 4, tick k4s):
- * the four operations the EpicReconciler dispatches through, built over the
+ * the four operations of the job-protocol attempt seam, built over the
  * SandboxBinding seam, exercised here against fakes the same way
  * worker-dispatch's own suite exercises spawn/wait/teardown — a lifecycle
  * only provable by starting a real container is a lifecycle nobody tests.
@@ -8,8 +8,8 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
+import type { AttemptSpec } from "../src/attempt-protocol";
 import { insertRun, type Run } from "../src/db";
-import type { AttemptSpec } from "../src/epic-reconciler";
 import { authorizeRunCredential, revokeRunTokens } from "../src/gateway";
 import type { GitRefWriter, RefPut } from "../src/git-refs";
 import type {

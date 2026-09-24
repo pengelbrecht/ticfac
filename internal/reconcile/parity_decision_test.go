@@ -21,11 +21,19 @@ import (
 
 // The parity record (tick sz0): decisions/reconciler-parity.json is the
 // written statement of every intentional semantic difference between the Go
-// reconciler (this package) and the Workflow reconciler
-// (cloudflare/src/epic-reconciler.ts). Two implementations of one thing with
-// no statement of where they may differ is how drift happens — the same
+// reconciler (this package) and the Workflow reconciler the isolate used to
+// run (cloudflare/src/epic-reconciler.ts). Two implementations of one thing
+// with no statement of where they may differ is how drift happens — the same
 // subject the vendored contract bundle (internal/contracts) and the vendored
 // image context (internal/sandboxpin) already answer with a pin and a check.
+//
+// Tick mn7 deleted the Workflow implementation — a cloud epic runs through
+// ticfac in the orchestrator container, whose reconciler is this package —
+// so the hosts are one implementation and the record's ts anchors went with
+// the module it pinned (decisions/README.md says how the record was
+// rewritten). What survives is the Go half: each decision still pins a
+// recorded behaviour of the one implementation, and this check still holds
+// that pin.
 //
 // Each decision is pinned to the code regions that implement it on each side
 // with marker comments bracketing the recorded behaviour:
@@ -404,20 +412,22 @@ func TestParityCheckRefusesAChangedRegion(t *testing.T) {
 		t.Fatalf("the throwaway copy does not verify clean before the mutation: %v", got)
 	}
 
-	// The acceptance criterion, on one side of one decision: change exactly
-	// one line of one recorded region of one implementation, and the check
+	// The acceptance criterion, on the one implementation's side of one
+	// decision: change exactly one line of one recorded region, and the check
 	// must refuse naming the decision, the side and the region.
-	const file = "cloudflare/src/epic-reconciler.ts"
+	const file = "internal/reconcile/window.go"
 	rewrite(t, filepath.Join(throwaway, filepath.FromSlash(file)), func(line string) string {
-		// D26's recorded admission: the width and the row's readiness only.
-		if strings.Contains(line, "if (width > 0 && live >= width) break;") {
-			return strings.Replace(line, "break;", "continue;", 1)
+		// D26's recorded admission: the wave and blocker boundaries this
+		// window never crosses. A boundary deleted is the drift the record
+		// exists to catch.
+		if strings.Contains(line, "if next.blockedBy(fl.entry.TickID) {") {
+			return "\t\t\t// the recorded blocker boundary was changed"
 		}
 		return line
 	})
 
 	complaints := verifyParity(throwaway, rec)
-	want := []string{"D26", "admission", file}
+	want := []string{"D26", "boundaries", file}
 	for _, w := range want {
 		found := false
 		for _, c := range complaints {
@@ -477,11 +487,12 @@ func TestParityCheckRefusesAMarkerNoDecisionRecords(t *testing.T) {
 
 	// A marker in the code whose decision is not in the record is an
 	// unattributed behaviour: deleting a decision must leave a refusal, not
-	// a marker that verifies by silence.
-	const file = "cloudflare/src/epic-reconciler.ts"
+	// a marker that verifies by silence. D26 still exists and still anchors
+	// window.go, so its begin marker is the line to hang a stray one beside.
+	const file = "internal/reconcile/window.go"
 	rewrite(t, filepath.Join(throwaway, filepath.FromSlash(file)), func(line string) string {
-		if strings.Contains(line, marker("D26", "admission", "begin")) {
-			return line + "\n      // reconciler-decision:D99:begin:stray\n      // reconciler-decision:D99:end:stray"
+		if strings.Contains(line, marker("D26", "boundaries", "begin")) {
+			return line + "\n\t\t\t// reconciler-decision:D99:begin:stray\n\t\t\t// reconciler-decision:D99:end:stray"
 		}
 		return line
 	})

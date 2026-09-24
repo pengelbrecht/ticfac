@@ -67,56 +67,17 @@ export const COLD_START_BENCHMARK_MS = 93_240;
  *
  * `fanout_degradation_vs_n1` in the same artifact: 1.00x / 2.22x / 3.74x at
  * N=1/3/5, all of it in dependency install. A probe budget sized for a lone
- * container is not a budget for the fifth container of a wave.
+ * container is not a budget for the fifth container of a wave. Read by
+ * `DEFAULT_PROBE_TIMEOUT_MS` below, and pinned against the committed
+ * benchmark artifact by `internal/factory/payload_parity_test.go`.
+ *
+ * The width-keyed degradation CURVE this constant fed — `probeTimeoutMs`,
+ * which interpolated a probe budget for a wave of any width — existed to
+ * size the reconciler's wave dispatches, and went with the reconciler
+ * (tick mn7); the door's dispatches are one container each, so the widest
+ * measured factor is the one that sizes them.
  */
 export const FANOUT_DEGRADATION_FACTOR = 3.74;
-
-/**
- * The same artifact's degradation curve, by wave width.
- *
- * {@link FANOUT_DEGRADATION_FACTOR} is the WIDEST point of this curve, and
- * sizing every deployment's probe by it is what pushed a green-start probe and
- * a dispatch confirm to 598s of the 600s a Workflow step may execute for
- * (tick 2xm, src/workflow-limits.ts). A deployment that runs three containers
- * at a time paid the five-container penalty for nothing.
- *
- * Read by {@link probeTimeoutMs}: measured points, linear between them, and
- * the widest measured factor beyond the last one — never extrapolated past
- * what the benchmark actually recorded.
- */
-export const FANOUT_DEGRADATION: ReadonlyArray<{ width: number; factor: number }> = [
-  { width: 1, factor: 1.0 },
-  { width: 3, factor: 2.22 },
-  { width: 5, factor: FANOUT_DEGRADATION_FACTOR },
-];
-
-/**
- * How long a worker container has to answer its probe, at a given wave width.
- *
- * Same derivation as {@link DEFAULT_PROBE_TIMEOUT_MS} — a measured cold start,
- * degraded for fan-out, plus 20% headroom — but degraded for THIS wave's
- * width rather than for the widest wave anyone has measured.
- */
-export function probeTimeoutMs(width: number): number {
-  const clean = Number.isFinite(width) && width >= 1 ? width : 1;
-  const last = FANOUT_DEGRADATION[FANOUT_DEGRADATION.length - 1]!;
-  let factor = last.factor;
-  for (let i = 0; i < FANOUT_DEGRADATION.length; i++) {
-    const point = FANOUT_DEGRADATION[i]!;
-    if (clean <= point.width) {
-      const previous = FANOUT_DEGRADATION[i - 1];
-      if (previous === undefined) {
-        factor = point.factor;
-      } else {
-        const span = point.width - previous.width;
-        const along = (clean - previous.width) / span;
-        factor = previous.factor + (point.factor - previous.factor) * along;
-      }
-      break;
-    }
-  }
-  return Math.ceil(COLD_START_BENCHMARK_MS * factor * 1.2);
-}
 
 /**
  * How long a worker container has to answer its probe.
