@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 93,
-  "state": "integrating",
-  "reason": "integrating nwn attempt 13 into epic/yoh",
-  "updated_at": "2026-09-24T05:56:03Z",
+  "sequence": 94,
+  "state": "gating",
+  "reason": "running the integrated gate for nwn on 512a7faa13de",
+  "updated_at": "2026-09-24T05:56:50Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -58,7 +58,7 @@
     },
     {
       "tick_id": "nwn",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 13
     },
     {
