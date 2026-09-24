@@ -24,10 +24,16 @@
  *    stop at killing a process: a trip revokes the run's gateway token, so an
  *    orchestrator that survives its own kill still cannot spend (D17).
  * 3. **Exhaustion is a clean stop, identical to the operator stop path
- *    (D15).** Both trip the same branch: give the in-flight work a bounded
- *    grace window, then boot a `closeout` orchestrator that reconciles and runs
- *    review and closeout on what is done. There is no "abandon the run" path,
- *    because an abandoned run leaves merged work with no tracker state.
+ *    (D15).** Both trip the same branch: revoke per the tick-gyl ordering,
+ *    give the in-flight work a bounded grace window, drain and kill the
+ *    container — and END the run. Since tick dl8 no second container is
+ *    booted on a trip: the one orchestrator runs `ticfac run-epic`, which
+ *    commits and pushes as it goes, so the branch IS the run's state and a
+ *    new run adopts it (`reconcile`); a `closeout` boot would only have
+ *    re-run the epic. There is no "abandon the run" outcome either way:
+ *    what the run did is on origin, review and close-out are role jobs the
+ *    one orchestrator runs inside the run, and a stop that lands before them
+ *    leaves the epic resumable by the next run.
  * 4. **Harness output streams to R2 during the run, never at exit (D20).** The
  *    crashed run is exactly the run whose logs you need, so every observation
  *    flushes what the orchestrator has printed since the last one. Reading the
@@ -127,6 +133,7 @@ import {
   sandboxName,
   terminalExitReason,
 } from "./sandbox";
+import { workerHarness, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
 
@@ -139,8 +146,17 @@ import {
  */
 export const MAX_SANDBOX_BOOTS = 3;
 
-/** The closeout pass gets its own, smaller allowance for the same reason. */
-export const MAX_CLOSEOUT_BOOTS = 2;
+/*
+ * The closeout pass that used to follow a trip had its own, smaller boot
+ * allowance (MAX_CLOSEOUT_BOOTS) and its own window (RUN_CLOSEOUT_MS). Tick dl8
+ * deleted that pass: since hn0 the container execs `ticfac run-epic`, which
+ * ignores TICKS_PHASE and TICKS_STOP_REASON, so a closeout boot re-ran the
+ * epic instead of winding it down — an agent-orchestrator path that no
+ * orchestrator exists to serve. A tripped run now ends (revoke, grace, drain,
+ * kill) and no second container is booted, so both constants are gone. The
+ * names live on here only until the pinned lifecycle-invariants bundle names
+ * them out (A11 cross-references MAX_CLOSEOUT_BOOTS; a re-cut is filed).
+ */
 
 /**
  * How many times one look may ask its container about the orchestrator
@@ -186,8 +202,6 @@ export const DEFAULT_MAX_WALL_CLOCK_MS = 21_600_000; // 6 hours
 export const DEFAULT_MAX_COST_USD = 25;
 /** How long the in-flight work has to land before a clean stop kills it. */
 export const DEFAULT_STOP_GRACE_MS = 300_000; // 5 minutes
-/** A closeout that has not closed out in this long is not going to. */
-export const DEFAULT_CLOSEOUT_MS = 1_800_000; // 30 minutes
 
 /**
  * Observation cadence. Fast at first — a broken boot, a missing toolchain and
@@ -268,7 +282,6 @@ export type RunConfig = {
   /** Whether the deployment explicitly supplied a cost budget override. */
   cost_budget_configured: boolean;
   stop_grace_ms: number;
-  closeout_ms: number;
   /** A fixed cadence when the deployment asks for one; else the backoff above. */
   poll_interval_ms: number | null;
   /** Looks per boot before the run is stopped cleanly rather than watched on. */
@@ -373,7 +386,6 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
     // it spend unmeasured.
     cost_budget_configured: hasPositiveVar(env, "RUN_MAX_COST_USD", false) || cost.applied,
     stop_grace_ms: positiveVar(env, "RUN_STOP_GRACE_MS", DEFAULT_STOP_GRACE_MS, true),
-    closeout_ms: positiveVar(env, "RUN_CLOSEOUT_MS", DEFAULT_CLOSEOUT_MS, true),
     poll_interval_ms:
       poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true),
     max_observations: positiveVar(env, "RUN_MAX_OBSERVATIONS", MAX_OBSERVATIONS, true),
@@ -472,26 +484,19 @@ export function spendSample(
 /**
  * What the next sleep must respect beyond the backoff.
  *
- * Both budgets are sampled on the same cadence, so both overshoot by whatever
- * the sleep costs — and they are bounded differently because they are known
- * differently. The wall clock is known exactly, so the sleep simply stops at
- * the deadline. Spend is only ever projected, so it gets the headroom rule.
+ * The wall clock is the one deadline in force since tick dl8 removed the
+ * closeout pass (the only pass that ever carried a window of its own), so a
+ * sleep stops at it: the look that trips should be the next one. Spend is
+ * only ever projected, so it gets the headroom rule below instead.
  */
 export type Cadence = {
   /** Now, on the same clock as `deadline_ms` — the last checkpointed reading. */
   now_ms: number;
-  /** The earliest deadline in force (run wall clock, pass window), or null. */
+  /** The run's wall-clock deadline, or null before the run starts its clock. */
   deadline_ms: number | null;
   /** The last observation's spend reading, or null before the first one. */
   spend: SpendSample | null;
 };
-
-/** The first of two absolute deadlines to arrive, when either exists. */
-export function earliestDeadline(a: number | null, b: number | null): number | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return Math.min(a, b);
-}
 
 /** The backoff the cadence starts from, before any budget caps it. */
 function baseDelay(config: RunConfig, n: number): number {
@@ -1077,9 +1082,6 @@ type ObserveInput = {
   offset: number;
   seq: number;
   poll_ms: number;
-  /** Absolute deadline for this pass; null when only the run budget applies. */
-  pass_deadline_ms: number | null;
-  enforce_budgets: boolean;
 };
 
 /**
@@ -1150,12 +1152,11 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   const question = await askProcess(sandbox, input.process_id);
   const at = Date.now();
 
-  const checked = input.enforce_budgets
-    ? await detectTrip(env, input, at, leaseLost)
-    : {
-        trip: (await hardStopTrip(env, input)) ?? passDeadlineTrip(input, at),
-        cost_usd: null,
-      };
+  // Budgets are enforced on every pass (tick dl8): the one pass that ever
+  // declined them — the closeout, which existed to land work the budget
+  // interrupted — is gone, and the kill switch's hard-stop half of the
+  // check below does not ride on a budget switch any more.
+  const checked = await detectTrip(env, input, at, leaseLost);
 
   return {
     process: question.answered
@@ -1232,28 +1233,19 @@ async function waitDoneSignal(
   }
 }
 
-function passDeadlineTrip(input: ObserveInput, at: number): Trip | null {
-  if (input.pass_deadline_ms === null || at < input.pass_deadline_ms) return null;
-  return {
-    kind: "budget",
-    budget: "wall_clock",
-    hard: true,
-    detail: "the closeout window elapsed before the orchestrator finished closing out",
-  };
-}
-
 /**
- * A hard stop, read at every observation of every pass — budgets or no.
+ * The trip a standing HARD stop builds, so the vocabulary has one spelling
+ * per verdict: `detectTrip` reads the stop record once, routes a hard stop
+ * through here, and a clean stop through its own arm below.
  *
- * The closeout pass deliberately does not enforce budgets (it exists to land
- * the work the budget interrupted), and that used to mean it read no stop
- * record at all: an operator killing a run mid-closeout was talking to nobody,
- * and every closeout reboot minted a fresh credential over their revocation.
- * A hard stop is not a budget, so it is not on that switch.
+ * Hard stops earned their own branch the hard way (tick gyl): the pass that
+ * once enforced no budgets read no stop record at all, an operator killing a
+ * run mid-pass was talking to nobody, and every reboot minted a fresh
+ * credential over their revocation. Budgets are enforced on every pass since
+ * tick dl8, but the hard/clean distinction still decides whether the
+ * credential dies before the grace window or after it.
  */
-async function hardStopTrip(env: Env, input: ObserveInput): Promise<Trip | null> {
-  const stop = await hardStopRecord(env, input.params);
-  if (stop === null) return null;
+function hardStopTrip(stop: { requested_by: string; requested_at: string }): Trip {
   return {
     kind: "stop",
     hard: true,
@@ -1281,7 +1273,7 @@ type TripCheck = { trip: Trip | null; cost_usd: number | null };
  *
  * The operator's stop wins over a budget: it is the more specific intent, and
  * both end in the same clean stop anyway, so the only thing that differs is
- * what the closeout orchestrator and the dispatch log are told.
+ * what the run's record and the dispatch log are told.
  *
  * It also reports the spend it read, because the cadence that decides when
  * this next runs is derived from it — see `pollDelay`.
@@ -1298,12 +1290,17 @@ async function detectTrip(
     .stopRequest(params.run_id)
     .catch(() => null);
   if (stop !== null) {
-    const hard = stop.mode === "hard";
+    // The same record answers both branches, read once: a hard stop is the
+    // trip `hardStopTrip` spells, a clean stop is the softer one whose
+    // credential outlives the grace window.
+    if (stop.mode === "hard") {
+      return { trip: hardStopTrip(stop), cost_usd: null };
+    }
     return {
       trip: {
         kind: "stop",
-        hard,
-        detail: `a ${hard ? "hard" : "clean"} stop was requested by ${stop.requested_by} at ${stop.requested_at}`,
+        hard: false,
+        detail: `a clean stop was requested by ${stop.requested_by} at ${stop.requested_at}`,
       },
       cost_usd: null,
     };
@@ -1373,12 +1370,16 @@ type PassOutcome =
 
 type PassOptions = {
   label: string;
-  phase: OrchestratorPhase;
-  stop_reason?: string;
+  /**
+   * Which job this pass supervises. The epic work pass boots the ONE
+   * orchestrator container (`ticfac run-epic`, phases `run`/`reconcile`);
+   * the PR review job boots a container that reviews one pull request and
+   * posts one comment. Since tick dl8 these are the only two, and nothing
+   * boots a second container when the work pass trips — the closeout pass is
+   * gone.
+   */
+  job: "orchestrator" | "review";
   max_boots: number;
-  enforce_budgets: boolean;
-  /** Wall-clock allowance for this pass alone; null when only run budgets apply. */
-  pass_max_ms: number | null;
   /** What running out of observations means for this pass. */
   on_exhausted: "stop" | "fail";
 };
@@ -1387,8 +1388,11 @@ type PassOptions = {
 type BootCounter = { next: number };
 
 /**
- * Boot an orchestrator, watch it, reboot it if it dies — until it finishes,
- * trips, or runs out of allowances.
+ * Boot one job's container, watch it, reboot it if it dies — until it
+ * finishes, trips, or runs out of allowances. The two jobs are the epic
+ * orchestrator and the PR review ({@link PassOptions.job}); neither may be
+ * booted beside a live one, and a trip ends the run rather than booting
+ * anything after it (tick dl8).
  */
 async function supervisePass(
   env: Env,
@@ -1439,21 +1443,17 @@ async function supervisePass(
     // A reboot is a *fresh* container by construction: the previous one is
     // presumed broken, and reusing its name is how you inherit what broke it.
     const name = sandboxName(params.run_id, boot);
-    // Only the very first boot of a run is a plain `run`; every later one
-    // reconciles first, whatever the pass asked for.
+    // Only the very first boot of the epic work pass is a plain `run`; every
+    // later one reconciles first, because a replacement's whole job is to
+    // adopt what the dead container pushed and continue from it.
     //
-    // `closeout` and `review` are the exceptions, and for the same reason:
-    // both already begin with the reconcile protocol in their own prompt, and
-    // both carry an instruction that `reconcile` does not have and the run
-    // depends on — wind this run up, or review this pull request. Flattening
-    // either into `reconcile` would boot a container that adopts the state
-    // correctly and then does the wrong thing with it.
+    // `review` is the exception, and it is a JOB rather than a phase of the
+    // orchestrator (tick dl8): a review container reads one pull request and
+    // posts one comment — its own prompt, its own credential grade — and a
+    // reboot of it repeats the same review, not a reconcile of an epic that
+    // does not exist.
     const phase: OrchestratorPhase =
-      options.phase === "closeout" || options.phase === "review"
-        ? options.phase
-        : boot === 1
-          ? "run"
-          : "reconcile";
+      options.job === "review" ? "review" : boot === 1 ? "run" : "reconcile";
 
     const booted = await step.do(
       `${options.label}:boot:${attempt}`,
@@ -1505,14 +1505,32 @@ async function supervisePass(
             // orchestrator carries it, including a reconcile's replacement: the
             // replacement is the same causal chain as the sandbox it succeeds.
             ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-            ...(options.stop_reason === undefined ? {} : { stop_reason: options.stop_reason }),
             // The grade's teeth (tick pzf): `operator` hands over the token
             // that can push, `run` hands over this run's own `tkr_` credential,
             // which github.com will not accept and this factory's git door will
             // not forward a push for.
             github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
-            ...(context.config.harness === null ? {} : { harness: context.config.harness }),
-            ...(context.config.model === null ? {} : { model: context.config.model }),
+            // Which harness and model the container's entrypoint probes before
+            // it starts its job. The two jobs are routed differently (tick dl8):
+            //
+            // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
+            //   harness/model pair only has to satisfy the entrypoint's
+            //   pre-flight probes — the deployment's run-level choice
+            //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
+            // - the REVIEW job is routed like every other cloud role, through
+            //   the worker ladder (`workerHarness`/`workerModel`), whose floor
+            //   is pi on GLM — never the image's own harness selection, which
+            //   a deployment that routes nothing would leave at claude (the
+            //   xte finding dl8 absorbed).
+            ...(options.job === "review"
+              ? {
+                  harness: workerHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                  model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
+                }
+              : {
+                  ...(context.config.harness === null ? {} : { harness: context.config.harness }),
+                  ...(context.config.model === null ? {} : { model: context.config.model }),
+                }),
             sandbox_image: image,
             // The factory URL is given per BOOT (tick 7eq): every orchestrator
             // reports its own finish to the done door over it, and the same
@@ -1592,14 +1610,10 @@ async function supervisePass(
     // operator noticed, and `finalize`'s sweep would arrive far too late to be
     // the only destroy.
     try {
-      const deadline = options.pass_max_ms === null ? null : booted.at_ms + options.pass_max_ms;
-      // Every absolute deadline a sleep on this pass must not run past: the run's
-      // wall clock while budgets are enforced, this pass's own window otherwise.
-      // Whichever comes first is the one the cadence stops at.
-      const cadenceDeadline = earliestDeadline(
-        options.enforce_budgets ? context.started_at_ms + context.config.max_wall_clock_ms : null,
-        deadline,
-      );
+      // The one absolute deadline a sleep on this pass must not run past: the
+      // run's wall clock, enforced on every pass since tick dl8 removed the
+      // closeout pass (the only pass that ever carried a window of its own).
+      const cadenceDeadline = context.started_at_ms + context.config.max_wall_clock_ms;
 
       let offset = 0;
       let seq = 1;
@@ -1666,8 +1680,6 @@ async function supervisePass(
               offset,
               seq,
               poll_ms: pollMs,
-              pass_deadline_ms: deadline,
-              enforce_budgets: options.enforce_budgets,
             }),
         );
         offset = seen.offset;
@@ -1696,15 +1708,17 @@ async function supervisePass(
           // that can no longer spend (tick gyl).
           if (trip.hard) await revoke("revoke");
           // The in-flight work still gets its bounded window to land, then the
-          // orchestrator is killed and closeout takes over. Nothing durable is
-          // lost either way — tracker state is committed to the run branch.
+          // container is killed. Nothing durable is lost either way — the
+          // keeper pushes as the run works, and `ticfac run-epic`'s own SIGTERM
+          // path commits and pushes on the way out — so the branch is the
+          // run's state, and no replacement is booted (tick dl8).
           await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
           await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
             drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
           );
-          // The closeout boot mints a fresh credential — a stop must still reach
-          // review and closeout (D15) — unless a hard stop stands, which the
-          // boot guard above refuses.
+          // A clean stop's credential outlives the grace window (that is the
+          // point of the window) and dies with the run at finalize; a hard
+          // stop's already died above.
           if (!trip.hard) await revoke("revoke:clean");
           return { kind: "tripped", trip, boots: counter.next - 1 };
         }
@@ -2134,16 +2148,17 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
 }
 
 /**
- * A pull request review run, start to finish (UC5, tick v7g).
+ * The pull request review JOB, start to finish (UC5, tick v7g; re-homed as a
+ * job the supervisor runs by tick dl8 — the one boot a harness still serves,
+ * because reviewing a diff and writing prose is a job, not control flow).
  *
  * Deliberately short, and every way in which it is shorter than the epic
- * lifecycle above is a property of the run rather than a simplification:
+ * lifecycle above is a property of the job rather than a simplification:
  *
- *  - **No closeout pass.** A closeout exists so a run that stopped early still
- *    leaves the tracker consistent with what landed on the branch. A review
- *    run lands nothing and writes no tracker state — it holds a read-only
- *    credential — so there is nothing to reconcile and a second paid container
- *    would do nothing but cost money.
+ *  - **One pass, no follow-on boot.** A review run lands nothing and writes
+ *    no tracker state — it holds a read-only credential — so there is nothing
+ *    to reconcile and a second paid container would do nothing but cost
+ *    money. A trip ends the job exactly as the epic pass's trip ends the run.
  *  - **No ref comparison.** Tick ehy's rule stands, but the evidence changes:
  *    a run that cannot push can never move a ref, so asking whether one moved
  *    would report every review as "nothing happened". What a review run
@@ -2152,6 +2167,10 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
  *  - **The budgets are the same ones.** Cost and wall clock are enforced by
  *    the same pass machinery as any other run, because an autonomous loop with
  *    no ceiling is the one thing worse than a bad review.
+ *  - **Routed like every other cloud role.** Its harness and model come from
+ *    the worker ladder (`workerHarness`/`workerModel`), whose floor is pi on
+ *    GLM — never the image's own harness selection, which a deployment that
+ *    routes nothing would leave at claude (the xte finding dl8 absorbed).
  */
 export async function superviseReview(
   env: Env,
@@ -2162,13 +2181,10 @@ export async function superviseReview(
 ): Promise<RunOutcome> {
   const work = await supervisePass(env, step, params, context, counter, {
     label: "review",
-    phase: "review",
+    job: "review",
     max_boots: MAX_SANDBOX_BOOTS,
-    enforce_budgets: true,
-    pass_max_ms: null,
-    // A review that ran out of observations is over: there is no clean stop to
-    // wind down into, because nothing was in flight that a closeout could
-    // finish.
+    // A review that ran out of observations is over: there is nothing in
+    // flight that a further pass could finish.
     on_exhausted: "fail",
   });
 
@@ -2235,10 +2251,10 @@ export async function superviseRun(
   const context = acquired.context;
   const counter: BootCounter = { next: 1 };
 
-  // A pull request review is one pass and then the run is over (UC5, tick
-  // v7g). It is checked FIRST because it is the narrower fact: a review run
-  // implements no ticks — and giving it the epic paths
-  // below would boot a container to close out an epic that does not exist.
+  // The PR review job (UC5, tick v7g): one container, one comment, done. It
+  // is checked FIRST because it is the narrower fact: a review run implements
+  // no ticks — and giving it the epic path below would boot a container to
+  // close out an epic that does not exist.
   if (context.review !== null) {
     return await superviseReview(env, step, params, context, counter);
   }
@@ -2249,10 +2265,8 @@ export async function superviseRun(
   // boots, budgets, watches, retries and finalizes — it does not orchestrate.
   const work = await supervisePass(env, step, params, context, counter, {
     label: "work",
-    phase: "run",
+    job: "orchestrator",
     max_boots: MAX_SANDBOX_BOOTS,
-    enforce_budgets: true,
-    pass_max_ms: null,
     on_exhausted: "stop",
   });
 
@@ -2267,10 +2281,13 @@ export async function superviseRun(
     outcome = { state: "failed", detail: work.detail, boots: work.boots };
   } else {
     // `tripped` is an interruption: the clean stop, identical for a budget and
-    // for an operator (D15). What differs is the reason the closeout
-    // orchestrator and the log are given.
+    // for an operator (D15). The run ENDS here (tick dl8): the pass above has
+    // already revoked, given the work its grace window, drained and killed the
+    // container, and the branch — pushed as the run worked — is the state a
+    // new run re-derives from. No second container is booted; a closeout boot
+    // would only re-run the epic, because `ticfac run-epic` reads no phase and
+    // no stop reason. What is recorded is the reason, and nothing else.
     const trip = work.trip;
-    const reason = work.trip.detail;
 
     await step.do("stop:record", OBSERVE_RETRIES, async () => {
       await logDispatch(env, {
@@ -2283,36 +2300,8 @@ export async function superviseRun(
       return { logged: true };
     });
 
-    const closeout = await supervisePass(env, step, params, context, counter, {
-      label: "closeout",
-      phase: "closeout",
-      stop_reason: reason,
-      max_boots: MAX_CLOSEOUT_BOOTS,
-      // A closeout must not be stopped by the budget that started it, or the
-      // run would never reach review and closeout at all.
-      enforce_budgets: false,
-      pass_max_ms: context.config.closeout_ms,
-      // A closeout that ran out of looks is over; there is nothing further to
-      // stop cleanly into.
-      on_exhausted: "fail",
-    });
-
-    const closed =
-      closeout.kind === "completed"
-        ? "review and closeout ran"
-        : `review and closeout did not finish (${
-            closeout.kind === "tripped"
-              ? // A tripped closeout has its own reason, and a hard stop's is
-                // the one an operator most needs to read back: the run stopped
-                // spending because they said so, not because a window elapsed.
-                closeout.trip.detail
-              : closeout.detail
-          })`;
-    const detail = `${reason}; ${closed}`;
-
-    // A run that was stopped is `stopped` however well its closeout went —
-    // the stop is the truer fact about it.
-    outcome = { state: "stopped", detail, boots: closeout.boots };
+    // A run that was stopped is `stopped`: the stop is the truer fact about it.
+    outcome = { state: "stopped", detail: trip.detail, boots: work.boots };
   }
 
   // Nothing above this line may call the run complete. The passes report what

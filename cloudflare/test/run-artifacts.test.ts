@@ -13,7 +13,6 @@ import {
   BUDGET_POLL_HEADROOM,
   DEFAULT_MAX_COST_USD,
   DEFAULT_MAX_WALL_CLOCK_MS,
-  earliestDeadline,
   MAX_POLL_MS,
   MIN_POLL_MS,
   pollDelay,
@@ -446,8 +445,9 @@ describe("the spend sample the cadence is derived from", () => {
   });
 
   it("treats a missing reading as missing, never as zero", () => {
-    // A pass that does not enforce budgets reads no cost at all. Folding that
-    // in as $0 would tell the cadence the run had stopped spending.
+    // A look that read no cost — budgets not enforced on this pass, or a look
+    // that tripped before the read — folds nothing in as $0, which would tell
+    // the cadence the run had stopped spending.
     const spend = spendSample(null, 2, 0);
     expect(spendSample(spend, null, 60_000)).toBe(spend);
   });
@@ -458,16 +458,6 @@ describe("the spend sample the cadence is derived from", () => {
     let spend = spendSample(null, 5, 0);
     spend = spendSample(spend, 4, 60_000);
     expect(spend!.rate_usd_per_ms).toBeNull();
-  });
-});
-
-describe("the deadline a sleep may not run past", () => {
-  it("takes whichever of the run and pass windows arrives first", () => {
-    expect(earliestDeadline(100, 50)).toBe(50);
-    expect(earliestDeadline(50, 100)).toBe(50);
-    expect(earliestDeadline(null, 50)).toBe(50);
-    expect(earliestDeadline(50, null)).toBe(50);
-    expect(earliestDeadline(null, null)).toBeNull();
   });
 });
 

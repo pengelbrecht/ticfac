@@ -24,8 +24,10 @@
  * 4. **Stop is control-plane state.** `stopRun` writes a stop record into the
  *    RunRoom and flips the run's index state; it does not send the
  *    orchestrator a message and does not need it to cooperate (UC1b). The Run
- *    Workflow reads that record and enforces D15's clean stop — finish the
- *    in-flight tick, then review and closeout.
+ *    Workflow reads that record and enforces D15's clean stop — the in-flight
+ *    work gets its grace window, the container is killed, and the run ends
+ *    (the branch, which `ticfac run-epic` pushes as it goes, is the state a
+ *    new run re-derives from).
  */
 
 import {

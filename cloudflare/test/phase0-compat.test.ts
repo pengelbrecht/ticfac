@@ -719,7 +719,6 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     expect(declared).toEqual({
       FACTORY_MAX_INSTANCES: declaredMaxInstances(),
       GITHUB_CONSENT_LABEL: "tk",
-      RUN_CLOSEOUT_MS: "1800000",
       RUN_HARNESS: "pi",
       RUN_MAX_COST_USD: "40",
       RUN_MAX_WALL_CLOCK_MS: "14400000",

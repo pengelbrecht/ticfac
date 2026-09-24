@@ -27,21 +27,22 @@ import { WORKER_TRACE_ID_ENV } from "./worker-boot";
 /**
  * What a boot is for (`TICKS_PHASE`).
  *
- * The Workflow can only reach the image through the environment, so "you are
- * the replacement for an orchestrator that died" and "this run is stopping
- * cleanly" are variables, not messages the harness has to be listening for. The
- * phase is never the agent's decision: budget and stop enforcement live here
- * (D14/D15), never in a prompt. Mirrors `sandbox.Phase*` in Go.
+ * The Workflow can only reach the image through the environment, so "you
+ * are the replacement for an orchestrator that died" is a variable, not a
+ * message the harness has to be listening for. The phase is never the
+ * agent's decision: budget and stop enforcement live here (D14/D15), never in
+ * a prompt. Mirrors `sandbox.Phase*` in Go.
  *
- * `review` is the pull request review pass (UC5, tick v7g), and it is the one
- * phase that is not about an epic at all: read a pull request's diff, write
- * findings, hand them to the factory, exit. It is a phase rather than a second
- * image for the reason the worker role is a command rather than a flag — one
- * image, and what a container is FOR is what it was started with. A review
- * boot is always a read-only run, so the container it lands in cannot push
- * whatever its prompt says.
+ * `review` is the pull request review job (UC5, tick v7g), and it is the one
+ * boot that is not about an epic at all: read a pull request's diff, write
+ * findings, hand them to the factory, exit. Since tick dl8 it is the only
+ * phase besides the epic's own `run`/`reconcile` — the `closeout` phase went
+ * with the closeout boot, because `ticfac run-epic` reads no phase and a
+ * closeout boot would only have re-run the epic. A review boot is always a
+ * read-only run, so the container it lands in cannot push whatever its prompt
+ * says.
  */
-export type OrchestratorPhase = "run" | "reconcile" | "closeout" | "review";
+export type OrchestratorPhase = "run" | "reconcile" | "review";
 
 /**
  * The image reference a run boots when the deployment asks for nothing else.
@@ -516,7 +517,6 @@ export type OrchestratorEnvInput = {
    */
   gateway_token: string;
   phase: OrchestratorPhase;
-  stop_reason?: string;
   github_token?: string;
   harness?: string;
   model?: string;
@@ -602,9 +602,9 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
     AI_GATEWAY_BASE_URL: input.gateway_base_url,
     AI_GATEWAY_TOKEN: input.gateway_token,
   };
-  if (input.stop_reason !== undefined && input.stop_reason !== "") {
-    env.TICKS_STOP_REASON = input.stop_reason;
-  }
+  // No TICKS_STOP_REASON: the closeout prompt was its only reader, and tick
+  // dl8 deleted the closeout boot — `ticfac run-epic`, which the epic
+  // container execs, reads no phase and no stop reason.
   if (input.github_token !== undefined && input.github_token !== "") {
     env.GITHUB_TOKEN = input.github_token;
   }

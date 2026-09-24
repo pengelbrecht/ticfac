@@ -180,7 +180,6 @@ declare namespace Cloudflare {
     RUN_MAX_WALL_CLOCK_MS?: string;
     RUN_MAX_COST_USD?: string;
     RUN_STOP_GRACE_MS?: string;
-    RUN_CLOSEOUT_MS?: string;
     /**
      * A fixed observation cadence, overriding the Workflow's own backoff. Unset
      * on a real deployment; set by tests and by an operator who wants a tighter
@@ -194,10 +193,11 @@ declare namespace Cloudflare {
      */
     RUN_MAX_OBSERVATIONS?: string;
     /**
-     * Harness kind and model a run is started with — the orchestrator sandbox,
-     * and any per-tick worker container the run dispatches unless the worker
-     * vars below are what the deployment wants instead. This is the run's own
-     * choice and it outranks them.
+     * Harness kind and model a run is started with — the orchestrator sandbox
+     * (whose entrypoint probes them before it execs `ticfac run-epic`), and
+     * the top rung of every cloud container's routing: the per-tick workers
+     * and, since tick dl8, the PR review job, which resolve through the
+     * worker ladder in src/worker-boot.ts with this as the run-level choice.
      *
      * Pinned in wrangler.toml to pi on GLM 5.3 (tick uqi), so an orchestrator
      * boot reports `model ... (from the control plane)` rather than falling

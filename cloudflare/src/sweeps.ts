@@ -20,8 +20,9 @@
  *     `budget_usd` into the `max_cost_usd` of a run submission, which
  *     `runConfig` clamps and `supervisePass` acts on — the same checkpointed
  *     supervisor that already trips a run at its ceiling and takes D15's
- *     clean stop (finish the tick in flight, then review and closeout on what
- *     is done). A sweep that trips its budget therefore loses nothing that was
+ *     clean stop (the in-flight work gets its grace window, then the
+ *     container is killed and the run ends on its pushed branch). A sweep
+ *     that trips its budget therefore loses nothing that was
  *     already committed, because it is the identical code path `tk cloud stop`
  *     takes, and it was not asked to behave; it was bounded.
  *
