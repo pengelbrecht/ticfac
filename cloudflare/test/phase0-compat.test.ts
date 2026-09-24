@@ -884,6 +884,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
       status_detail: "",
       status_line: `STATUS: ${status}`,
       boundary_files: [],
+      report_only: false,
       detail: "",
     });
 
@@ -1136,6 +1137,7 @@ class JournalCollector implements WorkerCollector {
       status_detail: "",
       status_line: "STATUS: DONE",
       boundary_files: [],
+      report_only: false,
       detail: "",
     };
   }

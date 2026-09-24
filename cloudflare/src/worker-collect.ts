@@ -14,6 +14,17 @@
  * one. The three checks and their ordering are identical on purpose: a
  * container-per-tick substrate and a herdr-pane substrate should never
  * disagree about what "ready to merge" means for the same tick.
+ *
+ * The fourth check is this substrate's own (tick 94u, ported from the Go
+ * executor's collect, tick dyo): the container's entrypoint commits the
+ * report itself, in its own commit (image/worker.sh), so a worker that did
+ * NOTHING still leaves one commit beyond the base, and counting commits
+ * alone reads it as ready-to-merge. When the diff minus the report is empty
+ * the verdict is `no-commits` — the same word the Go side refuses with —
+ * with its own sentence, because "the branch is empty" is a lie about this
+ * one. A herdr worker commits its own report and its collect needs no such
+ * check; on this substrate the two reads of the same branch must agree, or
+ * dyo's guarantee is only half the cloud.
  */
 
 import type { Env } from "./index";
@@ -106,6 +117,16 @@ export type WorkerReport = {
   status_line: string;
   /** `.tick/` paths the branch touches relative to the merge base. Non-empty is a violation. */
   boundary_files: string[];
+  /**
+   * Whether every path the branch changed beyond its base is the report
+   * itself — the shape a worker that did no work leaves on this substrate,
+   * where the container's entrypoint commits the report (image/worker.sh)
+   * and so one commit always exists (tick 94u, the TS half of the Go
+   * executor's own refusal, tick dyo). Like `boundary_attempted` this is
+   * evidence the verdict is computed FROM; the verdict stays `no-commits`,
+   * never a fifth word, because the closed vocabulary is the contract.
+   */
+  report_only: boolean;
   /**
    * Whether the worker's own report says its container CAUGHT the agent
    * crossing the boundary. Independent of `boundary_files`, and usually the
@@ -216,7 +237,7 @@ function apiBase(env: Env): string {
 }
 
 type CompareResult =
-  | { ok: true; ahead_by: number; boundary_files: string[] }
+  | { ok: true; ahead_by: number; changed: string[]; boundary_files: string[] }
   | { ok: false; missing: true }
   | { ok: false; missing: false; detail: string };
 
@@ -228,7 +249,9 @@ type CompareResult =
  * GitHub's `files` array is capped at 300 entries for a very large diff; a
  * single tick's change realistically never approaches that, and this is
  * noted here rather than silently assumed — see the module's test file for
- * the same caveat spelled out for whoever revisits this.
+ * the same caveat spelled out for whoever revisits this. The report-only
+ * check below reads the same list, so a diff big enough to cap it is a diff
+ * that is not report-only — the safe side to err on.
  */
 async function compareBranch(
   env: Env,
@@ -252,14 +275,15 @@ async function compareBranch(
     ahead_by?: number;
     files?: { filename?: string }[];
   };
-  const boundary_files = (body.files ?? [])
+  const changed = (body.files ?? [])
     .map((f) => f.filename)
     .filter((f): f is string => typeof f === "string")
-    .filter((f) => f === ".tick" || f.startsWith(".tick/"))
     .sort();
+  const boundary_files = changed.filter((f) => f === ".tick" || f.startsWith(".tick/"));
   return {
     ok: true,
     ahead_by: typeof body.ahead_by === "number" ? body.ahead_by : 0,
+    changed,
     boundary_files,
   };
 }
@@ -332,6 +356,11 @@ export async function collectFromGithub(
     status_detail: "",
     status_line: "",
     boundary_files: [],
+    // Not yet computed: the report-only fact comes from the compare's
+    // changed-file list, and every path that returns before that read says
+    // false rather than undefined — the same always-an-answer rule the
+    // other evidence fields hold.
+    report_only: false,
     detail: "",
   };
 
@@ -348,6 +377,11 @@ export async function collectFromGithub(
   report.branch_exists = true;
   report.commits = compare.ahead_by;
   report.boundary_files = compare.boundary_files;
+  // The did-nothing shape in this substrate's own terms (tick 94u): the
+  // entrypoint's report commit is the only change the branch carries. An
+  // empty `changed` list is NOT it — that is the push that never landed or
+  // the honest empty branch, which keep their own verdict and sentence.
+  report.report_only = reportIsOnlyChange(compare.changed, report.result_path);
 
   const contents = await readFileAt(env, project, task.branch, report.result_path);
   if (contents.ok) {
@@ -368,9 +402,30 @@ export async function collectFromGithub(
   return report;
 }
 
+/**
+ * Whether every path the branch changed beyond its base is the report the
+ * container's own entrypoint commits — the shape a worker that did no work
+ * leaves on this substrate, where the subprocess executor's empty branch is
+ * impossible by construction. Ported from the Go executor's
+ * `reportIsOnlyChange` (tick dyo) so the two reads of the same branch cannot
+ * disagree about it. Nothing changed is NOT this shape: that is the push
+ * that never landed or the honest empty branch, and it keeps its own verdict
+ * and message.
+ */
+function reportIsOnlyChange(changed: string[], reportPath: string): boolean {
+  if (changed.length === 0) return false;
+  return changed.every((path) => path === reportPath);
+}
+
 function verdictFor(r: WorkerReport): WorkerVerdict {
   if (!r.branch_exists || r.commits === 0) return WORKER_VERDICTS.noCommits;
   if (!r.result_exists || r.status === "") return WORKER_VERDICTS.missingResult;
+  // The report-only branch (tick 94u, mirroring the Go executor's classify):
+  // the closed vocabulary's own word for a worker that delivered nothing is
+  // `no-commits`, never a fifth word. It is checked after missing-result for
+  // the same reason the Go side checks it there — an answer nobody can read
+  // is the more urgent fact.
+  if (r.report_only) return WORKER_VERDICTS.noCommits;
   if (r.boundary_files.length > 0) return WORKER_VERDICTS.boundaryViolation;
   return WORKER_VERDICTS.readyToMerge;
 }
@@ -378,6 +433,12 @@ function verdictFor(r: WorkerReport): WorkerVerdict {
 function detailFor(r: WorkerReport): string {
   switch (r.verdict) {
     case WORKER_VERDICTS.noCommits:
+      if (r.report_only) {
+        return (
+          `the only commit ${r.branch} carries beyond its base (${r.base_sha.slice(0, 8)}) is ` +
+          `the report at ${r.result_path}: the worker committed no work, and a report is not a deliverable`
+        );
+      }
       return r.branch_exists
         ? `${r.branch} has no commits beyond ${r.base_sha.slice(0, 8)}`
         : `${r.branch} does not exist on origin`;

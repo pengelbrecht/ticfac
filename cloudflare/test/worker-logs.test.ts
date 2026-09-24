@@ -306,6 +306,7 @@ const stubReport = (task: WorkerTask): WorkerReport => ({
   status_detail: "",
   status_line: "",
   boundary_files: [],
+  report_only: false,
   detail: "the worker pushed nothing",
 });
 
