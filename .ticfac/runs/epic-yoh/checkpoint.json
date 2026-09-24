@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 54,
-  "state": "collecting",
-  "reason": "collecting lkd attempt 5",
-  "updated_at": "2026-09-24T05:15:13Z",
+  "sequence": 55,
+  "state": "integrating",
+  "reason": "integrating lkd attempt 5 into epic/yoh",
+  "updated_at": "2026-09-24T05:15:45Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "lkd",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 5
     },
     {
