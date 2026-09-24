@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 152,
-  "state": "dispatching",
-  "reason": "dispatching dyo as attempt 22",
-  "updated_at": "2026-09-24T12:17:01Z",
+  "sequence": 153,
+  "state": "running",
+  "reason": "dyo is running as attempt 22",
+  "updated_at": "2026-09-24T12:17:19Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -103,7 +103,8 @@
     },
     {
       "tick_id": "dyo",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 22
     }
   ],
   "provenance": {
