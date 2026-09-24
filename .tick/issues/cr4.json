@@ -2,6 +2,7 @@
   "id": "cr4",
   "title": "The Workflow supervises a run and stops orchestrating it",
   "description": "The Run Workflow's job shrinks to what docs/design/cloud-factory.md always said: 'boot the orchestrator sandbox, watch it, enforce wall-clock and cost budgets, retry a dead orchestrator, finalize'. It does not plan, dispatch, collect, gate or close.\n\nShape, all verified against Cloudflare's docs:\n- boot the container with keepAlive: true, which heartbeats every 30s and prevents idle shutdown (it does NOT defeat host-restart eviction; nothing does), and destroy() in a finally - a container under keepAlive 'must be explicitly destroyed... to prevent containers running indefinitely and counting toward your account limits'.\n- step.waitForEvent for the orchestrator's completion, with a timeout. Waiting instances 'do not consume concurrency slots'; the timeout is settable from 1 second to 365 days and THROWS on expiry, which is the re-boot-and-resume path.\n- on timeout: git fetch and LOOK before concluding anything. The branch is the source of truth; the event is an optimisation that avoids polling.\n\nAlso fix the two defaults that bit us: a step inherits timeout '10 minutes' AND retries { limit: 5, delay: 10000, backoff: exponential }. The retry default is the dangerous one - a timed-out step re-ran the whole pass and re-dispatched model work up to five times, which is very likely what exhausted the GitHub hourly budget (uim). Any step that can start paid work needs a deliberate retry policy, not the default.\n\nWhen this lands, q35's slot heartbeat becomes scaffolding for a shape we have left: remove it and let the TTL stand unassisted. Keep eg9's reporting - a refused release should still name who holds it.",
+  "notes": "2026-09-24 06:44 - ticfac run epic-yoh: cr4 try 1 (run dispatch #4) merged into epic/yoh as 86e918eddc42; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -13,6 +14,6 @@
   "acceptance_criteria": "The Workflow only boots, budgets, watches, retries and finalizes; no step that can start paid work carries the default retry policy; a container is always destroyed; and a timeout re-boots into resume rather than concluding failure",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:41.162867Z",
-  "updated_at": "2026-09-23T19:42:50.515447Z",
+  "updated_at": "2026-09-24T04:44:18.918122Z",
   "started_at": "2026-09-23T19:42:50.515446Z"
 }
