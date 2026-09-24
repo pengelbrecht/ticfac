@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 151,
-  "state": "running",
-  "reason": "9iz is running as attempt 21",
-  "updated_at": "2026-09-24T12:16:37Z",
+  "sequence": 152,
+  "state": "dispatching",
+  "reason": "dispatching dyo as attempt 22",
+  "updated_at": "2026-09-24T12:17:01Z",
   "ticks": [
     {
       "tick_id": "uqi",
