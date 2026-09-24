@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 129,
-  "state": "integrating",
-  "reason": "integrating mn7 attempt 16 into epic/yoh",
-  "updated_at": "2026-09-24T11:08:18Z",
+  "sequence": 130,
+  "state": "gating",
+  "reason": "running the integrated gate for mn7 on 44e0758ef998",
+  "updated_at": "2026-09-24T11:08:33Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "mn7",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 16
     },
     {
