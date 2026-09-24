@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -191,6 +192,51 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 		}
 		if dispatch.Profile.Provenance.Substrate != "cloud" {
 			t.Errorf("%s's provenance does not name the substrate: %q", tick, dispatch.Profile.Provenance.Substrate)
+		}
+	}
+}
+
+// The cloud rule refuses AT START over the FINAL resolved worker (tick nwn):
+// every cloud cell is pi on a Workers AI model at its base, but the cloud
+// file's own tier cell for the tier the policy starts at routes claude. The
+// run is refused at construction — before anything is dispatched — naming the
+// role, the tier and the resolved kind and model.
+func TestACloudRunRefusesAtStartOverATierThatLeavesWorkersAI(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	const cloudCells = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.implement.tiers.economy]
+kind = "claude"
+model = "haiku"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.closeout]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`
+	f := newFixture(t, fixtureOptions{gate: massGate})
+	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.cloud.toml"), []byte(cloudCells), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := f.options(f.Repo, fixtureOptions{gate: massGate, substrate: "cloud"})
+	_, err := New(opts)
+	if err == nil {
+		t.Fatal("a cloud run whose economy tier resolves to claude was constructed")
+	}
+	if !errors.Is(err, profile.ErrNotWorkersAI) {
+		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	}
+	for _, want := range []string{"implement", `tier "economy"`, `"claude"`, `"haiku"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %s: %v", want, err)
 		}
 	}
 }
