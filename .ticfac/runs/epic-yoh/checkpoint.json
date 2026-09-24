@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 59,
-  "state": "integrating",
-  "reason": "integrating lkd attempt 5 into epic/yoh",
-  "updated_at": "2026-09-24T05:20:44Z",
+  "sequence": 60,
+  "state": "gating",
+  "reason": "running the integrated gate for lkd on a9f4786ab43f",
+  "updated_at": "2026-09-24T05:20:58Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "lkd",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 5
     },
     {
