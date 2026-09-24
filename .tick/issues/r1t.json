@@ -6,11 +6,12 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "cs1"
+    "cs1",
+    "9iz"
   ],
   "parent": "yoh",
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:53.358546Z",
-  "updated_at": "2026-09-21T06:19:53.358546Z"
+  "updated_at": "2026-09-24T11:53:32.164601Z"
 }
