@@ -2,6 +2,7 @@
   "id": "3ed",
   "title": "The Workflow's watch treats an unanswerable container as unknown, never as dead",
   "description": "Found while repointing lifecycle invariant A2 after l6t (2026-09-24). run-workflow.ts observe() does getProcess(...).catch(() =\u003e null) and reads null as 'gone', which triggers a reboot of the orchestrator. The old container is destroyed first, so there are never two orchestrators, but A2/A6 say a container the supervisor cannot ASK is UNKNOWN, not dead: the reboot is then a guess. Distinguish 'the platform answered: no such process' from 'the question failed' (retry/hold on the latter, bounded), and make a failed question its own failure class in the feed (A9).",
+  "notes": "2026-09-24 10:33 - ticfac run epic-yoh: 3ed try 1 (run dispatch #15) reported a finding drafted for triage — contract \"Lifecycle invariants A2/A6/A9 could name the new unknown-question symbols in their `today` lists\" (key 9a38c69c9ceeaaed01b1708c6831c26045dad0da2bcfb6f473ef4e556de573a1, severity low, for pengelbrecht/ticks). Triage with `ticfac finding yoh 9a38c69c9ceeaaed01b1708c6831c26045dad0da2bcfb6f473ef4e556de573a1 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "observe() distinguishes an answered 'no process' from a failed question; a failed question is retried within a bound and reported as its own class, never read as a dead orchestrator; a vitest drives both paths; pnpm lint/contracts:check/tsc and the run-workflow tests pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T08:15:31.705796Z",
-  "updated_at": "2026-09-24T08:17:07.746323Z",
+  "updated_at": "2026-09-24T08:33:24.381872Z",
   "started_at": "2026-09-24T08:17:07.746322Z"
 }
