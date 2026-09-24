@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 193,
-  "state": "integrating",
-  "reason": "integrating 94u attempt 24 into epic/yoh",
-  "updated_at": "2026-09-24T15:51:33Z",
+  "sequence": 194,
+  "state": "gating",
+  "reason": "running the integrated gate for 94u on ca826da66cef",
+  "updated_at": "2026-09-24T15:51:48Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -113,7 +113,7 @@
     },
     {
       "tick_id": "94u",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 24
     }
   ],
