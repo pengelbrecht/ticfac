@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 153,
-  "state": "running",
-  "reason": "dyo is running as attempt 22",
-  "updated_at": "2026-09-24T12:17:19Z",
+  "sequence": 154,
+  "state": "collecting",
+  "reason": "collecting 4lv attempt 19",
+  "updated_at": "2026-09-24T12:55:09Z",
   "ticks": [
     {
       "tick_id": "uqi",
