@@ -2,6 +2,7 @@
   "id": "6gr",
   "title": "Prove sandbox adoption end to end through the real Go executor and the real door",
   "description": "Triaged 2026-09-23 from xte's close-out, which held on untriaged findings; the finding keys it absorbs are in this tick's notes. xte was merged as building blocks (operator's choice B) and its unmet goal moved here, because it is the same single cloud path yoh reconciles.\n\navx proved adoption with fixtures; dccd84cf asks for the real thing: a restarted orchestrator re-derives, finds a sandbox still running its tick through the real door, and adopts it rather than dispatching a rival. Unreachable must still not read as absent.",
+  "notes": "2026-09-24 10:21 - ticfac run epic-yoh: 6gr try 1 (run dispatch #14) reported a finding drafted for triage — defect \"internal/runstate's maintenance fixture reads the host's global git maintenance.auto and fails at its own control on hosts that disable auto maintenance\" (key 204b78bfa719c4cb54a464479f510c8bf4af1895d3d484716c23b57d9d4705aa, severity medium, for this repository). Triage with `ticfac finding yoh 204b78bfa719c4cb54a464479f510c8bf4af1895d3d484716c23b57d9d4705aa --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -14,6 +15,6 @@
   "acceptance_criteria": "A test drives the real Go executor against the real door (miniflare): an attempt is dispatched, the orchestrator is restarted, and the second incarnation adopts the running sandbox; an unreachable door is not treated as no sandbox; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.195116Z",
-  "updated_at": "2026-09-24T05:54:04.592227Z",
+  "updated_at": "2026-09-24T08:21:13.835355Z",
   "started_at": "2026-09-24T05:54:04.592226Z"
 }
