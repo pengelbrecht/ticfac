@@ -1,0 +1,14 @@
+{
+  "id": "tc9",
+  "title": "The integrated gate runs vitest, so TypeScript behaviour ticks are gated by their tests",
+  "description": "From yoh final-review finding dfae216d (cs1). The ts gate in .tick/runners.toml runs format, lint, contracts and tsc, but no vitest, so a TS behaviour change merges without its tests running in the gate (mn7's worker ran them; the gate did not). Add the vitest suite to the ts gate once the suite is deterministic under load (3cq and the slot-refused fix were the known flakes); watch its wall time against the gate bound.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The ts gate runs the vitest suite; it passes deterministically on this host and in CI across several runs; the Makefile gate parity test still holds",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T12:12:09.649879Z",
+  "updated_at": "2026-09-24T12:12:09.649879Z"
+}

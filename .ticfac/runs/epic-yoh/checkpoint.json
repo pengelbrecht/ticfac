@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 144,
+  "sequence": 153,
   "state": "running",
-  "reason": "no check runs yet on the epic PR #51; the close-out of yoh waits for CI to appear",
-  "updated_at": "2026-09-24T12:10:54Z",
+  "reason": "dyo is running as attempt 22",
+  "updated_at": "2026-09-24T12:17:19Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -85,6 +85,26 @@
       "tick_id": "3ed",
       "state": "closed",
       "attempt": 15
+    },
+    {
+      "tick_id": "4lv",
+      "state": "dispatched",
+      "attempt": 19
+    },
+    {
+      "tick_id": "78v",
+      "state": "dispatched",
+      "attempt": 20
+    },
+    {
+      "tick_id": "9iz",
+      "state": "dispatched",
+      "attempt": 21
+    },
+    {
+      "tick_id": "dyo",
+      "state": "dispatched",
+      "attempt": 22
     }
   ],
   "provenance": {
@@ -92,7 +112,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "86468cf597871d9740390359a469aecb31a68471",
+    "source_sha": "c9d145a78081620ad71db21da6c5c8ed256585f4",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
