@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 162,
-  "state": "dispatching",
-  "reason": "dispatching 0ye as attempt 23",
-  "updated_at": "2026-09-24T13:01:10Z",
+  "sequence": 163,
+  "state": "running",
+  "reason": "0ye is running as attempt 23",
+  "updated_at": "2026-09-24T13:01:32Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -108,7 +108,8 @@
     },
     {
       "tick_id": "0ye",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 23
     }
   ],
   "provenance": {
