@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "6gr",
   "attempt": 14,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T08:21:08Z",
+  "triaged_at": "2026-09-24T11:53:14Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pqs",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "6gr",
