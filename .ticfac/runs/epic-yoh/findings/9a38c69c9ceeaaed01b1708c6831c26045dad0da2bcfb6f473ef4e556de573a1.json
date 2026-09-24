@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "3ed",
   "attempt": 15,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-09-24T08:33:19Z",
+  "triaged_at": "2026-09-24T12:55:35Z",
+  "triaged_by": "claude (operator-delegated)",
+  "fixed_as": "0111684c",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "3ed",
