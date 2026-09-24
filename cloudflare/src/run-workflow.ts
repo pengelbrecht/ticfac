@@ -1455,108 +1455,143 @@ async function supervisePass(
     const phase: OrchestratorPhase =
       options.job === "review" ? "review" : boot === 1 ? "run" : "reconcile";
 
-    const booted = await step.do(
-      `${options.label}:boot:${attempt}`,
-      // A deliberate policy on the one step that starts paid work (cr4): a
-      // config-less step inherits ten minutes of timeout AND five retries —
-      // the retry default re-ran the whole pass and re-dispatched model work
-      // up to five times, which is very likely what exhausted the GitHub
-      // hourly budget (uim). `BOOT_RETRIES` is the deliberate retry policy;
-      // `BOOT_STEP_TIMEOUT_MS` is the deliberate timeout, sized for what a
-      // boot is (a cold pull and a spawn) rather than the platform's default.
-      { ...BOOT_RETRIES, timeout: BOOT_STEP_TIMEOUT_MS },
-      async () => {
-        const binding = sandboxBinding(env);
-        if (binding === null) throw new Error("the SANDBOXES binding disappeared mid-run");
-        // Every boot rotates the run's gateway credential (D17). The container
-        // being replaced may still be alive somewhere; its token dies before the
-        // replacement's is live, so two orchestrators can never both spend
-        // against one run — and the token this one gets carries the run and tick
-        // ids that stamp every model request it makes.
-        const credential = await issueRunToken(env, {
-          run_id: params.run_id,
-          tick_id: params.epic,
-          attempt: boot,
-        });
-        // The image is a parameter of the boot, not a constant of the call site
-        // (tick 3q2's seam), and since tick x3v the value can be the
-        // repository's own: `acquireContext` resolved it from the tracked config
-        // at the submitted SHA, and refused the run outright if this deployment
-        // could not serve it. The container is told which image it got, so its
-        // own reader can refuse a boot that is not what the repository declared.
-        const image = context.sandbox_image;
-        // keepAlive (tick cr4): this container heartbeats every 30 seconds and
-        // so cannot be killed by idleness while the orchestrator works — the
-        // platform's own doc is the trade: a container under keepAlive "must be
-        // explicitly destroyed... to prevent containers running indefinitely
-        // and counting toward your account limits". Every ending of a boot
-        // destroys it in the finally below, and `finalize` sweeps as backstop.
-        const sandbox = await binding.get(name, { image, keepAlive: true });
-        const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
-          env: orchestratorEnv({
+    let booted: { process_id: string; at_ms: number };
+    try {
+      booted = await step.do(
+        `${options.label}:boot:${attempt}`,
+        // A deliberate policy on the one step that starts paid work (cr4): a
+        // config-less step inherits ten minutes of timeout AND five retries —
+        // the retry default re-ran the whole pass and re-dispatched model work
+        // up to five times, which is very likely what exhausted the GitHub
+        // hourly budget (uim). `BOOT_RETRIES` is the deliberate retry policy;
+        // `BOOT_STEP_TIMEOUT_MS` is the deliberate timeout, sized for what a
+        // boot is (a cold pull and a spawn) rather than the platform's default.
+        { ...BOOT_RETRIES, timeout: BOOT_STEP_TIMEOUT_MS },
+        async () => {
+          const binding = sandboxBinding(env);
+          if (binding === null) throw new Error("the SANDBOXES binding disappeared mid-run");
+          // Every boot rotates the run's gateway credential (D17). The container
+          // being replaced may still be alive somewhere; its token dies before the
+          // replacement's is live, so two orchestrators can never both spend
+          // against one run — and the token this one gets carries the run and tick
+          // ids that stamp every model request it makes.
+          const credential = await issueRunToken(env, {
             run_id: params.run_id,
-            epic: params.epic,
-            base_sha: params.base_sha,
-            repo_url: context.repo_url,
-            gateway_base_url: context.gateway_base_url,
-            gateway_token: credential.token,
-            phase,
-            // The chain this container belongs to (tick hyi). Every boot of the
-            // orchestrator carries it, including a reconcile's replacement: the
-            // replacement is the same causal chain as the sandbox it succeeds.
-            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-            // The grade's teeth (tick pzf): `operator` hands over the token
-            // that can push, `run` hands over this run's own `tkr_` credential,
-            // which github.com will not accept and this factory's git door will
-            // not forward a push for.
-            github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
-            // Which harness and model the container's entrypoint probes before
-            // it starts its job. The two jobs are routed differently (tick dl8):
-            //
-            // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
-            //   harness/model pair only has to satisfy the entrypoint's
-            //   pre-flight probes — the deployment's run-level choice
-            //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
-            // - the REVIEW job is routed like every other cloud role, through
-            //   the worker ladder (`workerHarness`/`workerModel`), whose floor
-            //   is pi on GLM — never the image's own harness selection, which
-            //   a deployment that routes nothing would leave at claude (the
-            //   xte finding dl8 absorbed).
-            ...(options.job === "review"
-              ? {
-                  harness: workerHarness(context.config.harness, env.RUN_WORKER_HARNESS),
-                  model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
-                }
-              : {
-                  ...(context.config.harness === null ? {} : { harness: context.config.harness }),
-                  ...(context.config.model === null ? {} : { model: context.config.model }),
-                }),
-            sandbox_image: image,
-            // The factory URL is given per BOOT (tick 7eq): every orchestrator
-            // reports its own finish to the done door over it, and the same
-            // URL is what its `ticfac run-epic` hands the per-tick sandbox
-            // door's client — the one dispatch path a container has.
-            ...(factoryBaseURL(env) === null
-              ? {}
-              : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
-            // The review half (tick v7g). Given per BOOT, from the run's own row
-            // — a container is told which pull request it is reading, and there
-            // is no other way for it to find out. The factory URL comes with it
-            // because that is where the findings go; a review container that
-            // could not reach the door would have nowhere to put its one output.
-            ...(context.review === null || factoryBaseURL(env) === null
-              ? {}
-              : {
-                  review_pr: context.review.pr_number,
-                  review_head_sha: context.review.head_sha,
-                  factory_url: factoryBaseURL(env)!,
-                  factory_project: params.project,
-                }),
-          }),
+            tick_id: params.epic,
+            attempt: boot,
+          });
+          // The image is a parameter of the boot, not a constant of the call site
+          // (tick 3q2's seam), and since tick x3v the value can be the
+          // repository's own: `acquireContext` resolved it from the tracked config
+          // at the submitted SHA, and refused the run outright if this deployment
+          // could not serve it. The container is told which image it got, so its
+          // own reader can refuse a boot that is not what the repository declared.
+          const image = context.sandbox_image;
+          // keepAlive (tick cr4): this container heartbeats every 30 seconds and
+          // so cannot be killed by idleness while the orchestrator works — the
+          // platform's own doc is the trade: a container under keepAlive "must be
+          // explicitly destroyed... to prevent containers running indefinitely
+          // and counting toward your account limits". Every ending of a boot
+          // destroys it in the finally below, and `finalize` sweeps as backstop.
+          const sandbox = await binding.get(name, { image, keepAlive: true });
+          const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
+            env: orchestratorEnv({
+              run_id: params.run_id,
+              epic: params.epic,
+              base_sha: params.base_sha,
+              repo_url: context.repo_url,
+              gateway_base_url: context.gateway_base_url,
+              gateway_token: credential.token,
+              phase,
+              // The chain this container belongs to (tick hyi). Every boot of the
+              // orchestrator carries it, including a reconcile's replacement: the
+              // replacement is the same causal chain as the sandbox it succeeds.
+              ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
+              // The grade's teeth (tick pzf): `operator` hands over the token
+              // that can push, `run` hands over this run's own `tkr_` credential,
+              // which github.com will not accept and this factory's git door will
+              // not forward a push for.
+              github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
+              // Which harness and model the container's entrypoint probes before
+              // it starts its job. The two jobs are routed differently (tick dl8):
+              //
+              // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
+              //   harness/model pair only has to satisfy the entrypoint's
+              //   pre-flight probes — the deployment's run-level choice
+              //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
+              // - the REVIEW job is routed like every other cloud role, through
+              //   the worker ladder (`workerHarness`/`workerModel`), whose floor
+              //   is pi on GLM — never the image's own harness selection, which
+              //   a deployment that routes nothing would leave at claude (the
+              //   xte finding dl8 absorbed).
+              ...(options.job === "review"
+                ? {
+                    harness: workerHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                    model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
+                  }
+                : {
+                    ...(context.config.harness === null ? {} : { harness: context.config.harness }),
+                    ...(context.config.model === null ? {} : { model: context.config.model }),
+                  }),
+              sandbox_image: image,
+              // The factory URL is given per BOOT (tick 7eq): every orchestrator
+              // reports its own finish to the done door over it, and the same
+              // URL is what its `ticfac run-epic` hands the per-tick sandbox
+              // door's client — the one dispatch path a container has.
+              ...(factoryBaseURL(env) === null
+                ? {}
+                : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
+              // The review half (tick v7g). Given per BOOT, from the run's own row
+              // — a container is told which pull request it is reading, and there
+              // is no other way for it to find out. The factory URL comes with it
+              // because that is where the findings go; a review container that
+              // could not reach the door would have nowhere to put its one output.
+              ...(context.review === null || factoryBaseURL(env) === null
+                ? {}
+                : {
+                    review_pr: context.review.pr_number,
+                    review_head_sha: context.review.head_sha,
+                    factory_url: factoryBaseURL(env)!,
+                    factory_project: params.project,
+                  }),
+            }),
+          });
+          return { process_id: started.id, at_ms: Date.now() };
+        },
+      );
+    } catch (error) {
+      // A boot that exhausted its retries is a verdict about this run's
+      // environment, and is not allowed to throw out of the Workflow (tick
+      // 4lv, from yoh's final-review finding 0c110874). The throw used to
+      // escape `supervisePass`, so the run never reached `finalize`: its
+      // gateway tokens stayed live, its row never settled, and the keepAlive
+      // container a failed boot may already have provisioned - the `get`
+      // that starts it is what creates it - kept billing with nothing left
+      // to sweep it. Every ending of a run is `finalize`'s ending, and the
+      // engine journals an exhausted step's error, so this catch fires
+      // deterministically again on any replay.
+      const message = String((error as { message?: unknown }).message ?? error);
+      const detail =
+        `the orchestrator's container could not be booted (boot ${boot} failed after ` +
+        `${BOOT_RETRIES.retries.limit} retries: ${message})`;
+      await step.do(`${options.label}:unbootable:${attempt}`, OBSERVE_RETRIES, async () => {
+        // The audit line for the ending, before `finalize` writes its own:
+        // an operator reading the dispatch log finds why the boot gave up,
+        // never a run that simply stopped talking.
+        await logDispatch(env, {
+          run_id: params.run_id,
+          epic: params.epic,
+          decision: `unbootable:${boot}`,
+          reason: null,
         });
-        return { process_id: started.id, at_ms: Date.now() };
-      },
-    );
+        return { unbootable: true };
+      });
+      // `boots` counts this failed boot on purpose: it was counted before
+      // the step ran, and its container may exist - so the sweep in
+      // `finalize` is the destroy for it, exactly as it is for every boot
+      // that started something.
+      return { kind: "failed", detail, boots: counter.next - 1 };
+    }
 
     // Renew the lease the moment the container is up, BEFORE the first sleep.
     //
