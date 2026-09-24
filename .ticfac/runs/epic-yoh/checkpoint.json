@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 178,
-  "state": "running",
-  "reason": "9iz is closed",
-  "updated_at": "2026-09-24T13:52:39Z",
+  "sequence": 179,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-24T14:18:44Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -117,7 +117,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "a2360e90aed4387789213302e73882fee81d380f",
+    "source_sha": "caa80cf92699785b3c7978737b9869f0aaa601d6",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
