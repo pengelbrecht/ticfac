@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 134,
-  "state": "integrating",
-  "reason": "integrating dl8 attempt 17 into epic/yoh",
-  "updated_at": "2026-09-24T11:14:27Z",
+  "sequence": 135,
+  "state": "gating",
+  "reason": "running the integrated gate for dl8 on 0fbca1a785ea",
+  "updated_at": "2026-09-24T11:15:18Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "dl8",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 17
     },
     {
