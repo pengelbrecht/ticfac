@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 92,
-  "state": "collecting",
-  "reason": "collecting nwn attempt 13",
-  "updated_at": "2026-09-24T05:55:07Z",
+  "sequence": 93,
+  "state": "integrating",
+  "reason": "integrating nwn attempt 13 into epic/yoh",
+  "updated_at": "2026-09-24T05:56:03Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -58,7 +58,7 @@
     },
     {
       "tick_id": "nwn",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 13
     },
     {
