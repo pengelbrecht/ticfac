@@ -1,0 +1,14 @@
+{
+  "id": "dyo",
+  "title": "The cloudflare-sandbox executor tells the truth on collect and adoption",
+  "description": "Absorbed from yoh final-review findings 73ba193d (high) and 47e6e90d (cs1). collect merges an attempt whose only commit is the worker's own report, so a worker that did nothing reads as ready-to-merge. And adoption reports the model that was REQUESTED rather than the one the running container is on, so the Go model check (nwn) cannot fire for an adopted attempt. Both are the executor stating something it did not observe.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "yoh",
+  "acceptance_criteria": "collect refuses an attempt whose commits are only the report (a distinct verdict, as the subprocess executor does); adoption reads and reports the running container's model and nwn's check applies to it; tests cover both; go and ts gates pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T12:11:39.619593Z",
+  "updated_at": "2026-09-24T12:11:39.619593Z"
+}
