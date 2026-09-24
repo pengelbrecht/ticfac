@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 219,
+  "sequence": 220,
   "state": "running",
-  "reason": "CI on the epic PR #51 is pending; the close-out of yoh is held",
-  "updated_at": "2026-09-24T16:55:11Z",
+  "reason": "CI is green on the epic PR #51; the close-out of yoh is admitted",
+  "updated_at": "2026-09-24T17:05:16Z",
   "ticks": [
     {
       "tick_id": "uqi",
