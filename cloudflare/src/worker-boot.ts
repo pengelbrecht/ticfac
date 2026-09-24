@@ -371,9 +371,10 @@ export const WORKER_DEFAULT_HARNESS = "pi";
  * holds, so the deployable config — not a source constant — is what a
  * deployment reads.
  *
- * **Why GLM 5.3 (tick uqi).** The operator's rule, 2026-09-22: the cloud
- * harness is pi, the cloud models are GLM 5.3 and GLM 5.3 Flash, and nothing
- * in the cloud runs claude. The route is proven rather than hoped for: the
+ * **Why GLM 5.3 (tick uqi).** The operator's rule is Workers AI models only
+ * — nothing in the cloud runs claude — and pi on GLM 5.3 (GLM 5.3 Flash for
+ * cheap work) is today's choice within it; the model may change, the rule
+ * does not. The route is proven rather than hoped for: the
  * 2026-09-22/23 smoke runs (the throwaway `smoke/xte-omp-glm` branch, which
  * this tick retires) booted pi on GLM 5.3 through the gateway end to end, and
  * the pinned image

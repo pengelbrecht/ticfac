@@ -237,8 +237,9 @@ FACTORY_MAX_INSTANCES = "3"
 # buy is that the choice is no longer a SOURCE EDIT: before them, changing
 # the worker model meant editing TypeScript and redeploying the factory.
 #
-# OPERATOR, 2026-09-23 (tick uqi): the cloud runs GLM 5.3 or GLM 5.3 Flash,
-# via pi only — nothing in the cloud runs claude. Pinned explicitly below
+# OPERATOR (ticks uqi, nwn): the cloud runs Workers AI models only — nothing
+# in the cloud runs claude. Today's choice within that rule is pi on GLM 5.3
+# (GLM 5.3 Flash for cheap work); the model may change, the rule does not. Pinned explicitly below
 # rather than left to the built-in default, so the deployable config says
 # the rule and no silent default change can decide it: an unset RUN_MODEL
 # would let the orchestrator container fall back to the repository's
