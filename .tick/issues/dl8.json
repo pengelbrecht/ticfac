@@ -3,10 +3,10 @@
   "title": "Delete the agent-orchestrator path: no container runs a harness on the skill loop to orchestrate",
   "description": "OPERATOR, 2026-09-23, same reconciliation.\n\nThe Run Workflow's original job was to boot a container whose HARNESS orchestrated the epic on the ticks skill loop - an agent deciding control flow. hn0 made the container exec ticfac run-epic instead (internal/factory/ticfacentrypoint.go overrides the vendored entrypoint), so for epic runs that path is dead code that is still reachable: supervisePass's harness boot, the closeout-phase orchestrator boot, and the prompts they carry.\n\nDELETE the agent-orchestrator code path for epic runs.\n\nKEEP PR review. superviseReview boots a container that runs a harness to REVIEW a pull request and post one comment - a job, not orchestration, and it works: on 2026-09-23 it reviewed ticks #90 on pi/GLM and found a real defect. Re-home it so it reads as a job the supervisor runs, not a phase of an orchestrator that no longer exists.\n\nOrdering: after the wave path's deletion, because both edit run-workflow.ts and a same-wave pair would collide - the 0ju/mrn lesson. image/entrypoint.sh is VENDORED; ticfac's override is the part ticfac owns.",
   "notes": "2026-09-23 12:58 - ABSORBS xte findings 5881691b and 8814e085 (2026-09-23): the factory's phase=review escape boots the ticks harness - claude when the deploy routes it - with no runners.toml routing. Keeping PR review as a job means routing it through runners.toml's cloud cells like every other role, so it is pi on GLM and never claude.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "l6t"
   ],
@@ -14,5 +14,6 @@
   "acceptance_criteria": "No epic run boots a container whose harness orchestrates; PR review still boots, reviews and posts, proven by its tests; the removed prompts and phases have no remaining caller; and the full Go and TypeScript suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:49:08.537786Z",
-  "updated_at": "2026-09-23T10:58:14.791714Z"
+  "updated_at": "2026-09-24T08:20:35.968468Z",
+  "started_at": "2026-09-24T08:20:35.968467Z"
 }

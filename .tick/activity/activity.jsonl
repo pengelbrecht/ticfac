@@ -1399,3 +1399,4 @@
 {"ts":"2026-09-24T08:17:42.489883Z","tick":"mn7","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"Delete the TypeScript reconciler"}}
 {"ts":"2026-09-24T08:19:53.917364Z","tick":"l6t","action":"note","actor":"ticfac","epic":"yoh","data":{"note":"\n2026-09-24 10:19 - ticfac run epic-yoh: l6t try 1 (run dispatch #10) merged into epic/yoh as fdaf8f3be41c; the integrated gate (go, ts) passed.","title":"Delete the wave path: the Workflow no longer fans ticks out to worker containers"}}
 {"ts":"2026-09-24T08:20:00.652851Z","tick":"l6t","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"Delete the wave path: the Workflow no longer fans ticks out to worker containers"}}
+{"ts":"2026-09-24T08:20:35.969153Z","tick":"dl8","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"Delete the agent-orchestrator path: no container runs a harness on the skill loop to orchestrate"}}
