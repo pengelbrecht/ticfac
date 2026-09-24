@@ -268,6 +268,13 @@ func Resolve(role string, opts Options) (*Profile, error) {
 	if err := route(resolved, opts); err != nil {
 		return nil, err
 	}
+	// The cloud rule on the FINAL resolved worker (tick nwn), after every
+	// overlay route applied — never on one input layer.
+	if opts.Substrate == string(runconfig.SubstrateCloud) {
+		if err := enforceWorkersAI(resolved, opts.Tier); err != nil {
+			return nil, fmt.Errorf("profile %s: %w", role, err)
+		}
+	}
 	resolved.Digest = digest(resolved)
 	return resolved, nil
 }
