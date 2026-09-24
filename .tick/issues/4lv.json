@@ -3,7 +3,7 @@
   "title": "A Run Workflow whose boot step exhausts its retries still finalizes",
   "description": "Absorbed from yoh final-review finding 0c110874 (cs1, high). After cr4 gave the boot step a deliberate retry policy, a boot that exhausts its retries throws out of supervisePass and the run never reaches finalize: tokens are not revoked, the run row is never settled, the container sweep never runs. The Workflow's whole job after yoh is boot, budget, watch, retry, finalize - so a run that cannot finalize breaks yoh's definition of done.",
   "notes": "2026-09-24 14:55 - ticfac run epic-yoh: 4lv try 1 (run dispatch #19) reported a finding drafted for triage — proposed-tick \"superviseRun's context and progress steps can still throw past finalize\" (key 5882bf187be323331a8316948ed791f81ae1612d68598d2851274233958d1057, severity medium, for this repository). Triage with `ticfac finding yoh 5882bf187be323331a8316948ed791f81ae1612d68598d2851274233958d1057 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 14:55 - ticfac run epic-yoh: 4lv try 1 (run dispatch #19) reported a finding drafted for triage — proposed-tick \"Record the catch-at-the-step rule in .tick/learnings.md at the next compaction\" (key 411a7b90937c6d9ddbc239d9805950936db8dc753494a51940cd932a8e1c39a8, severity low, for this repository). Triage with `ticfac finding yoh 411a7b90937c6d9ddbc239d9805950936db8dc753494a51940cd932a8e1c39a8 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 15:00 - ticfac run epic-yoh: 4lv try 1 (run dispatch #19) merged into epic/yoh as c9b67641ee01; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "A boot that exhausts its retries ends in finalize (tokens revoked, run row settled with a reason naming the boot failure, containers swept); a vitest drives it; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:11:39.572217Z",
-  "updated_at": "2026-09-24T13:00:35.017097Z",
-  "started_at": "2026-09-24T12:15:12.262755Z"
+  "updated_at": "2026-09-24T13:00:43.049179Z",
+  "closed_at": "2026-09-24T13:00:43.049179Z"
 }
