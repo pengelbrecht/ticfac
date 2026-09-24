@@ -133,15 +133,6 @@ export const BASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
 export const TICK_ID_PATTERN = /^[a-z0-9]{3,4}$/;
 
 /**
- * The most ticks one cloud wave may name (tick b6e).
- *
- * Generous relative to any real wave `wave.Compute` would ever produce, and
- * bounded regardless: an unbounded array in a submission is a small denial
- * lever for no legitimate gain.
- */
-export const MAX_WAVE_TICKS = 64;
-
-/**
  * The canonical `owner/repo` project pair.
  *
  * Remote URLs are deliberately NOT parsed here. `internal/github` already owns
@@ -182,23 +173,6 @@ export type RunWorkflowParams = {
    * what compare-and-delete release depends on.
    */
   lease_token: string;
-  /**
-   * A wave of ticks to run as per-tick cloud worker containers (tick b6e),
-   * rather than the Phase 1 default of one orchestrator sandbox that fans
-   * subagents out inside itself.
-   *
-   * Absent (or empty) is the unchanged Phase 1 path — this is an ADDED path,
-   * not a replacement. Populating it is the caller's job: readiness — which
-   * ticks are unblocked right now — is `wave.Compute`/`query.Ready`'s answer
-   * in Go, already correct and already tested, and porting it a second time
-   * into this Worker is exactly the class of drift `.tick/learnings.md`
-   * warns against ("a fix landed in TypeScript only... both suites green
-   * because each was internally consistent"). So the wave is computed where
-   * `tk graph` already runs — the submitter — and carried in, the same way
-   * `max_cost_usd`/`max_wall_clock_ms` carry a per-submission decision the
-   * deployment did not make for it.
-   */
-  tick_ids?: string[];
   /**
    * The credential grade the run was submitted with (D11, tick pzf).
    *
@@ -303,10 +277,10 @@ export function epicBranchFor(epic: string): string {
 /**
  * Whether EpicReconcilerWorkflow can drive this submission (tick nu9).
  *
- * The reconciler plans an epic's own waves from its graph, meters no spend,
+ * The reconciler plans an epic's own ticks from its graph, meters no spend,
  * pings no channel when a run ends, and its sandbox executor issues every
  * worker the `write` grade. So the submissions it can honestly take over
- * are exactly the plain epic runs — no wave, no budget, no completion ping,
+ * are exactly the plain epic runs — no budget, no completion ping,
  * no grade the executor would silently upgrade — and everything else keeps
  * the container-agent driver that DOES honour those fields. That is not a
  * temporary shim: xo2's recorded rule is that no execution path is deleted
@@ -317,7 +291,6 @@ export function epicBranchFor(epic: string): string {
  */
 export function reconcilerDrives(submission: RunSubmission): boolean {
   return (
-    submission.tick_ids === undefined &&
     submission.notify === undefined &&
     submission.max_cost_usd === undefined &&
     submission.max_wall_clock_ms === undefined &&
@@ -351,14 +324,11 @@ export type RunSubmission = {
   max_cost_usd?: number;
   /** `tk cloud run --max-wall-clock`: this run's clock, never above the deployment's. */
   max_wall_clock_ms?: number;
-  /** The wave of ticks to fan out as per-tick cloud worker containers (tick b6e). */
-  tick_ids?: string[];
   /**
    * Where the orchestrator that submitted this run sits (D19, tick bmo).
    *
-   * The cloud substrate is drivable from anywhere: `tk cloud spawn` on a
-   * laptop dispatches worker containers and then drives the wave locally, and
-   * that submission takes the SAME RunRoom lease a Workflow-hosted run takes —
+   * The cloud substrate is drivable from anywhere, and a submission from a
+   * laptop takes the SAME RunRoom lease a Workflow-hosted run takes —
    * one project, one arbiter, whatever the orchestrator's location. This field
    * is what makes the two distinguishable afterwards, and it matters at
    * exactly the moment someone is refused: "held by run X (local)" tells an
@@ -472,9 +442,22 @@ export function parseSubmission(body: unknown): SubmissionParse {
   );
   if (clockComplaint !== null) return { ok: false, detail: clockComplaint };
 
-  let tickIDs: string[] | undefined;
-  const tickIDsComplaint = tickIDsField(raw.tick_ids, (v) => (tickIDs = v));
-  if (tickIDsComplaint !== null) return { ok: false, detail: tickIDsComplaint };
+  // The wave field is refused, not ignored (tick l6t): the Run Workflow no
+  // longer fans ticks out to worker containers itself — per-tick workers are
+  // dispatched by `ticfac run-epic` in the container, through the cloudflare-
+  // sandbox executor and the per-tick sandbox door. A submitter still naming
+  // a wave (an old CLI, a stale script) must learn that here, as a 400 naming
+  // what to do instead, because a silently dropped field is how runs lost
+  // waves before — the answer is never to accept it and do something else.
+  if (raw.tick_ids !== undefined && raw.tick_ids !== null) {
+    return {
+      ok: false,
+      detail:
+        "tick_ids is no longer accepted: the Run Workflow does not dispatch per-tick " +
+        "worker containers itself — submit the epic and its container's ticfac run-epic " +
+        "dispatches each tick through the per-tick sandbox door",
+    };
+  }
 
   // THE OTHER EDGE (D20, tick hyi). A run submitted directly — `tk cloud run`,
   // the 06:00 sweep, an operator's own curl — has no signal behind it, so if
@@ -531,20 +514,9 @@ export function parseSubmission(body: unknown): SubmissionParse {
     grade = raw.credential_grade;
   }
 
-  // The RunRoom's queued-submission record (D22) has no `tick_ids` column —
-  // queueing is for the project-lease-held case, and adding cloud-wave
-  // support to that path is its own migration. Refusing loudly here is the
-  // honest answer until that lands: silently igniting the queued submission
-  // later on the Phase 1 path, having accepted a wave up front, is exactly
-  // the kind of silent disagreement this tick was written to not repeat.
-  if (raw.queue === true && tickIDs !== undefined) {
-    return {
-      ok: false,
-      detail:
-        "tick_ids cannot be combined with queue: true yet — a queued cloud-wave submission " +
-        "would lose its wave on ignition; submit without queue or without tick_ids",
-    };
-  }
+  // The RunRoom's queued-submission record (D22) is shape-frozen; it never
+  // carried a wave, and a wave is no longer a thing a submission can ask for
+  // at all — see the tick_ids refusal above.
 
   return {
     ok: true,
@@ -559,44 +531,10 @@ export function parseSubmission(body: unknown): SubmissionParse {
       ...(queueTtl === undefined ? {} : { queue_ttl_ms: queueTtl }),
       ...(maxCost === undefined ? {} : { max_cost_usd: maxCost }),
       ...(maxWallClock === undefined ? {} : { max_wall_clock_ms: maxWallClock }),
-      ...(tickIDs === undefined ? {} : { tick_ids: tickIDs }),
       ...(origin === undefined ? {} : { origin }),
       ...(grade === undefined ? {} : { credential_grade: grade }),
     },
   };
-}
-
-/**
- * Reads an optional `tick_ids` wave (tick b6e). Absent and an empty array both
- * mean "no cloud wave — the Phase 1 path applies", so an empty array is
- * normalized away rather than carried as a distinct, meaningless case.
- *
- * Every id is validated against the same shape `internal/tick.IDGenerator`
- * produces: a submission naming something that cannot be a tick id is a typo
- * or a forgery, and either way the honest answer is a 400, not a wave that
- * silently dispatches nothing useful. Duplicates are refused for the same
- * reason `sandboxNameFor` addresses a sandbox by tick id — two tasks racing
- * to boot the identically-named container is not "one container per tick".
- */
-export function tickIDsField(value: unknown, into: (v: string[]) => void): string | null {
-  if (value === undefined || value === null) return null;
-  if (!Array.isArray(value)) return "tick_ids must be an array of tick ids";
-  if (value.length === 0) return null;
-  if (value.length > MAX_WAVE_TICKS) {
-    return `tick_ids must name at most ${MAX_WAVE_TICKS} ticks, got ${value.length}`;
-  }
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const entry of value) {
-    if (typeof entry !== "string" || !TICK_ID_PATTERN.test(entry)) {
-      return `tick_ids must each be a 3-4 character tick id, got ${JSON.stringify(entry)}`;
-    }
-    if (seen.has(entry)) return `tick_ids named ${entry} more than once`;
-    seen.add(entry);
-    ids.push(entry);
-  }
-  into(ids);
-  return null;
 }
 
 /**
@@ -666,7 +604,6 @@ export type StartRunInput = {
   max_cost_usd?: number;
   max_wall_clock_ms?: number;
   lease_token: string;
-  tick_ids?: string[];
   /** See {@link RunSubmission.credential_grade}. Absent means `write`. */
   credential_grade?: RunCredentialGrade;
 };
@@ -784,7 +721,6 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
           ? {}
           : { max_wall_clock_ms: input.max_wall_clock_ms }),
         lease_token: input.lease_token,
-        ...(input.tick_ids === undefined ? {} : { tick_ids: input.tick_ids }),
         credential_grade: run.credential_grade as RunCredentialGrade,
       },
     });
@@ -959,11 +895,10 @@ export type SubmitResult =
  *
  * Which driver the submission rides is decided here (tick nu9): the
  * reconciler for a plain epic run, the container agent for everything it
- * cannot honour. `opts.driver: "agent"` is the one explicit opt-out — for
- * a submitter whose ask is wave-shaped even when its fields are not (a
- * draft press runs ONE tick now, an epic the reconciler's own wave planning
- * cannot express) — and it is a named decision rather than a shape a future
- * rule might silently re-route.
+ * cannot honour. `opts.driver: "agent"` is the one explicit opt-out — for a
+ * submitter whose ask is narrower than the reconciler's plan (a draft press
+ * runs its tick now) — and it is a named decision rather than a shape a
+ * future rule might silently re-route.
  */
 export async function submitRun(
   env: Env,
@@ -972,8 +907,8 @@ export async function submitRun(
 ): Promise<SubmitResult> {
   // Which driver this submission can honestly ride (tick nu9): the
   // reconciler for a plain epic run, the container agent for everything it
-  // cannot honour — the wave, the budgets, the completion ping, the grades
-  // the executor would upgrade. The route, the sweeps, the drafts, the
+  // cannot honour — the budgets, the completion ping, the grades the
+  // executor would upgrade. The route, the sweeps, the drafts, the
   // reviews and the remediations all submit through this one choke point,
   // so the predicate is the one place the split lives and its tests are the
   // contract every submitter is held to.
@@ -1075,7 +1010,6 @@ export async function submitRun(
                 ? {}
                 : { max_wall_clock_ms: submission.max_wall_clock_ms }),
               lease_token: lease.lease.token,
-              ...(submission.tick_ids === undefined ? {} : { tick_ids: submission.tick_ids }),
               ...(submission.credential_grade === undefined
                 ? {}
                 : { credential_grade: submission.credential_grade }),
@@ -1160,7 +1094,7 @@ export async function submitRun(
  *
  * The reconciler binding is asked first because every plain epic run lives
  * there (tick nu9); the Run Workflow is still asked after it for the runs the
- * reconciler cannot take over — waves, budgeted runs, reviews — so neither
+ * reconciler cannot take over — budgeted runs, reviews — so neither
  * driver's live runs are silently unreachable. A binding with no instance
  * for the id, or an instance not waiting on an event, answers nothing and
  * the next binding is tried — the same graceful shape the single-binding
@@ -1425,8 +1359,8 @@ async function endedSupervisor(env: Env, run: Run): Promise<{ id: string; status
 
 async function workflowPhase(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
   // The reconciler first — every plain epic run's instance lives there (tick
-  // nu9) — then the Run Workflow, for the runs it still drives: waves,
-  // budgeted runs, reviews.
+  // nu9) — then the Run Workflow, for the runs it still drives: budgeted
+  // runs, reviews.
   for (const workflow of [epicReconcilerBinding(env), runWorkflowBinding(env)]) {
     if (workflow === null) continue;
     try {

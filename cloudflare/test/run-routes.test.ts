@@ -303,10 +303,7 @@ describe("submission on a free project", () => {
   it("records a locally-driven wave as a local lease holder", async () => {
     const project = await enrolled("local-origin");
 
-    const res = await post(
-      "/api/runs",
-      submission(project, { origin: "local", tick_ids: ["bmo", "s7f"] }),
-    );
+    const res = await post("/api/runs", submission(project, { origin: "local" }));
 
     expect(res.status).toBe(201);
     const body = (await res.json()) as { run: { run_id: string } };
@@ -467,10 +464,12 @@ describe("submission on a free project", () => {
     const project = await enrolled("no-workflow");
     delete env.RUN_WORKFLOW;
 
-    // A wave is the container agent's to drive — the reconciler plans its
-    // own waves from the epic's graph — so a missing agent binding is this
-    // submission's answer, not the epic run's (tick nu9).
-    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa"] }));
+    // A submission the container agent drives (here: one carrying a
+    // completion ping, which the reconciler cannot honour) is the one that
+    // needs the agent's binding — the reconciler plans its own ticks from
+    // the epic's graph, so a plain epic run is its to drive, not this one's
+    // (tick nu9).
+    const res = await post("/api/runs", submission(project, { notify: "telegram" }));
 
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toMatchObject({ error: "run_unavailable" });
@@ -498,20 +497,43 @@ describe("submission on a free project", () => {
 });
 
 /**
- * The wave of ticks a cloud-wave submission carries (tick b6e).
+ * The deleted wave submission (tick l6t).
  *
- * Readiness is computed where `tk graph` already runs — the submitter, not
- * this Worker — so the submission is where the wave enters the system. This
- * is what makes `dispatchWave` (0ds) reachable from a real run at all.
+ * The Run Workflow no longer fans ticks out to worker containers itself — a
+ * run's per-tick workers are dispatched by `ticfac run-epic` in the container,
+ * through the cloudflare-sandbox executor and the per-tick sandbox door — so
+ * `tick_ids` is not a field a submission can carry any more. A submitter still
+ * naming one (an old CLI, a stale script) is refused HERE, at the edge, with
+ * the reason and the replacement in the message: a silently dropped field is
+ * how runs lost waves before this tick, in both directions.
  */
 describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
-  it("carries tick_ids into the Workflow params", async () => {
-    const project = await enrolled("wave-direct");
+  it("refuses tick_ids, naming what to do instead", async () => {
+    const project = await enrolled("wave-refused");
 
-    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa", "bbb", "ccc"] }));
+    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa", "bbb"] }));
 
-    expect(res.status).toBe(201);
-    expect(workflow.created[0]!.params).toMatchObject({ tick_ids: ["aaa", "bbb", "ccc"] });
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: "invalid_request",
+      detail: expect.stringContaining("tick_ids is no longer accepted"),
+    });
+    expect(workflow.created).toEqual([]);
+    expect(reconciler.created).toEqual([]);
+    // Refused at the edge, so nothing was leased either.
+    await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
+  });
+
+  it("refuses an empty tick_ids the same as a named one, rather than normalizing it", async () => {
+    const project = await enrolled("wave-empty-refused");
+
+    // Before tick l6t an empty array was "no wave", normalized away at parse.
+    // Now the field itself is gone, and a submitter still carrying the empty
+    // array it used to send is exactly the stale client the refusal is for.
+    const res = await post("/api/runs", submission(project, { tick_ids: [] }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
   });
 
   it("treats an absent tick_ids as a whole epic the reconciler drives", async () => {
@@ -525,67 +547,6 @@ describe("submitting a wave of ticks for per-tick cloud dispatch", () => {
     expect(workflow.created).toEqual([]);
     expect(reconciler.created).toHaveLength(1);
     expect(reconciler.created[0]!.params.epic_id).toBe("ko8");
-  });
-
-  it("refuses an id that is not tick-id shaped", async () => {
-    const project = await enrolled("wave-bad-id");
-
-    const res = await post(
-      "/api/runs",
-      submission(project, { tick_ids: ["aaa", "not-a-tick-id"] }),
-    );
-
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
-    expect(workflow.created).toHaveLength(0);
-  });
-
-  it("refuses a duplicate tick id rather than booting two containers for one name", async () => {
-    const project = await enrolled("wave-dup");
-
-    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa", "aaa"] }));
-
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toMatchObject({
-      error: "invalid_request",
-      detail: expect.stringContaining("aaa"),
-    });
-  });
-
-  it("refuses tick_ids past the bound rather than truncating it", async () => {
-    const project = await enrolled("wave-too-wide");
-    const tooMany = Array.from({ length: 65 }, (_, i) => i.toString(36).padStart(3, "0"));
-
-    const res = await post("/api/runs", submission(project, { tick_ids: tooMany }));
-
-    expect(res.status).toBe(400);
-    expect(workflow.created).toHaveLength(0);
-  });
-
-  it("treats an empty tick_ids the same as absent", async () => {
-    const project = await enrolled("wave-empty");
-
-    const res = await post("/api/runs", submission(project, { tick_ids: [] }));
-
-    expect(res.status).toBe(201);
-    // Dropped at parse, so an empty wave IS a whole-epic run: the
-    // reconciler's, and the agent's fake was asked for nothing.
-    expect(workflow.created).toEqual([]);
-    expect(reconciler.created).toHaveLength(1);
-  });
-
-  // The RunRoom's queued-submission record has no tick_ids column yet: rather
-  // than silently ignite the queued submission on the Phase 1 path later
-  // having accepted a wave up front, the combination is refused loudly at
-  // submission, while there is still a caller to tell.
-  it("refuses to queue a wave until queued cloud-wave submissions are supported", async () => {
-    const project = await enrolled("wave-queue");
-
-    const res = await post("/api/runs", submission(project, { tick_ids: ["aaa"], queue: true }));
-
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request" });
-    expect(workflow.created).toHaveLength(0);
   });
 });
 

@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_WAVE_LEGS, WAVE_LEG_MS, waveSpawnBudget } from "../src/run-workflow";
 import {
   COLD_START_BENCHMARK_MS,
   DEFAULT_CONFIRM_TIMEOUT_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_SALVAGE_GRACE_MS,
-  DEFAULT_WAIT_TIMEOUT_MS,
   FANOUT_DEGRADATION_FACTOR,
   probeTimeoutMs,
 } from "../src/worker-dispatch";
@@ -46,54 +44,33 @@ describe("the 10-minute Workflow step limit is a named, guarded constant", () =>
   });
 
   /**
-   * THE BUG, as arithmetic. A wave's wait is longer than a step may run for,
-   * so a wave cannot be waited on inside one step — which is exactly what
-   * `superviseCloudWave` did until this tick.
+   * tick 7zk's arithmetic, still: a stop path holds the container's salvage
+   * window open INSIDE the same step that found the stop, and that step must
+   * not be the one that kills the supervisor. The window is bounded, and it
+   * is not the whole allowance.
    */
-  it("cannot contain a whole wave's wait, which is why legs exist", () => {
-    expect(fitsInStep(DEFAULT_WAIT_TIMEOUT_MS)).toBe(false);
-    expect(DEFAULT_WAIT_TIMEOUT_MS).toBeGreaterThan(WORKFLOW_STEP_TIMEOUT_MS);
-  });
-
-  it("bounds one dispatch leg, and enough legs to cover the longest wave", () => {
-    expect(fitsInStep(WAVE_LEG_MS)).toBe(true);
-    // Room left inside the step for the leg's reconcile, collects, teardowns
-    // and its R2 write — the leg's wait is not the leg's whole cost.
-    expect(WAVE_LEG_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
-    // And a wave never runs out of legs before it runs out of budget.
-    expect(MAX_WAVE_LEGS * WAVE_LEG_MS).toBeGreaterThan(DEFAULT_WAIT_TIMEOUT_MS);
+  it("bounds the salvage window a stop holds open inside one step", () => {
+    expect(fitsInStep(DEFAULT_SALVAGE_GRACE_MS)).toBe(true);
+    expect(DEFAULT_SALVAGE_GRACE_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
   });
 
   /**
-   * tick 7zk's arithmetic. A leg cancelled at its very last second then holds
-   * every container's salvage window open INSIDE the same step, and the step
-   * that matters most — the one ending a run that has just spent its whole
-   * budget — is exactly the one that must not be the step that kills the
-   * supervisor. So the window is held back from the leg, not added to it.
+   * A dispatch's waits are budgeted TOGETHER, and this is the tightest pin in
+   * the package: `spawnWorker` waits on the probe (up to the widest measured
+   * cold-start allowance) and then on the confirm (three minutes), in ONE
+   * call, from inside a Workflow step (the reconciler's start) and from the
+   * dispatch door. The sum is two seconds under the hard cap — the wave
+   * path's `waveSpawnBudget` used to scale the two shares apart to buy room
+   * for everything else in the step; that scaling died with the wave
+   * (tick l6t), so what is pinned now is that the UNSCALED sum still fits
+   * the cap at all.
    */
-  it("leaves room for a cancelled leg's salvage window inside the same step", () => {
-    expect(fitsInStep(WAVE_LEG_MS + DEFAULT_SALVAGE_GRACE_MS)).toBe(true);
-    // And still room beyond that for the leg's reconcile, collects, teardowns
-    // and its R2 write, which the window does not replace.
-    expect(WAVE_LEG_MS + DEFAULT_SALVAGE_GRACE_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
-  });
-
-  /**
-   * The second, quieter half of the same bug: a step's waits are budgeted
-   * TOGETHER. A 418s probe and a 180s confirm are each reasonable and sum to
-   * 598s, which is a step two seconds from the cap with a reconcile still to
-   * pay for.
-   */
-  it("budgets a dispatch leg's probe and confirm together, not one at a time", () => {
-    for (const width of [1, 2, 3, 5]) {
-      const budget = waveSpawnBudget(width);
-      expect(fitsInStep(budget.probe_timeout_ms + budget.confirm_timeout_ms)).toBe(true);
-    }
-    // At the width this deployment actually runs (`max_instances = 3`) nothing
-    // is scaled down: the probe keeps its full measured allowance.
-    const three = waveSpawnBudget(3);
-    expect(three.probe_timeout_ms).toBe(probeTimeoutMs(3));
-    expect(three.confirm_timeout_ms).toBe(DEFAULT_CONFIRM_TIMEOUT_MS);
+  it("keeps a dispatch's probe and confirm inside one hard step cap, together", () => {
+    expect(DEFAULT_PROBE_TIMEOUT_MS + DEFAULT_CONFIRM_TIMEOUT_MS).toBeLessThanOrEqual(
+      WORKFLOW_STEP_TIMEOUT_MS,
+    );
+    // The widest measured probe is the default, never an extrapolation.
+    expect(DEFAULT_PROBE_TIMEOUT_MS).toBe(probeTimeoutMs(5));
   });
 
   it("scales every share when a caller asks for more than a step can spend", () => {
@@ -105,8 +82,10 @@ describe("the 10-minute Workflow step limit is a named, guarded constant", () =>
 });
 
 /**
- * The probe budget, degraded for the width a wave actually runs at (tick 2xm)
- * rather than for the widest one anyone has measured (tick 7go's constant).
+ * The probe budget. The width parameter carries the fan-out degradation curve
+ * tick 2xm measured (and the wave path's deletion leaves nothing running it
+ * above width 1); the derivation itself still sizes every probe `spawnWorker`
+ * waits on, so it stays pinned — including the measured data.
  */
 describe("probeTimeoutMs", () => {
   it("keeps tick 7go's derivation at the widest measured width", () => {
@@ -116,7 +95,7 @@ describe("probeTimeoutMs", () => {
     );
   });
 
-  it("charges a narrower wave only the degradation it measured", () => {
+  it("charges a narrower fan-out only the degradation it measured", () => {
     expect(probeTimeoutMs(1)).toBe(Math.ceil(COLD_START_BENCHMARK_MS * 1.2));
     expect(probeTimeoutMs(3)).toBe(Math.ceil(COLD_START_BENCHMARK_MS * 2.22 * 1.2));
     expect(probeTimeoutMs(2)).toBeGreaterThan(probeTimeoutMs(1));

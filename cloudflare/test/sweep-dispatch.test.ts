@@ -2,7 +2,6 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { enrolProject, getSweepSelection, listSweepSelections } from "../src/db";
-import { runConfig } from "../src/run-workflow";
 import type { RunWorkflowInstance, RunWorkflowParams } from "../src/runs";
 import { MAX_SWEEP_FRONTIER, runDueSweeps, sweepProject } from "../src/sweep-dispatch";
 import type { TrackerWriteResult } from "../src/tracker-write";
@@ -190,7 +189,14 @@ describe("cron sweeps", () => {
     expect(workflow.created).toHaveLength(0);
   });
 
-  it("selects deterministically and ignites one run with the effective budget", async () => {
+  it("selects deterministically, and records a match without spending on it", async () => {
+    // Since tick l6t the sweep cannot submit its selection: the tick_ids wave
+    // it named the batch with is deleted, and the one orchestrator path that
+    // remains plans an epic's OWN children — which the create-only tracker
+    // writer cannot make the selection. So a matching selection is recorded
+    // and REFUSED, naming the gap, and nothing is spent. See the finding this
+    // change filed: sweeps need a new dispatch shape, and that is a person's
+    // decision.
     const project = await enrolled("morning");
     tracker.put(tickRecord({ id: "ddd", priority: 1, created_at: "2026-08-05T00:00:00Z" }));
     tracker.put(tickRecord({ id: "aaa", priority: 1, created_at: "2026-01-05T00:00:00Z" }));
@@ -199,29 +205,15 @@ describe("cron sweeps", () => {
     tracker.put(tickRecord({ id: "yyy", status: "closed" }));
 
     const [outcome] = await sweepProject(env, project, DUE);
-    expect(outcome!.outcome).toBe("ignited");
+    expect(outcome!.outcome).toBe("refused");
+    expect(outcome!.run_id).toBeNull();
     expect(outcome!.selection!.selected).toEqual(["ccc", "aaa", "ddd"]);
-
-    // One run, and its budget is the Workflow's, not a sentence in a prompt.
-    expect(workflow.created).toHaveLength(1);
-    const params = workflow.created[0]!.params;
-    expect(params.max_cost_usd).toBe(10);
-    expect(params.tick_ids).toEqual(["ccc", "aaa", "ddd"]);
-    expect(params.requested_by).toBe("sweep:morning-bugs");
-    expect(params.notify).toBe("telegram");
-    // A sweep pushes branches, so it is issued the write grade at submission —
-    // decided there and never by the run (D11, tick pzf).
-    expect(params.credential_grade).toBe("write");
-    // The epic is the synthetic bucket this sweep minted, not one of the ticks.
-    expect(params.epic).not.toBe("ccc");
-    expect(tracker.created).toHaveLength(1);
-    const epicRecord = JSON.parse(tracker.created[0]!.content);
-    expect(epicRecord.type).toBe("epic");
-    expect(epicRecord.external_ref).toBe("sweep:morning-bugs@2026-08-24T04:00:00.000Z");
-    expect(params.epic).toBe(epicRecord.id);
-
-    // And the number the Workflow will enforce is the number that was reported.
-    expect(runConfig(env, { max_cost_usd: params.max_cost_usd }).max_cost_usd).toBe(10);
+    // The refusal names what a sweep now needs, not only that it did not run.
+    expect(outcome!.detail).toContain("tick_ids wave field is deleted");
+    expect(outcome!.detail).toContain("Recorded, not spent");
+    // No run, no epic minted, nothing leased.
+    expect(workflow.created).toHaveLength(0);
+    expect(tracker.created).toHaveLength(0);
   });
 
   it("reports the effective budget when a deployment ceiling lowered it", async () => {
@@ -232,7 +224,7 @@ describe("cron sweeps", () => {
     tracker.put(tickRecord({ id: "bbb" }));
 
     const [outcome] = await sweepProject(env, project, DUE);
-    expect(outcome!.outcome).toBe("ignited");
+    expect(outcome!.outcome).toBe("refused");
     expect(outcome!.selection!.effective.budget_usd).toEqual({
       requested: 10,
       effective: 3,
@@ -245,10 +237,10 @@ describe("cron sweeps", () => {
     });
     // The clamp is in the sentence an operator reads, not only in the JSON —
     // tick 7zk's whole lesson is that the first place a replaced number
-    // appears must not be a cancellation.
+    // appears must not be a cancellation, and the bound a future sweep's
+    // dispatch shape will run under is the number that was reported.
     expect(outcome!.detail).toContain("clamped: max_ticks 5 -> 1, budget_usd 10 -> 3");
-    expect(workflow.created[0]!.params.max_cost_usd).toBe(3);
-    expect(workflow.created[0]!.params.tick_ids).toEqual(["aaa"]);
+    expect(workflow.created).toHaveLength(0);
   });
 
   it("records the morning nothing matched, and spends nothing", async () => {
@@ -322,7 +314,10 @@ describe("cron sweeps", () => {
     tracker.put(tickRecord({ id: "aaa" }));
     tracker.records.set("bad", "{not json");
     const [outcome] = await sweepProject(env, project, DUE);
-    expect(outcome!.outcome).toBe("ignited");
+    // The selection still happened — the unreadable record cost one tick
+    // nothing — and the refusal is the wave-deletion one, not a parse one.
+    expect(outcome!.outcome).toBe("refused");
+    expect(outcome!.detail).toContain("tick_ids wave field is deleted");
     expect(outcome!.selection!.selected).toEqual(["aaa"]);
     expect(outcome!.selection!.frontier).toBe(1);
   });
@@ -352,9 +347,9 @@ describe("cron sweeps", () => {
     expect(row!.project).toBe(project);
     expect(row!.sweep).toBe("morning-bugs");
     expect(row!.cron).toBe("0 4 * * 1-5");
-    expect(row!.outcome).toBe("ignited");
+    expect(row!.outcome).toBe("refused");
     expect(row!.base_sha).toBe(HEAD);
-    expect(row!.run_id).toBe(mine[0]!.run_id);
+    expect(row!.run_id).toBeNull();
 
     // The stored record is the whole explanation and needs nothing else to
     // read: the policy, the effective numbers, the rule, and every candidate.

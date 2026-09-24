@@ -212,12 +212,13 @@ describe("exempt paths", () => {
     expect(isAuthExempt("/HEALTH")).toBe(false);
   });
 
-  // The in-run dispatch door (tick wiy). Exempt from the FACTORY token for the
-  // reason /api/gateway is — its caller is a sandbox, and a sandbox must never
-  // hold the credential that commands the whole control plane — and NOT
-  // unauthenticated: it carries the run's own gateway token instead.
-  it("exempts the in-run wave door exactly, and nothing beside it", () => {
-    expect(isAuthExempt("/api/wave")).toBe(true);
+  // The wave door (tick wiy) is gone with the wave path (tick l6t): its route
+  // was the in-run half of a fan-out the Run Workflow no longer performs, and
+  // what it authenticated is now served by the per-tick sandbox door below.
+  // A path that no longer exists must not stay exempt — an exempt path answers
+  // the factory token question before it answers the 404.
+  it("does not exempt the deleted wave door, exactly or beside it", () => {
+    expect(isAuthExempt("/api/wave")).toBe(false);
     expect(isAuthExempt("/api/waves")).toBe(false);
     expect(isAuthExempt("/api/wave/run_1")).toBe(false);
     expect(isAuthExempt("/api/wave-request")).toBe(false);
@@ -326,13 +327,22 @@ describe("route middleware", () => {
 
   // Exempt from the factory token is not open. A caller with no credential at
   // all is refused by the endpoint's own authorization, which is the same one
-  // model traffic answers to — so a revoked run cannot dispatch a wave any
+  // model traffic answers to — so a revoked run cannot dispatch a worker any
   // more than it can make a model call.
-  it("still refuses an uncredentialled wave request", async () => {
-    const res = await SELF.fetch(`${BASE}/api/wave`, {
+  it("still refuses an uncredentialled sandbox dispatch", async () => {
+    const res = await SELF.fetch(`${BASE}/api/sandbox/attempts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ epic: "ko8", pass: 1, base_sha: "a".repeat(40), tick_ids: ["aaa"] }),
+      body: JSON.stringify({
+        epic: "ko8",
+        tick_id: "aaa",
+        attempt: 1,
+        role: "implement-tick",
+        write_ref: "refs/heads/ticfac/run-ko8/tick-aaa/attempt-1",
+        base_ref: "epic/ko8",
+        title: "a tick",
+        base_sha: "a".repeat(40),
+      }),
     });
 
     expect(res.status).toBe(401);
@@ -341,11 +351,20 @@ describe("route middleware", () => {
 
   // And the operator's own token is not a way in either: this door speaks one
   // credential, and it is the run's.
-  it("refuses a wave request bearing the operator's factory token", async () => {
-    const res = await SELF.fetch(`${BASE}/api/wave`, {
+  it("refuses a sandbox dispatch bearing the operator's factory token", async () => {
+    const res = await SELF.fetch(`${BASE}/api/sandbox/attempts`, {
       method: "POST",
       headers: { ...bearer(token).headers, "content-type": "application/json" },
-      body: JSON.stringify({ epic: "ko8", pass: 1, base_sha: "a".repeat(40), tick_ids: ["aaa"] }),
+      body: JSON.stringify({
+        epic: "ko8",
+        tick_id: "aaa",
+        attempt: 1,
+        role: "implement-tick",
+        write_ref: "refs/heads/ticfac/run-ko8/tick-aaa/attempt-1",
+        base_ref: "epic/ko8",
+        title: "a tick",
+        base_sha: "a".repeat(40),
+      }),
     });
 
     expect(res.status).toBe(401);

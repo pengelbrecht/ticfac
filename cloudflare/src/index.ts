@@ -60,7 +60,6 @@ import {
   isAuthConfigured,
   isAuthExempt,
   SANDBOX_DISPATCH_PREFIX,
-  WAVE_PATH,
 } from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
@@ -132,7 +131,6 @@ import {
   telegramWebhookInfo,
   unregisterTelegramWebhook,
 } from "./telegram";
-import { requestWave } from "./wave-request";
 import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
@@ -1250,22 +1248,6 @@ export default {
       return await health(env);
     }
 
-    // The in-run dispatch door (tick wiy). Placed beside the other
-    // token-exempt routes and before the /api/runs table, because it is
-    // authorized by a run credential rather than the operator's, and reading
-    // it as an /api/runs sub-path would put it behind the wrong gate.
-    if (url.pathname === WAVE_PATH) {
-      if (request.method !== "POST") return methodNotAllowed(["POST"]);
-      const result = await requestWave(env, request);
-      if (!result.ok) {
-        return Response.json(
-          { error: result.error, detail: result.detail },
-          { status: result.status },
-        );
-      }
-      return Response.json({ wave: result.request }, { status: 202 });
-    }
-
     // The completion door (tick 7eq). Beside the other run-credential doors
     // and for the same reason: its caller is the orchestrator container,
     // holding its run's own gateway token, never the operator's. A container
@@ -1291,8 +1273,9 @@ export default {
       );
     }
 
-    // A container recording the branch it just created (tick t4y). Beside
-    // /api/wave and authorized the same way, because it is the same kind of
+    // A container recording the branch it just created (tick t4y). Placed
+    // beside the other run-credential doors and authorized the same way,
+    // because it is the same kind of
     // caller: a sandbox holding its run's own token, never the operator's.
     // This is the write side that made a positive record of branch ownership
     // possible at all — before it, `epic/<id>` and the run branch were pushed
@@ -1388,8 +1371,7 @@ export default {
     }
 
     // The per-tick sandbox dispatch door (tick 8ty), beside the /api/git door
-    // and before the /api/runs table, for the reason the wave door sits where it
-    // does: it is authorized by a run credential rather than the operator's,
+    // and before the /api/runs table: it is authorized by a run credential rather than the operator's,
     // and reading it as an /api/runs sub-path would put it behind the wrong
     // gate. The orchestrator CONTAINER — whose Go executor cannot create a
     // sibling Sandbox, because the binding is a Worker binding — starts and

@@ -209,22 +209,6 @@ declare namespace Cloudflare {
      */
     RUN_MAX_OBSERVATIONS?: string;
     /**
-     * How long one dispatch leg of a cloud wave watches its containers, in ms
-     * (tick 2xm). Unset on a real deployment: the default is derived from
-     * Cloudflare's per-step execution cap (`src/workflow-limits.ts`), and a
-     * value above what a step may spend is clamped down to it rather than
-     * honoured — a leg that outlives its step kills the whole run.
-     */
-    RUN_WAVE_LEG_MS?: string;
-    /**
-     * A ceiling on what any ONE worker container's harness may spend, in ms
-     * (tick 5fg). Unset on a real deployment: the default is derived from
-     * measurement (`DEFAULT_WORKER_HARNESS_BUDGET_MS`) and bounded by the
-     * run's own remaining wall clock, which is the bound that matters. Set it
-     * to stop a single long tick from eating a generous run allowance.
-     */
-    RUN_WORKER_BUDGET_MS?: string;
-    /**
      * Harness kind and model a run is started with — the orchestrator sandbox,
      * and any per-tick worker container the run dispatches unless the worker
      * vars below are what the deployment wants instead. This is the run's own

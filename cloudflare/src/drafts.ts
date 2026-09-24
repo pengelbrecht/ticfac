@@ -623,12 +623,14 @@ async function presentDecision(
  * right and not a convenience: the run clones at a commit, and this is the
  * first commit in which the tick it was dispatched to work exists.
  *
- * A tick with a parent is dispatched as a one-tick wave under that epic; a
- * tick without one IS the epic the run works through, because a run is
- * addressed by an epic and there is no other tick to name. A refusal — the
- * project is busy, the deployment has no Workflow binding — is reported and
- * never retried silently: the tick is filed either way, and an operator who
- * can see why can press run themselves.
+ * A tick with a parent is dispatched as a run on the PARENT EPIC — the one
+ * orchestrator path there is (tick l6t): the container's `ticfac run-epic`
+ * plans the epic and dispatches this tick, as one worker per attempt through
+ * the per-tick sandbox door. A tick without a parent IS the epic the run
+ * works through, because a run is addressed by an epic and there is no other
+ * tick to name. A refusal — the project is busy, the deployment has no
+ * Workflow binding — is reported and never retried silently: the tick is
+ * filed either way, and an operator who can see why can press run themselves.
  */
 async function igniteDraft(
   env: Env,
@@ -653,19 +655,17 @@ async function igniteDraft(
     // submission mints its own rather than pretending to a chain it lacks.
     ...(draft.trace_id === "" ? {} : { trace_id: draft.trace_id }),
     queue: false,
-    ...(parent === undefined ? {} : { tick_ids: [tickID] }),
   });
   if (!parsed.ok) {
     return { run_id: null, detail: parsed.detail, draft };
   }
 
   const result = await submitRun(env, parsed.submission, {
-    // A press runs ONE tick now — a wave-shaped ask, even when the draft has
-    // no parent to name a wave with (the run's epic is the tick itself),
-    // which the reconciler's own wave planning cannot express. The press
-    // stays the container agent's, as an explicit decision (tick nu9): the
-    // reconciler drives epics, and a person pressing a button is asking for
-    // this tick, not for the reconciler's plan for whatever contains it.
+    // A press runs ONE tick now — a narrower ask than the reconciler's plan
+    // for whatever contains it, which the one orchestrator path cannot
+    // express. The press stays the container agent's, as an explicit decision
+    // (tick nu9): the reconciler drives epics, and a person pressing a
+    // button is asking for this tick, not for the reconciler's plan.
     driver: "agent",
   });
   if (result.outcome !== "started") {

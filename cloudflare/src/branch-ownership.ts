@@ -32,7 +32,8 @@
  *     uses. A container cannot record `main` as factory-created, which would
  *     be a container widening what the factory may push to.
  *  3. **Its own epic.** `epicOfBranch` must answer with the run's epic. This
- *     is the check `/api/wave` makes about the wave it is handed, for the same
+ *     is the check the per-tick sandbox dispatch door makes about the attempt
+ *     it is handed, for the same
  *     reason: a container that has somehow drifted must not be able to claim
  *     another epic's branches inside this run's credential.
  *

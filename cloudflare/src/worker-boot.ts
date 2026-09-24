@@ -26,7 +26,6 @@
  * started in the wrong one.
  */
 
-import type { WorkerTask } from "./worker-collect";
 import type { ProbeSpec, WorkSpec } from "./worker-dispatch";
 
 // ------------------------------------------------------------ the commands ---
@@ -107,10 +106,10 @@ export const WORKER_TRACE_ID_ENV = "TICKS_TRACE_ID";
 /**
  * A cancellation reason, reduced to something safe to hand a shell.
  *
- * The reason travels from `WaveCancellation.reason` — `budget:cost`,
+ * The reason travels from the stop that asked for the salvage — `budget:cost`,
  * `stopped:hard` — which is a machine-readable token by construction. It is
  * still filtered rather than trusted: this string becomes an argument in a
- * command line the control plane composes, and a `WaveCancellation` is built
+ * command line the control plane composes, and a cancellation is carried
  * from a stop record a caller supplied. Anything outside the token alphabet is
  * dropped, not escaped, because a reason is a label and a label that needed
  * escaping is not one.
@@ -179,11 +178,6 @@ export function workerResultFile(tick: string): string {
   return `RESULT-${tick}.md`;
 }
 
-/** The `WorkerTask` a wave collects one tick against, built from the same two rules. */
-export function workerTask(epic: string, tick: string, baseSHA: string): WorkerTask {
-  return { tick_id: tick, branch: workerBranch(epic, tick), base_sha: baseSHA };
-}
-
 // ---------------------------------------------------------- the exit codes ---
 
 /**
@@ -246,93 +240,12 @@ export type WorkerBootInput = {
   /**
    * How long this worker's harness may WORK, if the caller bounds it.
    *
-   * The agent's budget is the decision (`workerHarnessBudgetMs`); the wave's
-   * wait is derived from it (`waveWaitTimeoutMs`), not the other way round.
-   * They were one constant until tick 5fg, which made "how long may the agent
-   * work" a hostage of "how long does the supervisor wait before reconciling"
-   * — two different jobs, and the constant answered neither from measurement.
+   * Zero (absent) means unbounded — the entrypoint's own default. When a
+   * caller does bound it, the bound is the agent's working time, never a
+   * supervisor's observation window wearing it as a disguise (tick 5fg).
    */
   harness_budget_ms?: number;
 };
-
-/**
- * How much of the wave's wait window is reserved for committing and pushing.
- *
- * The dispatcher's wait timeout ends in `teardownWorker` KILLING the
- * container, and a killed container pushes nothing. This margin is what turns
- * that into a pushed branch and a legible report instead. It worked exactly as
- * designed on run run_2e66e765 — three killed containers still produced three
- * readable branches — so it is deliberately unchanged by tick 5fg.
- */
-export const WORKER_PUSH_MARGIN_MS = 60_000;
-
-/**
- * The default ceiling on one worker's harness budget, in ms.
- *
- * Justified by this repository's own measurement, not by taste. Tick y45
- * recorded a COMPLETE one-tick epic at **78 minutes** on
- * `deepseek-v4-pro-0813`, then the worker default (tick 1cd; the default is
- * GLM 5.3 since tick uqi). Ninety minutes is that measurement plus a small
- * allowance, and it stays where it is: a deployment that routes workers to
- * the cheaper GLM 5.3 Flash rung through `RUN_WORKER_MODEL` needs MORE time
- * than the default, not less, so lowering this on a model change would break
- * the configuration it enables.
- *
- * The number this replaced was thirty minutes, and it was not a safety margin:
- * on run run_2e66e765 (2026-08-22, epic 72y, ticks 201/5jo/5qj) all three
- * containers drove the loop competently — 393+ model calls each, real tool
- * use, 95-99% prompt cache — and all three were killed `exit 124` with zero
- * work commits, just before they would have committed. That is the most
- * expensive failure available: the run pays for every token and keeps nothing.
- */
-export const DEFAULT_WORKER_HARNESS_BUDGET_MS = 90 * 60_000;
-
-/**
- * The floor a DERIVED budget never drops below.
- *
- * A bound of a few seconds fails every worker rather than rescuing any. When a
- * run is genuinely out of time the thing that stops its wave is the wall-clock
- * trip (`cloudWaveTrip`, tick k24), which cancels the batch and tears the
- * containers down — not a harness budget of nine seconds.
- */
-export const MIN_WORKER_HARNESS_BUDGET_MS = 5 * 60_000;
-
-/**
- * How long one worker's harness may work, from the run's own allowance.
- *
- * `remaining_wall_clock_ms` is what the RUN has left, so a worker can never be
- * given more time than the run it belongs to — a worker that outlives its run
- * is a container the wall-clock trip has to kill, which is the failure this
- * derivation exists to stop. `cap_ms` is the deployment's own ceiling on any
- * single worker (`RUN_WORKER_BUDGET_MS`), defaulting to the measured
- * {@link DEFAULT_WORKER_HARNESS_BUDGET_MS}: a generous run allowance is not a
- * licence to hand ONE tick the whole run.
- */
-export function workerHarnessBudgetMs(
-  input: { remaining_wall_clock_ms?: number; cap_ms?: number } = {},
-): number {
-  const cap =
-    input.cap_ms !== undefined && Number.isFinite(input.cap_ms) && input.cap_ms > 0
-      ? input.cap_ms
-      : DEFAULT_WORKER_HARNESS_BUDGET_MS;
-  const remaining = input.remaining_wall_clock_ms;
-  if (remaining === undefined || !Number.isFinite(remaining)) return cap;
-  const usable = remaining - WORKER_PUSH_MARGIN_MS;
-  if (usable >= cap) return cap;
-  return Math.max(MIN_WORKER_HARNESS_BUDGET_MS, Math.floor(usable));
-}
-
-/**
- * How long the wave watches a container that may work for `harnessBudgetMs`.
- *
- * Exactly the push margin longer, and in that order: the agent's budget is the
- * decision and the supervisor's patience follows it. Deriving it the other way
- * round is what made a thirty-minute observation window silently also be every
- * agent's working life.
- */
-export function waveWaitTimeoutMs(harnessBudgetMs: number): number {
-  return harnessBudgetMs + WORKER_PUSH_MARGIN_MS;
-}
 
 /**
  * A worker container's own default harness.
@@ -444,9 +357,8 @@ export function workerHarness(run?: string | null, deployment?: string | null): 
  * repository's table routes local CLIs straight to Anthropic; (c) `WorkSpec`
  * construction per task rather than per wave, which `workerWorkSpec` already
  * is (it is called with `(task) => ...`), so this part is free; and (d) a
- * per-tick budget, since a flash worker needs MORE wall clock than pro, and
- * {@link workerHarnessBudgetMs} currently sizes every container in a batch
- * identically. Good Phase 3 candidate.
+ * per-tick budget, since a flash worker needs MORE wall clock than pro.
+ * Good Phase 3 candidate.
  */
 export function workerModel(run?: string | null, deployment?: string | null): string {
   return configured(run) ?? configured(deployment) ?? WORKER_DEFAULT_MODEL;
@@ -533,9 +445,9 @@ export function workerProbeSpec(input: WorkerBootInput): ProbeSpec {
 /**
  * Everything `spawnWorker` needs for one tick.
  *
- * PER TICK, not per wave: `TICKS_TICK` differs for every container in a wave,
- * so a caller fanning a wave out builds one of these per task rather than
- * sharing a single `WorkSpec` across `dispatchWave`.
+ * PER TICK, not per run: `TICKS_TICK` differs for every worker container, so
+ * a caller dispatching several builds one of these per task rather than
+ * sharing a single `WorkSpec` across them.
  */
 export function workerWorkSpec(input: WorkerBootInput): WorkSpec {
   const env = workerBootEnv(input);
