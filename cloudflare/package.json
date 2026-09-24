@@ -21,6 +21,8 @@
     "@biomejs/biome": "2.5.13",
     "@cloudflare/vitest-pool-workers": "^0.21.3",
     "@cloudflare/workers-types": "^5.20260811.1",
+    "esbuild": "0.28.1",
+    "miniflare": "5.20260815.0-alpha",
     "typescript": "^5.9.3",
     "vite": "^8.2.1",
     "vitest": "^4.1.10",

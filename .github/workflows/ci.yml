@@ -52,6 +52,33 @@ jobs:
       - name: go build
         run: go build ./...
 
+      # The full suite's one test that needs the OTHER toolchain:
+      # internal/exec/cloudflaresandbox's end-to-end adoption test (tick 6gr)
+      # drives the real factory Worker (cloudflare/src) in real workerd through
+      # miniflare, so it skips itself wherever cloudflare/node_modules is not
+      # installed. `make test` below is the one place that test runs, and a
+      # suite whose newest end-to-end proof skips on every CI run is a suite
+      # that never proved it, so the install lives here — the same two setup
+      # actions and the same frozen install the typescript job runs, arriving
+      # at the same cached store, before the step that needs it.
+      #
+      # It costs the install (~1 min cold, seconds cached) on a job that runs
+      # ~7 minutes of Go tests; it is deliberately NOT on the `go test -short`
+      # step's path, whose point is that the short suite needs nothing but Go.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cloudflare/pnpm-lock.yaml
+
+      - name: Install the worker workspace
+        working-directory: cloudflare
+        run: pnpm install --frozen-lockfile --prefer-offline
+
       # -timeout is pinned via the Makefile (not a bare `go test ./...`):
       # internal/reconcile's suite runs 600-620s even under -short, past go
       # test's default 10-minute per-package timeout.
