@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 71,
-  "state": "running",
-  "reason": "a08 is running as attempt 12",
-  "updated_at": "2026-09-24T05:28:00Z",
+  "sequence": 72,
+  "state": "collecting",
+  "reason": "collecting ppt attempt 6",
+  "updated_at": "2026-09-24T05:28:27Z",
   "ticks": [
     {
       "tick_id": "uqi",
