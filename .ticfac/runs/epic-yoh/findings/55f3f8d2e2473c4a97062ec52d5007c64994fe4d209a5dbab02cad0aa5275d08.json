@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "9iz",
   "attempt": 21,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T13:48:54Z",
+  "triaged_at": "2026-09-24T16:49:00Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pengelbrecht/ticks:nue",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "9iz",
