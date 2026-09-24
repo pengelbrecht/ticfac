@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "nwn",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T05:55:34Z",
+  "triaged_at": "2026-09-24T11:36:42Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "s4d",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "nwn",
