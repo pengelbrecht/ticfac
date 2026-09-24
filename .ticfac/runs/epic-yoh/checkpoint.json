@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 139,
-  "state": "running",
-  "reason": "cs1 is running as attempt 18",
-  "updated_at": "2026-09-24T11:17:35Z",
+  "sequence": 140,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for cs1",
+  "updated_at": "2026-09-24T11:34:45Z",
   "ticks": [
     {
       "tick_id": "uqi",
