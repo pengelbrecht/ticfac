@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 164,
-  "state": "collecting",
-  "reason": "collecting 78v attempt 20",
-  "updated_at": "2026-09-24T13:05:51Z",
+  "sequence": 165,
+  "state": "integrating",
+  "reason": "integrating 78v attempt 20 into epic/yoh",
+  "updated_at": "2026-09-24T13:06:04Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -93,7 +93,7 @@
     },
     {
       "tick_id": "78v",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 20
     },
     {
