@@ -41,6 +41,14 @@ type fakeDoor struct {
 	// the answer the named-container lookup would give.
 	statuses map[string]doorStatus
 
+	// running is the model each identity's LIVE work process is on, keyed by
+	// identity: what a fresh start's answer RECORDS (the door boots the
+	// container on the request's model) and what an adoption reports back
+	// (tick dyo) — the RUNNING container's model, never the new request's
+	// echo. Seeded by adoptRunning for a container an OLDER deployment
+	// booted, the one adoption shape no start of this door can produce.
+	running map[string]string
+
 	// script, when set, is answered INSTEAD of the door's own answer — a
 	// refusal the route would forward (401, 409, 503) or a body the door
 	// would never send, to prove the client fails loudly rather than
@@ -74,6 +82,7 @@ func newFakeDoor(t *testing.T) *fakeDoor {
 		runID:    "r1",
 		project:  "example/project",
 		statuses: map[string]doorStatus{},
+		running:  map[string]string{},
 	}
 	door.server = httptest.NewServer(door)
 	t.Cleanup(door.server.Close)
@@ -92,6 +101,16 @@ func (d *fakeDoor) setStatus(tickID string, attempt int, status doorStatus) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.statuses[key(tickID, attempt)] = status
+}
+
+// adoptRunning seeds a LIVE work process under one identity, already on a
+// model: the container an older deployment booted, from this door's point of
+// view. A start under that identity finds it and must answer for the model it
+// is on — the truthful-adoption case the tests that refuse it are about.
+func (d *fakeDoor) adoptRunning(tickID string, attempt int, model string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.running[key(tickID, attempt)] = model
 }
 
 // startCount is how many starts the door was asked for.
@@ -185,9 +204,35 @@ func (d *fakeDoor) serveStart(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	d.starts++
 	d.lastBody = body
+	running, adopted := d.running[key(tickID, attempt)]
+	d.mu.Unlock()
+	if adopted {
+		// The named container already holds a live work process: the SAME
+		// attempt comes back, adopted, on the model that process is on — the
+		// recorded model of the boot that started it (tick dyo), never the
+		// model this request carried.
+		answer := map[string]any{"handle": d.handleBodyFor(tickID, attempt, body, running,
+			"adopted: this container's work process was already running"), "adopted": true}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(answer)
+		return
+	}
+	// The model a FRESH boot of this body lands on: the request's own, unless
+	// the test's bootedModel override says the door disagrees — a door that
+	// boots on another model, for the tests that prove the client refuses a
+	// handle naming a model it did not ask for. Either way it is what the
+	// door's world RECORDS as running under the identity, which is what an
+	// adoption under the same identity reports back (tick dyo).
+	d.mu.Lock()
+	model := body["model"].(string)
+	if d.bootedModel != "" {
+		model = d.bootedModel
+	}
+	d.running[key(tickID, attempt)] = model
 	d.mu.Unlock()
 
-	handle := d.handleBody(tickID, attempt, body)
+	handle := d.handleBodyFor(tickID, attempt, body, model, "dispatch confirmed")
 	answer := map[string]any{"handle": handle, "adopted": false}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -233,22 +278,19 @@ func (d *fakeDoor) serveStatus(w http.ResponseWriter, r *http.Request, tickID, a
 	_ = json.NewEncoder(w).Encode(answer)
 }
 
-// handleBody mints the job_handle record the start route answers with: the
-// contract's closed top level and this substrate's private addressing in the
-// one open handle object, the same field set SandboxHandlePayload names.
-func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) map[string]any {
+// handleBodyFor mints the job_handle record the start route answers with:
+// the contract's closed top level and this substrate's private addressing
+// in the one open handle object, the same field set SandboxHandlePayload
+// names — on the MODEL GIVEN, which is the model the container the answer
+// is about is on: the request's for a fresh boot, the recorded boot's for an
+// adoption (tick dyo).
+func (d *fakeDoor) handleBodyFor(tickID string, attempt int, body map[string]any, model, detail string) map[string]any {
 	role, _ := body["role"].(string)
 	writeRef, _ := body["write_ref"].(string)
 	baseRef, _ := body["base_ref"].(string)
 	title, _ := body["title"].(string)
 	baseSHA, _ := body["base_sha"].(string)
 	epic, _ := body["epic"].(string)
-	model, _ := body["model"].(string)
-	d.mu.Lock()
-	if d.bootedModel != "" {
-		model = d.bootedModel
-	}
-	d.mu.Unlock()
 	processID := fmt.Sprintf("proc-%s-%d", tickID, attempt)
 	return map[string]any{
 		"schema_version": subprocess.SchemaVersion,
@@ -263,7 +305,7 @@ func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) m
 			"branch":     strings.TrimPrefix(writeRef, "refs/heads/"),
 			"write_ref":  writeRef,
 			"launched":   true,
-			"detail":     "dispatch confirmed",
+			"detail":     detail,
 			"run_id":     d.runID,
 			"epic_id":    epic,
 			"tick_id":    tickID,

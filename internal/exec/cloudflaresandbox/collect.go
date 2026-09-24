@@ -119,7 +119,20 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 
 	report, raw, hasReport := e.readReport(record, head)
 
-	verdict, outcome, class, reason := classify(record.Spec.Role, commits, hasReport, report,
+	// The one lie this substrate's collect could tell about its own branch
+	// (tick dyo, finding 73ba193d): the container's entrypoint commits the
+	// report itself, in its own commit, at the branch root — so a worker
+	// that did NOTHING still leaves one commit beyond the base, and a
+	// collect that counts commits alone reads it as ready-to-merge. The
+	// work the attempt delivered is the diff MINUS the report, and when that
+	// is empty the attempt is the no-commits shape in this substrate's own
+	// terms: the same distinct verdict the subprocess executor mints for a
+	// worker that committed nothing, with its own sentence, because "the
+	// branch is empty" and "the only commit is the entrypoint's report" are
+	// two facts an operator acts on the same way but reads differently.
+	reportOnly := reportIsOnlyChange(changed, resultFile(record.TickID))
+
+	verdict, outcome, class, reason := classify(record.Spec.Role, commits, reportOnly, hasReport, report,
 		violations, artifactViolations)
 
 	result := &subprocess.JobResult{
@@ -320,6 +333,24 @@ func digestOf(raw []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// reportIsOnlyChange says whether every path the attempt changed beyond its
+// base is the report the container's own entrypoint commits — the shape a
+// worker that did no work leaves on this substrate, where the subprocess
+// executor's empty branch is impossible by construction. Nothing changed is
+// NOT this shape: that is the push that never landed or the honest empty
+// branch, and it keeps its own verdict and message.
+func reportIsOnlyChange(changed []string, reportPath string) bool {
+	if len(changed) == 0 {
+		return false
+	}
+	for _, path := range changed {
+		if path != reportPath {
+			return false
+		}
+	}
+	return true
+}
+
 // classify is the verdict, in the order the checks run: the first FAILING
 // check wins, and the order is the collect vocabulary's own — shared with the
 // local executor and herdr's copy of it, because the same tick with the same
@@ -335,7 +366,7 @@ func digestOf(raw []byte) string {
 // (TICKS_WORKER_TIMEOUT) and the run's overrun is recorded from the INSPECT
 // that observed the settle, not minted here out of a marker this side never
 // writes.
-func classify(role string, commits int, hasReport bool, report subprocess.Report,
+func classify(role string, commits int, reportOnly bool, hasReport bool, report subprocess.Report,
 	violations, artifactViolations []string) (verdict, outcome, class, reason string) {
 	switch {
 	case !hasReport || report.Status == "":
@@ -348,6 +379,13 @@ func classify(role string, commits int, hasReport bool, report subprocess.Report
 		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportNoStatus
 	case commits == 0 && subprocess.NoCommitsIsFailure(role):
 		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
+	case reportOnly && subprocess.NoCommitsIsFailure(role):
+		// The report-only branch (tick dyo): the closed vocabulary's own word
+		// for a worker that delivered nothing is `no-commits`, never a fifth
+		// word — and the ROLE's recorded rule (NoCommitsIsFailure) is part of
+		// the verdict exactly as it is for the empty branch: a review whose
+		// only commit is its report delivered its whole deliverable.
+		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportOnly
 	case len(violations) > 0:
 		return subprocess.VerdictBoundaryViolation, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictBoundaryViolation
 	case len(artifactViolations) > 0:
@@ -374,6 +412,12 @@ const (
 	reasonSettledNoReport   = "settled-no-report"
 	reasonReportNoStatus    = "report-no-status"
 	reasonArtifactCommitted = "artifact-committed"
+
+	// reasonReportOnly is the report-only branch of `no-commits` (tick dyo):
+	// the branch is not empty on this substrate — the entrypoint committed
+	// the report — so the sentence says the one commit that is there rather
+	// than one that is not.
+	reasonReportOnly = "report-only"
 )
 
 // collectMessage keeps two failures from sharing one sentence.
@@ -384,6 +428,10 @@ func collectMessage(reason, class string, record *attemptRecord, head string, vi
 	case subprocess.VerdictNoCommits:
 		return fmt.Sprintf("the attempt branch carries no commit beyond the base it was cut from (%s)",
 			shortSHA(record.BaseSHA))
+	case reasonReportOnly:
+		return fmt.Sprintf("the only commit %s carries beyond its base (%s) is the container's own report at %s: "+
+			"the worker committed no work, and a report is not a deliverable",
+			record.Branch, shortSHA(record.BaseSHA), resultFile(record.TickID))
 	case subprocess.VerdictBoundaryViolation:
 		// Shared with the other two executors (tick 54n): the refusal names
 		// the role and the permitted destinations, rendered from the

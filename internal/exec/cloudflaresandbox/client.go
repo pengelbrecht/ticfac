@@ -57,7 +57,8 @@ const DefaultRequestTimeout = 90 * time.Second
 // with, the error class it named, and the detail it said. The classes are
 // the route's own vocabulary — run_token_required, run_token_unknown,
 // run_token_revoked, run_not_active, lease_lost, lease_held_by,
-// sandbox_dispatch_not_wired, invalid_request — and a caller that has to
+// sandbox_dispatch_not_wired, invalid_request, and the truthful-adoption
+// refusal adoption_model_unknown (tick dyo) — and a caller that has to
 // recover which one fired by matching on prose is the failure Appendix A #9
 // is about.
 type doorError struct {

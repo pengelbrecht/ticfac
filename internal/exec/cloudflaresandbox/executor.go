@@ -8,9 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
 // The executor: start and inspect over the door, collect from git (the
@@ -344,6 +346,20 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	payload, err := local(handle)
 	if err != nil {
 		return nil, err
+	}
+	// nwn's rule, applied to the model the door reports the container is ON —
+	// which, since the door records its boots and an adoption reads the record
+	// (tick dyo), is the RUNNING container's model for an adopted attempt too,
+	// not an echo of what this dispatch asked for. The rule is the profile
+	// package's one copy (profile.CloudRule): the cloud substrate runs Workers
+	// AI models only, and an adopted container — one a previous incarnation
+	// booted, before the rule or against it — is not exempt from the check a
+	// fresh boot answers to.
+	if !profile.IsWorkersAIModel(payload.Model) {
+		return nil, fmt.Errorf("the door reports attempt %d of %s running on model %q, which is not "+
+			"a Workers AI model (%s): the cloud substrate runs Workers AI models only, and a start that "+
+			"recorded it would name a model this run cannot have dispatched",
+			attempt, spec.JobID, payload.Model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
 	}
 	// The door names the model it booted the worker on. Anything but the one
 	// asked for — an adoption of a container some other start booted, a door
