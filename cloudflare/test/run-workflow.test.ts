@@ -294,9 +294,21 @@ class FakeRepo implements RepoRefs {
   unreadable: string | null = null;
   reads = 0;
 
+  /**
+   * tick 0ye: answer with what `compareSnapshots` cannot read. An unreadable
+   * remote is NOT a throw - `snapshotRefs` catches those and the run records
+   * `unknown` progress - so the one throw a progress step can make is the
+   * comparison trusting this answer to be an object, and arming this makes
+   * the step's callback throw on every attempt. Only the answer is poisoned,
+   * never the whole run's picture of the remote: the baseline the context
+   * step read stays whatever it was when it was read.
+   */
+  answersNothing = false;
+
   async list(): Promise<Record<string, string>> {
     this.reads += 1;
     if (this.unreadable !== null) throw new Error(this.unreadable);
+    if (this.answersNothing) return null as unknown as Record<string, string>;
     return { ...this.refs };
   }
 
@@ -499,6 +511,54 @@ function fromAnEarlierTest(sandbox: FakeSandbox): boolean {
     if (sandbox.name === id || sandbox.name.startsWith(`${id}-`)) return true;
   }
   return false;
+}
+
+/**
+ * Makes every D1 statement whose SQL matches throw, on the real binding - the
+ * general shape of `_failEveryDispatchLogInsert` above, for the tests that
+ * need a Workflow STEP to exhaust its retries rather than one write to fail
+ * once. Persistent by the same rule that helper states: a step retry re-runs
+ * the same code, so only a statement that never succeeds can tell a throw the
+ * run recovers from apart from one that ends it. Every method of a poisoned
+ * statement refuses - `first`/`all`/`run`/`raw` - because the poison is a
+ * fact about the table, not about one call shape, and `bind` hands back the
+ * same refusal so a bound statement is refused at its execution, not at its
+ * binding. Returns the attempt counter so a test can assert the step retried
+ * the statement rather than dying on its first throw.
+ */
+function failEveryStatement(
+  where: (sql: string) => boolean,
+  message: string,
+): { attempts(): number } {
+  const db = env.DB as D1Database;
+  let attempts = 0;
+  const refusing = (): D1PreparedStatement => {
+    const refuse = async (): Promise<never> => {
+      attempts += 1;
+      throw new Error(message);
+    };
+    return new Proxy({} as D1PreparedStatement, {
+      get(_target: D1PreparedStatement, property: string | symbol) {
+        if (property === "bind") return () => refusing();
+        return refuse;
+      },
+    });
+  };
+  set(
+    "DB",
+    new Proxy(db, {
+      get(target: D1Database, property: string | symbol, receiver: unknown) {
+        if (property !== "prepare") {
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === "function"
+            ? (value as (...args: unknown[]) => unknown).bind(target)
+            : value;
+        }
+        return (sql: string) => (where(sql) ? refusing() : target.prepare(sql));
+      },
+    }),
+  );
+  return { attempts: () => attempts };
 }
 
 beforeEach(async () => {
@@ -1463,6 +1523,99 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     expect(container.destroyed).toBe(true);
     const logged = await listDispatchLogs(env.DB, runID, epic);
     expect(logged.map((entry) => entry.decision)).toContain("unbootable:1");
+    expect(logged.at(-1)!.decision).toBe("finished:failed");
+  });
+});
+
+// tick 0ye (yoh finding 5882bf18): 4lv caught the boot step where it stood,
+// and left every other step of the run able to throw straight out of the
+// Workflow — the context read that precedes any container, the progress read
+// that follows the work. A throw that escapes `superviseRun` skips finalize,
+// and a run that skips finalize leaves exactly what the boot finding left:
+// its gateway tokens live, its index row frozen in a live state, and any
+// container it provisioned still billing under keepAlive. Both tests break
+// the step the run used to have no net under — one before anything booted,
+// one after the work finished — and assert the run still ends in finalize,
+// with the recorded reason naming the step that threw.
+describe("every step that can throw still ends in finalize (tick 0ye)", () => {
+  it("still finalizes when the context step exhausts its retries", async () => {
+    // The one read inside `acquireContext` that nothing in finalize needs:
+    // the review lookup. Poisoning it makes the context step throw on every
+    // attempt, so the step exhausts CONTEXT_RETRIES rather than failing once
+    // — and the finalize the catch runs still can, because nothing it reads
+    // or writes touches that table.
+    const poison = failEveryStatement(
+      (sql) => sql.includes("FROM pr_reviews"),
+      "the pr_reviews table is unavailable",
+    );
+    const { runID, project, epic } = await ignite();
+
+    // The run settles, and no container was ever booted: nothing was
+    // provisioned, so there is nothing to sweep and the settle is the whole
+    // ending.
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(run.ended_at).not.toBeNull();
+    expect(sandboxes.booted).toHaveLength(0);
+
+    // The step retried the statement rather than dying on its first throw:
+    // what the run did about the LAST attempt is the subject of this test.
+    expect(poison.attempts()).toBeGreaterThan(1);
+
+    // The settled record's reason names the step — "context", not the silence
+    // of a Workflow that died mid-verb — and carries the error the step died
+    // of, exactly as the boot finding's does.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.state).toBe("failed");
+    expect(record.detail).toContain("the context step threw");
+    expect(record.detail).toContain("the pr_reviews table is unavailable");
+
+    // The unassessed progress is stamped beside the state, naming the same
+    // step, and the audit log's closing line agrees with the row.
+    const progress = await getRunProgress(env.DB, runID);
+    expect(progress?.progress).toBe("unknown");
+    expect(progress?.detail).toContain("the context step threw");
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.at(-1)!.decision).toBe("finished:failed");
+  });
+
+  it("still finalizes when the progress step exhausts its retries", async () => {
+    const { runID, project, epic } = await ignite();
+    const process = await firstProcess();
+    // The orchestrator did its work and exited cleanly: the run is past the
+    // whole pass and at the one step that reads what the work moved.
+    orchestratorPushedWork(epic);
+    process.exit(0);
+
+    // The progress step's callback is not exception-safe — `compareSnapshots`
+    // trusts the refs reader to answer an object — and that is the seam
+    // through which the step can throw. Armed only now, after the pass:
+    // the baseline the context step read stays honest, and the poison is the
+    // verdict step's alone.
+    repo.answersNothing = true;
+
+    // This is the expensive case a skipped finalize leaves behind: the boot
+    // before the throw minted a live gateway credential. The run settles
+    // anyway, and the credential dies with it.
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(run.ended_at).not.toBeNull();
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens).toHaveLength(1);
+    expect(tokens.every((token) => token.revoked_at !== null)).toBe(true);
+
+    // The container is destroyed — the pass's own finally already destroyed
+    // it, and the finalize the catch runs sweeps it again as the backstop.
+    expect(sandboxes.named(sandboxName(runID, 1)).destroyed).toBe(true);
+
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.state).toBe("failed");
+    expect(record.detail).toContain("the progress step threw");
+
+    const progress = await getRunProgress(env.DB, runID);
+    expect(progress?.progress).toBe("unknown");
+    expect(progress?.detail).toContain("the progress step threw");
+    const logged = await listDispatchLogs(env.DB, runID, epic);
     expect(logged.at(-1)!.decision).toBe("finished:failed");
   });
 });
