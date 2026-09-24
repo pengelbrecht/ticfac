@@ -189,8 +189,11 @@ GITHUB_CONSENT_LABEL = "tk"
 # Budget enforcement lives in the Run Workflow, never in a prompt (D14): a model
 # can be talked out of a budget, a Workflow step cannot. Both numbers are
 # deployment decisions, and exhausting either is the SAME clean stop the
-# operator's `tk cloud stop` takes — finish in flight, then review and closeout
-# (D15). Bounds and defaults live in src/run-workflow.ts.
+# operator's `tk cloud stop` takes — the in-flight work gets its grace window,
+# the container is killed, and the run ends (D15; tick dl8 removed the
+# closeout boot that used to follow: `ticfac run-epic` commits and pushes as
+# it goes, so the branch is the state a new run re-derives from). Bounds and
+# defaults live in src/run-workflow.ts.
 #
 # Deliberately small until a run has been measured with working enforcement. The
 # first uncapped run billed $49.80 against a $25 ceiling because the cost query
@@ -211,8 +214,6 @@ RUN_MAX_COST_USD = "40"
 # orchestrator. Nothing durable is lost either way — tracker state is committed
 # to the run branch — but a tick that is one commit from done deserves it.
 RUN_STOP_GRACE_MS = "300000"
-# A closeout that has not closed out in this long is not going to.
-RUN_CLOSEOUT_MS = "1800000"
 
 # The account's container ceiling, mirrored (tick b6e): must equal
 # `[[containers]] max_instances` above. Wrangler does not hand a container

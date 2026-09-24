@@ -10,6 +10,13 @@ import {
   listRunGatewayTokens,
 } from "../src/db";
 import { GATEWAY_PATH_PREFIX, proxyModelRequest } from "../src/gateway";
+import {
+  ingestPullRequestEvent,
+  type PullRequestIngestResult,
+  REVIEW_PATH,
+  type ReviewCommenter,
+  reviewEpic,
+} from "../src/pr-review";
 import type { RepoRefs } from "../src/progress";
 import type { RepoConfigReader } from "../src/repo-config";
 import { DONE_EVENT_TYPE } from "../src/run-done";
@@ -26,6 +33,8 @@ import {
   DEFAULT_SANDBOX_IMAGE,
   ORCHESTRATOR_COMMAND,
   type OrchestratorSandbox,
+  REVIEW_HEAD_SHA_ENV,
+  REVIEW_PR_ENV,
   type SandboxBinding,
   type SandboxOutput,
   type SandboxProcessState,
@@ -869,7 +878,7 @@ async function firstProcess(): Promise<FakeProcess> {
 // -------------------------------------------------------------------- tests ---
 
 describe("boot and finalize", () => {
-  it("boots one sandbox on the skill loop and finalizes with a runs row", async () => {
+  it("boots one orchestrator container and finalizes with a runs row", async () => {
     const { runID, project, epic } = await ignite();
 
     const process = await firstProcess();
@@ -1202,16 +1211,17 @@ describe("exit 0 is not completion (tick ehy)", () => {
   // can tell a stop that preserved work from a stop that had none to preserve.
   it("records the verdict for a clean stop without changing its state", async () => {
     const { runID, epic } = await ignite();
-    await firstProcess();
+    const process = await firstProcess();
+    // What the run achieved is on the remote before the stop lands, the way a
+    // real orchestrator's pushed work would be.
+    repo.push(`epic/${epic}`, PUSHED_SHA);
     await stopRun(env, runID, "operator");
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    repo.push(`epic/${epic}`, PUSHED_SHA);
-    closeout.exit(0);
-
+    // No second container is booted on a stop (tick dl8): the work pass is
+    // drained and the run settles on what the branch already holds.
     expect((await settled(runID)).state).toBe("stopped");
+    expect(sandboxes.booted).toHaveLength(1);
+    expect(process.killed).toBe(true);
     expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "advanced" });
   });
 });
@@ -1378,16 +1388,14 @@ describe("a run that outlives what one instance can watch", () => {
     const process = await firstProcess();
     process.say("orchestrator: still working\n");
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    expect(process.killed).toBe(true);
-    // Exactly two sandboxes: the one that was watched out, and the closeout.
-    expect(sandboxes.booted).toHaveLength(2);
-    expect(sandboxes.phase("reconcile")).toBeUndefined();
-
-    closeout.exit(0);
+    // The watch ran out of looks with the orchestrator still ALIVE. The run
+    // stops cleanly — the container is killed and destroyed — and nothing is
+    // booted after it: not a replacement beside a live one, and not the
+    // closeout that used to follow the trip (tick dl8).
     expect((await settled(runID)).state).toBe("stopped");
+    expect(process.killed).toBe(true);
+    expect(sandboxes.booted).toHaveLength(1);
+    expect(sandboxes.phase("reconcile")).toBeUndefined();
   });
 });
 
@@ -1434,24 +1442,21 @@ describe("the supervisor watches, it does not orchestrate (cr4)", () => {
     expect(sandboxes.booted[0]!.destroyed).toBe(true);
   });
 
-  it("destroys the container when its pass ends, before the next one boots — a keepAlive container bills until someone destroys it", async () => {
+  it("destroys the container when the run is stopped — a keepAlive container bills until someone destroys it", async () => {
     const { runID } = await ignite();
     const work = await firstProcess();
     work.say("orchestrator: wave 1 in flight\n");
     const stopped = await stopRun(env, runID, "operator");
     expect(stopped.outcome).toBe("stopping");
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    // The WORK container was destroyed — not killed, destroyed — before the
-    // closeout boot started: with keepAlive, a container the supervisor has
-    // stopped watching would otherwise bill until an operator noticed.
-    expect(sandboxes.booted[0]!.destroyed).toBe(true);
-    expect(work.killed).toBe(true);
-
-    closeout.exit(0);
+    // The WORK container was destroyed — not killed only, destroyed — when the
+    // stop drained it: with keepAlive, a container the supervisor has
+    // stopped watching would otherwise bill until an operator noticed. Since
+    // tick dl8 nothing is booted after it, so there is no "next one" — there
+    // is only the run's end.
     expect((await settled(runID)).state).toBe("stopped");
+    expect(work.killed).toBe(true);
+    expect(sandboxes.booted).toHaveLength(1);
     for (const sandbox of sandboxes.booted) expect(sandbox.destroyed).toBe(true);
   });
 
@@ -1560,45 +1565,49 @@ describe("a stop whose supervisor has already ended", () => {
       expect(stop.run.state).toBe("stopping");
     }
 
-    // And the live supervisor does finish it, through its own closeout —
-    // driven to the end so no run of this test outlives it.
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    closeout.exit(0);
+    // And the live supervisor does finish it — with no boot after the trip
+    // (tick dl8), driven to the end so no run of this test outlives it.
     expect((await settled(runID)).state).toBe("stopped");
+    expect(sandboxes.booted).toHaveLength(1);
   });
 });
 
-describe("a clean stop runs review and closeout", () => {
-  it("stops on the operator's request and still closes the run out", async () => {
+describe("a clean stop ends the run — no second container (tick dl8)", () => {
+  /**
+   * Since hn0 the orchestrator container execs `ticfac run-epic`, which reads
+   * no phase and no stop reason — so the closeout boot this describe used to
+   * drive would only have re-run the epic. A trip now ends the run: the
+   * credential dies per the tick-gyl ordering, the in-flight work gets its
+   * grace window, the container is drained, killed and destroyed, and the
+   * pushed branch is the state a new run re-derives from.
+   */
+  it("stops on the operator's request and ends the run on its pushed branch", async () => {
     const { runID, project, epic } = await ignite();
     const process = await firstProcess();
     process.say("orchestrator: wave 1 in flight\n");
+    repo.push(`epic/${epic}`, PUSHED_SHA);
 
     const stopped = await stopRun(env, runID, "operator");
     expect(stopped.outcome).toBe("stopping");
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
     // The work orchestrator was given its grace window and then killed — the
-    // in-flight tick's evidence is on the run branch either way.
-    expect(process.killed).toBe(true);
-    expect(closeout.env.TICKS_EPIC).toBe(epic);
-    expect(closeout.env.TICKS_STOP_REASON ?? "").toContain("operator");
-
-    closeout.exit(0);
+    // in-flight tick's evidence is on the run branch either way — and NOTHING
+    // is booted after it.
     const run = await settled(runID);
     expect(run.state).toBe("stopped");
+    expect(process.killed).toBe(true);
+    expect(sandboxes.booted).toHaveLength(1);
+    expect(sandboxes.phase("closeout")).toBeUndefined();
 
     const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
     expect(record.state).toBe("stopped");
     expect(record.detail ?? "").toContain("operator");
+    // The work the run did land is still what progress was assessed against.
+    expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "advanced" });
   });
 
   it("treats a cost budget exactly like the operator stop path", async () => {
-    const { runID, epic } = await ignite();
+    const { runID, project, epic } = await ignite();
     const process = await firstProcess();
 
     // A last known ground-truth value remains enforceable when a later
@@ -1606,14 +1615,15 @@ describe("a clean stop runs review and closeout", () => {
     // not opt into an explicit budget without a readable gateway.
     await env.DB.prepare("UPDATE runs SET cost_usd = ? WHERE run_id = ?").bind(25.5, runID).run();
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
+    const run = await settled(runID);
     expect(process.killed).toBe(true);
-    expect(closeout.env.TICKS_STOP_REASON ?? "").toMatch(/budget|cost/i);
+    expect(run.state).toBe("stopped");
+    expect(sandboxes.booted).toHaveLength(1);
 
-    closeout.exit(0);
-    expect((await settled(runID)).state).toBe("stopped");
+    // The COST budget specifically: a wall-clock trip would satisfy a looser
+    // pattern while the undercount sailed on underneath it.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail ?? "").toMatch(/cost budget/i);
 
     // "Why did this stop" is answerable from D1, not from a log line.
     const log = await listDispatchLogs(env.DB, runID, epic);
@@ -1622,32 +1632,178 @@ describe("a clean stop runs review and closeout", () => {
 
   it("treats a wall-clock budget the same way", async () => {
     set("RUN_MAX_WALL_CLOCK_MS", "1");
-    const { runID } = await ignite();
+    const { runID, project } = await ignite();
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    expect(closeout.env.TICKS_STOP_REASON ?? "").toMatch(/wall|time/i);
-
-    closeout.exit(0);
-    expect((await settled(runID)).state).toBe("stopped");
-  });
-
-  it("still finalizes when the closeout orchestrator itself fails", async () => {
-    const { runID } = await ignite();
-    await firstProcess();
-    await stopRun(env, runID, "operator");
-
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    closeout.exit(1);
-
-    // A failed closeout is still a stopped run with a released lease: an
-    // abandoned run is the one outcome a stop must never produce.
     const run = await settled(runID);
     expect(run.state).toBe("stopped");
-    expect(await roomFor(env, run.project).leaseStatus()).toBeNull();
+    expect(sandboxes.booted).toHaveLength(1);
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail ?? "").toMatch(/wall-clock budget/i);
+  });
+
+  it("still finalizes when the run trips with its container already gone", async () => {
+    const { runID, project } = await ignite();
+    await firstProcess();
+    await stopRun(env, runID, "operator");
+    // The container dies between the stop and the drain — eviction, not the
+    // kill. The run must still finalize: a stopped run with a released lease,
+    // never an abandoned one wedging the project until its ttl expires.
+    sandboxes.booted[0]!.vanished = true;
+
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
+    expect(await roomFor(env, project).leaseStatus()).toBeNull();
+    expect(sandboxes.booted).toHaveLength(1);
+  });
+});
+
+// ------------------------------------------------- the PR review job ---
+
+/**
+ * The pull request review job (UC5, tick v7g) — kept by tick dl8 as the one
+ * boot a harness still serves, and RE-HOMED as a job the supervisor runs
+ * rather than a phase of the agent orchestrator that no longer exists.
+ *
+ * These drive the REAL Workflow from the real ingestion path
+ * (`ingestPullRequestEvent` creates the run, the `pr_reviews` row and the
+ * Workflow instance exactly as a pull request delivery does), so what is
+ * asserted is what a dispatched review actually boots with — and the one
+ * thing the dl8 absorption of the xte findings adds: the job is ROUTED like
+ * every other cloud role (the worker ladder, pi on GLM) and never left to the
+ * image's own harness selection, which a deployment that routes nothing
+ * would settle at claude.
+ */
+describe("the pull request review job (tick dl8)", () => {
+  /** GitHub's comment API, in memory — the review door posts through it. */
+  class FakeCommenter implements ReviewCommenter {
+    readonly posted: { project: string; number: number; body: string }[] = [];
+    async comment(project: string, number: number, body: string): Promise<{ id: string }> {
+      this.posted.push({ project, number, body });
+      return { id: `c${this.posted.length}` };
+    }
+  }
+
+  let commenter: FakeCommenter;
+
+  beforeEach(() => {
+    commenter = new FakeCommenter();
+    set("REVIEW_COMMENTER", commenter);
+    // The routing floor has to hold with NOTHING pinned: every harness/model
+    // var unset, so the review job's pi-on-GLM comes from the worker ladder's
+    // built-in floor — not from a deployment that happens to pin it.
+    set("RUN_HARNESS", undefined);
+    set("RUN_MODEL", undefined);
+    set("RUN_WORKER_HARNESS", undefined);
+    set("RUN_WORKER_MODEL", undefined);
+  });
+
+  /** A review run, dispatched by the real ingestion path on a fresh project. */
+  async function igniteReview(): Promise<{
+    runID: string;
+    project: string;
+    pr: number;
+    result: Extract<PullRequestIngestResult, { state: "dispatched" }>;
+  }> {
+    const project = `example-org/reviewed-${++counter}`;
+    await enrolProject(env.DB, {
+      project,
+      enrolled_by: "operator@example.com",
+      enrolled_at: new Date().toISOString(),
+    });
+    const dispatchedResult = await ingestPullRequestEvent(env, {
+      action: "opened",
+      repository: { full_name: project },
+      sender: { login: "maintainer" },
+      pull_request: {
+        number: 42,
+        node_id: `PR_kwD0TEST${counter}`,
+        state: "open",
+        draft: false,
+        user: { login: "maintainer" },
+        // A write-access author: the consent gate reviews these without a
+        // label, so the fixture needs no more of the gate than that.
+        author_association: "MEMBER",
+        labels: [],
+        head: { sha: "a".repeat(40), repo: { full_name: project } },
+        base: { sha: BASE_SHA },
+      },
+    });
+    expect(dispatchedResult.state).toBe("dispatched");
+    if (dispatchedResult.state !== "dispatched") throw new Error("unreachable");
+    return {
+      runID: dispatchedResult.run_id,
+      project,
+      pr: dispatchedResult.facts.number,
+      result: dispatchedResult,
+    };
+  }
+
+  it("boots one review container, routed like every other cloud role, and completes on the comment it posts", async () => {
+    const { runID, project, pr } = await igniteReview();
+
+    const process = await firstProcess();
+    expect(process.command).toBe(ORCHESTRATOR_COMMAND);
+    expect(process.env).toMatchObject({
+      TICKS_RUN_ID: runID,
+      TICKS_EPIC: reviewEpic(pr),
+      TICKS_PHASE: "review",
+      [REVIEW_PR_ENV]: String(pr),
+      [REVIEW_HEAD_SHA_ENV]: "a".repeat(40),
+      // The job's routing, resolved like every other cloud role: pi on GLM by
+      // construction, never the entrypoint's own harness selection.
+      TICKS_HARNESS: "pi",
+      TICKS_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
+      // The door the findings go to, and the credential that authorizes the
+      // post — the run's own token, never the operator's.
+      TICKS_FACTORY_URL: FACTORY,
+      TICKS_FACTORY_PROJECT: project,
+      TICKS_FACTORY_TOKEN: process.env.AI_GATEWAY_TOKEN,
+    });
+    // A review holds a read-only credential: its clone goes through the
+    // factory's own git door, not github.com with the operator's token.
+    expect(process.env.TICKS_REPO_URL).toContain(FACTORY);
+    expect(process.env.TICKS_REPO_URL).not.toContain("github.com");
+
+    // The container reviews and posts, exactly as the entrypoint's review job
+    // does: one bounded body to the review door, with the credential the
+    // container holds.
+    const response = await SELF.fetch(`${FACTORY}${REVIEW_PATH}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.TICKS_FACTORY_TOKEN}`,
+        "content-type": "text/markdown",
+      },
+      body: "Two findings:\n- a leak\n- a typo",
+    });
+    expect(response.status).toBe(201);
+
+    process.exit(0);
+    const run = await settled(runID);
+    // The comment is the evidence the job is judged on, never the exit.
+    expect(run.state).toBe("completed");
+    expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "advanced" });
+    expect(commenter.posted).toHaveLength(1);
+    expect(commenter.posted[0]!.number).toBe(pr);
+    expect(commenter.posted[0]!.body).toContain("- a leak");
+    expect(sandboxes.booted).toHaveLength(1);
+    expect(sandboxes.booted[0]!.destroyed).toBe(true);
+  });
+
+  it("does not call a reviewer that exited 0 without posting anything done", async () => {
+    const { runID, project } = await igniteReview();
+    const process = await firstProcess();
+    expect(process.env.TICKS_HARNESS).toBe("pi");
+
+    process.exit(0);
+    const run = await settled(runID);
+    // An exit status is not a review: nothing durable was produced, so the run
+    // is stopped with the run's own account of why.
+    expect(run.state).toBe("stopped");
+    expect(commenter.posted).toHaveLength(0);
+    expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "none" });
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail ?? "").toMatch(/no review comment/i);
+    expect(sandboxes.booted).toHaveLength(1);
   });
 });
 
@@ -1689,9 +1845,12 @@ describe("the run's gateway credential is the kill switch", () => {
     expect(gateway.calls).toHaveLength(1);
 
     await stopRun(env, runID, "operator");
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
+    // A clean stop revokes at the END of the grace window (tick gyl), so wait
+    // for the revocation rather than racing it.
+    await waitFor("the run's credential to be revoked", async () => {
+      const tokens = await listRunGatewayTokens(env.DB, runID);
+      return tokens.length > 0 && tokens.every((entry) => entry.revoked_at !== null);
+    });
 
     // The orchestrator that was stopped cannot spend another cent, whether or
     // not it noticed it was stopped — enforcement at the credential layer.
@@ -1700,14 +1859,13 @@ describe("the run's gateway credential is the kill switch", () => {
     await expect(refused.json()).resolves.toMatchObject({ error: "run_token_revoked" });
     expect(gateway.calls).toHaveLength(1);
 
-    // Rotation, not a shutdown: closeout still has to reach review and
-    // closeout (D15), so it boots with a credential of its own.
-    const closeoutToken = closeout.env.AI_GATEWAY_TOKEN!;
-    expect(closeoutToken).not.toBe(token);
-    expect((await modelCall(closeoutToken, gateway.fetcher)).status).toBe(200);
-
-    closeout.exit(0);
+    // And no replacement is credentialled: the run ends on the stop (tick
+    // dl8), so the one credential the work boot minted is the whole list, and
+    // it is dead.
     expect((await settled(runID)).state).toBe("stopped");
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens).toHaveLength(1);
+    expect(tokens.every((entry) => entry.revoked_at !== null)).toBe(true);
   });
 
   it("kills the credential before the grace window when a budget trips, not after it", async () => {
@@ -1742,13 +1900,16 @@ describe("the run's gateway credential is the kill switch", () => {
       await expect(refused.json()).resolves.toMatchObject({ error: "run_token_revoked" });
       expect(gateway.calls).toHaveLength(1);
 
-      // The unwind still happens: a stop must reach review and closeout (D15),
-      // and a budget trip leaves no stop record, so closeout is credentialled.
-      const closeout = await waitFor("the closeout orchestrator", async () =>
-        sandboxes.phase("closeout"),
-      );
-      closeout.exit(0);
-      expect((await settled(runID)).state).toBe("stopped");
+      // The unwind still happens on a container that can no longer spend, and
+      // the run ends there: nothing is booted after a budget trip, and the
+      // one credential it minted dies with it.
+      const run = await settled(runID);
+      expect(run.state).toBe("stopped");
+      expect(process.killed).toBe(true);
+      expect(sandboxes.booted).toHaveLength(1);
+      const tokens = await listRunGatewayTokens(env.DB, runID);
+      expect(tokens).toHaveLength(1);
+      expect(tokens.every((entry) => entry.revoked_at !== null)).toBe(true);
     } finally {
       logs.restore();
     }
@@ -1757,31 +1918,22 @@ describe("the run's gateway credential is the kill switch", () => {
   it("does not re-credential a run under a hard stop, in any pass", async () => {
     // The defect that made the kill switch decorative on a live run: revoking
     // a token stopped nothing, because the supervisor minted a replacement at
-    // the next boot — and the closeout pass, which enforces no budgets, did
-    // not read stop records at all. Only deleting the container application
-    // halted the spend. A hard stop is a durable refusal to mint.
+    // the next boot. A hard stop is a durable refusal to mint — and since
+    // tick dl8 there is no boot after a trip at all, so the refusal has no
+    // gap to slip a fresh credential into.
     const { runID } = await ignite();
     const work = await firstProcess();
     const gateway = fakeGateway();
+    const token = work.env.AI_GATEWAY_TOKEN!;
+    expect((await modelCall(token, gateway.fetcher)).status).toBe(200);
 
-    // A clean stop first, exactly as the incident went: the run unwinds into
-    // closeout and is credentialled again, and the spend continues.
-    await stopRun(env, runID, "operator");
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
-    const closeoutToken = closeout.env.AI_GATEWAY_TOKEN!;
-    expect(closeoutToken).not.toBe(work.env.AI_GATEWAY_TOKEN);
-    expect((await modelCall(closeoutToken, gateway.fetcher)).status).toBe(200);
-
-    // Now the operator pulls the switch.
+    // The operator pulls the switch.
     const stop = await stopRun(env, runID, "operator", "hard");
     expect(stop.outcome).toBe("stopping");
     if (stop.outcome === "stopping") {
       expect(stop.mode).toBe("hard");
       expect(stop.tokens_revoked).toBe(1);
     }
-    expect((await modelCall(closeoutToken, gateway.fetcher)).status).toBe(403);
 
     // And the container dies of it, the way a harness handed 403s does. The
     // supervisor must NOT answer that with a fresh container and a fresh
@@ -1790,11 +1942,11 @@ describe("the run's gateway credential is the kill switch", () => {
 
     const run = await settled(runID);
     expect(run.state).toBe("stopped");
-    expect(sandboxes.booted).toHaveLength(2);
+    expect(sandboxes.booted).toHaveLength(1);
     const tokens = await listRunGatewayTokens(env.DB, runID);
-    expect(tokens).toHaveLength(2);
+    expect(tokens).toHaveLength(1);
     expect(tokens.every((entry) => entry.revoked_at !== null)).toBe(true);
-    // Two model calls in the whole run, both before the switch was pulled.
+    // One model call in the whole run, before the switch was pulled.
     expect(gateway.calls).toHaveLength(1);
   });
 
@@ -1894,20 +2046,18 @@ describe("the run's gateway credential is the kill switch", () => {
     const logs = stubLogsAPI(0.0556, undefined, 887);
 
     try {
-      const { runID, epic } = await ignite();
+      const { runID, project, epic } = await ignite();
       const process = await firstProcess();
 
-      const closeout = await waitFor("the closeout orchestrator", async () =>
-        sandboxes.phase("closeout"),
-      );
+      const run = await settled(runID);
       expect(process.killed).toBe(true);
+      expect(run.state).toBe("stopped");
+      // Nothing is booted after a cost trip (tick dl8).
+      expect(sandboxes.booted).toHaveLength(1);
       // The COST budget specifically: a wall-clock trip would satisfy a looser
       // pattern while the undercount sailed on underneath it.
-      expect(closeout.env.TICKS_STOP_REASON ?? "").toMatch(/cost budget/i);
-
-      closeout.exit(0);
-      const run = await settled(runID);
-      expect(run.state).toBe("stopped");
+      const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+      expect(record.detail ?? "").toMatch(/cost budget/i);
       // The whole invoice, not one page of it.
       expect(run.cost_usd).toBeCloseTo(887 * 0.0556, 6);
       expect(run.cost_usd).toBeGreaterThan(25);
@@ -2113,7 +2263,7 @@ function onReconcileWrite(hook: () => Promise<void>): void {
 
 describe("a hard stop is refused at every boundary, not only the ones a run happens to reach", () => {
   // Neither of these had an assertion before tick k24: the kill-switch suite
-  // proved the credential layer refuses a REVOKED token, and that a closeout
+  // proved the credential layer refuses a REVOKED token and that a post-trip
   // reboot is refused, but nothing proved the two boundaries the supervisor
   // itself owns — before the first boot, and between two of them.
   it("credentials no orchestrator at all when the stop lands before the first boot", async () => {
@@ -2154,8 +2304,8 @@ describe("a hard stop is refused at every boundary, not only the ones a run happ
     const run = await settled(runID);
     expect(run.state).toBe("stopped");
     // The replacement boot the supervisor was on its way to making never
-    // happened — and neither did a closeout boot, which is refused by the same
-    // check.
+    // happened — the same check that refuses it is the one that would refuse
+    // any boot after a trip (and since tick dl8 no such boot exists at all).
     expect(sandboxes.booted).toHaveLength(1);
     const tokens = await listRunGatewayTokens(env.DB, runID);
     expect(tokens).toHaveLength(1);
@@ -2292,15 +2442,16 @@ describe("a run whose lease lapsed with nobody holding it (tick oen)", () => {
 
     const theirs = await handLeaseTo(project, "run_theirs");
 
-    const closeout = await waitFor("the closeout orchestrator", async () =>
-      sandboxes.phase("closeout"),
-    );
+    const run = await settled(runID);
     expect(process.killed).toBe(true);
-    expect(closeout.env.TICKS_STOP_REASON ?? "").toContain("taken by another run (run_theirs)");
+    expect(sandboxes.booted).toHaveLength(1);
+    // WHY it stopped says who took it — read from the run's own record, since
+    // no stop-reason environment crosses into a container that is never
+    // booted (tick dl8).
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail ?? "").toContain("taken by another run (run_theirs)");
     expect(warned.some((line) => line.includes("reclaimed"))).toBe(false);
-
-    closeout.exit(0);
-    expect((await settled(runID)).state).toBe("stopped");
+    expect(run.state).toBe("stopped");
     // The other run's lease is untouched — neither reclaimed nor released by
     // the run that lost it.
     await expect(room.leaseStatus()).resolves.toMatchObject({

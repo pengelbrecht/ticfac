@@ -791,9 +791,10 @@ export class RunRoom extends DurableObject<Env> {
    * Records a stop for a run (D15, UC1b).
    *
    * The record IS the enforcement point: the Run Workflow reads it at a step
-   * boundary and finishes the in-flight tick, then runs review and closeout.
-   * Nothing is sent to the orchestrator, so a wedged or adversarial one cannot
-   * decline. Repeating a stop is not an error — it is the same stop.
+   * boundary, gives the in-flight work its grace window, kills the container
+   * and ends the run on its pushed branch. Nothing is sent to the
+   * orchestrator, so a wedged or adversarial one cannot decline. Repeating a
+   * stop is not an error — it is the same stop.
    *
    * A `hard` request over a `clean` record is the exception, and the only
    * mutation this table has: it is not a repeat, it is an operator deciding
