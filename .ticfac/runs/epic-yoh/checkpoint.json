@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 44,
-  "state": "gating",
-  "reason": "running the integrated gate for cr4 on 86e918eddc42",
-  "updated_at": "2026-09-24T04:42:32Z",
+  "sequence": 45,
+  "state": "publishing",
+  "reason": "closing cr4 behind the integrated gate on 86e918eddc42",
+  "updated_at": "2026-09-24T04:44:01Z",
   "ticks": [
     {
       "tick_id": "uqi",
