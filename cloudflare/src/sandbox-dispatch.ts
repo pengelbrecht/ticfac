@@ -63,6 +63,8 @@
  * | `title` | the tick's title, carried for the same re-derivation. |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
  * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — the worker container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`, and the handle's `model` names it back. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran (the factory defaults once disagreed with the profiles — omp/DeepSeek against pi/GLM). |
+ * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
+ * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: printable prose with line breaks, at most 64 KiB — a start with no prompt would boot a worker on a prompt nobody chose. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -83,7 +85,8 @@
  * (`cloudflare-sandbox`), the issue time, and the one open `handle` object
  * carrying this substrate's private addressing — the container's name, the
  * work process id, the base, the per-attempt landing branch, the
- * write_ref, and the `model` the container was booted with. A caller re-derives NOTHING from it that the state route below
+ * write_ref, the `model` and the `harness` the container was booted
+ * with. A caller re-derives NOTHING from it that the state route below
  * cannot also answer from identity alone; the handle is for the record, not
  * for addressing (a client on the far side of HTTP cannot carry a live
  * Sandbox object any more than a Workflow step can).
@@ -206,12 +209,26 @@ function fromDenial(denial: GatewayDenial): SandboxDispatchResult {
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
- * An identifier or a reference (`role`, `write_ref`, `base_ref`, `model`): printable
- * ASCII, NO whitespace, bounded — these name things (a role, a git ref) and
- * ride environment variables into the container, and a name that contains a
- * space is a name nothing downstream can use.
+ * An identifier or a reference (`role`, `write_ref`, `base_ref`, `model`,
+ * `harness`): printable ASCII, NO whitespace, bounded — these name things (a
+ * role, a git ref, a model, a harness) and ride environment variables into
+ * the container, and a name that contains a space is a name nothing
+ * downstream can use.
  */
 const PLAIN_FIELD_PATTERN = /^[\x21-\x7e]{1,512}$/;
+
+/**
+ * A rendered prompt (`prompt`, tick 9iz): printable prose plus the line breaks
+ * markdown needs, never other control characters, bounded at 64 KiB — it
+ * rides one environment variable into the container, where the worker's
+ * harness reads it, and an environment value is not a place to discover what
+ * the platform does with a terminal escape.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the tab, line feed and carriage return in this class are the line breaks a rendered markdown prompt needs; every other control character is excluded on purpose, and naming them inside the class is how that stays true.
+const PROMPT_FIELD_PATTERN = /^[\x09\x0a\x0d\x20-\x7e]{1,65536}$/;
+
+/** The prompt bound, in characters, spelled once for the pattern and the refusal. */
+const PROMPT_FIELD_MAX = 65536;
 
 /**
  * A free-text field (`title`): printable ASCII plus the spaces prose needs,
@@ -318,6 +335,25 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   // caller a handle for a worker running something its records do not name.
   const model = text("model", raw.model, PLAIN_FIELD_PATTERN);
   if (typeof model !== "string") return model;
+  // The harness the caller resolved (tick 9iz). Required, and bound as given,
+  // for the model's reason verbatim.
+  const harness = text("harness", raw.harness, PLAIN_FIELD_PATTERN);
+  if (typeof harness !== "string") return harness;
+  // The rendered role prompt the caller resolved (tick 9iz). Required: the
+  // container's own entrypoint builds its worker prompt from the checkout's
+  // tracker, so the profile's prompt reaches the worker through this field or
+  // not at all — and a door that booted without it would be a door whose
+  // caller's `prompt_digest` named a prompt that never ran.
+  if (typeof raw.prompt !== "string" || !PROMPT_FIELD_PATTERN.test(raw.prompt)) {
+    return refuse(
+      400,
+      "invalid_request",
+      "prompt must be the rendered role prompt the dispatch resolved (printable text with line " +
+        `breaks, at most ${PROMPT_FIELD_MAX} characters) — the worker's container runs on it, and a start with ` +
+        "none would boot a worker on a prompt nobody chose",
+    );
+  }
+  const prompt = raw.prompt;
 
   // Not the run's submitted base: the caller names the commit this attempt's
   // worker must clone at, which for a later wave is the run branch head that
@@ -357,8 +393,14 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   // The wiring the deployment can actually dispatch through — the same
   // diagnosis `sandboxExecutorFromEnv` gives the Workflow, stated in the
   // response rather than only on the Worker's log, because the caller is a
-  // container reading one answer.
-  const wired = sandboxExecutorDepsFromEnv(env, { project: run.project, base_sha: raw.base_sha });
+  // container reading one answer. The run id is the credential's own: the
+  // worker this boot streams is this run's, and its logs land under the
+  // run's own artifacts where the log read routes serve them (tick 9iz).
+  const wired = sandboxExecutorDepsFromEnv(env, {
+    project: run.project,
+    base_sha: raw.base_sha,
+    run_id: run.run_id,
+  });
   if ("refusal" in wired) {
     return refuse(
       503,
@@ -381,6 +423,8 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     base_ref: baseRef,
     title,
     model,
+    harness,
+    prompt,
   };
 
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container

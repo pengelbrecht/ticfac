@@ -16,6 +16,7 @@ import {
   WORKER_PROBE_ARG,
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
+  WORKER_ROLE_PROMPT_ENV,
   workerBootEnv,
   workerBranch,
   workerCancelCommand,
@@ -103,6 +104,29 @@ describe("the per-attempt landing branch (tick us2)", () => {
     // One branch per attempt: a redispatch lands beside, never on top of,
     // the previous attempt's pushed work.
     expect(attemptLandingBranch("1vn", 4, "tap")).not.toBe(attemptLandingBranch("1vn", 3, "tap"));
+  });
+});
+
+describe("the role prompt a dispatch carries (tick 9iz)", () => {
+  // The sandbox dispatch door carries the profile's rendered prompt because
+  // the container's own entrypoint renders its worker prompt from the
+  // checkout's tracker and never sees the factory's otherwise. This pins the
+  // unit the door's own suite proves end to end: the prompt rides the boot
+  // environment the container is started with, beside the harness and the
+  // model the same boot carries.
+  const prompt = "# implement-tick\n\nYou are implementing ONE unit of work.\n";
+
+  it("rides the boot environment the work command and the probe both get", () => {
+    const env = workerBootEnv({ ...boot, harness: "pi", prompt });
+    expect(env[WORKER_ROLE_PROMPT_ENV]).toBe(prompt);
+    // The green-start probe answers in the same environment, or it proves
+    // something about a container nobody will use.
+    expect(workerProbeSpec({ ...boot, prompt }).env?.[WORKER_ROLE_PROMPT_ENV]).toBe(prompt);
+    expect(workerWorkSpec({ ...boot, prompt }).env?.[WORKER_ROLE_PROMPT_ENV]).toBe(prompt);
+  });
+
+  it("leaves the variable absent when the dispatch carried no prompt", () => {
+    expect(WORKER_ROLE_PROMPT_ENV in workerBootEnv(boot)).toBe(false);
   });
 });
 

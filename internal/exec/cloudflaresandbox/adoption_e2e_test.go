@@ -89,6 +89,13 @@ func TestARestartedOrchestratorAdoptsTheRunningSandboxThroughTheRealDoor(t *test
 	if firstRecord.Model != door.model {
 		t.Errorf("the record booted on model %q, want %q", firstRecord.Model, door.model)
 	}
+	if firstRecord.Harness != door.harness {
+		t.Errorf("the record booted on harness %q, want %q", firstRecord.Harness, door.harness)
+	}
+	if firstRecord.Prompt != door.prompt {
+		t.Errorf("the record does not state the prompt the dispatch delivered (%d bytes, want %d)",
+			len(firstRecord.Prompt), len(door.prompt))
+	}
 
 	// Inspect by identity, the way a live orchestrator watches its work.
 	status1, err := first.Inspect(handle1, "")
@@ -243,6 +250,11 @@ type realDoor struct {
 	baseSHA string
 	project string
 	model   string
+	// The harness and the rendered role prompt the dispatch carries (tick 9iz):
+	// what the executor sends over the door, and what the fake container's
+	// work process must be booted on.
+	harness string
+	prompt  string
 
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -336,6 +348,9 @@ func newRealDoor(t *testing.T) *realDoor {
 			door.epic = ready.Epic
 			door.baseSHA = ready.BaseSHA
 			door.model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+			door.harness = "pi"
+			door.prompt = "# implement-tick\n\nYou are implementing ONE unit of work from the ticks tracker, headless, in\n" +
+				"an isolated git worktree that is yours alone. Nobody will answer a question.\n"
 			return door
 		}
 		door.note(line)
@@ -356,6 +371,8 @@ func (d *realDoor) newExecutor(stateDir string) *Executor {
 		BaseRef:    "refs/heads/epic/" + d.epic,
 		Title:      "Prove sandbox adoption end to end through the real Go executor and the real door",
 		Model:      d.model,
+		Harness:    d.harness,
+		Prompt:     d.prompt,
 		Attempt:    1,
 		StateDir:   stateDir,
 	})
@@ -396,41 +413,45 @@ func (d *realDoor) newSpec(tickID string) *subprocess.JobSpec {
 }
 
 // observe reads the harness's one observation route: what containers its
-// fake binding was asked to boot, and what processes they hold. The door's
+// fake binding was asked to boot, what processes they hold, and the boot
+// environment the live work process was started with (tick 9iz). The door's
 // own answers cannot express "no rival was booted" — this can.
-func (d *realDoor) observe() (map[string]int, error) {
+func (d *realDoor) observe() (map[string]int, map[string]string, error) {
 	response, err := http.Get(d.url + "/__door_harness/sandboxes")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer response.Body.Close()
 	var observation struct {
 		Sandboxes []struct {
 			Name      string `json:"name"`
 			Processes []struct {
-				ID       string `json:"id"`
-				Command  string `json:"command"`
-				State    string `json:"state"`
-				ExitCode *int   `json:"exit_code"`
+				ID       string            `json:"id"`
+				Command  string            `json:"command"`
+				State    string            `json:"state"`
+				ExitCode *int              `json:"exit_code"`
+				Env      map[string]string `json:"env"`
 			} `json:"processes"`
 		} `json:"sandboxes"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&observation); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	counts := map[string]int{}
+	var workEnv map[string]string
 	for _, sandbox := range observation.Sandboxes {
 		counts["containers"]++
 		for _, process := range sandbox.Processes {
 			if process.Command == realDoorWorkCommand && process.State == "running" {
 				counts["live work processes"]++
+				workEnv = process.Env
 			}
 			if process.Command == realDoorWorkCommand && process.State != "running" {
 				counts["dead work processes"]++
 			}
 		}
 	}
-	return counts, nil
+	return counts, workEnv, nil
 }
 
 // assertOneLiveWorkProcess is the no-rival assertion: exactly one container
@@ -439,7 +460,7 @@ func (d *realDoor) observe() (map[string]int, error) {
 // could have been booted beside the tick's sandbox.
 func (d *realDoor) assertOneLiveWorkProcess(t *testing.T, when string) {
 	t.Helper()
-	counts, err := d.observe()
+	counts, workEnv, err := d.observe()
 	if err != nil {
 		t.Fatalf("%s: read the harness's observation route: %v", when, err)
 	}
@@ -451,6 +472,16 @@ func (d *realDoor) assertOneLiveWorkProcess(t *testing.T, when string) {
 	}
 	if counts["dead work processes"] != 0 {
 		t.Errorf("%s: %d work processes ended unexpectedly", when, counts["dead work processes"])
+	}
+	// The acceptance clause, read against the REAL door (tick 9iz): the
+	// worker boots on exactly the harness and the rendered prompt the
+	// dispatch carried — both proven in the container's own environment,
+	// not inferred from the door having accepted the request.
+	if got := workEnv["TICKS_HARNESS"]; got != d.harness {
+		t.Errorf("%s: the work process is bound to harness %q, want the dispatch's %q", when, got, d.harness)
+	}
+	if got := workEnv["TICKS_ROLE_PROMPT"]; got != d.prompt {
+		t.Errorf("%s: the work process was given a %d-byte role prompt, want the dispatch's %d bytes", when, len(got), len(d.prompt))
 	}
 }
 

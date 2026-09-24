@@ -104,6 +104,19 @@ export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 export const WORKER_TRACE_ID_ENV = "TICKS_TRACE_ID";
 
 /**
+ * The rendered role prompt a dispatch carries into the container (tick 9iz).
+ *
+ * The sandbox dispatch door receives the profile's own prompt text — the one
+ * the run's records digest into `prompt_digest` — because the container's
+ * entrypoint renders its worker prompt from the CHECKOUT's tracker and would
+ * otherwise never see the prompt the factory chose. It rides the boot
+ * environment beside the harness and the model, so the worker runs on exactly
+ * what the dispatch resolved: the same provenance rule the model (tick a08)
+ * and the harness (tick 9iz) already ride.
+ */
+export const WORKER_ROLE_PROMPT_ENV = "TICKS_ROLE_PROMPT";
+
+/**
  * A cancellation reason, reduced to something safe to hand a shell.
  *
  * The reason travels from the stop that asked for the salvage — `budget:cost`,
@@ -226,6 +239,13 @@ export type WorkerBootInput = {
   factory_project?: string;
   /** The chain this container's work belongs to; see {@link WORKER_TRACE_ID_ENV}. */
   trace_id?: string;
+  /**
+   * The rendered role prompt this worker's harness opens on, when the
+   * dispatch carried one (tick 9iz): the profile's own prompt text, exported
+   * as {@link WORKER_ROLE_PROMPT_ENV} so the container runs on the prompt the
+   * run's records digest, never one only the checkout knows.
+   */
+  prompt?: string;
   /**
    * Whether this worker runs the repository's `[sandbox]` setup.
    *
@@ -418,6 +438,7 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     ["TICKS_FACTORY_TOKEN", input.factory_token],
     ["TICKS_FACTORY_PROJECT", input.factory_project],
     [WORKER_TRACE_ID_ENV, input.trace_id],
+    [WORKER_ROLE_PROMPT_ENV, input.prompt],
   ];
   for (const [name, value] of optional) {
     if (value !== undefined && value !== "") env[name] = value;
