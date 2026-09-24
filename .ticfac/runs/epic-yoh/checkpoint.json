@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 128,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-24T11:07:25Z",
+  "sequence": 129,
+  "state": "integrating",
+  "reason": "integrating mn7 attempt 16 into epic/yoh",
+  "updated_at": "2026-09-24T11:08:18Z",
   "ticks": [
     {
       "tick_id": "uqi",
