@@ -318,6 +318,21 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	}
 	fmt.Fprintf(out, "the orchestrator entrypoint execs `ticfac run-epic` (no model decides control flow)\n")
 
+	// The cloud profile set (tick gbs): the image must carry
+	// profiles-cloudflare-sandbox/, because the entrypoint exec'd above points
+	// `ticfac run-epic --profiles` at it — and the profiles compiled into the
+	// binary as the default are the LOCAL set, whose executor would run every
+	// worker inside the orchestrator's own container. Staged from the copy
+	// embedded in this binary, so the profiles the container resolves and the
+	// binaries it runs are the same commit by construction. A step of the
+	// deploy rather than of InstallTicfacInSandbox, like the entrypoint
+	// rewrite above it: it compiles nothing.
+	if err := StageCloudProfiles(sandboxDir); err != nil {
+		return nil, err
+	}
+	fmt.Fprintf(out, "the cloud profile set staged into the image context (resolved at %s)\n",
+		cloudProfilesContainerPath)
+
 	// The Worker imports the Cloudflare Sandbox SDK to run a container, so the
 	// staged bundle is installed before it is deployed. Local work, done before
 	// the first `create`: a deploy that cannot bundle must not have provisioned

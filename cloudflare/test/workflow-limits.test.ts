@@ -1,20 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_WAVE_LEGS, WAVE_LEG_MS, waveSpawnBudget } from "../src/run-workflow";
 import {
   COLD_START_BENCHMARK_MS,
   DEFAULT_CONFIRM_TIMEOUT_MS,
   DEFAULT_PROBE_TIMEOUT_MS,
   DEFAULT_SALVAGE_GRACE_MS,
-  DEFAULT_WAIT_TIMEOUT_MS,
   FANOUT_DEGRADATION_FACTOR,
-  probeTimeoutMs,
 } from "../src/worker-dispatch";
 import {
-  fitsInStep,
+  STEP_BUDGET_FRACTION,
   STEP_WORK_BUDGET_MS,
-  shareStepBudget,
-  stepBudget,
   WORKFLOW_STEP_TIMEOUT_MS,
 } from "../src/workflow-limits";
 
@@ -27,6 +22,14 @@ import {
  * enforces. The rule it produced — "pin each limit as a named constant with a
  * guard test" — is what this file is. A green vitest run cannot prove the edge
  * accepts a value; it can prove nothing in this package is SIZED past one.
+ *
+ * The clamps this file used to test (`fitsInStep`, `stepBudget`,
+ * `shareStepBudget`) and the width-keyed probe derivation (`probeTimeoutMs`)
+ * sized the wave legs the deleted Workflow reconciler ran inside one step;
+ * they went with the reconciler (tick mn7). What stays pinned is the cap
+ * itself — which `contracts/lifecycle-invariants.json` names as
+ * `harness.thresholds.substrate.step_cap_ms`, so it cannot move without a
+ * bundle bump — and the dispatch waits the per-tick door's spawn still runs.
  */
 describe("the 10-minute Workflow step limit is a named, guarded constant", () => {
   it("is the number Cloudflare killed two live runs with", () => {
@@ -36,104 +39,53 @@ describe("the 10-minute Workflow step limit is a named, guarded constant", () =>
   });
 
   it("never lets a step be sized for its whole allowance", () => {
+    expect(STEP_BUDGET_FRACTION).toBe(0.8);
+    expect(STEP_WORK_BUDGET_MS).toBe(Math.floor(WORKFLOW_STEP_TIMEOUT_MS * STEP_BUDGET_FRACTION));
     expect(STEP_WORK_BUDGET_MS).toBeLessThan(WORKFLOW_STEP_TIMEOUT_MS);
     // The margin is what pays for the things a step cannot plan: an R2 write,
     // a GitHub round trip, a container that answers late.
     expect(WORKFLOW_STEP_TIMEOUT_MS - STEP_WORK_BUDGET_MS).toBeGreaterThanOrEqual(60_000);
-    expect(fitsInStep(STEP_WORK_BUDGET_MS)).toBe(true);
-    expect(fitsInStep(STEP_WORK_BUDGET_MS + 1)).toBe(false);
-    expect(stepBudget(WORKFLOW_STEP_TIMEOUT_MS * 10)).toBe(STEP_WORK_BUDGET_MS);
   });
 
   /**
-   * THE BUG, as arithmetic. A wave's wait is longer than a step may run for,
-   * so a wave cannot be waited on inside one step — which is exactly what
-   * `superviseCloudWave` did until this tick.
+   * tick 7zk's arithmetic, still: a stop path holds the container's salvage
+   * window open INSIDE the same step that found the stop, and that step must
+   * not be the one that kills the supervisor. The window is bounded, and it
+   * is not the whole allowance.
    */
-  it("cannot contain a whole wave's wait, which is why legs exist", () => {
-    expect(fitsInStep(DEFAULT_WAIT_TIMEOUT_MS)).toBe(false);
-    expect(DEFAULT_WAIT_TIMEOUT_MS).toBeGreaterThan(WORKFLOW_STEP_TIMEOUT_MS);
-  });
-
-  it("bounds one dispatch leg, and enough legs to cover the longest wave", () => {
-    expect(fitsInStep(WAVE_LEG_MS)).toBe(true);
-    // Room left inside the step for the leg's reconcile, collects, teardowns
-    // and its R2 write — the leg's wait is not the leg's whole cost.
-    expect(WAVE_LEG_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
-    // And a wave never runs out of legs before it runs out of budget.
-    expect(MAX_WAVE_LEGS * WAVE_LEG_MS).toBeGreaterThan(DEFAULT_WAIT_TIMEOUT_MS);
+  it("bounds the salvage window a stop holds open inside one step", () => {
+    expect(DEFAULT_SALVAGE_GRACE_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
   });
 
   /**
-   * tick 7zk's arithmetic. A leg cancelled at its very last second then holds
-   * every container's salvage window open INSIDE the same step, and the step
-   * that matters most — the one ending a run that has just spent its whole
-   * budget — is exactly the one that must not be the step that kills the
-   * supervisor. So the window is held back from the leg, not added to it.
+   * A dispatch's waits run TOGETHER, and this is the tightest pin in the
+   * package: `spawnWorker` waits on the probe (up to the widest measured
+   * cold-start allowance) and then on the confirm (three minutes), in ONE
+   * call, from the dispatch door. The sum must still fit the hard cap now
+   * that nothing scales the shares apart — the wave path's `waveSpawnBudget`
+   * died with the wave (tick l6t).
    */
-  it("leaves room for a cancelled leg's salvage window inside the same step", () => {
-    expect(fitsInStep(WAVE_LEG_MS + DEFAULT_SALVAGE_GRACE_MS)).toBe(true);
-    // And still room beyond that for the leg's reconcile, collects, teardowns
-    // and its R2 write, which the window does not replace.
-    expect(WAVE_LEG_MS + DEFAULT_SALVAGE_GRACE_MS).toBeLessThan(STEP_WORK_BUDGET_MS);
-  });
-
-  /**
-   * The second, quieter half of the same bug: a step's waits are budgeted
-   * TOGETHER. A 418s probe and a 180s confirm are each reasonable and sum to
-   * 598s, which is a step two seconds from the cap with a reconcile still to
-   * pay for.
-   */
-  it("budgets a dispatch leg's probe and confirm together, not one at a time", () => {
-    for (const width of [1, 2, 3, 5]) {
-      const budget = waveSpawnBudget(width);
-      expect(fitsInStep(budget.probe_timeout_ms + budget.confirm_timeout_ms)).toBe(true);
-    }
-    // At the width this deployment actually runs (`max_instances = 3`) nothing
-    // is scaled down: the probe keeps its full measured allowance.
-    const three = waveSpawnBudget(3);
-    expect(three.probe_timeout_ms).toBe(probeTimeoutMs(3));
-    expect(three.confirm_timeout_ms).toBe(DEFAULT_CONFIRM_TIMEOUT_MS);
-  });
-
-  it("scales every share when a caller asks for more than a step can spend", () => {
-    const shared = shareStepBudget({ a: 400_000, b: 400_000 }, "a test");
-    expect(shared.a! + shared.b!).toBeLessThanOrEqual(STEP_WORK_BUDGET_MS);
-    // In proportion — never starving the last share to pay the first.
-    expect(shared.a).toBe(shared.b);
+  it("keeps a dispatch's probe and confirm inside one hard step cap, together", () => {
+    expect(DEFAULT_PROBE_TIMEOUT_MS + DEFAULT_CONFIRM_TIMEOUT_MS).toBeLessThanOrEqual(
+      WORKFLOW_STEP_TIMEOUT_MS,
+    );
   });
 });
 
 /**
- * The probe budget, degraded for the width a wave actually runs at (tick 2xm)
- * rather than for the widest one anyone has measured (tick 7go's constant).
+ * The probe budget, still sized by tick 7go's derivation at the widest measured
+ * fan-out: the door's dispatches are one container each (tick mn7 deleted the
+ * width-keyed curve along with the reconciler that needed it), so the widest
+ * measured factor is the one every probe is sized by.
  */
-describe("probeTimeoutMs", () => {
+describe("the probe budget covers the measured cold start, degraded for fan-out", () => {
   it("keeps tick 7go's derivation at the widest measured width", () => {
-    expect(probeTimeoutMs(5)).toBe(DEFAULT_PROBE_TIMEOUT_MS);
-    expect(probeTimeoutMs(5)).toBe(
+    expect(DEFAULT_PROBE_TIMEOUT_MS).toBe(
       Math.ceil(COLD_START_BENCHMARK_MS * FANOUT_DEGRADATION_FACTOR * 1.2),
     );
   });
 
-  it("charges a narrower wave only the degradation it measured", () => {
-    expect(probeTimeoutMs(1)).toBe(Math.ceil(COLD_START_BENCHMARK_MS * 1.2));
-    expect(probeTimeoutMs(3)).toBe(Math.ceil(COLD_START_BENCHMARK_MS * 2.22 * 1.2));
-    expect(probeTimeoutMs(2)).toBeGreaterThan(probeTimeoutMs(1));
-    expect(probeTimeoutMs(2)).toBeLessThan(probeTimeoutMs(3));
-  });
-
-  it("never extrapolates past the benchmark, in either direction", () => {
-    // Wider than anything measured gets the widest measured factor, not a
-    // number invented by extending a line off the end of the data.
-    expect(probeTimeoutMs(50)).toBe(probeTimeoutMs(5));
-    expect(probeTimeoutMs(0)).toBe(probeTimeoutMs(1));
-    expect(probeTimeoutMs(Number.NaN)).toBe(probeTimeoutMs(1));
-  });
-
-  it("still leaves every width's probe inside one step on its own", () => {
-    for (const width of [1, 3, 5, 50]) {
-      expect(fitsInStep(probeTimeoutMs(width))).toBe(true);
-    }
+  it("never sizes a probe below the bare measured cold start", () => {
+    expect(DEFAULT_PROBE_TIMEOUT_MS).toBeGreaterThan(COLD_START_BENCHMARK_MS);
   });
 });

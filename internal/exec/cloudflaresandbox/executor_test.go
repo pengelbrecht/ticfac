@@ -62,6 +62,9 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 		"base_sha":  "0123456789abcdef0123456789abcdef01234567",
 		"write_ref": h.spec.Source.WriteRef,
 		"title":     "A cloudflare-sandbox executor that returns a handle, not a result",
+		"model":     testModel,
+		"harness":   testHarness,
+		"prompt":    testPrompt,
 	} {
 		if got := body[field]; got != want {
 			t.Errorf("the start body's %q is %v, want %v", field, got, want)
@@ -473,7 +476,14 @@ func TestDoorRefusalsArriveTyped(t *testing.T) {
 // then a run that reaches one of them stops honestly.
 //
 // short: an httptest door and one state directory.
-func TestCancelCollectAndDisposeAreRefusedNamingTheDecision(t *testing.T) {
+// short: the fake door and one state directory.
+//
+// Cancel and dispose are refused with the DECIDED reasons (tick xev): the
+// credential a container holds is the run's own token, so there is no
+// per-attempt dispatch to revoke, and the container's teardown belongs to
+// the factory. Collect is no longer refused — it is the Go side's, from git
+// (collect_test.go) — so the trio this test used to walk is a pair now.
+func TestCancelAndDisposeRefuseWithTheDecidedReasons(t *testing.T) {
 	h := newHarness(t)
 	h.running("keh")
 	handle, err := h.start("keh")
@@ -489,14 +499,10 @@ func TestCancelCollectAndDisposeAreRefusedNamingTheDecision(t *testing.T) {
 		{"cancel", func() error {
 			_, err := h.ex.Cancel(handle)
 			return err
-		}, RefusedNoCancelDoor},
-		{"collect", func() error {
-			_, err := h.ex.CollectDetail(handle)
-			return err
-		}, RefusedNoCollectDoor},
+		}, RefusedCancelOwnedByFactory},
 		{"dispose", func() error {
 			return h.ex.Dispose(handle, subprocess.DisposeOptions{})
-		}, RefusedNoDisposeDoor},
+		}, RefusedNothingLocalToDispose},
 	} {
 		err := tc.call()
 		refusal, ok := subprocess.AsRefusal(err)
@@ -507,8 +513,8 @@ func TestCancelCollectAndDisposeAreRefusedNamingTheDecision(t *testing.T) {
 		if refusal.Reason != tc.reason {
 			t.Errorf("%s refused with %q, want %q", tc.name, refusal.Reason, tc.reason)
 		}
-		if !strings.Contains(refusal.Message, "tick 8ty") {
-			t.Errorf("%s's refusal does not name the open decision it is held for: %s", tc.name, refusal.Message)
+		if !strings.Contains(refusal.Message, "tick xev") {
+			t.Errorf("%s's refusal does not name the decision it is held for: %s", tc.name, refusal.Message)
 		}
 	}
 }

@@ -1,0 +1,16 @@
+{
+  "id": "78v",
+  "title": "The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate",
+  "description": "Absorbed from yoh final-review finding 9fcc2315 (cs1). nwn keys the Workers-AI-only refusal on the CLOUD substrate. But the cloudflare-sandbox executor can be selected by a run whose substrate is local (herdr/harness), and then its workers boot in a Cloudflare container under local routing - which may resolve to claude via runners.local.toml's ladder. The operator's rule is about what runs in Cloudflare, so key the refusal on the executor that dispatches into Cloudflare as well as the substrate. The rule stays declared in one place (Workers AI provider namespace), not a model list.",
+  "notes": "2026-09-24 15:07 - ticfac run epic-yoh: 78v try 1 (run dispatch #20) merged into epic/yoh as 7645a0500739; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "yoh",
+  "acceptance_criteria": "A run dispatching through the cloudflare-sandbox executor refuses at start if any role's final resolved model is not a Workers AI model, whatever its substrate; a test covers a local-substrate run with the cloudflare-sandbox executor and a claude tier; go gate passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T12:11:39.669773Z",
+  "updated_at": "2026-09-24T13:08:06.593981Z",
+  "closed_at": "2026-09-24T13:08:06.593981Z"
+}

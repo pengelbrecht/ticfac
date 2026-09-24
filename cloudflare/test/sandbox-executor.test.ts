@@ -1,6 +1,6 @@
 /**
  * The sandbox compatibility executor (SPEC §12 Phase 4 item 4, tick k4s):
- * the four operations the EpicReconciler dispatches through, built over the
+ * the four operations of the job-protocol attempt seam, built over the
  * SandboxBinding seam, exercised here against fakes the same way
  * worker-dispatch's own suite exercises spawn/wait/teardown — a lifecycle
  * only provable by starting a real container is a lifecycle nobody tests.
@@ -8,8 +8,8 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
+import type { AttemptSpec } from "../src/attempt-protocol";
 import { insertRun, type Run } from "../src/db";
-import type { AttemptSpec } from "../src/epic-reconciler";
 import { authorizeRunCredential, revokeRunTokens } from "../src/gateway";
 import type { GitRefWriter, RefPut } from "../src/git-refs";
 import type {
@@ -20,8 +20,10 @@ import type {
   SandboxProcessView,
 } from "../src/sandbox";
 import {
+  AdoptionModelUnknownError,
   attemptSandboxName,
   reportFromWorker,
+  type SandboxBootRecord,
   type SandboxExecutorDeps,
   type SandboxJobHandle,
   sandboxExecutor,
@@ -35,7 +37,12 @@ import {
   WORKER_PROBE_MARKER,
   type WorkerBootInput,
 } from "../src/worker-boot";
-import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
+import {
+  githubWorkerCollector,
+  type WorkerCollector,
+  type WorkerReport,
+  type WorkerTask,
+} from "../src/worker-collect";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // --------------------------------------------------------------- the fakes ---
@@ -192,6 +199,11 @@ function bootInput(spec: AttemptSpec): WorkerBootInput {
     run_id: spec.run_id,
     gateway_base_url: "https://factory.example.com/api/gateway",
     gateway_token: "tkr_testtoken",
+    // The model the dispatch resolved, as the deployment's own boot composes
+    // it: the request's choice outranks the standing one, so a spec that
+    // names a different model is a container booted on a different one —
+    // exactly the adoption case the boot record exists for (tick dyo).
+    ...(spec.model === undefined ? {} : { model: spec.model }),
   };
 }
 
@@ -213,6 +225,7 @@ class FakeCollector implements WorkerCollector {
     status_detail: "the work is in",
     status_line: "STATUS: DONE",
     boundary_files: [],
+    report_only: false,
     detail: "ready",
   };
   readonly asked: WorkerTask[] = [];
@@ -237,21 +250,59 @@ class FakeRefWriter implements GitRefWriter {
   }
 }
 
+/**
+ * The boot record the tests fill per case (tick dyo): what each attempt's
+ * container was booted on, keyed by identity, so the adoption's read is
+ * exercised against the same contract the deployed D1 wiring answers to.
+ */
+class FakeBootRecord implements SandboxBootRecord {
+  readonly recorded: Array<{ run_id: string; tick_id: string; attempt: number; model: string }> =
+    [];
+  readonly #byIdentity = new Map<string, string>();
+
+  /** Every boot the record holds, forgotten — a deployment that predates it. */
+  forget(): void {
+    this.#byIdentity.clear();
+  }
+
+  async record(boot: {
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+    model: string;
+  }): Promise<void> {
+    this.#byIdentity.set(`${boot.run_id}/${boot.tick_id}/${boot.attempt}`, boot.model);
+    this.recorded.push({ ...boot });
+  }
+
+  async modelOf(identity: {
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+  }): Promise<string | null> {
+    return (
+      this.#byIdentity.get(`${identity.run_id}/${identity.tick_id}/${identity.attempt}`) ?? null
+    );
+  }
+}
+
 /** The executor under test, wired over the fakes. */
 function makeExecutor() {
   const binding = new FakeSandboxes();
   const collector = new FakeCollector();
   const refs = new FakeRefWriter();
+  const boots = new FakeBootRecord();
   const deps: SandboxExecutorDeps = {
     binding,
     collector,
     refs,
     boot: async (spec) => bootInput(spec),
+    boots,
     // No wall clock: the fake containers answer the probes instantly, and
     // nothing here should ever depend on real waiting.
     spawn: { sleep: async () => {} },
   };
-  return { binding, collector, refs, executor: sandboxExecutor(deps) };
+  return { binding, collector, refs, boots, executor: sandboxExecutor(deps) };
 }
 
 /** Unwraps a handle into this executor's own shape. */
@@ -335,6 +386,53 @@ describe("start", () => {
     expect(binding.named("run-x-k4s-3").processes.length).toBe(before);
   });
 
+  it("an adoption names the RUNNING container's model, never the request's (tick dyo)", async () => {
+    const { binding, boots, executor } = makeExecutor();
+    const firstSpec: AttemptSpec = { ...SPEC, model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3" };
+    await executor.start(firstSpec);
+
+    // The boot the first start made is RECORDED before the container was
+    // addressed, so the model is durable the moment there is a container to
+    // ask about at all.
+    expect(boots.recorded).toEqual([
+      expect.objectContaining({
+        run_id: SPEC.run_id,
+        tick_id: SPEC.tick_id,
+        attempt: SPEC.attempt,
+        model: firstSpec.model,
+      }),
+    ]);
+    expect(binding.named("run-x-k4s-3").workProcess()?.env.TICKS_MODEL).toBe(firstSpec.model);
+
+    // A restarted incarnation whose profile now resolves a DIFFERENT model:
+    // the container still running the tick was booted on the first one, and
+    // the handle must state what the CONTAINER is on — never echo the new
+    // request back as the answer, which is how a record came to name a model
+    // nobody observed and the caller's model checks could never fire here.
+    const second = asHandle(
+      await executor.start({ ...SPEC, model: "workers-ai/@cf/example/some-other-model" }),
+    );
+    expect(second.handle.detail).toContain("adopted");
+    expect(second.handle.model).toBe(firstSpec.model);
+    expect(second.handle.model).not.toBe("workers-ai/@cf/example/some-other-model");
+    // And nothing re-recorded: an adoption boots nothing, so the boot that
+    // started the running container stays the one on record.
+    expect(boots.recorded).toHaveLength(1);
+  });
+
+  it("refuses an adoption whose running container has no recorded boot, rather than guessing", async () => {
+    const { boots, executor } = makeExecutor();
+    await executor.start(SPEC);
+
+    // A container booted by a deployment that did not record boots: the work
+    // process is live, and nobody can state which model it is on. Adopting it
+    // would put a guess in the one field every trace reads, so the start is
+    // refused for a person to settle — never a lie in a handle.
+    boots.forget();
+    await expect(executor.start(SPEC)).rejects.toBeInstanceOf(AdoptionModelUnknownError);
+    await expect(executor.start(SPEC)).rejects.toThrow(/cannot be stated/);
+  });
+
   it("reports a failed green-start probe as not launched, never as absent", async () => {
     const { binding, collector, refs } = makeExecutor();
     // A container whose probe never answers: nothing prints the marker and
@@ -362,6 +460,7 @@ describe("start", () => {
       collector,
       refs,
       boot: async (spec) => bootInput(spec),
+      boots: new FakeBootRecord(),
       spawn: { probe_timeout_ms: 10, probe_poll_ms: 1, sleep: async () => {} },
     });
 
@@ -578,6 +677,7 @@ describe("reportFromWorker", () => {
     status_detail: "in",
     status_line: "STATUS: DONE",
     boundary_files: [],
+    report_only: false,
     detail: "ready",
   };
 
@@ -607,6 +707,100 @@ describe("reportFromWorker", () => {
     const report = reportFromWorker({ ...base, verdict: "unknown", commits: 0 });
     expect(report.outcome).toBe("failed");
     expect(report.detail).toContain("could not be read");
+  });
+});
+
+// --------------------------------------------- the door's collect, tick 94u ---
+
+// The door's collect must refuse a worker whose only commit is its report
+// with the same verdict the Go executor's collect refuses it with (tick dyo,
+// finding 73ba193d): the container's entrypoint commits the report itself
+// (image/worker.sh), so "one commit, and it is the report" is the did-nothing
+// shape on this substrate — and until tick 94u this was the one collect path
+// that could still read it as done.
+//
+// Driven through the REAL collector over a stubbed GitHub — the whole door
+// path (write-ref push, collect, the AttemptReport mapping), not a fake that
+// already agrees — so the refusal is proven on the wiring a deployment runs.
+describe("the door's collect refuses a report-only worker (tick 94u)", () => {
+  const API = "https://github.example.test";
+  const PROJECT = "acme/project";
+  const saved: Record<string, unknown> = {};
+
+  /** Sets a deployment variable for this describe, restored after each test. */
+  function set(name: string, value: unknown): void {
+    if (!(name in saved)) saved[name] = (env as unknown as Record<string, unknown>)[name];
+    (env as unknown as Record<string, unknown>)[name] = value;
+  }
+  afterEach(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete (env as unknown as Record<string, unknown>)[name];
+      else (env as unknown as Record<string, unknown>)[name] = value;
+      delete saved[name];
+    }
+  });
+
+  /** UTF-8-safe base64, matching how GitHub actually encodes file contents. */
+  function b64(text: string): string {
+    const bytes = new TextEncoder().encode(text);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
+  /** Stubs GitHub's compare and contents endpoints with one report-only branch. */
+  function stubReportOnlyGithub(): () => void {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!url.startsWith(API)) return original(input as RequestInfo, init);
+      // One commit beyond the base, and its only change is the report the
+      // container's own entrypoint committed — the shape a worker that did
+      // nothing leaves on this substrate.
+      if (url.includes("/compare/")) {
+        return Response.json(
+          { ahead_by: 1, files: [{ filename: "RESULT-k4s.md" }] },
+          { status: 200 },
+        );
+      }
+      if (url.includes("/contents/")) {
+        return Response.json({ content: b64("STATUS: DONE"), encoding: "base64" }, { status: 200 });
+      }
+      return new Response("unexpected request in test", { status: 500 });
+    }) as typeof fetch;
+    return () => void (globalThis.fetch = original);
+  }
+
+  it("refuses it — never done — with the sentence that names the one commit", async () => {
+    set("GITHUB_API_BASE_URL", API);
+    set("GITHUB_TOKEN", "ghp_repo_scoped");
+    const restore = stubReportOnlyGithub();
+    try {
+      const deps: SandboxExecutorDeps = {
+        binding: new FakeSandboxes(),
+        // The REAL collector, reading a stubbed GitHub: the refusal has to
+        // come from the collect the deployment wires, not from a fake.
+        collector: githubWorkerCollector(env, PROJECT),
+        refs: new FakeRefWriter(),
+        boot: async (spec) => bootInput(spec),
+        boots: new FakeBootRecord(),
+        spawn: { sleep: async () => {} },
+      };
+      const executor = sandboxExecutor(deps);
+      const handle = await executor.start(SPEC);
+      const report = await executor.collect(handle);
+      // The refusal: a worker whose only commit is its report is failed, the
+      // same outcome the Go executor settles from its own no-commits.
+      expect(report.outcome).toBe("failed");
+      // And the sentence names the shape rather than collapsing to the
+      // worker's own claim — "no-commits: STATUS: DONE" is the collapsed
+      // message A9 refuses, and it is what the status line would have shown.
+      expect(report.detail).toContain("no-commits");
+      expect(report.detail).toContain("RESULT-k4s.md");
+      expect(report.detail).toContain("not a deliverable");
+    } finally {
+      restore();
+    }
   });
 });
 

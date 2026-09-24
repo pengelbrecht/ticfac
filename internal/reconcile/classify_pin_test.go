@@ -26,14 +26,12 @@ import (
 //
 // So the record is pinned exactly as the real exchange writes it — the real
 // reconciler over the real store, on a real repository — at
-// cloudflare/test/fixtures/classify-tick-decision.json, where BOTH suites
-// read it:
-//
-//   - cloudflare/test/epic-reconciler.test.ts parses it through the
-//     TypeScript store — the read that used to throw;
-//   - internal/runstate's reader test decodes and validates it through the
-//     same decoder this store reads a run with — so the pin cannot drift
-//     into a record the Go reader refuses while the TypeScript one accepts.
+// cloudflare/test/fixtures/classify-tick-decision.json. The fixture kept
+// the location it was born in (tick kl9) even though the TypeScript store
+// that was its second reader went with the Workflow reconciler (tick mn7
+// deleted run-state-store.ts and its suite): internal/runstate's reader test
+// still decodes and validates it through the same decoder this store reads
+// a run with, so the pin cannot drift into a record the Go reader refuses.
 //
 // Exactly one value in the record cannot be byte-stable across runs: the
 // provenance's source_sha, a fresh commit every fixture mints. It is

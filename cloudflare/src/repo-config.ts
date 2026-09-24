@@ -242,34 +242,6 @@ export type DeclaredMaxParallel = {
 };
 
 /**
- * Read the wave width a repository declares at this commit. Never throws.
- *
- * Best effort, mirroring `readDeclaredSandboxImage`: this module's parser is a
- * second reader of a format Go owns, so a file it cannot read must not fail a
- * run on its own authority — it leaves the deployment's own ceiling standing,
- * which `resolveDispatchWidth` in src/run-workflow.ts treats as "no configured
- * width" rather than as a refusal.
- */
-export async function readDeclaredMaxParallel(
-  env: Env,
-  project: string,
-  ref: string,
-): Promise<DeclaredMaxParallel> {
-  try {
-    const source = await repoConfig(env).read(project, ref);
-    if (source === null) return { max_parallel: null, unread: null };
-    return { max_parallel: declaredMaxParallel(source), unread: null };
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    const kind = error instanceof TomlParseError ? "could not be parsed here" : "could not be read";
-    return {
-      max_parallel: null,
-      unread: `${RUNNERS_CONFIG_PATH} of ${project} at ${ref} ${kind} (${detail})`,
-    };
-  }
-}
-
-/**
  * Read the image the repository declares at this commit. Never throws.
  *
  * An unreadable answer is carried, not swallowed: it is recorded in the run's

@@ -848,137 +848,31 @@ func TestCloudRunRefusesANonPositiveBudgetBeforeSubmitting(t *testing.T) {
 	}
 }
 
-// --tick-ids is the CLI's route to the per-tick-container path (tick pjq).
-func TestCloudRunTickIDsCarryTheWaveIntoTheSubmission(t *testing.T) {
+// --tick-ids is gone (tick l6t): the Run Workflow no longer fans ticks out
+// to worker containers itself, so the flag that requested a wave must be a
+// plain unknown-flag refusal — not a silent no-op, and not a submission the
+// factory would have to interpret.
+func TestCloudRunRefusesTheDeletedTickIDsFlag(t *testing.T) {
 	stubCloudTk(t)
-	setupCloudWaveRepo(t, "aaa", "bbb")
-	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
-		if request.Method != http.MethodPost || request.Path != "/api/runs" {
-			return http.StatusNotFound, map[string]any{"error": "not_found"}
-		}
-		return http.StatusCreated, map[string]any{
-			"run": map[string]any{"run_id": "run_wave", "state": "starting"},
-		}
-	})
-	configureCloudFactory(t, endpoint)
-
-	code, out, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1", "--tick-ids", "aaa,bbb"})
-	if code != exitSuccess {
-		t.Fatalf("cloud run --tick-ids: %s\n%s", stderr.String(), out.String())
-	}
-	if len(*requests) != 1 {
-		t.Fatalf("factory received %d request(s), want one", len(*requests))
-	}
-	body := (*requests)[0].Body
-	wave, ok := body["tick_ids"].([]any)
-	if !ok {
-		t.Fatalf("submission tick_ids = %#v, want the wave", body["tick_ids"])
-	}
-	if len(wave) != 2 || wave[0] != "aaa" || wave[1] != "bbb" {
-		t.Errorf("submission tick_ids = %#v, want [aaa bbb]", wave)
-	}
-	if got := body["queue"]; got != false {
-		t.Errorf("submission queue = %#v, want false", got)
-	}
-	if output := out.String(); !strings.Contains(output, "run_wave") ||
-		!strings.Contains(output, "aaa") || !strings.Contains(output, "bbb") {
-		t.Errorf("output does not report the dispatched wave:\n%s", output)
-	}
-}
-
-// A plain `ticfac cloud run` must stay a Phase 1 submission: no empty wave
-// field that the factory would have to interpret.
-func TestCloudRunWithoutTickIDsSubmitsNoWave(t *testing.T) {
-	stubCloudTk(t)
-	setupCloudRepo(t, true)
-	endpoint, requests := newCloudFactory(t, func(cloudFactoryRequest) (int, any) {
-		return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": "run_plain"}}
-	})
-	configureCloudFactory(t, endpoint)
-
-	code, _, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1"})
-	if code != exitSuccess {
-		t.Fatalf("cloud run: %s", stderr.String())
-	}
-	if _, ok := (*requests)[0].Body["tick_ids"]; ok {
-		t.Errorf("submission carries tick_ids with no flag set: %#v", (*requests)[0].Body["tick_ids"])
-	}
-}
-
-// The factory refuses queue+tick_ids with a 400 because the RunRoom's queued
-// submission has no tick_ids column and would lose the wave on ignition. The
-// CLI says so itself, before a push and before the network, rather than
-// letting the operator meet it as an HTTP error.
-func TestCloudRunRefusesTickIDsWithQueue(t *testing.T) {
-	stubCloudTk(t)
-	repo, _, sha := setupCloudWaveRepo(t, "aaa")
+	setupCloudWaveRepo(t, "aaa")
 	var calls int
 	endpoint, _ := newCloudFactory(t, func(cloudFactoryRequest) (int, any) {
 		calls++
 		return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": "run_should_not_start"}}
 	})
 	configureCloudFactory(t, endpoint)
-	execTestCmd(t, repo, "git", "commit", "--allow-empty", "-m", "unpushed change")
 
-	code, _, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1", "--tick-ids", "aaa", "--queue"})
+	code, _, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1", "--tick-ids", "aaa"})
 	if code == exitSuccess {
-		t.Fatal("cloud run accepted --tick-ids together with --queue")
+		t.Fatal("cloud run accepted --tick-ids, a flag the wave path it named is deleted")
 	}
 	if code != exitUsage {
-		t.Errorf("exit code = %d, want %d (usage)", code, exitUsage)
+		t.Errorf("exit code = %d, want %d (an unknown flag is a usage error)", code, exitUsage)
 	}
-	for _, want := range []string{"--tick-ids", "--queue"} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Errorf("refusal %q does not name %s", stderr.String(), want)
-		}
+	if !strings.Contains(stderr.String(), "tick-ids") {
+		t.Errorf("refusal %q does not name the flag the operator typed", stderr.String())
 	}
 	if calls != 0 {
-		t.Fatalf("factory received %d submission(s) for a combination it refuses", calls)
-	}
-	remote := strings.Fields(string(execTestOutput(t, repo, "git", "ls-remote", "origin", "refs/heads/main")))[0]
-	if remote != sha {
-		t.Errorf("origin/main = %s, want %s: the refusal cost a push", remote, sha)
-	}
-}
-
-// The same wave checks `tk cloud spawn` makes, for the same reason: a worker
-// container clones at the epic's base, so a tick from another epic would be
-// implemented against a base its own epic never chose. Refused locally, before
-// anything is pushed.
-func TestCloudRunRefusesAnUnusableWaveBeforeSubmitting(t *testing.T) {
-	stubCloudTk(t)
-	repo, _, _ := setupCloudWaveRepo(t, "aaa")
-	writeCloudEpic(t, repo, "epic2")
-	writeCloudTick(t, repo, "ccc", "epic2")
-	execTestCmd(t, repo, "git", "add", "-A")
-	execTestCmd(t, repo, "git", "commit", "-m", "second epic")
-	execTestCmd(t, repo, "git", "push", "origin", "main")
-
-	var calls int
-	endpoint, _ := newCloudFactory(t, func(cloudFactoryRequest) (int, any) {
-		calls++
-		return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": "run_should_not_start"}}
-	})
-	configureCloudFactory(t, endpoint)
-
-	for name, tc := range map[string]struct {
-		args []string
-		want string
-	}{
-		"duplicate":    {[]string{"cloud", "run", "epic1", "--tick-ids", "aaa,aaa"}, "more than once"},
-		"unknown tick": {[]string{"cloud", "run", "epic1", "--tick-ids", "zzz"}, "zzz"},
-		"another epic": {[]string{"cloud", "run", "epic1", "--tick-ids", "ccc"}, "epic1"},
-		"blank only":   {[]string{"cloud", "run", "epic1", "--tick-ids", " "}, "--tick-ids"},
-	} {
-		code, _, stderr := runCloudArgs(t, tc.args)
-		if code == exitSuccess {
-			t.Fatalf("%s: %v was accepted, want a refusal", name, tc.args)
-		}
-		if !strings.Contains(stderr.String(), tc.want) {
-			t.Errorf("%s: refusal %q does not mention %q", name, stderr.String(), tc.want)
-		}
-	}
-	if calls != 0 {
-		t.Fatalf("factory received %d submission(s) for an unusable wave", calls)
+		t.Fatalf("factory received %d submission(s) for a flag it no longer accepts", calls)
 	}
 }

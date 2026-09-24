@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 12,
+  "tick_id": "a08",
+  "dispatched_at": "2026-09-24T05:27:36Z",
+  "job_handle": {
+    "attempt": 12,
+    "base_sha": "9d0bc8f0b85cc84061f0acf85b826f57aa29ad30",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-yoh/tick-a08/attempt-12",
+    "model": "opus",
+    "prompt_digest": "sha256:3d229556d593db5060d6a8d6bfb1599b620b3e49921ea7abfa6616f4761279b1",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "a08",
+    "tier": "frontier",
+    "touch": null,
+    "try": 3,
+    "write_ref": "refs/heads/ticfac/run-epic-yoh/tick-a08/attempt-12"
+  },
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "a08",
+    "attempt": 12,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "9d0bc8f0b85cc84061f0acf85b826f57aa29ad30",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "frontier",
+    "profile_digest": "sha256:93e9c51f4dcb05de53a19089f3d50e5905076e5bf893230eafc5ac2238a32e05",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

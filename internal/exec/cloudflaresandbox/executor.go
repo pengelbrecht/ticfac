@@ -8,24 +8,32 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
-// The executor: start and inspect over the door, and the three operations the
-// door does not carry yet, refused.
+// The executor: start and inspect over the door, collect from git (the
+// decided placement, tick xev), and the two operations this side of the
+// boundary has nothing to act on, refused typed.
 //
 // Nothing here crosses the protocol seam that is not already crossed by the
 // records internal/exec/subprocess owns: the factory's base URL, the run's
 // own gateway token, the epic, the base ref and the tick's title are host
 // configuration (Options), because the protocol records are closed and a
-// field invented here would be one the reconciler ignores. The REPOSITORY is
-// not among them, deliberately: this executor creates no worktree and runs
-// no runner in this container — the sandbox container the factory boots is
-// the worker's whole environment, and it clones from the write ref's
-// upstream itself. An Options with no Repo is not a missing half; it is the
-// substrate's own shape.
+// field invented here would be one the reconciler ignores. The model (tick
+// a08) and the harness and rendered role prompt (tick 9iz) ride Options for
+// the same reason with one difference: they are the dispatch PROFILE's own
+// resolution, carried to the door because the container is the only thing
+// that can act on them. The REPOSITORY
+// enters the same way, at collect: this executor creates no worktree and
+// runs no runner in this container — the sandbox container the factory
+// boots is the worker's whole environment, and it clones from the write
+// ref's upstream itself. An Options with no Repo is refused by collect
+// rather than papered over; Start and Inspect need none, and a settle leg
+// that only ever asks Cancel and Dispose builds the executor without one.
 
 // Options configure the host.
 type Options struct {
@@ -53,6 +61,50 @@ type Options struct {
 
 	// Title is the tick's title, carried for the same re-derivation.
 	Title string
+
+	// Model is the model the dispatch's profile resolved (tick a08). The door
+	// boots the worker container on exactly this and names it back in the
+	// handle, and Start refuses a handle that names another — so the model a
+	// run records for the attempt is the model that ran, never the factory's
+	// own default agreeing with it by luck. Required: the door refuses a start
+	// without one.
+	Model string
+
+	// Harness is the harness the dispatch's profile resolved — the profile's
+	// runner, the kind the sandbox image runs a harness for (tick 9iz). The
+	// door binds the worker container to exactly this (`TICKS_HARNESS`,
+	// outranking RUN_WORKER_HARNESS) and names it back in the handle, and
+	// Start refuses a handle that names another — for the model's reason
+	// verbatim: a start with no harness would boot on the factory's own
+	// standing choice, and the caller's record would name a harness that
+	// never ran. Required: the door refuses a start without one.
+	Harness string
+
+	// Prompt is the RENDERED role prompt the dispatch's profile resolved (tick
+	// 9iz): the profile's own prompt text, not a filename. The container's
+	// entrypoint renders its worker prompt from the checkout's tracker and
+	// never sees the factory's otherwise, so the door delivers this into the
+	// container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness
+	// and the model the same boot carries) and the attempt record states it —
+	// the prompt whose digest the reconciler's marker records is the prompt
+	// that reached the worker. Required: the door refuses a start without one.
+	Prompt string
+
+	// Repo is the ORCHESTRATOR'S OWN CHECKOUT of the project the worker
+	// pushed to — the clone the reconciler runs in. It is not among the
+	// fields Start needs (that dispatch creates no worktree and runs no
+	// runner here), but it is the one thing collect reads the durable layer
+	// through: the landing branch the container pushed is fetched into THIS
+	// checkout, so the head a collect answers with is a commit the
+	// reconciler's own integrate can resolve. The decision that collect is
+	// the Go side's, from git, is recorded beside the door's contract
+	// (sandbox-dispatch.ts, tick xev).
+	Repo string
+
+	// Remote is the name (or URL) of the remote the durable layer lives on
+	// — the one the worker container pushed its landing branch to and the
+	// one this checkout fetches it from. Defaults to "origin".
+	Remote string
 
 	// Attempt is the attempt number this start is for. It comes from the
 	// caller because job_id is OPAQUE to an executor — the contract says the
@@ -84,26 +136,33 @@ type Options struct {
 }
 
 // The reasons this executor refuses that the closed vocabulary does not name.
-// The door carries no cancel, no collect and no dispose route yet, and a
-// refusal whose reason a caller has to recover by matching on prose is the
-// failure Appendix A #9 is about — so each absent operation has its own
-// value, and the reconciler records it in the feed as what it is: a decision
-// the seam still owes, not a verdict on the work.
+// A refusal whose reason a caller has to recover by matching on prose is the
+// failure Appendix A #9 is about — so each operation this executor declines
+// has its own value, and the reconciler records it in the feed as what it
+// is: a decision about where the operation LIVES (tick xev, recorded beside
+// the door's contract in sandbox-dispatch.ts), not a verdict on the work.
 const (
-	// RefusedNoCancelDoor is the refusal Cancel answers: the door's own
-	// header names cancel as a salvage door plus a teardown the Worker-side
-	// executor already owns, and where it crosses this boundary is an open
-	// decision this executor was told not to make alone.
-	RefusedNoCancelDoor = "no_cancel_door"
-	// RefusedNoCollectDoor is the refusal CollectDetail answers: collect
-	// reads the durable layer (git), which the orchestrator's own container
-	// holds a clone of, and where that read lives for this executor is the
-	// same open decision.
-	RefusedNoCollectDoor = "no_collect_door"
-	// RefusedNoDisposeDoor is the refusal Dispose answers, for the same
-	// reason: there is no local worktree to remove and no door route to
-	// tear the container down through.
-	RefusedNoDisposeDoor = "no_dispose_door"
+	// RefusedCancelOwnedByFactory is the refusal Cancel answers. Cancel's
+	// contract on this seam is revoke-then-signal: revoke the attempt's
+	// credential, then stop its process. Neither half exists on this side of
+	// the boundary. The credential a sandbox attempt holds is the RUN'S own
+	// gateway token (D17) — one credential shared by every attempt of the
+	// run, whose revocation is the run-level kill switch the door already
+	// honours (403 run_token_revoked), not a per-attempt dispatch to revoke.
+	// And stopping one container is the factory's own teardown — the
+	// salvage door and teardownWorker the Worker-side executor owns, and
+	// the queue-expiry sweep behind them — which no per-tick route crosses.
+	// The reconciler's teardown records the refusal and continues; nothing
+	// is half-cancelled and nothing pretends to have been stopped.
+	RefusedCancelOwnedByFactory = "cancel_owned_by_factory"
+	// RefusedNothingLocalToDispose is the refusal Dispose answers. This
+	// executor owns no worktree, no local branch and no credential to
+	// retire: the container belongs to the factory that booted it, and the
+	// work's durability is the landing branch on the remote, which the
+	// close retires — so there is nothing on this side of the HTTP
+	// boundary to dispose of, and a dispose that answered "done" would be
+	// claiming a teardown it never performed.
+	RefusedNothingLocalToDispose = "nothing_local_to_dispose"
 )
 
 // Executor is one host, pointed at one factory door.
@@ -240,6 +299,9 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		BaseRef:  e.opts.BaseRef,
 		Title:    e.opts.Title,
 		BaseSHA:  spec.Source.BaseSHA,
+		Model:    e.opts.Model,
+		Harness:  e.opts.Harness,
+		Prompt:   e.opts.Prompt,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -311,6 +373,38 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	if err != nil {
 		return nil, err
 	}
+	// nwn's rule, applied to the model the door reports the container is ON —
+	// which, since the door records its boots and an adoption reads the record
+	// (tick dyo), is the RUNNING container's model for an adopted attempt too,
+	// not an echo of what this dispatch asked for. The rule is the profile
+	// package's one copy (profile.CloudRule): the cloud substrate runs Workers
+	// AI models only, and an adopted container — one a previous incarnation
+	// booted, before the rule or against it — is not exempt from the check a
+	// fresh boot answers to.
+	if !profile.IsWorkersAIModel(payload.Model) {
+		return nil, fmt.Errorf("the door reports attempt %d of %s running on model %q, which is not "+
+			"a Workers AI model (%s): the cloud substrate runs Workers AI models only, and a start that "+
+			"recorded it would name a model this run cannot have dispatched",
+			attempt, spec.JobID, payload.Model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
+	}
+	// The door names the model it booted the worker on. Anything but the one
+	// asked for — an adoption of a container some other start booted, a door
+	// that fell back to its own default — is refused before a record is
+	// written, because the record's model is what every trace reads.
+	if payload.Model != req.Model {
+		return nil, fmt.Errorf("the door booted attempt %d of %s on model %q, not the %q its dispatch resolved: "+
+			"a record naming the requested model over a worker running another is a provenance that lies",
+			attempt, spec.JobID, payload.Model, req.Model)
+	}
+	// The door names the harness it bound the worker to, for the model's
+	// reason (tick 9iz): anything but the one asked for — an adoption of a
+	// container some other start booted, a door that fell back to its own
+	// standing choice — is refused before a record is written.
+	if payload.Harness != req.Harness {
+		return nil, fmt.Errorf("the door booted attempt %d of %s on harness %q, not the %q its dispatch resolved: "+
+			"a record naming the requested harness over a worker bound to another is a provenance that lies",
+			attempt, spec.JobID, payload.Harness, req.Harness)
+	}
 	record := &attemptRecord{
 		SchemaVersion: stateSchemaVersion,
 		JobID:         handle.JobID,
@@ -330,6 +424,9 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Project:       payload.Project,
 		BaseRef:       payload.BaseRef,
 		Title:         payload.Title,
+		Model:         payload.Model,
+		Harness:       payload.Harness,
+		Prompt:        req.Prompt,
 		Adopted:       adopted,
 		Spec:          spec,
 		IssuedAt:      handle.IssuedAt,
@@ -397,58 +494,36 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 	return status, nil
 }
 
-// ------------------------------------------- the operations the door lacks ---
+// ------------------------------------- the operations decided elsewhere ---
 
-// Cancel is refused: the door carries no cancel route yet. The route's own
-// header names cancel as a salvage door plus a teardown the Worker-side
-// executor already owns, and where that crosses this boundary is an open
-// decision (the finding triaged against tick 8ty) this executor was told not
-// to make for the whole seam — so it fails CLOSED, naming the decision,
-// rather than half-implementing a revoke-then-stop it cannot acknowledge.
+// Cancel is refused, by decision (tick xev): the credential a sandbox attempt
+// holds is the RUN'S own gateway token (D17) — shared by every attempt of
+// the run, and revoked only as the run-level kill switch the door already
+// honours — and stopping one container is the factory's own teardown, which
+// no per-tick route crosses. Failing closed with a typed reason, because a
+// stop nothing acknowledges is a stop the records say happened and the
+// container never saw.
 func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error) {
 	if _, err := local(h); err != nil {
 		return nil, err
 	}
-	return nil, refuse(RefusedNoCancelDoor,
-		"the sandbox dispatch door carries no cancel route yet (where cancel and collect live for this "+
-			"executor is an open decision against tick 8ty): refusing rather than half-cancelling, because a "+
-			"stop nothing acknowledges is a stop the records say happened and the container never saw")
+	return nil, refuse(RefusedCancelOwnedByFactory,
+		"cancel is the factory's, not this executor's (decided, tick xev): the credential a sandbox attempt holds is "+
+			"the run's own gateway token, whose revocation is the run-level kill switch the door already honours, and "+
+			"the container's teardown belongs to the factory that booted it — so there is no per-attempt dispatch to "+
+			"revoke and no process on this side of the boundary to signal")
 }
 
-// CollectDetail is refused for the same reason: collect reads the durable
-// layer — git, which the orchestrator's own container holds a clone of — and
-// where that read lives for this executor is the same open decision. A
-// collect this executor invented would be a second mechanism beside the one
-// the door's own header says is the only place the contract may grow.
-func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collection, error) {
-	if _, err := local(h); err != nil {
-		return nil, err
-	}
-	return nil, refuse(RefusedNoCollectDoor,
-		"the cloudflare-sandbox executor does not collect yet (where collect and cancel live for this executor "+
-			"is an open decision against tick 8ty): the completion contract is the branch and the report in git, "+
-			"and the read that settles this attempt has to land in one decided place, not a guessed one")
-}
-
-// Collect returns the protocol record; it is refused for CollectDetail's
-// reason.
-func (e *Executor) Collect(h *subprocess.JobHandle) (*subprocess.JobResult, error) {
-	collected, err := e.CollectDetail(h)
-	if err != nil {
-		return nil, err
-	}
-	return collected.Result, nil
-}
-
-// Dispose is refused: there is no local worktree to remove, no local branch
-// this executor owns, and no door route to tear the container down through.
-// The container's lifetime belongs to the factory that booted it.
+// Dispose is refused, by the same decision: this executor owns no worktree,
+// no local branch and no credential to retire, and the container belongs to
+// the factory that booted it. The work's durability is the landing branch on
+// the remote, which the close retires.
 func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptions) error {
 	if _, err := local(h); err != nil {
 		return err
 	}
-	return refuse(RefusedNoDisposeDoor,
-		"the sandbox dispatch door carries no dispose route yet (where collect and cancel live for this "+
-			"executor is an open decision against tick 8ty): this executor owns no worktree and no branch to "+
-			"remove, and the container belongs to the factory that booted it")
+	return refuse(RefusedNothingLocalToDispose,
+		"there is nothing on this side of the boundary to dispose of (decided, tick xev): this executor owns no "+
+			"worktree, no local branch and no credential, the container belongs to the factory that booted it, and "+
+			"the branch the work landed on is retired by the close")
 }

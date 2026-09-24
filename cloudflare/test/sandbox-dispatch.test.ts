@@ -19,6 +19,7 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
+import { readWorkerLogTail } from "../src/artifacts";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken, revokeRunTokens } from "../src/gateway";
 import { roomFor } from "../src/runs";
@@ -175,6 +176,38 @@ const jobStatusSchema = parseSchema(
   "$",
 );
 
+/**
+ * The model a dispatch names (tick a08): pi's spelling of GLM 5.3 Flash, as a
+ * cloud profile resolves it — deliberately NOT the deployment's
+ * `RUN_WORKER_MODEL` nor the built-in default, so a container booted on either
+ * of those is told apart from one booted on what the request carried.
+ */
+const REQUESTED_MODEL = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash";
+
+/**
+ * The harness a dispatch names (tick 9iz): the profile's runner — deliberately
+ * spelled the same as the built-in default so the test that proves the request
+ * outranks the deployment sets `RUN_WORKER_HARNESS` to something else, and a
+ * container booted on the deployment's standing choice is told apart from one
+ * booted on what the request carried.
+ */
+const REQUESTED_HARNESS = "pi";
+
+/**
+ * The rendered role prompt a dispatch carries (tick 9iz): the profile's own
+ * prompt text, multi-line prose with the report contract in it — deliberately
+ * NOT anything the container could derive for itself, so a boot that dropped
+ * it is a boot the assertion tells apart from one that carried it.
+ */
+const ROLE_PROMPT = [
+  "# implement-tick",
+  "",
+  "You are implementing ONE unit of work from the ticks tracker, headless, in",
+  "an isolated git worktree that is yours alone. Nobody will answer a question.",
+  "",
+  "Work test-first, and end your report with a STATUS line.",
+].join("\n");
+
 /** The start body every test fills around, in the door's documented shape. */
 function startBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -186,6 +219,9 @@ function startBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     base_ref: `refs/heads/epic/${EPIC}`,
     title: "Expose per-tick sandbox dispatch over HTTP from the Worker",
     base_sha: BASE_SHA,
+    model: REQUESTED_MODEL,
+    harness: REQUESTED_HARNESS,
+    prompt: ROLE_PROMPT,
     ...overrides,
   };
 }
@@ -387,6 +423,176 @@ describe("start", () => {
     // NOTHING WAITED: the handle came back while the work process is still
     // running — the door's answer is a handle, not the attempt's fate.
     expect(work?.state).toBe("running");
+  });
+
+  it("boots the worker on the model the request carries, and the handle names it (tick a08)", async () => {
+    // The deployment's standing choice says something else: the request's
+    // model is a choice about THIS attempt, and it outranks a standing one.
+    set("RUN_WORKER_MODEL", "workers-ai/@cf/zai-org/some-other-model");
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle; adopted: boolean };
+
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+    // The handle states the model the container was booted with, so the
+    // record a caller keeps names the model that actually ran.
+    expect(body.handle.handle.model).toBe(REQUESTED_MODEL);
+    expect(body.handle.handle.model).toBe(work?.env.TICKS_MODEL);
+
+    // An adoption names it too — the same attempt, the same model.
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(200);
+    const adopted = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(adopted.adopted).toBe(true);
+    expect(adopted.handle.handle.model).toBe(REQUESTED_MODEL);
+  });
+
+  it("an adoption answers with the RUNNING container's model, never the new request's (tick dyo)", async () => {
+    // The first dispatch boots on REQUESTED_MODEL and the door records that
+    // boot before the container is addressed.
+    const first = await postStart(runToken, startBody());
+    expect(first.status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+
+    // A restarted incarnation whose profile now resolves a DIFFERENT model
+    // for the same attempt: the container still running the tick is on the
+    // model ITS dispatch booted it on, and the door states THAT — never the
+    // new request echoed back as the answer, which is how the caller's model
+    // check could not fire for an adopted attempt at all.
+    const again = await postStart(
+      runToken,
+      startBody({ model: "workers-ai/@cf/example/another-model" }),
+    );
+    expect(again.status).toBe(200);
+    const adopted = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(adopted.adopted).toBe(true);
+    expect(adopted.handle.handle.model).toBe(REQUESTED_MODEL);
+    expect(adopted.handle.handle.model).toBe(work?.env.TICKS_MODEL);
+    expect(adopted.handle.handle.model).not.toBe("workers-ai/@cf/example/another-model");
+
+    // And the container was not re-booted on the new model either: an
+    // adoption boots nothing, so the running process keeps its own TICKS_MODEL.
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+  });
+
+  it("refuses an adoption whose running container has no recorded boot — never a guess in a handle", async () => {
+    const first = await postStart(runToken, startBody());
+    expect(first.status).toBe(201);
+
+    // The record of the boot is gone — a container an older deployment
+    // booted, from this door's point of view. The work process is live, but
+    // nobody can state which model it is on, so the door refuses the start
+    // rather than naming the request's model over a container it did not
+    // boot on it: a hold the caller surfaces, never a lie in the record.
+    await env.DB.prepare(
+      "DELETE FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = 1",
+    )
+      .bind(RUN_ID, TICK)
+      .run();
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(409);
+    const denial = await denialOf(again);
+    expect(denial.error).toBe("adoption_model_unknown");
+    expect(denial.detail).toContain("cannot be stated");
+  });
+
+  it("refuses a start that names no model rather than booting the factory's own", async () => {
+    // A request with no model would boot on RUN_WORKER_MODEL or the default,
+    // and the caller's record would name a model that never ran.
+    const { model: _dropped, ...withoutModel } = startBody();
+    for (const body of [
+      withoutModel,
+      startBody({ model: "" }),
+      startBody({ model: "has space" }),
+    ]) {
+      const response = await postStart(runToken, body);
+      expect(response.status, JSON.stringify(body.model)).toBe(400);
+      const denial = await denialOf(response);
+      expect(denial.error).toBe("invalid_request");
+      expect(denial.detail).toContain("model");
+    }
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("boots the worker on the harness the request carries, and the handle names it (tick 9iz)", async () => {
+    // The deployment's standing choice says omp: the request's harness is a
+    // choice about THIS attempt, and it outranks a standing one — the same
+    // ladder the model rides, applied to the harness the worker binds.
+    set("RUN_WORKER_HARNESS", "omp");
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle; adopted: boolean };
+
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_HARNESS).toBe(REQUESTED_HARNESS);
+    // The handle states the harness the container was booted with, so the
+    // record a caller keeps names the harness that actually ran — never the
+    // deployment's own agreeing with it by luck.
+    expect(body.handle.handle.harness).toBe(REQUESTED_HARNESS);
+    expect(body.handle.handle.harness).toBe(work?.env.TICKS_HARNESS);
+
+    // An adoption names it too — the same attempt, the same harness.
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(200);
+    const adopted = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(adopted.adopted).toBe(true);
+    expect(adopted.handle.handle.harness).toBe(REQUESTED_HARNESS);
+  });
+
+  it("delivers the rendered prompt to the worker's boot environment (tick 9iz)", async () => {
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+
+    const sandbox = binding.named(attemptSandboxName(RUN_ID, TICK, 1));
+    // The work process is the one the harness runs in: the prompt the
+    // dispatch carried is in ITS environment, exactly as given — a door
+    // that dropped it would leave the worker running a prompt nobody chose.
+    const work = sandbox.workProcess();
+    expect(work?.env.TICKS_ROLE_PROMPT).toBe(ROLE_PROMPT);
+    // And the probe answers in the same environment: a probe run in a
+    // different one proves something about a container nobody will use.
+    const probe = sandbox.processes.find((p) => p.command.includes("--probe"));
+    expect(probe?.env.TICKS_ROLE_PROMPT).toBe(ROLE_PROMPT);
+  });
+
+  it("refuses a start that names no harness or no prompt rather than booting unbound", async () => {
+    // A request with no harness would boot on RUN_WORKER_HARNESS or the
+    // default, and the caller's record would name a harness that never ran; a
+    // request with no prompt would boot a worker on a prompt nobody chose.
+    const { harness: _droppedHarness, prompt: _droppedPrompt, ...withoutEither } = startBody();
+    for (const body of [
+      withoutEither,
+      startBody({ harness: "" }),
+      startBody({ harness: "has space" }),
+      startBody({ prompt: "" }),
+      startBody({ prompt: "a control\u0007 character" }),
+      startBody({ prompt: "a".repeat(65537) }),
+    ]) {
+      const response = await postStart(runToken, body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      const denial = await denialOf(response);
+      expect(denial.error).toBe("invalid_request");
+      expect(
+        denial.detail.includes("harness") || denial.detail.includes("prompt"),
+        `the refusal must name the missing field: ${denial.detail}`,
+      ).toBe(true);
+    }
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("streams the worker's output to the run's logs as the container produces it (tick 9iz)", async () => {
+    // The wave path wired a workerLogSink into every spawn; the door's path
+    // is the only dispatch path now, so its spawns stream the same way: the
+    // probe's marker and the work process's first output land in the run's
+    // own R2 stream, where the log read routes serve them.
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+
+    const tail = await readWorkerLogTail(env.ARTIFACTS, project, RUN_ID, TICK);
+    expect(tail.text).toContain(WORKER_PROBE_MARKER);
+    expect(tail.text).toContain("implementing the tick");
   });
 
   it("a second call with the same identity returns the SAME running attempt, not a rival", async () => {

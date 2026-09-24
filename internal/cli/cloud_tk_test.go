@@ -111,15 +111,10 @@ func TestCloudTrackerReadsTicksOwnedByAnyone(t *testing.T) {
 	}
 }
 
-// TestCloudRunExitCodesFromTheTkRead pins the mapping the tk read hands its
-// users (ported from ticks' spawn test, on `cloud run --tick-ids` — the
-// command here that reads the tracker before anything is pushed):
-//
-//	refused    tk ran and said the tick is not in this checkout  -> exit 4
-//	answered   tk returned a tick, and it is not an epic         -> exit 1
-//
-// Collapsing an environment fault into the first is the specific regression
-// the third case (below) guards.
+// TestCloudRunExitCodesFromTheTkRead pins how `cloud run` surfaces a tracker
+// read that refused: prepareCloudSubmission reads the epic before anything is
+// pushed, so a lookup failure or a non-epic must cost no factory call and no
+// push — and the refusal must name what the operator typed.
 func TestCloudRunExitCodesFromTheTkRead(t *testing.T) {
 	stubCloudTk(t)
 	setupCloudWaveRepo(t, "aaa")
@@ -130,24 +125,20 @@ func TestCloudRunExitCodesFromTheTkRead(t *testing.T) {
 
 	for name, tc := range map[string]struct {
 		args []string
-		want int
 		says string
 	}{
 		// tk ran and refused the epic lookup: the epic is not in this checkout.
-		"missing epic": {[]string{"cloud", "run", "nope", "--tick-ids", "aaa"}, exitNotFound, "nope"},
-		// tk answered, and the answer is a task. Not a lookup failure, so not
-		// a "not found" — the wave is simply not dispatchable.
-		"not an epic": {[]string{"cloud", "run", "aaa", "--tick-ids", "aaa"}, exitGeneric, "not an epic"},
-		// tk answered the epic, and a named tick is not in the checkout.
-		"missing tick": {[]string{"cloud", "run", "epic1", "--tick-ids", "zzz"}, exitNotFound, "zzz"},
+		"missing epic": {[]string{"cloud", "run", "nope"}, "nope"},
+		// tk answered, and the answer is a task, so it is not a submittable epic.
+		"not an epic": {[]string{"cloud", "run", "aaa"}, "not an epic"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			code, _, stderr := runCloudArgs(t, tc.args)
 			if code == exitSuccess {
 				t.Fatalf("%v was accepted, want a refusal", tc.args)
 			}
-			if code != tc.want {
-				t.Errorf("exit code = %d, want %d — refusal was %q", code, tc.want, stderr.String())
+			if code != exitGeneric {
+				t.Errorf("exit code = %d, want %d — refusal was %q", code, exitGeneric, stderr.String())
 			}
 			if !strings.Contains(stderr.String(), tc.says) {
 				t.Errorf("refusal %q does not mention %q", stderr.String(), tc.says)
@@ -156,7 +147,7 @@ func TestCloudRunExitCodesFromTheTkRead(t *testing.T) {
 	}
 
 	if len(*requests) != 0 {
-		t.Errorf("refusals made %d factory call(s); the wave check runs before the network", len(*requests))
+		t.Errorf("refusals made %d factory call(s); the tracker read runs before the network", len(*requests))
 	}
 }
 
@@ -179,9 +170,9 @@ func TestCloudRunOnAnUnrunnableTkSaysSo(t *testing.T) {
 	cloudTkBinary = func() (string, []string, error) { return missing, nil, nil }
 	t.Cleanup(func() { cloudTkBinary = inner })
 
-	code, _, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1", "--tick-ids", "aaa"})
+	code, _, stderr := runCloudArgs(t, []string{"cloud", "run", "epic1"})
 	if code == exitSuccess {
-		t.Fatal("cloud run dispatched a wave it could not read the tracker for")
+		t.Fatal("cloud run submitted an epic whose tracker it could not read")
 	}
 	if code != exitGeneric {
 		t.Errorf("exit code = %d, want %d — an unrunnable tk is an environment fault, not a missing epic (%d)",

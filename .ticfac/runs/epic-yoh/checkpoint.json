@@ -1,0 +1,140 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-yoh",
+  "epic_id": "yoh",
+  "sequence": 225,
+  "state": "completed",
+  "reason": "every tick of yoh is closed behind the integrated gate",
+  "updated_at": "2026-09-24T17:06:30Z",
+  "ticks": [
+    {
+      "tick_id": "uqi",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "xev",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "7eq",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "cr4",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "lkd",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "ppt",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "gbs",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "l6t",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "a08",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "mn7",
+      "state": "closed",
+      "attempt": 16
+    },
+    {
+      "tick_id": "nwn",
+      "state": "closed",
+      "attempt": 13
+    },
+    {
+      "tick_id": "dl8",
+      "state": "closed",
+      "attempt": 17
+    },
+    {
+      "tick_id": "6gr",
+      "state": "closed",
+      "attempt": 14
+    },
+    {
+      "tick_id": "cs1",
+      "state": "closed",
+      "attempt": 18
+    },
+    {
+      "tick_id": "r1t",
+      "state": "closed",
+      "attempt": 25
+    },
+    {
+      "tick_id": "3ed",
+      "state": "closed",
+      "attempt": 15
+    },
+    {
+      "tick_id": "4lv",
+      "state": "closed",
+      "attempt": 19
+    },
+    {
+      "tick_id": "78v",
+      "state": "closed",
+      "attempt": 20
+    },
+    {
+      "tick_id": "9iz",
+      "state": "closed",
+      "attempt": 21
+    },
+    {
+      "tick_id": "dyo",
+      "state": "closed",
+      "attempt": 22
+    },
+    {
+      "tick_id": "0ye",
+      "state": "closed",
+      "attempt": 23
+    },
+    {
+      "tick_id": "94u",
+      "state": "closed",
+      "attempt": 24
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "52aa194a36e3fef61832b4ef4c4c9d8c35836ab2",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:f96b10aefd58876b117f04711f6e6c34d3e72cc50549b5843ec31d68ce984a62",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

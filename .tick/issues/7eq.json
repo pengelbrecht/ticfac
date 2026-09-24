@@ -2,10 +2,11 @@
   "id": "7eq",
   "title": "The orchestrator signals completion; the branch remains the truth",
   "description": "When the orchestrator finishes, the Workflow should learn it without polling. Containers can make outbound requests, so: orchestrator finishes -\u003e POSTs a Worker endpoint -\u003e the Worker calls instance.sendEvent(). A container invoking a Workflow binding DIRECTLY is unverified, so route through a Worker.\n\nVerified semantics that shape this:\n- Events are BUFFERED: 'You can send an event to a Workflow instance before it reaches the corresponding waitForEvent call.' A container that finishes before the Workflow resumes does not lose its completion, so the timing race is closed by the platform.\n- Payload cap is 1 MiB. Send the branch and the head sha, never the work product.\n- The event type must match ^[a-zA-Z0-9_][a-zA-Z0-9-_]*$ - no dots.\n\nThe caveat that decides the design: buffering closes the timing race but NOT the case where the container dies after finishing and before its callback lands. So the event is an optimisation and the pushed branch is the source of truth. A supervisor that trusted the event alone would report a finished run as failed.\n\nThat is the same rule the local reconciler already lives by - never take a claim's word for its own progress, read the durable evidence.",
-  "status": "open",
+  "notes": "2026-09-23 23:26 - ticfac run epic-yoh: attempt 3 reported a finding drafted for triage — proposed-tick \"One live cloud run must confirm the deployed platform's waitForEvent timeout path\" (key 911216a93ff8d8dd0b9450b81df02249a12bc22e0f70f0febca18d1189b294ff, severity medium, for this repository). Triage with `ticfac finding yoh 911216a93ff8d8dd0b9450b81df02249a12bc22e0f70f0febca18d1189b294ff --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-23 23:30 - ticfac run epic-yoh: attempt 3 merged into epic/yoh as 98939cb85734; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "hn0"
   ],
@@ -13,5 +14,6 @@
   "acceptance_criteria": "A finished orchestrator wakes its Workflow without polling, and a run whose callback never lands is still concluded correctly from the branch",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:41.211296Z",
-  "updated_at": "2026-09-21T06:19:41.211296Z"
+  "updated_at": "2026-09-23T21:30:14.345314Z",
+  "closed_at": "2026-09-23T21:30:14.345314Z"
 }

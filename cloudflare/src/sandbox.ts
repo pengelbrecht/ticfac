@@ -27,28 +27,22 @@ import { WORKER_TRACE_ID_ENV } from "./worker-boot";
 /**
  * What a boot is for (`TICKS_PHASE`).
  *
- * The Workflow can only reach the image through the environment, so "you are
- * the replacement for an orchestrator that died" and "this run is stopping
- * cleanly" are variables, not messages the harness has to be listening for. The
- * phase is never the agent's decision: budget and stop enforcement live here
- * (D14/D15), never in a prompt. Mirrors `sandbox.Phase*` in Go.
+ * The Workflow can only reach the image through the environment, so "you
+ * are the replacement for an orchestrator that died" is a variable, not a
+ * message the harness has to be listening for. The phase is never the
+ * agent's decision: budget and stop enforcement live here (D14/D15), never in
+ * a prompt. Mirrors `sandbox.Phase*` in Go.
  *
- * `wave` is the continuation pass a cloud run alternates with its container
- * waves (tick wiy): integrate what the last wave pushed, then compute and
- * request the next one, or finish the epic if none remains. It is deliberately
- * NOT `closeout` — a closeout is a run being wound up early and its prompt
- * forbids new work, and conflating "this wave finished" with "somebody stopped
- * this run" is the mistake tick 074 already had to undo once.
- *
- * `review` is the pull request review pass (UC5, tick v7g), and it is the one
- * phase that is not about an epic at all: read a pull request's diff, write
- * findings, hand them to the factory, exit. It is a phase rather than a second
- * image for the reason the worker role is a command rather than a flag — one
- * image, and what a container is FOR is what it was started with. A review
- * boot is always a read-only run, so the container it lands in cannot push
- * whatever its prompt says.
+ * `review` is the pull request review job (UC5, tick v7g), and it is the one
+ * boot that is not about an epic at all: read a pull request's diff, write
+ * findings, hand them to the factory, exit. Since tick dl8 it is the only
+ * phase besides the epic's own `run`/`reconcile` — the `closeout` phase went
+ * with the closeout boot, because `ticfac run-epic` reads no phase and a
+ * closeout boot would only have re-run the epic. A review boot is always a
+ * read-only run, so the container it lands in cannot push whatever its prompt
+ * says.
  */
-export type OrchestratorPhase = "run" | "reconcile" | "wave" | "closeout" | "review";
+export type OrchestratorPhase = "run" | "reconcile" | "review";
 
 /**
  * The image reference a run boots when the deployment asks for nothing else.
@@ -281,7 +275,10 @@ export interface OrchestratorSandbox {
  * the point, not a warm one.
  */
 export interface SandboxBinding {
-  get(name: string, options?: { image?: string }): Promise<OrchestratorSandbox>;
+  get(
+    name: string,
+    options?: { image?: string; keepAlive?: boolean },
+  ): Promise<OrchestratorSandbox>;
 }
 
 /**
@@ -303,14 +300,37 @@ export function sandboxBinding(env: Env): SandboxBinding | null {
 /**
  * How long a sandbox may go unaddressed before the platform stops it.
  *
- * Not `keepAlive`. A container that never sleeps has to be destroyed by
- * something, and the thing that would destroy it is the Workflow instance that
- * may itself have died — so an orchestrator whose supervisor is gone would bill
- * until an operator noticed. The observation loop addresses its sandbox at most
- * every MAX_POLL_MS (5 minutes, src/run-workflow.ts), so a window several times
- * that keeps a live run awake while still putting a ceiling on a leaked one.
+ * The ceiling for every boot EXCEPT the orchestrator's (see
+ * {@link sdkBootOptions}, tick cr4): a container the supervisor is not
+ * actively watching — a worker container, a leaked one — dies inside this
+ * window rather than billing until an operator noticed. The observation loop
+ * addresses its sandbox at most every MAX_POLL_MS (5 minutes,
+ * src/run-workflow.ts), so a window several times that keeps a live run
+ * awake while still putting a ceiling on one nobody is watching.
  */
 export const SANDBOX_SLEEP_AFTER = "20m";
+
+/**
+ * The SDK lifetime a boot asks for, from the seam's own vocabulary (tick cr4).
+ *
+ * An orchestrator boot passes `keepAlive: true` and the SDK heartbeats the
+ * container every 30 seconds so no idle shutdown can kill a live run — the
+ * platform kills containers at arbitrary moments anyway, and idleness was one
+ * death we did not have to accept. The price is exact and the SDK's own docs
+ * say it: a container under keepAlive "must be explicitly destroyed" — it
+ * never idles away, so the Workflow destroys every boot in a `finally` and
+ * `finalize` still sweeps as the backstop. Everything else keeps the
+ * `sleepAfter` ceiling above, which is the bound a LEAKED container dies
+ * inside of instead of billing until an operator notices. The two lifetimes
+ * are mutually exclusive at the SDK (`sleepAfter` is ignored when
+ * `keepAlive` is set), so the keepAlive arm carries no `sleepAfter` of its
+ * own.
+ */
+export function sdkBootOptions(options?: {
+  keepAlive?: boolean;
+}): { keepAlive: true } | { sleepAfter: string } {
+  return options?.keepAlive === true ? { keepAlive: true } : { sleepAfter: SANDBOX_SLEEP_AFTER };
+}
 
 /**
  * The command modifier that puts one boot's whole output in one buffer.
@@ -383,8 +403,11 @@ export function isSandboxNamespace(
  */
 export function sdkSandboxBinding(namespace: SandboxNamespace): SandboxBinding {
   return {
-    async get(name: string): Promise<OrchestratorSandbox> {
-      return adaptSandbox(getSandbox(namespace, name, { sleepAfter: SANDBOX_SLEEP_AFTER }));
+    async get(
+      name: string,
+      options?: { image?: string; keepAlive?: boolean },
+    ): Promise<OrchestratorSandbox> {
+      return adaptSandbox(getSandbox(namespace, name, sdkBootOptions(options)));
     },
   };
 }
@@ -494,7 +517,6 @@ export type OrchestratorEnvInput = {
    */
   gateway_token: string;
   phase: OrchestratorPhase;
-  stop_reason?: string;
   github_token?: string;
   harness?: string;
   model?: string;
@@ -514,61 +536,25 @@ export type OrchestratorEnvInput = {
    */
   sandbox_image?: string;
   /**
-   * Which substrate this orchestrator dispatches its workers through
-   * (`TICKS_SUBSTRATE`), overriding `[orchestration].substrate` in the
-   * checkout.
-   *
-   * Absent means the container's own default — `harness`, its subagents in
-   * this container — which is the load-bearing default
-   * (`image/entrypoint.sh`): left to infer, an orchestrator booted on
-   * a checkout that declares `substrate = "cloud"` would read "my workers are
-   * cloud sandboxes" and "I am one of them" as the same statement, and
-   * dispatch containers from inside a container with nothing arbitrating it.
-   *
-   * `cloud` is that permission, given explicitly by the control plane to a run
-   * it is prepared to dispatch waves for (tick wiy). It is not a hint the
-   * agent may take: the Workflow is what boots the containers, and it does so
-   * only for a wave the run asked for through the factory.
-   */
-  substrate?: string;
-  /**
-   * How many container waves this run has already dispatched, so this pass can
-   * name the wave it is requesting (`TICKS_PASS`).
-   *
-   * The Workflow reads back exactly the request stamped with this number,
-   * which is what keeps a replayed step from re-consuming an earlier pass's
-   * wave — a Workflow step that completes is checkpointed, but the R2 object
-   * beside it is not versioned by the replay.
-   */
-  pass?: number;
-  /**
    * The factory this run belongs to, so `tk` inside the container can reach
-   * its own control plane (`tk cloud spawn`, `tk ask`).
+   * its own control plane (`tk cloud spawn`, `tk ask`) — and, since tick 7eq,
+   * so `ticfac run-epic` can report its own finish to the done door and wake
+   * its Run Workflow without the Workflow polling for it.
+   *
+   * Given per BOOT now: every orchestrator pass reports completion, and the
+   * same URL is what its `ticfac run-epic` hands the per-tick sandbox door's
+   * client — see the boot call site in run-workflow.ts.
    *
    * Note what the token is NOT: the operator's factory token. A container
    * holding that could enrol projects, submit runs and read every other run's
    * logs, and D17 exists so that a leaked sandbox environment leaks something
    * run-scoped and revocable. So the credential here is the run's own gateway
-   * token — the same one a stop revokes — and the in-run dispatch endpoint
+   * token — the same one a stop revokes — and the per-tick sandbox door
    * authenticates it exactly as the model proxy does. A revoked run cannot
-   * dispatch a wave any more than it can make a model call.
+   * dispatch a worker any more than it can make a model call.
    */
   factory_url?: string;
   factory_project?: string;
-  /**
-   * The wave this pass inherits: the ticks the control plane just dispatched,
-   * and the commit their containers cloned at.
-   *
-   * A `tk cloud wait`/`collect`/`reconcile` reads the manifests
-   * `tk cloud spawn` wrote under `.tick/logs/cloud/`, which is git-ignored
-   * local state — and every pass of a cloud run is a FRESH container, so that
-   * state is gone by the time the pass that must collect the wave boots. The
-   * control plane is the one party that certainly knows what it dispatched, so
-   * it says so here rather than leaving the container to infer a wave from a
-   * directory it cannot have (tick wiy).
-   */
-  wave_ticks?: string[];
-  wave_base_sha?: string;
   /**
    * The pull request a `review` boot is reviewing, and the commit it reviews
    * (UC5, tick v7g).
@@ -616,9 +602,9 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
     AI_GATEWAY_BASE_URL: input.gateway_base_url,
     AI_GATEWAY_TOKEN: input.gateway_token,
   };
-  if (input.stop_reason !== undefined && input.stop_reason !== "") {
-    env.TICKS_STOP_REASON = input.stop_reason;
-  }
+  // No TICKS_STOP_REASON: the closeout prompt was its only reader, and tick
+  // dl8 deleted the closeout boot — `ticfac run-epic`, which the epic
+  // container execs, reads no phase and no stop reason.
   if (input.github_token !== undefined && input.github_token !== "") {
     env.GITHUB_TOKEN = input.github_token;
   }
@@ -630,10 +616,6 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   if (input.sandbox_image !== undefined && input.sandbox_image !== "") {
     env.TICKS_SANDBOX_IMAGE = input.sandbox_image;
   }
-  if (input.substrate !== undefined && input.substrate !== "") {
-    env.TICKS_SUBSTRATE = input.substrate;
-  }
-  if (input.pass !== undefined) env.TICKS_PASS = String(input.pass);
   if (input.factory_url !== undefined && input.factory_url !== "") {
     env.TICKS_FACTORY_URL = input.factory_url;
     // The run's own gateway credential, deliberately reused rather than a
@@ -649,12 +631,6 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   // the run.
   if (input.trace_id !== undefined && input.trace_id !== "") {
     env[WORKER_TRACE_ID_ENV] = input.trace_id;
-  }
-  if (input.wave_ticks !== undefined && input.wave_ticks.length > 0) {
-    env.TICKS_WAVE_TICKS = input.wave_ticks.join(",");
-  }
-  if (input.wave_base_sha !== undefined && input.wave_base_sha !== "") {
-    env.TICKS_WAVE_BASE = input.wave_base_sha;
   }
   // What a review boot is reviewing (tick v7g). Both or neither: the
   // entrypoint refuses a review phase that is missing either, because a review

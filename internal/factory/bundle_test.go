@@ -118,12 +118,14 @@ func setPayloadSeam(t *testing.T, factory, sandbox fs.FS) {
 func TestMissingPayloadIsALoudStop(t *testing.T) {
 	factoryFS = nil
 	sandboxFS = nil
+	cloudProfilesFS = nil
 	resetPayloadCaches()
 	t.Cleanup(wireEmbeddedPayload)
 
 	for name, err := range map[string]error{
 		"Materialize":        Materialize(t.TempDir()),
 		"MaterializeSandbox": MaterializeSandbox(t.TempDir()),
+		"StageCloudProfiles": StageCloudProfiles(t.TempDir()),
 		"ReadBundleFile":     func() error { _, err := ReadBundleFile("wrangler.toml"); return err }(),
 		"ReadSandboxFile":    func() error { _, err := ReadSandboxFile("Dockerfile"); return err }(),
 	} {

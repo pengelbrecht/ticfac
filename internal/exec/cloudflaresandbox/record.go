@@ -46,6 +46,16 @@ var (
 	// titleFieldPattern is TITLE_FIELD_PATTERN: the title may carry the
 	// spaces prose needs, never control characters.
 	titleFieldPattern = regexp.MustCompile(`^[\x20-\x7e]{1,512}$`)
+	// promptFieldPattern is PROMPT_FIELD_PATTERN's character half: the
+	// rendered role prompt is printable prose plus the line breaks markdown
+	// needs, never other control characters (tick 9iz) — it rides one
+	// environment variable into the container the worker boots in. The
+	// 64 KiB length half is promptFieldMax, spelled beside it: RE2 caps a
+	// repeat count at 1000, so the bound is a length check, not a
+	// quantifier.
+	promptFieldPattern = regexp.MustCompile(`^[\x09\x0a\x0d\x20-\x7e]+$`)
+	// promptFieldMax is the rendered prompt's bound, in bytes.
+	promptFieldMax = 65536
 	// baseSHAPattern is runs.ts's BASE_SHA_PATTERN: the full 40-hex commit
 	// the container clones at, refused rather than parsed.
 	baseSHAPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -64,6 +74,9 @@ type startRequest struct {
 	BaseRef  string `json:"base_ref"`
 	Title    string `json:"title"`
 	BaseSHA  string `json:"base_sha"`
+	Model    string `json:"model"`
+	Harness  string `json:"harness"`
+	Prompt   string `json:"prompt"`
 }
 
 // startResponse is the door's answer to a start: the handle, and whether the
@@ -111,6 +124,14 @@ type cloudflareHandle struct {
 	Project   string  `json:"project"`
 	BaseRef   string  `json:"base_ref"`
 	Title     string  `json:"title"`
+	// Model is the model the door booted the container on — its TICKS_MODEL,
+	// named back by the door (tick a08). Empty on a handle from a door that
+	// predates the field.
+	Model string `json:"model,omitempty"`
+	// Harness is the harness the door booted the container on — its
+	// TICKS_HARNESS, named back by the door (tick 9iz). Empty on a handle
+	// from a door that predates the field.
+	Harness string `json:"harness,omitempty"`
 }
 
 // local decodes the executor-private half of a handle, refusing one that
@@ -252,6 +273,25 @@ type attemptRecord struct {
 	BaseRef   string  `json:"base_ref"`
 	Title     string  `json:"title"`
 
+	// Model is the model the attempt's worker was booted on, as the door
+	// named it back (tick a08). Start refuses a handle naming any model but
+	// the one the dispatch asked for, so this is both what was asked and what
+	// ran.
+	Model string `json:"model,omitempty"`
+
+	// Harness is the harness the attempt's worker was booted on, as the door
+	// named it back (tick 9iz). Start refuses a handle naming any harness but
+	// the one the dispatch asked for, so this is both what was asked and what
+	// ran.
+	Harness string `json:"harness,omitempty"`
+
+	// Prompt is the rendered role prompt the dispatch delivered, in full
+	// (tick 9iz) — the profile's own text, the thing the reconciler's marker
+	// digests into prompt_digest, kept here because the container's own
+	// entrypoint renders its worker prompt from the checkout's tracker and
+	// would otherwise never see it.
+	Prompt string `json:"prompt,omitempty"`
+
 	// Adopted says the door's start route found a live work process under
 	// this identity and adopted it rather than booting a rival.
 	Adopted bool `json:"adopted"`
@@ -281,6 +321,8 @@ func (r *attemptRecord) payload() *cloudflareHandle {
 		Project:   r.Project,
 		BaseRef:   r.BaseRef,
 		Title:     r.Title,
+		Model:     r.Model,
+		Harness:   r.Harness,
 	}
 }
 
@@ -398,6 +440,21 @@ func validateDoorFields(req *startRequest) error {
 	if !titleFieldPattern.MatchString(req.Title) {
 		return fmt.Errorf("title is not a non-empty printable ASCII string the door reads (spaces allowed, at " +
 			"most 512 characters)")
+	}
+	if !plainFieldPattern.MatchString(req.Model) {
+		return fmt.Errorf("model %q is not a non-empty printable ASCII string the door reads: the door boots the "+
+			"worker on the model the profile resolved, and a start that names none would run the factory's own "+
+			"default under a record that names nothing", req.Model)
+	}
+	if !plainFieldPattern.MatchString(req.Harness) {
+		return fmt.Errorf("harness %q is not a non-empty printable ASCII string the door reads: the door binds the "+
+			"worker to the harness the profile resolved, and a start that names none would run the factory's own "+
+			"standing choice under a record that names nothing", req.Harness)
+	}
+	if len(req.Prompt) > promptFieldMax || !promptFieldPattern.MatchString(req.Prompt) {
+		return fmt.Errorf("prompt is not the rendered role prompt the door reads (printable text with line " +
+			"breaks, at most 65536 characters): the worker's container runs on it, and a start with none would " +
+			"boot a worker on a prompt nobody chose")
 	}
 	if !baseSHAPattern.MatchString(req.BaseSHA) {
 		return fmt.Errorf("base_sha %q is not the full 40-character commit the attempt's container clones at", req.BaseSHA)

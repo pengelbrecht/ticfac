@@ -11,7 +11,6 @@ import {
   MAX_IMAGE_LENGTH,
   type RepoConfigReader,
   RUNNERS_CONFIG_PATH,
-  readDeclaredMaxParallel,
   readDeclaredSandboxImage,
   repoConfig,
 } from "../src/repo-config";
@@ -126,52 +125,6 @@ describe("the declared wave width, read from the tracked config (tick b6e)", () 
 
   it("refuses [orchestration] written as something other than a table", () => {
     expect(() => declaredMaxParallel("orchestration = 3\n")).toThrow(/not a table/);
-  });
-});
-
-describe("what an unreadable wave width does", () => {
-  const reader = (read: RepoConfigReader["read"]) => ({ REPO_CONFIG: { read } }) as never;
-  const PROJECT = "example-org/example-repo";
-  const SHA = "d".repeat(40);
-
-  it("reads a declaration when the file is there", async () => {
-    const declared = await readDeclaredMaxParallel(
-      reader(async () => "[orchestration]\nmax_parallel = 2\n"),
-      PROJECT,
-      SHA,
-    );
-    expect(declared).toEqual({ max_parallel: 2, unread: null });
-  });
-
-  it("reads no config as no declaration, conclusively", async () => {
-    const declared = await readDeclaredMaxParallel(
-      reader(async () => null),
-      PROJECT,
-      SHA,
-    );
-    expect(declared).toEqual({ max_parallel: null, unread: null });
-  });
-
-  it("keeps 'could not be read' distinct from 'declares nothing'", async () => {
-    const declared = await readDeclaredMaxParallel(
-      reader(async () => {
-        throw new Error("GitHub answered HTTP 503");
-      }),
-      PROJECT,
-      SHA,
-    );
-    expect(declared.max_parallel).toBeNull();
-    expect(declared.unread).toContain("HTTP 503");
-  });
-
-  it("treats a file it cannot parse the same way", async () => {
-    const declared = await readDeclaredMaxParallel(
-      reader(async () => "[orchestration\nmax_parallel = broken\n"),
-      PROJECT,
-      SHA,
-    );
-    expect(declared.max_parallel).toBeNull();
-    expect(declared.unread).toContain("could not be parsed here");
   });
 });
 

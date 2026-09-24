@@ -1,37 +1,37 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the wne and xte close-outs, 2026-09-23.
+Seeded from ticks' learnings 2026-09-02; last compacted at the yoh close-out, 2026-09-24.
 
 ## Planning an epic
 
-**Problem:** TWICE now (Phase 4, then xte) every component tick closed green and NOTHING drove them.
-Phase 4: no route created the Workflow. xte: the door, the Go executor, the cloud profiles and
-adoption all landed, but internal/cli never registered the executor and the container's
-`run-epic` never named the cloud profiles — so a cloud run still dispatched local subprocesses.
-Both epics ran on the old host, proving the old host. **Rule:** When an epic's gate is a run, the
-FIRST tick wires the thinnest end-to-end path through the PRODUCTION entry point (tested through
-the staged entrypoint, not a package), and a named tick PERFORMS the gate run before the review.
-A partition of components with no wiring tick is refused at planning.
-wne repeated the shape: an injectable classifier nothing constructs, a factory table nothing reads. A
-seam is not delivery — a tick wires it, or the done says in words that production is out of scope.
+**Problem:** THREE epics closed without the run their acceptance names. Phase 4: no route created the
+Workflow. xte: the door, executor, profiles and adoption landed, but internal/cli never registered
+the executor, so a cloud run still dispatched local subprocesses. yoh: every tick green against
+fakes, the live run deferred to dha's u9h — and the one gap only a live run shows (ticks' worker.sh
+never reads TICKS_ROLE_PROMPT, so a cloud worker ignores its profile's prompt) surfaced as an
+upstream finding. **Rule:** When an epic's gate is a run, the FIRST tick wires the thinnest
+end-to-end path through the PRODUCTION entry point (tested through the staged entrypoint), and a
+named tick INSIDE the epic performs the run before the review. If the run lives elsewhere, the
+acceptance says so in words. A seam nothing constructs is not delivery.
 
-**Problem:** xte's "a cloud run never routes claude" held per layer and failed in the whole: the
-cloud overlay was checked, then a tier overlay applied after it (`balanced` → codex). **Rule:**
-Check a policy on the FINAL resolved value, after every overlay, never on one input layer.
+**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a
+tier overlay replaced the model; yoh keyed the Workers-AI rule on the substrate while the
+cloudflare-sandbox executor also ran under the local one (78v). **Rule:** Check a policy on the
+FINAL resolved value, keyed on what actually crosses the boundary (the executor), never on one input.
 
-**Problem:** wne put the work-type enum (mrn) and the classifier that uses it (0ju) in one wave; 0ju
-had to create the enum too, and mrn died on an add/add conflict. **Rule:** A tick that DECLARES a
-vocabulary and one that CONSUMES it are different waves, even when neither lists the other's file.
+**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; mrn died on add/add.
+**Rule:** A tick that DECLARES a vocabulary and one that CONSUMES it are different waves.
 
-**Problem:** A lost sandbox handle and a boot revoking every sibling's token were green: the fake keyed
-on job_id and the tests stubbed boot. **Rule:** A fake must demand the identity the real thing
-demands; a more forgiving fake certifies the defect it hides — fix it in the same change.
+**Problem:** l6t deleted the wave path, and with it four things it alone produced: the worker's
+harness bound, streamed logs, per-tick board events, and cron sweeps. Each was found later, one
+finding at a time (9iz, 925). **Rule:** A deletion tick first LISTS every effect the deleted path
+produced (events, bounds, logs, schedules), then names each one's new owner or records it as
+dropped. A deletion's acceptance is that list, not "tests still pass".
 
 ## Orchestration
 
-**Problem:** Wave-2 agents branched from a base missing wave-1's merge. **Rule:** Name the prerequisite
-SHA and verify with `git merge-base --is-ancestor`.
+**Problem:** Wave-2 branched from a base missing wave-1. **Rule:** Name the SHA; check `--is-ancestor`.
 
 **Problem:** Two additions to one file were cut by two same-wave ticks. **Rule:** Two additions to one
 file are a union in INTENT, not in text — hand the resolve to a worker holding the context. A
@@ -45,106 +45,106 @@ every attempt.
 flight" state outlived its dead writer. **Rule:** The merge gate is the only test of a shared contract.
 Settle in-flight state from durable evidence by whoever finds it, never by trusting the claimer.
 
-**Problem:** epic-ncv stopped EIGHT times for nothing but untriaged findings, and after each triage the
-resume re-dispatched the review instead of closing it — three frontier reviews of byte-identical
-source, a loop that ends only when a reviewer finds nothing. **Rule:** A hold that fires when the
-system does its job (finding things) makes "unattended" impossible by construction; put it where a
-person already is (the PR). A resume replays a recorded decision, it never buys it again.
+**Problem:** epic-ncv stopped EIGHT times for nothing but untriaged findings, and each resume
+re-dispatched the review instead of closing it. yoh needed a person ~20 times: main merges,
+contract re-cuts, test repairs, triage. **Rule:** A hold that fires when the system does its job
+(finding things) makes "unattended" impossible by construction; put it where a person already is
+(the PR). A resume replays a recorded decision, it never buys it again.
 
-**Problem:** A bare `go test ./...` died at the 10-minute per-package timeout (`internal/reconcile`
-is ~600s under `-short`). **Rule:** Test through the Makefile, which pins `GOTEST_TIMEOUT := 45m`.
+**Problem:** A bare `go test ./...` died at the 10-minute package timeout. **Rule:** Use the Makefile.
 
 ## Git state the run does not own
 
 **Problem:** Two runs died with `conflict_exists`: the run-state store resolved origin through
-`FETCH_HEAD`, ONE file shared by every process on that checkout, and a watcher's `git fetch` rewrote
-it; the same read reappeared in the tracker publisher, which MOVES the worktree to it. **Rule:** Never
-resolve a ref through process-global git state. Fetch into a private per-run ref with
-`--no-write-fetch-head --refmap=`. When a defect is a SHAPE (global state, unbounded retry, swallowed
-error), grep for the shape, leave a guard test, and prove the fix by reproducing on the old code.
+`FETCH_HEAD`, one file shared by every process on the checkout, and a watcher's fetch rewrote it.
+**Rule:** Never resolve a ref through process-global git state. Fetch into a private per-run ref with
+`--no-write-fetch-head --refmap=`.
 
-**Problem:** Host `rerere.enabled` replayed a person's old resolve into a machine merge. **Rule:** The
-run states its own git environment (`-c rerere.enabled=false`); host config must not reach a run's merge.
+**Problem:** Host `rerere.enabled` replayed a person's resolve into a machine merge. **Rule:** The run
+states its own git environment (`-c rerere.enabled=false`); host config never reaches its merge.
 
 ## Waiting and watching
 
-**Problem:** Blind `sleep 300` loops, and three hand-rolled watchers that were each wrong. **Rule:** Wait
-on a CONDITION over durable evidence, a push stream, or a held PID's exit. A watcher covers every
-terminal state — reported, blocked, died-without-reporting — or its silence means nothing.
+**Problem:** Blind `sleep 300` loops; three hand-rolled watchers, each wrong. **Rule:** Wait on a
+CONDITION over durable evidence, a push stream, or a held PID's exit, covering every terminal state
+(reported, blocked, died-without-reporting) — or the watcher's silence means nothing.
 
-**Problem:** A watcher piped through `tail` delivered nothing (block buffering); `pgrep -f` read ALIVE
-after death by matching its own argv. **Rule:** No `tail`/`head` in a watcher pipeline; flush per line.
-Never identify a process by a pattern the observer matches: hold the PID and check its start time.
+**Problem:** A watcher piped through `tail` delivered nothing; `pgrep -f` read ALIVE after death by
+matching its own argv. **Rule:** No `tail`/`head` in a watcher pipeline; flush per line. Hold the PID
+and check its start time, never a pattern the observer itself matches.
 
-**Problem:** The close-out opened PR #11 and in the same second refused it as "CI unsatisfiable by
-waiting"; GitHub had not created the check runs yet. **Rule:** Absence right after creation is "not
-yet". Bound a wait for the thing to APPEAR before calling it "never", and state what was checked
-rather than a guessed cause.
+**Problem:** The close-out refused PR #11 as "CI unsatisfiable" the second it opened it; GitHub had
+not created the check runs yet. **Rule:** Absence right after creation is "not yet". Bound a wait for
+the thing to APPEAR before calling it "never".
 
 ## Where a tick lives
 
-**Problem:** Ticks filed here to change the ticks repository were undispatchable, and xte's ha9
-(pi in the ticks sandbox image) was dispatched SEVEN times: no ticfac worker could make it. **Rule:**
-A tick goes in the tracker of the repo whose CODE it changes; another repo's change is an
-`upstream-tick`, never a child of this epic. Cross-repo work is a second epic, `--repo <dir>`.
+**Problem:** Ticks here that change the ticks repo were undispatchable (ha9: SEVEN dispatches). **Rule:**
+A tick lives where its CODE is; another repo's change is an `upstream-tick`, never a child here.
 
 ## Provider and model configuration
 
 **Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
-GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable, probe both ends.
+GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable at a time.
 
-**Problem:** GLM served through `cloudflare-workers-ai` leaked `<think>` tags and looped: pi detects
-reasoning providers by name or baseUrl. **Rule:** A model served off its vendor's endpoint loses that
-detection. Set `compat.thinkingFormat` explicitly.
+**Problem:** GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** Off-vendor, set `compat.thinkingFormat`.
 
 ## Reviews and repairs
 
-**Problem:** A review's "blocker" was repaired and the repair regressed (the premise was true of the
-function, false of the run calling it); a regression test "failed before the fix" only on a
-stage-record assertion. **Rule:** REPRODUCE a reported defect at the base, and read WHICH assertion
-fails there.
+**Problem:** A review's "blocker" was repaired and the repair regressed; a regression test "failed
+before the fix" only on an unrelated assertion. **Rule:** REPRODUCE a reported defect at the base,
+and read WHICH assertion fails there.
 
-**Problem:** A review said NOT READY and the run recorded `verdict: ready-to-merge` beside it
-(decisions/1.json) — the schema had no field for the review's judgement. **Rule:** A role whose
-answer is a judgement needs that judgement as a typed field with an effect; a status line that means
-"I finished" must never be the only thing a verdict can ride on.
+**Problem:** A defect that is a SHAPE was repaired one site at a time. "Collect counts commits, but
+the worker commits its report separately" took dyo (Go), then 94u (TS), and herdr's collect is still
+open; "a step that throws escapes finalize" took 4lv (boot), then 0ye (context, progress). **Rule:**
+A repair tick's acceptance names EVERY implementation of the seam (grep for the shape across Go, TS
+and every executor), leaves a guard test, and proves the fix by reproducing on the old code.
 
-**Problem:** Gate evidence keyed by commit was wrong both ways: the run writes `.ticfac/` to the branch
-it gates, and a rekeyed key compared only to the plain key chained on every resume. **Rule:** When a
-run writes to what it measures, key evidence by the SOURCE (tree minus the run's own path), and make a
-derived key a function of the thing it identifies, not of the history that produced it.
+**Problem:** A boot step that exhausted its retries escaped supervisePass, so a run ended with no
+token revocation, lease release, settlement or container destroy. **Rule:** In the Run Workflow
+every ending is finalize's ending: any step that can throw is caught AT ITS STEP and turned into a
+finalize-reaching outcome, and a test fails each step past its retries.
 
-**Problem:** Across 9pd and ncv the integrated gate refused innocent work six times, each through a
-wall-clock test measuring the host, not the tree. **Rule:** A gate verdict is about the tree only if
-the host is bounded; record the host's conditions with the verdict.
+**Problem:** A review said NOT READY; the run recorded ready-to-merge. **Rule:** A verdict is a typed field.
 
-**Problem:** wne's per-tick gates went green while 7 of the 10 tests exercising the change skipped
-under `-short`; the review was the first to run them. **Rule:** A tick's evidence runs under the gate's
-own flags. A test that skips there is not evidence — make it cheap, or name it in the acceptance.
+**Problem:** Gate evidence keyed by commit was wrong both ways, because the run writes `.ticfac/` to
+the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's own path), and make
+a derived key a function of the thing it identifies, not of its history.
+
+**Problem:** The integrated gate refused innocent work six times through wall-clock tests measuring
+the host; a host-dependent git fixture failed at base in NINE yoh ticks, filed as nine findings.
+**Rule:** A gate verdict is about the tree only if the host is bounded — record the host's
+conditions. A failure that reproduces at base is looked up before it is filed again.
+
+**Problem:** wne's per-tick gates went green while 7 of 10 relevant tests skipped under `-short`;
+yoh's ts gate ran no vitest, so five TS behaviour ticks merged with their tests unrun by the gate.
+**Rule:** A tick's evidence runs under the gate's own flags. A test the gate does not run is not
+evidence — add it to the gate, or name the gap in the acceptance.
 
 ## Fixtures
 
-**Problem:** Two identical fixture commits in one second got one SHA. **Rule:** Make them differ on
-purpose and assert the property you rely on.
+**Problem:** A lost sandbox handle was green because the fake keyed on job_id; yoh's collect fake put
+work and report in ONE commit, which the real worker never does. **Rule:** A fake must demand the
+identity and reproduce the shape the real thing produces; a more forgiving fake certifies the
+defect it hides — fix it in the same change.
 
-**Problem:** fake-runner's blocked-first modes keyed on TICFAC_ATTEMPT — the RUN's counter — and
-passed only because the first tick drew 1. **Rule:** "The tick's first try" keys on `$TICFAC_TRY`;
-attempt numbers are identity (branch, marker, `ticfac settle`), never an ordinal.
+**Problem:** Two identical fixture commits in one second got one SHA. **Rule:** Make them differ.
 
-## Verification ticks
+**Problem:** fake-runner keyed "first try" on TICFAC_ATTEMPT, the RUN's counter. **Rule:** "The
+tick's first try" keys on `$TICFAC_TRY`; attempt numbers are identity, never an ordinal.
 
-**Problem:** Verification workers left `RESULT-<id>.md` uncommitted, so collect saw `no-commits`.
-**Rule:** Evidence output is committed even with no source change; "settled" means "look now", not done.
+**Problem:** Verification workers left `RESULT-<id>.md` uncommitted; collect saw `no-commits`.
+**Rule:** Evidence output is committed even with no source change.
 
 ## Tracker hygiene
 
-**Problem:** `tk close` on a parked tick printed usage; the real error showed only with `--reason`.
-**Rule:** A close that prints usage is a REFUSAL — re-run with `--reason done` to read it. A tick
-parked with `tk ask` needs `--from human` once answered. Heredoc tick text; `git commit .tick/`.
+**Problem:** `tk close` on a parked tick printed usage. **Rule:** Usage is a REFUSAL — re-run with
+`--reason done` to read it; a `tk ask`-parked tick needs `--from human`; `git commit .tick/`.
 
-**Problem:** Phase 4's triage promoted ~20 findings into ticks that existed only as untracked files in
-the operator's checkout, so the run branch's `promoted_as` ids resolved in no committed tracker.
-**Rule:** A promotion is finished when the tick is COMMITTED where the next run reads it.
+**Problem:** Promotions pointed at ticks that existed only as untracked files in the operator's
+checkout. **Rule:** A promotion is finished when the tick is COMMITTED where the next run reads it;
+a promoted tick's text is re-read against what the epic deleted (u9h still names the deleted
+EpicReconcilerWorkflow).
 
-**Problem:** A spawn blamed "the probe" while the account sat at 93% of its session limit. **Rule:**
-Before believing a spawn's diagnosis, send text to the pane by hand.
+**Problem:** A spawn blamed "the probe" at 93% of its session limit. **Rule:** Test the pane by hand.

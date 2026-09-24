@@ -667,3 +667,64 @@ export async function listSweepSelections(
   const result = await statement.all<SweepSelectionRow>();
   return result.results;
 }
+
+// --------------------------------------------------- sandbox attempt boots ---
+
+/**
+ * The model one attempt's worker container was booted on, as the dispatch
+ * door recorded it before addressing the container (tick dyo).
+ *
+ * Keyed by the identity that names the container — run, tick, attempt —
+ * because that is the identity an adoption re-addresses: the door is the
+ * only party that boots under it, so its own record of what it commanded is
+ * the one honest answer to "which model is the RUNNING container on", on a
+ * substrate whose process list cannot read a live process's environment.
+ */
+export interface SandboxAttemptBoot {
+  run_id: string;
+  tick_id: string;
+  attempt: number;
+  model: string;
+  at: string;
+}
+
+/**
+ * Records the model one attempt's worker container boots on.
+ *
+ * Written BEFORE the container is addressed (the boot inputs are composed
+ * first; they touch no container), so a live work process can never exist
+ * without a record of the boot that started it — and re-recorded over by a
+ * later fresh boot under the same identity, which is the only way the named
+ * container comes to hold a new work process at all.
+ */
+export async function recordSandboxAttemptBoot(
+  db: D1Database,
+  boot: SandboxAttemptBoot,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT OR REPLACE INTO sandbox_attempt_boot
+        (run_id, tick_id, attempt, model, "at")
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .bind(boot.run_id, boot.tick_id, boot.attempt, boot.model, boot.at)
+    .run();
+}
+
+/**
+ * Reads the model the named attempt's container was booted on, or null when
+ * no boot was recorded for the identity — a container an older deployment
+ * booted, which the door refuses to adopt rather than guess about (tick dyo).
+ */
+export async function sandboxAttemptBootModel(
+  db: D1Database,
+  identity: { run_id: string; tick_id: string; attempt: number },
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      "SELECT model FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = ?",
+    )
+    .bind(identity.run_id, identity.tick_id, identity.attempt)
+    .first<{ model: string }>();
+  return row === null ? null : row.model;
+}

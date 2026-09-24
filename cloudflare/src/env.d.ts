@@ -39,21 +39,6 @@ declare namespace Cloudflare {
      */
     RUN_WORKFLOW?: import("./runs").RunWorkflowBinding;
     /**
-     * The EpicReconciler Workflow (tick z23): the reconciler's control flow
-     * hosted by a Workflow, one instance per EpicRun keyed by run id
-     * (`[[workflows]]` in wrangler.toml, class `EpicReconcilerWorkflow`).
-     *
-     * Since tick nu9 this is the driver every plain epic run started through
-     * the run route is handed to; `RUN_WORKFLOW` above still drives the
-     * submissions the reconciler cannot honour (waves, budgeted runs,
-     * reviews) until the Workflow host grows that machinery. Still optional
-     * in the type — a deployment whose Workflow failed to register must fail
-     * closed at the point of use rather than record runs that could never
-     * reconcile — and typed as the structural subset the run route uses so a
-     * test can substitute a recording fake for it.
-     */
-    EPIC_RECONCILER?: import("./runs").EpicReconcilerBinding;
-    /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
      * tick from Phase 2 (see image/).
      *
@@ -195,7 +180,6 @@ declare namespace Cloudflare {
     RUN_MAX_WALL_CLOCK_MS?: string;
     RUN_MAX_COST_USD?: string;
     RUN_STOP_GRACE_MS?: string;
-    RUN_CLOSEOUT_MS?: string;
     /**
      * A fixed observation cadence, overriding the Workflow's own backoff. Unset
      * on a real deployment; set by tests and by an operator who wants a tighter
@@ -209,40 +193,32 @@ declare namespace Cloudflare {
      */
     RUN_MAX_OBSERVATIONS?: string;
     /**
-     * How long one dispatch leg of a cloud wave watches its containers, in ms
-     * (tick 2xm). Unset on a real deployment: the default is derived from
-     * Cloudflare's per-step execution cap (`src/workflow-limits.ts`), and a
-     * value above what a step may spend is clamped down to it rather than
-     * honoured — a leg that outlives its step kills the whole run.
-     */
-    RUN_WAVE_LEG_MS?: string;
-    /**
-     * A ceiling on what any ONE worker container's harness may spend, in ms
-     * (tick 5fg). Unset on a real deployment: the default is derived from
-     * measurement (`DEFAULT_WORKER_HARNESS_BUDGET_MS`) and bounded by the
-     * run's own remaining wall clock, which is the bound that matters. Set it
-     * to stop a single long tick from eating a generous run allowance.
-     */
-    RUN_WORKER_BUDGET_MS?: string;
-    /**
-     * Harness kind and model a run is started with — the orchestrator sandbox,
-     * and any per-tick worker container the run dispatches unless the worker
-     * vars below are what the deployment wants instead. This is the run's own
-     * choice and it outranks them.
+     * Harness kind and model a run is started with — the orchestrator sandbox
+     * (whose entrypoint probes them before it execs `ticfac run-epic`), and
+     * the top rung of every cloud container's routing: the per-tick workers
+     * and, since tick dl8, the PR review job, which resolve through the
+     * worker ladder in src/worker-boot.ts with this as the run-level choice.
+     *
+     * Pinned in wrangler.toml to pi on GLM 5.3 (tick uqi), so an orchestrator
+     * boot reports `model ... (from the control plane)` rather than falling
+     * back to the repository's role/tier routing, which is the LOCAL worker
+     * CLI's route, not one the factory gateway serves.
      */
     RUN_HARNESS?: string;
     RUN_MODEL?: string;
     /**
      * This deployment's standing harness and model for a per-tick WORKER
-     * container (tick 1cd). Unset on a real deployment: the built-in default
-     * is `omp` on `deepseek-v4-pro-0813`, chosen on run_215b7cbff9's evidence
-     * that flash failed to converge on two of three real ticks inside a
-     * 90-minute budget — see `WORKER_DEFAULT_MODEL` in src/worker-boot.ts for
-     * the measurement and what pro costs.
+     * container (tick 1cd). Pinned in wrangler.toml to pi on
+     * `workers-ai/@cf/zai-org/glm-5.3` (tick uqi): the operator's rule is
+     * GLM 5.3 / 5.3 Flash via pi only, and nothing in the cloud runs claude.
+     * The built-in default in `src/worker-boot.ts` holds the same value, so
+     * an unconfigured deployment agrees with a configured one — but the pin
+     * states the rule in the deployable config rather than leaving it to a
+     * source constant.
      *
-     * Set `RUN_WORKER_MODEL` to route workers somewhere else — back to
-     * `workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731` for a wave of small
-     * ticks, say — without editing TypeScript. Resolution order is
+     * Set `RUN_WORKER_MODEL` to route workers somewhere else — to
+     * `workers-ai/@cf/zai-org/glm-5.3-flash` for a wave of small ticks, say —
+     * without editing TypeScript. Resolution order is
      * run submission > deployment var > built-in default (`workerModel`).
      */
     RUN_WORKER_HARNESS?: string;
@@ -460,17 +436,6 @@ declare namespace Cloudflare {
       store: import("./git-contents").ContentsStore;
     };
     /**
-     * The attempt executor the EpicReconciler Workflow dispatches through
-     * (tick z23): the job-protocol four operations. A deployment now wires
-     * the sandbox compatibility executor itself when the pieces exist (tick
-     * k4s, `sandboxExecutorFromEnv` in src/sandbox-executor.ts) — the
-     * binding remains the seam a test injects its own executor through, and
-     * a deployment missing a piece (no container binding, no epic base, no
-     * factory URL) still refuses dispatches, naming what is missing rather
-     * than recording attempts nobody started.
-     */
-    TICFAC_EXECUTOR?: import("./epic-reconciler").AttemptExecutor;
-    /**
      * The git writer the sandbox executor puts an attempt's work on its own
      * write_ref through (tick us2): the executor's collect takes the branch
      * the container pushed and lands it on `refs/heads/ticfac/…`, the same
@@ -481,29 +446,6 @@ declare namespace Cloudflare {
      * needs testing, not the HTTP.
      */
     TICFAC_REF_WRITER?: import("./git-refs").GitRefWriter;
-    /**
-     * The merge-and-gate half of a tick's settle on the Workflow host (tick
-     * z23): what turns a reported attempt into a closeable one. Unset on a
-     * deployment, where the run refuses to close ticks behind an
-     * integration it cannot perform — the serialized publisher is this
-     * phase's item 3.
-     */
-    TICFAC_INTEGRATION?: import("./epic-reconciler").IntegrationHost;
-    /**
-     * The code-hosting surface the CI-gated close-out reads (tick cxk): the
-     * pull-request + CI seam the PR + CI close-out rule demands — find or
-     * open the epic PR, read CI on a commit, carry the review's verdict and
-     * the run's findings onto the PR. Unset on a deployment, which speaks
-     * GitHub's REST API directly from `GITHUB_TOKEN` — and a deployment
-     * with no token at all gets the typed refusal a rule-declaring
-     * repository answers to, never a silent ungated close-out.
-     */
-    TICFAC_PULL_REQUESTS?: {
-      project: string;
-      forge: import("./forge").PullRequests;
-    };
-    /** Test knob for the reconcile Workflow's poll cadence (ms). */
-    TICFAC_RECONCILE_POLL_MS?: number;
     [signalSecret: `SIGNAL_SECRET_${string}`]: string | undefined;
   }
 }

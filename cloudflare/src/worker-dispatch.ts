@@ -48,7 +48,7 @@ import type {
   SandboxOutput,
   SandboxProcessState,
 } from "./sandbox";
-import type { WorkerCollector, WorkerReport, WorkerTask } from "./worker-collect";
+import type { WorkerTask } from "./worker-collect";
 
 // ------------------------------------------------------------- the timing ---
 
@@ -67,56 +67,17 @@ export const COLD_START_BENCHMARK_MS = 93_240;
  *
  * `fanout_degradation_vs_n1` in the same artifact: 1.00x / 2.22x / 3.74x at
  * N=1/3/5, all of it in dependency install. A probe budget sized for a lone
- * container is not a budget for the fifth container of a wave.
+ * container is not a budget for the fifth container of a wave. Read by
+ * `DEFAULT_PROBE_TIMEOUT_MS` below, and pinned against the committed
+ * benchmark artifact by `internal/factory/payload_parity_test.go`.
+ *
+ * The width-keyed degradation CURVE this constant fed — `probeTimeoutMs`,
+ * which interpolated a probe budget for a wave of any width — existed to
+ * size the reconciler's wave dispatches, and went with the reconciler
+ * (tick mn7); the door's dispatches are one container each, so the widest
+ * measured factor is the one that sizes them.
  */
 export const FANOUT_DEGRADATION_FACTOR = 3.74;
-
-/**
- * The same artifact's degradation curve, by wave width.
- *
- * {@link FANOUT_DEGRADATION_FACTOR} is the WIDEST point of this curve, and
- * sizing every deployment's probe by it is what pushed a green-start probe and
- * a dispatch confirm to 598s of the 600s a Workflow step may execute for
- * (tick 2xm, src/workflow-limits.ts). A deployment that runs three containers
- * at a time paid the five-container penalty for nothing.
- *
- * Read by {@link probeTimeoutMs}: measured points, linear between them, and
- * the widest measured factor beyond the last one — never extrapolated past
- * what the benchmark actually recorded.
- */
-export const FANOUT_DEGRADATION: ReadonlyArray<{ width: number; factor: number }> = [
-  { width: 1, factor: 1.0 },
-  { width: 3, factor: 2.22 },
-  { width: 5, factor: FANOUT_DEGRADATION_FACTOR },
-];
-
-/**
- * How long a worker container has to answer its probe, at a given wave width.
- *
- * Same derivation as {@link DEFAULT_PROBE_TIMEOUT_MS} — a measured cold start,
- * degraded for fan-out, plus 20% headroom — but degraded for THIS wave's
- * width rather than for the widest wave anyone has measured.
- */
-export function probeTimeoutMs(width: number): number {
-  const clean = Number.isFinite(width) && width >= 1 ? width : 1;
-  const last = FANOUT_DEGRADATION[FANOUT_DEGRADATION.length - 1]!;
-  let factor = last.factor;
-  for (let i = 0; i < FANOUT_DEGRADATION.length; i++) {
-    const point = FANOUT_DEGRADATION[i]!;
-    if (clean <= point.width) {
-      const previous = FANOUT_DEGRADATION[i - 1];
-      if (previous === undefined) {
-        factor = point.factor;
-      } else {
-        const span = point.width - previous.width;
-        const along = (clean - previous.width) / span;
-        factor = previous.factor + (point.factor - previous.factor) * along;
-      }
-      break;
-    }
-  }
-  return Math.ceil(COLD_START_BENCHMARK_MS * factor * 1.2);
-}
 
 /**
  * How long a worker container has to answer its probe.
@@ -145,21 +106,6 @@ export const DEFAULT_PROBE_POLL_MS = 2_000;
  */
 export const DEFAULT_CONFIRM_TIMEOUT_MS = 180_000;
 export const DEFAULT_CONFIRM_POLL_MS = 2_000;
-/**
- * How long a caller who names no timeout watches one worker.
- *
- * Kept equal to `waveWaitTimeoutMs(DEFAULT_WORKER_HARNESS_BUDGET_MS)` in
- * worker-boot.ts — the measured 90-minute harness budget plus the push margin
- * — and pinned there by a guard test rather than imported, because
- * worker-boot.ts already takes its types from this module and a value import
- * back would close the cycle. It was thirty minutes, which is shorter than a
- * real tick takes (tick 5fg): a default that kills healthy work is worse than
- * no default at all, and `run-workflow.ts` now passes its own derived number
- * on every dispatch regardless.
- */
-export const DEFAULT_WAIT_TIMEOUT_MS = 91 * 60_000;
-export const DEFAULT_WAIT_POLL_MS = 15_000;
-
 /** Injectable so a test drives the polling loops without real wall-clock time. */
 export type Sleeper = (ms: number) => Promise<void>;
 
@@ -237,15 +183,6 @@ export type WaveCancellation = {
 export type CancelProbe = () => Promise<WaveCancellation | null>;
 
 /**
- * How often a wave in flight looks for a reason to stop, by default.
- *
- * The same cadence `run-workflow.ts` watches an orchestrator on (`MIN_POLL_MS`):
- * the point of this seam is that noticing a hard stop costs one poll interval,
- * never one batch.
- */
-export const DEFAULT_CANCEL_POLL_MS = 15_000;
-
-/**
  * The seam a wave is interrupted through.
  *
  * ONE of these is shared by every worker in a wave, which is the whole design:
@@ -269,93 +206,14 @@ export type Canceller = {
   readonly reads: number;
 };
 
-export type CancellerOptions = {
-  poll_ms?: number;
-  /**
-   * Run once, awaited, the instant the wave is first found cancelled — before
-   * `check` answers and therefore before any worker starts tearing down.
-   *
-   * This is where the money dies. `.tick/learnings.md` ("Cost, budgets and kill
-   * switches"): a hard stop must revoke BEFORE the window in which the run
-   * would otherwise keep spending, not after it. Tearing a container down is
-   * the stronger stop, but it is also the slower one, and a failure here must
-   * not swallow the cancellation — it is logged, never thrown.
-   */
-  on_cancel?: (cancellation: WaveCancellation) => Promise<void>;
-};
-
 /**
- * Builds the shared canceller for one wave.
+ * One poll-interval sleep, interruptible by the cancellation seam.
  *
- * A probe that throws is NOT a cancellation: an unreadable stop record is a
- * failed read, and the run keeps going exactly as `hardStopRecord` in
- * `run-workflow.ts` already decides ("a read failure is not a stop"). Fail-open
- * is right here and only here, because the between-batch check and the
- * per-observation check both still stand behind it.
- */
-export function waveCanceller(probe: CancelProbe, opts: CancellerOptions = {}): Canceller {
-  const pollMs = Math.max(opts.poll_ms ?? DEFAULT_CANCEL_POLL_MS, 0);
-  let latched: WaveCancellation | null = null;
-  let inflight: Promise<WaveCancellation | null> | null = null;
-  let nextAt = 0;
-  let reads = 0;
-
-  async function read(): Promise<WaveCancellation | null> {
-    reads += 1;
-    let seen: WaveCancellation | null = null;
-    try {
-      seen = await probe();
-    } catch (error) {
-      console.error(
-        `factory worker-dispatch: a wave's cancellation probe failed: ${String(error)}`,
-      );
-      return null;
-    }
-    nextAt = Date.now() + pollMs;
-    if (seen === null) return null;
-    latched = seen;
-    if (opts.on_cancel !== undefined) {
-      try {
-        await opts.on_cancel(seen);
-      } catch (error) {
-        console.error(
-          `factory worker-dispatch: a wave's cancellation hook failed: ${String(error)}`,
-        );
-      }
-    }
-    return seen;
-  }
-
-  return {
-    async check(): Promise<WaveCancellation | null> {
-      if (latched !== null) return latched;
-      if (pollMs > 0 && Date.now() < nextAt) return null;
-      if (inflight === null) {
-        inflight = read().finally(() => {
-          inflight = null;
-        });
-      }
-      return inflight;
-    },
-    get cancelled(): WaveCancellation | null {
-      return latched;
-    },
-    pollMs,
-    get reads(): number {
-      return reads;
-    },
-  };
-}
-
-/**
- * Sleeps, checking for cancellation on the CANCELLER's cadence rather than the
- * caller's.
- *
- * The two cadences are deliberately independent. A wait loop that polls a
- * container every fifteen minutes must not mean fifteen minutes before a hard
- * stop is noticed; a probe loop that polls every second must not mean a
- * stop-record read every second. Whichever is shorter decides how long a sleep
- * runs before the next look.
+ * An absent canceller is an ordinary sleep — which is what the dispatch door's
+ * spawns pass, nothing: the seam stays open on `spawnWorker`'s options, and a
+ * caller that names no `cancel` cannot be interrupted by one. Present, the
+ * sleep is cut into canceller-sized chunks so a stop is noticed on the
+ * canceller's own cadence, never a full interval late.
  */
 async function sleepUnlessCancelled(
   ms: number,
@@ -812,115 +670,6 @@ export async function spawnWorker(
   };
 }
 
-// ------------------------------------------------------------------- wait ---
-
-export type WaitOutcome = {
-  state: SandboxProcessState | "gone";
-  exit_code: number | null;
-  timed_out: boolean;
-  /** Set when the wave was cancelled while this worker was still being watched. */
-  cancelled: WaveCancellation | null;
-  /**
-   * How far into the worker's output this wait streamed.
-   *
-   * Carried out of the wait because a wave is watched across MANY bounded
-   * waits since tick 2xm — one per Workflow step — and the next one adopts
-   * this container rather than starting it. Restarting the cursor at zero
-   * would re-stream everything the container has printed so far into its R2
-   * key on every leg, which for a ninety-minute wave is the same log written
-   * thirteen times.
-   */
-  offset: number;
-};
-
-/**
- * Waits for a launched worker's process to reach a terminal state, bounded.
- *
- * Re-addresses the sandbox by name on every look rather than holding the
- * reference `spawnWorker` used, matching how each of `tk herd`'s spawn,
- * wait and collect independently resolve state by id — a caller across a
- * real boundary (a Workflow step, a `tk cloud wait` HTTP call) cannot carry
- * a live object across it either.
- */
-export async function waitForWorker(
-  binding: SandboxBinding,
-  sandboxName: string,
-  processID: string,
-  opts: {
-    timeoutMs?: number;
-    pollMs?: number;
-    sleep?: Sleeper;
-    cancel?: Canceller;
-    /** Where this container's output goes as the wait watches it (tick 0fg). */
-    log?: WorkerLogWriter;
-    /** How much of it `confirmDispatch` already streamed — never restart at 0. */
-    offset?: number;
-  } = {},
-): Promise<WaitOutcome> {
-  const sleep = opts.sleep ?? defaultSleeper;
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-  const pollMs = opts.pollMs ?? DEFAULT_WAIT_POLL_MS;
-  const deadline = Date.now() + timeoutMs;
-  let offset = opts.offset ?? 0;
-
-  /**
-   * The wait is where a worker spends nearly all of its wall clock and prints
-   * nearly everything it prints, so the drain happens HERE, on the same
-   * cadence as the liveness look — continuously, never once at the end. A read
-   * that fails is logged and the wait carries on: a diagnostic that can end a
-   * live run is worse than a gap in a log.
-   */
-  const flush = async (sandbox: OrchestratorSandbox): Promise<void> => {
-    if (opts.log === undefined) return;
-    try {
-      const chunk = await drain(sandbox, processID, offset, opts.log);
-      offset = chunk.offset;
-    } catch (error) {
-      console.error(
-        `factory worker-dispatch: could not read ${sandboxName}'s output: ${String(error)}`,
-      );
-    }
-  };
-
-  for (;;) {
-    const sandbox = await binding.get(sandboxName);
-    await flush(sandbox);
-    const view = await sandbox.getProcess(processID);
-    if (view === null) {
-      return { state: "gone", exit_code: null, timed_out: false, cancelled: null, offset };
-    }
-    if (view.state === "completed" || view.state === "failed") {
-      // Read once more now the process is over: whatever it printed on its way
-      // out landed after the flush above, and that is the half of the log a
-      // failed worker is read for.
-      await flush(sandbox);
-      return {
-        state: view.state,
-        exit_code: view.exit_code,
-        timed_out: false,
-        cancelled: null,
-        offset,
-      };
-    }
-    if (Date.now() >= deadline) {
-      return {
-        state: view.state,
-        exit_code: view.exit_code,
-        timed_out: true,
-        cancelled: null,
-        offset,
-      };
-    }
-    // The wait is where a wave spends nearly all of its wall clock, and it is
-    // therefore where an operator's stop was being ignored for up to
-    // `timeoutMs` — thirty minutes of a batch nobody could interrupt.
-    const cancelled = await sleepUnlessCancelled(pollMs, sleep, opts.cancel);
-    if (cancelled !== null) {
-      return { state: view.state, exit_code: view.exit_code, timed_out: false, cancelled, offset };
-    }
-  }
-}
-
 // -------------------------------------------------------------- liveness ---
 
 export type LivenessCheck = { alive: boolean; state: SandboxProcessState | "gone" };
@@ -1199,310 +948,4 @@ export async function teardownWorker(
   }
   await sandbox.destroy();
   return { killed: liveness?.alive ?? false, destroyed: true, liveness };
-}
-
-// -------------------------------------------------------------- the wave ---
-
-export type WaveOptions = SpawnOptions & {
-  wait_timeout_ms?: number;
-  wait_poll_ms?: number;
-  /**
-   * What happens to a container whose wait ran out (tick 2xm).
-   *
-   * `teardown` — the default, and the only behaviour before this tick — kills
-   * the process and destroys the container: the wait timeout IS the worker's
-   * deadline, so a worker still running at it has had its allowance.
-   *
-   * `leave` means this wait was not the worker's deadline but one bounded LEG
-   * of it, sized to fit inside a Cloudflare Workflow step (600s execution cap,
-   * src/workflow-limits.ts). The container is left exactly as it is, still
-   * working, for the next leg's reconcile to adopt. Nothing else changes: a
-   * cancelled wave still tears its containers down immediately, and the last
-   * leg of a wave still passes `teardown`, so a worker that outlives the whole
-   * wave budget is killed exactly as it always was.
-   */
-  on_wait_timeout?: "teardown" | "leave";
-  /**
-   * How long a cancelled container is given to commit and push before it is
-   * destroyed (tick 7zk). Defaults to {@link DEFAULT_SALVAGE_GRACE_MS}. Zero
-   * asks the container to stop and destroys it without waiting, which is the
-   * behaviour before this tick with one extra process started.
-   */
-  salvage_grace_ms?: number;
-  /** How often that window looks; defaults to {@link DEFAULT_SALVAGE_POLL_MS}. */
-  salvage_poll_ms?: number;
-  /**
-   * A worker already running for this tick, from the reconcile plan
-   * (src/reconcile.ts). Returning one turns the whole spawn half of the cycle
-   * off for that task: no probe, no second process, nothing started — the
-   * wave waits on what is there, collects it and tears it down exactly as if
-   * it had launched it itself.
-   *
-   * This is the rule the herd substrate learned the hard way, at the one
-   * place that could break it: a live worker is never redispatched, whatever
-   * its branch looks like.
-   */
-  adopt?: (task: WorkerTask) => Adoption | null;
-};
-
-/** A worker this wave takes over rather than starts. */
-export type Adoption = {
-  /** The running work process, from the container's own live process list. */
-  process_id: string;
-  /** Why this tick is being adopted — carried into the outcome's `detail`. */
-  detail: string;
-  /**
-   * How much of this container's output has already been streamed, when the
-   * adopter knows (tick 2xm's dispatch legs do: the previous leg's checkpointed
-   * `WaitOutcome` says so). Absent means the cursor is unknown and the stream
-   * restarts from the beginning — see {@link adoptedSpawn}.
-   */
-  output_offset?: number;
-};
-
-export type WorkerWaveOutcome = SpawnResult & {
-  wait: WaitOutcome | null;
-  collect: WorkerReport;
-  teardown: TeardownOutcome;
-  /**
-   * What this container's grace window did, present exactly when the wave was
-   * cancelled while this container existed (tick 7zk). Absent everywhere else:
-   * a container that finished, or that a leg left running, was never asked to
-   * stop, and reporting a salvage for it would describe a window nobody held.
-   */
-  salvage?: SalvageOutcome;
-  /**
-   * The reconcile class that settled this tick without addressing a container
-   * at all (tick s7f) — `already-landed` for work that is in git, `unknown`
-   * for evidence a human has to resolve. Absent for every tick the wave
-   * actually dispatched or adopted.
-   */
-  settled?: string;
-};
-
-/** A container the wave never addressed: nothing was booted, so nothing is torn down. */
-export const NOT_ADDRESSED: TeardownOutcome = { killed: false, destroyed: false, liveness: null };
-
-/**
- * A container this LEG left running on purpose (tick 2xm).
- *
- * Shaped like `NOT_ADDRESSED` and meaning something else entirely: the
- * container exists, a worker is still in it, and the next leg is going to
- * adopt it. Named separately so a reader of an outcome — or of the wave
- * outcomes artifact — can tell "no container" from "a container we chose not
- * to kill yet".
- */
-export const LEFT_RUNNING: TeardownOutcome = { killed: false, destroyed: false, liveness: null };
-
-/**
- * The outcome of adopting a worker that was already running.
- *
- * `launched` is true because the container IS running this tick's work — the
- * field means "a work process for this tick exists in this container", not "we
- * are the ones who started it". A collect that read the branch would otherwise
- * be filed under a wave that never launched anything.
- */
-function adoptedSpawn(task: WorkerTask, sandboxName: string, adoption: Adoption): SpawnResult {
-  return {
-    tick_id: task.tick_id,
-    sandbox_name: sandboxName,
-    launched: true,
-    // No probe was run: the container proved itself when it was first
-    // dispatched, and re-probing a container that is mid-tick would start a
-    // second process in it for no reason.
-    probe: { ok: true },
-    confirm: { confirmed: true, detail: adoption.detail, offset: adoption.output_offset ?? 0 },
-    process_id: adoption.process_id,
-    // Zero when the adopter cannot say where the stream got to — a DEAD
-    // supervisor's cursor died with it. This attempt then streams the adopted
-    // container from the beginning into its OWN attempt folder, so a reader
-    // may see the pre-adoption output twice: deliberately chosen over losing
-    // whatever the dead supervisor never flushed, which is the output closest
-    // to why it died. A live adopter that knows the cursor — one dispatch leg
-    // handing the wave to the next (tick 2xm) — passes it, and nothing is
-    // re-streamed.
-    output_offset: adoption.output_offset ?? 0,
-    adopted: true,
-    cancelled: null,
-    detail: `adopted a live worker: ${adoption.detail}`,
-  };
-}
-
-async function dispatchOneWorker(
-  binding: SandboxBinding,
-  sandboxName: string,
-  task: WorkerTask,
-  spec: WorkSpec,
-  opts: WaveOptions,
-  collector: WorkerCollector,
-): Promise<WorkerWaveOutcome> {
-  // Before a container is even ADDRESSED. `binding.get` provisions on
-  // Cloudflare, so a wave already cancelled must not touch the sandbox at all:
-  // addressing one is how a stopped run boots the containers it was stopped to
-  // prevent.
-  const before = opts.cancel === undefined ? null : await opts.cancel.check();
-  if (before !== null) {
-    return {
-      tick_id: task.tick_id,
-      sandbox_name: sandboxName,
-      launched: false,
-      probe: { ok: false, reason: "cancelled", detail: before.detail, output: "" },
-      confirm: null,
-      process_id: null,
-      output_offset: 0,
-      adopted: false,
-      cancelled: before,
-      detail: `wave cancelled before this container was addressed: ${before.detail}`,
-      wait: null,
-      collect: await collector.collect(task),
-      teardown: NOT_ADDRESSED,
-    };
-  }
-
-  // A worker that is ALREADY running for this tick is taken over, never
-  // replaced. Everything downstream — the wait, the collect, the teardown — is
-  // unchanged, which is the point: adoption is a different way to acquire a
-  // process, not a different lifecycle.
-  const adoption = opts.adopt?.(task) ?? null;
-  const spawned =
-    adoption === null
-      ? await spawnWorker(binding, sandboxName, task, spec, opts)
-      : adoptedSpawn(task, sandboxName, adoption);
-
-  // Bound once for the whole cycle: the wait streams this container's output,
-  // and so does the salvage window after a cancellation — the same tick's
-  // stream, so the same writer and the same cursor.
-  const log = opts.logs?.forTick(task.tick_id);
-
-  let wait: WaitOutcome | null = null;
-  if (spawned.cancelled === null && spawned.launched && spawned.process_id !== null) {
-    wait = await waitForWorker(binding, sandboxName, spawned.process_id, {
-      timeoutMs: opts.wait_timeout_ms,
-      pollMs: opts.wait_poll_ms,
-      sleep: opts.sleep,
-      offset: spawned.output_offset ?? 0,
-      ...(opts.cancel === undefined ? {} : { cancel: opts.cancel }),
-      ...(log === undefined ? {} : { log }),
-    });
-  }
-
-  const cancelled = spawned.cancelled ?? wait?.cancelled ?? null;
-  if (cancelled !== null) {
-    // REVOKE, THEN GRACE, THEN DESTROY (tick 7zk).
-    //
-    // The revoke has already happened: it is `waveCanceller`'s `on_cancel`,
-    // awaited before `check` answers and therefore before this line is
-    // reached, which is tick gyl's ordering — the money dies before the
-    // containers do. What that ordering BUYS is this window: a container whose
-    // gateway token is revoked cannot make a model call, so the seconds spent
-    // here cannot be spent on the model. They can only be spent finishing a
-    // git push, and that is exactly what run_f7bd5a36 needed and did not get.
-    //
-    // Then teardown, still before collect — the reverse of the ordinary order
-    // below. Collect makes GitHub round trips, and reading git while a
-    // container is still up buys nothing: git does not forget while we tear a
-    // container down.
-    const salvage = await salvageWorker(binding, sandboxName, spawned.process_id, spec.salvage, {
-      reason: cancelled.reason,
-      ...(opts.salvage_grace_ms === undefined ? {} : { graceMs: opts.salvage_grace_ms }),
-      ...(opts.salvage_poll_ms === undefined ? {} : { pollMs: opts.salvage_poll_ms }),
-      ...(opts.sleep === undefined ? {} : { sleep: opts.sleep }),
-      ...(log === undefined ? {} : { log }),
-      offset: wait?.offset ?? spawned.output_offset ?? 0,
-    });
-    const teardown = await teardownWorker(binding, sandboxName, spawned.process_id);
-    return {
-      ...spawned,
-      cancelled,
-      wait,
-      salvage,
-      collect: await collector.collect(task),
-      teardown,
-    };
-  }
-
-  // Collect ALWAYS runs, whatever spawn/wait decided: a green-start trap or
-  // a timed-out wait is a fact about this attempt at the container, not
-  // about the branch — and reconcile's own rule applies at the tick level
-  // too, so a prior attempt's pushed work must still be found.
-  const collect = await collector.collect(task);
-
-  // The one case a container survives its wait: this wait was a bounded LEG of
-  // the wave rather than the worker's deadline (tick 2xm). Killing here is what
-  // the whole leg mechanism exists to avoid — the worker is mid-tick and the
-  // next leg adopts it. Every other path still tears down, cancellation
-  // included, and so does the final leg.
-  if (wait?.timed_out && wait.cancelled === null && opts.on_wait_timeout === "leave") {
-    return { ...spawned, wait, collect, teardown: LEFT_RUNNING };
-  }
-
-  const teardown = await teardownWorker(binding, sandboxName, spawned.process_id);
-
-  return { ...spawned, wait, collect, teardown };
-}
-
-/**
- * Dispatches a wave: one sandbox per tick, booted concurrently.
- *
- * `Promise.all` is what makes "N containers concurrently" true — every
- * tick's spawn → wait → collect → teardown cycle is independent of every
- * other's, exactly as `tk herd spawn` fires every worker of a wave before
- * any wait begins rather than working through them one at a time.
- *
- * `specFor` is a function, not a shared `WorkSpec`, because a spec is PER
- * TICK — `worker-boot.ts`'s own `workerWorkSpec` says so in as many words —
- * and a single shared spec would set the identical `TICKS_TICK` in every
- * container's environment, which is the exact bug that would make "one
- * container per tick" boot N containers that all implement the SAME tick
- * (tick b6e).
- *
- * `opts.adopt` is the reconcile plan's other half (tick s7f): a task it
- * answers for is taken over rather than started, so a supervisor replacing one
- * that died mid-wave never puts a second worker on a tick that already has a
- * live one.
- *
- * `opts.on_wait_timeout` is what makes a wave that outlives one Cloudflare
- * Workflow step possible at all (tick 2xm). This function BLOCKS until every
- * container in the wave settles or its wait runs out, and a wave's wait is now
- * up to ninety-one minutes ({@link DEFAULT_WAIT_TIMEOUT_MS}) against a 600s
- * per-step execution cap (src/workflow-limits.ts) — so a caller inside a
- * Workflow step calls this repeatedly with a leg-sized `wait_timeout_ms` and
- * `on_wait_timeout: "leave"`, and each call re-establishes what is running
- * from the durable layer and adopts it. Called once with a wave-sized timeout,
- * as `superviseCloudWave` used to, it kills its own supervisor.
- *
- * `opts.cancel` is the wave's interrupt (tick k24). Without it a batch of up
- * to `max_instances` containers runs to completion no matter what an operator
- * asks for — a hard stop or a blown budget waited on the slowest container in
- * the batch, up to `wait_timeout_ms`. With it, every polling loop in the cycle
- * looks for a reason to stop on the canceller's own cadence, and a cancelled
- * worker is torn down before anything else is done with it. The canceller is
- * SHARED by the whole wave by construction: it lives in the options every task
- * is handed, so the first worker to see the stop decides it for all of them.
- */
-export async function dispatchWave(
-  binding: SandboxBinding,
-  sandboxNameFor: (tickID: string) => string,
-  tasks: WorkerTask[],
-  specFor: (task: WorkerTask) => WorkSpec,
-  opts: WaveOptions,
-  collector: WorkerCollector,
-): Promise<WorkerWaveOutcome[]> {
-  return Promise.all(
-    tasks.map((task) =>
-      dispatchOneWorker(
-        binding,
-        sandboxNameFor(task.tick_id),
-        task,
-        specFor(task),
-        opts,
-        collector,
-      ),
-    ),
-  );
-}
-
-/** The sandbox name one tick's worker is addressed by within a run. */
-export function workerSandboxName(runID: string, tickID: string): string {
-  return `${runID}-tick-${tickID}`;
 }

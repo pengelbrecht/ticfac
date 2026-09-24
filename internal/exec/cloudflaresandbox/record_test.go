@@ -104,6 +104,9 @@ func TestValidateDoorFieldsRefusesWhatTheDoorRefuses(t *testing.T) {
 		BaseRef:  "epic/xte",
 		Title:    "A tick title with spaces",
 		BaseSHA:  "0123456789abcdef0123456789abcdef01234567",
+		Model:    testModel,
+		Harness:  testHarness,
+		Prompt:   testPrompt,
 	}
 	if err := validateDoorFields(good); err != nil {
 		t.Fatalf("a request the door accepts was refused here: %v", err)
@@ -124,6 +127,14 @@ func TestValidateDoorFieldsRefusesWhatTheDoorRefuses(t *testing.T) {
 		{"base ref is empty", func(r *startRequest) { r.BaseRef = "" }, "base_ref"},
 		{"title carries a newline", func(r *startRequest) { r.Title = "line\nline" }, "title"},
 		{"base sha is short", func(r *startRequest) { r.BaseSHA = "abc123" }, "base_sha"},
+		{"no model", func(r *startRequest) { r.Model = "" }, "model"},
+		{"model carries a space", func(r *startRequest) { r.Model = "glm 5.3" }, "model"},
+		{"no harness", func(r *startRequest) { r.Harness = "" }, "harness"},
+		{"harness carries a space", func(r *startRequest) { r.Harness = "some harness" }, "harness"},
+		{"no prompt", func(r *startRequest) { r.Prompt = "" }, "prompt"},
+		{"prompt carries a control character", func(r *startRequest) { r.Prompt = "a\u0007b" }, "prompt"},
+		{"prompt is not text the door reads", func(r *startRequest) { r.Prompt = "non-ascii: \u00e9" }, "prompt"},
+		{"prompt is too long", func(r *startRequest) { r.Prompt = strings.Repeat("a", 65537) }, "prompt"},
 	} {
 		r := *good
 		tc.mutat(&r)

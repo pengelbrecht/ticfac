@@ -141,6 +141,7 @@ describe("needsHuman", () => {
       status_detail: "",
       status_line: "",
       boundary_files: [],
+      report_only: false,
       detail: "",
     };
     expect(needsHuman({ ...base, status: STATUS_BLOCKED })).toBe(true);
@@ -176,6 +177,88 @@ describe("collectFromGithub", () => {
         `/repos/${PROJECT}/compare/${BASE}...${encodeURIComponent(BRANCH)}`,
       );
       expect(github.calls[1]).toContain(`/repos/${PROJECT}/contents/${RESULT_PATH}?ref=`);
+    } finally {
+      github.restore();
+    }
+  });
+
+  // Tick 94u, absorbing the finding the Go executor's own collect already
+  // refused (dyo, 73ba193d): the container's entrypoint commits the report
+  // itself, in its own commit (image/worker.sh), so a worker that did
+  // NOTHING still leaves one commit beyond the base — and a collect that
+  // counts commits alone reads it as ready-to-merge. The refusal is the
+  // same verdict the Go side uses, no-commits, with its own sentence,
+  // because "the branch is empty" is a lie about this one.
+  it("is no-commits, never ready-to-merge, when the report is the branch's only change", async () => {
+    const github = stubGithub({
+      compare: compareOK(1, [RESULT_PATH]),
+      contents: {
+        status: 200,
+        body: { content: b64("STATUS: DONE"), encoding: "base64" },
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
+      expect(report.verdict).toBe("no-commits");
+      expect(report.report_only).toBe(true);
+      // The commit is a stated fact, not a denial: the refusal is about the
+      // WORK, and one commit is exactly what this shape leaves.
+      expect(report.commits).toBe(1);
+      // The report is still read: the refusal says what the worker CLAIMED.
+      expect(report.status).toBe(STATUS_DONE);
+      expect(report.detail).toContain(RESULT_PATH);
+      expect(report.detail).toContain("not a deliverable");
+    } finally {
+      github.restore();
+    }
+  });
+
+  // The refusal must not swallow real work: the entrypoint's report commit
+  // rides beside the worker's own commits on every honest branch, and the
+  // check reads the whole diff, not the commit count.
+  it("stays ready-to-merge when the report rides beside real work", async () => {
+    const github = stubGithub({
+      compare: compareOK(2, ["src/thing.ts", RESULT_PATH]),
+      contents: {
+        status: 200,
+        body: { content: b64("work\n\nSTATUS: DONE\n"), encoding: "base64" },
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
+      expect(report.verdict).toBe("ready-to-merge");
+      expect(report.report_only).toBe(false);
+    } finally {
+      github.restore();
+    }
+  });
+
+  // Ordering, pinned the way the Go side's classify pins it: a report that
+  // carries no STATUS line is missing-result even on a report-only branch,
+  // because an answer nobody can read is the more urgent fact.
+  it("is missing-result, not the report-only refusal, when the report carries no STATUS: line", async () => {
+    const github = stubGithub({
+      compare: compareOK(1, [RESULT_PATH]),
+      contents: {
+        status: 200,
+        body: { content: b64("Implemented the thing.\n"), encoding: "base64" },
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+      });
+      expect(report.verdict).toBe("missing-result");
     } finally {
       github.restore();
     }

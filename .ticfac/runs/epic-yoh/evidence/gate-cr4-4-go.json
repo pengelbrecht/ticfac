@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-cr4-4-go",
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "cr4",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "86e918eddc42aaf3d0d94ded933ef95ad9bdbf29",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-24T04:42:42Z",
+  "finished_at": "2026-09-24T04:43:22Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t21.837s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.150s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.712s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t4.794s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t0.480s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t34.655s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t15.384s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t1.012s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t0.683s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t1.057s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t1.066s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t2.501s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t0.991s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t0.849s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t17.188s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t1.088s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.070s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t1.489s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t1.635s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t0.757s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t0.596s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t0.239s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tkcorpus\t2.270s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:3734faf3be11543308e1c004455dbdcf121d00c915b399cb131fb18246acfc9e",
+  "persistence_uri": "git:refs/heads/epic/yoh:.ticfac/runs/epic-yoh/evidence/gate-cr4-4-go.json"
+}

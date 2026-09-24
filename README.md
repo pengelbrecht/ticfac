@@ -76,6 +76,17 @@ negative controls, and it finishes in seconds. Everything skipped there runs in
 `make test-short`, and which epic close-out runs before a merge. The discipline
 is enforced by `internal/shorttest`'s guard rather than remembered.
 
+The full suite also carries one test that needs the OTHER toolchain:
+`internal/exec/cloudflaresandbox`'s end-to-end adoption test (tick 6gr) drives
+the REAL factory Worker — `cloudflare/src`'s deployed fetch handler, the
+gateway's authorization, the dispatch lease, the adoption machinery — in real
+workerd through miniflare, on a real local port, with the real Go executor on
+the far side. The harness is `cloudflare/test/go-door-harness/`; it needs
+`cloudflare/node_modules` (`pnpm install` there) and skips — naming that
+remedy — where they are absent, so a checkout with only Go installed still
+gets the short suite in seconds and a clear sentence saying what the long one
+adds. CI installs the workspace in the go job for exactly this reason.
+
 **Which side a new test belongs on.** "End-to-end" is not the same claim as
 "not worth a tick's time", so the second is decided by name rather than
 inferred from the first. A test in one of those three packages must do one of

@@ -25,8 +25,20 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runsignal"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
+
+// newTracker builds the tracker a command works through, as the tk client
+// against one checkout. It is a seam for exactly one proof — the SIGTERM
+// evacuation test (tick ppt) — which runs a REAL run-epic as a real child
+// process without a tk binary on PATH: a fake answers the tracker interface
+// the reconciler reads, and everything above that seam — the reconciler, the
+// executor, the supervisor, the signal handler — is the production code the
+// acceptance criterion is about.
+var newTracker = func(repo string) (reconcile.Tracker, error) {
+	return tk.New(tk.Options{Dir: repo})
+}
 
 // Version is this build's version, set with -ldflags "-X
 // github.com/pengelbrecht/ticfac/internal/cli.Version=<v>". "dev" is an
@@ -80,12 +92,21 @@ run-epic flags:
   --budget <usd>      the budget an operator asks for
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
+  --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
+                      in-flight work and writing the checkpoint before the process exits anyway — the
+                      platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
+                      the flush is what spends a bounded slice of that window making the disk's loss
+                      survivable (0 disables the flush)
 
 Each dispatch goes through the executor its resolved profile names — a profile
-naming the herdr executor launches the attempt in a herdr workspace, and every
-record it produces states herdr's protocol and server version in its
-provenance; this build honours two executors, the local subprocess one and
-herdr, and refuses a profile naming any other before anything is claimed.
+naming the herdr executor launches the attempt in a herdr workspace, a profile
+naming cloudflare-sandbox asks the factory's per-tick sandbox door to boot one
+attempt's worker container (the factory's base URL and the run's own gateway
+token come from TICKS_FACTORY_URL and TICKS_FACTORY_TOKEN), and the wall
+clock, the report and the boundary are judged from the branch and the report
+in git at collect. This build honours three executors — local-subprocess,
+herdr and cloudflare-sandbox — and refuses a profile naming any other before
+anything is claimed.
 
 The effective budget — what an operator asked for, clamped to the deployment
 ceiling — is printed before the run starts, while it can still be cancelled
@@ -313,6 +334,16 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
 			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
 				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
+		// The eviction flush's bound (tick ppt). The platform sends SIGTERM,
+		// waits up to fifteen minutes, then SIGKILLs; the flush commits and
+		// pushes the in-flight work and writes the checkpoint inside THIS many
+		// seconds, so a hung push cannot spend the whole window and reach
+		// SIGKILL anyway. Zero and below disable the flush — the pre-ppt
+		// behaviour, an immediate exit that leaves the work to whatever the
+		// last timer push carried away.
+		evacuateSeconds = fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
+			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
+				"and writing the checkpoint before the process exits anyway (0 disables the flush)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -360,7 +391,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	if *runner == "" {
 		*runner = "claude"
 	}
-	tracker, err := tk.New(tk.Options{Dir: *repo})
+	tracker, err := newTracker(*repo)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: the tracker is not usable: %v\n", epicID, err)
 		return 1
@@ -479,6 +510,31 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		case sig := <-signals:
 			detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
 			life.Logf("%s", detail)
+			// The eviction flush (tick ppt): SIGTERM is the platform saying the
+			// container is going away, so the run spends a BOUNDED slice of the
+			// grace window making the disk's loss survivable — commit what is in
+			// the worktrees, push, write the checkpoint — then exits. The window
+			// is not used for anything else; the run does not try to finish
+			// work, and a step that cannot be done is said and skipped, so no
+			// hung push can eat the window the bound exists to protect.
+			//
+			// SIGINT keeps the immediate exit it always had: that is a person
+			// at a terminal, not a platform eviction, and a person's stop wants
+			// no ceremony. The flush is SIGTERM's.
+			if sig == syscall.SIGTERM && *evacuateSeconds > 0 {
+				budget := time.Duration(*evacuateSeconds) * time.Second
+				lines := reconciler.Evacuate(sig.String(), budget)
+				for _, line := range lines {
+					life.Logf("evacuation: %s", line)
+					fmt.Fprintf(operatorStderr, "ticfac run-epic %s: evacuation: %s\n", epicID, line)
+				}
+				// The summary line is the one fact the run's death record
+				// carries forward — the last line of the account, folded into
+				// the run_died a subscriber reads from the feed.
+				if summary := lines[len(lines)-1]; summary != "" {
+					detail += "; " + summary
+				}
+			}
 			died(detail)
 			life.Release(detail)
 			status := 130
@@ -497,6 +553,11 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		died(err.Error())
 		life.Release("died: " + err.Error())
+		// The completion signal (tick 7eq): a dead run wants its supervisor
+		// woken just as much as a finished one, so the reboot does not wait out
+		// a whole cadence to learn what the container already knew. The branch
+		// may never have landed — the door takes a signal with no head.
+		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
 		return 1
 	}
 	defer life.Release(string(result.State))
@@ -529,6 +590,15 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	if result.LivenessError != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %s\n", epicID, livenessFailureLine(result.RunID, result.LivenessError))
 	}
+	// The completion signal (tick 7eq), sent on this path and the error path
+	// both: a run that errored has as much reason to wake its supervisor
+	// immediately as one that finished — the replacement (or the refusal) is a
+	// cadence look away otherwise. Best effort by construction: the pushed
+	// branch is the source of truth, so FromEnv's nil — a local run with no
+	// factory in its environment — makes this a no-op, and a signal that cannot
+	// be delivered is said to the log (which is run.log here, the stream the
+	// Workflow drains to R2) and swallowed, never an exit code.
+	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
 	return resultExitCode(result)
 }
 
@@ -673,7 +743,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	if *runner == "" {
 		*runner = "claude"
 	}
-	tracker, err := tk.New(tk.Options{Dir: *repo})
+	tracker, err := newTracker(*repo)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: the tracker is not usable: %v\n", epicID, err)
 		return 1

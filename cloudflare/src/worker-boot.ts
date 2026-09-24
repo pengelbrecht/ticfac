@@ -26,7 +26,6 @@
  * started in the wrong one.
  */
 
-import type { WorkerTask } from "./worker-collect";
 import type { ProbeSpec, WorkSpec } from "./worker-dispatch";
 
 // ------------------------------------------------------------ the commands ---
@@ -105,12 +104,25 @@ export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 export const WORKER_TRACE_ID_ENV = "TICKS_TRACE_ID";
 
 /**
+ * The rendered role prompt a dispatch carries into the container (tick 9iz).
+ *
+ * The sandbox dispatch door receives the profile's own prompt text — the one
+ * the run's records digest into `prompt_digest` — because the container's
+ * entrypoint renders its worker prompt from the CHECKOUT's tracker and would
+ * otherwise never see the prompt the factory chose. It rides the boot
+ * environment beside the harness and the model, so the worker runs on exactly
+ * what the dispatch resolved: the same provenance rule the model (tick a08)
+ * and the harness (tick 9iz) already ride.
+ */
+export const WORKER_ROLE_PROMPT_ENV = "TICKS_ROLE_PROMPT";
+
+/**
  * A cancellation reason, reduced to something safe to hand a shell.
  *
- * The reason travels from `WaveCancellation.reason` — `budget:cost`,
+ * The reason travels from the stop that asked for the salvage — `budget:cost`,
  * `stopped:hard` — which is a machine-readable token by construction. It is
  * still filtered rather than trusted: this string becomes an argument in a
- * command line the control plane composes, and a `WaveCancellation` is built
+ * command line the control plane composes, and a cancellation is carried
  * from a stop record a caller supplied. Anything outside the token alphabet is
  * dropped, not escaped, because a reason is a label and a label that needed
  * escaping is not one.
@@ -179,11 +191,6 @@ export function workerResultFile(tick: string): string {
   return `RESULT-${tick}.md`;
 }
 
-/** The `WorkerTask` a wave collects one tick against, built from the same two rules. */
-export function workerTask(epic: string, tick: string, baseSHA: string): WorkerTask {
-  return { tick_id: tick, branch: workerBranch(epic, tick), base_sha: baseSHA };
-}
-
 // ---------------------------------------------------------- the exit codes ---
 
 /**
@@ -233,6 +240,13 @@ export type WorkerBootInput = {
   /** The chain this container's work belongs to; see {@link WORKER_TRACE_ID_ENV}. */
   trace_id?: string;
   /**
+   * The rendered role prompt this worker's harness opens on, when the
+   * dispatch carried one (tick 9iz): the profile's own prompt text, exported
+   * as {@link WORKER_ROLE_PROMPT_ENV} so the container runs on the prompt the
+   * run's records digest, never one only the checkout knows.
+   */
+  prompt?: string;
+  /**
    * Whether this worker runs the repository's `[sandbox]` setup.
    *
    * This is the performance lever for the whole per-tick design and it is
@@ -246,99 +260,24 @@ export type WorkerBootInput = {
   /**
    * How long this worker's harness may WORK, if the caller bounds it.
    *
-   * The agent's budget is the decision (`workerHarnessBudgetMs`); the wave's
-   * wait is derived from it (`waveWaitTimeoutMs`), not the other way round.
-   * They were one constant until tick 5fg, which made "how long may the agent
-   * work" a hostage of "how long does the supervisor wait before reconciling"
-   * — two different jobs, and the constant answered neither from measurement.
+   * Zero (absent) means unbounded — the entrypoint's own default. When a
+   * caller does bound it, the bound is the agent's working time, never a
+   * supervisor's observation window wearing it as a disguise (tick 5fg).
    */
   harness_budget_ms?: number;
 };
 
 /**
- * How much of the wave's wait window is reserved for committing and pushing.
+ * A worker container's own default harness.
  *
- * The dispatcher's wait timeout ends in `teardownWorker` KILLING the
- * container, and a killed container pushes nothing. This margin is what turns
- * that into a pushed branch and a legible report instead. It worked exactly as
- * designed on run run_2e66e765 — three killed containers still produced three
- * readable branches — so it is deliberately unchanged by tick 5fg.
+ * `pi`, per the operator's rule (tick uqi): the cloud's harness is pi and only
+ * pi, and nothing in the cloud runs claude — `image/common.sh` refuses
+ * `claude` outright against a non-Anthropic provider, by design, and the
+ * routes the operator pays for are Workers AI ones the image wires pi to.
+ * The default and the `wrangler.toml` pins agree; this constant is the floor
+ * under a deployment that sets no `RUN_WORKER_HARNESS`, not the rule itself.
  */
-export const WORKER_PUSH_MARGIN_MS = 60_000;
-
-/**
- * The default ceiling on one worker's harness budget, in ms.
- *
- * Justified by this repository's own measurement, not by taste. Tick y45
- * recorded a COMPLETE one-tick epic at **78 minutes** on
- * `deepseek-v4-pro-0813`, which is now {@link WORKER_DEFAULT_MODEL} itself
- * (tick 1cd). Ninety minutes is that measurement plus a small allowance, and
- * it stays where it is: a deployment that routes workers back to flash
- * through `RUN_WORKER_MODEL` needs MORE time than pro, not less, so lowering
- * this on the model change would break the configuration it enables.
- *
- * The number this replaced was thirty minutes, and it was not a safety margin:
- * on run run_2e66e765 (2026-08-22, epic 72y, ticks 201/5jo/5qj) all three
- * containers drove the loop competently — 393+ model calls each, real tool
- * use, 95-99% prompt cache — and all three were killed `exit 124` with zero
- * work commits, just before they would have committed. That is the most
- * expensive failure available: the run pays for every token and keeps nothing.
- */
-export const DEFAULT_WORKER_HARNESS_BUDGET_MS = 90 * 60_000;
-
-/**
- * The floor a DERIVED budget never drops below.
- *
- * A bound of a few seconds fails every worker rather than rescuing any. When a
- * run is genuinely out of time the thing that stops its wave is the wall-clock
- * trip (`cloudWaveTrip`, tick k24), which cancels the batch and tears the
- * containers down — not a harness budget of nine seconds.
- */
-export const MIN_WORKER_HARNESS_BUDGET_MS = 5 * 60_000;
-
-/**
- * How long one worker's harness may work, from the run's own allowance.
- *
- * `remaining_wall_clock_ms` is what the RUN has left, so a worker can never be
- * given more time than the run it belongs to — a worker that outlives its run
- * is a container the wall-clock trip has to kill, which is the failure this
- * derivation exists to stop. `cap_ms` is the deployment's own ceiling on any
- * single worker (`RUN_WORKER_BUDGET_MS`), defaulting to the measured
- * {@link DEFAULT_WORKER_HARNESS_BUDGET_MS}: a generous run allowance is not a
- * licence to hand ONE tick the whole run.
- */
-export function workerHarnessBudgetMs(
-  input: { remaining_wall_clock_ms?: number; cap_ms?: number } = {},
-): number {
-  const cap =
-    input.cap_ms !== undefined && Number.isFinite(input.cap_ms) && input.cap_ms > 0
-      ? input.cap_ms
-      : DEFAULT_WORKER_HARNESS_BUDGET_MS;
-  const remaining = input.remaining_wall_clock_ms;
-  if (remaining === undefined || !Number.isFinite(remaining)) return cap;
-  const usable = remaining - WORKER_PUSH_MARGIN_MS;
-  if (usable >= cap) return cap;
-  return Math.max(MIN_WORKER_HARNESS_BUDGET_MS, Math.floor(usable));
-}
-
-/**
- * How long the wave watches a container that may work for `harnessBudgetMs`.
- *
- * Exactly the push margin longer, and in that order: the agent's budget is the
- * decision and the supervisor's patience follows it. Deriving it the other way
- * round is what made a thirty-minute observation window silently also be every
- * agent's working life.
- */
-export function waveWaitTimeoutMs(harnessBudgetMs: number): number {
-  return harnessBudgetMs + WORKER_PUSH_MARGIN_MS;
-}
-
-/**
- * A worker container's own default harness — cross-provider, unlike `claude`
- * (`image/common.sh` refuses `claude` outright against a non-Anthropic
- * provider, by design).
- */
-export const WORKER_DEFAULT_HARNESS = "omp";
+export const WORKER_DEFAULT_HARNESS = "pi";
 
 /**
  * A worker container's own default model when nothing else names one.
@@ -360,41 +299,35 @@ export const WORKER_DEFAULT_HARNESS = "omp";
  * It is a DEFAULT, not the route: {@link workerModel} resolves the run's own
  * choice first, then the deployment's `RUN_WORKER_MODEL`, then this. Tick 1cd
  * added the middle rung, because until then changing which model every cloud
- * worker runs meant editing this line and redeploying the factory.
+ * worker runs meant editing this line and redeploying the factory; tick uqi
+ * pinned that rung in `wrangler.toml` to the same value this constant now
+ * holds, so the deployable config — not a source constant — is what a
+ * deployment reads.
  *
- * **Why `deepseek-v4-pro-0813`, and what it costs.** Run
- * `run_215b7cbff9dd405c80d738be45cccde5` (2026-08-22) is the first cloud run
- * whose substrate worked end to end: three real ticks, 90-minute budgets,
- * workers on `deepseek-v4-flash-0731`. Result — `201` exit 124 at the bound
- * with zero work commits, `5jo` exit 0 with real correct work, `5qj` exit 124
- * with zero commits and four paths salvaged. **One of three**, and not on toy
- * ticks (201 is scrolling in a bubbletea TUI, 5qj is a workerd lifecycle
- * problem in vitest): flash ground through 90 minutes of 94-99%-cached calls
- * without converging on two of them. Everything around the model worked, so
- * that is a model-capability result. Tick y45 predicted this exact shape and
- * had already placed the two models — flash at `implement.balanced`/`economy`,
- * pro at `implement.strong` — on 53.3 against 63.0 DeepSWE v1.1.
+ * **Why GLM 5.3 (tick uqi).** The operator's rule is Workers AI models only
+ * — nothing in the cloud runs claude — and pi on GLM 5.3 (GLM 5.3 Flash for
+ * cheap work) is today's choice within it; the model may change, the rule
+ * does not. The route is proven rather than hoped for: the
+ * 2026-09-22/23 smoke runs (the throwaway `smoke/xte-omp-glm` branch, which
+ * this tick retires) booted pi on GLM 5.3 through the gateway end to end, and
+ * the pinned image
+ * carries pi's GLM 5.3 catalog correction (vendored from ticks `d5dbfbc4`:
+ * pi's catalog overstates the model's output limit, and the override pins
+ * maxTokens and the thinking format) — without which the first harness probe
+ * dies on a bodyless HTTP 400 that looks like nothing else in the log.
  *
- * The price is real and is not hidden here. On y45's own per-completed-tick
- * model (`docs/workers-ai-model-selection.md`), pro costs **$0.851/tick
- * against flash's $0.283 — 3.0x**, and the true multiple on a long agentic run
- * is WORSE than that, because pro delivered only **12 of 24** post-warm
- * prompt-cache opportunities against flash's **23/23**, and a cached input
- * token bills at a thirtieth of an uncached one. The comparison that decides
- * it is not cost per token: **a worker that does not converge costs 100% of
- * its tokens for 0% of the work**, and that was two of the three containers.
- *
- * This is NOT "always use the expensive model". The end state is per-tick tier
- * selection, which `[roles.implement].tiers` already expresses for local
- * workers and the cloud path has no plumbing for — see the note on
- * {@link workerModel} for exactly what it needs. Until then a deployment that
- * knows its wave is cheap sets `RUN_WORKER_MODEL` back to flash, which is the
+ * The defaults this replaces were Workers AI too — flash, then
+ * `deepseek-v4-pro-0813` on run_215b7cbff9's evidence that flash converged on
+ * only one of three real ticks inside a 90-minute budget — so the operator's
+ * Phase 2 constraint (Workers AI only, the Cloudflare credit) is unchanged.
+ * The end state is still per-tick tier selection, which `[roles.implement]`
+ * `.tiers` already expresses for local workers and the cloud path has no
+ * plumbing for — see the note on {@link workerModel} for exactly what it
+ * needs. Until then a deployment that knows its wave is cheap sets
+ * `RUN_WORKER_MODEL` to `workers-ai/@cf/zai-org/glm-5.3-flash`, which is the
  * rung tick 1cd added.
- *
- * Both models are Workers AI, so both stay on the Cloudflare credit and the
- * operator's Phase 2 constraint is unaffected either way.
  */
-export const WORKER_DEFAULT_MODEL = "workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813";
+export const WORKER_DEFAULT_MODEL = "workers-ai/@cf/zai-org/glm-5.3";
 
 /**
  * Whether a configured route string was actually supplied.
@@ -444,9 +377,8 @@ export function workerHarness(run?: string | null, deployment?: string | null): 
  * repository's table routes local CLIs straight to Anthropic; (c) `WorkSpec`
  * construction per task rather than per wave, which `workerWorkSpec` already
  * is (it is called with `(task) => ...`), so this part is free; and (d) a
- * per-tick budget, since a flash worker needs MORE wall clock than pro, and
- * {@link workerHarnessBudgetMs} currently sizes every container in a batch
- * identically. Good Phase 3 candidate.
+ * per-tick budget, since a flash worker needs MORE wall clock than pro.
+ * Good Phase 3 candidate.
  */
 export function workerModel(run?: string | null, deployment?: string | null): string {
   return configured(run) ?? configured(deployment) ?? WORKER_DEFAULT_MODEL;
@@ -506,6 +438,7 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     ["TICKS_FACTORY_TOKEN", input.factory_token],
     ["TICKS_FACTORY_PROJECT", input.factory_project],
     [WORKER_TRACE_ID_ENV, input.trace_id],
+    [WORKER_ROLE_PROMPT_ENV, input.prompt],
   ];
   for (const [name, value] of optional) {
     if (value !== undefined && value !== "") env[name] = value;
@@ -533,9 +466,9 @@ export function workerProbeSpec(input: WorkerBootInput): ProbeSpec {
 /**
  * Everything `spawnWorker` needs for one tick.
  *
- * PER TICK, not per wave: `TICKS_TICK` differs for every container in a wave,
- * so a caller fanning a wave out builds one of these per task rather than
- * sharing a single `WorkSpec` across `dispatchWave`.
+ * PER TICK, not per run: `TICKS_TICK` differs for every worker container, so
+ * a caller dispatching several builds one of these per task rather than
+ * sharing a single `WorkSpec` across them.
  */
 export function workerWorkSpec(input: WorkerBootInput): WorkSpec {
   const env = workerBootEnv(input);

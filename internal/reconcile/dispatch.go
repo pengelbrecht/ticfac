@@ -1145,6 +1145,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: entry.TickID, Attempt: number,
 		Try: try, JobID: jobID, Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
+		BaseRef: r.opts.BaseRef, Title: entry.Title,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
 		ResumedFrom: resumed,
 		// What the tick's earlier attempts found (tick nvn): the reports a
@@ -1299,16 +1300,36 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 					"not failed: the attempt is not spent, and running the epic again under this run id starts it "+
 					"once the width frees", marker.TickID, r.attemptName(marker.TickID, marker.Attempt), claimErr)
 		}
-		// The marker landed and the dispatch did not: the previous reconciler
-		// died in the window the marker exists to make safe, or the tracker
-		// refused its claim. Nothing is running, so this one starts it — and
-		// the tick is in flight from here, which the next checkpoint carries
-		// (a resume reads a dispatched tick as one to adopt before anything
-		// new is claimed).
+		// The state directory is gone with the disk that held it — the
+		// fresh-disk boot a replacement container makes, and the same path a
+		// reconciler that died between marker and dispatch takes. They are one
+		// branch because they must not be distinguishable: whatever the attempt
+		// PUSHED is what it had already done, and origin can say how far that
+		// was. The executor cuts the worktree from the pushed head
+		// (executor.go startPoint), and the note below is the run's own
+		// account of a boot that resumed rather than restarted.
+		note := fmt.Sprintf(
+			"attempt %d's disk is gone with its container and nothing it pushed survives: it starts over from the base",
+			marker.Attempt)
+		if pushed, err := r.remoteWork(branchOf(marker.WriteRef), marker.BaseSHA); err != nil {
+			// Not "nothing survived": a failed read is not evidence of absence,
+			// and saying it was would be the guess the executor refuses too.
+			note = fmt.Sprintf(
+				"attempt %d's disk is gone with its container, and what it pushed could not be read (%v): it starts from the base and what is on origin is settled by whoever finds it",
+				marker.Attempt, err)
+		} else if pushed != "" {
+			note = fmt.Sprintf(
+				"attempt %d's disk is gone with its container, and origin carries %s of it beyond the base: it continues from its own pushed work, and what it never pushed is redone",
+				marker.Attempt, short(pushed))
+		}
+		// Nothing is running, so this one starts it. The resume note lands only
+		// if the start did: a start that failed is the failure the run records,
+		// and a resume that never happened is not a fact about the run.
 		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, r.startFailure(marker.TickID, err)
 		}
+		r.record(marker.TickID, StageResumed, "%s", note)
 		r.noteAlive(marker.JobID)
 		r.setTick(marker.TickID, "dispatched")
 		return handle, executor, nil
@@ -1384,6 +1405,7 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		Try:   marker.Try,
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
+		BaseRef: r.opts.BaseRef, Title: r.titleOf(marker.TickID),
 		Tier: marker.Tier,
 		// The executor the attempt RAN ON, off the marker — never the one a
 		// profile re-resolved today would name (tick d6s): a later leg must
@@ -1429,6 +1451,18 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	}
 	dispatch.Profile = profile
 	return dispatch, nil
+}
+
+// titleOf is the tick's title as the plan read it from the tracker, for a
+// dispatch rebuilt from a marker (the marker carries the identity, not the
+// prose). Empty when the plan no longer carries the tick — a leg that never
+// starts work — and the executor that requires a title refuses such a start
+// loudly rather than minting one from anywhere else.
+func (r *Reconciler) titleOf(tickID string) string {
+	if r.titles == nil {
+		return ""
+	}
+	return r.titles[tickID]
 }
 
 // carryHead is the commit a dispatch CARRIED from a released attempt starts

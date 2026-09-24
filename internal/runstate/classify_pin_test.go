@@ -10,14 +10,14 @@ import (
 //
 // cloudflare/test/fixtures/classify-tick-decision.json is pinned byte for
 // byte from the live exchange by internal/reconcile
-// (TestTheClassificationRecordIsPinnedAsItIsWritten), and BOTH run-state
-// stores test against it: the TypeScript store parses it through
-// validateDecision — the read that used to throw, because that side had
-// closed the decision record's role vocabulary with $defs.role alone while
-// this side's DecisionRoles had gained the classification exchange — and
-// THIS test proves the other direction: the pin is a record the Go reader
-// accepts, so the fixture cannot drift into something one store refuses
-// while the other passes.
+// (TestTheClassificationRecordIsPinnedAsItIsWritten), and internal/runstate
+// — the one run-state store left — tests against it: this test proves the
+// pin is a record the Go reader accepts, so the fixture cannot drift into
+// something the store refuses. The TypeScript store that was the pin's other
+// reader — the read that used to throw, because that side had closed the
+// decision record's role vocabulary with $defs.role alone while this side's
+// DecisionRoles had gained the classification exchange — went with the
+// Workflow reconciler (tick mn7).
 //
 // It is this package's test rather than the pin writer's because the pin's
 // side of the comparison needs a whole run; the READ is cheap, so it stays in

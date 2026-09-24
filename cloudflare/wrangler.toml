@@ -189,8 +189,11 @@ GITHUB_CONSENT_LABEL = "tk"
 # Budget enforcement lives in the Run Workflow, never in a prompt (D14): a model
 # can be talked out of a budget, a Workflow step cannot. Both numbers are
 # deployment decisions, and exhausting either is the SAME clean stop the
-# operator's `tk cloud stop` takes — finish in flight, then review and closeout
-# (D15). Bounds and defaults live in src/run-workflow.ts.
+# operator's `tk cloud stop` takes — the in-flight work gets its grace window,
+# the container is killed, and the run ends (D15; tick dl8 removed the
+# closeout boot that used to follow: `ticfac run-epic` commits and pushes as
+# it goes, so the branch is the state a new run re-derives from). Bounds and
+# defaults live in src/run-workflow.ts.
 #
 # Deliberately small until a run has been measured with working enforcement. The
 # first uncapped run billed $49.80 against a $25 ceiling because the cost query
@@ -211,8 +214,6 @@ RUN_MAX_COST_USD = "40"
 # orchestrator. Nothing durable is lost either way — tracker state is committed
 # to the run branch — but a tick that is one commit from done deserves it.
 RUN_STOP_GRACE_MS = "300000"
-# A closeout that has not closed out in this long is not going to.
-RUN_CLOSEOUT_MS = "1800000"
 
 # The account's container ceiling, mirrored (tick b6e): must equal
 # `[[containers]] max_instances` above. Wrangler does not hand a container
@@ -227,30 +228,35 @@ RUN_CLOSEOUT_MS = "1800000"
 # limit.
 FACTORY_MAX_INSTANCES = "3"
 
-# Which harness and model a per-tick WORKER container runs (tick 1cd). Left
-# unset on purpose: the default lives in `src/worker-boot.ts`
-# (`WORKER_DEFAULT_HARNESS` = `omp`, `WORKER_DEFAULT_MODEL` =
-# `workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813`) so an unconfigured
-# deployment still boots a worker that can reach the gateway — the repository's
-# own `[roles.implement]` routes to Anthropic and this gateway serves Workers
-# AI only (tick ys3). What these vars buy is that the choice is no longer a
-# SOURCE EDIT: before them, changing the worker model meant editing TypeScript
-# and redeploying the factory.
+# Which harness and model the cloud runs (tick 1cd added the vars; tick uqi
+# pinned them). The built-in defaults live in `src/worker-boot.ts`
+# (`WORKER_DEFAULT_HARNESS` = `pi`, `WORKER_DEFAULT_MODEL` =
+# `workers-ai/@cf/zai-org/glm-5.3`) so an unconfigured deployment still boots
+# a worker that can reach the gateway — the repository's own
+# `[roles.implement]` routes to a vendor a cloud container has no credential
+# for, and this gateway serves Workers AI only (tick ys3). What these vars
+# buy is that the choice is no longer a SOURCE EDIT: before them, changing
+# the worker model meant editing TypeScript and redeploying the factory.
 #
-# The default moved flash -> pro on run_215b7cbff9's evidence: three real ticks
-# at 90 minutes each on `deepseek-v4-flash-0731` and only ONE converged (201
-# and 5qj both hit the bound at exit 124 with no work commits). Pro costs
-# roughly 3x flash per completed tick on y45's model ($0.851 against $0.283)
-# and caches worse under load (12/24 post-warm hits against flash's 23/23), so
-# the real multiple on a long run is worse than 3x — but a worker that does not
-# converge costs 100% of its tokens for 0% of the work, which is the comparison
-# that decided it. Both models are Workers AI, so both stay on the credit.
+# OPERATOR (ticks uqi, nwn): the cloud runs Workers AI models only — nothing
+# in the cloud runs claude. Today's choice within that rule is pi on GLM 5.3
+# (GLM 5.3 Flash for cheap work); the model may change, the rule does not. Pinned explicitly below
+# rather than left to the built-in default, so the deployable config says
+# the rule and no silent default change can decide it: an unset RUN_MODEL
+# would let the orchestrator container fall back to the repository's
+# role/tier routing (the LOCAL worker CLI's route, not one this gateway
+# serves), and an unset RUN_WORKER_MODEL would leave the workers to the TS
+# constants.
 #
-# Set RUN_WORKER_MODEL to route a wave of small ticks back to flash. Order is
-# run submission (`--model`/RUN_MODEL) > this var > the built-in default.
+# Order is run submission (`--model`/RUN_MODEL) > this var > the built-in
+# default. Route a wave of cheap ticks to GLM 5.3 Flash with RUN_WORKER_MODEL:
 #
-#   RUN_WORKER_MODEL = "workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731"
-#   RUN_WORKER_HARNESS = "omp"
+#   RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3-flash"
+
+RUN_HARNESS = "pi"
+RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+RUN_WORKER_HARNESS = "pi"
+RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 
 # What a CLASSIFIED work type costs on this deployment (tick mrn, epic wne):
 # which model serves each kind of work. The vocabulary — mechanical,
@@ -343,16 +349,6 @@ crons = ["0 * * * *"]
 name = "ticks-run"
 binding = "RUN_WORKFLOW"
 class_name = "RunWorkflow"
-
-# The EpicReconciler Workflow (tick z23, SPEC 12 Phase 4 item 2): the
-# reconciler's control flow hosted by a Workflow rather than an
-# orchestrating agent container — one instance per EpicRun, keyed by run
-# id. Tracker access goes through the contract-held TypeScript client
-# (src/tracker-client.ts); run state lives in .ticfac/ on the run branch.
-[[workflows]]
-name = "ticfac-epic-reconciler"
-binding = "EPIC_RECONCILER"
-class_name = "EpicReconcilerWorkflow"
 
 [dev]
 port = 8788

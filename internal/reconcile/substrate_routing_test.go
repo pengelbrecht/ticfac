@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -125,6 +127,77 @@ func TestACloudRunRefusesAtStartOverARoleWithNoCloudRouting(t *testing.T) {
 	}
 }
 
+// The same refusal, keyed on the EXECUTOR rather than the substrate (tick
+// 78v): a run on a LOCAL substrate (herdr) whose profiles name the
+// cloudflare-sandbox executor boots its workers in a Cloudflare container
+// under local routing — and the local ladder's claude tier
+// (.tick/runners.local.toml's frontier, the file a laptop declares) is
+// exactly the model that must not run there. The run is refused AT START,
+// at construction, before anything is dispatched, naming the role, the tier
+// and the resolved kind and model — whatever its substrate.
+func TestALocalRunOnTheSandboxExecutorRefusesAtStartOverATierThatLeavesWorkersAI(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	const localGate = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[tier_policy]
+default = "strong"
+ceiling = "frontier"
+
+[testing.commands]
+tree = { command = "test -f README.md", description = "the merge carries the work" }
+`
+	const localCells = `version = 2
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+`
+	f := newFixture(t, fixtureOptions{gate: localGate})
+	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.local.toml"), []byte(localCells), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The profile set a local run selects to dispatch through the sandbox
+	// executor: every role names it, the way profiles-cloudflare-sandbox/
+	// does — and the honoured set admits it, so without the executor-keyed
+	// rule this run would have constructed and dispatched.
+	profiles := filepath.Join(f.Root, "sandbox-profiles")
+	if err := os.MkdirAll(profiles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range profile.Roles {
+		writeProfile(t, profiles, role,
+			`"executor": "cloudflare-sandbox", "runner": "pi", "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3"`)
+	}
+	opts := f.options(f.Repo, fixtureOptions{gate: localGate, substrate: "herdr"})
+	opts.ProfileDir = profiles
+	opts.Executors = []KnownExecutor{{
+		Name:         "cloudflare-sandbox",
+		Runners:      []string{"pi"},
+		AcceptsModel: func(string) bool { return true },
+		PollInterval: 20 * time.Millisecond,
+	}}
+	_, err := New(opts)
+	if err == nil {
+		t.Fatal("a herdr-substrate run on the sandbox executor, whose frontier tier resolves to claude, was constructed")
+	}
+	if !errors.Is(err, profile.ErrNotWorkersAI) {
+		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	}
+	for _, want := range []string{"implement", `tier "frontier"`, `"claude"`, `"opus"`, "runners.local.toml"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %q: %v", want, err)
+		}
+	}
+}
+
 // The same run, over a config that declares the cloud cells, dispatches every
 // role off the claude harness — review and close-out included — while a local
 // run of the same file keeps the frontier cells (asserted by the profile and
@@ -191,6 +264,51 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 		}
 		if dispatch.Profile.Provenance.Substrate != "cloud" {
 			t.Errorf("%s's provenance does not name the substrate: %q", tick, dispatch.Profile.Provenance.Substrate)
+		}
+	}
+}
+
+// The cloud rule refuses AT START over the FINAL resolved worker (tick nwn):
+// every cloud cell is pi on a Workers AI model at its base, but the cloud
+// file's own tier cell for the tier the policy starts at routes claude. The
+// run is refused at construction — before anything is dispatched — naming the
+// role, the tier and the resolved kind and model.
+func TestACloudRunRefusesAtStartOverATierThatLeavesWorkersAI(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	const cloudCells = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.implement.tiers.economy]
+kind = "claude"
+model = "haiku"
+
+[roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.closeout]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`
+	f := newFixture(t, fixtureOptions{gate: massGate})
+	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.cloud.toml"), []byte(cloudCells), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := f.options(f.Repo, fixtureOptions{gate: massGate, substrate: "cloud"})
+	_, err := New(opts)
+	if err == nil {
+		t.Fatal("a cloud run whose economy tier resolves to claude was constructed")
+	}
+	if !errors.Is(err, profile.ErrNotWorkersAI) {
+		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	}
+	for _, want := range []string{"implement", `tier "economy"`, `"claude"`, `"haiku"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %s: %v", want, err)
 		}
 	}
 }

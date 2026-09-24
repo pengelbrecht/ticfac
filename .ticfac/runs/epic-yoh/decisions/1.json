@@ -1,0 +1,112 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "yoh",
+    "job_id": "run-epic-yoh/tick-cs1/attempt-18",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "aeb552e307fee87992e878e796e4980501bb5e46",
+    "tick_id": "cs1"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "collect.go classifies no-commits with rev-list --count base..head, but image/worker.sh commit_report always commits RESULT-<tick>.md as its own commit, so an implement-tick worker that changed nothing and wrote STATUS: DONE collects as ready_to_merge, and every cloud attempt merges RESULT-<tick>.md into the epic branch root. collect_test.go's fake puts work and report in one commit, which the real worker never does.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "cloudflare-sandbox collect merges an attempt whose only commit is the worker's report"
+      },
+      {
+        "body": "In run-workflow.ts the boot step.do sits outside the try/finally that destroys the container, and superviseRun has no try around supervisePass, so a boot that fails three times (startProcess/issueRunToken throw, 300s step timeout) errors the instance: the lease is not released, the run row stays running, the gateway token is not revoked and a keepAlive container may never be destroyed. The same escape exists for a watch step that exhausts OBSERVE_RETRIES. No test fails the boot past its retries.",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "A Run Workflow whose boot step exhausts its retries never finalizes"
+      },
+      {
+        "body": "collect.go defers the wall bound to the container's TICKS_WORKER_TIMEOUT, but sandbox-executor.ts never sets harness_budget_ms, the Go start request carries no wall value, and Cancel is refused, so --wall does nothing for a cloud worker and a looping worker runs until factory-side teardown.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Cloud workers dispatched through the door have no wall-clock bound"
+      },
+      {
+        "body": "The orchestrator is a sandbox.startProcess child while PID 1 (where eviction SIGTERM goes) is the sandbox control server; nothing shows the signal is forwarded, and the Workflow's killProcess ignores its signal argument. The CLI's evacuation also runs concurrently with reconciler.Supervise, which can keep dispatching or return and os.Exit mid-flush, emitting a done signal for an evicted run. ppt's AC asked for a live SIGTERM proof.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Prove the SIGTERM flush reaches a startProcess'd orchestrator, and stop dispatch while it runs"
+      },
+      {
+        "body": "sandbox-executor.ts builds the adopted handle's model from bootedModel(deps.boot(spec)) of the CURRENT request, so executor.go's adoption model check compares the request with itself; if the tier or runners.cloud.toml changes between orchestrator incarnations the record names a model the container is not running. Each adoption also mints a fresh worker run token.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Sandbox adoption reports the requested model, not the running container's, so the Go model check cannot fire"
+      },
+      {
+        "body": "enforceWorkersAI fires only under substrate cloud, so a laptop run using executor cloudflare-sandbox can send a claude profile through the door unchecked; and nothing refuses executor local-subprocess under the cloud substrate (cloudprofiles_test asserts the local set resolves), so gbs's guarantee rests on the entrypoint passing --profiles.",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "The Workers-AI-only rule is keyed on substrate, not on the cloudflare-sandbox executor"
+      },
+      {
+        "body": "internal/runsignal/runsignal.go runs git ls-remote under context.Background() via plain git rather than gitbin, so a hung remote hangs run-epic's exit after the run has finished; the HTTP POST is bounded but the ref read before it is not.",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "runsignal.Done runs git ls-remote with no deadline and plain git"
+      },
+      {
+        "body": "make ts-gate is lint + contracts + tsc only; every TypeScript behaviour change in yoh (cr4, 7eq, 3ed, dl8, l6t) merged with the gate never running its tests, which only CI runs. vitest also leaks Workflow instances (uncaught 'Engine was never started' / hung-worker errors after teardown). Either add vitest to a gate command or record why CI alone suffices.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "The integrated gate runs no vitest, so TS behaviour ticks merge untested by the gate"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-yoh/tick-cs1/attempt-18",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-yoh/cs1/RESULT-cs1.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "make gate` fails in this sandbox only because the read-only push config breaks local-fixture pushes; the affected packages were re-run with that config removed from the test env and pass. Confirm on a normal host. The epic's live-cloud acceptance was not and could not be exercised from here."
+  },
+  "validated": true,
+  "requested_at": "2026-09-24T11:53:32Z",
+  "answered_at": "2026-09-24T11:53:32Z",
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "cs1",
+    "attempt": 18,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "aeb552e307fee87992e878e796e4980501bb5e46",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

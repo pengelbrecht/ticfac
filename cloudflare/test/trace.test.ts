@@ -2,12 +2,11 @@ import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import layout from "../../contracts/tracker-layout.json";
 import contract from "../../contracts/worker-boot-contract.json";
-import { readWorkerLogTail, readWorkerManifest, type WorkerManifest } from "../src/artifacts";
+import { readWorkerLogTail, writeWorkerLogHeader } from "../src/artifacts";
 import { enrolProject, getRun } from "../src/db";
 import { draftCallbackData } from "../src/drafts";
 import { GATEWAY_METADATA_KEYS, gatewayMetadata } from "../src/gateway";
 import { DEFAULT_CONSENT_LABEL, GITHUB_WEBHOOK_PATH, githubSignature } from "../src/github-issues";
-import { manifestRecorder } from "../src/reconcile";
 import { epicCompleted, epicStarted, tickCompleted, tickStarted } from "../src/run-events";
 import { parseSubmission, type RunWorkflowInstance, type RunWorkflowParams } from "../src/runs";
 import { inboxFor, submitSignal } from "../src/signal-inbox";
@@ -471,15 +470,19 @@ describe("what carries the id", () => {
   it("heads a worker container's log stream before the container is addressed", async () => {
     const project = "acme/widgets";
     const runID = "run_banner";
-    const recorder = manifestRecorder(env.ARTIFACTS, project, {
-      run_id: runID,
-      epic: "1vn",
-      batch: 1,
-      trace_id: layout.trace_id.example,
-    });
-    await recorder.dispatched(
-      { tick_id: "tap", branch: "tick/1vn/tap", base_sha: "b".repeat(40) },
-      "sandbox-tap",
+    // The control plane's own banner write — the same call a dispatch that
+    // heads a worker's stream makes before the container is addressed.
+    await writeWorkerLogHeader(
+      env.ARTIFACTS,
+      project,
+      runID,
+      "tap",
+      traceBanner({
+        trace_id: layout.trace_id.example,
+        run_id: runID,
+        epic: "1vn",
+        tick_id: "tap",
+      }),
     );
 
     // The banner is in the container's OWN stream, written by the control
@@ -497,16 +500,6 @@ describe("what carries the id", () => {
       }),
     );
     expect(TRACE_BANNER_MARKER).toBe(contract.trace.banner_marker);
-
-    // And on the manifest, which is the other record: the banner says what the
-    // container printed, the manifest says what the control plane dispatched.
-    const manifest = (await readWorkerManifest(
-      env.ARTIFACTS,
-      project,
-      runID,
-      "tap",
-    )) as WorkerManifest;
-    expect(manifest.trace_id).toBe(layout.trace_id.example);
   });
 });
 
@@ -554,19 +547,21 @@ describe("the acceptance criterion", () => {
     expect(workflow.created).toHaveLength(1);
     expect(workflow.created[0]!.params.trace_id).toBe(trace);
 
-    // QUERY THREE — that run's worker logs. The wave's dispatch is exercised
-    // at the seam the Workflow uses, because what has to be true is that the
-    // id reaches the container's own stream before the container is addressed.
-    const recorder = manifestRecorder(env.ARTIFACTS, project, {
-      run_id: runID,
-      epic: run!.epic,
-      batch: 1,
-      trace_id: run!.trace_id!,
-    });
+    // QUERY THREE — that run's worker logs. The control plane's banner write
+    // is exercised directly, because what has to be true is that the id
+    // reaches the container's own stream before the container is addressed.
     const tickID = decided!.tick_id!;
-    await recorder.dispatched(
-      { tick_id: tickID, branch: `tick/${run!.epic}/${tickID}`, base_sha: COMMIT_SHA },
-      `sandbox-${tickID}`,
+    await writeWorkerLogHeader(
+      env.ARTIFACTS,
+      project,
+      runID,
+      tickID,
+      traceBanner({
+        trace_id: run!.trace_id!,
+        run_id: runID,
+        epic: run!.epic,
+        tick_id: tickID,
+      }),
     );
     const logs = await readWorkerLogTail(env.ARTIFACTS, project, runID, tickID);
     expect(logs.text).toContain(trace);

@@ -27,6 +27,9 @@
  *                             on its own run's gateway token (tick t4y); this
  *                             is what makes branch ownership a lookup rather
  *                             than a naming convention
+ * - POST /api/done          - a finished orchestrator waking its Run Workflow
+ *                             through the Worker (tick 7eq); best effort — the
+ *                             pushed branch, never the event, is the truth
  * - GET/POST/DELETE /api/ci/branches - a person answering the same question,
  *                             on the operator's token; the only door that may
  *                             say a branch is a HUMAN's
@@ -53,10 +56,10 @@ import {
 } from "./artifacts";
 import {
   authenticateFactoryRequest,
+  DONE_PATH,
   isAuthConfigured,
   isAuthExempt,
   SANDBOX_DISPATCH_PREFIX,
-  WAVE_PATH,
 } from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
@@ -72,7 +75,6 @@ import {
   removeEnrolledProject,
 } from "./db";
 import { handleDraftPress, parseDraftCallback } from "./drafts";
-import { EpicReconcilerWorkflow } from "./epic-reconciler";
 import {
   bareTextOf,
   type FreeTextCandidate,
@@ -85,6 +87,7 @@ import { runDailyDigest } from "./loop-digest";
 import { observeRoute } from "./observe";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
+import { signalRunDone } from "./run-done";
 import { readRunFeed } from "./run-feed";
 import {
   type MessageRef,
@@ -127,7 +130,6 @@ import {
   telegramWebhookInfo,
   unregisterTelegramWebhook,
 } from "./telegram";
-import { requestWave } from "./wave-request";
 import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
@@ -160,10 +162,6 @@ async function health(env: Env): Promise<Response> {
       // The Run Workflow is bound by tick ldr; until then every submission
       // fails closed, and this is where a deploy sees why.
       run_workflow: Boolean(env.RUN_WORKFLOW),
-      // The reconciler that drives every plain epic run since tick nu9 - the
-      // binding a deploy must see true, because a false here is a factory that
-      // refuses every epic submission with a message naming it.
-      epic_reconciler: Boolean(env.EPIC_RECONCILER),
       // The orchestrator container. A deployment without it records runs that
       // can never boot, so `tk factory deploy` fails on a false here rather
       // than leaving a factory that refuses every run with a correct message
@@ -1245,24 +1243,34 @@ export default {
       return await health(env);
     }
 
-    // The in-run dispatch door (tick wiy). Placed beside the other
-    // token-exempt routes and before the /api/runs table, because it is
-    // authorized by a run credential rather than the operator's, and reading
-    // it as an /api/runs sub-path would put it behind the wrong gate.
-    if (url.pathname === WAVE_PATH) {
+    // The completion door (tick 7eq). Beside the other run-credential doors
+    // and for the same reason: its caller is the orchestrator container,
+    // holding its run's own gateway token, never the operator's. A container
+    // invoking the Workflow binding DIRECTLY is unverified platform ground,
+    // so it POSTs here and the Worker — which does hold the binding — turns
+    // the POST into `instance.sendEvent()`. Answered 202 whether or not the
+    // event was taken: the door is an optimisation, and the pushed branch —
+    // never the event — is the source of truth.
+    if (url.pathname === DONE_PATH) {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
-      const result = await requestWave(env, request);
-      if (!result.ok) {
+      const signalled = await signalRunDone(env, request);
+      if (!signalled.ok) {
         return Response.json(
-          { error: result.error, detail: result.detail },
-          { status: result.status },
+          { error: signalled.error, detail: signalled.detail },
+          { status: signalled.status },
         );
       }
-      return Response.json({ wave: result.request }, { status: 202 });
+      return Response.json(
+        { delivered: signalled.delivered, detail: signalled.detail },
+        {
+          status: 202,
+        },
+      );
     }
 
-    // A container recording the branch it just created (tick t4y). Beside
-    // /api/wave and authorized the same way, because it is the same kind of
+    // A container recording the branch it just created (tick t4y). Placed
+    // beside the other run-credential doors and authorized the same way,
+    // because it is the same kind of
     // caller: a sandbox holding its run's own token, never the operator's.
     // This is the write side that made a positive record of branch ownership
     // possible at all — before it, `epic/<id>` and the run branch were pushed
@@ -1358,8 +1366,7 @@ export default {
     }
 
     // The per-tick sandbox dispatch door (tick 8ty), beside the /api/git door
-    // and before the /api/runs table, for the reason the wave door sits where it
-    // does: it is authorized by a run credential rather than the operator's,
+    // and before the /api/runs table: it is authorized by a run credential rather than the operator's,
     // and reading it as an /api/runs sub-path would put it behind the wrong
     // gate. The orchestrator CONTAINER — whose Go executor cannot create a
     // sibling Sandbox, because the binding is a Worker binding — starts and
@@ -1521,4 +1528,4 @@ export { Sandbox } from "@cloudflare/sandbox";
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
-export { EpicReconcilerWorkflow, RepoRoom, RunRoom, RunWorkflow, SignalInbox };
+export { RepoRoom, RunRoom, RunWorkflow, SignalInbox };

@@ -18,18 +18,19 @@ import type {
   SandboxProcessView,
 } from "../src/sandbox";
 import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
-import { dispatchWave, type Sleeper, type WorkSpec } from "../src/worker-dispatch";
+import { type Sleeper, spawnWorker, teardownWorker, type WorkSpec } from "../src/worker-dispatch";
 
 /**
  * A worker container's OWN output (tick 0fg).
  *
  * `tk cloud logs <run>` streams the orchestrator sandbox's stdout/stderr from
- * R2. A worker container's went nowhere durable: diagnosing the exit-7 wave
- * cost seven paid runs because the one thing that would have answered it in
- * one — what the container printed before it died — was unreadable anywhere.
+ * R2. A worker container's went nowhere durable: diagnosing the exit-7
+ * failure cost seven paid runs because the one thing that would have answered
+ * it in one — what the container printed before it died — was unreadable
+ * anywhere.
  *
  * The stream is per (run, tick) by construction. Reusing the orchestrator's
- * single key would interleave a wave's containers into nonsense.
+ * single key would interleave a run's worker containers into nonsense.
  */
 
 const BASE = "https://factory.example.com";
@@ -70,7 +71,7 @@ async function recordedRun(runID: string): Promise<void> {
 // ------------------------------------------------------------ the stream ---
 
 describe("a worker container's log stream", () => {
-  it("keeps one stream per tick — a wave's containers never interleave", async () => {
+  it("keeps one stream per tick — a run's worker containers never interleave", async () => {
     const runID = "run_worker_streams";
     await writeWorkerLogSegment(env.ARTIFACTS, PROJECT, runID, "aaa", 1, 1, "aaa is booting\n");
     await writeWorkerLogSegment(env.ARTIFACTS, PROJECT, runID, "bbb", 1, 1, "bbb is booting\n");
@@ -305,10 +306,11 @@ const stubReport = (task: WorkerTask): WorkerReport => ({
   status_detail: "",
   status_line: "",
   boundary_files: [],
+  report_only: false,
   detail: "the worker pushed nothing",
 });
 
-const collector: WorkerCollector = {
+const _collector: WorkerCollector = {
   async collect(task) {
     return stubReport(task);
   },
@@ -346,23 +348,27 @@ describe("a worker that dies at boot", () => {
       process.exit_code = 7;
     };
 
-    const [outcome] = await dispatchWave(
+    // spawnWorker is the dispatch door's own spawn path (the same call the
+    // sandbox executor makes), so this exercises the log seam the way every
+    // dispatch goes: probe, confirm, teardown — with the worker's stream
+    // bound to the sink before the container is addressed.
+    const outcome = await spawnWorker(
       binding,
-      sandboxNameFor,
-      [{ tick_id: "0fg", branch: "tick/1vn/0fg", base_sha: "c".repeat(40) }],
-      () => WORK_SPEC,
+      sandboxNameFor("0fg"),
+      { tick_id: "0fg", branch: "tick/1vn/0fg", base_sha: "c".repeat(40) },
+      WORK_SPEC,
       {
         probe_timeout_ms: 5_000,
         probe_poll_ms: 1,
         sleep,
         logs: workerLogSink(env.ARTIFACTS, PROJECT, runID),
       },
-      collector,
     );
 
-    // The container was written off and destroyed — and its account of itself
-    // survived it.
-    expect(outcome!.launched).toBe(false);
+    // The probe failed, so the container was never launched — and its own
+    // account of itself still survived it.
+    expect(outcome.launched).toBe(false);
+    await teardownWorker(binding, sandboxNameFor("0fg"), outcome.process_id);
     expect(binding.named(sandboxNameFor("0fg")).destroyed).toBe(true);
 
     const body = (await (await get(`/api/runs/${runID}/logs?tick=0fg`)).json()) as Record<

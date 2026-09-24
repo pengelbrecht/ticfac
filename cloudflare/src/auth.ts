@@ -97,7 +97,7 @@ export const WEBHOOK_PREFIX = "/api/hooks";
  *
  * It lives in `auth.ts` because this module already owns the path registry
  * ({@link HEALTH_PATH}, {@link WEBHOOK_PREFIX}, {@link GATEWAY_PREFIX},
- * {@link WAVE_PATH}) and — deliberately — imports nothing, so every other
+ * module paths) and — deliberately — imports nothing, so every other
  * module can read a path from it without dragging a dependency along.
  * `telegram.ts` re-exports this binding, so registration still names the
  * constant from the module that registers.
@@ -116,20 +116,18 @@ export const TELEGRAM_WEBHOOK_PATH = "/api/channels/telegram/webhook";
 export const GATEWAY_PREFIX = "/api/gateway";
 
 /**
- * The in-run dispatch door (tick wiy), exempt from the FACTORY bearer token
- * for exactly the reason `/api/gateway` is: its caller is a sandbox, and a
- * sandbox must never hold the operator's token.
+ * The completion door (tick 7eq), exempt for the same reason as the four above:
+ * its caller is an orchestrator container holding its run's own gateway token,
+ * never the operator's.
  *
- * It carries the same run-scoped gateway credential and is authorized by the
- * same function, so an operator's stop — which revokes that token — reaches a
- * run's ability to dispatch containers and not only its ability to spend.
- *
- * Note there is no run id in the path. The credential decides which run is
- * speaking, so a container cannot ask for a wave on behalf of a run it is not;
- * a path parameter would have made that a thing to check rather than a thing
- * that cannot be expressed.
+ * A container invoking a Workflow binding DIRECTLY is unverified platform
+ * ground, so the orchestrator POSTs here and the Worker — which does hold the
+ * binding — turns the POST into `instance.sendEvent()`. The event is an
+ * optimisation that lets the Run Workflow learn the orchestrator finished
+ * without polling for it; the pushed branch remains the source of truth, so
+ * delivery here is best effort and never load-bearing.
  */
-export const WAVE_PATH = "/api/wave";
+export const DONE_PATH = "/api/done";
 
 /**
  * The read-only git door (D11, tick pzf), exempt for the same reason as the
@@ -162,7 +160,7 @@ export const REVIEW_PREFIX = "/api/review";
 
 /**
  * The per-tick sandbox dispatch door (tick 8ty), exempt from the FACTORY
- * bearer token for exactly the reason `/api/wave` is: its caller is a
+ * bearer token for exactly the reason the gateway path is: its caller is a
  * container — the Go orchestrator's `cloudflare-sandbox` executor — and a
  * container must never hold the operator's token.
  *
@@ -366,7 +364,7 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === HEALTH_PATH) return true;
   if (pathname === TELEGRAM_WEBHOOK_PATH) return true;
   if (pathname === GATEWAY_PREFIX || pathname.startsWith(`${GATEWAY_PREFIX}/`)) return true;
-  if (pathname === WAVE_PATH) return true;
+  if (pathname === DONE_PATH) return true;
   if (pathname === SANDBOX_DISPATCH_PREFIX || pathname.startsWith(`${SANDBOX_DISPATCH_PREFIX}/`))
     return true;
   if (pathname === GIT_PREFIX || pathname.startsWith(`${GIT_PREFIX}/`)) return true;

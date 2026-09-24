@@ -45,6 +45,107 @@ precisely why it is the one the version exists to make loud.
 
 ---
 
+## 6.2.0
+
+MINOR. No rule, statement, guard, sequence, threshold or vocabulary byte
+changed, and no invariant lost its only living site: four `today`
+cross-references in `lifecycle-invariants.json` are corrected against ticfac's
+epic yoh as it stands after ticks dl8 and 3ed.
+
+- **A11 no longer names `MAX_CLOSEOUT_BOOTS`.** ticfac tick dl8 deleted the
+  closeout pass and both of its constants. The pinned symbol reader only kept
+  passing because a comment in `run-workflow.ts` still spelled the name — a
+  pointer satisfied by prose is a fake pass, so the name comes out here and
+  the comment comes out of ticfac in the same pin bump. A11's run-workflow
+  site keeps `MAX_SANDBOX_BOOTS`; its Go site (`internal/reconcile/guards.go`)
+  and the cloud's strike budget are unchanged.
+- **A2, A6 and A9 name tick 3ed's "unknown question" symbols** in
+  `run-workflow.ts`. 3ed made the Workflow's `observe` keep an ANSWERED "no
+  such process" (`gone`) apart from a question that FAILED (`unknown`):
+  - A2 (liveness from outside) adds `askProcess`, `ProcessQuestion`,
+    `ObservedProcessState` — a failed question is a statement about the
+    observer, never `gone`;
+  - A6 (never redispatch live) adds `ObservedProcessState`,
+    `PROCESS_QUERY_ATTEMPTS`, `MAX_UNANSWERED_LOOKS` — an `unknown` look holds
+    rather than reboots, and a container that stays unaskable fails the pass
+    with no replacement booted;
+  - A9 (distinct failure classes) adds `ProcessQuestion`,
+    `ObservedProcessState`, `MAX_UNANSWERED_LOOKS` — "could not be asked" is
+    its own ending, never the words of an exit or a sandbox death.
+
+MINOR rather than PATCH because a pinning consumer's symbol reader now asks
+for names an older tree does not hold (3ed's), so an unchanged consumer is no
+longer complete; nothing it does is now wrong.
+
+**Who has to follow:** ticfac, whose `cloudflare/src/run-workflow.ts` must
+carry 3ed and must no longer spell `MAX_CLOSEOUT_BOOTS` (the dl8 comment that
+did is reworded in the same commit as the pin bump).
+
+---
+
+## 6.1.0
+
+MINOR. No rule, statement, guard, sequence, threshold or vocabulary byte
+changed: `lifecycle-invariants.json`'s `today` cross-references for nine of the
+thirteen invariants (A1–A4, A6–A9, A11) are re-pointed at where each rule is
+enforced now. Found from ticfac 2026-09-24: ticfac tick l6t (epic yoh) deleted
+the Run Workflow's per-tick wave path — `runWaveBatch`, `superviseWaveLoop`,
+the wave legs, `readWaveRequest` / `writeWaveOutcomes`, the wave-loss
+accounting and the whole of `reconcile.ts` — because orchestration moved into
+ticfac's own Go reconciler running in the orchestrator container. The pinned
+reader that greps the named symbols then failed on every one of them.
+
+The rules did not move out of existence, they moved house:
+
+- where the Workflow still holds a rule, the site names the symbols that hold
+  it now (`supervisePass`, `waitDoneSignal`, `BOOT_STEP_TIMEOUT_MS`,
+  `assessProgress`, `terminalExitReason`, `MAX_CLOSEOUT_BOOTS`, and the
+  per-tick door's `startNamedAttempt` / `namedAttemptStatus` in
+  `sandbox-executor.ts`);
+- where ticfac's Go now holds it, the site names that Go — the reconciler
+  (`internal/reconcile`: adoption by identity, settlement from evidence, the
+  step legs, the poll keepalive, distinct refusals, the person-released hold),
+  the run-state store's compare-and-swap (`internal/runstate`), and the two
+  executors' read-back and liveness (`internal/exec/cloudflaresandbox`,
+  `internal/exec/subprocess`).
+
+That second kind is the additive part, and the reason this is MINOR rather
+than PATCH: a `today` site may now name a plain `ticfac` path, and
+`contracts/README.md` says how a reader resolves each prefix. Every invariant
+still names at least one living site; none lost its only implementation.
+Two sites were narrowed rather than re-pointed, because pointing at code that
+no longer enforces anything is the failure the cross-reference exists to
+prevent: `workflow-limits.ts` keeps only the cap constants (its clamps have no
+production caller since the legs went), and A7 no longer names `artifacts.ts`
+(nothing reads back what is written there now).
+
+**Who has to follow:** a pinning consumer whose tree holds the named symbols
+has nothing to change beyond the version; its symbol reader goes green again.
+
+---
+
+## 6.0.0
+
+MAJOR. A rule changed: `tk-json-manifest.json`'s `merge-file` said a
+successful merge "was written to <path>", and that was the data-loss bug, not
+the contract (ticks #90, found from ticfac 2026-09-23).
+
+git invokes the driver as `merge-file %O %A %B %P` and reads the merge back
+from `%A` ONLY; `%P` is the file's logical path. A driver that writes `%P`
+leaves `%A` holding OURS, so every tick record both sides of a merge changed
+keeps one side in the commit and silently drops the other, while the correct
+merge is left in the working tree as an unstaged change. tk itself did exactly
+that until #90.
+
+- `tk-json-manifest.json` — `merge-file` exit code `0` now says the result is
+  written back over `<ours>` (%A) and that `<path>` is never written, matching
+  `merge-activity`, which already said "written back over <current>".
+
+**Who has to follow:** any host that implemented `merge-file`'s file effect
+from the old text writes the result to the wrong file and must write it over
+`<ours>` instead. A host that only invokes `tk merge-file` has nothing to do
+beyond running a tk that includes #90.
+
 ## 5.2.0
 
 MINOR. One contract added (ticfac tick u9l, epic av8); no existing fixture

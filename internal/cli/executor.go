@@ -1,13 +1,16 @@
 // The executor factory a production run uses: the routing tick to1 (epic av8)
 // put behind `ticfac run-epic`. A dispatch goes through the executor its
 // RESOLVED PROFILE names — the reconciler asks, this side answers, because a
-// name the reconciler cannot spell (herdr) is a name the reconciler must not
-// spell: internal/reconcile carries no herdr code by design, and the seam test
-// in internal/exec/herdr enforces it.
+// name the reconciler cannot spell (herdr, cloudflare-sandbox) is a name the
+// reconciler must not spell: internal/reconcile carries no executor-specific
+// code by design, and the seam tests in internal/exec/herdr and
+// internal/exec/cloudflaresandbox enforce it.
 //
 // The honoured set is stated here too, as the KnownExecutors the reconciler's
 // construction-time checks admit: the local subprocess executor this build
-// always has, and the herdr executor, with the agent kinds it can launch.
+// always has, the herdr executor, and the cloudflare-sandbox executor that
+// dispatches one attempt's worker container through the factory's per-tick
+// sandbox door (registered by tick xev).
 package cli
 
 import (
@@ -17,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox"
 	"github.com/pengelbrecht/ticfac/internal/exec/herdr"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
@@ -45,6 +49,21 @@ func knownExecutors() []reconcile.KnownExecutor {
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: herdr.PollInterval,
 		},
+		{
+			// The cloud executor (tick xev): the runner names a KIND the
+			// sandbox image can run a harness for, and the poll cadence is the
+			// executor's own five minutes, because on that substrate the poll
+			// IS the keepalive. Any MODEL a profile names is accepted: the
+			// dispatch door carries it (tick a08), the worker container boots
+			// on it, and the executor refuses a handle naming any other — so
+			// the recorded model is the one that ran, not the factory's own
+			// default agreeing with it by luck. The profile's RUNNER and PROMPT
+			// ride the same request (tick 9iz), for the same reason.
+			Name:         cloudflaresandbox.ExecutorName,
+			Runners:      runconfig.KnownKinds(),
+			AcceptsModel: func(string) bool { return true },
+			PollInterval: cloudflaresandbox.PollInterval,
+		},
 	}
 }
 
@@ -69,16 +88,71 @@ func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Ex
 			return local(d)
 		case herdr.ExecutorName:
 			return herdrExecutor(gate, d)
+		case cloudflaresandbox.ExecutorName:
+			return sandboxExecutor(d)
 		default:
 			// Unreachable in a run: usableProfile refused any profile naming an
 			// executor outside knownExecutors() at construction. Refused again
 			// here anyway, fail closed, because a factory that silently fell
 			// back would dispatch through an executor the record does not name.
 			return nil, reconcile.Substrate{}, fmt.Errorf(
-				"the profile for %s names executor %q, which this build can honour neither of %s",
-				d.TickID, d.Profile.Executor, subprocess.ExecutorName+", "+herdr.ExecutorName)
+				"the profile for %s names executor %q, which this build can honour none of %s",
+				d.TickID, d.Profile.Executor, honouredNames())
 		}
 	}
+}
+
+// honouredNames is the honoured set the way a refusal should spell it: the
+// names a profile may name, comma-separated. Kept beside the set it renders
+// so the two cannot drift.
+func honouredNames() string {
+	names := make([]string, 0, len(knownExecutors()))
+	for _, known := range knownExecutors() {
+		names = append(names, known.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// sandboxExecutor builds the cloudflare-sandbox executor for one dispatch:
+// the client of the factory's per-tick sandbox door (tick keh), configured
+// from the dispatch the reconciler already assembled — the door's required
+// fields (epic, base ref, title, attempt) ride the Dispatch precisely so no
+// executor re-derives facts the run already knows, and the repository the
+// collect reads is the orchestrator's own checkout, which is what the Go
+// side collects from (the decided placement, tick xev).
+//
+// The factory's base URL and the run's own gateway token come from the
+// environment — TICKS_FACTORY_URL and TICKS_FACTORY_TOKEN, which a container
+// boot exports for the orchestrator and an operator exports on a laptop
+// driving cloud workers — and a missing either is a dispatch that fails
+// BEFORE the tick is claimed, because the executor's constructor refuses it.
+// The substrate is the zero value, stated deliberately: the door is an HTTP
+// route but carries no versioned protocol the client could pin a floor
+// against, and provenance records null rather than a number nobody checks.
+func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
+	executor, err := cloudflaresandbox.New(cloudflaresandbox.Options{
+		FactoryURL: os.Getenv("TICKS_FACTORY_URL"),
+		Token:      os.Getenv("TICKS_FACTORY_TOKEN"),
+		EpicID:     d.EpicID,
+		BaseRef:    d.BaseRef,
+		Title:      d.Title,
+		// The model, the harness and the rendered role prompt the profile
+		// resolved all cross the door (ticks a08, 9iz): the worker is booted
+		// on the model, bound to the harness and delivered the prompt, and the
+		// handle names the model and the harness back — so what the dispatch
+		// records is what ran.
+		Model:    d.Profile.Model,
+		Harness:  d.Profile.Runner,
+		Prompt:   d.Profile.Prompt,
+		Attempt:  d.Attempt,
+		StateDir: d.StateDir,
+		Repo:     d.Repo,
+		Remote:   d.Remote,
+	})
+	if err != nil {
+		return nil, reconcile.Substrate{}, err
+	}
+	return executor, reconcile.Substrate{}, nil
 }
 
 // pushInterval is the local executor's push cadence, as run-epic always passed

@@ -62,6 +62,9 @@
  * | `base_ref` | the epic's base branch, for the same re-derivation. |
  * | `title` | the tick's title, carried for the same re-derivation. |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
+ * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
+ * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
+ * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: printable prose with line breaks, at most 64 KiB — a start with no prompt would boot a worker on a prompt nobody chose. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -75,14 +78,19 @@
  *     The handle is the SAME attempt's — same job id, same process — so a
  *     caller that retries an ambiguous request reaches the same answer as one
  *     whose first call landed. `adopted` is a first-class field, not text to
- *     be parsed back out of the handle's detail.
+ *     be parsed back out of the handle's detail. The handle's `model` is the
+ *     RUNNING container's, read from the door's own recorded boot (tick dyo)
+ *     — a live work process whose boot was never recorded (a container an
+ *     older deployment booted) is refused `409 adoption_model_unknown`
+ *     rather than adopted under a model nobody observed.
  *
  * `handle` is the pinned job-protocol `job_handle` record (`contracts/`
  * `$defs.job_handle`): the closed top level of identity and executor name
  * (`cloudflare-sandbox`), the issue time, and the one open `handle` object
  * carrying this substrate's private addressing — the container's name, the
- * work process id, the base, the per-attempt landing branch and the
- * write_ref. A caller re-derives NOTHING from it that the state route below
+ * work process id, the base, the per-attempt landing branch, the
+ * write_ref, the `model` and the `harness` the container was booted
+ * with. A caller re-derives NOTHING from it that the state route below
  * cannot also answer from identity alone; the handle is for the record, not
  * for addressing (a client on the far side of HTTP cannot carry a live
  * Sandbox object any more than a Workflow step can).
@@ -108,14 +116,48 @@
  *     `lost` either (tick avx's rule: unreachable is not absent, and the
  *     distinction lives in the client's error handling, not in this body).
  *
- * ### What is deliberately NOT here
+ * ### Where each of the other operations lives (DECIDED, tick xev)
  *
- * Collect and cancel are not part of this door yet. Collect reads the durable
- * layer (git), which the Go reconciler can do itself from inside the
- * repository, and cancel is a salvage door plus a teardown the Worker-side
- * executor already owns (`cancelAttempt`). When the Go executor needs either
- * over this boundary, they land here beside the two routes above — in this
- * file, the one place the contract lives — rather than in a second module.
+ * Which of the four operations cross this door and which the Go side does
+ * from git was the open question the door shipped with (the finding triaged
+ * against tick 8ty); it is decided, and this is the decision recorded where
+ * the executor's doc says the contract lives — this file, the one place the
+ * HTTP contract lives:
+ *
+ *   - **dispatch and inspect cross the door**, as built. A container cannot
+ *     create a sibling sandbox — the binding is a Worker binding — so the
+ *     door is the only route to boot one attempt's container and to
+ *     re-address it by identity. Nothing about that is new.
+ *   - **collect is the Go side's, from git, and NEVER a door route.** The
+ *     orchestrator holds the clone; the worker's container pushes its
+ *     per-attempt landing branch with the report its own entrypoint commits
+ *     at `RESULT-<tick>.md` (image/worker.sh — in this substrate the report
+ *     has to be committed, because the container is destroyed and collect
+ *     reads the file off the pushed branch); the Go executor reads that
+ *     durable layer (internal/exec/cloudflaresandbox/collect.go) exactly the
+ *     way `worker-collect.ts` reads it through GitHub's API — commits, the
+ *     changed-file list, the report — only through git, because the Go side
+ *     has the clone. A collect route here would be a second mechanism
+ *     beside the one the durable layer already is.
+ *   - **cancel stays with the factory, and the Go executor refuses it
+ *     typed.** The credential a sandbox attempt holds is the run's OWN
+ *     gateway token (D17) — one credential shared by every attempt of the
+ *     run, revoked only as the run-level kill switch this door already
+ *     honours (`403 run_token_revoked`) — so the local executor's
+ *     revoke-then-signal contract has nothing to revoke on this side of the
+ *     boundary. Stopping one container is the salvage door and teardown
+ *     `worker-boot.ts`/`worker-dispatch.ts` already own, and the
+ *     queue-expiry sweep behind them; a per-tick cancel route would only
+ *     ever half-exist beside machinery that already does the whole job.
+ *   - **dispose has nothing to act on across this boundary, and is refused
+ *     typed.** The Go executor owns no worktree, no local branch and no
+ *     credential; the container belongs to the factory that booted it; the
+ *     branch the work landed on is retired by the close.
+ *
+ * The door therefore stays exactly two routes BY DECISION, not by omission:
+ * `POST /api/sandbox/attempts` and
+ * `GET /api/sandbox/attempts/:tick_id/:attempt` are the whole of it, and a
+ * third route is a change to this contract that starts here.
  *
  * ### The lease (D4)
  *
@@ -128,12 +170,13 @@
  * containers must not be the one place a lapsed arbiter can still spend.
  */
 
-import type { AttemptSpec } from "./epic-reconciler";
+import type { AttemptSpec } from "./attempt-protocol";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
+  AdoptionModelUnknownError,
   attemptJobID,
   namedAttemptStatus,
   type SandboxJobHandle,
@@ -171,12 +214,26 @@ function fromDenial(denial: GatewayDenial): SandboxDispatchResult {
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
- * An identifier or a reference (`role`, `write_ref`, `base_ref`): printable
- * ASCII, NO whitespace, bounded — these name things (a role, a git ref) and
- * ride environment variables into the container, and a name that contains a
- * space is a name nothing downstream can use.
+ * An identifier or a reference (`role`, `write_ref`, `base_ref`, `model`,
+ * `harness`): printable ASCII, NO whitespace, bounded — these name things (a
+ * role, a git ref, a model, a harness) and ride environment variables into
+ * the container, and a name that contains a space is a name nothing
+ * downstream can use.
  */
 const PLAIN_FIELD_PATTERN = /^[\x21-\x7e]{1,512}$/;
+
+/**
+ * A rendered prompt (`prompt`, tick 9iz): printable prose plus the line breaks
+ * markdown needs, never other control characters, bounded at 64 KiB — it
+ * rides one environment variable into the container, where the worker's
+ * harness reads it, and an environment value is not a place to discover what
+ * the platform does with a terminal escape.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the tab, line feed and carriage return in this class are the line breaks a rendered markdown prompt needs; every other control character is excluded on purpose, and naming them inside the class is how that stays true.
+const PROMPT_FIELD_PATTERN = /^[\x09\x0a\x0d\x20-\x7e]{1,65536}$/;
+
+/** The prompt bound, in characters, spelled once for the pattern and the refusal. */
+const PROMPT_FIELD_MAX = 65536;
 
 /**
  * A free-text field (`title`): printable ASCII plus the spaces prose needs,
@@ -278,6 +335,30 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   if (typeof baseRef !== "string") return baseRef;
   const title = text("title", raw.title, TITLE_FIELD_PATTERN);
   if (typeof title !== "string") return title;
+  // The model the caller resolved (tick a08). Required, and booted as given:
+  // a door that fell back to the deployment's own model here would hand the
+  // caller a handle for a worker running something its records do not name.
+  const model = text("model", raw.model, PLAIN_FIELD_PATTERN);
+  if (typeof model !== "string") return model;
+  // The harness the caller resolved (tick 9iz). Required, and bound as given,
+  // for the model's reason verbatim.
+  const harness = text("harness", raw.harness, PLAIN_FIELD_PATTERN);
+  if (typeof harness !== "string") return harness;
+  // The rendered role prompt the caller resolved (tick 9iz). Required: the
+  // container's own entrypoint builds its worker prompt from the checkout's
+  // tracker, so the profile's prompt reaches the worker through this field or
+  // not at all — and a door that booted without it would be a door whose
+  // caller's `prompt_digest` named a prompt that never ran.
+  if (typeof raw.prompt !== "string" || !PROMPT_FIELD_PATTERN.test(raw.prompt)) {
+    return refuse(
+      400,
+      "invalid_request",
+      "prompt must be the rendered role prompt the dispatch resolved (printable text with line " +
+        `breaks, at most ${PROMPT_FIELD_MAX} characters) — the worker's container runs on it, and a start with ` +
+        "none would boot a worker on a prompt nobody chose",
+    );
+  }
+  const prompt = raw.prompt;
 
   // Not the run's submitted base: the caller names the commit this attempt's
   // worker must clone at, which for a later wave is the run branch head that
@@ -317,8 +398,14 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   // The wiring the deployment can actually dispatch through — the same
   // diagnosis `sandboxExecutorFromEnv` gives the Workflow, stated in the
   // response rather than only on the Worker's log, because the caller is a
-  // container reading one answer.
-  const wired = sandboxExecutorDepsFromEnv(env, { project: run.project, base_sha: raw.base_sha });
+  // container reading one answer. The run id is the credential's own: the
+  // worker this boot streams is this run's, and its logs land under the
+  // run's own artifacts where the log read routes serve them (tick 9iz).
+  const wired = sandboxExecutorDepsFromEnv(env, {
+    project: run.project,
+    base_sha: raw.base_sha,
+    run_id: run.run_id,
+  });
   if ("refusal" in wired) {
     return refuse(
       503,
@@ -340,12 +427,27 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     write_ref: writeRef,
     base_ref: baseRef,
     title,
+    model,
+    harness,
+    prompt,
   };
 
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container
   // BY NAME, adopts a live work process instead of booting a rival beside it,
   // and returns once the dispatch is confirmed — a handle, never a result.
-  const started = await startNamedAttempt(wired.deps, spec);
+  // The one refusal the machinery itself can make is the adoption whose
+  // running container has no recorded boot (tick dyo): the door cannot state
+  // the model the handle must name, and a refusal the caller holds is honest
+  // where a guess in a handle would not be.
+  let started: Awaited<ReturnType<typeof startNamedAttempt>>;
+  try {
+    started = await startNamedAttempt(wired.deps, spec);
+  } catch (error) {
+    if (error instanceof AdoptionModelUnknownError) {
+      return refuse(409, "adoption_model_unknown", error.message);
+    }
+    throw error;
+  }
   const body: Record<string, unknown> = { handle: started.handle, adopted: started.adopted };
   return {
     ok: true,

@@ -42,10 +42,6 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 		"ticfac run-epic",
 		`--base "$base_sha"`,
 		`--repo "$workdir"`,
-		// The run's gateway token under the name pi's cloudflare-workers-ai
-		// provider reads (tick mdw): common.sh exports every vendor credential
-		// it knows, but pi reads one it does not.
-		`export CLOUDFLARE_API_KEY="$gateway_token"`,
 		// The substrate the run executes on, stated by whatever booted it (tick
 		// 84z): role routing resolves against it, the cloud overlays in the
 		// target repo's .tick/runners.cloud.toml cells apply, and a role nobody
@@ -53,6 +49,10 @@ func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 		// silent fall back to the base cell, which is how a container reached
 		// a claude process nobody chose.
 		`export TICKS_SUBSTRATE="cloud"`,
+		// The cloud profile set (tick gbs): the container's run-epic resolves
+		// profiles-cloudflare-sandbox/, not the compiled-in LOCAL set, whose
+		// executor would run every worker inside this very container.
+		"--profiles " + cloudProfilesContainerPath,
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the staged orchestrator entrypoint does not carry %q — it is not booting ticfac", want)
@@ -165,13 +165,34 @@ func TestSetSandboxOrchestratorEntrypointRefusesEveryMovedAnchor(t *testing.T) {
 	}
 }
 
-// What the override actually DOES, proved by running it rather than by reading
-// it. The block is evaluated on top of a stand-in for the parts of the
-// entrypoint it uses, with `exec` and `git` replaced so the command it would
-// have become is observable.
+// What the override actually DOES, proved by running it rather than by
+// reading it. The block is the one the STAGED entrypoint ships — extracted
+// from the staged file between the insertion markers, not taken from the
+// Go constant (finding 7be27471: proven through the staged script rather
+// than by reading it) — and it is evaluated on top of a stand-in for the
+// parts of the entrypoint it uses, with `exec` and `git` replaced so the
+// command it would have become is observable.
+func stagedOverrideBlock(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(stagedEntrypoint(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	start := strings.Index(text, ticfacEntrypointMarker)
+	if start < 0 {
+		t.Fatalf("the staged entrypoint carries no ticfac override block")
+	}
+	end := strings.Index(text, ticfacEntrypointCloseMarker)
+	if end < 0 || end < start {
+		t.Fatalf("the staged entrypoint's override block has no close marker")
+	}
+	return text[start : end+len(ticfacEntrypointCloseMarker)]
+}
+
 func runOverride(t *testing.T, phase string, extra string) string {
 	t.Helper()
-	block := ticfacEntrypointBlock
+	block := stagedOverrideBlock(t)
 
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
@@ -212,7 +233,7 @@ warn() { printf 'warn: %s\n' "$*"; }
 die() { shift; printf 'die: %s\n' "$*"; exit 1; }
 start_keeper() { printf 'keeper watching %s\n' "$1"; }
 start_harness() { printf 'HARNESS\n'; }
-exec() { printf 'CLOUDFLARE_API_KEY=%s\n' "${CLOUDFLARE_API_KEY:-}"; printf 'EXEC: %s\n' "$*"; }
+exec() { printf 'TICKS_SUBSTRATE=%s\n' "${TICKS_SUBSTRATE:-}"; printf 'EXEC: %s\n' "$*"; }
 ` + extra + `
 ` + block + `
 start_harness
@@ -269,6 +290,24 @@ func TestOverrideExecsTicfacRunEpicOnTheRemotesDefaultBranch(t *testing.T) {
 	}
 }
 
+// The tick's first acceptance item, proved on the STAGED script the image
+// boots: a cloud run's run-epic resolves the cloud profile set and the cloud
+// substrate. `--profiles` is what makes the run resolve
+// profiles-cloudflare-sandbox/ rather than the compiled-in LOCAL set — the
+// flag the staged entrypoint did not pass before this tick, which is how the
+// 2026-09-23 smoke tick dispatched every worker as a subprocess of the
+// orchestrator's own container — and TICKS_SUBSTRATE is what role routing
+// resolves against (tick 84z).
+func TestOverrideRunsRunEpicOnTheCloudProfilesAndTheCloudSubstrate(t *testing.T) {
+	out := runOverride(t, "run", "")
+	if !strings.Contains(out, "--profiles "+cloudProfilesContainerPath) {
+		t.Errorf("the override did not name the cloud profile set: run-epic would resolve the compiled-in LOCAL profiles, whose executor is local-subprocess, and every worker would run inside this container:\n%s", out)
+	}
+	if !strings.Contains(out, "TICKS_SUBSTRATE=cloud") {
+		t.Errorf("the override did not export the cloud substrate for the run to resolve role routing against:\n%s", out)
+	}
+}
+
 func TestOverrideLeavesTheReviewPhaseOnTheHarness(t *testing.T) {
 	out := runOverride(t, "review", "")
 	if !strings.Contains(out, "HARNESS") {
@@ -280,10 +319,10 @@ func TestOverrideLeavesTheReviewPhaseOnTheHarness(t *testing.T) {
 }
 
 // A run routed off the Anthropic route is exactly the run this container is
-// for (tick mdw): the worker is pi, which speaks the gateway's workers-ai
-// route, so the boot that used to refuse it — a refusal that existed only
-// because the worker was the claude CLI — now execs the reconciler and hands
-// the workers the token under the name pi reads.
+// for (tick mdw): the workers are pi in their own sandbox containers, which
+// speak the gateway's workers-ai route, so the boot that used to refuse it —
+// a refusal that existed only because the worker was the claude CLI — now
+// execs the reconciler and dispatches through the cloud profile set.
 func TestOverrideExecsANonAnthropicRoute(t *testing.T) {
 	out := runOverride(t, "run", `TICKS_MODEL_PROVIDER="workers-ai"; export TICKS_MODEL_PROVIDER; model="cloudflare-workers-ai/@cf/zai-org/glm-5.3"`)
 	if !strings.Contains(out, "EXEC: ticfac run-epic") {
@@ -292,12 +331,14 @@ func TestOverrideExecsANonAnthropicRoute(t *testing.T) {
 	if strings.Contains(out, "die:") {
 		t.Errorf("the boot refused a non-Anthropic route, which rejected exactly the workers-ai route this container wires:\n%s", out)
 	}
-	// The one substitution (tick mdw): the run's gateway token under
-	// CLOUDFLARE_API_KEY, the name pi's cloudflare-workers-ai provider reads —
-	// common.sh exports the token under every vendor name it knows, and pi's
-	// is the one it does not.
-	if !strings.Contains(out, "CLOUDFLARE_API_KEY=run-token") {
-		t.Errorf("the run's gateway token was not exported under the name pi reads:\n%s", out)
+	// The workers' model credentials are issued in THEIR containers' boots by
+	// the factory, from the run's own gateway token; this container hands the
+	// workers nothing but the door (TICKS_FACTORY_URL/TICKS_FACTORY_TOKEN), so
+	// the orchestrator's environment carries no worker credential to hand on
+	// — the pi-under-this-container substitution (tick mdw) went with the
+	// local-subprocess workers this tick removes.
+	if strings.Contains(out, "CLOUDFLARE_API_KEY=") {
+		t.Errorf("the boot still exports a worker credential for a subprocess worker: no worker shares this container, so nobody is left to read it:\n%s", out)
 	}
 }
 

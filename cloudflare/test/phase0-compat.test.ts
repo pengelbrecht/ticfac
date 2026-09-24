@@ -12,14 +12,12 @@ import {
   reconcileKey,
   runPrefix,
   runRecordKey,
-  waveOutcomesKey,
-  waveRequestKey,
   workerLogSegmentKey,
   workerLogStreamPrefix,
-  workerManifestKey,
 } from "../src/artifacts";
 import {
   BRANCH_CLAIM_PREFIX,
+  DONE_PATH,
   deriveTokenHash,
   GATEWAY_PREFIX,
   GIT_PREFIX,
@@ -27,13 +25,13 @@ import {
   isAuthExempt,
   mintFactoryToken,
   REVIEW_PREFIX,
+  SANDBOX_DISPATCH_PREFIX,
   TELEGRAM_WEBHOOK_PATH,
-  WAVE_PATH,
   WEBHOOK_PREFIX,
 } from "../src/auth";
 import { getDeploymentImage, getRunImage, insertRunImage, listRunGatewayTokens } from "../src/db";
 import { authorizeRunCredential, issueRunToken, revokeRunTokens } from "../src/gateway";
-import { DEFAULT_FACTORY_MAX_INSTANCES, effectiveRunBudget } from "../src/run-workflow";
+import { effectiveRunBudget } from "../src/run-workflow";
 // The two deployable files this suite pins strings out of. Vite inlines a
 // `?raw` import at transform time, which is what makes reading them possible
 // at all in a suite that executes inside workerd with no filesystem — and it
@@ -52,16 +50,11 @@ import type {
 } from "../src/sandbox";
 import { DEFAULT_SANDBOX_IMAGE, deploymentImage, resolveSandboxImage } from "../src/sandbox";
 import {
-  DEFAULT_WORKER_HARNESS_BUDGET_MS,
-  MIN_WORKER_HARNESS_BUDGET_MS,
   WORKER_DEFAULT_HARNESS,
   WORKER_DEFAULT_MODEL,
   WORKER_EXIT,
-  WORKER_PUSH_MARGIN_MS,
-  waveWaitTimeoutMs,
   workerBranch,
   workerHarness,
-  workerHarnessBudgetMs,
   workerModel,
   workerResultFile,
 } from "../src/worker-boot";
@@ -80,11 +73,11 @@ import {
   type WorkerTask,
 } from "../src/worker-collect";
 import {
-  dispatchWave,
   type Sleeper,
+  salvageWorker,
+  spawnWorker,
+  teardownWorker,
   type WorkSpec,
-  waveCanceller,
-  workerSandboxName,
 } from "../src/worker-dispatch";
 import WRANGLER_TOML from "../wrangler.toml?raw";
 
@@ -111,9 +104,9 @@ import WRANGLER_TOML from "../wrangler.toml?raw";
  * protects. Appendix A ("Lifecycle invariants earned from live runs") is
  * conformance, not guidance: an executor that violates one is wrong.
  *
- * No test here ignites a run (`.tick/learnings.md`, "Cloudflare"): the wave
- * tests drive `dispatchWave` against a fake sandbox binding, and the Workflow
- * is never created.
+ * No test here ignites a run (`.tick/learnings.md`, "Cloudflare"): the
+ * dispatch-ordering tests drive `spawnWorker` against a fake sandbox
+ * binding, and the Workflow is never created.
  *
  * **CI.** `vitest.config.ts` includes `test/**\/*.test.ts`, `pnpm test` runs
  * `vitest run`, and the `factory` job in `.github/workflows/ci.yml` runs
@@ -172,7 +165,8 @@ type Grade =
  */
 const ROUTES: ReadonlyArray<{ path: string; grade: Grade }> = [
   { path: "/health", grade: "open" },
-  { path: "/api/wave", grade: "run-token" },
+  { path: "/api/sandbox/attempts", grade: "run-token" },
+  { path: "/api/done", grade: "run-token" },
   { path: "/api/branches", grade: "run-token" },
   { path: "/api/review", grade: "run-token" },
   { path: "/api/gateway/v1/messages", grade: "run-token" },
@@ -210,7 +204,8 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     // one. `auth.ts` declares the registry and imports nothing, so these are
     // the spellings every other module is pinned to.
     expect(HEALTH_PATH).toBe("/health");
-    expect(WAVE_PATH).toBe("/api/wave");
+    expect(SANDBOX_DISPATCH_PREFIX).toBe("/api/sandbox");
+    expect(DONE_PATH).toBe("/api/done");
     expect(BRANCH_CLAIM_PREFIX).toBe("/api/branches");
     expect(REVIEW_PREFIX).toBe("/api/review");
     expect(GATEWAY_PREFIX).toBe("/api/gateway");
@@ -279,7 +274,6 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     expect(Object.keys(body.bindings).sort()).toEqual([
       "artifacts",
       "db",
-      "epic_reconciler",
       "run_rooms",
       "run_workflow",
       "sandboxes",
@@ -301,7 +295,6 @@ describe("SPEC §8.1: the route table and its auth grades", () => {
     authenticated: boolean;
   }> = [
     { method: "DELETE", path: "/health", allow: "GET, HEAD", authenticated: false },
-    { method: "GET", path: "/api/wave", allow: "POST", authenticated: false },
     { method: "GET", path: "/api/branches", allow: "POST", authenticated: false },
     { method: "GET", path: "/api/review", allow: "POST", authenticated: false },
     { method: "PUT", path: "/api/runs", allow: "GET, POST", authenticated: true },
@@ -539,15 +532,6 @@ describe("SPEC §10.1: the R2 artifact key layout", () => {
     expect(reconcileKey(project, run, 3)).toBe(
       "runs/acme/widgets/run_compat/artifacts/orchestrator/reconcile/003.json",
     );
-    expect(waveOutcomesKey(project, run, 1)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/wave/001.json",
-    );
-    expect(waveRequestKey(project, run, 1)).toBe(
-      "runs/acme/widgets/run_compat/artifacts/wave-request/001.json",
-    );
-    expect(workerManifestKey(project, run, "mrq")).toBe(
-      "runs/acme/widgets/run_compat/artifacts/mrq/manifest.json",
-    );
     expect(workerLogStreamPrefix(project, run, "mrq")).toBe(
       "runs/acme/widgets/run_compat/artifacts/mrq/harness/",
     );
@@ -564,14 +548,12 @@ describe("SPEC §10.1: the R2 artifact key layout", () => {
     const run = "run_prefix";
     await env.ARTIFACTS.put(runRecordKey(project, run), "{}");
     await env.ARTIFACTS.put(harnessSegmentKey(project, run, 1, 1), "orchestrator\n");
-    await env.ARTIFACTS.put(workerManifestKey(project, run, "mrq"), "{}");
     await env.ARTIFACTS.put(workerLogSegmentKey(project, run, "mrq", 1756771200000, 1), "worker\n");
 
     const listed = await env.ARTIFACTS.list({ prefix: runPrefix(project, run) });
 
     expect(listed.objects.map((object) => object.key)).toEqual([
       "runs/acme/prefix/run_prefix/artifacts/mrq/harness/1756771200000/000001.log",
-      "runs/acme/prefix/run_prefix/artifacts/mrq/manifest.json",
       "runs/acme/prefix/run_prefix/artifacts/orchestrator/harness/001/000001.log",
       "runs/acme/prefix/run_prefix/run.json",
     ]);
@@ -645,27 +627,20 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     return declared[1];
   };
 
-  it("keeps the sandbox capacity and the dispatch width one number, not two", () => {
+  it("keeps the sandbox capacity and its [vars] mirror one number, not two", () => {
     // `[[containers]] max_instances` is the ceiling Cloudflare actually
-    // enforces; `[vars] FACTORY_MAX_INSTANCES` is the copy the Worker bounds a
-    // cloud wave's dispatch width by, because wrangler does not hand a
-    // container application's own config back at runtime. Two numbers that
-    // must agree and are maintained separately drift (tick 7fl), and the
-    // failure when they do is a wave that books more containers than the
-    // account can host — surfacing as sandbox creation failures attributed
-    // to whichever tick happened to be fourth, never as a capacity message.
-    // This is the suite's half of the mechanical check; `ticfac factory
-    // deploy` refuses to ship a config whose two numbers disagree.
+    // enforces on concurrent containers — worker containers dispatched through
+    // the per-tick sandbox door included. `[vars] FACTORY_MAX_INSTANCES` is
+    // the copy `ticfac factory deploy` checks it against, because wrangler
+    // does not hand a container application's own config back at runtime.
+    // Two numbers that must agree and are maintained separately drift
+    // (tick 7fl). This is the suite's half of the mechanical check; the
+    // deploy refuses to ship a config whose two numbers disagree.
     const ceiling = declaredMaxInstances();
     const mirror = /^\s*FACTORY_MAX_INSTANCES\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
     expect(mirror, "wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES mirror").not.toBeNull();
 
-    expect(mirror![1], "the dispatch width's copy of the container ceiling disagrees").toBe(
-      ceiling,
-    );
-    // The compiled default the width falls back to when the var is absent is
-    // the same number again — a copy nothing can check at runtime.
-    expect(DEFAULT_FACTORY_MAX_INSTANCES).toBe(Number(ceiling));
+    expect(mirror![1], "the [vars] copy of the container ceiling disagrees").toBe(ceiling);
   });
 
   it("names the container application wrangler.toml declares", () => {
@@ -744,11 +719,14 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     expect(declared).toEqual({
       FACTORY_MAX_INSTANCES: declaredMaxInstances(),
       GITHUB_CONSENT_LABEL: "tk",
-      RUN_CLOSEOUT_MS: "1800000",
+      RUN_HARNESS: "pi",
       RUN_MAX_COST_USD: "40",
       RUN_MAX_WALL_CLOCK_MS: "14400000",
+      RUN_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       RUN_QUEUE_TTL_MS: "1800000",
       RUN_STOP_GRACE_MS: "300000",
+      RUN_WORKER_HARNESS: "pi",
+      RUN_WORKER_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       // The work-type to model table (tick mrn, epic wne): what a classified
       // work type costs on this deployment. The vocabulary it keys on is the
       // repository's closed enum; this is the factory's price list, pinned
@@ -766,35 +744,37 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     });
   });
 
-  it("leaves the model-and-route vars unset, so the built-in default governs", () => {
-    // Deliberate, and documented in wrangler.toml: an unset
-    // GATEWAY_ALLOWED_PROVIDERS is `workers-ai` alone — the rung billed to the
-    // operator's own Cloudflare account rather than to a card — and an unset
-    // RUN_WORKER_MODEL/RUN_WORKER_HARNESS leaves WORKER_DEFAULT_*. (The
-    // RUN_WORKER_MODEL_BY_WORK_TYPE table above is the deliberate exception
-    // among RUN_WORKER_*: it is the per-work-type price list, not a single
-    // standing route.) Setting one of these is a deployment decision about
-    // spend, so a value appearing here is news.
+  it("pins the model-and-route vars to the operator's rule, so a default change can never decide them", () => {
+    // OPERATOR, 2026-09-23: the cloud runs GLM 5.3 or GLM 5.3 Flash, via pi
+    // only — nothing in the cloud runs claude. The pin is explicit in the
+    // deployable config (tick uqi) rather than left to the built-in default,
+    // so the config itself says the rule. Still deliberately unset:
+    // GATEWAY_ALLOWED_PROVIDERS (workers-ai alone — the rung billed to the
+    // operator's own Cloudflare account rather than to a card), SANDBOX_IMAGE
+    // and BOARD_BASE_URL.
     const vars = env as unknown as Record<string, unknown>;
-    for (const name of [
-      "GATEWAY_ALLOWED_PROVIDERS",
-      "RUN_WORKER_MODEL",
-      "RUN_WORKER_HARNESS",
-      "RUN_MODEL",
-      "RUN_HARNESS",
-      "SANDBOX_IMAGE",
-      "BOARD_BASE_URL",
-    ]) {
+    for (const name of ["GATEWAY_ALLOWED_PROVIDERS", "SANDBOX_IMAGE", "BOARD_BASE_URL"]) {
       expect(`${name}=${String(vars[name])}`).toBe(`${name}=undefined`);
     }
+    // The orchestrator's own route: an unset RUN_MODEL would leave the
+    // container to the repository's role/tier routing, which is the LOCAL
+    // worker CLI's route, not a factory-served one.
+    expect(`RUN_HARNESS=${String(vars.RUN_HARNESS)}`).toBe("RUN_HARNESS=pi");
+    expect(`RUN_MODEL=${String(vars.RUN_MODEL)}`).toBe("RUN_MODEL=workers-ai/@cf/zai-org/glm-5.3");
+    // The per-tick worker's standing route: an unset RUN_WORKER_MODEL would
+    // leave the boot to WORKER_DEFAULT_* in src/worker-boot.ts.
+    expect(`RUN_WORKER_HARNESS=${String(vars.RUN_WORKER_HARNESS)}`).toBe("RUN_WORKER_HARNESS=pi");
+    expect(`RUN_WORKER_MODEL=${String(vars.RUN_WORKER_MODEL)}`).toBe(
+      "RUN_WORKER_MODEL=workers-ai/@cf/zai-org/glm-5.3",
+    );
   });
 
   it("resolves a worker's model and harness by run > deployment var > built-in default", () => {
     // The ladder tick 1cd built, and the thing Phase 4 must not reorder: a
     // choice made about ONE run outranks a deployment's standing one, which
     // outranks the constant.
-    expect(WORKER_DEFAULT_HARNESS).toBe("omp");
-    expect(WORKER_DEFAULT_MODEL).toBe("workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813");
+    expect(WORKER_DEFAULT_HARNESS).toBe("pi");
+    expect(WORKER_DEFAULT_MODEL).toBe("workers-ai/@cf/zai-org/glm-5.3");
 
     expect(workerModel(null, null)).toBe(WORKER_DEFAULT_MODEL);
     expect(workerModel(null, "workers-ai/deployment")).toBe("workers-ai/deployment");
@@ -904,6 +884,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
       status_detail: "",
       status_line: `STATUS: ${status}`,
       boundary_files: [],
+      report_only: false,
       detail: "",
     });
 
@@ -1021,26 +1002,6 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
     expect(BOUNDARY_REPORT_MARKER).toBe(bootContract.boundary.report_marker);
     expect(WORKER_EXIT).toEqual(bootContract.exit_codes);
   });
-
-  it("reserves the push margin out of a worker's budget, so a killed container still pushed", () => {
-    // Appendix A #5: "In-progress work is pushed on a timer… a job that dies
-    // leaves its partial work on origin." This is the supervisor's half of
-    // that: the wait ends by KILLING the container, and a killed container
-    // pushes nothing — unless its own budget ended a margin earlier.
-    expect(WORKER_PUSH_MARGIN_MS).toBe(60_000);
-    expect(waveWaitTimeoutMs(90 * 60_000)).toBe(90 * 60_000 + WORKER_PUSH_MARGIN_MS);
-
-    // A worker can never be given more time than the run it belongs to, and
-    // the margin comes out of what is left — never out of thin air.
-    expect(workerHarnessBudgetMs()).toBe(DEFAULT_WORKER_HARNESS_BUDGET_MS);
-    expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 20 * 60_000 })).toBe(
-      20 * 60_000 - WORKER_PUSH_MARGIN_MS,
-    );
-    // …and never so little that it fails every worker rather than rescuing any.
-    expect(workerHarnessBudgetMs({ remaining_wall_clock_ms: 61_000 })).toBe(
-      MIN_WORKER_HARNESS_BUDGET_MS,
-    );
-  });
 });
 
 // ===========================================================================
@@ -1139,6 +1100,12 @@ class JournalBinding implements SandboxBinding {
     }
     return sandbox;
   }
+
+  named(name: string): JournalSandbox {
+    const sandbox = this.#byName.get(name);
+    if (sandbox === undefined) throw new Error(`no sandbox named ${name}`);
+    return sandbox;
+  }
 }
 
 /**
@@ -1170,6 +1137,7 @@ class JournalCollector implements WorkerCollector {
       status_detail: "",
       status_line: "STATUS: DONE",
       boundary_files: [],
+      report_only: false,
       detail: "",
     };
   }
@@ -1215,7 +1183,7 @@ function stagedSleeper(binding: JournalBinding, opts: { finishWork: boolean }): 
   };
 }
 
-const WAVE_TIMINGS = {
+const _WAVE_TIMINGS = {
   probe_timeout_ms: 2_000,
   probe_poll_ms: 1,
   confirm_timeout_ms: 2_000,
@@ -1229,120 +1197,98 @@ const WAVE_TIMINGS = {
 // ===========================================================================
 
 describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before cleanup", () => {
-  it("persists the worker's evidence before the container is destroyed", async () => {
-    // §10.2's ordering: "worker report/evidence persisted → … → worktree/
-    // branch/executor resources cleaned up". Collect reads the durable layer,
-    // so on the ordinary path it runs while the container is still up and the
-    // teardown follows it.
+  it("confirms real work started before a dispatch is answerable", async () => {
+    // §10.2's first half, on the dispatch the door itself makes: a container
+    // is not "launched" because a process id exists — it is launched when the
+    // green-start probe answered AND the work process confirmed, which is the
+    // evidence the returned handle carries.
     const journal: string[] = [];
     const binding = new JournalBinding(journal);
-    const collector = new JournalCollector(journal);
 
-    await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run_compat", tickID),
-      [task("mrq")],
-      () => SPEC,
-      { ...WAVE_TIMINGS, sleep: stagedSleeper(binding, { finishWork: true }) },
-      collector,
-    );
+    const spawned = await spawnWorker(binding, "run_compat-mrq-1", task("mrq"), SPEC, {
+      probe_timeout_ms: 2_000,
+      probe_poll_ms: 1,
+      confirm_timeout_ms: 2_000,
+      confirm_poll_ms: 1,
+      sleep: stagedSleeper(binding, { finishWork: true }),
+    });
 
-    const collectAt = journal.indexOf("collect:mrq");
-    const destroyAt = journal.indexOf(`destroy:${workerSandboxName("run_compat", "mrq")}`);
-    expect(collectAt).toBeGreaterThanOrEqual(0);
-    expect(destroyAt).toBeGreaterThanOrEqual(0);
-    expect(collectAt).toBeLessThan(destroyAt);
+    expect(spawned.launched).toBe(true);
+    expect(spawned.confirm?.confirmed).toBe(true);
+    const sandbox = binding.named("run_compat-mrq-1");
+    // The probe answered before the work command was ever started — the
+    // green-start trap is an ordering, not just a check.
+    const probeAt = sandbox.processes.findIndex((p) => p.command === PROBE.command);
+    const workAt = sandbox.processes.findIndex((p) => p.command === SPEC.command);
+    expect(probeAt).toBeGreaterThanOrEqual(0);
+    expect(workAt).toBe(probeAt + 1);
   });
 
-  it("runs a cancelled wave's on_cancel hook before it destroys any container", async () => {
+  it("asks a stopped worker to push before its container is destroyed", async () => {
     // Appendix A #1: "Revoke before teardown: the money dies first, then the
-    // work is rescued." Destroying a container is the stronger stop and the
-    // slower one, and every second of teardown is a second the harness inside
-    // it can still spend — so the credential dies the instant the wave is
-    // found cancelled, ahead of the teardowns.
-    //
-    // WHAT THIS PINS, exactly: `dispatchWave`'s ORDERING — that a cancelled
-    // wave runs the canceller's `on_cancel` hook once, before the first
-    // teardown and before the salvage window. The hook below is this test's
-    // own; it journals rather than revoking, because a revoke needs the
-    // run-workflow step's env and params. That `on_cancel` is wired to
-    // `revokeRunTokens` in production is a separate claim, pinned by the test
-    // below it.
+    // work is rescued." The door's cancel is exactly that shape, at the
+    // container: the salvage command (stop, commit, push) runs inside the
+    // grace window BEFORE teardownWorker destroys anything — a killed
+    // container pushes nothing, so the ask has to land first.
     const journal: string[] = [];
     const binding = new JournalBinding(journal);
-    const collector = new JournalCollector(journal);
-    const tasks = [task("mrq"), task("wl7")];
+    let workSpoke = false;
+    const sleep: Sleeper = async () => {
+      for (const sandbox of binding.booted) {
+        const process = sandbox.processes.at(-1);
+        if (process === undefined || process.state !== "running") continue;
+        if (process.command === PROBE.command) {
+          process.say(`${PROBE.expect}\n`);
+          process.finish(0);
+        } else if (process.command === SPEC.command) {
+          // The work process must stay RUNNING for the salvage to have
+          // something mid-flight to rescue; one line is what confirms the
+          // dispatch.
+          if (!workSpoke) {
+            workSpoke = true;
+            process.say("implementing\n");
+          }
+        } else {
+          process.say(`${SPEC.salvage?.marker}\n`);
+          process.finish(0);
+        }
+      }
+    };
 
-    // Cancel once every container is in its wait — a batch in flight, not a
-    // wave that never started.
-    const inWait = () =>
-      tasks.every(
-        (candidate) =>
-          binding.gets.filter((name) => name === workerSandboxName("run_compat", candidate.tick_id))
-            .length >= 2,
-      );
-    const cancel = waveCanceller(
-      async () =>
-        inWait() ? { reason: "stopped:hard", detail: "the operator stopped this run" } : null,
-      {
-        poll_ms: 0,
-        on_cancel: async () => {
-          journal.push("revoke");
-        },
-      },
-    );
+    const spawned = await spawnWorker(binding, "run_compat-mrq-1", task("mrq"), SPEC, {
+      probe_timeout_ms: 2_000,
+      probe_poll_ms: 1,
+      confirm_timeout_ms: 2_000,
+      confirm_poll_ms: 1,
+      sleep,
+    });
+    expect(spawned.launched).toBe(true);
 
-    await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run_compat", tickID),
-      tasks,
-      () => SPEC,
-      {
-        ...WAVE_TIMINGS,
-        sleep: stagedSleeper(binding, { finishWork: false }),
-        cancel,
-        salvage_grace_ms: 0,
-        salvage_poll_ms: 1,
-      },
-      collector,
-    );
+    await salvageWorker(binding, "run_compat-mrq-1", spawned.process_id, SPEC.salvage, {
+      reason: "stopped:hard",
+      graceMs: 0,
+      pollMs: 1,
+      sleep,
+    });
+    await teardownWorker(binding, "run_compat-mrq-1", spawned.process_id);
 
-    const revokeAt = journal.indexOf("revoke");
-    const destroys = journal
-      .map((entry, index) => ({ entry, index }))
-      .filter(({ entry }) => entry.startsWith("destroy:"))
-      .map(({ index }) => index);
-
-    // Exactly one revoke for the whole wave: the canceller is shared, so the
-    // first worker to see the stop decides it for all of them.
-    expect(journal.filter((entry) => entry === "revoke")).toEqual(["revoke"]);
-    expect(destroys).toHaveLength(tasks.length);
-    for (const destroyAt of destroys) expect(revokeAt).toBeLessThan(destroyAt);
-
-    // …and the container was ASKED to stop and push inside the window the
-    // revoke bought, before it was destroyed.
+    // The salvage command ran — and the destroy came after it, never before.
     const salvageAt = journal.findIndex((entry) => entry.includes("--cancel"));
-    expect(revokeAt).toBeLessThan(salvageAt);
-    expect(salvageAt).toBeLessThan(destroys[0]!);
+    const destroyAt = journal.indexOf("destroy:run_compat-mrq-1");
+    expect(salvageAt).toBeGreaterThanOrEqual(0);
+    expect(destroyAt).toBeGreaterThan(salvageAt);
   });
 
-  it("wires that hook to revokeRunTokens, and revokes again before finalize tears down", () => {
-    // The half the harness test above cannot reach. `dispatchWave` proves the
-    // ordering; this proves the production canceller puts a REVOKE in the slot
-    // whose ordering was proved, and that the durable, replay-safe half runs
-    // before finalize destroys anything. Both are orderings inside
+  it("revokes before finalize tears down, and a boot check comes before every credential", () => {
+    // Appendix A #1, at the supervisor: finalize must revoke the run's
+    // gateway tokens before it destroys anything, and nothing may start paid
+    // work over a standing hard stop. These are orderings inside
     // `run-workflow.ts`, which this suite does not execute — so they are read
     // out of the source, the same way `internal/factory/lifecycle` checks that
     // an invariant's named symbols still exist in the file that claims them.
     //
     // A source read is a weak pin and is meant to be: it catches the wiring
     // being deleted or reordered, not every way it could be made wrong.
-    const cancellerHook = /on_cancel:[\s\S]{0,400}?revokeRunTokens\(/.exec(RUN_WORKFLOW_TS);
-    expect(
-      cancellerHook,
-      "run-workflow.ts no longer revokes from a wave canceller's on_cancel",
-    ).not.toBeNull();
-
     const finalizeAt = RUN_WORKFLOW_TS.indexOf("export async function finalize(");
     expect(finalizeAt, "run-workflow.ts no longer exports finalize()").toBeGreaterThan(-1);
     const finalize = RUN_WORKFLOW_TS.slice(finalizeAt);
@@ -1351,6 +1297,17 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
     expect(revokeAt, "finalize() no longer revokes the run's gateway tokens").toBeGreaterThan(-1);
     expect(destroyAt, "finalize() no longer destroys the run's sandboxes").toBeGreaterThan(-1);
     expect(revokeAt).toBeLessThan(destroyAt);
+
+    // The kill switch is checked before anything is credentialled: the
+    // hard-stop read precedes the first boot of the pass that would spend.
+    const killCheckAt = RUN_WORKFLOW_TS.indexOf("hardStopRecord(env, params)");
+    expect(
+      killCheckAt,
+      "run-workflow.ts no longer reads the hard stop before booting",
+    ).toBeGreaterThan(-1);
+    const bootAt = RUN_WORKFLOW_TS.indexOf(":boot:");
+    expect(bootAt).toBeGreaterThan(-1);
+    expect(killCheckAt).toBeLessThan(bootAt);
   });
 
   it("keeps a revoked credential refused, so nothing a restart does re-issues it", async () => {
@@ -1399,25 +1356,16 @@ describe("SPEC §10.2 and Appendix A #1: revoke before teardown, evidence before
 
   it("hands collect only durable facts, so a container's exit cannot be the verdict", async () => {
     // §10.1: "Terminal output is useful diagnostic material, but it is not a
-    // completion contract." The collector is handed a tick, a branch and a
-    // base — no sandbox, no process, no exit code — so a container that
-    // exited 0 having pushed nothing still collects as `no-commits`.
-    const journal: string[] = [];
-    const binding = new JournalBinding(journal);
-    const collector = new JournalCollector(journal, WORKER_VERDICTS.noCommits);
-
-    const [outcome] = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run_compat", tickID),
-      [task("mrq")],
-      () => SPEC,
-      { ...WAVE_TIMINGS, sleep: stagedSleeper(binding, { finishWork: true }) },
-      collector,
-    );
-
+    // completion contract." The dispatch door returns a HANDLE, never a
+    // result — collect is a separate operation the executor performs over
+    // durable state only. Its structural half is pinned here: the collector
+    // is handed a tick, a branch and a base — no sandbox, no process, no
+    // exit code — so a container that exited 0 having pushed nothing still
+    // collects as `no-commits`.
+    const collector = new JournalCollector([], WORKER_VERDICTS.noCommits);
+    const report = await collector.collect(task("mrq"));
     expect(collector.seenKeys).toEqual([["base_sha", "branch", "tick_id"]]);
-    expect(outcome!.wait?.exit_code).toBe(0);
-    expect(outcome!.collect.verdict).toBe(WORKER_VERDICTS.noCommits);
-    expect(outcome!.collect.commits).toBe(0);
+    expect(report.verdict).toBe(WORKER_VERDICTS.noCommits);
+    expect(report.commits).toBe(0);
   });
 });
