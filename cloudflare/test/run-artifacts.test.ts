@@ -11,7 +11,6 @@ import {
 } from "../src/artifacts";
 import {
   BUDGET_POLL_HEADROOM,
-  cloudWaveBudget,
   DEFAULT_MAX_COST_USD,
   DEFAULT_MAX_WALL_CLOCK_MS,
   earliestDeadline,
@@ -34,11 +33,8 @@ import {
   terminalExitReason,
 } from "../src/sandbox";
 import {
-  DEFAULT_WORKER_HARNESS_BUDGET_MS,
-  MIN_WORKER_HARNESS_BUDGET_MS,
   WORKER_DEFAULT_HARNESS,
   WORKER_DEFAULT_MODEL,
-  WORKER_PUSH_MARGIN_MS,
   workerHarness,
   workerModel,
 } from "../src/worker-boot";
@@ -602,125 +598,40 @@ describe("the per-repo sandbox declaration", () => {
   });
 });
 
-// ------------------------------------------------- the cloud wave's budget ---
+// ------------------------------------------- the worker's route and model ---
 
 /**
- * tick 5fg. Run run_2e66e765 was submitted with `--max-wall-clock 90m`; all
- * three of its worker containers were killed at ~29 minutes with `exit 124`,
- * `0 work commit(s)`, having made 393+ real model calls each. The operator's
- * own bound was ignored because `TICKS_WORKER_TIMEOUT` derived from a
- * `CLOUD_WAVE_WAIT_TIMEOUT_MS = 30 * 60_000` constant and from nothing else.
- *
- * These pin both halves of the fix: the budget follows the run's wall-clock
- * allowance, and the default it falls back to clears the measurement (tick
- * y45: a COMPLETE one-tick epic at 78 minutes on deepseek-v4-pro, the
- * worker default from tick 1cd until tick uqi moved the default to GLM 5.3).
+ * tick 1cd. The MODEL a worker runs was once a source constant, so changing
+ * which model every cloud worker runs meant editing TypeScript and redeploying
+ * the factory. What is pinned here is the resolution the sandbox executor and
+ * every boot go through (workerModel/workerHarness), and its precedence: run
+ * submission > deployment var > built-in default.
  */
-describe("a cloud wave's worker budget", () => {
-  const MINUTE = 60_000;
+describe("the worker model and harness are deployment vars (tick 1cd)", () => {
+  const GLM = "workers-ai/@cf/zai-org/glm-5.3";
+  const GLM_FLASH = "workers-ai/@cf/zai-org/glm-5.3-flash";
 
-  it("derives a worker's harness budget from the run's wall-clock allowance", () => {
-    const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(90 * MINUTE) } as never);
-    const budget = cloudWaveBudget(config, 0);
-
-    // The number the failing run should have had, instead of ~29 minutes.
-    expect(budget.harness_budget_ms).toBe(90 * MINUTE - WORKER_PUSH_MARGIN_MS);
-    expect(budget.harness_budget_ms).toBeGreaterThan(30 * MINUTE);
-    // And the wave waits exactly the push margin longer than the agent may
-    // work: the two bounds do different jobs, but the margin still separates
-    // them, because the dispatcher's timeout ends in a KILLED container.
-    expect(budget.wait_timeout_ms).toBe(budget.harness_budget_ms + WORKER_PUSH_MARGIN_MS);
-    expect(budget.wait_timeout_ms).toBeLessThanOrEqual(config.max_wall_clock_ms);
+  it("defaults an unconfigured worker to the built-in pi on GLM 5.3", () => {
+    expect(workerModel(null, null)).toBe(WORKER_DEFAULT_MODEL);
+    expect(workerModel(null, null)).toBe(GLM);
+    expect(workerHarness(null, null)).toBe(WORKER_DEFAULT_HARNESS);
   });
 
-  it("spends only the wall clock the run has LEFT, not the whole allowance", () => {
-    const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(90 * MINUTE) } as never);
-    const budget = cloudWaveBudget(config, 30 * MINUTE);
-
-    expect(budget.harness_budget_ms).toBe(60 * MINUTE - WORKER_PUSH_MARGIN_MS);
-    // A worker that outlives its run is a container the wall-clock trip has to
-    // kill — which is the failure mode this tick is about, one layer up.
-    expect(30 * MINUTE + budget.wait_timeout_ms).toBeLessThanOrEqual(config.max_wall_clock_ms);
+  it("takes the deployment's variable over the built-in default", () => {
+    expect(workerModel(null, GLM_FLASH)).toBe(GLM_FLASH);
+    expect(workerHarness(null, "codex")).toBe("codex");
   });
 
-  it("falls back to the measured default when the run's allowance is generous", () => {
-    const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(6 * 60 * MINUTE) } as never);
-    const budget = cloudWaveBudget(config, 0);
-
-    expect(budget.harness_budget_ms).toBe(DEFAULT_WORKER_HARNESS_BUDGET_MS);
-    // Tick y45's measurement is the floor the default has to clear.
-    expect(budget.harness_budget_ms).toBeGreaterThanOrEqual(78 * MINUTE);
+  // A whitespace-only var is an unset var, exactly as `textVar` treats
+  // RUN_MODEL — never an empty TICKS_MODEL export into the container.
+  it("ignores a blank var rather than exporting an empty model", () => {
+    expect(workerModel(null, "   ")).toBe(WORKER_DEFAULT_MODEL);
   });
 
-  it("lets a deployment cap what any one worker may take", () => {
-    const config = runConfig({
-      RUN_MAX_WALL_CLOCK_MS: String(6 * 60 * MINUTE),
-      RUN_WORKER_BUDGET_MS: String(20 * MINUTE),
-    } as never);
-
-    expect(config.worker_budget_ms).toBe(20 * MINUTE);
-    expect(cloudWaveBudget(config, 0).harness_budget_ms).toBe(20 * MINUTE);
-  });
-
-  it("ignores an unusable cap the way every other budget var is treated", () => {
-    const config = runConfig({ RUN_WORKER_BUDGET_MS: "soon" } as never);
-    expect(config.worker_budget_ms).toBeNull();
-    expect(cloudWaveBudget(config, 0).harness_budget_ms).toBe(DEFAULT_WORKER_HARNESS_BUDGET_MS);
-  });
-
-  it("hands a worker a usable floor rather than seconds when the run is nearly out of time", () => {
-    const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(90 * MINUTE) } as never);
-    const budget = cloudWaveBudget(config, 90 * MINUTE);
-
-    expect(budget.harness_budget_ms).toBe(MIN_WORKER_HARNESS_BUDGET_MS);
-    expect(budget.wait_timeout_ms).toBeGreaterThan(0);
-  });
-
-  /**
-   * tick 1cd. The budget above is a deployment decision; the MODEL the budget
-   * is spent on was not — `WORKER_DEFAULT_MODEL` was a source constant, so
-   * changing which model every cloud worker runs meant editing TypeScript and
-   * redeploying the factory. These pin the var and the precedence.
-   */
-  describe("the worker model and harness are deployment vars (tick 1cd)", () => {
-    const GLM = "workers-ai/@cf/zai-org/glm-5.3";
-    const GLM_FLASH = "workers-ai/@cf/zai-org/glm-5.3-flash";
-
-    it("is null when the deployment names none, so the built-in default stands", () => {
-      const config = runConfig({} as never);
-      expect(config.worker_model).toBeNull();
-      expect(config.worker_harness).toBeNull();
-      expect(workerModel(config.model, config.worker_model)).toBe(WORKER_DEFAULT_MODEL);
-      expect(workerModel(config.model, config.worker_model)).toBe(GLM);
-      expect(workerHarness(config.harness, config.worker_harness)).toBe(WORKER_DEFAULT_HARNESS);
-    });
-
-    it("reads RUN_WORKER_MODEL / RUN_WORKER_HARNESS from the deployment", () => {
-      const config = runConfig({
-        RUN_WORKER_MODEL: GLM_FLASH,
-        RUN_WORKER_HARNESS: "codex",
-      } as never);
-
-      expect(config.worker_model).toBe(GLM_FLASH);
-      expect(config.worker_harness).toBe("codex");
-      expect(workerModel(config.model, config.worker_model)).toBe(GLM_FLASH);
-      expect(workerHarness(config.harness, config.worker_harness)).toBe("codex");
-    });
-
-    // A whitespace-only var is an unset var, exactly as `textVar` treats
-    // RUN_MODEL — never an empty TICKS_MODEL export into the container.
-    it("ignores a blank var rather than exporting an empty model", () => {
-      const config = runConfig({ RUN_WORKER_MODEL: "   " } as never);
-      expect(config.worker_model).toBeNull();
-      expect(workerModel(config.model, config.worker_model)).toBe(WORKER_DEFAULT_MODEL);
-    });
-
-    // Precedence: run submission > deployment var > built-in default. The
-    // run's own `RUN_MODEL`/`--model` was already winning before this tick and
-    // must go on winning — a per-run choice outranks a standing one.
-    it("lets the run's own model outrank the deployment's worker var", () => {
-      const config = runConfig({ RUN_MODEL: GLM_FLASH, RUN_WORKER_MODEL: GLM } as never);
-      expect(workerModel(config.model, config.worker_model)).toBe(GLM_FLASH);
-    });
+  // Precedence: run submission > deployment var > built-in default. The
+  // run's own `RUN_MODEL`/`--model` was already winning before this tick and
+  // must go on winning — a per-run choice outranks a standing one.
+  it("lets the run's own model outrank the deployment's worker var", () => {
+    expect(workerModel(GLM_FLASH, GLM)).toBe(GLM_FLASH);
   });
 });

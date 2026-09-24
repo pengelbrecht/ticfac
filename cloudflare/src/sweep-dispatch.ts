@@ -1,6 +1,6 @@
 /**
- * The cron sweep itself: read the frontier, select, record, ignite (D14/D15,
- * tick hye).
+ * The cron sweep itself: read the frontier, select, record (D14/D15, tick
+ * hye; the ignite step refused since tick l6t — see the selection site).
  *
  * `sweeps.ts` holds the policy and the arithmetic and touches nothing; this is
  * where the network is. The order of operations is the design doc's UC7, and
@@ -17,25 +17,21 @@
  *     costs ("never default a pagination bound to a permissive value... treat
  *     the page cap as a telemetry FAILURE").
  *  4. Select deterministically and build the record.
- *  5. Mint the synthetic sweep epic — one CREATE of one tick record, which is
- *     the only write this path makes to the repository.
- *  6. Submit ONE run whose `max_cost_usd` is the effective sweep budget.
- *  7. Write the record to D1 whatever happened, including when nothing ran.
+ *  5. Write the record to D1 whatever happened, including when nothing ran.
+ *     (Steps 5-7 of the design doc's UC7 were the epic mint and the run
+ *     submission; since tick l6t deleted the tick_ids wave a sweep submitted
+ *     with, a selection that matches refuses rather than spends — see the
+ *     comment at the selection site for the full argument.)
  *
  * ## Where the budget is enforced, and where it is not
  *
- * Nothing in this file enforces a budget. Step 6 hands `max_cost_usd` to
- * `submitRun`, which puts it in the Workflow's params; `runConfig` clamps it
- * against the deployment ceiling and `supervisePass` trips the run on it. That
- * is D14 exactly — *"a model can be talked out of a budget; a Workflow step
- * cannot"* — and it is also D15, because the trip path is the one `tk cloud
- * stop` takes: the in-flight tick finishes, review and closeout run on what is
- * done, and every branch already pushed is still pushed. A sweep that trips
- * its budget loses nothing that landed.
- *
- * The number is REPORTED before any of that happens, in the record this file
- * writes: requested, effective, and whether a ceiling lowered it (tick 7zk —
- * an operator whose $40 became $8 found out from the cancellation).
+ * Nothing in this file enforces a budget — and since tick l6t nothing this
+ * file does spends one either: a matching selection refuses to submit a run
+ * (the wave field a sweep named its batch with is deleted), so the budget the
+ * policy declares is REPORTED, in the record this file writes, as the bound
+ * the sweep's future dispatch shape will run under: requested, effective, and
+ * whether a ceiling lowered it (tick 7zk — an operator whose $40 became $8
+ * found out from the cancellation, not before it).
  *
  * ## What this path deliberately does not do
  *
@@ -44,21 +40,21 @@
  * `tk cloud supervisor` (tick acy). A sweep that grew its own watchdog would
  * be a second, worse one.
  *
- * **It does not re-parent the selected ticks under the sweep epic.** The
+ * **It does not re-parent the selected ticks under a sweep epic.** The
  * control plane's tracker writer is create-only, on purpose and as its whole
  * safety argument (`tracker-write.ts`): it has no way to lose an update
- * because it has no way to make one. So the sweep epic is a BUCKET — the
- * design doc's own word, "buckets are already free and passive in the
- * hierarchy model" — and the wave is carried into the submission as
- * `tick_ids`, through the same seam `tk cloud spawn` uses for a wave computed
- * where `tk graph` already runs.
+ * because it has no way to make one. That is the second half of why a
+ * matching selection now refuses (tick l6t): even if a bucket epic were
+ * minted, the one orchestrator path that remains plans an epic's OWN
+ * children, and no write this factory has can make the selection the
+ * bucket's. The record this file writes to D1 is the selection's account
+ * today.
  */
 
 import { getEnrolledProject, insertSweepSelection, listEnrolledProjects } from "./db";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL, repoRefs } from "./progress";
 import { repoConfig } from "./repo-config";
-import { submitRun } from "./runs";
 import {
   cronMatches,
   declaredSweeps,
@@ -72,8 +68,6 @@ import {
   sweepCeilings,
 } from "./sweeps";
 import { TICK_RECORD_DIR, trackerReader } from "./tick-membership";
-import { newTraceID } from "./trace";
-import { commitTickRecord, tickIDCandidates, trackerWriter } from "./tracker-write";
 
 /**
  * The most tick records one sweep will read before it refuses to select.
@@ -294,10 +288,13 @@ export type SweepOutcome = {
   fired_at: string;
   base_sha: string;
   /**
-   * `ignited` — a run was submitted. `queued` — parked behind a live lease.
    * `empty` — the frontier held nothing this filter wanted. `refused` — the
    * sweep would not select (unreadable config, unreadable or oversized
-   * frontier, no epic, a refused submission).
+   * frontier) or, since tick l6t, a selection that matches but has no
+   * dispatch shape to run under (the `tick_ids` wave it named its batch with
+   * is deleted). `ignited`/`queued` stay in the vocabulary the D1 record and
+   * the route accept, and are produced again the day a sweep regains a way
+   * to run what it selects.
    */
   outcome: "ignited" | "queued" | "empty" | "refused";
   run_id: string | null;
@@ -491,95 +488,25 @@ export async function runOneSweep(
     };
   }
 
-  // The synthetic sweep epic: one CREATE, the only write this path makes. The
-  // selected ticks are NOT re-parented under it — see the header — so this
-  // record is a bucket that names the batch and gives the run's branches
-  // somewhere to hang.
-  const traceID = newTraceID();
-  const epic = await commitTickRecord(trackerWriter(env), {
-    project,
-    branch: base.branch,
-    candidates: tickIDCandidates(),
-    record: {
-      title: `Sweep ${policy.name} ${fired.slice(0, 10)}`,
-      description:
-        `Selected by the ${policy.name} cron sweep at ${fired} from ${selection.frontier} tick ` +
-        `record(s) at ${base.sha}, ordered by ${selection.order}: ` +
-        `${selection.selected.join(", ")}. Budget: ${budgetLine}. Record: ${id}.`,
-      type: "epic",
-      owner: sweepRequester(policy.name),
-      created_by: sweepRequester(policy.name),
-      external_ref: `sweep:${policy.name}@${fired}`,
-      trace_id: traceID,
-      at: fired,
-    },
-  });
-  if (epic.state !== "committed") {
-    return refused(
-      `the sweep epic could not be committed to ${project}, so nothing ran: ${epic.detail}`,
-      base.sha,
-      selection,
-    );
-  }
-
-  const submitted = await submitRun(env, {
-    project,
-    epic: epic.tick_id,
-    base_sha: base.sha,
-    requested_by: sweepRequester(policy.name),
-    trace_id: traceID,
-    queue: false,
-    // The whole of D14 in one field: the budget the Workflow will enforce.
-    // Already bounded by the deployment ceiling here so the record can report
-    // the effective number, and bounded AGAIN by `runConfig` inside the
-    // Workflow, which is the clamp that actually governs.
-    max_cost_usd: effective.budget_usd.effective,
-    tick_ids: selection.selected,
-    // A sweep run pushes branches and opens PRs, so it is issued the `write`
-    // grade (D11, tick pzf) — stated rather than defaulted, because the grade
-    // is decided at submission and never by the run, and a sweep is the one
-    // submitter with no human at it to notice a wrong one.
-    credential_grade: "write",
-    ...(policy.gate_on_complete === "none" ? {} : { notify: policy.gate_on_complete }),
-  });
-
-  const common = {
-    sweep_id: id,
-    project,
-    sweep: policy.name,
-    cron: policy.cron,
-    fired_at: fired,
-    base_sha: base.sha,
+  // The wave field this path was built on is deleted (tick l6t): a submission
+  // can no longer name "exactly these ticks" to a run, and the one dispatch
+  // path that remains — an orchestrator container running `ticfac run-epic` —
+  // plans an EPIC'S OWN CHILDREN. The create-only tracker writer cannot
+  // parent the selected ticks under a synthetic epic, so a run on a bucket
+  // epic would plan nothing: a paid container boot guaranteed to do no work.
+  // The honest outcome is to select, record, and REFUSE — naming the gap so
+  // the record an operator reads every morning says what a sweep now needs
+  // (a dispatch shape for a tick batch under the one-orchestrator rule)
+  // rather than reporting runs that cannot run anything.
+  return refused(
+    `${selection.selected.length} tick(s) matched "${policy.filter}" (${selection.selected.join(", ")}), ` +
+      "but no run was submitted: the tick_ids wave field is deleted (tick l6t), and the " +
+      "create-only tracker writer cannot parent the selection under a synthetic epic for " +
+      "the one orchestrator path to plan — a bucket-epic run would boot a container " +
+      "guaranteed to plan nothing. Recorded, not spent (" +
+      budgetLine +
+      ").",
+    base.sha,
     selection,
-  };
-  switch (submitted.outcome) {
-    case "started":
-      return {
-        ...common,
-        outcome: "ignited",
-        run_id: submitted.started.run.run_id,
-        detail:
-          `${selection.selected.length} tick(s) selected into epic ${epic.tick_id} and ignited ` +
-          `as ${submitted.started.run.run_id} with ${budgetLine}`,
-      };
-    case "queued":
-      return {
-        ...common,
-        outcome: "queued",
-        run_id: submitted.queued.run_id,
-        detail:
-          `${selection.selected.length} tick(s) selected into epic ${epic.tick_id}; the run is ` +
-          `parked behind ${submitted.holder.run_id} and will ignite when the lease frees ` +
-          `(${budgetLine})`,
-      };
-    default:
-      return {
-        ...common,
-        outcome: "refused",
-        run_id: null,
-        detail:
-          `${selection.selected.length} tick(s) selected into epic ${epic.tick_id} but the run ` +
-          `was not started: ${submitted.detail}`,
-      };
-  }
+  );
 }

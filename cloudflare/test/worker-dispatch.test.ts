@@ -1,8 +1,5 @@
-import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import { readWorkerManifest } from "../src/artifacts";
-import { manifestRecorder } from "../src/reconcile";
 import type {
   OrchestratorSandbox,
   SandboxBinding,
@@ -10,13 +7,12 @@ import type {
   SandboxProcessState,
   SandboxProcessView,
 } from "../src/sandbox";
-import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
+import type { WorkerTask } from "../src/worker-collect";
 import {
   type Canceller,
   checkLiveness,
   confirmDispatch,
   DEFAULT_SALVAGE_GRACE_MS,
-  dispatchWave,
   evaluateProbeOutput,
   type SalvageSpec,
   type Sleeper,
@@ -26,9 +22,6 @@ import {
   type WaveCancellation,
   type WorkerLogSink,
   type WorkSpec,
-  waitForWorker,
-  waveCanceller,
-  workerSandboxName,
 } from "../src/worker-dispatch";
 
 /**
@@ -36,8 +29,10 @@ import {
  * green-start trap, confirmed dispatch, expiring liveness — plus concurrent
  * fan-out and a collect seam that structurally cannot read a sandbox.
  *
- * These drive the pure dispatch functions directly against a fake
- * `SandboxBinding`, the same seam `run-workflow.test.ts` uses for the
+ * These are the functions the per-tick sandbox dispatch door's executor is
+ * built from; the wave fan-out that also lived here is deleted (tick l6t), and
+ * so are its tests. They drive the pure dispatch functions directly against a
+ * fake `SandboxBinding`, the same seam `run-workflow.test.ts` uses for the
  * orchestrator sandbox — nothing here starts a real container.
  */
 
@@ -171,51 +166,10 @@ class FakeSandboxes implements SandboxBinding {
   }
 }
 
-/** Never sees a sandbox at all — the structural proof collect cannot read one. */
-class FakeCollector implements WorkerCollector {
-  readonly asked: WorkerTask[] = [];
-  reports = new Map<string, WorkerReport>();
-  /**
-   * tick k24: what the container looked like at the moment collect was asked,
-   * so a test can assert the ORDER of teardown and collect rather than only
-   * that both happened.
-   */
-  seenDestroyed = new Map<string, boolean>();
-  watch: FakeSandboxes | null = null;
-  runAtCollect: (() => void) | null = null;
-
-  set(tickID: string, report: WorkerReport): void {
-    this.reports.set(tickID, report);
-  }
-
-  async collect(task: WorkerTask): Promise<WorkerReport> {
-    this.asked.push(task);
-    if (this.watch !== null) {
-      const sandbox = this.watch.find(workerSandboxName("run1", task.tick_id));
-      this.seenDestroyed.set(task.tick_id, sandbox?.destroyed ?? false);
-    }
-    this.runAtCollect?.();
-    const found = this.reports.get(task.tick_id);
-    if (found !== undefined) return found;
-    return {
-      tick_id: task.tick_id,
-      branch: task.branch,
-      base_sha: task.base_sha,
-      verdict: "ready-to-merge",
-      branch_exists: true,
-      commits: 1,
-      result_path: `RESULT-${task.tick_id}.md`,
-      result_exists: true,
-      status: "DONE",
-      status_detail: "",
-      status_line: "STATUS: DONE",
-      boundary_files: [],
-      detail: "ready to merge",
-    };
-  }
+/** The sandbox name a test addresses one worker by — any distinct name. */
+function workerSandboxName(runID: string, tickID: string): string {
+  return `${runID}-${tickID}`;
 }
-
-const noWait: Sleeper = async () => {};
 
 const PROBE_SPEC = { command: "tk --version", expect: "READY" };
 const WORK_SPEC: WorkSpec = {
@@ -224,28 +178,23 @@ const WORK_SPEC: WorkSpec = {
   env: { TICKS_TICK_ID: "0ds" },
 };
 
-/**
- * The door a container is asked to stop and push through (tick 7zk). Spelled
- * here the way `workerWorkSpec` spells it, so a test that asserts the command
- * is asserting the thing a real wave starts.
- */
-const SALVAGE_SPEC: SalvageSpec = {
-  command: "/usr/local/bin/ticks-worker --cancel",
-  env: { TICKS_TICK_ID: "0ds" },
-  marker: "ticks-worker-cancel-requested",
-};
+function task(tickID: string): WorkerTask {
+  return { tick_id: tickID, branch: `tick/1vn/${tickID}`, base_sha: "a".repeat(40) };
+}
 
-/** A worker container that CAN be asked to stop and push. */
-const SALVAGEABLE_SPEC: WorkSpec = { ...WORK_SPEC, salvage: SALVAGE_SPEC };
+/** A sleeper that never waits — the polling loops still poll, instantly. */
+const noWait: Sleeper = async () => {};
 
 /** The door process a container was asked through, if it was asked at all. */
 function doorIn(sandbox: FakeSandbox): FakeProcess | undefined {
   return sandbox.processes.find((p) => p.command.startsWith(SALVAGE_SPEC.command));
 }
 
-function task(tickID: string): WorkerTask {
-  return { tick_id: tickID, branch: `tick/1vn/${tickID}`, base_sha: "a".repeat(40) };
-}
+const SALVAGE_SPEC: SalvageSpec = {
+  command: "/usr/local/bin/ticks-worker --cancel",
+  env: { TICKS_TICK_ID: "0ds" },
+  marker: "ticks-worker-cancel-requested",
+};
 
 // ------------------------------------------------------------ probe evaluation ---
 
@@ -470,7 +419,7 @@ describe("spawnWorker: the green-start trap", () => {
     });
 
     expect(result.launched).toBe(false);
-    // The distinction the first real wave paid for: three healthy containers
+    // The distinction the first real wave paid for: healthy containers
     // were reported as having started cleanly and done nothing, when they were
     // still pulling a 1.1 GB image. Silence is "never got there", not "failed".
     expect(result.probe.ok === false && result.probe.reason).toBe("boot-timeout");
@@ -684,368 +633,45 @@ describe("checkLiveness / teardownWorker: expiring liveness", () => {
   });
 });
 
-// -------------------------------------------------------------------- waitForWorker ---
-
-describe("waitForWorker", () => {
-  it("resolves once the process reaches a terminal state", async () => {
-    const binding = new FakeSandboxes();
-    const sandbox = (await binding.get("s1")) as FakeSandbox;
-    const started = await sandbox.startProcess("ticks-worker", { env: {} });
-    sandbox.current.finish(0);
-
-    const outcome = await waitForWorker(binding, "s1", started.id, {
-      timeoutMs: 5_000,
-      pollMs: 1,
-      sleep: noWait,
-    });
-    expect(outcome).toEqual({
-      state: "completed",
-      exit_code: 0,
-      timed_out: false,
-      cancelled: null,
-      offset: 0,
-    });
-  });
-
-  it("times out rather than waiting forever on a process that never finishes", async () => {
-    const binding = new FakeSandboxes();
-    const sandbox = (await binding.get("s1")) as FakeSandbox;
-    const started = await sandbox.startProcess("ticks-worker", { env: {} });
-
-    const outcome = await waitForWorker(binding, "s1", started.id, { timeoutMs: 20, pollMs: 5 });
-    expect(outcome.timed_out).toBe(true);
-    expect(outcome.state).toBe("running");
-  });
-
-  it("reports gone rather than throwing when the sandbox no longer knows the process", async () => {
-    const binding = new FakeSandboxes();
-    const sandbox = (await binding.get("s1")) as FakeSandbox;
-    const started = await sandbox.startProcess("ticks-worker", { env: {} });
-    sandbox.vanished = true;
-
-    const outcome = await waitForWorker(binding, "s1", started.id, {
-      timeoutMs: 5_000,
-      pollMs: 1,
-      sleep: noWait,
-    });
-    expect(outcome).toEqual({
-      state: "gone",
-      exit_code: null,
-      timed_out: false,
-      cancelled: null,
-      offset: 0,
-    });
-  });
-});
-
-// ------------------------------------------------------------------------- the wave ---
-
-describe("dispatchWave", () => {
-  it("boots N sandboxes CONCURRENTLY — none can finish until all N have started", async () => {
-    const binding = new FakeSandboxes();
-    const tasks = [task("aaa"), task("bbb"), task("ccc")];
-    const N = tasks.length;
-
-    // Every probe only finishes once every sandbox has started ITS probe —
-    // a serial implementation would deadlock here, because task 2's probe
-    // would never even start until task 1's whole cycle (probe → confirm →
-    // wait → collect → teardown) completed. Each process is advanced at
-    // most twice (one output, then terminal) so the `wait` stage afterward
-    // resolves quickly instead of spinning on a process left `running`
-    // forever.
-    const givenOutput = new Set<string>();
-    const sleep: Sleeper = async () => {
-      if (binding.bootOrder.length < N) return; // still waiting on siblings to boot
-      for (const sandbox of binding.booted) {
-        for (const process of sandbox.processes) {
-          if (process.state !== "running") continue;
-          if (process.command === PROBE_SPEC.command) {
-            process.say("READY\n");
-            process.finish(0);
-          } else if (process.command === WORK_SPEC.command) {
-            if (givenOutput.has(process.id)) {
-              process.finish(0);
-            } else {
-              givenOutput.add(process.id);
-              process.say("working\n");
-            }
-          }
-        }
-      }
-    };
-
-    const collector = new FakeCollector();
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      tasks,
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        sleep,
-      },
-      collector,
-    );
-
-    expect(outcomes).toHaveLength(N);
-    expect(binding.booted).toHaveLength(N);
-    // One distinctly-named sandbox per tick.
-    expect(new Set(binding.booted.map((s) => s.name)).size).toBe(N);
-    for (const outcome of outcomes) {
-      expect(outcome.launched).toBe(true);
-    }
-    // Every tick was asked for, by its own task — collect never saw a sandbox.
-    expect(collector.asked.map((t) => t.tick_id).sort()).toEqual(["aaa", "bbb", "ccc"]);
-  });
-
-  it("collects and tears down every task even when one's probe fails the green-start trap", async () => {
-    const binding = new FakeSandboxes();
-    const tasks = [task("good"), task("bad")];
-
-    // Every process gets advanced exactly once per sleep call, and each
-    // advance is TERMINAL or otherwise final for that stage — never an
-    // unbounded repeat — so `waitForWorker`'s wait afterward (bounded at 30
-    // minutes by default) resolves quickly rather than spinning on a
-    // process this callback keeps leaving `running` forever.
-    const givenOutput = new Set<string>();
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (sandbox.name.endsWith("bad")) {
-          proc.finish(0); // green-start trap: finishes with no useful output
-          continue;
-        }
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else if (givenOutput.has(proc.id)) {
-          proc.finish(0); // confirmed already; let the real work finish
-        } else {
-          givenOutput.add(proc.id);
-          proc.say("working\n");
-        }
-      }
-    };
-
-    const collector = new FakeCollector();
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      tasks,
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        sleep,
-      },
-      collector,
-    );
-
-    const good = outcomes.find((o) => o.tick_id === "good")!;
-    const bad = outcomes.find((o) => o.tick_id === "bad")!;
-
-    expect(good.launched).toBe(true);
-    expect(bad.launched).toBe(false);
-    // Collect and teardown ran for BOTH, regardless of launch outcome.
-    expect(good.collect).not.toBeNull();
-    expect(bad.collect).not.toBeNull();
-    expect(good.teardown.destroyed).toBe(true);
-    expect(bad.teardown.destroyed).toBe(true);
-    expect(collector.asked.map((t) => t.tick_id).sort()).toEqual(["bad", "good"]);
-  });
-
-  // tick b6e: the call site needs a distinct TICKS_TICK per container, or a
-  // wave of N tasks boots N containers all implementing the SAME tick.
-  it("gives every task its own spec rather than sharing one across the wave", async () => {
-    const binding = new FakeSandboxes();
-    const tasks = [task("aaa"), task("bbb")];
-
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else {
-          proc.finish(0);
-        }
-      }
-    };
-
-    const collector = new FakeCollector();
-    await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      tasks,
-      (t) => ({ probe: PROBE_SPEC, command: "ticks-worker", env: { TICKS_TICK: t.tick_id } }),
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        sleep,
-      },
-      collector,
-    );
-
-    const aaa = binding.named(workerSandboxName("run1", "aaa"));
-    const bbb = binding.named(workerSandboxName("run1", "bbb"));
-    const workEnv = (sandbox: FakeSandbox) =>
-      sandbox.processes.find((p) => p.command === "ticks-worker")!.env.TICKS_TICK;
-    expect(workEnv(aaa)).toBe("aaa");
-    expect(workEnv(bbb)).toBe("bbb");
-  });
-});
-
-describe("workerSandboxName", () => {
-  it("is distinct per tick within a run", () => {
-    expect(workerSandboxName("run1", "aaa")).not.toBe(workerSandboxName("run1", "bbb"));
-  });
-});
-
 // ------------------------------------------------------- the cancellation seam ---
 
 /**
- * tick k24: a wave in flight has to be interruptible.
- *
- * The gap this closes had teeth: the hard-stop check ran BETWEEN batches, so an
- * operator's kill — or a blown budget — waited for up to `max_instances`
- * containers to finish, each of them watched for up to thirty minutes, before
- * anything reacted. `cts` (a budget that could not trip) and `gyl` (a kill
- * switch a reboot undid) are the same shape: enforcement that existed somewhere
- * it could not act in time.
+ * tick k24, kept for the seam that still carries it: `spawnWorker` accepts a
+ * Canceller, and every polling loop in the spawn cycle looks for a stop on
+ * the canceller's own cadence. Nothing in the surviving dispatch path
+ * constructs one (the wave fan-out did, tick l6t deletes it) — the seam stays
+ * because `spawnWorker`'s signature is the door's, and a caller may wire a
+ * stop into it again without touching this module.
  *
  * Every case below drives the seam directly against the fake sandbox — no wall
- * clock, no timing assumptions, and no "wait and hope": a canceller with
- * `poll_ms: 0` reads on every look, and the fake sleeper is what advances the
- * world.
+ * clock, no timing assumptions, and no "wait and hope".
  */
 
-/** A probe that answers "keep going" for `after` looks and then cancels. */
-function cancelsAfter(
-  after: number,
-  cancellation: WaveCancellation,
-): { probe: () => Promise<WaveCancellation | null>; looks: () => number } {
-  let looks = 0;
+/** A test-local latched canceller, standing in for whatever constructs one. */
+function latched(cancellation: WaveCancellation): Canceller {
   return {
-    probe: async () => {
-      looks += 1;
-      return looks > after ? cancellation : null;
-    },
-    looks: () => looks,
+    pollMs: 0,
+    reads: 0,
+    cancelled: cancellation,
+    check: async () => cancellation,
   };
 }
 
 const STOPPED: WaveCancellation = { reason: "stopped:hard", detail: "a hard stop stands" };
 
 /** The cancellation run run_f7bd5a36 actually died of, verbatim (tick 7zk). */
-const BUDGET: WaveCancellation = {
+const _BUDGET: WaveCancellation = {
   reason: "budget:cost",
   detail: "the cost budget is exhausted: $8.00 of $8.00",
 };
-
-describe("waveCanceller", () => {
-  it("latches: once cancelled it never asks again", async () => {
-    const { probe, looks } = cancelsAfter(0, STOPPED);
-    const cancel = waveCanceller(probe, { poll_ms: 0 });
-
-    expect(await cancel.check()).toEqual(STOPPED);
-    expect(await cancel.check()).toEqual(STOPPED);
-    expect(await cancel.check()).toEqual(STOPPED);
-    expect(cancel.cancelled).toEqual(STOPPED);
-    expect(looks()).toBe(1);
-  });
-
-  // The wave shares ONE canceller precisely so N containers cost one read, not
-  // N — and so they cannot disagree about whether the run may still spend.
-  it("dedupes concurrent readers onto a single read", async () => {
-    let looks = 0;
-    let release: (() => void) | null = null;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const cancel = waveCanceller(
-      async () => {
-        looks += 1;
-        await gate;
-        return null;
-      },
-      { poll_ms: 0 },
-    );
-
-    const answers = Promise.all([cancel.check(), cancel.check(), cancel.check()]);
-    release!();
-    expect(await answers).toEqual([null, null, null]);
-    expect(looks).toBe(1);
-    expect(cancel.reads).toBe(1);
-  });
-
-  it("reads at most once per poll interval, whatever the caller's cadence", async () => {
-    const { probe, looks } = cancelsAfter(1000, STOPPED);
-    const cancel = waveCanceller(probe, { poll_ms: 60_000 });
-
-    // The first look always reads; a minute has not passed before the rest.
-    for (let i = 0; i < 20; i++) expect(await cancel.check()).toBeNull();
-    expect(looks()).toBe(1);
-  });
-
-  // A stop record that cannot be read is a failed read, not a stop —
-  // `hardStopRecord`'s own rule. Fail-open is safe here only because the
-  // between-batch check and the per-observation check still stand behind it.
-  it("treats a probe that throws as no cancellation, not as one", async () => {
-    const cancel = waveCanceller(
-      async () => {
-        throw new Error("D1 is unreachable");
-      },
-      { poll_ms: 0 },
-    );
-
-    expect(await cancel.check()).toBeNull();
-    expect(cancel.cancelled).toBeNull();
-  });
-
-  // tick gyl, at wave scale: the credential dies FIRST, because tearing a
-  // container down is the stronger stop but also the slower one.
-  it("runs its on-cancel hook once, before it answers", async () => {
-    const order: string[] = [];
-    const cancel = waveCanceller(async () => STOPPED, {
-      poll_ms: 0,
-      on_cancel: async (cancellation) => {
-        order.push(`revoked:${cancellation.reason}`);
-      },
-    });
-
-    order.push(`answered:${(await cancel.check())!.reason}`);
-    await cancel.check();
-    expect(order).toEqual(["revoked:stopped:hard", "answered:stopped:hard"]);
-  });
-
-  it("does not let a failing hook swallow the cancellation", async () => {
-    const cancel = waveCanceller(async () => STOPPED, {
-      poll_ms: 0,
-      on_cancel: async () => {
-        throw new Error("the revocation failed");
-      },
-    });
-
-    expect(await cancel.check()).toEqual(STOPPED);
-  });
-});
 
 describe("cancelling a worker mid-cycle", () => {
   it("stops a container during its probe, and never starts its real command", async () => {
     const binding = new FakeSandboxes();
     const name = workerSandboxName("run1", "aaa");
-    const cancel = waveCanceller(async () => STOPPED, { poll_ms: 0 });
+    const cancel = latched(STOPPED);
     // The probe never finishes: without the seam this would poll until the
-    // probe timeout, and in a real wave the operator would wait it out.
+    // probe timeout, and a real operator would wait it out.
     const result = await spawnWorker(binding, name, task("aaa"), WORK_SPEC, {
       probe_timeout_ms: 5_000,
       probe_poll_ms: 1,
@@ -1056,7 +682,7 @@ describe("cancelling a worker mid-cycle", () => {
     expect(result.launched).toBe(false);
     expect(result.cancelled).toEqual(STOPPED);
     expect(result.probe.ok === false && result.probe.reason).toBe("cancelled");
-    // Only the probe ever ran: a cancelled wave does not start real work.
+    // Only the probe ever ran: a cancelled dispatch does not start real work.
     expect(binding.named(name).processes).toHaveLength(1);
     expect(binding.named(name).processes[0]!.command).toBe(PROBE_SPEC.command);
   });
@@ -1064,8 +690,15 @@ describe("cancelling a worker mid-cycle", () => {
   it("stops a container whose dispatch is still unconfirmed, and reports it launched", async () => {
     const binding = new FakeSandboxes();
     const name = workerSandboxName("run1", "aaa");
-    const { probe } = cancelsAfter(1, STOPPED);
-    const cancel = waveCanceller(probe, { poll_ms: 0 });
+    // Latched after one read: the confirm loop's first poll sees a live run,
+    // the next sees the stop.
+    let looked = 0;
+    const cancel: Canceller = {
+      pollMs: 0,
+      reads: 0,
+      cancelled: null,
+      check: async () => (++looked > 1 ? STOPPED : null),
+    };
     let sleeps = 0;
     const sleep: Sleeper = async () => {
       sleeps += 1;
@@ -1093,520 +726,6 @@ describe("cancelling a worker mid-cycle", () => {
     expect(result.process_id).not.toBeNull();
     expect(result.cancelled).toEqual(STOPPED);
     expect(result.confirm?.confirmed).toBe(false);
-  });
-
-  // The wait is where a wave spends nearly all of its wall clock — up to
-  // `wait_timeout_ms` (thirty minutes in production) per batch.
-  it("stops waiting on a live container instead of watching it to the timeout", async () => {
-    const binding = new FakeSandboxes();
-    const name = workerSandboxName("run1", "aaa");
-    const sandbox = await binding.get(name);
-    const started = await sandbox.startProcess("ticks-worker", { env: {} });
-    const cancel = waveCanceller(async () => STOPPED, { poll_ms: 0 });
-
-    const outcome = await waitForWorker(binding, name, started.id, {
-      // A timeout no test may sit through: reaching it is the failure.
-      timeoutMs: 30 * 60_000,
-      pollMs: 15_000,
-      sleep: noWait,
-      cancel,
-    });
-
-    expect(outcome.cancelled).toEqual(STOPPED);
-    expect(outcome.timed_out).toBe(false);
-    expect(outcome.state).toBe("running");
-  });
-
-  // The cancellation cadence is independent of the caller's poll interval: a
-  // fifteen-minute wait must not mean fifteen minutes of not noticing.
-  it("looks for a stop on its own cadence, not the wait loop's", async () => {
-    const binding = new FakeSandboxes();
-    const name = workerSandboxName("run1", "aaa");
-    const sandbox = await binding.get(name);
-    const started = await sandbox.startProcess("ticks-worker", { env: {} });
-    // A canceller whose cadence (1ms) is five times finer than the wait loop's
-    // (5ms), driven by look count rather than by the clock so the assertion
-    // below is about the chunking and not about how fast a machine is.
-    let looked = 0;
-    const cancel: Canceller = {
-      pollMs: 1,
-      reads: 0,
-      cancelled: null,
-      check: async () => (++looked > 4 ? STOPPED : null),
-    };
-    const looks = () => looked;
-    const slept: number[] = [];
-    const sleep: Sleeper = async (ms) => void slept.push(ms);
-
-    const outcome = await waitForWorker(binding, name, started.id, {
-      timeoutMs: 30 * 60_000,
-      // One poll of the container, sliced into five looks for a stop.
-      pollMs: 5,
-      sleep,
-      cancel,
-    });
-
-    expect(outcome.cancelled).toEqual(STOPPED);
-    // Five looks inside a single container poll — the sleep was chunked, not
-    // waited out whole and then checked.
-    expect(looks()).toBe(5);
-    expect(slept).toEqual([1, 1, 1, 1, 1]);
-  });
-});
-
-describe("dispatchWave: a batch in flight is interruptible", () => {
-  it("tears every container down as soon as the wave is cancelled", async () => {
-    const binding = new FakeSandboxes();
-    const tasks = [task("aaa"), task("bbb"), task("ccc")];
-    const collector = new FakeCollector();
-    collector.watch = binding;
-    // Cancel once every container is up and INSIDE ITS WAIT — the thirty-minute
-    // window that used to be uninterruptible — rather than before the wave
-    // starts, which would prove nothing about a batch in flight. A worker is in
-    // its wait once the wave has addressed its sandbox a second time.
-    const inWait = () =>
-      tasks.every(
-        (t) =>
-          binding.gets.filter((name) => name === workerSandboxName("run1", t.tick_id)).length >= 2,
-      );
-    const cancel = waveCanceller(async () => (inWait() ? STOPPED : null), { poll_ms: 0 });
-
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else {
-          // The real work says something and then just keeps running: the
-          // thirty-minute wait nobody could interrupt.
-          proc.say("implementing\n");
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      tasks,
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_timeout_ms: 30 * 60_000,
-        wait_poll_ms: 15_000,
-        sleep,
-        cancel,
-      },
-      collector,
-    );
-
-    expect(outcomes).toHaveLength(3);
-    for (const outcome of outcomes) {
-      expect(outcome.cancelled).toEqual(STOPPED);
-      expect(outcome.teardown.destroyed).toBe(true);
-      // A live process is killed, not left running in a destroyed container.
-      expect(outcome.teardown.killed).toBe(true);
-      // Nothing timed out: the wave was stopped, not waited out.
-      expect(outcome.wait?.timed_out ?? false).toBe(false);
-    }
-    for (const sandbox of binding.booted) {
-      expect(sandbox.destroyed).toBe(true);
-      expect(sandbox.killed).toHaveLength(1);
-    }
-  });
-
-  // On a hard stop or a blown budget, collect's GitHub round trips are seconds
-  // the container keeps spending in. Git does not forget while a container is
-  // torn down, so the teardown goes first and the durable read follows.
-  it("tears down BEFORE it reads the durable layer, the reverse of the ordinary order", async () => {
-    const binding = new FakeSandboxes();
-    const collector = new FakeCollector();
-    collector.watch = binding;
-    const cancel = waveCanceller(
-      async () =>
-        binding.gets.filter((name) => name === workerSandboxName("run1", "aaa")).length >= 2
-          ? STOPPED
-          : null,
-      { poll_ms: 0 },
-    );
-
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else {
-          proc.say("implementing\n");
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_timeout_ms: 30 * 60_000,
-        wait_poll_ms: 15_000,
-        sleep,
-        cancel,
-      },
-      collector,
-    );
-
-    // Collect still ran — a cancelled attempt may still have pushed work.
-    expect(collector.asked.map((t) => t.tick_id)).toEqual(["aaa"]);
-    expect(outcomes[0]!.collect.verdict).toBe("ready-to-merge");
-    // …and the container was already gone when it did.
-    expect(collector.seenDestroyed.get("aaa")).toBe(true);
-  });
-
-  // `binding.get` PROVISIONS a container on Cloudflare. A wave that is already
-  // cancelled must not address one: addressing is how a stopped run boots the
-  // containers it was stopped to prevent (`finalize`'s own teardown rule).
-  it("addresses no container at all when the wave is cancelled before it starts", async () => {
-    const binding = new FakeSandboxes();
-    const collector = new FakeCollector();
-    const cancel = waveCanceller(async () => STOPPED, { poll_ms: 0 });
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa"), task("bbb")],
-      () => WORK_SPEC,
-      { probe_poll_ms: 1, confirm_poll_ms: 1, sleep: noWait, cancel },
-      collector,
-    );
-
-    expect(binding.booted).toHaveLength(0);
-    for (const outcome of outcomes) {
-      expect(outcome.launched).toBe(false);
-      expect(outcome.cancelled).toEqual(STOPPED);
-      expect(outcome.teardown.destroyed).toBe(false);
-      expect(outcome.detail).toContain("before this container was addressed");
-    }
-    // The durable layer is still read: a previous attempt's work must be found.
-    expect(collector.asked.map((t) => t.tick_id).sort()).toEqual(["aaa", "bbb"]);
-  });
-
-  it("an uncancelled wave behaves exactly as it did before the seam existed", async () => {
-    const binding = new FakeSandboxes();
-    const collector = new FakeCollector();
-    collector.watch = binding;
-    const cancel: Canceller = waveCanceller(async () => null, { poll_ms: 0 });
-
-    const givenOutput = new Set<string>();
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else if (givenOutput.has(proc.id)) {
-          proc.finish(0);
-        } else {
-          givenOutput.add(proc.id);
-          proc.say("working\n");
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa"), task("bbb")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_poll_ms: 1,
-        sleep,
-        cancel,
-      },
-      collector,
-    );
-
-    for (const outcome of outcomes) {
-      expect(outcome.launched).toBe(true);
-      expect(outcome.cancelled).toBeNull();
-      expect(outcome.wait?.state).toBe("completed");
-      expect(outcome.teardown.destroyed).toBe(true);
-      // The ordinary order: the durable read happens while the container is
-      // still there.
-      expect(collector.seenDestroyed.get(outcome.tick_id)).toBe(false);
-    }
-  });
-});
-
-// -------------------------------------------------- adoption and manifests ---
-
-/**
- * Taking over a live worker instead of replacing it (tick s7f).
- *
- * The reconcile protocol decides WHICH workers are live; this is the seam that
- * makes acting on that decision possible at all. Everything downstream of
- * acquiring the process is deliberately unchanged — the wave waits, collects
- * and tears down an adopted worker exactly as it does one it launched.
- */
-describe("dispatchWave: adopting a live worker", () => {
-  it("starts nothing at all in a container it adopts", async () => {
-    const binding = new FakeSandboxes();
-    const name = workerSandboxName("run1", "aaa");
-    // A worker a dead supervisor left mid-tick, in a container that already
-    // exists — which is what `binding.get` returns to its replacement.
-    const sandbox = (await binding.get(name)) as unknown as FakeSandbox;
-    const work = await sandbox.startProcess(WORK_SPEC.command, { env: {} });
-
-    const sleep: Sleeper = async () => {
-      const process = binding.named(name).processes.find((p) => p.id === work.id)!;
-      if (process.state === "running") process.finish(0);
-    };
-
-    const collector = new FakeCollector();
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_poll_ms: 1,
-        sleep,
-        adopt: () => ({ process_id: work.id, detail: "a worker process is running" }),
-      },
-      collector,
-    );
-
-    const outcome = outcomes[0]!;
-    expect(outcome.adopted).toBe(true);
-    expect(outcome.launched).toBe(true);
-    expect(outcome.process_id).toBe(work.id);
-    // No second worker, and no probe: the container was left exactly as the
-    // dead supervisor left it.
-    expect(binding.named(name).processes).toHaveLength(1);
-    // And the rest of the cycle ran unchanged.
-    expect(outcome.wait?.state).toBe("completed");
-    expect(collector.asked.map((t) => t.tick_id)).toEqual(["aaa"]);
-    expect(outcome.teardown.destroyed).toBe(true);
-  });
-
-  it("launches normally for a task the plan does not adopt", async () => {
-    const binding = new FakeSandboxes();
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const process = sandbox.processes.at(-1);
-        if (process === undefined || process.state !== "running") continue;
-        if (process.command === PROBE_SPEC.command) {
-          process.say("READY\n");
-          process.finish(0);
-        } else {
-          process.say("working\n");
-          process.finish(0);
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_poll_ms: 1,
-        sleep,
-        adopt: () => null,
-      },
-      new FakeCollector(),
-    );
-
-    expect(outcomes[0]!.adopted).toBe(false);
-    expect(outcomes[0]!.launched).toBe(true);
-  });
-});
-
-describe("the dispatch manifest lands before the container does", () => {
-  // The ordering IS the guarantee. A manifest written after the boot would
-  // leave a window in which a running container has no durable record, and a
-  // reconcile reading no manifest correctly concludes nothing was dispatched
-  // — and boots a second worker onto the same tick.
-  it("records the dispatch before the sandbox is addressed, and the process after it starts", async () => {
-    const binding = new FakeSandboxes();
-    const trace: string[] = [];
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const process = sandbox.processes.at(-1);
-        if (process === undefined || process.state !== "running") continue;
-        if (process.command === PROBE_SPEC.command) {
-          process.say("READY\n");
-          process.finish(0);
-        } else {
-          process.say("working\n");
-          process.finish(0);
-        }
-      }
-    };
-
-    await spawnWorker(
-      new Proxy(binding, {
-        get(target, property, receiver) {
-          if (property === "get") {
-            return async (name: string) => {
-              trace.push(`address:${name}`);
-              return target.get(name);
-            };
-          }
-          const value = Reflect.get(target, property, receiver);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      }),
-      workerSandboxName("run1", "aaa"),
-      task("aaa"),
-      WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        sleep,
-        record: {
-          async dispatched(t, name) {
-            trace.push(`manifest:${t.tick_id}:${name}`);
-          },
-          async started(t, _name, processID) {
-            trace.push(`process:${t.tick_id}:${processID}`);
-          },
-        },
-      },
-    );
-
-    expect(trace[0]).toBe(`manifest:aaa:${workerSandboxName("run1", "aaa")}`);
-    expect(trace[1]).toBe(`address:${workerSandboxName("run1", "aaa")}`);
-    expect(trace[2]).toMatch(/^process:aaa:/);
-  });
-
-  it("aborts the dispatch rather than booting a container no manifest names", async () => {
-    const binding = new FakeSandboxes();
-
-    await expect(
-      spawnWorker(binding, workerSandboxName("run1", "aaa"), task("aaa"), WORK_SPEC, {
-        sleep: noWait,
-        record: {
-          async dispatched() {
-            throw new Error("R2 is unreachable");
-          },
-          async started() {},
-        },
-      }),
-    ).rejects.toThrow("R2 is unreachable");
-
-    expect(binding.booted).toHaveLength(0);
-  });
-});
-
-describe("dispatchWave: a failed probe's output survives to the real R2 manifest (tick ys3)", () => {
-  // The gap this closes is a real one that unit-testing `spawnWorker` with a
-  // stub `record` (above) cannot catch: this tick shipped once already with
-  // `probeFailed` wired to a stub and to `manifestRecorder` in isolation, and
-  // TWO live re-runs against the real factory still showed no `probe_failure`
-  // on the manifest. Only driving the exact path production uses —
-  // `dispatchWave` with the real `manifestRecorder` writing to a real R2
-  // bucket — and reading the result back with `readWorkerManifest` proves the
-  // wiring end to end, the way `reconcile.test.ts`'s manifest test (which
-  // calls `manifestRecorder` directly, never through a dispatch) does not.
-  const PROJECT = "example-org/example-repo";
-
-  it("a wrong-output probe, dispatched through the wave, leaves probe_failure on the manifest a reconcile reads", async () => {
-    const binding = new FakeSandboxes();
-    const runID = "run_ys3_e2e_wrong_output";
-    const name = workerSandboxName(runID, "3nh");
-    const sleep: Sleeper = async () => {
-      const probe = binding.named(name).current;
-      probe.say("8.19.2\n");
-      probe.finish(0);
-    };
-    const collector = new FakeCollector();
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName(runID, tickID),
-      [task("3nh")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 5_000,
-        probe_poll_ms: 1,
-        sleep,
-        record: manifestRecorder(env.ARTIFACTS, PROJECT, { run_id: runID, epic: "1vn", batch: 1 }),
-      },
-      collector,
-    );
-
-    expect(outcomes[0]!.launched).toBe(false);
-
-    const manifest = await readWorkerManifest(env.ARTIFACTS, PROJECT, runID, "3nh");
-    expect(manifest).not.toBeNull();
-    expect(manifest!.probe_failure).toBeDefined();
-    expect(manifest!.probe_failure!.reason).toBe("wrong-output");
-    expect(manifest!.probe_failure!.output).toBe("8.19.2\n");
-    expect(manifest!.probe_failure!.detail).toContain("8.19.2");
-    // The rest of the manifest that `dispatched` wrote before the probe ran
-    // is still there — a probe failure augments the record, it does not
-    // replace it.
-    expect(manifest!.sandbox_name).toBe(name);
-    expect(manifest!.run_id).toBe(runID);
-  });
-
-  it("an SDK exception during the probe, dispatched through the wave, also lands on the manifest", async () => {
-    const binding = new FakeSandboxes();
-    const runID = "run_ys3_e2e_probe_error";
-    const name = workerSandboxName(runID, "3nh");
-    const sandbox = await binding.get(name);
-    sandbox.getProcess = async () => {
-      throw new Error("the sandbox did not answer");
-    };
-    const collector = new FakeCollector();
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName(runID, tickID),
-      [task("3nh")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 5_000,
-        probe_poll_ms: 1,
-        sleep: noWait,
-        record: manifestRecorder(env.ARTIFACTS, PROJECT, { run_id: runID, epic: "1vn", batch: 1 }),
-      },
-      collector,
-    );
-
-    expect(outcomes[0]!.launched).toBe(false);
-
-    const manifest = await readWorkerManifest(env.ARTIFACTS, PROJECT, runID, "3nh");
-    expect(manifest).not.toBeNull();
-    expect(manifest!.probe_failure).toBeDefined();
-    expect(manifest!.probe_failure!.reason).toBe("probe-error");
-    expect(manifest!.probe_failure!.detail).toContain("the sandbox did not answer");
   });
 });
 
@@ -1677,86 +796,7 @@ describe("a worker container's own output is streamed while it runs", () => {
     expect(logs.text("0fg")).toContain("READY");
   });
 
-  it("keeps what a container printed on its way out — the die message IS the diagnosis", async () => {
-    const binding = new FakeSandboxes();
-    const name = workerSandboxName("run1", "0fg");
-    const logs = new FakeLogSink();
-    const died = 'ticks-worker: FATAL POST /v1/chat/completions -> 404 {"error":"no route"}\n';
-    const sleep: Sleeper = async () => {
-      // The container prints and dies BETWEEN the supervisor's read and the
-      // state it reads back. Only a drain after the terminal state was seen
-      // can catch that.
-      binding.named(name).beforeGetProcess = () => {
-        const probe = binding.named(name).current;
-        if (probe.state !== "running") return;
-        probe.say(died);
-        probe.finish(7);
-      };
-    };
-
-    const result = await spawnWorker(binding, name, task("0fg"), WORK_SPEC, {
-      probe_timeout_ms: 5_000,
-      probe_poll_ms: 1,
-      sleep,
-      logs,
-    });
-
-    expect(result.launched).toBe(false);
-    expect(logs.text("0fg")).toBe(died);
-  });
-
-  it("streams the real work command's output through the wait, mid-run", async () => {
-    const binding = new FakeSandboxes();
-    const name = workerSandboxName("run1", "0fg");
-    const logs = new FakeLogSink();
-    let stage = 0;
-    const sleep: Sleeper = async () => {
-      const sandbox = binding.named(name);
-      stage += 1;
-      if (stage === 1) {
-        sandbox.current.say("READY\n");
-        sandbox.current.finish(0);
-        return;
-      }
-      if (stage === 2) {
-        sandbox.current.say("cloning the repository\n");
-        return;
-      }
-      if (stage === 3) {
-        // Mid-run: the wait has not finished, and the line is already durable.
-        expect(logs.text("0fg")).toContain("cloning the repository");
-        sandbox.current.say("running the harness\n");
-        return;
-      }
-      sandbox.current.finish(0);
-    };
-
-    const outcome = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("0fg")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 5_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 5_000,
-        confirm_poll_ms: 1,
-        wait_timeout_ms: 5_000,
-        wait_poll_ms: 1,
-        sleep,
-        logs,
-      },
-      new FakeCollector(),
-    );
-
-    expect(outcome[0]!.launched).toBe(true);
-    // The probe ran in the same container and its output belongs to the same
-    // tick's stream, in the order the container produced it — and nothing is
-    // recorded twice as the cursor passes from confirm to wait.
-    expect(logs.text("0fg")).toBe("READY\ncloning the repository\nrunning the harness\n");
-  });
-
-  it("keeps a sink failure out of the dispatch — telemetry cannot fail a wave", async () => {
+  it("keeps a sink failure out of the dispatch — telemetry cannot fail a dispatch", async () => {
     const binding = new FakeSandboxes();
     const name = workerSandboxName("run1", "0fg");
     const sleep: Sleeper = async () => {
@@ -1901,142 +941,5 @@ describe("salvageWorker: the grace window between revoke and destroy", () => {
   it("is bounded by a window sized for a push, not for work", () => {
     expect(DEFAULT_SALVAGE_GRACE_MS).toBeGreaterThan(0);
     expect(DEFAULT_SALVAGE_GRACE_MS).toBeLessThanOrEqual(60_000);
-  });
-});
-
-describe("dispatchWave: a cancelled wave rescues before it destroys", () => {
-  it("asks every live container to push, then tears it down, then reads git", async () => {
-    const binding = new FakeSandboxes();
-    const tasks = [task("aaa"), task("bbb")];
-    const collector = new FakeCollector();
-    collector.watch = binding;
-    const inWait = () =>
-      tasks.every(
-        (t) =>
-          binding.gets.filter((name) => name === workerSandboxName("run1", t.tick_id)).length >= 2,
-      );
-    // What the revocation saw when it ran. tick gyl's ordering is the whole
-    // reason the window below is safe, so it is asserted rather than assumed:
-    // the money must be dead before any container is asked to keep working for
-    // another second.
-    let doorsWhenRevoked = -1;
-    const cancel = waveCanceller(async () => (inWait() ? BUDGET : null), {
-      poll_ms: 0,
-      on_cancel: async () => {
-        doorsWhenRevoked = binding.booted.filter((s) => doorIn(s) !== undefined).length;
-      },
-    });
-
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const door = doorIn(sandbox);
-        if (door !== undefined) {
-          door.say("ticks-worker: ticks-worker-cancel-requested reason=budget:cost\n");
-          // The container does what worker.sh does when its harness stops: it
-          // salvages, reports and pushes, and only then exits.
-          const work = sandbox.processes.find(
-            (p) => p.command === WORK_SPEC.command && p.state === "running",
-          );
-          work?.say("ticks-worker: salvaged the harness's uncommitted work\n");
-          work?.finish(11);
-          continue;
-        }
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else {
-          proc.say("implementing\n");
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      tasks,
-      () => SALVAGEABLE_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_timeout_ms: 30 * 60_000,
-        wait_poll_ms: 15_000,
-        salvage_poll_ms: 1,
-        sleep,
-        cancel,
-      },
-      collector,
-    );
-
-    // The credential died before any container was asked for anything.
-    expect(doorsWhenRevoked).toBe(0);
-
-    for (const outcome of outcomes) {
-      expect(outcome.cancelled).toEqual(BUDGET);
-      // Asked, and it answered inside the window.
-      expect(outcome.salvage?.requested).toBe(true);
-      expect(outcome.salvage?.settled).toBe(true);
-      // And then destroyed, which is still what happens to a cancelled
-      // container — the window changes when, never whether.
-      expect(outcome.teardown.destroyed).toBe(true);
-      // Nothing had to be killed: the container stopped on its own, which is
-      // the difference between a pushed branch and a lost one.
-      expect(outcome.teardown.killed).toBe(false);
-      expect(collector.seenDestroyed.get(outcome.collect.tick_id)).toBe(true);
-    }
-    for (const sandbox of binding.booted) {
-      expect(doorIn(sandbox)?.command).toBe("/usr/local/bin/ticks-worker --cancel budget:cost");
-    }
-  });
-
-  // The behaviour before this tick, still available and still correct for a
-  // container that cannot be asked: kill it and destroy it.
-  it("kills and destroys a container with no door, exactly as before", async () => {
-    const binding = new FakeSandboxes();
-    const collector = new FakeCollector();
-    const cancel = waveCanceller(
-      async () =>
-        binding.gets.filter((name) => name === workerSandboxName("run1", "aaa")).length >= 2
-          ? BUDGET
-          : null,
-      { poll_ms: 0 },
-    );
-    const sleep: Sleeper = async () => {
-      for (const sandbox of binding.booted) {
-        const proc = sandbox.processes.at(-1);
-        if (proc === undefined || proc.state !== "running") continue;
-        if (proc.command === PROBE_SPEC.command) {
-          proc.say("READY\n");
-          proc.finish(0);
-        } else {
-          proc.say("implementing\n");
-        }
-      }
-    };
-
-    const outcomes = await dispatchWave(
-      binding,
-      (tickID) => workerSandboxName("run1", tickID),
-      [task("aaa")],
-      () => WORK_SPEC,
-      {
-        probe_timeout_ms: 2_000,
-        probe_poll_ms: 1,
-        confirm_timeout_ms: 2_000,
-        confirm_poll_ms: 1,
-        wait_timeout_ms: 30 * 60_000,
-        wait_poll_ms: 15_000,
-        sleep,
-        cancel,
-      },
-      collector,
-    );
-
-    expect(outcomes[0]!.salvage?.requested).toBe(false);
-    expect(outcomes[0]!.teardown.killed).toBe(true);
-    expect(outcomes[0]!.teardown.destroyed).toBe(true);
   });
 });

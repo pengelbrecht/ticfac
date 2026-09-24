@@ -7,12 +7,10 @@
  * outside those two trees. Keep the two files identical — a fix to one is a
  * fix to both, and `test/toml.test.ts` pins the behaviour this bundle needs.
  *
- * Nothing here decides what a run may execute. The factory reads two bounded
- * values out of the parse — `[sandbox].image`, so the control plane can boot
- * what a repository declares, and (tick b6e) `[orchestration].max_parallel`,
- * so a cloud wave's container width can defer to the same number `kji` enforces
- * on the tick claim rather than disagree with it silently. Both are checked,
- * bounded scalars, never a command; everything that IS a command — the
+ * Nothing here decides what a run may execute. The factory reads bounded
+ * scalars out of the parse — `[sandbox].image`, so the control plane can boot
+ * what a repository declares (and the TS reconciler's tracker client reads
+ * `[orchestration].max_parallel`). Everything that IS a command — the
  * `[sandbox].setup` list above all — is deliberately left to the container,
  * through the Go reader `tk` owns. That is also what makes an unreadable file
  * safe here: the boot the control plane could not inform is still checked by

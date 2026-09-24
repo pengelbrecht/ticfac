@@ -39,18 +39,12 @@
  * 6. **Completion is proved, never inferred from an exit status (tick ehy).**
  *    A harness exits 0 when it has nothing left to say, which is not the same
  *    as having done something: the first run whose boot chain fully succeeded
- *    printed 271 bytes, dispatched no wave, pushed no branch, left the epic's
+ *    printed 271 bytes, dispatched nothing, pushed no branch, left the epic's
  *    ticks open — and was recorded COMPLETED and charged for. So the exit
  *    status only decides whether to reboot; whether the epic MOVED is decided
  *    against the durable layer (src/progress.ts: the remote's refs, before and
  *    after). A run that stopped without advancing anything is `stopped`, and
  *    `completed` means the epic actually moved.
- * 7. **A mandatory closeout is not a stop (tick 074).** A cloud wave always
- *    hands off to a closeout orchestrator, because per-tick workers implement
- *    and push and nothing else. That handoff travels as its own `handoff`
- *    outcome rather than as a trip, so a wave that went perfectly is not
- *    recorded — in the index row, the dispatch log or `run.json` — as a run
- *    somebody stopped. `state` alone has to be readable.
  * 8. **The completion signal wakes the watch; the branch decides (tick
  *    7eq).** A finished orchestrator POSTs the factory's done door, the
  *    Worker turns that into `instance.sendEvent()`, and the next wait
@@ -69,13 +63,10 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 
 import {
   type RunRecord,
-  readWaveRequest,
-  workerLogSink,
   writeCombinedHarnessLog,
   writeHarnessSegment,
   writeReconcileRecord,
   writeRunRecord,
-  writeWaveOutcomes,
 } from "./artifacts";
 import {
   containerGitToken,
@@ -107,34 +98,15 @@ import {
   snapshotRefs,
   unverifiedProgress,
 } from "./progress";
-import {
-  adoptions,
-  dispatchable,
-  manifestRecorder,
-  NOT_ASKED,
-  reconcileWave,
-  settled,
-  settledOutcome,
-} from "./reconcile";
-import { readDeclaredMaxParallel, readDeclaredSandboxImage } from "./repo-config";
+import { readDeclaredSandboxImage } from "./repo-config";
 import { DONE_EVENT_TYPE, type DoneSignal, readDoneSignal } from "./run-done";
-import {
-  epicCompleted,
-  epicStarted,
-  publishRunEvents,
-  tickCompleted,
-  tickStarted,
-} from "./run-events";
+import { epicCompleted, epicStarted, publishRunEvents } from "./run-events";
 import {
   appendFeed,
-  attemptsSoFar,
   FINAL_FEED_SEQ,
   runFinishedFeedEvent,
   runStartedFeedEvent,
   START_FEED_SEQ,
-  tickCollectedFeedEvent,
-  tickDispatchedFeedEvent,
-  waveFeedSeq,
 } from "./run-feed";
 import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
@@ -151,29 +123,6 @@ import {
   sandboxName,
   terminalExitReason,
 } from "./sandbox";
-import { MAX_RUN_WAVES } from "./wave-request";
-import {
-  DEFAULT_WORKER_HARNESS_BUDGET_MS,
-  waveWaitTimeoutMs,
-  workerHarness,
-  workerHarnessBudgetMs,
-  workerModel,
-  workerTask,
-  workerWorkSpec,
-} from "./worker-boot";
-import { type WorkerCollector, workerCollector } from "./worker-collect";
-import {
-  DEFAULT_CONFIRM_TIMEOUT_MS,
-  DEFAULT_SALVAGE_GRACE_MS,
-  DEFAULT_WAIT_POLL_MS,
-  dispatchWave,
-  probeTimeoutMs,
-  type WaveCancellation,
-  type WorkerWaveOutcome,
-  waveCanceller,
-  workerSandboxName,
-} from "./worker-dispatch";
-import { STEP_WORK_BUDGET_MS, shareStepBudget, stepBudget } from "./workflow-limits";
 
 // ------------------------------------------------------------- the shape ---
 
@@ -188,28 +137,6 @@ export const MAX_SANDBOX_BOOTS = 3;
 
 /** The closeout pass gets its own, smaller allowance for the same reason. */
 export const MAX_CLOSEOUT_BOOTS = 2;
-
-/**
- * This deployment's `[[containers]] max_instances` ceiling, mirrored into a
- * `[vars]` string because wrangler does not hand a container application's own
- * config back to the Worker at runtime (tick b6e). Not a third copy to
- * maintain by hand (tick 7fl): the suite pins this default to the number
- * wrangler.toml declares, and `ticfac factory deploy` refuses a config whose
- * two declarations disagree, so a drift is a failing check — never the silent
- * serialization wave 3 measured, one layer up.
- */
-export const DEFAULT_FACTORY_MAX_INSTANCES = 3;
-
-/**
- * How many cloud worker containers a run may run concurrently.
- *
- * `FACTORY_MAX_INSTANCES` is `[vars]`, not `RUN_*`: it is a fact about this
- * deployment's account, not a per-run budget, so it is read once rather than
- * through `runConfig`'s per-submission override machinery.
- */
-export function factoryMaxInstances(env: Env): number {
-  return positiveVar(env, "FACTORY_MAX_INSTANCES", DEFAULT_FACTORY_MAX_INSTANCES, true);
-}
 
 /**
  * Observations per boot.
@@ -231,17 +158,6 @@ export const DEFAULT_MAX_WALL_CLOCK_MS = 21_600_000; // 6 hours
 export const DEFAULT_MAX_COST_USD = 25;
 /** How long the in-flight work has to land before a clean stop kills it. */
 export const DEFAULT_STOP_GRACE_MS = 300_000; // 5 minutes
-/**
- * What a dispatching orchestrator pass is told `TICKS_SUBSTRATE` is (tick wiy).
- *
- * The container's own default is `harness` and that default is load-bearing:
- * left to infer from a checkout that declares `substrate = "cloud"`, an
- * orchestrator container would read "my workers are cloud sandboxes" and "I am
- * one of them" as the same statement. This is the control plane saying
- * otherwise, explicitly, for a pass it is prepared to dispatch a wave for.
- */
-const CLOUD_SUBSTRATE = "cloud";
-
 /** A closeout that has not closed out in this long is not going to. */
 export const DEFAULT_CLOSEOUT_MS = 1_800_000; // 30 minutes
 
@@ -329,33 +245,8 @@ export type RunConfig = {
   poll_interval_ms: number | null;
   /** Looks per boot before the run is stopped cleanly rather than watched on. */
   max_observations: number;
-  /**
-   * How long one dispatch leg of a cloud wave watches its containers before
-   * checkpointing and starting another (tick 2xm). Bounded by what a single
-   * Cloudflare Workflow step may execute for; see `WAVE_LEG_MS`.
-   */
-  wave_leg_ms: number;
   harness: string | null;
   model: string | null;
-  /**
-   * A deployment's own ceiling on what any ONE worker container's harness may
-   * spend (`RUN_WORKER_BUDGET_MS`), or null for the measured default. See
-   * {@link cloudWaveBudget}.
-   */
-  worker_budget_ms: number | null;
-  /**
-   * This deployment's standing choice of harness and model for a per-tick
-   * WORKER container (`RUN_WORKER_HARNESS`/`RUN_WORKER_MODEL`), or null to
-   * leave the built-in default standing (tick 1cd).
-   *
-   * Separate from `harness`/`model` above because they answer a different
-   * question: those are what THIS RUN asked for and apply to the orchestrator
-   * too, these are what this factory routes its workers at when a run asks for
-   * nothing. `workerHarness`/`workerModel` resolve the two together —
-   * run submission > deployment var > built-in default.
-   */
-  worker_harness: string | null;
-  worker_model: string | null;
 };
 
 /**
@@ -458,22 +349,8 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
     poll_interval_ms:
       poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true),
     max_observations: positiveVar(env, "RUN_MAX_OBSERVATIONS", MAX_OBSERVATIONS, true),
-    // Clamped, never trusted: a leg longer than a step may execute for is the
-    // bug this tick fixed, and a var is exactly how it would come back.
-    wave_leg_ms: stepBudget(positiveVar(env, "RUN_WAVE_LEG_MS", WAVE_LEG_MS, true)),
     harness: textVar(env, "RUN_HARNESS"),
     model: textVar(env, "RUN_MODEL"),
-    // Null rather than a number, so `cloudWaveBudget` can tell "this
-    // deployment named a ceiling" from "use the measured default" — an
-    // unusable value is ignored exactly as every other budget var's is.
-    worker_budget_ms: hasPositiveVar(env, "RUN_WORKER_BUDGET_MS", true)
-      ? positiveVar(env, "RUN_WORKER_BUDGET_MS", DEFAULT_WORKER_HARNESS_BUDGET_MS, true)
-      : null,
-    // Null rather than the constant, for the same reason as the budget above:
-    // "this deployment named a worker model" and "use the built-in default"
-    // are different facts, and only `workerModel` gets to collapse them.
-    worker_harness: textVar(env, "RUN_WORKER_HARNESS"),
-    worker_model: textVar(env, "RUN_WORKER_MODEL"),
   };
 }
 
@@ -656,7 +533,7 @@ export function renewalTtl(pollMs: number): number {
  *
  * `null` is "the renewal could not be made" — a DO hop that threw — and is
  * NOT a lost lease: a failed read has never been a stop in this file
- * (`hardStopRecord`, `waveCanceller`), and treating one as a stop would kill
+ * (`hardStopRecord`), and treating one as a stop would kill
  * runs on a transient. `ok: false` is a verdict, and it carries WHICH of the
  * two ways the lease went.
  *
@@ -675,10 +552,9 @@ export type LeaseRenewal =
 /**
  * Extends the run's hold on its project, and reports the verdict verbatim.
  *
- * Every renewal in this file goes through here so that the two callers — the
- * watched-orchestrator loop and the container wave — cannot drift into
- * answering the same question differently (`.tick/learnings.md`: if two
- * endpoints answer the same question, they must run the same check).
+ * Every renewal in this file goes through here so every caller answers the
+ * same question the same way (`.tick/learnings.md`: if two endpoints answer
+ * the same question, they must run the same check).
  *
  * ## A lapse is reclaimed, a take is a stop (tick oen)
  *
@@ -689,10 +565,10 @@ export type LeaseRenewal =
  * after it, but nothing covers a boot, stall or step longer than the lease —
  * `BOOT_LEASE_TTL_MS`'s own comment says "a slow boot outlives any fixed
  * acquire ttl" — and when one happened the run stopped itself with nobody
- * else in sight. Measured on CI (2-vCPU runner, run-workflow.test.ts's wave-2
- * test, 200ms lease): "could not renew its lease after boot 1: ... has expired
+ * else in sight. Measured on CI (2-vCPU runner, a long-pass workflow test,
+ * 200ms lease): "could not renew its lease after boot 1: ... has expired
  * or been released — no dispatch lease is held for this project, and no other
- * run has taken it", then a hard stop before wave 1's container ever worked.
+ * run has taken it", then a hard stop before the container ever worked.
  *
  * The reclaim is the room's compare-and-swap, not a second decision made
  * here: between the renewal and the reclaim another run may have taken the
@@ -774,8 +650,8 @@ export async function renewRunLease(
  * arbiter must not keep writing — but they are opposite failures and an
  * operator has to be able to tell which one happened. run_659b7cf2 read "the
  * dispatch lease was lost to another run" when no other run existed: its
- * ten-minute lease had simply lapsed under an eighty-eight-minute container
- * wave that renewed nothing. That message sent the diagnosis looking for a
+ * ten-minute lease had simply lapsed under a long stretch of work that
+ * renewed nothing. That message sent the diagnosis looking for a
  * competing run for as long as it stood.
  *
  * Since tick oen `renewRunLease` reclaims a lapsed, unheld lease instead of
@@ -860,16 +736,6 @@ export type RunContext = {
    */
   sandbox_image: string;
   /**
-   * A wave of ticks to run as per-tick cloud worker containers (tick b6e), or
-   * null for the unchanged Phase 1 path.
-   *
-   * Resolved once, before any container exists, for the same reason
-   * `sandbox_image` is: the width is a configuration decision (two ceilings
-   * reconciled — `resolveDispatchWidth`), and it cannot change mid-run without
-   * the dispatch-log record of it becoming a lie.
-   */
-  cloud_wave: CloudWavePlan | null;
-  /**
    * The pull request this run was dispatched to review (UC5, tick v7g), or
    * null for every other run.
    *
@@ -882,75 +748,6 @@ export type RunContext = {
    */
   review: ReviewTarget | null;
 };
-
-/**
- * A resolved wave: which ticks, and how many of their containers may run at
- * once.
- */
-export type CloudWavePlan = {
-  tick_ids: string[];
-  /**
-   * The commit this wave's containers clone at.
-   *
-   * The submitted wave uses the run's base. Every wave AFTER it uses the run
-   * branch head its orchestrator pass pushed (tick wiy) — a wave-2 worker that
-   * cloned the original base would implement its tick against a tree wave 1's
-   * merged work never landed in, which is not a slow wave, it is a wrong one.
-   */
-  base_sha: string;
-  width: number;
-  /** True when `[orchestration].max_parallel` asked for more than the deployment can serve. */
-  capped: boolean;
-  /** Why `width` is what it is — always said, never silent (tick b6e, wave 3's finding). */
-  detail: string;
-};
-
-/**
- * How many worker containers a cloud wave may run at once.
- *
- * Two ceilings, and per the tick's own instruction they must not disagree
- * silently. `maxParallel` — `[orchestration].max_parallel` in the
- * repository's tracked config — is the project's own choice, and it is the
- * SAME number `kji` enforces on the tick claim inside each worker's
- * entrypoint: a width wider than it would only book containers whose claim
- * gets refused, wasting a boot for nothing. `deploymentCeiling` —
- * `FACTORY_MAX_INSTANCES`, mirroring `wrangler.toml`'s `[[containers]]
- * max_instances` — is a hard platform limit on concurrent containers across
- * the WHOLE factory, not just this run.
- *
- * `max_parallel` is authoritative for INTENT (it is the operator's explicit
- * per-project choice); the deployment ceiling is authoritative for
- * ENFORCEMENT (it is a resource limit, not a preference) and can only
- * narrow the width, never widen it past what `max_parallel` asked for. When
- * the two disagree the wave is capped at the tighter one and it SAYS SO
- * (`capped`/`detail`) — the alternative wave 3 found is Cloudflare's own
- * container scheduler serializing the overflow invisibly.
- */
-export function resolveDispatchWidth(
-  deploymentCeiling: number,
-  maxParallel: number | null,
-): { width: number; capped: boolean; detail: string } {
-  const requested = maxParallel ?? deploymentCeiling;
-  if (requested <= deploymentCeiling) {
-    return {
-      width: requested,
-      capped: false,
-      detail:
-        maxParallel === null
-          ? `wave width ${requested}, from this deployment's container ceiling — no ` +
-            "[orchestration].max_parallel is declared"
-          : `wave width ${requested}, from [orchestration].max_parallel`,
-    };
-  }
-  return {
-    width: deploymentCeiling,
-    capped: true,
-    detail:
-      `[orchestration].max_parallel (${maxParallel}) exceeds this deployment's container ` +
-      `ceiling (${deploymentCeiling}); the wave is capped at ${deploymentCeiling} and runs in ` +
-      "batches rather than silently serializing wider than that",
-  };
-}
 
 export type ContextResult = { ok: true; context: RunContext } | { ok: false; detail: string };
 
@@ -1040,37 +837,6 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
   });
   if (!image.ok) return { ok: false, detail: image.detail };
 
-  // A wave of ticks to fan out as per-tick cloud worker containers (tick
-  // b6e), or null for the unchanged Phase 1 path — an ADDED path, decided
-  // once here, before any container exists, same as the image above.
-  let cloud_wave: CloudWavePlan | null = null;
-  if (params.tick_ids !== undefined && params.tick_ids.length > 0) {
-    const declaredParallel = await readDeclaredMaxParallel(env, params.project, params.base_sha);
-    if (declaredParallel.unread !== null) {
-      console.error(
-        `factory run-workflow: ${params.run_id} could not read [orchestration].max_parallel: ` +
-          `${declaredParallel.unread}; falling back to this deployment's own ceiling`,
-      );
-    }
-    const resolved = resolveDispatchWidth(factoryMaxInstances(env), declaredParallel.max_parallel);
-    cloud_wave = {
-      tick_ids: params.tick_ids,
-      base_sha: params.base_sha,
-      width: resolved.width,
-      capped: resolved.capped,
-      detail: resolved.detail,
-    };
-    // "Must not disagree silently" (tick b6e): a durable record of the width
-    // this run actually dispatched with, queryable the same way any other
-    // dispatch decision is (`tk factory trace`) — not just a console line.
-    await logDispatch(env, {
-      run_id: params.run_id,
-      epic: params.epic,
-      decision: `cloud_wave:width=${resolved.width}${resolved.capped ? ":capped" : ""}`,
-      reason: null,
-    });
-  }
-
   // Whether this run is a pull request review (UC5, tick v7g), from the
   // `pr_reviews` row keyed by this run id. Nothing a container said, and
   // nothing in the params blob: the row is written by the ingestion path
@@ -1104,7 +870,6 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
     cost_telemetry: telemetry.ok ? null : telemetry.detail,
     refs_baseline: refs,
     sandbox_image: image.image,
-    cloud_wave,
     review,
   };
 
@@ -1139,10 +904,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
       epic: params.epic,
       run_id: params.run_id,
       ...(run.trace_id === null ? {} : { trace_id: run.trace_id }),
-      status:
-        cloud_wave === null
-          ? "one orchestrator container"
-          : `${cloud_wave.tick_ids.length} tick(s), ${cloud_wave.width} at a time`,
+      status: "one orchestrator container",
     }),
   ]);
 
@@ -1160,11 +922,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
     events: [
       runStartedFeedEvent({
         run_id: params.run_id,
-        detail: `run started: ${
-          cloud_wave === null
-            ? "one orchestrator container"
-            : `${cloud_wave.tick_ids.length} tick(s), ${cloud_wave.width} at a time`
-        }`,
+        detail: "run started: one orchestrator container",
       }),
     ],
   });
@@ -1498,41 +1256,11 @@ type PassOutcome =
   /**
    * `detail` is optional and is the pass's own account of what it did. A
    * single orchestrator pass has nothing to add — it finished the epic, which
-   * is what `completed` already says. A wave LOOP does: the per-tick verdicts
-   * of every wave it ran are written down nowhere else, and a completion that
-   * dropped them would leave an operator with a green run and no way to see
-   * which containers produced it (tick wiy, keeping tick 074's evidence).
+   * is what `completed` already says.
    */
   | { kind: "completed"; boots: number; detail?: string }
   | { kind: "failed"; detail: string; boots: number }
-  | { kind: "tripped"; trip: Trip; boots: number }
-  /**
-   * The pass finished everything it was for, and the run still owes the epic
-   * a closeout boot. Only `superviseCloudWave` produces one: per-tick workers
-   * implement and push and nothing else, so a wave that went perfectly is
-   * still not an ending.
-   *
-   * It exists because folding that into `tripped` — which was the shortest
-   * way to reach the mandatory closeout leg — made every successful wave
-   * finish in state `stopped` (tick 074). A handoff is not a stop, and the
-   * two must not share a carrier.
-   */
-  | {
-      kind: "handoff";
-      detail: string;
-      boots: number;
-      /**
-       * Whether the pass reached its own end or died on the way (tick wiy).
-       *
-       * Both owe the epic a closeout — "there is no abandon path" applies to a
-       * continuation pass that crashed exactly as it applies to a budget trip
-       * — but they are not the same run. A clean handoff may still be promoted
-       * to `completed` when the durable layer agrees; one carrying a dead pass
-       * may not, whatever its closeout does, because the run did not do what
-       * it set out to do. Absent means clean.
-       */
-      clean?: boolean;
-    };
+  | { kind: "tripped"; trip: Trip; boots: number };
 
 type PassOptions = {
   label: string;
@@ -1544,27 +1272,6 @@ type PassOptions = {
   pass_max_ms: number | null;
   /** What running out of observations means for this pass. */
   on_exhausted: "stop" | "fail";
-  /**
-   * Which wave this pass is allowed to ask for, if it may ask at all (tick
-   * wiy). Absent means it may not: the container is booted without
-   * `TICKS_PASS`, and the dispatch endpoint refuses a request that carries no
-   * pass number. A closeout is exactly such a pass — it is winding the run up,
-   * not continuing it.
-   */
-  pass?: number;
-  /**
-   * `TICKS_SUBSTRATE` for this pass. Absent leaves the container's own
-   * `harness` default standing, which is the correct default for every pass
-   * that is not driving a container wave.
-   */
-  substrate?: string;
-  /**
-   * The wave this pass inherits — what the control plane just dispatched, so
-   * the container can fan it back in without the local manifests that died
-   * with the previous container.
-   */
-  wave_ticks?: string[];
-  wave_base_sha?: string;
 };
 
 /** Mutable across passes so sandbox names and R2 segment folders never collide. */
@@ -1626,14 +1333,14 @@ async function supervisePass(
     // Only the very first boot of a run is a plain `run`; every later one
     // reconciles first, whatever the pass asked for.
     //
-    // `closeout` and `wave` are the exceptions, and for the same reason: both
-    // already begin with the reconcile protocol in their own prompt, and both
-    // carry an instruction that `reconcile` does not have and the run depends
-    // on — wind this run up, or integrate the last wave and ask for the next.
-    // Flattening either into `reconcile` would boot a container that adopts
-    // the state correctly and then does the wrong thing with it.
+    // `closeout` and `review` are the exceptions, and for the same reason:
+    // both already begin with the reconcile protocol in their own prompt, and
+    // both carry an instruction that `reconcile` does not have and the run
+    // depends on — wind this run up, or review this pull request. Flattening
+    // either into `reconcile` would boot a container that adopts the state
+    // correctly and then does the wrong thing with it.
     const phase: OrchestratorPhase =
-      options.phase === "closeout" || options.phase === "wave" || options.phase === "review"
+      options.phase === "closeout" || options.phase === "review"
         ? options.phase
         : boot === 1
           ? "run"
@@ -1698,20 +1405,10 @@ async function supervisePass(
             ...(context.config.harness === null ? {} : { harness: context.config.harness }),
             ...(context.config.model === null ? {} : { model: context.config.model }),
             sandbox_image: image,
-            // The dispatch half (tick wiy). The WAVE REQUEST is per PASS: a
-            // container that may not ask for a wave has no TICKS_PASS, and the
-            // dispatch door refuses a request carrying no pass number. The
-            // factory URL itself is given per BOOT now (tick 7eq): every
-            // orchestrator reports its own finish to the done door, and the
-            // door — not a withheld URL — is what keeps a non-wave pass from
-            // dispatching: `POST /api/wave` answers 400 without a recorded wave
-            // request for the pass, whatever the container holds.
-            ...(options.substrate === undefined ? {} : { substrate: options.substrate }),
-            ...(options.pass === undefined ? {} : { pass: options.pass }),
-            ...(options.wave_ticks === undefined ? {} : { wave_ticks: options.wave_ticks }),
-            ...(options.wave_base_sha === undefined
-              ? {}
-              : { wave_base_sha: options.wave_base_sha }),
+            // The factory URL is given per BOOT (tick 7eq): every orchestrator
+            // reports its own finish to the done door over it, and the same
+            // URL is what its `ticfac run-epic` hands the per-tick sandbox
+            // door's client — the one dispatch path a container has.
             ...(factoryBaseURL(env) === null
               ? {}
               : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
@@ -2024,1333 +1721,6 @@ async function drainAndKill(
   return { killed: true };
 }
 
-// ------------------------------------------------------------ cloud wave ---
-
-/**
- * One `step.do` retry for a batch dispatch, not the usual three.
- *
- * A batch can legitimately run for tens of minutes (`CLOUD_WAVE_WAIT_TIMEOUT_MS`
- * below); a naive retry limit would let a flaky retry TRIPLE a run's worst-case
- * duration for the same reason `supervisePass`'s own boot/observe steps use
- * narrower policies than a quick D1 read does. One retry still recovers a
- * transient failure without compounding a slow one.
- */
-const CLOUD_DISPATCH_RETRIES = {
-  retries: { limit: 1, delay: 2_000, backoff: "constant" },
-} as const;
-
-/**
- * What one worker container in this run may spend: how long its harness may
- * WORK, and how long its wave watches it (tick 5fg).
- *
- * These were one constant — `CLOUD_WAVE_WAIT_TIMEOUT_MS = 30 * 60_000` — and
- * the harness bound was that constant minus the push margin, so every worker
- * got ~29 minutes no matter what the tick was or what the run's own
- * `--max-wall-clock` said. Run run_2e66e765 was submitted with 90 minutes and
- * its three containers were still killed `exit 124` at ~29, each having made
- * 393+ real model calls and committed nothing.
- *
- * Two bounds doing two jobs, derived in the order they actually depend on each
- * other. The AGENT'S budget is decided first, from what the run has LEFT
- * (`workerHarnessBudgetMs`: never more than the run, never more than the
- * deployment's per-worker ceiling, defaulting to the measured 90 minutes); the
- * supervisor's patience is then that budget plus the push margin, which keeps
- * the mechanism that turns a timeout into a pushed branch rather than a
- * destroyed container.
- */
-export function cloudWaveBudget(
-  config: Pick<RunConfig, "max_wall_clock_ms" | "worker_budget_ms">,
-  elapsedMs: number,
-): { harness_budget_ms: number; wait_timeout_ms: number } {
-  const remaining = Math.max(0, config.max_wall_clock_ms - Math.max(0, elapsedMs));
-  const harness_budget_ms = workerHarnessBudgetMs({
-    remaining_wall_clock_ms: remaining,
-    ...(config.worker_budget_ms === null ? {} : { cap_ms: config.worker_budget_ms }),
-  });
-  return { harness_budget_ms, wait_timeout_ms: waveWaitTimeoutMs(harness_budget_ms) };
-}
-
-/** Splits a wave into batches of at most `width`, preserving order. */
-export function chunkWave(tickIDs: string[], width: number): string[][] {
-  if (width <= 0) return tickIDs.length === 0 ? [] : [tickIDs];
-  const batches: string[][] = [];
-  for (let i = 0; i < tickIDs.length; i += width) {
-    batches.push(tickIDs.slice(i, i + width));
-  }
-  return batches;
-}
-
-/**
- * The stop-and-budget check a cloud wave answers to, at a batch boundary AND
- * while a batch is in flight (tick k24).
- *
- * It is deliberately the same function in both places. The between-batch check
- * used to read only the hard stop record, which meant the budgets this run was
- * given were enforced on the Phase 1 orchestrator path and on NO cloud path at
- * all — a wave could run every batch it was handed at any cost, because the
- * only thing watching the money was `observe`, and a cloud wave never calls it.
- *
- * `detectTrip` is the model, minus the pieces that belong to a single watched
- * PROCESS (log drain, process state). A clean stop is not here on purpose:
- * "clean" means the in-flight work gets its window, and a wave's in-flight
- * work is a container that will finish on its own.
- *
- * ## The lease renewal, and why it belongs here (tick 7n7)
- *
- * The lease was left out of this function as another single-process concern.
- * It is not one: the lease is the RUN's hold on the project, and a container
- * wave is the run working. Nothing else renewed it while a wave ran —
- * `runWaveBatch`'s legs are supervisor-side and touched only sandboxes — so a
- * wave outlived the ten-minute lease `runs.ts` acquires at submit and the run
- * silently stopped being its project's arbiter while its containers worked on.
- *
- * Measured, not reasoned: run_659b7cf253e4462aa6c0dfebbe820ddd ran fifteen
- * `cloud:dispatch` legs from 00:30:35Z to 01:50:59Z — eighty minutes, no
- * lease step between them — and the `wave:1` pass that booted at 01:50:59Z
- * failed its very first renewal and hard-stopped fifteen seconds later. No
- * other run had taken it (the run index shows none started in that window,
- * and the project's lease read back null): it had expired at ~00:40Z and sat
- * unheld for seventy minutes.
- *
- * This is the shared cancellation probe, so it runs on the run's own poll
- * cadence inside every leg's wait AND at every between-batch checkpoint —
- * which is exactly the cadence a heartbeat wants. The ttl asked for outlives a
- * whole leg, so a leg that dispatches without waiting (and therefore never
- * polls) still cannot let the lease lapse underneath it.
- *
- * A renewal that could not be MADE is not a trip — same fail-open rule as
- * `hardStopRecord` and `waveCanceller`. A renewal that came back lost is.
- */
-/**
- * The shared, in-memory state one wave's checks pass between themselves.
- *
- * Not checkpointed and not meant to be. `complained` dedupes a log line;
- * `renewed_at_ms` paces the lease heartbeat. Both are safe to lose on a
- * replay: a fresh object costs one extra log line and one extra renewal, and
- * neither changes what the wave decides.
- */
-export type WaveWatch = {
-  complained: boolean;
-  /** When the lease was last renewed, so the heartbeat runs on its own cadence. */
-  renewed_at_ms?: number;
-};
-
-/**
- * The run's heartbeat on its project, at the cadence a heartbeat wants
- * (tick 7n7).
- *
- * `runs.ts` acquires the dispatch lease for ten minutes and everything after
- * that depends on something renewing it. `observe` does that on the
- * watched-orchestrator path. On the container-wave path NOTHING did — a leg
- * only ever addressed sandboxes — so a wave of real containers, sixty to
- * ninety minutes of it, ran its whole length under a lease that had lapsed
- * after ten, and the run silently stopped being its project's arbiter while
- * its containers worked on. Measured on run_659b7cf2: fifteen dispatch legs,
- * 00:30:35Z to 01:50:59Z, with no lease step between any of them.
- *
- * It hangs off `cloudWaveTrip` because that is the one thing already called
- * from everywhere a wave passes through — every batch boundary and, as the
- * shared cancellation probe, every poll of every leg. But it must NOT run at
- * that function's rate: the probe polls on the run's own cadence (15s
- * deployed, 25ms under test), and one RunRoom write plus one DO alarm re-arm
- * per poll is both pointless — the ttl is three legs long — and heavy enough
- * to wedge the shared workerd runtime the suite runs in. So it renews once
- * per third of a ttl and is a free no-op the rest of the time.
- *
- * Returns the loss when a renewal came back lost, `null` otherwise. A renewal
- * that could not be MADE is not a loss: same fail-open rule as
- * `hardStopRecord` and `waveCanceller` — a failed read has never been a stop.
- */
-async function waveLeaseHeartbeat(
-  env: Env,
-  params: RunWorkflowParams,
-  context: RunContext,
-  watch: WaveWatch,
-): Promise<{ lost: LeaseLostReason; holder: string | null } | null> {
-  const ttl = renewalTtl(context.config.wave_leg_ms);
-  const now = Date.now();
-  // A third of the ttl: two whole heartbeats may be missed — to a slow leg, a
-  // failed read, a replayed step — before the lease is anywhere near lapsing.
-  if (watch.renewed_at_ms !== undefined && now - watch.renewed_at_ms < ttl / 3) return null;
-
-  const renewal = await renewRunLease(env, params, ttl);
-  if (renewal === null) return null;
-  // A reclaim (tick oen) is a renewal as far as the wave is concerned: the
-  // run holds the project again and its containers work on. `renewRunLease`
-  // has already said so in the log; the only loss left to return is `taken`.
-  if (renewal.ok) {
-    watch.renewed_at_ms = now;
-    return null;
-  }
-  return { lost: renewal.lost, holder: renewal.holder };
-}
-
-async function cloudWaveTrip(
-  env: Env,
-  params: RunWorkflowParams,
-  context: RunContext,
-  telemetry: WaveWatch,
-): Promise<Trip | null> {
-  const stop = await hardStopRecord(env, params);
-  if (stop !== null) {
-    return {
-      kind: "stop",
-      hard: true,
-      detail: `a hard stop requested by ${stop.requested_by} at ${stop.requested_at} stands`,
-    };
-  }
-
-  const renewal = await waveLeaseHeartbeat(env, params, context, telemetry);
-  if (renewal !== null) return leaseLostTrip(renewal);
-
-  const elapsed = Date.now() - context.started_at_ms;
-  if (elapsed >= context.config.max_wall_clock_ms) {
-    return {
-      kind: "budget",
-      budget: "wall_clock",
-      hard: true,
-      detail:
-        `the wall-clock budget is exhausted: ${Math.round(elapsed / 1000)}s of ` +
-        `${Math.round(context.config.max_wall_clock_ms / 1000)}s`,
-    };
-  }
-
-  // Ground truth from the gateway logs, exactly as `detectTrip` reads it. A
-  // failed read leaves the last known number standing and is complained about
-  // ONCE per wave — this runs on the poll cadence, and a per-read log would
-  // bury the run's output in the same line a few thousand times.
-  const spend = await syncRunCost(env, params.run_id);
-  if (!spend.ok && !telemetry.complained) {
-    telemetry.complained = true;
-    console.error(
-      `factory run-workflow: ${params.run_id} could not read gateway spend for its cloud wave: ` +
-        `${spend.detail}`,
-    );
-  }
-  const run = await getRun(env.DB, params.run_id).catch(() => null);
-  const cost = run?.cost_usd ?? 0;
-  if (cost >= context.config.max_cost_usd) {
-    return {
-      kind: "budget",
-      budget: "cost",
-      hard: true,
-      detail: `the cost budget is exhausted: $${cost.toFixed(2)} of $${context.config.max_cost_usd.toFixed(2)}`,
-    };
-  }
-
-  return null;
-}
-
-/**
- * A mid-batch cancellation, back as the trip that caused it.
- *
- * A `step.do` result is what survives a Workflow replay, so the reason a batch
- * was cancelled has to travel inside the step's return value — a variable the
- * step's callback closed over is simply not re-assigned when the step replays
- * from its checkpoint, and the run would sail on into the next batch of a
- * stopped wave. `reason` is the same string the credential revocation is
- * recorded under, so the two can never describe different stops.
- */
-function tripFromCancellation(cancellation: WaveCancellation): Trip {
-  if (cancellation.reason === "budget:cost") {
-    return { kind: "budget", budget: "cost", hard: true, detail: cancellation.detail };
-  }
-  if (cancellation.reason === "budget:wall_clock") {
-    return { kind: "budget", budget: "wall_clock", hard: true, detail: cancellation.detail };
-  }
-  return { kind: "stop", hard: true, detail: cancellation.detail };
-}
-
-/**
- * What a cancellation cost this wave, counted rather than implied (tick 7zk).
- *
- * Run `run_f7bd5a36` reported three ticks as `no-commits` with
- * `branch_exists: false`. That is true and it reads like three containers that
- * did nothing, when in fact all three were working, all three were destroyed
- * mid-tick, and the run had just spent its entire $8.00 allowance producing
- * them. A silent `no-commits` is the wrong shape of fact for the most
- * expensive failure this substrate has.
- */
-export type CloudWaveLoss = {
-  /** Containers that were still working when the wave was cancelled. */
-  mid_work: number;
-  /** Of those, the ones whose branch carries work: the grace window paid. */
-  rescued: string[];
-  /** Of those, the ones destroyed with nothing on their branch: the work is gone. */
-  lost: string[];
-};
-
-/**
- * Counts what a cancelled wave destroyed while it was still working.
- *
- * Mid-work is decided by what the container was DOING, never by the verdict: a
- * tick whose worker was `running` when the wave was cancelled was mid-work
- * whether or not its salvage then landed anything, and folding the two
- * together is how "we destroyed live work" disappears into "the branch is
- * empty".
- */
-export function cloudWaveLoss(outcomes: WorkerWaveOutcome[]): CloudWaveLoss {
-  const rescued: string[] = [];
-  const lost: string[] = [];
-  let mid = 0;
-  for (const outcome of outcomes) {
-    if (outcome.cancelled === null || !outcome.launched) continue;
-    // Either the wait caught it running, or the salvage window found something
-    // alive to ask. A container already over when the wave stopped lost
-    // nothing and is not counted.
-    const working =
-      outcome.salvage?.requested === true ||
-      (outcome.salvage === undefined && outcome.wait?.state === "running");
-    if (!working) continue;
-    mid += 1;
-    if (outcome.collect.branch_exists && outcome.collect.commits > 0) {
-      rescued.push(outcome.collect.tick_id);
-    } else {
-      lost.push(outcome.collect.tick_id);
-    }
-  }
-  return { mid_work: mid, rescued, lost };
-}
-
-/**
- * The same counts as a sentence an operator reads in the run's outcome.
- *
- * Empty when nothing was mid-work, so an ordinary stop between batches does
- * not grow a clause about destruction that did not happen.
- */
-export function describeCloudWaveLoss(loss: CloudWaveLoss): string {
-  if (loss.mid_work === 0) return "";
-  const parts = [`${loss.mid_work} container(s) were still working when they were cut`];
-  if (loss.rescued.length > 0) {
-    parts.push(
-      `${loss.rescued.length} pushed what they had inside the salvage window ` +
-        `(${loss.rescued.join(", ")})`,
-    );
-  }
-  if (loss.lost.length > 0) {
-    parts.push(
-      `${loss.lost.length} were DESTROYED MID-WORK with nothing on their branch, so that ` +
-        `work is lost and the run paid for it (${loss.lost.join(", ")})`,
-    );
-  }
-  return parts.join("; ");
-}
-
-/** A short, greppable summary of what a wave's containers actually did. */
-export function summarizeCloudWave(outcomes: WorkerWaveOutcome[]): string {
-  const counts = new Map<string, number>();
-  for (const outcome of outcomes) {
-    // A tick the reconcile settled and one this wave adopted are both reported
-    // as what they are, never folded into "not-launched": an operator reading
-    // a recovered run has to be able to see which containers it did not have
-    // to boot (tick s7f).
-    const label =
-      outcome.settled !== undefined
-        ? outcome.settled
-        : outcome.adopted
-          ? `${outcome.collect.verdict} (adopted)`
-          : outcome.launched
-            ? outcome.collect.verdict
-            : "not-launched";
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([label, n]) => `${n} ${label}`)
-    .join(", ");
-}
-
-/**
- * How long ONE dispatch leg may watch a wave's containers.
- *
- * The number this exists to respect is Cloudflare's: a Workflow step may
- * EXECUTE for ten minutes (`WORKFLOW_STEP_TIMEOUT_MS`), and a step that runs
- * longer kills the whole instance — supervisor, run record, lease and all
- * (tick 2xm, src/workflow-limits.ts). A wave's containers work for up to
- * ninety minutes, so the wait is spread across legs of this length instead of
- * being one blocking call.
- *
- * `STEP_WORK_BUDGET_MS` is what a step may be sized for; the minute held back
- * here is for everything the leg does BESIDES waiting — the reconcile's git
- * reads, the collect at the end of each container's cycle, the teardowns, and
- * the R2 write of the leg's outcomes.
- *
- * `DEFAULT_SALVAGE_GRACE_MS` is held back on top of it (tick 7zk). A leg that
- * is cancelled at its very last second then holds every container's grace
- * window open INSIDE the same step, and a leg sized without it would put the
- * one step that matters most — the one ending a run that has just spent its
- * whole budget — past the cap that kills the supervisor. The window is only
- * ever paid on a cancelled leg; the arithmetic has to survive it anyway.
- */
-export const WAVE_LEG_MS = STEP_WORK_BUDGET_MS - 60_000 - DEFAULT_SALVAGE_GRACE_MS;
-
-/**
- * The most legs one batch may burn.
- *
- * A backstop, not a budget: the wave's real bound is `wait_timeout_ms` (the
- * worker budget plus the push margin) and the run's own wall clock, both
- * enforced below. This only stops a pathological batch from spending the
- * Workflow instance's whole step allowance — at a full leg it is more than
- * four hours of watching, well past any wave budget this deployment can issue.
- */
-export const MAX_WAVE_LEGS = 40;
-
-/**
- * How many times one tick may have a container STARTED for it inside a batch.
- *
- * A leg that finds a tick's container gone redispatches it — that is the
- * eviction recovery the reconcile protocol exists for (tick s7f). Unbounded,
- * across a dozen legs, it is also a way to boot a dozen containers for one
- * tick that cannot stay up. Two attempts: the first one, and the recovery.
- */
-export const MAX_WORKER_DISPATCHES = 2;
-
-/**
- * The bounded waits inside ONE dispatch leg's step, budgeted together.
- *
- * Two independently reasonable timeouts — a green-start probe sized for a cold
- * container and a dispatch confirm sized for a harness launch — summed to 598s
- * of the 600s a step may execute for, which is a step with no room for the
- * reconcile in front of it. Sizing the probe for the width this wave actually
- * runs at (`probeTimeoutMs`) is what buys the room back; `shareStepBudget` is
- * the backstop that keeps the sum inside the cap for any width at all.
- */
-export function waveSpawnBudget(width: number): {
-  probe_timeout_ms: number;
-  confirm_timeout_ms: number;
-} {
-  const shared = shareStepBudget(
-    { probe: probeTimeoutMs(width), confirm: DEFAULT_CONFIRM_TIMEOUT_MS },
-    `a cloud wave ${width} container(s) wide`,
-  );
-  return { probe_timeout_ms: shared.probe!, confirm_timeout_ms: shared.confirm! };
-}
-
-/** What one batch of a wave did, folded across every leg it took. */
-type WaveBatchOutcome = {
-  /** One per tick in the batch, each from the leg that settled it. */
-  outcomes: WorkerWaveOutcome[];
-  /** Set when a stop or a budget cancelled the batch mid-flight. */
-  cancelled: WaveCancellation | null;
-  /** The reconcile summary leg 0 drew, for the dispatch log. */
-  reconcile: string;
-  /** Every leg's reconcile summary, in order — what each one found still live. */
-  legs: string[];
-};
-
-/**
- * Runs one batch of a cloud wave, across as many bounded steps as it takes.
- *
- * THE SHAPE, and why it is not one step (tick 2xm). `dispatchWave` blocks
- * until every container in the batch settles, and since tick 5fg that is up to
- * ninety-one minutes. A Cloudflare Workflow step may EXECUTE for ten. The
- * previous version of this code called `dispatchWave` inside a single
- * `step.do`, so every real wave killed its own supervisor at minute ten:
- * `status: errored, "Execution timed out after 600000ms"`, run record frozen
- * at `running`, lease unrenewed, containers orphaned and still spending. Both
- * live fan-out runs died exactly there.
- *
- * So a batch is a sequence of LEGS, each its own step, each sized to fit
- * inside the cap:
- *
- *  - **leg 0 dispatches.** Reconcile, then boot the containers that need
- *    booting and confirm their work started — and wait zero. Its cost is the
- *    probe plus the confirm, budgeted together by `waveSpawnBudget`.
- *  - **later legs watch.** Reconcile again, adopt every container that is
- *    still running, and wait one `WAVE_LEG_MS`. A container still working when
- *    the leg ends is LEFT RUNNING (`on_wait_timeout: "leave"`) for the next
- *    leg to adopt; nothing is torn down for the crime of outliving a step.
- *  - **the last leg is the wave's deadline.** It waits with the default
- *    `teardown` policy, so a container that outlived the whole wave budget is
- *    killed exactly as it always was.
- *
- * Every leg re-establishes the wave from the DURABLE LAYER — manifests, git,
- * the container's own process list — rather than from anything held in a
- * closure, because a step that was in flight when the isolate died runs again
- * from the top and a resumed Workflow has none of the previous attempt's
- * memory. That is the same `reconcileWave` call the single-step version made
- * for the same reason (tick s7f); it now runs once per leg instead of once per
- * batch, which is what turns "the supervisor died mid-wave" from a special
- * case into the ordinary flow of control.
- *
- * What did NOT change, because a wave that cannot be stopped is worse than a
- * wave that dies: cancellation is still `cloudWaveTrip` through a shared
- * `waveCanceller` polled on the run's own cadence INSIDE each leg, the
- * credential is still revoked before any teardown (tick gyl's ordering), a
- * cancelled container is still torn down before anything else is done with it,
- * and the outcomes of every leg are still written to R2 at the return site so
- * a failing wave stays diagnosable (tick ys3).
- */
-async function runWaveBatch(
-  env: Env,
-  step: WorkflowStep,
-  params: RunWorkflowParams,
-  context: RunContext,
-  plan: CloudWavePlan,
-  collector: WorkerCollector,
-  batch: string[],
-  input: {
-    wave: number;
-    index: number;
-    tag: string;
-    token: string;
-    telemetry: WaveWatch;
-    cancel_poll_ms: number;
-  },
-): Promise<WaveBatchOutcome> {
-  const label = `${input.tag}${input.index}`;
-  const batchNumber = input.wave * 1000 + input.index + 1;
-  const spawnBudget = waveSpawnBudget(plan.width);
-  const legMs = context.config.wave_leg_ms;
-
-  /** The outcome that stands for each tick, replaced as later legs learn more. */
-  const merged = new Map<string, WorkerWaveOutcome>();
-  /** How far each container's output has been streamed, so no leg re-streams it. */
-  const offsets = new Map<string, number>();
-  /** Containers started per tick, against `MAX_WORKER_DISPATCHES`. */
-  const dispatches = new Map<string, number>();
-  const legs: string[] = [];
-  /** The ticks still being watched — every leg after the first acts only on these. */
-  let pending = [...batch];
-  let cancelled: WaveCancellation | null = null;
-  let firstPlan = "";
-  /** Leg 0's clock, and the wave window it computed. Both checkpointed values. */
-  let startedAtMs = 0;
-  /** When the leg that just ran started, on the same checkpointed clock. */
-  let lastLegAtMs = 0;
-  let waveWaitMs = 0;
-  let legCount = 2;
-
-  for (let leg = 0; leg < legCount && pending.length > 0; leg++) {
-    // The last leg is the wave's deadline: it may not start new containers, and
-    // whatever is still running when it ends is killed rather than left for a
-    // leg that will not come.
-    // Projected from CHECKPOINTED clocks — the leg that just ran reported the
-    // time it started — never from a live `Date.now()`, so a replayed Workflow
-    // decides the same legs are final as the original run did.
-    const projectedEndMs = lastLegAtMs === 0 ? 0 : lastLegAtMs + legMs;
-    const final =
-      leg === legCount - 1 || (waveWaitMs > 0 && projectedEndMs - startedAtMs >= waveWaitMs);
-    // Leg 0 keeps the original, unprefixed step name so a run in flight across
-    // a deploy replays its checkpoint rather than re-dispatching its batch.
-    const name = leg === 0 ? `cloud:dispatch:${label}` : `cloud:dispatch:${label}:${leg}`;
-    const legTicks = [...pending];
-    const priorOutcomes = [...merged.values()].filter(
-      (outcome) => !legTicks.includes(outcome.collect.tick_id),
-    );
-    const adoptOffsets = Object.fromEntries(offsets);
-    const started = Object.fromEntries(dispatches);
-
-    const ran = await step.do(name, CLOUD_DISPATCH_RETRIES, async () => {
-      const binding = sandboxBinding(env);
-      if (binding === null) throw new Error("the SANDBOXES binding disappeared mid-run");
-      const taskFor = (tick: string) => workerTask(params.epic, tick, params.base_sha);
-      const sandboxNameFor = (tick: string) => workerSandboxName(params.run_id, tick);
-      const at_ms = Date.now();
-
-      // The reconcile protocol, run INSIDE this step and on every attempt at
-      // it (tick s7f).
-      //
-      // That placement is the whole point. A Workflow step that completes is
-      // checkpointed and never runs again, but a step that was IN FLIGHT when
-      // the isolate died runs from the top — and this is the step that boots
-      // containers. Without a reconcile here, a supervisor replacing one that
-      // died mid-batch addresses the same per-tick sandbox names and starts a
-      // second worker process in each of them, on the same branch, with the
-      // first one still working. A reconcile hoisted into its own step would
-      // be no better: its verdict would be the checkpointed one, taken before
-      // the containers it describes existed.
-      //
-      // So the evidence is re-established from the durable layer every time
-      // this step runs, and only the ticks the plan says to dispatch are
-      // dispatched. Since tick 2xm that is once per LEG rather than once per
-      // batch, which is what lets leg N+1 pick up exactly the containers leg N
-      // left running.
-      const reconciled = await reconcileWave({
-        bucket: env.ARTIFACTS,
-        project: params.project,
-        run_id: params.run_id,
-        epic: params.epic,
-        tick_ids: legTicks,
-        binding,
-        collector,
-        sandboxNameFor,
-        taskFor,
-      });
-      const adopted = adoptions(reconciled);
-      // A container is started for a tick only while the batch has attempts
-      // left for it, and never on the final leg: the wave is ending, and a
-      // container booted into the last few seconds of it is pure spend.
-      const fresh = final
-        ? []
-        : dispatchable(reconciled)
-            .map((item) => item.tick_id)
-            .filter((tick) => (started[tick] ?? 0) < MAX_WORKER_DISPATCHES);
-      const acting = new Set([...fresh, ...adopted.keys()]);
-      const tasks = legTicks.filter((tick) => acting.has(tick)).map(taskFor);
-      // Every tick the plan left alone, reported with the evidence that left
-      // it alone — never dropped. A tick missing from a wave's outcomes is a
-      // tick the board and the run record cannot account for.
-      const untouched = settled(reconciled).map((item) =>
-        settledOutcome(item, taskFor(item.tick_id)),
-      );
-      // What this batch's containers may spend, computed HERE rather than
-      // hoisted: a Workflow step that ran, died and re-ran has to be sized by
-      // the wall clock the run has left NOW, not by what it had left when the
-      // wave started. Recomputed per batch — and per leg — for the same
-      // reason: batch 3 does not get batch 1's allowance, and a container
-      // booted by leg 6 does not get leg 0's.
-      const waveBudget = cloudWaveBudget(context.config, Date.now() - context.started_at_ms);
-      // A leg either DISPATCHES or WAITS, never both, and that is what keeps
-      // it inside the step cap: spawning costs the probe plus the confirm, and
-      // a leg that then also waited a full leg would be sized past ten
-      // minutes — the exact arithmetic this tick exists to fix, one layer
-      // down. A leg that started something hands the waiting to the next one.
-      const waitMs = fresh.length > 0 ? 0 : legMs;
-      // One canceller for the whole leg, built fresh inside the step so a
-      // retry of it gets a fresh one rather than an already-latched verdict.
-      const cancel = waveCanceller(
-        async () => {
-          const trip = await cloudWaveTrip(env, params, context, input.telemetry);
-          return trip === null ? null : { reason: tripRevokeReason(trip), detail: trip.detail };
-        },
-        {
-          poll_ms: input.cancel_poll_ms,
-          // The money dies before the containers do. Destroying a container is
-          // the stronger stop but also the slower one, and every second of
-          // teardown is a second the harness inside it can still spend — so
-          // the credential is revoked the instant the wave is found cancelled,
-          // ahead of the teardowns (tick gyl's ordering, at wave scale). The
-          // step-level revoke below is the durable, replay-safe half.
-          on_cancel: async (cancellation) => {
-            await revokeRunTokens(env, params.run_id, cancellation.reason);
-          },
-        },
-      );
-      const batch_outcomes = await dispatchWave(
-        binding,
-        (tickID) => workerSandboxName(params.run_id, tickID),
-        tasks,
-        (task) =>
-          workerWorkSpec({
-            repo_url: context.repo_url,
-            // The PLAN's base, not the submission's: wave 2 stands on wave 1's
-            // merged work (tick wiy).
-            base_sha: plan.base_sha,
-            epic: params.epic,
-            tick: task.tick_id,
-            run_id: params.run_id,
-            gateway_base_url: context.gateway_base_url,
-            gateway_token: input.token,
-            // Resolved, not spread: a worker's route always has a concrete
-            // answer, and the ladder that produces it is
-            // run submission > deployment var > built-in default (tick 1cd).
-            // `context.config.harness`/`.model` are the run's own choice and
-            // still win; `RUN_WORKER_*` is this deployment's standing one;
-            // `WORKER_DEFAULT_*` is the floor. The orchestrator's own boot
-            // above deliberately does NOT read the worker vars — it is not a
-            // worker, and giving it their model was never the question.
-            harness: workerHarness(context.config.harness, context.config.worker_harness),
-            model: workerModel(context.config.model, context.config.worker_model),
-            // Per-tick containers inherit the run's grade, because the grade
-            // is the RUN's (tick pzf): a wave cannot contain a worker with
-            // more access than the run that dispatched it.
-            github_token: containerGitToken(context.git, env.GITHUB_TOKEN, input.token),
-            sandbox_image: context.sandbox_image,
-            harness_budget_ms: waveBudget.harness_budget_ms,
-            // Into the container, so everything it prints and every `tk` it
-            // runs belongs to a chain a reader can name (tick hyi).
-            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          }),
-        {
-          wait_timeout_ms: waitMs,
-          // A leg shorter than the default look interval must still get a
-          // look: `waitForWorker` checks its deadline between polls, so a
-          // 15-second poll inside a shorter leg would overrun the leg it is
-          // supposed to bound. Real legs are minutes long and keep the
-          // default cadence unchanged.
-          wait_poll_ms: waitMs > 0 ? Math.min(DEFAULT_WAIT_POLL_MS, waitMs) : DEFAULT_WAIT_POLL_MS,
-          // Everything still working when this leg's wait ends is left exactly
-          // as it is, for the next leg's reconcile to adopt — unless this is
-          // the wave's last leg, which IS the deadline and kills what it finds.
-          on_wait_timeout: final ? "teardown" : "leave",
-          ...spawnBudget,
-          cancel,
-          adopt: (task) => {
-            const adoption = adopted.get(task.tick_id);
-            if (adoption === undefined) return null;
-            const offset = adoptOffsets[task.tick_id];
-            // The cursor the PREVIOUS leg reached, so a ninety-minute wave
-            // streams each container's output once instead of once per leg.
-            return offset === undefined ? adoption : { ...adoption, output_offset: offset };
-          },
-          // The manifest lands before each container is addressed, so the
-          // next reconcile — this step's own retry, and every later leg —
-          // can see it.
-          record: manifestRecorder(env.ARTIFACTS, params.project, {
-            run_id: params.run_id,
-            epic: params.epic,
-            batch: batchNumber,
-            // Recorded on the manifest AND written as the head of the
-            // container's log stream, before the container is addressed. The
-            // manifest says what was dispatched; the banner puts the same id
-            // in the text an operator reads. A container that dies before it
-            // prints anything still leaves both (tick hyi).
-            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          }),
-          // Each container's own stdout/stderr, streamed to its own R2 key as
-          // it appears (tick 0fg). The orchestrator sandbox has had this since
-          // D20; a worker's went nowhere, so a container that died at boot took
-          // the one message that explained it with it. One sink for the wave,
-          // one stream per tick: a shared key would interleave the batch's
-          // containers into nonsense.
-          ...(env.ARTIFACTS === undefined
-            ? {}
-            : { logs: workerLogSink(env.ARTIFACTS, params.project, params.run_id) }),
-        },
-        collector,
-      );
-      const all_outcomes = [...batch_outcomes, ...untouched];
-
-      // Record what dispatch actually returned, before anything interprets it.
-      //
-      // Tick ys3 twice instrumented a branch the live failure did not take, and
-      // seven live runs produced no diagnosis. This is at the return site, so
-      // whatever path an outcome came from it is in this array. The batch's
-      // whole picture is written, not just this leg's, so the artifact reads
-      // as the state of the batch rather than of whichever leg wrote last.
-      // Best-effort: a wave must not fail because its telemetry could not be
-      // written.
-      if (env.ARTIFACTS !== undefined) {
-        try {
-          await writeWaveOutcomes(env.ARTIFACTS, params.project, params.run_id, batchNumber, [
-            ...priorOutcomes,
-            ...all_outcomes,
-          ]);
-        } catch (error) {
-          console.error(
-            `factory run-workflow: ${params.run_id} could not record batch ${input.index + 1} ` +
-              `leg ${leg} outcomes: ${String(error)}`,
-          );
-        }
-      }
-
-      return {
-        outcomes: all_outcomes,
-        cancelled: cancel.cancelled,
-        reconcile: reconciled.summary,
-        at_ms,
-        wait_timeout_ms: waveBudget.wait_timeout_ms,
-        dispatched: fresh,
-      };
-    });
-
-    legs.push(ran.reconcile);
-    lastLegAtMs = ran.at_ms;
-    if (leg === 0) {
-      firstPlan = ran.reconcile;
-      startedAtMs = ran.at_ms;
-      waveWaitMs = ran.wait_timeout_ms;
-      // Enough legs to cover the wave's own window, plus one for the leg that
-      // only dispatched and one for the recovery leg an evicted container
-      // costs. Bounded by `MAX_WAVE_LEGS` whatever the arithmetic says.
-      legCount = Math.min(
-        MAX_WAVE_LEGS,
-        2 + Math.ceil(Math.max(waveWaitMs, 0) / Math.max(legMs, 1)),
-      );
-    }
-    for (const tick of ran.dispatched) dispatches.set(tick, (dispatches.get(tick) ?? 0) + 1);
-
-    const stillRunning: string[] = [];
-    for (const outcome of ran.outcomes) {
-      const tick = outcome.collect.tick_id;
-      merged.set(tick, outcome);
-      const streamed = outcome.wait?.offset ?? outcome.output_offset ?? 0;
-      offsets.set(tick, Math.max(offsets.get(tick) ?? 0, streamed));
-      // A container this leg LEFT RUNNING: its wait ran out with nothing
-      // wrong, so it is mid-tick and the next leg adopts it. Anything else —
-      // a terminal state, a container that vanished, a failed probe, a
-      // cancellation — is this tick's answer for the batch.
-      if (
-        outcome.launched &&
-        outcome.settled === undefined &&
-        outcome.wait?.timed_out &&
-        outcome.wait.cancelled === null
-      ) {
-        stillRunning.push(tick);
-      }
-    }
-    pending = stillRunning;
-
-    if (ran.cancelled !== null) {
-      cancelled = ran.cancelled;
-      break;
-    }
-  }
-
-  return {
-    outcomes: batch.map(
-      (tick) =>
-        merged.get(tick) ??
-        settledOutcome(
-          {
-            tick_id: tick,
-            class: "unknown",
-            action: "inspect",
-            redispatch: false,
-            adopt_process_id: null,
-            reason:
-              "the wave's legs ended without an outcome for this tick — nothing may vanish " +
-              "from a batch's account",
-            contradictions: [],
-            evidence: {
-              tick_id: tick,
-              manifest: null,
-              report: null,
-              liveness: NOT_ASKED,
-              branch: workerTask(params.epic, tick, params.base_sha).branch,
-              sandbox_name: workerSandboxName(params.run_id, tick),
-            },
-          },
-          workerTask(params.epic, tick, params.base_sha),
-        ),
-    ),
-    cancelled,
-    reconcile: firstPlan,
-    legs,
-  };
-}
-
-/**
- * Dispatches a run's cloud wave: one container per tick, `plan.width` at a
- * time, through `dispatchWave` (0ds) — the call site tick b6e exists to wire
- * up.
- *
- * Returns a `PassOutcome` so `superviseRun` can fold it into the SAME
- * outcome-derivation logic the harness-substrate pass already has, rather
- * than growing a second one. Both endings send `superviseRun` down its
- * existing closeout leg — per-tick workers only implement and push (tap);
- * nothing merges, runs the integrated gate, or does epic-level review and
- * closeout the way a Phase 1 orchestrator does before it exits 0, so a REAL
- * orchestrator boot in `closeout` phase is mandatory after every cloud wave,
- * not just an interrupted one — but they arrive as DIFFERENT outcomes:
- *
- * - a mid-wave stop is `tripped`, and the run is stopping;
- * - a wave that dispatched every batch is `handoff`, and the run is not.
- *
- * Tick 074 is that distinction. While both were `tripped`, the mandatory
- * closeout made every successful wave terminate in `stopped` — technically
- * true of the code path and false about the run, which is the class of signal
- * that has already cost this session real time on `tk cloud trace` (c5i).
- *
- * Budgets and stops are enforced at BOTH scales (tick k24): `cloudWaveTrip`
- * runs between batches, and the same function is the wave's shared
- * cancellation probe while a batch is in flight, so an operator's hard stop or
- * a blown budget no longer waits for up to `max_instances` containers to
- * finish. This repo has paid for that lesson twice already — cts (a budget
- * that could not trip) and gyl (a kill switch a reboot undid) — and both times
- * the enforcement existed somewhere that could not act in time.
- */
-export async function superviseCloudWave(
-  env: Env,
-  step: WorkflowStep,
-  params: RunWorkflowParams,
-  context: RunContext,
-  plan: CloudWavePlan,
-  /**
-   * Which wave of this run's epic this is — 0 for the submitted one, then 1, 2
-   * … as its orchestrator asks for more (tick wiy).
-   *
-   * It is in every step name below, and that is not cosmetic: a Workflow
-   * identifies a checkpoint by its step name, so a second wave reusing
-   * `cloud:dispatch:0` would replay the FIRST wave's checkpointed result and
-   * dispatch nothing at all while reporting that it had.
-   */
-  wave: number = 0,
-): Promise<PassOutcome> {
-  const collector = workerCollector(env, params.project);
-  const batches = chunkWave(plan.tick_ids, plan.width);
-  // The step-name namespace for this wave. Wave 0 keeps the original,
-  // unprefixed names so a run in flight across a deploy replays its
-  // checkpoints rather than re-dispatching its first wave.
-  const tag = wave === 0 ? "" : `${wave}:`;
-  const outcomes: WorkerWaveOutcome[] = [];
-  // How often a batch in flight looks for a reason to stop: the run's own
-  // observation cadence, so a deployment that tightens one tightens both.
-  const cancelPollMs = context.config.poll_interval_ms ?? MIN_POLL_MS;
-  const telemetry: WaveWatch = { complained: false };
-
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i]!;
-
-    // Mirrors `supervisePass`'s own killcheck: a hard stop that stands — or a
-    // budget already spent — refuses to credential ANOTHER batch, the same way
-    // it refuses to credential another orchestrator boot (tick gyl).
-    const standing = await step.do(`cloud:killcheck:${tag}${i}`, OBSERVE_RETRIES, () =>
-      cloudWaveTrip(env, params, context, telemetry),
-    );
-    if (standing !== null) {
-      await step.do(`cloud:killrevoke:${tag}${i}`, OBSERVE_RETRIES, async () => {
-        const revoked = await revokeRunTokens(env, params.run_id, tripRevokeReason(standing));
-        return { revoked };
-      });
-      return {
-        kind: "tripped",
-        trip: {
-          ...standing,
-          detail:
-            `${standing.detail}, so no further cloud workers were dispatched ` +
-            `(${outcomes.length}/${plan.tick_ids.length} already ran)`,
-        },
-        boots: outcomes.length,
-      };
-    }
-
-    // One credential per BATCH, shared by every worker dispatched concurrently
-    // in it — never one per worker. `issueRunToken` revokes the run's previous
-    // token as part of minting a new one (D17's rotation), so calling it once
-    // per worker would have concurrent workers killing each other's gateway
-    // access mid-run.
-    const credential = await step.do(`cloud:credential:${tag}${i}`, BOOT_RETRIES, () =>
-      issueRunToken(env, {
-        run_id: params.run_id,
-        tick_id: params.epic,
-        // Wave and batch, so two waves' batches are distinguishable in the
-        // gateway's own logs rather than both reading as `attempt: 1`.
-        attempt: wave * 1000 + i + 1,
-      }),
-    );
-
-    // The board learns which ticks are in flight BEFORE the containers are
-    // booted, because a wave that boots and then wedges is exactly the run an
-    // operator needs to see the shape of. One publish per batch, never one per
-    // tick: a wave's events are generated together and one DO hop carries them.
-    //
-    // The versioned feed learns the same thing in the same checkpointed step
-    // (tick k7p): one segment per batch, the lines the CLI follows live. The
-    // attempt on each line is counted from what this run already collected,
-    // so a tick the orchestrator re-requests in a later wave is attempt 2 and
-    // not a second attempt 1.
-    const feedSeq = waveFeedSeq(wave, i, false);
-    const collectedSoFar = outcomes.map((outcome) => outcome.collect.tick_id);
-    await step.do(`cloud:events:started:${tag}${i}`, OBSERVE_RETRIES, async () => {
-      await publishRunEvents(
-        env,
-        params.project,
-        batch.map((tick) =>
-          tickStarted({
-            epic: params.epic,
-            tick,
-            batch: i + 1,
-            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          }),
-        ),
-      );
-      await appendFeed(env, {
-        project: params.project,
-        run_id: params.run_id,
-        seq: feedSeq,
-        events: batch.map((tick) =>
-          tickDispatchedFeedEvent({
-            run_id: params.run_id,
-            tick_id: tick,
-            attempt: attemptsSoFar(collectedSoFar, tick) + 1,
-            detail: `worker container dispatched (wave ${wave + 1}, batch ${i + 1})`,
-          }),
-        ),
-      });
-      return { published: true };
-    });
-
-    const ran = await runWaveBatch(env, step, params, context, plan, collector, batch, {
-      wave,
-      index: i,
-      tag,
-      token: credential.token,
-      telemetry,
-      cancel_poll_ms: cancelPollMs,
-    });
-    const dispatched = { outcomes: ran.outcomes, cancelled: ran.cancelled };
-    await step.do(`cloud:reconciled:${tag}${i}`, OBSERVE_RETRIES, async () => {
-      // `ran.reconcile` is the PLAN leg 0 drew, established from the durable
-      // layer BEFORE this batch's containers were addressed (the big comment
-      // above `reconcileWave` explains why it has to run there). This step
-      // logs it only after every leg has finished, so by wall clock it lands
-      // after whatever the dispatch attempt did — a probe failure included.
-      // "cloud_reconcile_plan" names it as the pre-dispatch snapshot it is: a
-      // bare "cloud_reconcile:1:1 never-dispatched" sitting after a
-      // "task-started" line reads as a post-dispatch verdict ("the container
-      // was never dispatched") when it is really the trivial, correct fact
-      // that nothing had been dispatched YET when the plan was drawn (tick
-      // ys3; same misread class as 074 and c5i — technically true, reliably
-      // misread).
-      await logDispatch(env, {
-        run_id: params.run_id,
-        epic: params.epic,
-        decision: `cloud_reconcile_plan:${tag}${i + 1}:${ran.reconcile}`,
-        reason: null,
-      });
-      // What the batch cost in STEPS, and what each leg found when it
-      // re-established the wave from the durable layer (tick 2xm). A wave that
-      // needed more than one leg is the normal case for real containers — a
-      // tick takes longer than the ten minutes one step may execute for — and
-      // this line is how an operator sees that the supervisor watched it the
-      // whole way instead of dying inside a single blocking step.
-      if (ran.legs.length > 1) {
-        await logDispatch(env, {
-          run_id: params.run_id,
-          epic: params.epic,
-          decision: `cloud_wave_legs:${tag}${i + 1}:${ran.legs.length}:${ran.legs.join(" | ")}`,
-          reason: null,
-        });
-      }
-      return { logged: true };
-    });
-    outcomes.push(...dispatched.outcomes);
-
-    // What the DURABLE LAYER said about each tick, never what its container
-    // printed or its report claimed: `success` on the board is
-    // `verdict === "ready-to-merge"` and nothing else (tick bne). A worker
-    // that writes STATUS: DONE onto a branch with no commits is the case
-    // collect exists to catch, and a board that believed the report would be
-    // drawing green over an empty branch.
-    //
-    // Published BEFORE the cancellation return (tick k24) on purpose: a wave
-    // cancelled mid-batch is exactly when an operator most needs the board to
-    // show what the containers that did run actually produced. Returning first
-    // would hide a cancelled batch's real outcomes behind the cancellation.
-    const collectedSeq = waveFeedSeq(wave, i, true);
-    const collectedIDs = outcomes.map((outcome) => outcome.collect.tick_id);
-    await step.do(`cloud:events:collected:${tag}${i}`, OBSERVE_RETRIES, async () => {
-      await publishRunEvents(
-        env,
-        params.project,
-        dispatched.outcomes.map((outcome) => {
-          // A tick the reconcile settled without addressing a container was
-          // not "not-launched": its verdict is what the durable layer said
-          // about it, and an `already-landed` tick showing as unlaunched
-          // would draw a merged branch as a failure (tick s7f).
-          const reported = outcome.launched || outcome.settled !== undefined;
-          return tickCompleted({
-            epic: params.epic,
-            tick: outcome.collect.tick_id,
-            verdict: reported ? outcome.collect.verdict : "not-launched",
-            status: outcome.collect.status,
-            detail: reported ? outcome.collect.detail : outcome.detail,
-            ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-          });
-        }),
-      );
-      // The feed carries the same facts in the same checkpointed step (tick
-      // k7p). `outcomes` already holds this batch, so the attempt on a
-      // collected line is the count itself — the number its dispatch line
-      // carried — and a replayed Workflow rewrites the same segment key
-      // rather than appending a second copy of a line.
-      await appendFeed(env, {
-        project: params.project,
-        run_id: params.run_id,
-        seq: collectedSeq,
-        events: dispatched.outcomes.map((outcome) => {
-          const reported = outcome.launched || outcome.settled !== undefined;
-          const message =
-            outcome.collect.status === ""
-              ? outcome.collect.detail
-              : `${outcome.collect.status}${
-                  outcome.collect.detail === "" ? "" : ` — ${outcome.collect.detail}`
-                }`;
-          return tickCollectedFeedEvent({
-            run_id: params.run_id,
-            tick_id: outcome.collect.tick_id,
-            attempt: attemptsSoFar(collectedIDs, outcome.collect.tick_id),
-            detail: reported
-              ? `verdict ${outcome.collect.verdict}: ${message}`
-              : `not launched: ${outcome.detail}`,
-          });
-        }),
-      });
-      return { published: true };
-    });
-
-    if (dispatched.cancelled !== null) {
-      const trip = tripFromCancellation(dispatched.cancelled);
-      // Idempotent with the canceller's own revoke: that one is fast, this one
-      // is checkpointed, and a replayed Workflow only ever runs the second.
-      await step.do(`cloud:cancelrevoke:${tag}${i}`, OBSERVE_RETRIES, async () => {
-        const revoked = await revokeRunTokens(env, params.run_id, tripRevokeReason(trip));
-        return { revoked };
-      });
-      // What the cancellation destroyed, said out loud (tick 7zk). A budget
-      // trip is the most expensive failure this substrate has — the run has by
-      // definition just spent its entire allowance — and until this line the
-      // only account of it was three ticks reading `no-commits`, which is what
-      // a container that never started looks like. The loss is counted from
-      // the outcomes and logged as its own dispatch decision, so it is
-      // greppable in D1 as well as readable in the run's ending.
-      const loss = cloudWaveLoss(outcomes);
-      const lossDetail = describeCloudWaveLoss(loss);
-      if (lossDetail !== "") {
-        await step.do(`cloud:waveloss:${tag}${i}`, OBSERVE_RETRIES, async () => {
-          await logDispatch(env, {
-            run_id: params.run_id,
-            epic: params.epic,
-            decision: `cloud_wave_loss:${tag}${i + 1}:${lossDetail}`,
-            // `budget_exhausted` only when that is what did it: the reason
-            // column is a closed vocabulary and a stop is not a budget.
-            reason: trip.kind === "budget" ? "budget_exhausted" : null,
-          });
-          return { logged: true };
-        });
-      }
-      return {
-        kind: "tripped",
-        trip: {
-          ...trip,
-          detail:
-            `${trip.detail}, so the cloud wave was cancelled mid-batch and its containers ` +
-            `were torn down (${outcomes.length}/${plan.tick_ids.length} tick(s) dispatched)` +
-            (lossDetail === "" ? "" : ` — ${lossDetail}`),
-        },
-        boots: outcomes.length,
-      };
-    }
-  }
-
-  // The batch token has done its job; closeout mints its own fresh one, the
-  // same way a clean stop revokes the work pass's token before closeout boots
-  // (tick gyl) — dead hygiene, not a functional requirement, since nobody
-  // holds it once the last batch's containers are torn down.
-  await step.do(`cloud:revoke:done:${tag}`, OBSERVE_RETRIES, async () => {
-    const revoked = await revokeRunTokens(env, params.run_id, "stopped");
-    return { revoked };
-  });
-
-  // Only containers this wave actually ATTEMPTED can fail a green-start probe.
-  // A tick the reconcile adopted or settled never ran one, and counting it as
-  // a probe failure would fail a run whose work is sitting in git (tick s7f).
-  const attempted = outcomes.filter((outcome) => outcome.settled === undefined && !outcome.adopted);
-  if (attempted.length > 0 && attempted.every((outcome) => !outcome.launched)) {
-    return {
-      kind: "failed",
-      detail:
-        `every worker container in the cloud wave failed its green-start probe ` +
-        `(${attempted.length} tick(s)) — a configuration failure, so no closeout was attempted`,
-      // Zero ORCHESTRATOR sandboxes, which is what `boots` means to
-      // `finalize`'s teardown loop (`sandboxName(run_id, boot)`) — every
-      // worker container this wave booted is already torn down by
-      // `dispatchWave`'s own `teardownWorker` call, per task, unconditionally.
-      // Reporting the worker count here would make finalize ADDRESS —
-      // and so provision — orchestrator-named sandboxes that were never
-      // booted, exactly the mistake its own teardown comment warns against.
-      boots: 0,
-    };
-  }
-
-  // Every batch ran and nothing stopped anything. That is a HANDOFF, not a
-  // trip: the wave is over because it is finished, and the closeout boot it
-  // hands to is the run's normal ending rather than the salvage of an
-  // interrupted one (tick 074).
-  return {
-    kind: "handoff",
-    // What this wave DID, and nothing about what happens next: since tick wiy
-    // a wave can be followed by an integrate-and-plan pass that requests
-    // another one, or by review and closeout, and the caller is what knows
-    // which. Baking "handing off for review and closeout" in here made every
-    // wave claim to be the last.
-    detail:
-      `the cloud wave dispatched ${outcomes.length} per-tick worker container(s): ` +
-      `${summarizeCloudWave(outcomes)}`,
-    boots: outcomes.length,
-  };
-}
-
-/**
- * The whole fan-out: wave, integrate, wave, integrate — until the epic is done
- * (tick wiy).
- *
- * ## What this replaced
- *
- * A cloud run used to dispatch the wave it was submitted with and then hand
- * off to a single-sandbox closeout orchestrator, which ran everything the
- * first wave had unblocked as harness subagents inside one container. Only
- * wave 1 of a multi-wave epic ever reached a container, and the runs where
- * that mattered most were the long ones.
- *
- * ## Why the loop is shaped like this
- *
- * The obvious loop — compute the next wave here and dispatch it — needs
- * readiness in TypeScript, which is the cross-language port this repository
- * has already paid for once (`.tick/learnings.md`) and which
- * `docs/design/cloud-factory.md` decided against. The second door that doc
- * left open is the one used: `wave.Compute` runs INSIDE the orchestrator, in
- * the Go `tk` the container already carries.
- *
- * Which puts the two halves of a wave in two different places, and the
- * alternation below is what joins them:
- *
- *  - only the orchestrator can decide the next wave. It is standing on the
- *    merged run branch and it is the only party that knows what wave 1
- *    actually landed, which tick the integrated gate rejected, and what that
- *    left ready;
- *  - only the Workflow can dispatch one. The `SANDBOXES` binding is here, and
- *    so are the checkpoints, the budgets and the kill switch (D14/D15/D17). A
- *    container that booted its own siblings would be fanning out with none of
- *    that.
- *
- * So the orchestrator pass ENDS by asking (`src/wave-request.ts`), and this
- * loop reads the request the moment the pass exits and dispatches it here.
- * The pass exiting is not a failure and not a stop — it is the handshake. A
- * pass that asks for nothing has finished the epic, and the run is over.
- *
- * The alternative — keeping one orchestrator container alive across waves
- * while this supervisor dispatched underneath it — was rejected: the wave
- * dispatch would have to run inside the watch loop that also drains the
- * container's logs and renews the project lease, so a 30-minute wave would
- * stall a lease renewal and hand the project to whatever came next. A pass per
- * wave costs a container boot and buys a checkpoint, a bounded pass, and a
- * reconcile against the durable layer at every wave boundary.
- */
-async function superviseWaveLoop(
-  env: Env,
-  step: WorkflowStep,
-  params: RunWorkflowParams,
-  context: RunContext,
-  counter: BootCounter,
-  first: CloudWavePlan,
-): Promise<PassOutcome> {
-  let plan = first;
-  // Every wave's own account, kept because nothing else records the per-tick
-  // verdicts (tick 074's evidence, through tick wiy's loop).
-  const ran_waves: string[] = [];
-
-  /** Everything the run's waves did so far, as one readable clause. */
-  const account = (): string =>
-    ran_waves.length === 1
-      ? ran_waves[0]!
-      : `${ran_waves.length} container waves — ${ran_waves.join("; then ")}`;
-
-  /**
-   * A trip or failure from anywhere in the loop, with the waves that already
-   * ran kept in front of it.
-   *
-   * Without this, a run stopped during wave 3 reports only wave 3's reason and
-   * an operator loses every verdict waves 1 and 2 produced — the same loss
-   * tick 074 fixed for the single-wave case and the reason `applyProgress`
-   * keeps an outcome's own account rather than replacing it.
-   */
-  const withHistory = (outcome: PassOutcome): PassOutcome => {
-    if (ran_waves.length === 0) return outcome;
-    const prefix = `${account()}; then `;
-    switch (outcome.kind) {
-      case "tripped":
-        return { ...outcome, trip: { ...outcome.trip, detail: `${prefix}${outcome.trip.detail}` } };
-      case "failed":
-      case "handoff":
-        return { ...outcome, detail: `${prefix}${outcome.detail}` };
-      case "completed":
-        return outcome.detail === undefined
-          ? { ...outcome, detail: `${account()}; the orchestrator then finished the epic` }
-          : outcome;
-    }
-  };
-
-  for (let wave = 0; ; wave++) {
-    const ran = await superviseCloudWave(env, step, params, context, plan, wave);
-    // A trip or a configuration failure ends the run the way it always did:
-    // `superviseRun`'s closeout leg. Only a handoff — a wave that dispatched
-    // every batch and stopped because it was finished — continues here.
-    if (ran.kind !== "handoff") return withHistory(ran);
-    ran_waves.push(ran.detail);
-
-    const pass = wave + 1;
-    // The integrate-and-plan pass. Its phase is `wave`, never `closeout`:
-    // closeout means a run being wound up early and its prompt forbids new
-    // work, and tick 074 already had to undo one conflation of "this finished"
-    // with "somebody stopped this".
-    const continued = await supervisePass(env, step, params, context, counter, {
-      label: `wave:${pass}`,
-      phase: "wave",
-      // What this pass inherits, in the container's own TICKS_STOP_REASON
-      // slot: the wave that just ran, and what it is expected to do with it.
-      stop_reason:
-        `${ran.detail}; integrate what they pushed, then request the next wave ` +
-        "or finish the epic",
-      max_boots: MAX_SANDBOX_BOOTS,
-      enforce_budgets: true,
-      pass_max_ms: null,
-      on_exhausted: "stop",
-      // What makes this pass able to ask for the next wave at all.
-      pass,
-      substrate: CLOUD_SUBSTRATE,
-      // And what it needs to fan the last one back in.
-      wave_ticks: plan.tick_ids,
-      wave_base_sha: plan.base_sha,
-    });
-    // A pass that TRIPPED takes the run down its existing closeout leg.
-    if (continued.kind === "tripped") return withHistory(continued);
-    // A pass that DIED owes the epic the same closeout, and must not simply
-    // end the run: containers have already pushed branches, and a run that
-    // stops there leaves merged-able work with no tracker state — the one
-    // outcome rule 3 says a stop must never produce. It is handed off as an
-    // unclean one, so nothing downstream can promote it to `completed`.
-    if (continued.kind === "failed") {
-      return withHistory({
-        kind: "handoff",
-        detail: `the orchestrator integrating wave ${wave + 1} did not finish (${continued.detail})`,
-        boots: continued.boots,
-        clean: false,
-      });
-    }
-    if (continued.kind !== "completed") return withHistory(continued);
-
-    const next = await step.do(`cloud:waverequest:${pass}`, OBSERVE_RETRIES, async () => {
-      const request = await readWaveRequest(env.ARTIFACTS, params.project, params.run_id, pass);
-      // Returned as a nullable field rather than a bare null: a `step.do` that
-      // resolves to null and one that was never reached are indistinguishable
-      // in a replay, and this decides whether an epic continues.
-      return { request };
-    });
-    if (next.request === null) {
-      // The pass integrated the last wave, found nothing left to dispatch, and
-      // ran the epic's own review and closeout — that is what a `wave` pass
-      // does when it asks for no wave. There is no closeout boot to add: the
-      // run is complete, and `applyProgress` still decides whether the durable
-      // layer agrees (tick ehy).
-      return withHistory({ kind: "completed", boots: continued.boots });
-    }
-    if (pass >= MAX_RUN_WAVES) {
-      // A ceiling reached is a hand-off, not a failure: everything dispatched
-      // so far is real work that still needs merging and closing out.
-      return withHistory({
-        kind: "handoff",
-        detail:
-          `the run reached its ceiling of ${MAX_RUN_WAVES} container wave(s) with another ` +
-          `still requested (${next.request.tick_ids.length} tick(s)), so it is handing off ` +
-          "for review and closeout on what did run",
-        boots: continued.boots,
-      });
-    }
-
-    plan = {
-      tick_ids: next.request.tick_ids,
-      base_sha: next.request.base_sha,
-      // The width is a deployment decision and does not change mid-run — it is
-      // the same reconciliation of the same two ceilings that produced wave 1.
-      width: first.width,
-      capped: first.capped,
-      detail: first.detail,
-    };
-    await step.do(`cloud:wavenext:${pass}`, OBSERVE_RETRIES, async () => {
-      await logDispatch(env, {
-        run_id: params.run_id,
-        epic: params.epic,
-        decision: `cloud_wave:next=${pass}:${plan.tick_ids.length}@${plan.base_sha.slice(0, 12)}`,
-        reason: null,
-      });
-      return { logged: true };
-    });
-  }
-}
-
 // ------------------------------------------------------------- finalizing ---
 
 export type RunOutcome = {
@@ -3582,9 +1952,8 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
     case "none":
       return {
         state: "stopped",
-        // The outcome's own account is kept, not replaced (tick 074): for a
-        // cloud wave it is the only place the per-tick verdicts are written
-        // down, and "nothing moved" without "here is what ran" leaves an
+        // The outcome's own account is kept, not replaced (tick 074):
+        // "nothing moved" without the run's own account of itself leaves an
         // operator with a stop and no way to tell which stop it was.
         detail:
           `${outcome.detail}, but the epic did not move: ${progress.detail}. ` +
@@ -3652,7 +2021,7 @@ export async function superviseReview(
         ? { state: "failed", detail: work.detail, boots: work.boots }
         : {
             state: "stopped",
-            detail: work.kind === "tripped" ? work.trip.detail : work.detail,
+            detail: work.trip.detail,
             boots: work.boots,
           };
 
@@ -3708,28 +2077,26 @@ export async function superviseRun(
   const context = acquired.context;
   const counter: BootCounter = { next: 1 };
 
-  // substrate = cloud (tick b6e): a resolved wave fans out per-tick worker
-  // containers instead of the Phase 1 single orchestrator. Absent, this is
-  // the unchanged path — an ADDED one, not a replacement.
   // A pull request review is one pass and then the run is over (UC5, tick
   // v7g). It is checked FIRST because it is the narrower fact: a review run
-  // never has a wave — it implements no ticks — and giving it the epic paths
+  // implements no ticks — and giving it the epic paths
   // below would boot a container to close out an epic that does not exist.
   if (context.review !== null) {
     return await superviseReview(env, step, params, context, counter);
   }
 
-  const work =
-    context.cloud_wave !== null
-      ? await superviseWaveLoop(env, step, params, context, counter, context.cloud_wave)
-      : await supervisePass(env, step, params, context, counter, {
-          label: "work",
-          phase: "run",
-          max_boots: MAX_SANDBOX_BOOTS,
-          enforce_budgets: true,
-          pass_max_ms: null,
-          on_exhausted: "stop",
-        });
+  // One orchestrator container, supervised (tick l6t): the container runs
+  // `ticfac run-epic` and dispatches every tick's worker itself, through the
+  // cloudflare-sandbox executor and the per-tick sandbox door. The Workflow
+  // boots, budgets, watches, retries and finalizes — it does not orchestrate.
+  const work = await supervisePass(env, step, params, context, counter, {
+    label: "work",
+    phase: "run",
+    max_boots: MAX_SANDBOX_BOOTS,
+    enforce_budgets: true,
+    pass_max_ms: null,
+    on_exhausted: "stop",
+  });
 
   let outcome: RunOutcome;
   if (work.kind === "completed") {
@@ -3741,51 +2108,22 @@ export async function superviseRun(
   } else if (work.kind === "failed") {
     outcome = { state: "failed", detail: work.detail, boots: work.boots };
   } else {
-    // Two ways to arrive here, and they owe the epic the same closeout boot —
-    // but they are not the same event and must not be recorded as one.
-    //
     // `tripped` is an interruption: the clean stop, identical for a budget and
     // for an operator (D15). What differs is the reason the closeout
     // orchestrator and the log are given.
-    //
-    // `handoff` is a cloud wave that finished. Nothing stopped it; the pass is
-    // over because per-tick workers do not close an epic out. Recording it as
-    // a stop — a `stopping` row, a `stopping:operator` log line, a terminal
-    // `stopped` — was tick 074's bug: every successful wave read back as a run
-    // somebody had killed.
-    const trip = work.kind === "tripped" ? work.trip : null;
-    const reason = work.kind === "tripped" ? work.trip.detail : work.detail;
-    // A handoff whose own pass died is still a handoff — it owes the epic a
-    // closeout — but it is not a run that finished what it started, so it is
-    // never promoted below (tick wiy).
-    const clean = work.kind !== "handoff" || work.clean !== false;
+    const trip = work.trip;
+    const reason = work.trip.detail;
 
-    if (trip === null) {
-      await step.do("handoff:record", OBSERVE_RETRIES, async () => {
-        await logDispatch(env, {
-          run_id: params.run_id,
-          epic: params.epic,
-          decision: "handoff:closeout",
-          reason: null,
-        });
-        // Deliberately NO `stopping` write: the run is still running, which is
-        // both true and what keeps its closeout credential spendable
-        // (`SPENDABLE_RUN_STATES`) and an operator's stop still meaningful
-        // (`ACTIVE_RUN_STATES`).
-        return { logged: true };
+    await step.do("stop:record", OBSERVE_RETRIES, async () => {
+      await logDispatch(env, {
+        run_id: params.run_id,
+        epic: params.epic,
+        decision: trip.kind === "budget" ? `stopping:budget:${trip.budget}` : "stopping:operator",
+        reason: tripReason(trip),
       });
-    } else {
-      await step.do("stop:record", OBSERVE_RETRIES, async () => {
-        await logDispatch(env, {
-          run_id: params.run_id,
-          epic: params.epic,
-          decision: trip.kind === "budget" ? `stopping:budget:${trip.budget}` : "stopping:operator",
-          reason: tripReason(trip),
-        });
-        await updateRunState(env.DB, params.run_id, "stopping");
-        return { logged: true };
-      });
-    }
+      await updateRunState(env.DB, params.run_id, "stopping");
+      return { logged: true };
+    });
 
     const closeout = await supervisePass(env, step, params, context, counter, {
       label: "closeout",
@@ -3814,17 +2152,9 @@ export async function superviseRun(
           })`;
     const detail = `${reason}; ${closed}`;
 
-    // A run that was stopped is `stopped` however well its closeout went — the
-    // stop is the truer fact about it. A HANDOFF whose closeout ran is a run
-    // that did everything it set out to do, so it is offered as `completed`
-    // and `applyProgress` below decides whether the durable layer agrees,
-    // exactly as it does for a Phase 1 orchestrator that exited 0 (tick ehy).
-    // A handoff whose closeout did NOT finish never reached review and
-    // closeout: the run really did stop short, and `stopped` is honest.
-    outcome =
-      trip === null && clean && closeout.kind === "completed"
-        ? { state: "completed", detail, boots: closeout.boots }
-        : { state: "stopped", detail, boots: closeout.boots };
+    // A run that was stopped is `stopped` however well its closeout went —
+    // the stop is the truer fact about it.
+    outcome = { state: "stopped", detail, boots: closeout.boots };
   }
 
   // Nothing above this line may call the run complete. The passes report what
