@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 192,
-  "state": "collecting",
-  "reason": "collecting 94u attempt 24",
-  "updated_at": "2026-09-24T15:51:07Z",
+  "sequence": 193,
+  "state": "integrating",
+  "reason": "integrating 94u attempt 24 into epic/yoh",
+  "updated_at": "2026-09-24T15:51:33Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -113,7 +113,7 @@
     },
     {
       "tick_id": "94u",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 24
     }
   ],
