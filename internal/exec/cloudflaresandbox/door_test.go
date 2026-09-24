@@ -53,6 +53,11 @@ type fakeDoor struct {
 	// client refuses a handle naming a model it did not ask for.
 	bootedModel string
 
+	// bootedHarness, when set, is the harness the door says it booted the
+	// container on INSTEAD of the one the request carried — the same
+	// disagreement, for the harness cross-check (tick 9iz).
+	bootedHarness string
+
 	starts      int
 	statusReads int
 	lastBody    map[string]any
@@ -244,9 +249,13 @@ func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) m
 	baseSHA, _ := body["base_sha"].(string)
 	epic, _ := body["epic"].(string)
 	model, _ := body["model"].(string)
+	harness, _ := body["harness"].(string)
 	d.mu.Lock()
 	if d.bootedModel != "" {
 		model = d.bootedModel
+	}
+	if d.bootedHarness != "" {
+		harness = d.bootedHarness
 	}
 	d.mu.Unlock()
 	processID := fmt.Sprintf("proc-%s-%d", tickID, attempt)
@@ -272,6 +281,7 @@ func (d *fakeDoor) handleBody(tickID string, attempt int, body map[string]any) m
 			"base_ref":   baseRef,
 			"title":      title,
 			"model":      model,
+			"harness":    harness,
 		},
 	}
 }
@@ -304,6 +314,18 @@ func (d *fakeDoor) answerGarbage(status int) {
 // testModel is the model the harness's profile resolved: pi's spelling of GLM
 // 5.3, the cloud profiles' own.
 const testModel = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+// testHarness is the harness the harness's profile resolved: the cloud
+// profiles' own runner, pi (tick 9iz).
+const testHarness = "pi"
+
+// testPrompt is the rendered role prompt the harness's profile resolved: the
+// shape the cloud profiles carry — markdown prose, lines, a report contract —
+// and deliberately nothing the container could derive for itself.
+const testPrompt = "# implement-tick\n\n" +
+	"You are implementing ONE unit of work from the ticks tracker, headless, in\n" +
+	"an isolated git worktree that is yours alone. Nobody will answer a question.\n\n" +
+	"Work test-first, and end your report with a STATUS line.\n"
 
 // harness is one executor pointed at one door, with the spec the reconciler
 // would build for one tick.
@@ -346,6 +368,8 @@ func (h *harness) newExecutor(state string) *Executor {
 		BaseRef:    "epic/xte",
 		Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
 		Model:      testModel,
+		Harness:    testHarness,
+		Prompt:     testPrompt,
 		Attempt:    1,
 		StateDir:   state,
 		Now:        func() time.Time { return time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC) },

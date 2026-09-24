@@ -51,6 +51,7 @@
  * attempt's commits.
  */
 
+import { workerLogSink } from "./artifacts";
 import type {
   AttemptExecutor,
   AttemptHandle,
@@ -171,6 +172,13 @@ export type SandboxHandlePayload = {
    * caller keeps names the model that actually ran.
    */
   model: string;
+  /**
+   * The harness the container was booted with — its `TICKS_HARNESS`, read
+   * off the boot environment rather than restated (tick 9iz), so the record
+   * a caller keeps names the harness that actually ran, never the
+   * deployment's own agreeing with it by luck.
+   */
+  harness: string;
 };
 
 /**
@@ -323,7 +331,10 @@ export async function startNamedAttempt(
   // container pushes lands on no other attempt's branch, so a redispatch
   // starts from the base it was given, not from the previous attempt's work.
   const landing = attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id);
-  const payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model"> = {
+  const payload: Omit<
+    SandboxHandlePayload,
+    "process_id" | "launched" | "detail" | "model" | "harness"
+  > = {
     sandbox: name,
     base_sha: "",
     branch: landing,
@@ -355,6 +366,7 @@ export async function startNamedAttempt(
           ...payload,
           base_sha: boot.base_sha,
           model: bootedModel(boot),
+          harness: bootedHarness(boot),
           process_id: running.id,
           launched: true,
           detail: "adopted: this container's work process was already running",
@@ -379,6 +391,7 @@ export async function startNamedAttempt(
         ...payload,
         base_sha: boot.base_sha,
         model: bootedModel(boot),
+        harness: bootedHarness(boot),
         process_id: spawned.process_id,
         launched: spawned.launched,
         detail: spawned.detail,
@@ -396,6 +409,16 @@ export async function startNamedAttempt(
  */
 function bootedModel(boot: WorkerBootInput): string {
   return workerBootEnv(boot).TICKS_MODEL ?? "";
+}
+
+/**
+ * The harness a container booted from these inputs binds: the `TICKS_HARNESS`
+ * its environment carries, derived by the same function that builds that
+ * environment (tick 9iz), so the handle cannot name one harness while the
+ * container was told another.
+ */
+function bootedHarness(boot: WorkerBootInput): string {
+  return workerBootEnv(boot).TICKS_HARNESS ?? "";
 }
 
 // ---------------------------------------------------------------- inspect ---
@@ -657,6 +680,11 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
     write_ref: payload.write_ref,
     base_ref: payload.base_ref,
     title: payload.title,
+    // The harness the container was booted on (tick 9iz): the salvage door
+    // runs in the same container's environment, and a re-derived boot that
+    // disagreed with the recorded one would knock on a door built for a
+    // worker that is not the one running.
+    harness: payload.harness,
   });
   const work = workerWorkSpec(boot);
   const salvage: SalvageSpec | undefined = work.salvage;
@@ -705,6 +733,15 @@ export function sandboxExecutor(deps: SandboxExecutorDeps): AttemptExecutor {
 export type SandboxExecutorEnvInput = {
   project: string;
   base_sha?: string;
+  /**
+   * The run whose containers this executor boots, when the caller knows it
+   * (tick 9iz): the door names it, because a dispatch's worker log stream is
+   * the RUN's — one stream per tick under the run's own artifacts, exactly
+   * where the wave path put them and the log read routes read them. Absent
+   * means no streaming, which is the Workflow's own dispatch (no run id at
+   * the seam that builds an executor for it).
+   */
+  run_id?: string;
 };
 
 /**
@@ -796,6 +833,16 @@ export function sandboxExecutorDepsFromEnv(
       // or the seam a test injects (TICFAC_REF_WRITER) — same pattern as
       // WORKER_COLLECTOR: the ordering is what needs testing.
       refs: env.TICFAC_REF_WRITER ?? gitRefWriter(env, input.project),
+      // Each container's own stdout/stderr, streamed to the run's R2 stream
+      // as it appears (tick 9iz) — the same sink the wave path wired into
+      // every spawn, so a worker dispatched through the door leaves the log
+      // the run's read routes serve instead of taking its diagnosis with it
+      // when the container goes. The wave's wait loop streamed the tail too;
+      // the door's answer cannot hold a stream open, so what its spawn window
+      // (the probe and the confirmed dispatch) observes is what streams.
+      ...(env.ARTIFACTS === undefined || input.run_id === undefined
+        ? {}
+        : { spawn: { logs: workerLogSink(env.ARTIFACTS, input.project, input.run_id) } }),
       boot: async (spec) => {
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
         // are parallel spenders, so a boot that rotated would cut every live
@@ -817,11 +864,16 @@ export function sandboxExecutorDepsFromEnv(
           run_id: spec.run_id,
           gateway_base_url: runGatewayEndpoint(factory as string),
           gateway_token: credential.token,
-          harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
+          // The dispatch's own harness and prompt (tick 9iz): the door carries
+          // the harness the caller's profile resolved and the rendered role
+          // prompt beside it, and a choice about this attempt outranks the
+          // deployment's standing one — the same ladder the model rides.
+          harness: workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS")),
           // The dispatch's own model first (tick a08): the door carries the
           // model the caller's profile resolved, and a choice about this
           // attempt outranks the deployment's standing one.
           model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
+          prompt: spec.prompt,
           github_token: containerGitToken(git.plan, env.GITHUB_TOKEN, credential.token),
           sandbox_image: deploymentImage(env),
           factory_url: factory as string,

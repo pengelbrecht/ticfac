@@ -80,6 +80,7 @@ func cloudDispatch(t *testing.T) reconcile.Dispatch {
 		Profile: &profile.Profile{
 			Role: "implement-tick", Executor: cloudflaresandbox.ExecutorName,
 			Runner: "pi", Model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+			Prompt: "# implement-tick\n\nYou are implementing ONE unit of work from the ticks tracker, headless.\n",
 		},
 	}
 }
@@ -218,6 +219,8 @@ func TestTheProfilesModelRidesTheDispatchToTheDoor(t *testing.T) {
 
 	d := cloudDispatch(t)
 	d.Profile.Model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+	d.Profile.Runner = "pi"
+	d.Profile.Prompt = "# implement-tick\n\nYou are implementing ONE unit of work.\n"
 	executor, _, err := executorFactory("pi", "")(d)
 	if err != nil {
 		t.Fatalf("the factory refused a dispatch the honoured set names: %v", err)
@@ -247,5 +250,15 @@ func TestTheProfilesModelRidesTheDispatchToTheDoor(t *testing.T) {
 	}
 	if got := asked["model"]; got != d.Profile.Model {
 		t.Errorf("the door was asked to boot model %v, want the profile's %q", got, d.Profile.Model)
+	}
+	// The profile's runner is the harness the door binds the worker to (tick
+	// 9iz), and its prompt is what the container runs on: both ride the same
+	// request, or the profile's recorded harness and prompt_digest name
+	// things that never ran.
+	if got := asked["harness"]; got != d.Profile.Runner {
+		t.Errorf("the door was asked to bind harness %v, want the profile's runner %q", got, d.Profile.Runner)
+	}
+	if got, _ := asked["prompt"].(string); got != d.Profile.Prompt {
+		t.Errorf("the door was asked to deliver a prompt of %d bytes, want the profile's %d", len(got), len(d.Profile.Prompt))
 	}
 }

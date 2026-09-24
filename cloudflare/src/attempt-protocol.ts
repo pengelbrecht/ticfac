@@ -37,6 +37,23 @@ export type AttemptSpec = {
    * Workflow's own dispatch, which still boots on the per-run ladder.
    */
   model?: string;
+  /**
+   * The harness this attempt's worker must run, when the dispatcher resolved
+   * one (tick 9iz): the sandbox dispatch door carries the profile's runner,
+   * and a boot that has one outranks the deployment's standing
+   * `RUN_WORKER_HARNESS` — the same ladder the model rides, applied to the
+   * harness the worker binds. Absent is the Workflow's own dispatch, which
+   * still boots on the per-run ladder.
+   */
+  harness?: string;
+  /**
+   * The rendered role prompt this attempt's worker opens its work on (tick
+   * 9iz): the profile's own prompt text, carried through the door because
+   * the container's entrypoint renders its prompt from the checkout's
+   * tracker and never sees the factory's. Absent is the Workflow's own
+   * dispatch, whose prompt is the image's own.
+   */
+  prompt?: string;
 };
 
 /** The JobHandle the executor's start returned (SPEC 4.3); opaque here. */

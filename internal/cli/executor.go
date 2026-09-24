@@ -57,7 +57,8 @@ func knownExecutors() []reconcile.KnownExecutor {
 			// dispatch door carries it (tick a08), the worker container boots
 			// on it, and the executor refuses a handle naming any other — so
 			// the recorded model is the one that ran, not the factory's own
-			// default agreeing with it by luck.
+			// default agreeing with it by luck. The profile's RUNNER and PROMPT
+			// ride the same request (tick 9iz), for the same reason.
 			Name:         cloudflaresandbox.ExecutorName,
 			Runners:      runconfig.KnownKinds(),
 			AcceptsModel: func(string) bool { return true },
@@ -135,10 +136,14 @@ func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substr
 		EpicID:     d.EpicID,
 		BaseRef:    d.BaseRef,
 		Title:      d.Title,
-		// The model the profile resolved crosses the door (tick a08): the
-		// worker is booted on it and the handle names it back, so the model
-		// the dispatch records is the model that ran.
+		// The model, the harness and the rendered role prompt the profile
+		// resolved all cross the door (ticks a08, 9iz): the worker is booted
+		// on the model, bound to the harness and delivered the prompt, and the
+		// handle names the model and the harness back — so what the dispatch
+		// records is what ran.
 		Model:    d.Profile.Model,
+		Harness:  d.Profile.Runner,
+		Prompt:   d.Profile.Prompt,
 		Attempt:  d.Attempt,
 		StateDir: d.StateDir,
 		Repo:     d.Repo,

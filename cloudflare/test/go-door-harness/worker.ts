@@ -152,7 +152,14 @@ class FakeSandboxes implements SandboxBinding {
   describe(): {
     sandboxes: Array<{
       name: string;
-      processes: Array<{ id: string; command: string; state: string; exit_code: number | null }>;
+      processes: Array<{
+        id: string;
+        command: string;
+        state: string;
+        exit_code: number | null;
+        /** The boot environment the process was started with (tick 9iz): the harness and the role prompt a dispatch carried are proven delivered by reading them off the container the door booted. */
+        env: Record<string, string>;
+      }>;
     }>;
   } {
     return {
@@ -163,6 +170,7 @@ class FakeSandboxes implements SandboxBinding {
           command: p.command,
           state: p.state,
           exit_code: p.exit_code,
+          env: p.env,
         })),
       })),
     };

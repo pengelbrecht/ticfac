@@ -21,7 +21,11 @@ import (
 // records internal/exec/subprocess owns: the factory's base URL, the run's
 // own gateway token, the epic, the base ref and the tick's title are host
 // configuration (Options), because the protocol records are closed and a
-// field invented here would be one the reconciler ignores. The REPOSITORY
+// field invented here would be one the reconciler ignores. The model (tick
+// a08) and the harness and rendered role prompt (tick 9iz) ride Options for
+// the same reason with one difference: they are the dispatch PROFILE's own
+// resolution, carried to the door because the container is the only thing
+// that can act on them. The REPOSITORY
 // enters the same way, at collect: this executor creates no worktree and
 // runs no runner in this container — the sandbox container the factory
 // boots is the worker's whole environment, and it clones from the write
@@ -63,6 +67,26 @@ type Options struct {
 	// own default agreeing with it by luck. Required: the door refuses a start
 	// without one.
 	Model string
+
+	// Harness is the harness the dispatch's profile resolved — the profile's
+	// runner, the kind the sandbox image runs a harness for (tick 9iz). The
+	// door binds the worker container to exactly this (`TICKS_HARNESS`,
+	// outranking RUN_WORKER_HARNESS) and names it back in the handle, and
+	// Start refuses a handle that names another — for the model's reason
+	// verbatim: a start with no harness would boot on the factory's own
+	// standing choice, and the caller's record would name a harness that
+	// never ran. Required: the door refuses a start without one.
+	Harness string
+
+	// Prompt is the RENDERED role prompt the dispatch's profile resolved (tick
+	// 9iz): the profile's own prompt text, not a filename. The container's
+	// entrypoint renders its worker prompt from the checkout's tracker and
+	// never sees the factory's otherwise, so the door delivers this into the
+	// container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness
+	// and the model the same boot carries) and the attempt record states it —
+	// the prompt whose digest the reconciler's marker records is the prompt
+	// that reached the worker. Required: the door refuses a start without one.
+	Prompt string
 
 	// Repo is the ORCHESTRATOR'S OWN CHECKOUT of the project the worker
 	// pushed to — the clone the reconciler runs in. It is not among the
@@ -274,6 +298,8 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Title:    e.opts.Title,
 		BaseSHA:  spec.Source.BaseSHA,
 		Model:    e.opts.Model,
+		Harness:  e.opts.Harness,
+		Prompt:   e.opts.Prompt,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -354,6 +380,15 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 			"a record naming the requested model over a worker running another is a provenance that lies",
 			attempt, spec.JobID, payload.Model, req.Model)
 	}
+	// The door names the harness it bound the worker to, for the model's
+	// reason (tick 9iz): anything but the one asked for — an adoption of a
+	// container some other start booted, a door that fell back to its own
+	// standing choice — is refused before a record is written.
+	if payload.Harness != req.Harness {
+		return nil, fmt.Errorf("the door booted attempt %d of %s on harness %q, not the %q its dispatch resolved: "+
+			"a record naming the requested harness over a worker bound to another is a provenance that lies",
+			attempt, spec.JobID, payload.Harness, req.Harness)
+	}
 	record := &attemptRecord{
 		SchemaVersion: stateSchemaVersion,
 		JobID:         handle.JobID,
@@ -374,6 +409,8 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		BaseRef:       payload.BaseRef,
 		Title:         payload.Title,
 		Model:         payload.Model,
+		Harness:       payload.Harness,
+		Prompt:        req.Prompt,
 		Adopted:       adopted,
 		Spec:          spec,
 		IssuedAt:      handle.IssuedAt,
