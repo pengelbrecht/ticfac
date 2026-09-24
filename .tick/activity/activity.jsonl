@@ -1480,3 +1480,4 @@
 {"ts":"2026-09-24T14:58:51.25217Z","tick":"4v4","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"Door adoption reports the harness the container was booted with, not the new request's","type":"task"}}
 {"ts":"2026-09-24T14:59:29.623308Z","tick":"94u","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The door's TypeScript collect refuses a report-only worker too"}}
 {"ts":"2026-09-24T15:01:11.6809Z","tick":"dyo","action":"note","actor":"ticfac","epic":"yoh","data":{"note":"\n2026-09-24 17:01 - ticfac run epic-yoh: dyo try 1 (run dispatch #22) merged into epic/yoh as 5dd1b0e0ffc9; the integrated gate (go, ts) passed.","title":"The cloudflare-sandbox executor tells the truth on collect and adoption"}}
+{"ts":"2026-09-24T15:01:16.646264Z","tick":"dyo","action":"close","actor":"ticfac","epic":"yoh","data":{"title":"The cloudflare-sandbox executor tells the truth on collect and adoption"}}
