@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 48,
-  "state": "integrating",
-  "reason": "integrating gbs attempt 7 into epic/yoh",
-  "updated_at": "2026-09-24T04:46:27Z",
+  "sequence": 49,
+  "state": "gating",
+  "reason": "running the integrated gate for gbs on bd293dc1b404",
+  "updated_at": "2026-09-24T04:46:59Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "gbs",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
