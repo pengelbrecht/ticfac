@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 222,
-  "state": "gating",
-  "reason": "running the integrated gate for r1t on b200a61209cd",
-  "updated_at": "2026-09-24T17:05:30Z",
+  "sequence": 223,
+  "state": "publishing",
+  "reason": "closing r1t behind the integrated gate on b200a61209cd",
+  "updated_at": "2026-09-24T17:06:15Z",
   "ticks": [
     {
       "tick_id": "uqi",
