@@ -264,6 +264,105 @@ model = "`+glm53+`"
 	}
 }
 
+// The rule keys on WHAT RUNS IN CLOUDFLARE (tick 78v), not on the cloud
+// substrate alone: a run whose substrate is LOCAL — herdr, harness, or none
+// named at all — can still select the cloudflare-sandbox executor by pointing
+// --profiles at the cloud set (profiles-cloudflare-sandbox/), and then its
+// workers boot in a Cloudflare container under local routing, which is as
+// much Cloudflare as the cloud substrate is. The operator's rule is about
+// what runs in Cloudflare, so the refusal keys on the executor that
+// dispatches into Cloudflare as well as on the substrate — declared in ONE
+// place, CloudRule.Executors, the way the namespaces are.
+func TestTheCloudRuleKeysOnTheExecutorThatDispatchesIntoCloudflare(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "`+glm53+`"
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+`)
+	cloud := cloudProfileDir(t)
+
+	// The base cell, pi on a Workers AI model, resolves on every substrate —
+	// local ones included, because the rule is not a refusal of the executor.
+	for _, sub := range []string{"herdr", "harness", ""} {
+		p, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub})
+		if err != nil {
+			t.Fatalf("the sandbox executor on %q refused pi on a Workers AI model: %v", sub, err)
+		}
+		if p.Runner != "pi" || p.Model != glm53 {
+			t.Errorf("the %q base resolution is %s/%s, want pi/%s", sub, p.Runner, p.Model, glm53)
+		}
+	}
+
+	// The tier that leaves Workers AI refuses on every substrate — the local
+	// ones a sandbox-executor run can execute on, and the substrate-blind
+	// resolution alike — naming the role, the tier, the resolved kind and
+	// model, and the file the routing lives in for that substrate.
+	for _, sub := range []string{"herdr", "harness", ""} {
+		_, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: "frontier"})
+		routeFile := ".tick/runners.toml"
+		if sub != "" {
+			routeFile = ".tick/runners.local.toml"
+		}
+		assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "opus", routeFile)
+	}
+}
+
+// The finding's exact shape: the claude tier lives in .tick/runners.local.toml
+// — a laptop's ladder, the file the cloud substrate never reads — and a LOCAL
+// run selecting the cloudflare-sandbox executor would boot its worker in a
+// Cloudflare container on it. The refusal names the local override file, the
+// one an operator reading it can actually edit.
+func TestTheCloudRuleRefusesTheLocalLadderOnTheSandboxExecutor(t *testing.T) {
+	config := writeConfig(t, `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "`+glm53+`"
+`)
+	write(t, filepath.Join(filepath.Dir(config), "runners.local.toml"), `version = 2
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+`)
+	cloud := cloudProfileDir(t)
+	for _, sub := range []string{"herdr", "harness"} {
+		_, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: "frontier"})
+		assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "opus", "runners.local.toml")
+	}
+	// The same ladder on the compiled-in LOCAL set — whose executor is the
+	// local subprocess one, dispatching nothing into Cloudflare — keeps its
+	// claude tier: the rule is keyed on the executor that dispatches into
+	// Cloudflare, never on the claude name or on every local run.
+	local, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "herdr", Tier: "frontier"})
+	if err != nil {
+		t.Fatalf("the rule reached a local-executor resolution: %v", err)
+	}
+	if local.Runner != "claude" || local.Model != "opus" {
+		t.Errorf("a herdr run's frontier tier resolved to %s/%s, want the local claude/opus", local.Runner, local.Model)
+	}
+}
+
+// The rule's executor half, declared in the one place the namespaces are:
+// CloudRule.Executors names the executors that dispatch their workers into
+// Cloudflare, and nothing else answers for the refusal — not a substrate
+// check alone, and not a model list.
+func TestTheCloudRuleDeclaresTheExecutorsThatDispatchIntoCloudflare(t *testing.T) {
+	if !dispatchesIntoCloudflare(cloudExecutorName) {
+		t.Errorf("%q is not in CloudRule.Executors: the executor that boots one worker container per attempt in Cloudflare is the one the rule must key on", cloudExecutorName)
+	}
+	for _, executor := range []string{"", "local-subprocess", "herdr"} {
+		if dispatchesIntoCloudflare(executor) {
+			t.Errorf("%q dispatches nothing into Cloudflare but passed as if it did", executor)
+		}
+	}
+}
+
 // The rule itself: the provider namespace of the model, not the model family.
 func TestIsWorkersAIModel(t *testing.T) {
 	for _, model := range []string{

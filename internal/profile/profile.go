@@ -269,8 +269,13 @@ func Resolve(role string, opts Options) (*Profile, error) {
 		return nil, err
 	}
 	// The cloud rule on the FINAL resolved worker (tick nwn), after every
-	// overlay route applied — never on one input layer.
-	if opts.Substrate == string(runconfig.SubstrateCloud) {
+	// overlay route applied — never on one input layer. It keys on WHAT RUNS
+	// IN CLOUDFLARE (tick 78v), not on the substrate alone: the cloud
+	// substrate, and any executor that dispatches its workers into Cloudflare
+	// — a run whose substrate is local, selecting the cloudflare-sandbox
+	// executor by its --profiles, boots its workers in a Cloudflare container
+	// under local routing, and the rule is about what runs in Cloudflare.
+	if opts.Substrate == string(runconfig.SubstrateCloud) || dispatchesIntoCloudflare(resolved.Executor) {
 		if err := enforceWorkersAI(resolved, opts.Tier); err != nil {
 			return nil, fmt.Errorf("profile %s: %w", role, err)
 		}
