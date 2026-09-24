@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 86,
-  "state": "integrating",
-  "reason": "integrating a08 attempt 12 into epic/yoh",
-  "updated_at": "2026-09-24T05:47:24Z",
+  "sequence": 87,
+  "state": "gating",
+  "reason": "running the integrated gate for a08 on d57ed7e90169",
+  "updated_at": "2026-09-24T05:48:13Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -49,7 +49,7 @@
     },
     {
       "tick_id": "a08",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 12
     },
     {
