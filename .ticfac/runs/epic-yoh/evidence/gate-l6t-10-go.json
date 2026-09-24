@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-l6t-10-go",
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "l6t",
+    "attempt": 10,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "65ed80e7cce614c2c89aaa40e33fc33f5aa4ed4f",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-24T08:00:54Z",
+  "finished_at": "2026-09-24T08:01:19Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t20.444s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t12.219s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t(cached)\n--- FAIL: TestNamedSymbolsExistInTheFilesThatClaimThem (0.00s)\n    contract_test.go:438: the contract names cloud/factory/src/reconcile.ts, which this repository does not have (looked at cloudflare/src/reconcile.ts): stat ../../../cloudflare/src/reconcile.ts: no such file or directory\n    contract_test.go:468: A1: cloud/factory/src/run-workflow.ts does not contain \"runWaveBatch\"\n    contract_test.go:453: A2 names cloud/factory/src/reconcile.ts, which does not exist: open ../../../cloudflare/src/reconcile.ts: no such file or directory\n    contract_test.go:468: A3: cloud/factory/src/run-workflow.ts does not contain \"WAVE_LEG_MS\"\n    contract_test.go:468: A3: cloud/factory/src/run-workflow.ts does not contain \"MAX_WAVE_LEGS\"\n    contract_test.go:468: A3: cloud/factory/src/run-workflow.ts does not contain \"runWaveBatch\"\n    contract_test.go:468: A3: cloud/factory/src/run-workflow.ts does not contain \"superviseWaveLoop\"\n    contract_test.go:468: A3: cloud/factory/src/run-workflow.ts does not contain \"waveSpawnBudget\"\n    contract_test.go:468: A4: cloud/factory/src/run-workflow.ts does not contain \"waveLeaseHeartbeat\"\n    contract_test.go:468: A4: cloud/factory/src/worker-dispatch.ts does not contain \"DEFAULT_WAIT_POLL_MS\"\n    contract_test.go:468: A6: cloud/factory/src/run-workflow.ts does not contain \"runWaveBatch\"\n    contract_test.go:468: A6: cloud/factory/src/run-workflow.ts does not contain \"MAX_WORKER_DISPATCHES\"\n    contract_test.go:468: A7: cloud/factory/src/run-workflow.ts does not contain \"readWaveRequest\"\n    contract_test.go:468: A7: cloud/factory/src/run-workflow.ts does not contain \"manifestRecorder\"\n    contract_test.go:468: A7: cloud/factory/src/artifacts.ts does not contain \"readWaveRequest\"\n    contract_test.go:468: A7: cloud/factory/src/artifacts.ts does not contain \"writeWaveOutcomes\"\n    contract_test.go:468: A9: cloud/factory/src/run-workflow.ts does not contain \"cloudWaveLoss\"\n    contract_test.go:468: A9: cloud/factory/src/run-workflow.ts does not contain \"describeCloudWaveLoss\"\n    contract_test.go:468: A9: cloud/factory/src/run-workflow.ts does not contain \"tripFromCancellation\"\n    contract_test.go:468: A11: cloud/factory/src/run-workflow.ts does not contain \"MAX_WORKER_DISPATCHES\"\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t0.395s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t14.088s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t0.851s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tkcorpus\t(cached)\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:c35c62d5dd6eaf68e95f781958ab925ccf95d601b0bb38b804001b32272c1a21",
+  "persistence_uri": "git:refs/heads/epic/yoh:.ticfac/runs/epic-yoh/evidence/gate-l6t-10-go.json"
+}
