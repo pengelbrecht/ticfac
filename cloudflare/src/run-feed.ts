@@ -175,6 +175,35 @@ export function runFinishedFeedEvent(input: {
   });
 }
 
+/**
+ * The supervisor could not ASK its orchestrator's container how the
+ * orchestrator is doing (tick 3ed).
+ *
+ * Its own stage, deliberately a new word rather than a reuse: the local
+ * reconciler never supervised an orchestrator container, and folding this
+ * into any existing stage — a `run_finished`, a `held` — would be exactly
+ * the collapse A9 forbids. A failed question is not a verdict about the
+ * process (A2/A6), and the line must never read as one: the detail says the
+ * question could not be asked, never that the orchestrator died.
+ */
+export const STAGE_ORCHESTRATOR_UNANSWERABLE = "orchestrator_unanswerable" as const;
+
+/** The run-level line for a container the supervisor gave up asking (tick 3ed). */
+export function orchestratorUnanswerableFeedEvent(input: {
+  run_id: string;
+  detail: string;
+  at?: string;
+}): FeedEvent {
+  return line({
+    run_id: input.run_id,
+    tick_id: null,
+    attempt: null,
+    stage: STAGE_ORCHESTRATOR_UNANSWERABLE,
+    detail: input.detail,
+    ...(input.at === undefined ? {} : { at: input.at }),
+  });
+}
+
 // ------------------------------------------------------------- the segments ---
 
 /** Everything about one run's feed lives under this prefix, beside its logs. */
@@ -209,6 +238,19 @@ export function waveFeedSeq(wave: number, batch: number, collected: boolean): nu
 
 /** The run's first segment: the run-level started line. */
 export const START_FEED_SEQ = 0;
+
+/**
+ * The one run-level segment a pass writes when it gives up asking its
+ * orchestrator's container how it is (tick 3ed).
+ *
+ * Mid-range on purpose: above every wave segment's key so it can never
+ * interleave one, below the terminal line so a subscriber still following
+ * the run reads it before the finish. One fixed key per run rather than one
+ * per boot — only one pass can end this way (a pass that fails here fails the
+ * run, and only a tripped pass runs a closeout), and a replayed step rewrites
+ * the same key rather than appending a second copy of the line.
+ */
+export const UNANSWERABLE_FEED_SEQ = 9_000_000;
 
 /** The run's last segment: written at finalize, after every wave. */
 export const FINAL_FEED_SEQ = 99_999_99;

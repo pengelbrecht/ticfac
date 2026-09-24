@@ -104,9 +104,11 @@ import { epicCompleted, epicStarted, publishRunEvents } from "./run-events";
 import {
   appendFeed,
   FINAL_FEED_SEQ,
+  orchestratorUnanswerableFeedEvent,
   runFinishedFeedEvent,
   runStartedFeedEvent,
   START_FEED_SEQ,
+  UNANSWERABLE_FEED_SEQ,
 } from "./run-feed";
 import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
@@ -115,10 +117,12 @@ import {
   isTerminalExit,
   ORCHESTRATOR_COMMAND,
   type OrchestratorPhase,
+  type OrchestratorSandbox,
   orchestratorEnv,
   repoURL,
   resolveSandboxImage,
   type SandboxProcessState,
+  type SandboxProcessView,
   sandboxBinding,
   sandboxName,
   terminalExitReason,
@@ -137,6 +141,30 @@ export const MAX_SANDBOX_BOOTS = 3;
 
 /** The closeout pass gets its own, smaller allowance for the same reason. */
 export const MAX_CLOSEOUT_BOOTS = 2;
+
+/**
+ * How many times one look may ask its container about the orchestrator
+ * process before the look counts the question as failed (tick 3ed).
+ *
+ * A single throw is usually a transient hop, so the question is retried
+ * within this bound before one look reports it failed; the slower retry is
+ * the looks themselves, which keep their cadence and keep enforcing the
+ * budgets on every look, failed question or not.
+ */
+export const PROCESS_QUERY_ATTEMPTS = 3;
+
+/**
+ * How many consecutive looks may fail to ask before the pass gives up on the
+ * container (tick 3ed).
+ *
+ * Bounded on purpose, like every allowance in this file: a container nobody
+ * can reach is usually a broken platform, and holding forever would burn the
+ * run's whole watch on a question that is never answered. The bound is in
+ * LOOKS, not wall clock, so it costs a fixed number of steps inside the
+ * instance's budget — and reaching it fails the pass as its own class rather
+ * than rebooting, because an unanswered question is not a death (A2/A6).
+ */
+export const MAX_UNANSWERED_LOOKS = 3;
 
 /**
  * Observations per boot.
@@ -952,8 +980,63 @@ function tripRevokeReason(trip: Trip): string {
   return trip.hard ? "stopped:hard" : "stopped";
 }
 
+// ------------------------------------------- asking the container (3ed) ---
+
+/**
+ * What a look may conclude about the orchestrator process (tick 3ed).
+ *
+ * The seam's own four states are the platform's ANSWERS; `unknown` is the
+ * supervisor's own class for a question that could not be asked —
+ * deliberately not one of the four, because an unanswered question is not a
+ * verdict about the process (A2/A6), and the one thing it must never be
+ * allowed to become is `gone`, which is how a failed question used to end:
+ * one `.catch(() => null)` read an unanswerable container as a dead one and
+ * rebooted it on a guess.
+ */
+export type ObservedProcessState = SandboxProcessState | "unknown";
+
+/**
+ * What one look learned when it asked the container about its orchestrator
+ * (tick 3ed): the platform's answer, or the fact that the question itself
+ * failed. The two are different classes of fact (A9), and keeping them apart
+ * is the whole of this tick — `getProcess` resolving `null` is the container
+ * SAYING no such process exists, while a throw is a container nobody could
+ * ask, and only the first is evidence about the orchestrator at all.
+ */
+export type ProcessQuestion =
+  | { answered: true; view: SandboxProcessView | null }
+  | { answered: false; error: string };
+
+/**
+ * Asks the container about its orchestrator, and reports WHICH of the two
+ * things happened (tick 3ed): the platform answered, or the question failed.
+ *
+ * `getProcess` resolves `null` when the sandbox knows no such process — a
+ * container that died and came back empty, which IS a verdict about the
+ * process — and it THROWS when the container cannot be addressed at all,
+ * which is a verdict about the question and never about the process. One
+ * throw is usually a transient hop, so the question is retried inside the
+ * bound {@link PROCESS_QUERY_ATTEMPTS} sets before this look counts it as
+ * failed; the slower retry is the looks themselves, which keep their cadence
+ * and keep enforcing the budgets regardless.
+ */
+async function askProcess(
+  sandbox: OrchestratorSandbox,
+  processID: string,
+): Promise<ProcessQuestion> {
+  let error = "the container could not be asked";
+  for (let attempt = 0; attempt < PROCESS_QUERY_ATTEMPTS; attempt += 1) {
+    try {
+      return { answered: true, view: await sandbox.getProcess(processID) };
+    } catch (thrown) {
+      error = thrown instanceof Error ? thrown.message : String(thrown);
+    }
+  }
+  return { answered: false, error };
+}
+
 type Observation = {
-  process: SandboxProcessState;
+  process: ObservedProcessState;
   exit_code: number | null;
   /** Cursor into the orchestrator's output, carried to the next observation. */
   offset: number;
@@ -975,6 +1058,14 @@ type Observation = {
    * the watch step's return value is where a later diagnosis will look.
    */
   lease_reclaimed?: string;
+  /**
+   * Why the question failed, present only on a look that could not ask its
+   * container (tick 3ed). Its own field so a failed question stays a
+   * distinct fact in the checkpointed step result — never folded back into
+   * `process` as one of the platform's answers (A9), and never lost before
+   * the pass can report it in its own words.
+   */
+  unanswered?: string;
 };
 
 type ObserveInput = {
@@ -993,7 +1084,15 @@ type ObserveInput = {
 
 /**
  * One look at the run: drain the log, renew the lease, check the stop record,
- * check the budgets, report the process.
+ * check the budgets, ask the process.
+ *
+ * The ask keeps two different facts apart (tick 3ed): the platform's ANSWER
+ * — including the answer "no such process", which is a verdict about the
+ * orchestrator — and a FAILED QUESTION, which is a verdict about the
+ * supervisor's reach and never about the orchestrator. Only the first may be
+ * reported as a process state; a failed question is reported as `unknown`,
+ * its own class (A9), and it is the watch loop's job to hold on it rather
+ * than read it as a death.
  *
  * Order matters. Output is flushed FIRST, so an observation that then decides
  * to kill the orchestrator has already preserved what it printed.
@@ -1043,7 +1142,12 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   const renewal = await renewRunLease(env, params, renewalTtl(input.poll_ms));
   const leaseLost = renewal !== null && renewal.ok === false ? renewal : null;
 
-  const view = await sandbox.getProcess(input.process_id).catch(() => null);
+  // The one question this look exists to ask (tick 3ed), with the two ways it
+  // can go kept apart: an ANSWER — even the answer "no such process" — is a
+  // fact about the orchestrator and may report a state, while a FAILED
+  // QUESTION is a fact about the observer's reach and reports `unknown`,
+  // never `gone`.
+  const question = await askProcess(sandbox, input.process_id);
   const at = Date.now();
 
   const checked = input.enforce_budgets
@@ -1054,14 +1158,19 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
       };
 
   return {
-    process: view === null ? "gone" : view.state,
-    exit_code: view === null ? null : view.exit_code,
+    process: question.answered
+      ? question.view === null
+        ? "gone"
+        : question.view.state
+      : "unknown",
+    exit_code: question.answered && question.view !== null ? question.view.exit_code : null,
     offset,
     seq,
     trip: checked.trip,
     at_ms: at,
     cost_usd: checked.cost_usd,
     ...(renewal?.ok === true && renewal.reclaimed ? { lease_reclaimed: renewal.detail } : {}),
+    ...(question.answered ? {} : { unanswered: question.error }),
   };
 }
 
@@ -1503,6 +1612,13 @@ async function supervisePass(
       // Workflow recomputes the identical cadence.
       let spend: SpendSample | null = null;
       let lastAt = booted.at_ms;
+      /**
+       * How many consecutive looks could not ASK the container (tick 3ed).
+       * Reset by any answered look, because a streak is a streak: the bound
+       * below is about a container that STAYS unanswerable, not one that
+       * flickered through a transient.
+       */
+      let unasked = 0;
 
       for (let look = 0; look < context.config.max_observations; look++) {
         const pollMs = pollDelay(context.config, look, {
@@ -1592,6 +1708,48 @@ async function supervisePass(
           if (!trip.hard) await revoke("revoke:clean");
           return { kind: "tripped", trip, boots: counter.next - 1 };
         }
+
+        if (seen.process === "unknown") {
+          // The question failed (tick 3ed): a container the supervisor cannot
+          // ASK is UNKNOWN, not dead (A2/A6), and rebooting here would be a
+          // guess — the old container might be alive, working and spending, and
+          // the only thing a failed question proves is that nobody can ask it.
+          // So the watch HOLDS: the next look asks again on the cadence, and
+          // the budgets keep being enforced on every look above, failed
+          // question or not — holding is not unwatched spending.
+          unasked += 1;
+          if (unasked < MAX_UNANSWERED_LOOKS) continue;
+
+          // Out of bounds: give up asking, and fail the pass as its own class
+          // — never a reboot, and never the words a dying container gets. The
+          // feed line is written before the return so a subscriber still
+          // following the run learns the hold ended here rather than reading
+          // silence into it; the decision in the dispatch log is its own name
+          // for the same reason (A9: a failed question is neither a death nor
+          // a reboot, and may not share either's message).
+          const detail =
+            `the orchestrator's container could not be asked how it was doing for ` +
+            `${MAX_UNANSWERED_LOOKS} looks (last: ${seen.unanswered ?? "the question failed"}) — ` +
+            "the run failed as unanswerable rather than guessing the container dead, " +
+            "and no replacement was booted";
+          await step.do(`${options.label}:unanswerable:${attempt}`, OBSERVE_RETRIES, async () => {
+            await appendFeed(env, {
+              project: params.project,
+              run_id: params.run_id,
+              seq: UNANSWERABLE_FEED_SEQ,
+              events: [orchestratorUnanswerableFeedEvent({ run_id: params.run_id, detail })],
+            });
+            await logDispatch(env, {
+              run_id: params.run_id,
+              epic: params.epic,
+              decision: `unanswerable:${boot}`,
+              reason: null,
+            });
+            return { unanswerable: true };
+          });
+          return { kind: "failed", detail, boots: counter.next - 1 };
+        }
+        unasked = 0;
 
         if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
           return { kind: "completed", boots: counter.next - 1 };

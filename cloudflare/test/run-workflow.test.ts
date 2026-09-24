@@ -14,11 +14,14 @@ import type { RepoRefs } from "../src/progress";
 import type { RepoConfigReader } from "../src/repo-config";
 import { DONE_EVENT_TYPE } from "../src/run-done";
 import type { RunEventMessage, RunEventSink } from "../src/run-events";
+import { readRunFeed } from "../src/run-feed";
 import type { DispatchLease } from "../src/run-room";
 import {
   applyProgress,
   leaseLostTrip,
   MAX_SANDBOX_BOOTS,
+  MAX_UNANSWERED_LOOKS,
+  PROCESS_QUERY_ATTEMPTS,
   type RunOutcome,
 } from "../src/run-workflow";
 import { roomFor, runStatus, runWorkflowBinding, startRun, stopRun, submitRun } from "../src/runs";
@@ -84,6 +87,15 @@ class FakeSandbox implements OrchestratorSandbox {
   looked = 0;
   /** tick s7f: how many times the reconcile has read this container's process list. */
   listed = 0;
+  /**
+   * tick 3ed: how many further `getProcess` questions must THROW — the
+   * container cannot be ASKED, which is a different fact from `vanished`
+   * (a container that answers "no such process"). `Infinity` for a
+   * container nobody can reach at all.
+   */
+  unanswerable = 0;
+  /** tick 3ed: how many questions have thrown so far. */
+  unanswered = 0;
   #next = 0;
 
   constructor(readonly name: string) {}
@@ -99,6 +111,15 @@ class FakeSandbox implements OrchestratorSandbox {
 
   async getProcess(id: string): Promise<SandboxProcessView | null> {
     this.looked += 1;
+    // The question itself fails (tick 3ed): the throw is the one thing the
+    // watch must never read as "no such process" — and the fake demands the
+    // distinction the real seam makes, because a more forgiving fake is
+    // what let `.catch(() => null)` certify the defect it hid.
+    if (this.unanswerable > 0) {
+      this.unanswerable -= 1;
+      this.unanswered += 1;
+      throw new Error(`the container for ${this.name} cannot be asked`);
+    }
     if (this.vanished) return null;
     const process = this.processes.find((p) => p.id === id);
     return process === undefined ? null : process.view;
@@ -1366,6 +1387,95 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     const run = await settled(runID);
     expect(run.state).toBe("failed");
     expect(sandboxes.booted).toHaveLength(MAX_SANDBOX_BOOTS);
+  });
+});
+
+describe("a container the supervisor cannot ask is unknown, never dead (tick 3ed)", () => {
+  it("still reboots on the platform's ANSWER that no process exists — an answered 'gone' is a verdict", async () => {
+    // The other half of the distinction, pinned first so the tests below say
+    // something: `getProcess` resolving null is the container SAYING the
+    // process is gone, and that answer still costs the orchestrator its
+    // reboot. Only the question FAILING is held.
+    const { runID } = await ignite();
+    const first = await firstProcess();
+    first.say("orchestrator: working\n");
+    sandboxes.booted[0]!.vanished = true;
+
+    const replacement = await waitFor("a replacement sandbox", async () =>
+      sandboxes.booted.length > 1 ? sandboxes.booted[1]! : null,
+    );
+    const process = await waitFor("the replacement orchestrator", async () =>
+      replacement.processes.length > 0 ? replacement.current : null,
+    );
+    orchestratorPushedWork();
+    process.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(sandboxes.booted).toHaveLength(2);
+  });
+
+  it("holds a container it cannot ask, and watches on once the question answers again", async () => {
+    const { runID } = await ignite();
+    const first = await firstProcess();
+    first.say("orchestrator: still working\n");
+    // One look's worth of failed questions — a transient the retry bound burns
+    // through — and then the container answers again.
+    sandboxes.booted[0]!.unanswerable = PROCESS_QUERY_ATTEMPTS;
+
+    await waitFor("the failed question to be asked out to its bound", async () =>
+      sandboxes.booted[0]!.unanswered >= PROCESS_QUERY_ATTEMPTS ? sandboxes.booted[0]! : null,
+    );
+    // Retried within the bound and no further: exactly the in-look allowance
+    // of questions threw, and the next look's question was answered.
+    expect(sandboxes.booted[0]!.unanswered).toBe(PROCESS_QUERY_ATTEMPTS);
+
+    // The orchestrator finishes normally and the run concludes from the
+    // branch — with the ONE sandbox it booted, because a failed question was
+    // never read as a dead orchestrator.
+    orchestratorPushedWork();
+    first.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(sandboxes.booted).toHaveLength(1);
+  });
+
+  it("fails the run as its own class when nobody can ask the container, and boots no replacement", async () => {
+    const { runID, project, epic } = await ignite();
+    const first = await firstProcess();
+    first.say("orchestrator: alive but unreachable\n");
+    // Every question fails, for every look the pass is allowed to hold.
+    sandboxes.booted[0]!.unanswerable = Infinity;
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    // Never read as a dead orchestrator: no replacement was booted, and the
+    // dying-container path (destroy, reconcile record, reboot) never ran.
+    expect(sandboxes.booted).toHaveLength(1);
+
+    // Its own class (A9), not a death: the record says the question could not
+    // be asked, in words no exit status or sandbox death produces.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("could not be asked");
+    expect(record.detail).not.toContain("died");
+
+    // The class has its own line on the run feed, as its own stage — never a
+    // death, never a silence, and never folded into another stage's message.
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain('"stage":"orchestrator_unanswerable"');
+
+    // And the dispatch trail carries the decision as its own name, so a
+    // refusal read back from `dispatch_log` never says reboot.
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "unanswerable:1")).toBe(true);
+    expect(logged.some((entry) => entry.decision.startsWith("reboot"))).toBe(false);
+
+    // Retried within a bound: the hold asked its question on every look and
+    // gave up after the looks the bound allows (a look straddling the arm may
+    // have answered its first attempt before the container went quiet, hence
+    // the floor one attempt below the exact count).
+    const asked = sandboxes.booted[0]!.unanswered;
+    expect(asked).toBeGreaterThanOrEqual(MAX_UNANSWERED_LOOKS * (PROCESS_QUERY_ATTEMPTS - 1));
+    expect(asked).toBeLessThanOrEqual(MAX_UNANSWERED_LOOKS * PROCESS_QUERY_ATTEMPTS);
   });
 });
 
