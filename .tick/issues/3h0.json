@@ -1,0 +1,14 @@
+{
+  "id": "3h0",
+  "title": "A running epic sees ticks and blockers added after it started; its close-out never runs past an open blocker",
+  "description": "Observed on epic-yoh, 2026-09-24. While the run was in its final review, ticks 9iz, 4lv, dyo and 78v were added to yoh (absorbed findings) and r1t (the close-out) was made blocked-by each of them, pushed to epic/yoh. The live run did not see either change. When cs1 closed it went straight into r1t's close-out and opened the epic PR (#51), with four open blockers of r1t. It replans wave LAYERS as ticks close ('replanned'), but it does not admit ticks created after its plan was made, and it does not re-read blocked_by. A person had to kill the run so a resume could replan from scratch. Absorbing a gating finding into the running epic (npq) depends on this. Worse, a close-out that runs past an open blocker could close an epic whose definition of done is not met.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "gvc",
+  "acceptance_criteria": "A tick created under the running epic after the run started is dispatched by that run without a restart; a blocked_by edge added mid-run is honoured before the blocked tick is dispatched; the close-out refuses to start while any child of the epic other than itself is open; tests drive all three",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T12:14:02.61324Z",
+  "updated_at": "2026-09-24T12:14:02.61324Z"
+}
