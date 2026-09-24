@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 50,
-  "state": "publishing",
-  "reason": "closing gbs behind the integrated gate on bd293dc1b404",
-  "updated_at": "2026-09-24T04:48:23Z",
+  "sequence": 51,
+  "state": "running",
+  "reason": "gbs is closed",
+  "updated_at": "2026-09-24T04:49:01Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "gbs",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
