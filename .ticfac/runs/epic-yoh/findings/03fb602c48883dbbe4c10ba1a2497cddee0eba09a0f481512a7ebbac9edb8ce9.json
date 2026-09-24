@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ppt",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T05:28:37Z",
+  "triaged_at": "2026-09-24T11:37:17Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pqs",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "ppt",
