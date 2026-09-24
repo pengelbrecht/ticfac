@@ -1051,21 +1051,14 @@ describe("boot and finalize", () => {
       enrolled_by: "operator",
       enrolled_at: new Date().toISOString(),
     });
-    const submitted = await submitRun(
-      env,
-      {
-        project,
-        epic: "ko8",
-        base_sha: BASE_SHA,
-        requested_by: "operator",
-        trace_id: "tr_0123456789abcdef0123456789abcdef",
-        queue: false,
-      },
-      // This suite is the Run Workflow's own: the boot lease under test is
-      // the agent driver's, so the submission is pinned to it rather than
-      // handed to the reconciler a plain epic run rides since tick nu9.
-      { driver: "agent" },
-    );
+    const submitted = await submitRun(env, {
+      project,
+      epic: "ko8",
+      base_sha: BASE_SHA,
+      requested_by: "operator",
+      trace_id: "tr_0123456789abcdef0123456789abcdef",
+      queue: false,
+    });
     if (submitted.outcome !== "started") {
       throw new Error(`the submission was refused: ${JSON.stringify(submitted)}`);
     }

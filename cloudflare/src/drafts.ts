@@ -660,14 +660,7 @@ async function igniteDraft(
     return { run_id: null, detail: parsed.detail, draft };
   }
 
-  const result = await submitRun(env, parsed.submission, {
-    // A press runs ONE tick now — a narrower ask than the reconciler's plan
-    // for whatever contains it, which the one orchestrator path cannot
-    // express. The press stays the container agent's, as an explicit decision
-    // (tick nu9): the reconciler drives epics, and a person pressing a
-    // button is asking for this tick, not for the reconciler's plan.
-    driver: "agent",
-  });
+  const result = await submitRun(env, parsed.submission);
   if (result.outcome !== "started") {
     const detail =
       result.outcome === "refused"

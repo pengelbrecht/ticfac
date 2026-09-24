@@ -3,33 +3,25 @@
  * the cloud host's concrete `AttemptExecutor`, built over the
  * `SandboxBinding` seam `sandbox.ts` already declares.
  *
- * The reconciler that dispatches through it is the Workflow-hosted
- * `EpicReconciler` (`epic-reconciler.ts`, item 2), whose `AttemptExecutor`
- * interface is contracts/job-protocol.json's four operations — start,
- * inspect, collect, cancel — the same seam every local executor implements.
- * Until this module, a deployment had no executor at all and the Workflow
- * refused every dispatch, exactly the way the local reconciler refuses a
- * profile naming an executor its build cannot honour: this module is what
- * turns `cloudflare-sandbox` from a name the tracker's enum merely admits
- * into an executor a run actually dispatches through.
- *
- * What each operation is built from — every piece an existing, live-proven
- * module, none of it invented here:
- *
- *  - `start`    `worker-boot.ts` composes the boot (command, env, probe,
- *               salvage door) and `worker-dispatch.ts`'s `spawnWorker` runs
- *               the green-start trap and the confirmed-dispatch wait against
- *               a fresh container named per ATTEMPT.
- *  - `inspect`  the SandboxBinding's process view, with the rule
- *               `src/reconcile.ts` and `OrchestratorSandbox.listProcesses`
- *               exist for: "I have no id for it" must never be allowed to
- *               read as "nothing is running here".
- *  - `collect`  `worker-collect.ts`, which reads ONLY what survived in git —
- *               never a sandbox's terminal output — the collect rule all
- *               three substrates share.
- *  - `cancel`   the container's own stop-and-push door (`worker-boot.ts`'s
- *               salvage spec, tick 7zk) and then `teardownWorker`: the work
- *               is asked to rescue itself before the container is destroyed.
+ * WHO CALLS IT NOW. This module was built as the Workflow-hosted
+ * reconciler's executor (tick z23, `epic-reconciler.ts`); tick mn7 deleted
+ * that reconciler — an epic's runs are driven by ticfac in the orchestrator
+ * container, whose Go executor (`internal/exec/cloudflaresandbox`)
+ * cannot create a sibling Sandbox itself, because the binding is a Worker
+ * binding. It reaches this module's machinery over HTTP instead, through
+ * the per-tick sandbox door (`sandbox-dispatch.ts`): the door calls
+ * `startNamedAttempt` and `namedAttemptStatus` directly — it needs to KNOW
+ * whether a dispatch ADOPTED a live container, which the closed four-op
+ * interface cannot say — and `sandboxExecutorDepsFromEnv` is the wiring
+ * both the door and `sandboxExecutorFromEnv` share. The four-operation
+ * interface below stays: it is the contract's own shape
+ * (`contracts/job-protocol.json`'s start / inspect / collect / cancel, the
+ * same seam every local executor implements), its tests are what hold the
+ * handle/status/report records to the pinned schemas, and it is what a
+ * future door route that needs inspect or cancel over HTTP would build
+ * on. `worker-boot.ts` composes each boot and `worker-dispatch.ts`'s
+ * `spawnWorker` runs the green-start trap and the confirmed-dispatch wait
+ * against a fresh container named per ATTEMPT.
  *
  * THE HANDLE IS THE CONTRACT'S (tick us2). What `start` returns is a
  * job-protocol `JobHandle` — the closed top level (schema_version, job_id,
@@ -37,9 +29,9 @@
  * reserves for executor-private addressing — validated against the pinned
  * `$defs.job_handle` by this module's tests, so a cloud-produced handle is
  * indistinguishable from a local one to everything that reads records. The
- * reconciler nests it under the dispatch marker's `handle` slot, the same
- * slot the run-state contract's own golden attempt record uses for herdr's
- * addressing. It deliberately carries NO credential: the handle is what the
+ * in-container caller stores it in its dispatch marker's `handle` slot, the
+ * same slot the run-state contract's own golden attempt record uses for
+ * herdr's addressing. It deliberately carries NO credential: the handle is what the
  * run's marker stores on the run branch, and a secret in a committed record
  * is a leak by construction. The boot inputs are re-derived from the seam at
  * every use, each boot minting a fresh per-worker gateway credential that
@@ -59,14 +51,14 @@
  * attempt's commits.
  */
 
-import { containerGitToken, planSandboxGit } from "./credentials";
 import type {
   AttemptExecutor,
   AttemptHandle,
   AttemptReport,
   AttemptSpec,
   AttemptStatus,
-} from "./epic-reconciler";
+} from "./attempt-protocol";
+import { containerGitToken, planSandboxGit } from "./credentials";
 import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
 import { type GitRefWriter, gitRefWriter, writeRefBranch } from "./git-refs";
 import type { Env } from "./index";

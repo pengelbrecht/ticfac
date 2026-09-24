@@ -39,21 +39,6 @@ declare namespace Cloudflare {
      */
     RUN_WORKFLOW?: import("./runs").RunWorkflowBinding;
     /**
-     * The EpicReconciler Workflow (tick z23): the reconciler's control flow
-     * hosted by a Workflow, one instance per EpicRun keyed by run id
-     * (`[[workflows]]` in wrangler.toml, class `EpicReconcilerWorkflow`).
-     *
-     * Since tick nu9 this is the driver every plain epic run started through
-     * the run route is handed to; `RUN_WORKFLOW` above still drives the
-     * submissions the reconciler cannot honour (waves, budgeted runs,
-     * reviews) until the Workflow host grows that machinery. Still optional
-     * in the type — a deployment whose Workflow failed to register must fail
-     * closed at the point of use rather than record runs that could never
-     * reconcile — and typed as the structural subset the run route uses so a
-     * test can substitute a recording fake for it.
-     */
-    EPIC_RECONCILER?: import("./runs").EpicReconcilerBinding;
-    /**
      * The orchestrator sandboxes a run boots — one per run in Phase 1, one per
      * tick from Phase 2 (see image/).
      *
@@ -451,17 +436,6 @@ declare namespace Cloudflare {
       store: import("./git-contents").ContentsStore;
     };
     /**
-     * The attempt executor the EpicReconciler Workflow dispatches through
-     * (tick z23): the job-protocol four operations. A deployment now wires
-     * the sandbox compatibility executor itself when the pieces exist (tick
-     * k4s, `sandboxExecutorFromEnv` in src/sandbox-executor.ts) — the
-     * binding remains the seam a test injects its own executor through, and
-     * a deployment missing a piece (no container binding, no epic base, no
-     * factory URL) still refuses dispatches, naming what is missing rather
-     * than recording attempts nobody started.
-     */
-    TICFAC_EXECUTOR?: import("./epic-reconciler").AttemptExecutor;
-    /**
      * The git writer the sandbox executor puts an attempt's work on its own
      * write_ref through (tick us2): the executor's collect takes the branch
      * the container pushed and lands it on `refs/heads/ticfac/…`, the same
@@ -472,29 +446,6 @@ declare namespace Cloudflare {
      * needs testing, not the HTTP.
      */
     TICFAC_REF_WRITER?: import("./git-refs").GitRefWriter;
-    /**
-     * The merge-and-gate half of a tick's settle on the Workflow host (tick
-     * z23): what turns a reported attempt into a closeable one. Unset on a
-     * deployment, where the run refuses to close ticks behind an
-     * integration it cannot perform — the serialized publisher is this
-     * phase's item 3.
-     */
-    TICFAC_INTEGRATION?: import("./epic-reconciler").IntegrationHost;
-    /**
-     * The code-hosting surface the CI-gated close-out reads (tick cxk): the
-     * pull-request + CI seam the PR + CI close-out rule demands — find or
-     * open the epic PR, read CI on a commit, carry the review's verdict and
-     * the run's findings onto the PR. Unset on a deployment, which speaks
-     * GitHub's REST API directly from `GITHUB_TOKEN` — and a deployment
-     * with no token at all gets the typed refusal a rule-declaring
-     * repository answers to, never a silent ungated close-out.
-     */
-    TICFAC_PULL_REQUESTS?: {
-      project: string;
-      forge: import("./forge").PullRequests;
-    };
-    /** Test knob for the reconcile Workflow's poll cadence (ms). */
-    TICFAC_RECONCILE_POLL_MS?: number;
     [signalSecret: `SIGNAL_SECRET_${string}`]: string | undefined;
   }
 }

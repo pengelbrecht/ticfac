@@ -163,7 +163,7 @@
  * containers must not be the one place a lapsed arbiter can still spend.
  */
 
-import type { AttemptSpec } from "./epic-reconciler";
+import type { AttemptSpec } from "./attempt-protocol";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor } from "./runs";

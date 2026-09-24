@@ -1,26 +1,27 @@
 /**
  * One tracked-file store, the mechanism every durable read and write this
- * Workflow host makes through GitHub's contents API goes through.
+ * Worker makes through GitHub's contents API goes through.
  *
- * SPEC §3.1 (line 191) and `contracts/tk-json-manifest.json`'s `hosts`
- * section say what this seam is FOR: a Cloudflare Workflow or isolate cannot
- * execute a Go binary, so on this host the reconciler cannot shell out to tk.
- * `tk --json` defines the tracker contract; a host that cannot run tk
- * implements the same contract in its own language — reading `.tick/` records
- * through the contents API and writing tracker commits the same way — and
- * proves it against the pinned fixtures. This module is deliberately the
- * narrowest possible mechanism for that: list, read, create, update, each
- * against one ref of one repository, with the contents API's own
+ * The seam exists for the same reason it always did: a Cloudflare isolate
+ * cannot execute a Go binary, so whatever this host reads or writes in a
+ * repository it reaches through the contents API, with the API's own
  * compare-and-swap semantics surfaced as answers rather than exceptions.
+ * It is deliberately the narrowest possible mechanism for that: list, read,
+ * create, update, each against one ref of one repository.
  *
- * Two consumers, one mechanism, so the rules cannot drift between them:
- *
- *  - `tracker-client.ts` reaches `.tick/issues/**` on the run branch — the
- *    reads and controlled writes of the tk --json contract.
- *  - `run-state-store.ts` reaches `.ticfac/runs/<run-id>/**` on the same
- *    branch — the checkpoint (SHA-guarded update) and the attempt markers
- *    (create-if-absent), exactly the two CAS modes
- *    `contracts/ticfac-run-state.json` pins.
+ * Who uses it now. Tick mn7 deleted the isolate's reconciler — a cloud epic
+ * runs through ticfac in the orchestrator container, which reads `.tick/` and
+ * writes `.ticfac/` itself, from git, in Go — and with it the two consumers
+ * this header used to name (`tracker-client.ts`, the tk-contract client, and
+ * `run-state-store.ts`, the run's checkpoint state). What survives is the
+ * repository Durable Object's own publish path (`repo-room.ts`): the room is
+ * a lock, not a store, and the store is how a publish it has serialized
+ * reaches the repository — one writer, one mechanism, on the ref the holder
+ * names. The bulk-read half (`readAll`, over the tarball archive of tick 8xd)
+ * existed to read a ~1100-record tracker in ONE request for the reconciler's
+ * plan pass; with no reader of that shape left it went with the reconciler,
+ * and a caller that ever needs a whole directory again reads it file by file
+ * through `list` + `read` until something brings the need back.
  *
  * A test assigns an in-memory store; a deployment gets the GitHub one below.
  */
@@ -29,7 +30,6 @@ import type { Env } from "./index";
 import type { HolderCredentials } from "./lease";
 import { GITHUB_API_BASE_URL } from "./progress";
 import type { PublishWrite } from "./repo-room";
-import { describeLimit, repositoryFiles } from "./tarball";
 
 // ------------------------------------------------------------- the seam ---
 
@@ -72,20 +72,6 @@ export interface ContentsStore {
   list(prefix: string): Promise<string[]>;
   /** One file, or null when the ref does not hold it. */
   read(path: string): Promise<StoredFile | null>;
-  /**
-   * Every file under `prefix`, by path, in ONE request (tick 8xd).
-   *
-   * Optional, and the reason it is optional is the reason it exists: a host
-   * that can answer a whole directory at once should, because reading a
-   * ~1100-record tracker file by file costs 1104 points against GitHub's
-   * 900-per-minute secondary limit and cannot be paced out of it. A store with
-   * no bulk answer — a test's in-memory fake, where a per-path read is free —
-   * simply omits this and callers fall back to `list` + `read`.
-   *
-   * Contents only: a caller that needs a blob sha to guard a write still reads
-   * that one path.
-   */
-  readAll?(prefix: string): Promise<Map<string, string>>;
   /** Create one new file. The ref's head is the compare-and-swap. */
   create(path: string, input: { content: string; message: string }): Promise<StoreWrite>;
   /**
@@ -101,6 +87,18 @@ export interface ContentsStore {
 }
 
 // -------------------------------------------------------- the deployment ---
+
+/** What GitHub said about a refusal, when it said anything worth repeating. */
+export function describeLimit(response: Response): string {
+  const parts: string[] = [];
+  const retry = response.headers.get("retry-after");
+  if (retry !== null) parts.push(`retry-after ${retry}s`);
+  const remaining = response.headers.get("x-ratelimit-remaining");
+  if (remaining !== null) parts.push(`${remaining} of the hourly budget left`);
+  const reset = response.headers.get("x-ratelimit-reset");
+  if (reset !== null) parts.push(`resets at ${reset}`);
+  return parts.length === 0 ? "" : ` (${parts.join("; ")})`;
+}
 
 /**
  * Base64 of a UTF-8 string, which `btoa` alone is not.
@@ -229,15 +227,6 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
       }
       paths.sort();
       return paths;
-    },
-
-    async readAll(prefix) {
-      // One request for the whole directory (tick 8xd). The prefix is matched
-      // against the archive's paths with the generated wrapper directory
-      // already stripped, so callers name paths the way every other method
-      // here does.
-      const wanted = prefix.endsWith("/") ? prefix : `${prefix}/`;
-      return await repositoryFiles(env, project, ref, (path) => path.startsWith(wanted));
     },
 
     async read(path) {
