@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 87,
-  "state": "gating",
-  "reason": "running the integrated gate for a08 on d57ed7e90169",
-  "updated_at": "2026-09-24T05:48:13Z",
+  "sequence": 88,
+  "state": "publishing",
+  "reason": "closing a08 behind the integrated gate on d57ed7e90169",
+  "updated_at": "2026-09-24T05:52:36Z",
   "ticks": [
     {
       "tick_id": "uqi",
