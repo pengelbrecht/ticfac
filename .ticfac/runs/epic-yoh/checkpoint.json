@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 200,
+  "sequence": 201,
   "state": "failed",
-  "reason": "CI is red on the epic PR #51 (https://github.com/pengelbrecht/ticfac/pull/51): the failing job is go. The close-out of yoh is not admitted until CI is green on the PR, and the rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch. **The merge itself is a person's**, and deliberately so: everything up to it — the waves, the per-tick gates, the final review, the close-out — is work a run can prove it did, while the merge is a judgement about whether to accept that work. A run's job is to hand a person a PR that is reviewed and CI-verified, so the judgement is quick; it is not to make it.",
-  "updated_at": "2026-09-24T16:08:32Z",
+  "reason": "r1t did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: CI is red on the epic PR #51 (https://github.com/pengelbrecht/ticfac/pull/51): the failing job is go. The close-out of yoh is not admitted until CI is green on the PR, and the rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch. **The merge itself is a person's**, and deliberately so: everything up to it — the waves, the per-tick gates, the final review, the close-out — is work a run can prove it did, while the merge is a judgement about whether to accept that work. A run's job is to hand a person a PR that is reviewed and CI-verified, so the judgement is quick; it is not to make it.. This incarnation was reached after 5 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-09-24T16:08:35Z",
   "ticks": [
     {
       "tick_id": "uqi",
