@@ -1,0 +1,14 @@
+{
+  "id": "9iz",
+  "title": "The sandbox dispatch door carries the worker's harness and prompt, and the worker's logs stream",
+  "description": "Absorbed from yoh findings fe91398b (xev), d09ef48c (a08) and 8a263ee1 (l6t), 2026-09-24. After l6t the only cloud worker path is ticfac's cloudflare-sandbox executor through the Worker's dispatch door. The door carries the model (a08) but not the harness and not the prompt: the harness rests on RUN_WORKER_HARNESS agreeing with the cloud profile, the role prompt never reaches the container, and workers boot with no harness bound and no streamed logs (the wave path set both). A cloud epic run cannot do real work through that door, so this gates yoh's definition of done and u9h. Make the dispatch request carry harness and prompt (or a reference the container can fetch), boot the worker with them, stream its log the way the wave path did, and record both in the attempt record.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "yoh",
+  "acceptance_criteria": "A dispatch through the door carries the resolved harness and the rendered prompt; the worker boots with exactly those (a test proves both reach the container's environment/files); the worker's output streams to the run's logs; the attempt record names the harness; the door contract (sandbox-dispatch.ts) documents the fields; go and ts gates pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T11:34:21.803594Z",
+  "updated_at": "2026-09-24T11:34:21.803594Z"
+}

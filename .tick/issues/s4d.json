@@ -1,0 +1,13 @@
+{
+  "id": "s4d",
+  "title": "Post-yoh cleanup: dead wave-era helpers, stale docs, the four-operation wrapper, and a Workers-AI guard on the TS side",
+  "description": "From yoh findings 749337d5, 295e72f2, fc0cf44d, 5a9614de, a71d689a, f27e4765, 44455165 (2026-09-24). run-workflow.test.ts carries two dead wave-era helpers; cloudflare/README.md documents the deleted src/reconcile.ts; repo-room.ts's header names deleted modules; the sandbox executor's closed four-operation wrapper may be retired; the TS factory side (worker-boot defaults, RUN_MODEL) should refuse a non-Workers-AI model as Go's nwn does (rule: Workers AI models only, declared in one place, never a model list); observe() still treats a vanished SANDBOXES binding as 'gone'; the supervisor's own SIGTERM stop path settles as failed without the final push.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Each listed item is fixed or explicitly refused with a reason in the tick's notes; go and ts gates pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T11:34:21.955204Z",
+  "updated_at": "2026-09-24T11:34:21.955204Z"
+}

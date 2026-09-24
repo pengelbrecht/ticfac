@@ -1,0 +1,13 @@
+{
+  "id": "925",
+  "title": "Cloud runs regain per-tick board events and cron sweeps after the wave deletion",
+  "description": "From yoh findings dd4ae59a and 22e95d4a (l6t). The wave loop was the only producer of task-started/task-completed board events for cloud runs, and cron sweeps refuse any matching selection because no dispatch shape can name a tick batch any more. Re-home both on the new path: board events from ticfac's run feed (the container's run-epic), and sweeps submitting an epic-shaped run instead of a tick batch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A cloud run emits task-started/task-completed per tick from the ticfac feed; a cron sweep with a matching selection starts a run instead of refusing; tests cover both",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T11:34:21.889052Z",
+  "updated_at": "2026-09-24T11:34:21.889052Z"
+}
