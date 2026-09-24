@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 207,
-  "state": "dispatching",
-  "reason": "dispatching r1t as attempt 25",
-  "updated_at": "2026-09-24T16:26:28Z",
+  "sequence": 208,
+  "state": "running",
+  "reason": "r1t is running as attempt 25",
+  "updated_at": "2026-09-24T16:26:38Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -79,7 +79,8 @@
     },
     {
       "tick_id": "r1t",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 25
     },
     {
       "tick_id": "3ed",
