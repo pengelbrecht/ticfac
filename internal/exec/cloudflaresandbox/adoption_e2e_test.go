@@ -163,6 +163,26 @@ func TestARestartedOrchestratorAdoptsTheRunningSandboxThroughTheRealDoor(t *test
 	// express, which is what the harness's observation route exists for.
 	door.assertOneLiveWorkProcess(t, "after the restart")
 
+	// ------------------------------------------------- the model the container is on ---
+	// The door tells the truth about an adopted container's model (tick dyo):
+	// it reads its own recorded boot and names THAT, so a restarted incarnation
+	// whose profile now resolves a DIFFERENT model is refused by the Go check
+	// that could never fire when the door echoed the request back — and no rival
+	// is booted behind the refusal.
+	const otherModel = "workers-ai/@cf/example/another-model"
+	mismatched := door.newExecutorModel(t.TempDir(), otherModel)
+	_, err = mismatched.Start(spec)
+	if err == nil {
+		t.Fatal("an adoption of a container running another model was accepted: the door named the request's model over the running container's")
+	}
+	if !strings.Contains(err.Error(), otherModel) || !strings.Contains(err.Error(), door.model) {
+		t.Errorf("the refusal does not name both models: %v", err)
+	}
+	if entries, readErr := os.ReadDir(mismatched.opts.StateDir); readErr != nil || len(entries) != 0 {
+		t.Errorf("the refused adoption left %d entries in its state root (err %v): nothing is recorded for a container the dispatch did not resolve", len(entries), readErr)
+	}
+	door.assertOneLiveWorkProcess(t, "after the refused adoption")
+
 	// ------------------------------------------------ unreachable ≠ absent ---
 	// The door goes away — the exact outage in which an attempt is at most
 	// risk of being written off. Every question after it must fail LOUDLY: a
@@ -363,6 +383,14 @@ func newRealDoor(t *testing.T) *realDoor {
 // temp directory per incarnation, because a rebooted orchestrator container
 // carries none of its predecessor's local state.
 func (d *realDoor) newExecutor(stateDir string) *Executor {
+	return d.newExecutorModel(stateDir, d.model)
+}
+
+// newExecutorModel is one incarnation resolving a model the caller names: the
+// restarted orchestrator whose profile now answers DIFFERENTLY than the one
+// that booted the running container — the case the door's truthfulness about
+// an adopted container's model exists for (tick dyo).
+func (d *realDoor) newExecutorModel(stateDir, model string) *Executor {
 	d.t.Helper()
 	ex, err := New(Options{
 		FactoryURL: d.url,
@@ -370,7 +398,7 @@ func (d *realDoor) newExecutor(stateDir string) *Executor {
 		EpicID:     d.epic,
 		BaseRef:    "refs/heads/epic/" + d.epic,
 		Title:      "Prove sandbox adoption end to end through the real Go executor and the real door",
-		Model:      d.model,
+		Model:      model,
 		Harness:    d.harness,
 		Prompt:     d.prompt,
 		Attempt:    1,

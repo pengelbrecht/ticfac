@@ -448,6 +448,56 @@ describe("start", () => {
     expect(adopted.handle.handle.model).toBe(REQUESTED_MODEL);
   });
 
+  it("an adoption answers with the RUNNING container's model, never the new request's (tick dyo)", async () => {
+    // The first dispatch boots on REQUESTED_MODEL and the door records that
+    // boot before the container is addressed.
+    const first = await postStart(runToken, startBody());
+    expect(first.status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+
+    // A restarted incarnation whose profile now resolves a DIFFERENT model
+    // for the same attempt: the container still running the tick is on the
+    // model ITS dispatch booted it on, and the door states THAT — never the
+    // new request echoed back as the answer, which is how the caller's model
+    // check could not fire for an adopted attempt at all.
+    const again = await postStart(
+      runToken,
+      startBody({ model: "workers-ai/@cf/example/another-model" }),
+    );
+    expect(again.status).toBe(200);
+    const adopted = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(adopted.adopted).toBe(true);
+    expect(adopted.handle.handle.model).toBe(REQUESTED_MODEL);
+    expect(adopted.handle.handle.model).toBe(work?.env.TICKS_MODEL);
+    expect(adopted.handle.handle.model).not.toBe("workers-ai/@cf/example/another-model");
+
+    // And the container was not re-booted on the new model either: an
+    // adoption boots nothing, so the running process keeps its own TICKS_MODEL.
+    expect(work?.env.TICKS_MODEL).toBe(REQUESTED_MODEL);
+  });
+
+  it("refuses an adoption whose running container has no recorded boot — never a guess in a handle", async () => {
+    const first = await postStart(runToken, startBody());
+    expect(first.status).toBe(201);
+
+    // The record of the boot is gone — a container an older deployment
+    // booted, from this door's point of view. The work process is live, but
+    // nobody can state which model it is on, so the door refuses the start
+    // rather than naming the request's model over a container it did not
+    // boot on it: a hold the caller surfaces, never a lie in the record.
+    await env.DB.prepare(
+      "DELETE FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = 1",
+    )
+      .bind(RUN_ID, TICK)
+      .run();
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(409);
+    const denial = await denialOf(again);
+    expect(denial.error).toBe("adoption_model_unknown");
+    expect(denial.detail).toContain("cannot be stated");
+  });
+
   it("refuses a start that names no model rather than booting the factory's own", async () => {
     // A request with no model would boot on RUN_WORKER_MODEL or the default,
     // and the caller's record would name a model that never ran.

@@ -62,7 +62,7 @@
  * | `base_ref` | the epic's base branch, for the same re-derivation. |
  * | `title` | the tick's title, carried for the same re-derivation. |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
- * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — the worker container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`, and the handle's `model` names it back. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran (the factory defaults once disagreed with the profiles — omp/DeepSeek against pi/GLM). |
+ * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
  * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
  * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: printable prose with line breaks, at most 64 KiB — a start with no prompt would boot a worker on a prompt nobody chose. |
  *
@@ -78,7 +78,11 @@
  *     The handle is the SAME attempt's — same job id, same process — so a
  *     caller that retries an ambiguous request reaches the same answer as one
  *     whose first call landed. `adopted` is a first-class field, not text to
- *     be parsed back out of the handle's detail.
+ *     be parsed back out of the handle's detail. The handle's `model` is the
+ *     RUNNING container's, read from the door's own recorded boot (tick dyo)
+ *     — a live work process whose boot was never recorded (a container an
+ *     older deployment booted) is refused `409 adoption_model_unknown`
+ *     rather than adopted under a model nobody observed.
  *
  * `handle` is the pinned job-protocol `job_handle` record (`contracts/`
  * `$defs.job_handle`): the closed top level of identity and executor name
@@ -172,6 +176,7 @@ import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
+  AdoptionModelUnknownError,
   attemptJobID,
   namedAttemptStatus,
   type SandboxJobHandle,
@@ -430,7 +435,19 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container
   // BY NAME, adopts a live work process instead of booting a rival beside it,
   // and returns once the dispatch is confirmed — a handle, never a result.
-  const started = await startNamedAttempt(wired.deps, spec);
+  // The one refusal the machinery itself can make is the adoption whose
+  // running container has no recorded boot (tick dyo): the door cannot state
+  // the model the handle must name, and a refusal the caller holds is honest
+  // where a guess in a handle would not be.
+  let started: Awaited<ReturnType<typeof startNamedAttempt>>;
+  try {
+    started = await startNamedAttempt(wired.deps, spec);
+  } catch (error) {
+    if (error instanceof AdoptionModelUnknownError) {
+      return refuse(409, "adoption_model_unknown", error.message);
+    }
+    throw error;
+  }
   const body: Record<string, unknown> = { handle: started.handle, adopted: started.adopted };
   return {
     ok: true,

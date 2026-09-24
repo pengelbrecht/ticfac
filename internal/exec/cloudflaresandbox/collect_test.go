@@ -109,12 +109,22 @@ func mustGit(t *testing.T, dir string, args ...string) string {
 // dispatch named.
 func newCollectHarness(t *testing.T) (*harness, *gitRepo, *subprocess.JobHandle, string) {
 	t.Helper()
+	return newCollectHarnessRole(t, "implement-tick")
+}
+
+// newCollectHarnessRole is newCollectHarness for a dispatch of any role: the
+// collect's no-commits rule is the ROLE's recorded one (NoCommitsIsFailure,
+// tick 19l), so a review's branch is held to a different rule than an
+// implementation's and the tests state which they mean.
+func newCollectHarnessRole(t *testing.T, role string) (*harness, *gitRepo, *subprocess.JobHandle, string) {
+	t.Helper()
 	h := newHarness(t)
 	repo := newGitRepo(t)
 	h.newExecutorWithRepo(t.TempDir(), repo.Clone)
 
 	spec := h.newSpec("keh")
 	spec.Source.BaseSHA = repo.Base
+	spec.Role = role
 	handle, err := h.ex.Start(spec)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -265,6 +275,80 @@ func TestCollectArchivesTheReportForTheNextAttempt(t *testing.T) {
 	}
 	if collected.Result.Outcome != subprocess.OutcomeFailed {
 		t.Errorf("outcome %q, want %q", collected.Result.Outcome, subprocess.OutcomeFailed)
+	}
+}
+
+// TestCollectRefusesAReportOnlyAttempt: the finding this tick absorbed
+// (73ba193d) as its acceptance criterion — a worker that did nothing still
+// leaves one commit beyond the base, because the container's own entrypoint
+// commits the report, so commits alone read it as ready-to-merge. The
+// collect must refuse it with the no-commits verdict and its OWN sentence,
+// the way the subprocess executor refuses a worker that committed nothing.
+//
+// short: local throwaway git repositories; no network, no container.
+func TestCollectRefusesAReportOnlyAttempt(t *testing.T) {
+	h, repo, handle, branch := newCollectHarness(t)
+	worker := repo.workerDir("worker")
+	// The branch a worker that did nothing leaves: no source, no tests —
+	// only the report its own entrypoint commits at the branch root, saying
+	// DONE over work that does not exist.
+	head := repo.commitOn(worker, branch, "commit the report", map[string]string{resultFile("keh"): reportBody})
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictNoCommits {
+		t.Errorf("verdict %q, want %q: a branch whose only commit is the worker's own report is "+
+			"the no-work shape in this substrate's terms, never a merge", collected.Verdict, subprocess.VerdictNoCommits)
+	}
+	if collected.Result.Outcome != subprocess.OutcomeFailed {
+		t.Errorf("outcome %q, want %q: a worker that did nothing did not succeed", collected.Result.Outcome,
+			subprocess.OutcomeFailed)
+	}
+	if !strings.Contains(collected.Message, "the container's own report") {
+		t.Errorf("the refusal does not say the only commit is the report — the sentence an empty branch reads is a "+
+			"lie about this one: %q", collected.Message)
+	}
+	// The report is still read and still archived: the refusal says what the
+	// worker CLAIMED, and a redispatch's prompt reads its analysis.
+	if !collected.HasReport || collected.Report.Status != subprocess.StatusDone {
+		t.Errorf("the report was not read: has=%v status=%q", collected.HasReport, collected.Report.Status)
+	}
+	// The role result carries the verdict the run acts on, which is the
+	// refusal — never the worker's own DONE over nothing.
+	if collected.Result.RoleResult == nil || collected.Result.RoleResult.Result["verdict"] != subprocess.VerdictNoCommits {
+		t.Errorf("the role result does not carry the refusal verdict: %+v", collected.Result.RoleResult)
+	}
+	// The collected head is still the branch's, a stated fact: the refusal is
+	// about the WORK, not a denial that the commit exists.
+	if collected.Result.Source.HeadSHA == nil || *collected.Result.Source.HeadSHA != head {
+		t.Errorf("the collected head is %v, want %s", collected.Result.Source.HeadSHA, head)
+	}
+}
+
+// TestCollectKeepsAReportOnlyReviewReadyToMerge: the role's recorded rule
+// (NoCommitsIsFailure, tick 19l) is part of the report-only verdict exactly
+// as it is of the empty-branch one — a review dispatched read-only whose
+// only commit is its report delivered its whole deliverable, and the new
+// check must not refuse every review this substrate dispatches.
+//
+// short: local throwaway git repositories; no network, no container.
+func TestCollectKeepsAReportOnlyReviewReadyToMerge(t *testing.T) {
+	h, repo, handle, branch := newCollectHarnessRole(t, "review-epic")
+	worker := repo.workerDir("worker")
+	repo.commitOn(worker, branch, "commit the report", map[string]string{resultFile("keh"): reportBody})
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictReadyToMerge {
+		t.Errorf("verdict %q, want %q: a review whose only commit is its report is the answer the role exists "+
+			"to deliver (%s)", collected.Verdict, subprocess.VerdictReadyToMerge, collected.Message)
+	}
+	if collected.Result.Outcome != subprocess.OutcomeSucceeded {
+		t.Errorf("outcome %q, want %q", collected.Result.Outcome, subprocess.OutcomeSucceeded)
 	}
 }
 

@@ -20,8 +20,10 @@ import type {
   SandboxProcessView,
 } from "../src/sandbox";
 import {
+  AdoptionModelUnknownError,
   attemptSandboxName,
   reportFromWorker,
+  type SandboxBootRecord,
   type SandboxExecutorDeps,
   type SandboxJobHandle,
   sandboxExecutor,
@@ -192,6 +194,11 @@ function bootInput(spec: AttemptSpec): WorkerBootInput {
     run_id: spec.run_id,
     gateway_base_url: "https://factory.example.com/api/gateway",
     gateway_token: "tkr_testtoken",
+    // The model the dispatch resolved, as the deployment's own boot composes
+    // it: the request's choice outranks the standing one, so a spec that
+    // names a different model is a container booted on a different one —
+    // exactly the adoption case the boot record exists for (tick dyo).
+    ...(spec.model === undefined ? {} : { model: spec.model }),
   };
 }
 
@@ -237,21 +244,59 @@ class FakeRefWriter implements GitRefWriter {
   }
 }
 
+/**
+ * The boot record the tests fill per case (tick dyo): what each attempt's
+ * container was booted on, keyed by identity, so the adoption's read is
+ * exercised against the same contract the deployed D1 wiring answers to.
+ */
+class FakeBootRecord implements SandboxBootRecord {
+  readonly recorded: Array<{ run_id: string; tick_id: string; attempt: number; model: string }> =
+    [];
+  readonly #byIdentity = new Map<string, string>();
+
+  /** Every boot the record holds, forgotten — a deployment that predates it. */
+  forget(): void {
+    this.#byIdentity.clear();
+  }
+
+  async record(boot: {
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+    model: string;
+  }): Promise<void> {
+    this.#byIdentity.set(`${boot.run_id}/${boot.tick_id}/${boot.attempt}`, boot.model);
+    this.recorded.push({ ...boot });
+  }
+
+  async modelOf(identity: {
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+  }): Promise<string | null> {
+    return (
+      this.#byIdentity.get(`${identity.run_id}/${identity.tick_id}/${identity.attempt}`) ?? null
+    );
+  }
+}
+
 /** The executor under test, wired over the fakes. */
 function makeExecutor() {
   const binding = new FakeSandboxes();
   const collector = new FakeCollector();
   const refs = new FakeRefWriter();
+  const boots = new FakeBootRecord();
   const deps: SandboxExecutorDeps = {
     binding,
     collector,
     refs,
     boot: async (spec) => bootInput(spec),
+    boots,
     // No wall clock: the fake containers answer the probes instantly, and
     // nothing here should ever depend on real waiting.
     spawn: { sleep: async () => {} },
   };
-  return { binding, collector, refs, executor: sandboxExecutor(deps) };
+  return { binding, collector, refs, boots, executor: sandboxExecutor(deps) };
 }
 
 /** Unwraps a handle into this executor's own shape. */
@@ -335,6 +380,53 @@ describe("start", () => {
     expect(binding.named("run-x-k4s-3").processes.length).toBe(before);
   });
 
+  it("an adoption names the RUNNING container's model, never the request's (tick dyo)", async () => {
+    const { binding, boots, executor } = makeExecutor();
+    const firstSpec: AttemptSpec = { ...SPEC, model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3" };
+    await executor.start(firstSpec);
+
+    // The boot the first start made is RECORDED before the container was
+    // addressed, so the model is durable the moment there is a container to
+    // ask about at all.
+    expect(boots.recorded).toEqual([
+      expect.objectContaining({
+        run_id: SPEC.run_id,
+        tick_id: SPEC.tick_id,
+        attempt: SPEC.attempt,
+        model: firstSpec.model,
+      }),
+    ]);
+    expect(binding.named("run-x-k4s-3").workProcess()?.env.TICKS_MODEL).toBe(firstSpec.model);
+
+    // A restarted incarnation whose profile now resolves a DIFFERENT model:
+    // the container still running the tick was booted on the first one, and
+    // the handle must state what the CONTAINER is on — never echo the new
+    // request back as the answer, which is how a record came to name a model
+    // nobody observed and the caller's model checks could never fire here.
+    const second = asHandle(
+      await executor.start({ ...SPEC, model: "workers-ai/@cf/example/some-other-model" }),
+    );
+    expect(second.handle.detail).toContain("adopted");
+    expect(second.handle.model).toBe(firstSpec.model);
+    expect(second.handle.model).not.toBe("workers-ai/@cf/example/some-other-model");
+    // And nothing re-recorded: an adoption boots nothing, so the boot that
+    // started the running container stays the one on record.
+    expect(boots.recorded).toHaveLength(1);
+  });
+
+  it("refuses an adoption whose running container has no recorded boot, rather than guessing", async () => {
+    const { boots, executor } = makeExecutor();
+    await executor.start(SPEC);
+
+    // A container booted by a deployment that did not record boots: the work
+    // process is live, and nobody can state which model it is on. Adopting it
+    // would put a guess in the one field every trace reads, so the start is
+    // refused for a person to settle — never a lie in a handle.
+    boots.forget();
+    await expect(executor.start(SPEC)).rejects.toBeInstanceOf(AdoptionModelUnknownError);
+    await expect(executor.start(SPEC)).rejects.toThrow(/cannot be stated/);
+  });
+
   it("reports a failed green-start probe as not launched, never as absent", async () => {
     const { binding, collector, refs } = makeExecutor();
     // A container whose probe never answers: nothing prints the marker and
@@ -362,6 +454,7 @@ describe("start", () => {
       collector,
       refs,
       boot: async (spec) => bootInput(spec),
+      boots: new FakeBootRecord(),
       spawn: { probe_timeout_ms: 10, probe_poll_ms: 1, sleep: async () => {} },
     });
 

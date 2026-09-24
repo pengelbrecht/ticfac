@@ -60,6 +60,7 @@ import type {
   AttemptStatus,
 } from "./attempt-protocol";
 import { containerGitToken, planSandboxGit } from "./credentials";
+import { recordSandboxAttemptBoot, type SandboxAttemptBoot, sandboxAttemptBootModel } from "./db";
 import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
 import { type GitRefWriter, gitRefWriter, writeRefBranch } from "./git-refs";
 import type { Env } from "./index";
@@ -169,7 +170,9 @@ export type SandboxHandlePayload = {
   /**
    * The model the container was booted with — its `TICKS_MODEL`, read off
    * the boot environment rather than restated (tick a08), so the record a
-   * caller keeps names the model that actually ran.
+   * caller keeps names the model that actually ran. For an ADOPTION (tick dyo)
+   * that is the recorded model of the boot that started the RUNNING work
+   * process — never an echo of the model the adopting request carried.
    */
   model: string;
   /**
@@ -248,6 +251,48 @@ function isJobHandle(value: unknown): value is SandboxJobHandle {
 export type SandboxBootSeam = (spec: AttemptSpec) => Promise<WorkerBootInput>;
 
 /**
+ * The durable record of what one attempt's container was booted on (tick dyo).
+ *
+ * An ADOPTION answers for a work process an earlier dispatch started, whose
+ * model THIS request never chose — a config edited between incarnations, a
+ * deployment redeployed mid-run — and the handle's `model` field must name
+ * the model the RUNNING container is on, never the one the new request
+ * carries, because the caller's record and its model checks read exactly
+ * that field. The process list cannot read a live process's environment, so
+ * the boot is RECORDED here, before the container is addressed, and an
+ * adoption READS it back: the door is the only party that boots under an
+ * identity, so its own durable record of what it commanded is what the
+ * container is on.
+ */
+export type SandboxBootRecord = {
+  /** Records the model one attempt's container boots on, keyed by identity. */
+  record(boot: SandboxAttemptBoot): Promise<void>;
+  /**
+   * Reads the model the named attempt's container was booted on, or null
+   * when no boot was recorded — a container an older deployment booted,
+   * which the adoption refuses on rather than guess about.
+   */
+  modelOf(identity: { run_id: string; tick_id: string; attempt: number }): Promise<string | null>;
+};
+
+/**
+ * The adoption that cannot tell the truth: a live work process exists under
+ * the identity, and no recorded boot says which model it is on. The door
+ * refuses the start rather than naming a model it cannot state — the caller
+ * holds the attempt for a person instead of recording a guess.
+ */
+export class AdoptionModelUnknownError extends Error {
+  constructor(identity: { run_id: string; tick_id: string; attempt: number }) {
+    super(
+      `the running container for ${identity.run_id}/${identity.tick_id}/attempt-${identity.attempt} ` +
+        "has no recorded boot, so the model it is on cannot be stated: it was booted by a deployment " +
+        "that did not record boots, and adopting it would name a model nobody observed",
+    );
+    this.name = "AdoptionModelUnknownError";
+  }
+}
+
+/**
  * What the executor is built from. Every dependency is a seam for the same
  * reason `SANDBOXES` is one: the four operations' mapping is the thing worth
  * testing, and a lifecycle exercisable only by starting a real container is
@@ -261,6 +306,12 @@ export type SandboxExecutorDeps = {
   refs: GitRefWriter;
   /** Boot inputs for one dispatch: repo URL, gateway credential, base SHA, image. */
   boot: SandboxBootSeam;
+  /**
+   * The durable record of what each attempt's container was booted on
+   * (tick dyo): written before the container is addressed, read by an
+   * adoption so its handle names the RUNNING container's model.
+   */
+  boots: SandboxBootRecord;
   /** Spawn knobs (sleep, log sinks, budgets) — the wave machinery's own. */
   spawn?: SpawnOptions;
 };
@@ -351,9 +402,25 @@ export async function startNamedAttempt(
   // Adoption first: a container already holding a live work process is this
   // attempt's, by the name nobody else would boot under, and starting a
   // second one beside it is how a run pays twice for one tick.
+  //
+  // The model the handle names on this path is the RUNNING container's, read
+  // from the record of the boot that started it (tick dyo) — never the model
+  // THIS request carries. Until that distinction was made, an adoption named
+  // the new dispatch's model over a container some other dispatch booted, and
+  // the caller's model check — the one that holds a container to the model its
+  // dispatch resolved, and with it the Workers-AI-only rule — could never
+  // fire here: the door was echoing the question back as the answer.
   const sandbox = await namedSandbox(deps.binding, name);
   const running = await findWorkProcess(sandbox);
   if (running !== null) {
+    const runningModel = await deps.boots.modelOf(spec);
+    if (runningModel === null || runningModel.trim() === "") {
+      // No recorded boot for a live work process: a container an older
+      // deployment booted. Adopting it would put an unstated model in a
+      // record every trace reads, so the start is refused and the caller
+      // holds the attempt — never a guess in a handle.
+      throw new AdoptionModelUnknownError(spec);
+    }
     const boot = await deps.boot(spec);
     return {
       handle: {
@@ -365,7 +432,7 @@ export async function startNamedAttempt(
         handle: {
           ...payload,
           base_sha: boot.base_sha,
-          model: bootedModel(boot),
+          model: runningModel,
           harness: bootedHarness(boot),
           process_id: running.id,
           launched: true,
@@ -377,6 +444,18 @@ export async function startNamedAttempt(
   }
 
   const boot = await deps.boot(spec);
+  // The boot is recorded BEFORE the container is addressed (deps.boot composes
+  // inputs; it touches no container), so a live work process can never exist
+  // without a durable record of the boot that started it — the record an
+  // adoption reads above, and the only honest answer to which model the
+  // running container is on (tick dyo).
+  await deps.boots.record({
+    run_id: spec.run_id,
+    tick_id: spec.tick_id,
+    attempt: spec.attempt,
+    model: bootedModel(boot),
+    at: new Date().toISOString(),
+  });
   const work = workerWorkSpec(boot);
   const task = { tick_id: spec.tick_id, branch: landing, base_sha: boot.base_sha };
   const spawned = await spawnWorker(deps.binding, name, task, work, deps.spawn);
@@ -843,6 +922,7 @@ export function sandboxExecutorDepsFromEnv(
       ...(env.ARTIFACTS === undefined || input.run_id === undefined
         ? {}
         : { spawn: { logs: workerLogSink(env.ARTIFACTS, input.project, input.run_id) } }),
+      boots: d1BootRecord(env.DB),
       boot: async (spec) => {
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
         // are parallel spenders, so a boot that rotated would cut every live
@@ -881,6 +961,22 @@ export function sandboxExecutorDepsFromEnv(
           factory_project: input.project,
         };
       },
+    },
+  };
+}
+
+/**
+ * The boot record over the factory's own D1 (tick dyo): the deployed wiring
+ * both the door and a Workflow-side executor share, behind the seam so the
+ * adoption's read is testable without a database.
+ */
+export function d1BootRecord(db: D1Database): SandboxBootRecord {
+  return {
+    async record(boot: SandboxAttemptBoot) {
+      await recordSandboxAttemptBoot(db, boot);
+    },
+    async modelOf(identity: { run_id: string; tick_id: string; attempt: number }) {
+      return sandboxAttemptBootModel(db, identity);
     },
   };
 }
