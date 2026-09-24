@@ -1664,6 +1664,20 @@ type planEntry struct {
 	// never something this run is holding, and guessing it closed would be
 	// guessing about a tracker nobody read.
 	BlockedBy []string
+
+	// Claimed is the tracker's own answer that the tick is in_progress: it
+	// holds a claim, and tk counts every claim under the epic against the
+	// width whoever holds it and whether or not this run's window is holding
+	// it (epic-yoh: cr4, lkd and ppt were claimed and not in the window). It is
+	// a graph fact like the wave, and is re-read with it.
+	Claimed bool
+
+	// InFlight marks a tick this run already has a live attempt of — a
+	// dispatched marker whose tick the checkpoint reads as dispatched,
+	// reported or integrated. A pass ADOPTS these before it claims anything
+	// new (runPlan), and admitting one takes no new claim and starts no new
+	// work, so the width and the graph boundaries do not stand in its way.
+	InFlight bool
 }
 
 // blockedBy reports whether this entry is sequenced behind one named tick.
@@ -1697,7 +1711,7 @@ func planFrom(graph tk.Graph) []planEntry {
 			out = append(out, planEntry{
 				TickID: task.ID, Title: task.Title, Wave: wave.Wave, Role: RoleOf(task),
 				Priority: task.Priority, Type: task.Type, Labels: task.Labels, Blocks: len(task.Blocks),
-				BlockedBy: openBlockers(task.BlockedBy, closed),
+				BlockedBy: openBlockers(task.BlockedBy, closed), Claimed: task.Status == "in_progress",
 			})
 		}
 	}

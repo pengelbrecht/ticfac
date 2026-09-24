@@ -305,7 +305,11 @@ func (r *Reconciler) beginTick(ctx context.Context, entry planEntry) (*inflightA
 	if err != nil {
 		return nil, err
 	}
-	return r.newInflight(entry, handle, executor, marker), nil
+	fl := r.newInflight(entry, handle, executor, marker)
+	// A nil handle with no error is claimDispatch's answer for an attempt that
+	// is already integrated: nothing to address, only a finish to run.
+	fl.integrated = handle == nil
+	return fl, nil
 }
 
 // claimDispatch is the dispatch, and the compare-and-swap in front of it.
@@ -373,6 +377,11 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// are evaluated in the same pass, and only a pass with no hold adopts.
 	var adoptable *runstate.Attempt
 	var adoptableMarker attemptHandle
+	// adoptableIntegrated says the attempt the pass will take is one whose
+	// rejection something else has since answered by MERGING its work: it is
+	// finished from the integration branch, never addressed through an
+	// executor again.
+	var adoptableIntegrated bool
 	for i := range mine {
 		existing := &mine[i]
 		marker := handleFromMap(existing.JobHandle)
@@ -409,7 +418,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
-		switch disposition, where := r.disposition(*existing, marker); disposition {
+		disposition, where := r.disposition(*existing, marker)
+		switch disposition {
 		case redispatchAttempt:
 			// SETTLED, and it produced nothing. Adopting it would re-collect
 			// the same refusal for as long as the run is restarted, so this is
@@ -447,7 +457,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// come back for. It is idempotent, and it keeps the branch.
 			r.tearDownSettled(marker, fmt.Sprintf(
 				"%s was rejected and holds commits nothing merged",
-				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)))
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)), true)
 			return nil, nil, marker, r.refuse(RefusedRejectedWork, tick,
 				"%s was rejected and the work it committed is still there — %s — and nothing merged "+
 					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
@@ -465,7 +475,35 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		if adoptable == nil {
 			adoptable = existing
 			adoptableMarker = marker
+			// A role job is acted on in one piece by processRoleJob, which
+			// already finishes an integrated attempt from the branch; only a
+			// tick the window finishes takes the executor-free path.
+			adoptableIntegrated = disposition == integratedAttempt && !isRoleJob(entry.Role)
 		}
+	}
+
+	// The attempt was rejected and its work is ALREADY on the integration
+	// branch — a person, or a resolve job, merged what this run refused to
+	// (epic-yoh: cr4's merge_failed, merged by hand). integrate.go already
+	// treats a contained head as integrated "whoever integrated it"; the
+	// resume must reach it WITHOUT adopting through the executor: the refusal
+	// tore the attempt down, and adopt() on a host that holds no state for it
+	// reads "the marker landed and the dispatch did not" and starts the worker
+	// again on work that is already merged — which the executor refuses,
+	// holding the tick forever. So nothing is addressed: the attempt joins the
+	// window settled, and the finish proves the containment, gates the epic
+	// head and closes.
+	if adoptable != nil && adoptableIntegrated {
+		r.setAttempt(tick, adoptable.Attempt)
+		// The tracker should say the tick is being worked while it is
+		// finished; a claim that cannot be replayed is recorded, never fatal —
+		// the work is merged either way.
+		_ = r.replayClaim(ctx, tick)
+		r.record(tick, StageAdopted,
+			"%s was rejected and its work is already on %s — something other than this run merged it; it is "+
+				"finished from there (gated on the epic head and closed) rather than addressed again",
+			attemptLabel(tick, tryOf(attempts, tick, adoptable.Attempt), adoptable.Attempt), r.branch)
+		return nil, nil, adoptableMarker, nil
 	}
 
 	// Appendix A #6: an attempt under this identity has already been
@@ -810,6 +848,13 @@ const (
 	// work is the only copy of what a person has to look at, and this run has
 	// nothing left to do to it.
 	holdAttemptWork
+
+	// integratedAttempt: it was REJECTED and its head is already CONTAINED in
+	// the integration branch on origin — merged by the run itself before a
+	// gate refused it, or by a person or a resolve job after a merge_failed.
+	// Either way the work is integrated: it is finished from the branch (gate
+	// the epic head, close), and nothing is asked of an executor.
+	integratedAttempt
 )
 
 // disposition decides which of the three an attempt on origin is.
@@ -826,9 +871,12 @@ const (
 // The third question is what separates a gate failure from every other
 // refusal: an attempt whose head the integration branch already CARRIES was
 // merged, and the thing that refused it was the gate over that merge or the
-// freshness check after it. That one is adopted, so that a person who fixed
-// the check or the tree gets the gate run again (gate.go's evidence key) rather
-// than a refusal about work that is already integrated.
+// freshness check after it — or a person, or a resolve job, merged it after
+// this run refused the merge (epic-yoh's cr4). That one is integrated, so that
+// a person who fixed the check, the tree or the conflict gets the gate run
+// again (gate.go's evidence key) rather than a refusal about work that is
+// already integrated. It is finished from the branch and never adopted through
+// the executor, whose attempt the refusal already tore down.
 func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) (attemptDisposition, string) {
 	if r.tickState(record.TickID) != "rejected" {
 		return adoptAttempt, ""
@@ -844,7 +892,7 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 	}
 	if remote != "" {
 		if r.integrated(remote) {
-			return adoptAttempt, ""
+			return integratedAttempt, ""
 		}
 		return holdAttemptWork, fmt.Sprintf("%s carries %s on %s, and %s does not have it",
 			branch, short(remote), r.opts.Remote, r.branch)
@@ -1238,18 +1286,32 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
 	}
 	// The marker and the claim are two effects, in that order, and adopting is
-	// what happens when a reconciler died between them.
-	r.replayClaim(ctx, marker.TickID)
+	// what happens when a reconciler died between them — or when the tracker
+	// REFUSED the claim, which leaves the same shape behind (epic-yoh's a08).
+	claimErr := r.replayClaim(ctx, marker.TickID)
 	state, found := findAttemptState(marker.StateRoot)
 	if !found {
+		// A worker is never started behind a claim the tracker refused: the
+		// run holds on the refusal exactly as a fresh dispatch does, and the
+		// attempt stays unstarted — and unspent — for the next resume.
+		if claimErr != nil {
+			return nil, nil, r.refuse(RefusedClaimWidth, marker.TickID,
+				"the tracker refused to claim %s while adopting %s, which never started: %v. The run is HELD, "+
+					"not failed: the attempt is not spent, and running the epic again under this run id starts it "+
+					"once the width frees", marker.TickID, r.attemptName(marker.TickID, marker.Attempt), claimErr)
+		}
 		// The marker landed and the dispatch did not: the previous reconciler
-		// died in the window the marker exists to make safe. Nothing is
-		// running, so this one starts it.
+		// died in the window the marker exists to make safe, or the tracker
+		// refused its claim. Nothing is running, so this one starts it — and
+		// the tick is in flight from here, which the next checkpoint carries
+		// (a resume reads a dispatched tick as one to adopt before anything
+		// new is claimed).
 		handle, err := executor.Start(r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, r.startFailure(marker.TickID, err)
 		}
 		r.noteAlive(marker.JobID)
+		r.setTick(marker.TickID, "dispatched")
 		return handle, executor, nil
 	}
 	handle := &subprocess.JobHandle{
@@ -1289,21 +1351,32 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 // A failure here is not fatal — the attempt exists either way, and refusing a
 // tick because its claim could not be replayed would strand work that is
 // already running.
-func (r *Reconciler) replayClaim(ctx context.Context, tick string) {
+//
+// It still REPORTS a width refusal, typed, because one caller must act on it:
+// an attempt whose marker landed and whose job never started is about to be
+// STARTED by adopt, and starting a worker the tracker just refused to count is
+// exactly the over-claim the refusal exists to stop (epic-yoh: a08's attempt
+// was left in that state by a claim_width refusal).
+func (r *Reconciler) replayClaim(ctx context.Context, tick string) error {
 	current, err := r.tracker.Show(ctx, tick)
 	if err != nil {
 		r.record(tick, StageAdopted, "the adopted attempt's tick could not be read from the tracker: %v", err)
-		return
+		return nil
 	}
 	if current.Status != "open" {
-		return
+		return nil
 	}
 	if _, err := r.tracker.Claim(ctx, tick, r.opts.Owner); err != nil {
 		r.record(tick, StageAdopted, "the adopted attempt's tick could not be claimed: %v", err)
-		return
+		var width *tk.ErrDispatchWidth
+		if errors.As(err, &width) {
+			return err
+		}
+		return nil
 	}
 	r.record(tick, StageClaimed,
 		"claimed for %s while adopting: the dispatch that made the marker never reached its claim", r.opts.Owner)
+	return nil
 }
 
 func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
@@ -1735,6 +1808,14 @@ type inflightAttempt struct {
 	// attempt it is honestly "since this incarnation first looked", which is
 	// the only thing a run that did not dispatch it can claim.
 	baseline time.Time
+
+	// integrated marks an attempt that was REJECTED and whose work is already
+	// on the integration branch — something other than this run merged it
+	// (epic-yoh's cr4, merged by hand after its merge_failed). It has no
+	// handle and no executor: there is nothing left to address, so it joins
+	// the window already settled and goes straight to the finish, which proves
+	// the containment again, gates the epic head and closes.
+	integrated bool
 }
 
 func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
@@ -2315,6 +2396,14 @@ func needsHuman(status string) bool {
 func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, marker attemptHandle) {
 	reason := fmt.Sprintf("%s is merged into %s and the tick is closed",
 		r.attemptName(marker.TickID, marker.Attempt), r.branch)
+	if handle == nil || executor == nil {
+		// An attempt finished from the integration branch without being
+		// addressed (it was already integrated): whatever this host still
+		// holds of it is torn down from its state, and a host holding none
+		// has nothing to tear down.
+		r.tearDownSettled(marker, reason, false)
+		return
+	}
 	r.tearDown(handle, executor, marker, reason, false)
 }
 
@@ -2370,11 +2459,15 @@ func (r *Reconciler) disposeRefused(handle *subprocess.JobHandle, executor Execu
 // a settlement rebuilds it, and no inspect is asked — there is nothing left to
 // ask about. Everything it does is idempotent, so a run that reaches this on
 // every resume revokes an already-dead credential and prunes an already-removed
-// worktree, and the BRANCH is always kept: those commits are the only copy.
+// worktree, and for a rejection the BRANCH is kept: those commits are the only
+// copy. The one other caller is cleanUp for an attempt finished from the
+// integration branch without being addressed, whose tick is closed and whose
+// commits the branch it was merged into already carries — that one passes
+// keepBranch false, as every close's cleanup does.
 //
 // A host that holds no state for the attempt has nothing to tear down, which is
 // what a restart on another machine looks like.
-func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
+func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string, keepBranch bool) {
 	state, found := findAttemptState(marker.StateRoot)
 	if !found {
 		return
@@ -2395,7 +2488,7 @@ func (r *Reconciler) tearDownSettled(marker attemptHandle, reason string) {
 		Attempt:       marker.Attempt,
 		Executor:      marker.Executor,
 		Handle:        map[string]any{"state": state},
-	}, executor, marker, reason, true)
+	}, executor, marker, reason, keepBranch)
 }
 
 // attemptCarriesWork asks the same question disposition asks of origin, of the

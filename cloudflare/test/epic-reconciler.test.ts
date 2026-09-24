@@ -2058,15 +2058,20 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
   });
 
   it("refuses to run a second Workflow that cannot take the publish slot, and writes nothing", async () => {
+    // A project of its own: the publish slot lives in a Durable Object keyed
+    // by project and shared by every test in this file, and a run an earlier
+    // test left holding it (seen on CI 2026-09-23: "expected to pre-hold the
+    // publish slot") would make this test measure that run, not this one.
+    const project = `${PROJECT}-slot-refused`;
     const contents = sharedContents();
     Object.assign(env, {
-      TICK_CONTENTS: { project: PROJECT, ref: BRANCH, store: contents },
+      TICK_CONTENTS: { project, ref: BRANCH, store: contents },
       TICFAC_RECONCILE_POLL_MS: 5,
     });
 
     // Pre-hold the repository's one publish slot with a run that is not this
     // one — the shape two concurrent runs of one epic actually take.
-    const room = env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(PROJECT));
+    const room = env.REPO_ROOMS.get(env.REPO_ROOMS.idFromName(project));
     const held = await room.acquireSlot({ run_id: "run_other", epic: EPIC_ID });
     if (!held.ok) throw new Error("expected to pre-hold the publish slot");
 
@@ -2076,7 +2081,7 @@ describe("one Workflow per EpicRun, driven by the engine", () => {
       params: {
         run_id: runID,
         epic_id: EPIC_ID,
-        project: PROJECT,
+        project,
         branch: BRANCH,
         poll_interval_ms: 5,
       },

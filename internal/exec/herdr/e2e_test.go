@@ -48,8 +48,19 @@ func TestARealTickRunsEndToEndThroughThisExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.State != subprocess.StateRunning {
-		t.Fatalf("the attempt inspecting as %s before the work: expected running", status.State)
+	// The fake agent's implement mode is a few shell commands, so on a loaded
+	// CI host it can finish its turn between the start and this first look
+	// (seen 2026-09-23 on PR #47: "inspecting as succeeded before the work").
+	// Either answer is the truth; what would be a lie is any other state, or
+	// succeeded while the agent is in fact still working.
+	switch status.State {
+	case subprocess.StateRunning:
+	case subprocess.StateSucceeded:
+		if !h.agentDone() {
+			t.Fatalf("the attempt inspected as succeeded while the agent is still working")
+		}
+	default:
+		t.Fatalf("the attempt inspecting as %s before the work: expected running (or succeeded, once the agent is done)", status.State)
 	}
 	if !waitForOr(t, "the agent to finish its turn", 30*time.Second, h.agentDone) {
 		h.dumpAgent(t)
