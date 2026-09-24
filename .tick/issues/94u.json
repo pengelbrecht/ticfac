@@ -2,13 +2,14 @@
   "id": "94u",
   "title": "The door's TypeScript collect refuses a report-only worker too",
   "description": "Absorbed from yoh finding a0447d05 (dyo). dyo made the Go cloudflare-sandbox executor refuse an attempt whose only commit is the worker's report. But cloudflare/src/worker-collect.ts, which sandbox-executor.ts still calls on the door's collect path (workerCollector, sandbox-executor.ts ~line 831), still merges a report-only worker. If the door's collect is what the Go executor relies on, dyo's guarantee is incomplete: a worker that did nothing can still read as ready-to-merge. Make the TS collect refuse it with the same verdict the Go side uses, or prove the Go side's refusal covers every path and delete the TS merge.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "yoh",
   "acceptance_criteria": "No collect path (Go executor or the door's TypeScript collect) reports a worker whose only commit is its report as ready-to-merge; a vitest drives a report-only worker through the door's collect and asserts the refusal; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T14:53:53.217169Z",
-  "updated_at": "2026-09-24T14:53:53.217169Z"
+  "updated_at": "2026-09-24T14:59:29.622938Z",
+  "started_at": "2026-09-24T14:59:29.622937Z"
 }

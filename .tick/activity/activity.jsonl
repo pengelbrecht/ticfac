@@ -1478,3 +1478,4 @@
 {"ts":"2026-09-24T14:53:53.218061Z","tick":"94u","action":"create","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"priority":1,"title":"The door's TypeScript collect refuses a report-only worker too","type":"task"}}
 {"ts":"2026-09-24T14:53:53.29477Z","tick":"r1t","action":"block","actor":"peter@engelbrecht.dk","epic":"yoh","data":{"blockers":["cs1","9iz","4lv","dyo","78v","0ye","94u"],"title":"Close out yoh: retro, and what the next epic is"}}
 {"ts":"2026-09-24T14:58:51.25217Z","tick":"4v4","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"Door adoption reports the harness the container was booted with, not the new request's","type":"task"}}
+{"ts":"2026-09-24T14:59:29.623308Z","tick":"94u","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The door's TypeScript collect refuses a report-only worker too"}}
