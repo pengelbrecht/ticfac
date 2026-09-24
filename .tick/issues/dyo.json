@@ -2,7 +2,7 @@
   "id": "dyo",
   "title": "The cloudflare-sandbox executor tells the truth on collect and adoption",
   "description": "Absorbed from yoh final-review findings 73ba193d (high) and 47e6e90d (cs1). collect merges an attempt whose only commit is the worker's own report, so a worker that did nothing reads as ready-to-merge. And adoption reports the model that was REQUESTED rather than the one the running container is on, so the Go model check (nwn) cannot fire for an adopted attempt. Both are the executor stating something it did not observe.",
-  "notes": "2026-09-24 16:52 - ticfac run epic-yoh: dyo try 1 (run dispatch #22) reported a finding drafted for triage — defect \"worker-collect.ts (the Workflow wave path's collect) still merges a report-only worker\" (key a0447d0556f7590dd181f0d617e41312dc4eba4feca3ff1af2fa08e50aeb7267, severity medium, for this repository). Triage with `ticfac finding yoh a0447d0556f7590dd181f0d617e41312dc4eba4feca3ff1af2fa08e50aeb7267 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
+  "notes": "2026-09-24 16:52 - ticfac run epic-yoh: dyo try 1 (run dispatch #22) reported a finding drafted for triage — defect \"worker-collect.ts (the Workflow wave path's collect) still merges a report-only worker\" (key a0447d0556f7590dd181f0d617e41312dc4eba4feca3ff1af2fa08e50aeb7267, severity medium, for this repository). Triage with `ticfac finding yoh a0447d0556f7590dd181f0d617e41312dc4eba4feca3ff1af2fa08e50aeb7267 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 17:01 - ticfac run epic-yoh: dyo try 1 (run dispatch #22) merged into epic/yoh as 5dd1b0e0ffc9; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -11,6 +11,6 @@
   "acceptance_criteria": "collect refuses an attempt whose commits are only the report (a distinct verdict, as the subprocess executor does); adoption reads and reports the running container's model and nwn's check applies to it; tests cover both; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:11:39.619593Z",
-  "updated_at": "2026-09-24T14:52:44.228554Z",
+  "updated_at": "2026-09-24T15:01:11.680348Z",
   "started_at": "2026-09-24T12:17:14.101908Z"
 }
