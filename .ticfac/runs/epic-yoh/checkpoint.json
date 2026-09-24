@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 167,
-  "state": "publishing",
-  "reason": "closing 78v behind the integrated gate on 7645a0500739",
-  "updated_at": "2026-09-24T13:07:48Z",
+  "sequence": 168,
+  "state": "running",
+  "reason": "78v is closed",
+  "updated_at": "2026-09-24T13:08:11Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -93,7 +93,7 @@
     },
     {
       "tick_id": "78v",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 20
     },
     {
