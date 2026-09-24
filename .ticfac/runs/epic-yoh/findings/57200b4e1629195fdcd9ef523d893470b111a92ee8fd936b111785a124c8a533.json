@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "cs1",
   "attempt": 18,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T11:35:26Z",
+  "triaged_at": "2026-09-24T12:12:53Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "b1t",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "cs1",
