@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 89,
-  "state": "running",
-  "reason": "a08 is closed",
-  "updated_at": "2026-09-24T05:53:17Z",
+  "sequence": 90,
+  "state": "dispatching",
+  "reason": "dispatching 6gr as attempt 14",
+  "updated_at": "2026-09-24T05:53:50Z",
   "ticks": [
     {
       "tick_id": "uqi",
