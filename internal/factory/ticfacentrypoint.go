@@ -77,6 +77,13 @@ const entrypointReDerive = "the vendored entrypoint changed shape under sandbox.
 // application is a refusal rather than two definitions of one function.
 const ticfacEntrypointMarker = "# >>> ticfac run-epic (tick hn0)"
 
+// ticfacEntrypointCloseMarker ends the inserted block. A constant rather
+// than a second line of the raw string below so the tests can extract the
+// block from the STAGED script by its markers and run exactly what the
+// image ships — finding 7be27471: proven through the staged script rather
+// than by reading it.
+const ticfacEntrypointCloseMarker = "# <<< ticfac run-epic (tick hn0)"
+
 // THE THREE ANCHORS, AND WHY EACH ONE IS A STOP.
 //
 // This rewrite is coupled to three structural facts about a file ticfac does
@@ -242,20 +249,19 @@ start_harness() {
 		die $EXIT_CONFIG "this image does not carry ${missing[*]} — the orchestrator IS ticfac, so there is nothing for this container to run. Rebuild the image from a deploy that stages it (internal/factory/ticfacbin.go)."
 	fi
 
-	# The workers this container dispatches are ` + "`pi`" + ` processes (tick xte),
-	# launched by the local-subprocess executor
-	# (internal/exec/subprocess/runner.go), and they inherit this environment.
-	# common.sh has already exported WORKERS_AI_BASE_URL — the gateway's
-	# workers-ai route — and set every vendor credential it knows to the run's
-	# gateway token, but pi reads its Workers AI credential under a name
-	# common.sh does not carry: its cloudflare-workers-ai provider reads
-	# CLOUDFLARE_API_KEY (pi's Providers doc). Exporting the run's token under
-	# that name is the one substitution this boot makes, and the executor's
-	# source grade preserves it through a read-only worker's environment
-	# (modelCredentialPrefixes, internal/exec/subprocess/grade.go) — so a
-	# worker's model call is the gateway-backed one the factory already pays
-	# for, metered against this run.
-	export CLOUDFLARE_API_KEY="$gateway_token"
+	# The workers this run dispatches run in their OWN containers (tick gbs).
+	# Every role resolves the CLOUD profile set — the --profiles flag below
+	# points run-epic at the profiles-cloudflare-sandbox/ the image installs at
+	# /usr/local/share/ticfac — whose executor is cloudflare-sandbox: one
+	# worker container per attempt, booted by this run's factory over its
+	# per-tick sandbox door, authenticated by TICKS_FACTORY_URL and
+	# TICKS_FACTORY_TOKEN above. No worker shares this container. The
+	# compiled-in profiles/ name executor local-subprocess, and dispatching
+	# with them is how the 2026-09-23 smoke tick ran every worker as a
+	# subprocess of the orchestrator's own container — the exact finding this
+	# tick closes. A worker's model credential is issued in ITS boot by the
+	# factory, from the run's own gateway token; this container hands the
+	# workers nothing but the door.
 
 	# Two requirements the claude worker used to impose on this boot are
 	# deliberately NOT here any more (tick mdw).
@@ -325,8 +331,17 @@ start_harness() {
 		--remote origin
 		--base "$base_sha"
 		--run-id "$run_id"
+		--profiles ` + cloudProfilesContainerPath + `
 		"$epic"
 	)
+
+	# --profiles is what makes this a CLOUD run (tick gbs): the compiled-in
+	# set is the LOCAL one — executor local-subprocess — and a run-epic that
+	# resolved it would dispatch every worker of this epic as a subprocess of
+	# this very container. The cloud set pairs every role with executor
+	# cloudflare-sandbox, so each worker boots in its own container through
+	# this run's factory, and the reconciler refuses at construction if the
+	# image did not carry the set — fail closed, before any tick is claimed.
 
 	# Started BEFORE the exec, watching this pid: exec keeps the pid, so the
 	# keeper is watching ticfac itself and dies when it does.
@@ -336,5 +351,4 @@ start_harness() {
 	# and its exit status is the run's exit status.
 	exec "${cmd[@]}"
 }
-# <<< ticfac run-epic (tick hn0)
-`
+` + ticfacEntrypointCloseMarker + "\n"

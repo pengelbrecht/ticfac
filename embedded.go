@@ -29,6 +29,26 @@ var BundleJSON []byte
 //go:embed profiles
 var ProfilesFS embed.FS
 
+// cloudProfilesFS is `profiles-cloudflare-sandbox/`: the cloud dispatch set
+// (tick njj), the directory a cloud orchestrator container points `ticfac
+// run-epic --profiles` at (tick gbs). It is not the compiled-in default a
+// plain `ticfac run-epic` resolves — that is `profiles/`, the LOCAL set a
+// laptop has — but it travels inside the executable for the same reason the
+// local set does: `ticfac factory deploy` stages it into the orchestrator
+// image's build context from THIS copy, so the profiles the container
+// resolves and the binaries it runs are the same commit by construction, and
+// a profile read off some other disk at deploy time cannot disagree with the
+// binary beside it.
+//
+//go:embed profiles-cloudflare-sandbox
+var cloudProfilesFS embed.FS
+
+// CloudProfiles returns the embedded cloud profile set. Paths inside it are
+// rooted at "profiles-cloudflare-sandbox".
+func CloudProfiles() embed.FS {
+	return cloudProfilesFS
+}
+
 // JobProtocolJSON is contracts/job-protocol.json, the schemas the reconciler
 // validates a role-result envelope against before it acts on one. Embedded for
 // the same reason: a controller run outside this checkout has no contracts
