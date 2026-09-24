@@ -1,0 +1,77 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "yoh",
+    "job_id": "run-epic-yoh/tick-r1t/attempt-25",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "d3b9c83ef73b8496dcb70dbde672ee82ad189817",
+    "tick_id": "r1t"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "yoh set out to delete the contents-API write path, but cloudflare/src/git-contents.ts survives as repo-room.ts's publish mechanism (create/update against one ref over the contents API). That keeps alive the defect class yoh named (99f: the ref goes in the query on a read and in the body on a write) on the one path still using it. Either move the publish into the container's git or record why the room must keep the API.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Decide whether the repo room's publish still needs the GitHub contents API now the orchestrator has a clone"
+      },
+      {
+        "body": "u9h (dha's live gate run) still says to run an epic 'through EpicReconcilerWorkflow', which yoh deleted. It is also now the only place yoh's acceptance (ticfac drives a cloud epic in the container; a killed orchestrator re-derives from the remote) is proven live. Its acceptance should name that run: SIGTERM flush of a startProcess'd orchestrator, adoption after a mid-run restart, waitForEvent timeout concluded from the branch.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Restate u9h's gate run for the yoh shape: ticfac run-epic in the container, not EpicReconcilerWorkflow"
+      },
+      {
+        "body": "In yoh, the same host-dependent runstate maintenance fixture failure was drafted as a separate finding by nine ticks (all later promoted to pqs), and 9iz re-drafted b1t's wall-bound gap. Each duplicate costs a triage step on a run that is meant to be unattended. Keying findings on the failing test or symbol and suppressing re-drafts of an open one would remove that load.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A finding that reproduces at the base is matched against existing findings and ticks before it is drafted"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-yoh/tick-r1t/attempt-25",
+      "commits": 1,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-yoh/r1t/RESULT-r1t.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "five yoh findings are still untriaged (55f3f8d2 upstream-high, b21c18d0 = b1t, 127240d6, aee05bd7, 240bad07); PR #51 showed CONFLICTING/DIRTY on GitHub at bb28ce14 with go/ts CI re-running, although a local merge-tree against main is clean; yoh's acceptance items 1 and 3 are unproven live until u9h runs"
+  },
+  "validated": true,
+  "requested_at": "2026-09-24T16:31:45Z",
+  "answered_at": "2026-09-24T16:31:45Z",
+  "provenance": {
+    "run_id": "epic-yoh",
+    "tick_id": "r1t",
+    "attempt": 25,
+    "source_ref": "refs/heads/epic/yoh",
+    "source_sha": "d3b9c83ef73b8496dcb70dbde672ee82ad189817",
+    "integration_ref": "refs/heads/epic/yoh",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
