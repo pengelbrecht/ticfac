@@ -64,6 +64,7 @@ type startRequest struct {
 	BaseRef  string `json:"base_ref"`
 	Title    string `json:"title"`
 	BaseSHA  string `json:"base_sha"`
+	Model    string `json:"model"`
 }
 
 // startResponse is the door's answer to a start: the handle, and whether the
@@ -111,6 +112,10 @@ type cloudflareHandle struct {
 	Project   string  `json:"project"`
 	BaseRef   string  `json:"base_ref"`
 	Title     string  `json:"title"`
+	// Model is the model the door booted the container on — its TICKS_MODEL,
+	// named back by the door (tick a08). Empty on a handle from a door that
+	// predates the field.
+	Model string `json:"model,omitempty"`
 }
 
 // local decodes the executor-private half of a handle, refusing one that
@@ -252,6 +257,12 @@ type attemptRecord struct {
 	BaseRef   string  `json:"base_ref"`
 	Title     string  `json:"title"`
 
+	// Model is the model the attempt's worker was booted on, as the door
+	// named it back (tick a08). Start refuses a handle naming any model but
+	// the one the dispatch asked for, so this is both what was asked and what
+	// ran.
+	Model string `json:"model,omitempty"`
+
 	// Adopted says the door's start route found a live work process under
 	// this identity and adopted it rather than booting a rival.
 	Adopted bool `json:"adopted"`
@@ -281,6 +292,7 @@ func (r *attemptRecord) payload() *cloudflareHandle {
 		Project:   r.Project,
 		BaseRef:   r.BaseRef,
 		Title:     r.Title,
+		Model:     r.Model,
 	}
 }
 
@@ -398,6 +410,11 @@ func validateDoorFields(req *startRequest) error {
 	if !titleFieldPattern.MatchString(req.Title) {
 		return fmt.Errorf("title is not a non-empty printable ASCII string the door reads (spaces allowed, at " +
 			"most 512 characters)")
+	}
+	if !plainFieldPattern.MatchString(req.Model) {
+		return fmt.Errorf("model %q is not a non-empty printable ASCII string the door reads: the door boots the "+
+			"worker on the model the profile resolved, and a start that names none would run the factory's own "+
+			"default under a record that names nothing", req.Model)
 	}
 	if !baseSHAPattern.MatchString(req.BaseSHA) {
 		return fmt.Errorf("base_sha %q is not the full 40-character commit the attempt's container clones at", req.BaseSHA)

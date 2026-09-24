@@ -53,14 +53,11 @@ func knownExecutors() []reconcile.KnownExecutor {
 			// The cloud executor (tick xev): the runner names a KIND the
 			// sandbox image can run a harness for, and the poll cadence is the
 			// executor's own five minutes, because on that substrate the poll
-			// IS the keepalive. The MODEL a profile names is accepted rather
-			// than refused, with the gap named rather than hidden: the dispatch
-			// door carries no model field, so the model that actually serves
-			// the worker is the factory's own routing — the recorded model
-			// rests on the factory agreeing, the standing finding against
-			// tick njj — and refusing it here would make every cloud profile
-			// (the ones njj paired with this executor) unusable, which is the
-			// exact gap this registration closes.
+			// IS the keepalive. Any MODEL a profile names is accepted: the
+			// dispatch door carries it (tick a08), the worker container boots
+			// on it, and the executor refuses a handle naming any other — so
+			// the recorded model is the one that ran, not the factory's own
+			// default agreeing with it by luck.
 			Name:         cloudflaresandbox.ExecutorName,
 			Runners:      runconfig.KnownKinds(),
 			AcceptsModel: func(string) bool { return true },
@@ -138,10 +135,14 @@ func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substr
 		EpicID:     d.EpicID,
 		BaseRef:    d.BaseRef,
 		Title:      d.Title,
-		Attempt:    d.Attempt,
-		StateDir:   d.StateDir,
-		Repo:       d.Repo,
-		Remote:     d.Remote,
+		// The model the profile resolved crosses the door (tick a08): the
+		// worker is booted on it and the handle names it back, so the model
+		// the dispatch records is the model that ran.
+		Model:    d.Profile.Model,
+		Attempt:  d.Attempt,
+		StateDir: d.StateDir,
+		Repo:     d.Repo,
+		Remote:   d.Remote,
 	})
 	if err != nil {
 		return nil, reconcile.Substrate{}, err

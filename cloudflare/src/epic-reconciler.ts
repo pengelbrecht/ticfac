@@ -89,6 +89,14 @@ export type AttemptSpec = {
   write_ref: string;
   base_ref: string;
   title: string;
+  /**
+   * The model this attempt's worker must run on, when the dispatcher resolved
+   * one (tick a08): the sandbox dispatch door carries the profile's model, and
+   * a boot that has one outranks the deployment's standing `RUN_WORKER_MODEL`
+   * — a choice about this attempt beats a standing one. Absent is the
+   * Workflow's own dispatch, which still boots on the per-run ladder.
+   */
+  model?: string;
 };
 
 /** The JobHandle the executor's start returned (SPEC 4.3); opaque here. */

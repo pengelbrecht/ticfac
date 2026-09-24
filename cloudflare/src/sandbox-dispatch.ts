@@ -62,6 +62,7 @@
  * | `base_ref` | the epic's base branch, for the same re-derivation. |
  * | `title` | the tick's title, carried for the same re-derivation. |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
+ * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — the worker container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`, and the handle's `model` names it back. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran (the factory defaults once disagreed with the profiles — omp/DeepSeek against pi/GLM). |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -81,8 +82,8 @@
  * `$defs.job_handle`): the closed top level of identity and executor name
  * (`cloudflare-sandbox`), the issue time, and the one open `handle` object
  * carrying this substrate's private addressing — the container's name, the
- * work process id, the base, the per-attempt landing branch and the
- * write_ref. A caller re-derives NOTHING from it that the state route below
+ * work process id, the base, the per-attempt landing branch, the
+ * write_ref, and the `model` the container was booted with. A caller re-derives NOTHING from it that the state route below
  * cannot also answer from identity alone; the handle is for the record, not
  * for addressing (a client on the far side of HTTP cannot carry a live
  * Sandbox object any more than a Workflow step can).
@@ -205,7 +206,7 @@ function fromDenial(denial: GatewayDenial): SandboxDispatchResult {
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
- * An identifier or a reference (`role`, `write_ref`, `base_ref`): printable
+ * An identifier or a reference (`role`, `write_ref`, `base_ref`, `model`): printable
  * ASCII, NO whitespace, bounded — these name things (a role, a git ref) and
  * ride environment variables into the container, and a name that contains a
  * space is a name nothing downstream can use.
@@ -312,6 +313,11 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   if (typeof baseRef !== "string") return baseRef;
   const title = text("title", raw.title, TITLE_FIELD_PATTERN);
   if (typeof title !== "string") return title;
+  // The model the caller resolved (tick a08). Required, and booted as given:
+  // a door that fell back to the deployment's own model here would hand the
+  // caller a handle for a worker running something its records do not name.
+  const model = text("model", raw.model, PLAIN_FIELD_PATTERN);
+  if (typeof model !== "string") return model;
 
   // Not the run's submitted base: the caller names the commit this attempt's
   // worker must clone at, which for a later wave is the run branch head that
@@ -374,6 +380,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     write_ref: writeRef,
     base_ref: baseRef,
     title,
+    model,
   };
 
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container

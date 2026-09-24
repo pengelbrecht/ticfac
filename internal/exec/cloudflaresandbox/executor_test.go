@@ -62,6 +62,7 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 		"base_sha":  "0123456789abcdef0123456789abcdef01234567",
 		"write_ref": h.spec.Source.WriteRef,
 		"title":     "A cloudflare-sandbox executor that returns a handle, not a result",
+		"model":     testModel,
 	} {
 		if got := body[field]; got != want {
 			t.Errorf("the start body's %q is %v, want %v", field, got, want)

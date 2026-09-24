@@ -82,6 +82,7 @@ import {
   attemptLandingBranch,
   WORKER_COMMAND,
   type WorkerBootInput,
+  workerBootEnv,
   workerHarness,
   workerModel,
   workerWorkSpec,
@@ -172,6 +173,12 @@ export type SandboxHandlePayload = {
   project: string;
   base_ref: string;
   title: string;
+  /**
+   * The model the container was booted with — its `TICKS_MODEL`, read off
+   * the boot environment rather than restated (tick a08), so the record a
+   * caller keeps names the model that actually ran.
+   */
+  model: string;
 };
 
 /**
@@ -324,7 +331,7 @@ export async function startNamedAttempt(
   // container pushes lands on no other attempt's branch, so a redispatch
   // starts from the base it was given, not from the previous attempt's work.
   const landing = attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id);
-  const payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail"> = {
+  const payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model"> = {
     sandbox: name,
     base_sha: "",
     branch: landing,
@@ -355,6 +362,7 @@ export async function startNamedAttempt(
         handle: {
           ...payload,
           base_sha: boot.base_sha,
+          model: bootedModel(boot),
           process_id: running.id,
           launched: true,
           detail: "adopted: this container's work process was already running",
@@ -378,6 +386,7 @@ export async function startNamedAttempt(
       handle: {
         ...payload,
         base_sha: boot.base_sha,
+        model: bootedModel(boot),
         process_id: spawned.process_id,
         launched: spawned.launched,
         detail: spawned.detail,
@@ -385,6 +394,16 @@ export async function startNamedAttempt(
     },
     adopted: false,
   };
+}
+
+/**
+ * The model a container booted from these inputs runs on: the `TICKS_MODEL`
+ * its environment carries, derived by the same function that builds that
+ * environment, so the handle cannot name one model while the container was
+ * told another.
+ */
+function bootedModel(boot: WorkerBootInput): string {
+  return workerBootEnv(boot).TICKS_MODEL ?? "";
 }
 
 // ---------------------------------------------------------------- inspect ---
@@ -807,7 +826,10 @@ export function sandboxExecutorDepsFromEnv(
           gateway_base_url: runGatewayEndpoint(factory as string),
           gateway_token: credential.token,
           harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
-          model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
+          // The dispatch's own model first (tick a08): the door carries the
+          // model the caller's profile resolved, and a choice about this
+          // attempt outranks the deployment's standing one.
+          model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
           github_token: containerGitToken(git.plan, env.GITHUB_TOKEN, credential.token),
           sandbox_image: deploymentImage(env),
           factory_url: factory as string,
