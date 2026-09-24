@@ -160,7 +160,18 @@ func TestFactoryGroupHelpMentionsItsCommands(t *testing.T) {
 // for is gone. What is still worth asserting is that they reach their real
 // handlers rather than the dispatcher's unknown-subcommand arm: an unknown name
 // exits 2 with usage, and these two do not.
+//
+// The handlers are REAL, so the test isolates them exactly as its siblings in
+// factory_test.go do: an empty PATH, a temp TK_HOME and an empty working
+// directory leave no wrangler anywhere the resolver looks, and each command
+// stops at the wrangler prerequisite (exit 1). Without that, on a machine
+// where wrangler is reachable, `factory deploy` staged into the operator's
+// real ~/.tick/factory and ran a live `wrangler deploy` — remote D1
+// migrations and a container image push — from inside `go test -short`.
 func TestFactoryDeployAndSetupAreWired(t *testing.T) {
+	t.Setenv("TK_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Chdir(t.TempDir())
 	for _, name := range []string{"deploy", "setup"} {
 		code, _, stderr := runCloudArgs(t, []string{"factory", name})
 		if code == exitUsage {
