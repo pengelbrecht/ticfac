@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 53,
-  "state": "running",
-  "reason": "l6t is running as attempt 10",
-  "updated_at": "2026-09-24T05:03:41Z",
+  "sequence": 54,
+  "state": "collecting",
+  "reason": "collecting lkd attempt 5",
+  "updated_at": "2026-09-24T05:15:13Z",
   "ticks": [
     {
       "tick_id": "uqi",
