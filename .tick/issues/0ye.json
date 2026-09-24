@@ -2,6 +2,7 @@
   "id": "0ye",
   "title": "Every step of superviseRun that can throw still ends in finalize",
   "description": "Absorbed from yoh finding 5882bf18 (4lv). 4lv made a boot step that exhausts its retries reach finalize. superviseRun's context and progress steps can still throw past finalize the same way, leaving tokens unrevoked, the run row unsettled and containers unswept. The Workflow's job after yoh is boot, budget, watch, retry, FINALIZE, so every throwing step must reach it.",
+  "notes": "2026-09-24 15:41 - ticfac run epic-yoh: 0ye try 1 (run dispatch #23) merged into epic/yoh as 0f01c4a7a997; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "Every step of superviseRun that can throw ends in finalize with a reason naming the step (a single try/finally or equivalent); a vitest throws from the context and progress steps and asserts finalize ran; go and ts gates pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:56:11.997221Z",
-  "updated_at": "2026-09-24T13:01:24.580754Z",
+  "updated_at": "2026-09-24T13:41:31.067672Z",
   "started_at": "2026-09-24T13:01:24.580753Z"
 }
