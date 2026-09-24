@@ -2,7 +2,7 @@
   "id": "r1t",
   "title": "Close out yoh: retro, and what the next epic is",
   "notes": "2026-09-24 18:31 - ticfac run epic-yoh: r1t try 1 (run dispatch #25) reported a finding drafted for triage — proposed-tick \"Decide whether the repo room's publish still needs the GitHub contents API now the orchestrator has a clone\" (key ddb0679f985aec3fa9336297682a1d0633c3845b73d26f00ddc02d33f6b5ae52, severity medium, for this repository). Triage with `ticfac finding yoh ddb0679f985aec3fa9336297682a1d0633c3845b73d26f00ddc02d33f6b5ae52 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 18:31 - ticfac run epic-yoh: r1t try 1 (run dispatch #25) reported a finding drafted for triage — proposed-tick \"Restate u9h's gate run for the yoh shape: ticfac run-epic in the container, not EpicReconcilerWorkflow\" (key d6036ef1f3a81fbb122836a21cfaad6026470f8d6c259282605b78ce1aa8189c, severity medium, for this repository). Triage with `ticfac finding yoh d6036ef1f3a81fbb122836a21cfaad6026470f8d6c259282605b78ce1aa8189c --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 18:31 - ticfac run epic-yoh: r1t try 1 (run dispatch #25) reported a finding drafted for triage — proposed-tick \"A finding that reproduces at the base is matched against existing findings and ticks before it is drafted\" (key 2883b0632c82d8aa73c36783a140fb82e6acdea21a1ac3b73da504a396ee328e, severity low, for this repository). Triage with `ticfac finding yoh 2883b0632c82d8aa73c36783a140fb82e6acdea21a1ac3b73da504a396ee328e --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-24 19:06 - ticfac run epic-yoh: r1t try 1 (run dispatch #25) merged into epic/yoh as b200a61209cd; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -19,6 +19,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:53.358546Z",
-  "updated_at": "2026-09-24T17:06:20.299458Z",
-  "started_at": "2026-09-24T16:26:34.535433Z"
+  "updated_at": "2026-09-24T17:06:23.753409Z",
+  "closed_at": "2026-09-24T17:06:23.753409Z"
 }
