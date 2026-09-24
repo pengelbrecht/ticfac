@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 160,
-  "state": "publishing",
-  "reason": "closing 4lv behind the integrated gate on c9b67641ee01",
-  "updated_at": "2026-09-24T13:00:24Z",
+  "sequence": 161,
+  "state": "running",
+  "reason": "4lv is closed",
+  "updated_at": "2026-09-24T13:00:48Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -88,7 +88,7 @@
     },
     {
       "tick_id": "4lv",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 19
     },
     {
