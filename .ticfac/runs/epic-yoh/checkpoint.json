@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 217,
+  "sequence": 218,
   "state": "running",
-  "reason": "the epic PR #51 (epic/yoh → main) is open; close-out of yoh waits on CI",
-  "updated_at": "2026-09-24T16:49:59Z",
+  "reason": "no check runs yet on the epic PR #51; the close-out of yoh waits for CI to appear",
+  "updated_at": "2026-09-24T16:50:08Z",
   "ticks": [
     {
       "tick_id": "uqi",
