@@ -1,0 +1,13 @@
+{
+  "id": "4v4",
+  "title": "Door adoption reports the harness the container was booted with, not the new request's",
+  "description": "From the dyo/9iz merge (2026-09-24). dyo made adoption report the RUNNING container's model, read from the D1 boot record (migration 0014). The harness on adoption still echoes the new request, because the boot record keeps no harness. Add a harness column to the boot record, report the recorded harness on adoption, and have the Go executor check it the way it checks the model. Not gating yoh: the Workers-AI rule is enforced on the model, and a claude harness cannot reach a Workers AI model through the gateway, but an attempt record should never state a harness nobody observed.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "The boot record stores the harness; adoption reports the recorded harness; the Go executor refuses an adoption whose recorded harness differs from the dispatch's; tests cover it; go and ts gates pass",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-24T14:58:51.251644Z",
+  "updated_at": "2026-09-24T14:58:51.251644Z"
+}
