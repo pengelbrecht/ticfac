@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 111,
-  "state": "dispatching",
-  "reason": "dispatching dl8 as attempt 17",
-  "updated_at": "2026-09-24T08:20:24Z",
+  "sequence": 112,
+  "state": "running",
+  "reason": "dl8 is running as attempt 17",
+  "updated_at": "2026-09-24T08:20:41Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -64,7 +64,8 @@
     },
     {
       "tick_id": "dl8",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 17
     },
     {
       "tick_id": "6gr",
