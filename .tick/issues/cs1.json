@@ -1,10 +1,10 @@
 {
   "id": "cs1",
   "title": "Final review of the yoh diff",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "mn7",
     "l6t",
@@ -21,5 +21,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:53.311427Z",
-  "updated_at": "2026-09-24T08:15:38.563306Z"
+  "updated_at": "2026-09-24T11:17:30.803749Z",
+  "started_at": "2026-09-24T11:17:30.803749Z"
 }
