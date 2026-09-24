@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 119,
-  "state": "integrating",
-  "reason": "integrating 3ed attempt 15 into epic/yoh",
-  "updated_at": "2026-09-24T08:33:52Z",
+  "sequence": 120,
+  "state": "gating",
+  "reason": "running the integrated gate for 3ed on 57ab7fb78300",
+  "updated_at": "2026-09-24T08:34:17Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -82,7 +82,7 @@
     },
     {
       "tick_id": "3ed",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 15
     }
   ],
