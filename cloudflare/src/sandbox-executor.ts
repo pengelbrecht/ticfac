@@ -689,6 +689,18 @@ export function reportFromWorker(report: WorkerReport): AttemptReport {
       detail: `the durable layer could not be read (${report.detail}); the evidence is not a verdict`,
     };
   }
+  // A report-only refusal carries the collect's own sentence, never the
+  // worker's status line (tick 94u): the line would read "no-commits:
+  // STATUS: DONE" — the collapsed message A9 refuses, the worker's claim
+  // where the operator needs the diagnosis. The sentence names the one
+  // commit there was.
+  if (report.report_only) {
+    return {
+      outcome: "failed",
+      commits: report.commits,
+      detail: `${report.verdict}: ${report.detail}`,
+    };
+  }
   return {
     outcome: "failed",
     commits: report.commits,

@@ -37,7 +37,12 @@ import {
   WORKER_PROBE_MARKER,
   type WorkerBootInput,
 } from "../src/worker-boot";
-import type { WorkerCollector, WorkerReport, WorkerTask } from "../src/worker-collect";
+import {
+  githubWorkerCollector,
+  type WorkerCollector,
+  type WorkerReport,
+  type WorkerTask,
+} from "../src/worker-collect";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // --------------------------------------------------------------- the fakes ---
@@ -220,6 +225,7 @@ class FakeCollector implements WorkerCollector {
     status_detail: "the work is in",
     status_line: "STATUS: DONE",
     boundary_files: [],
+    report_only: false,
     detail: "ready",
   };
   readonly asked: WorkerTask[] = [];
@@ -671,6 +677,7 @@ describe("reportFromWorker", () => {
     status_detail: "in",
     status_line: "STATUS: DONE",
     boundary_files: [],
+    report_only: false,
     detail: "ready",
   };
 
@@ -700,6 +707,100 @@ describe("reportFromWorker", () => {
     const report = reportFromWorker({ ...base, verdict: "unknown", commits: 0 });
     expect(report.outcome).toBe("failed");
     expect(report.detail).toContain("could not be read");
+  });
+});
+
+// --------------------------------------------- the door's collect, tick 94u ---
+
+// The door's collect must refuse a worker whose only commit is its report
+// with the same verdict the Go executor's collect refuses it with (tick dyo,
+// finding 73ba193d): the container's entrypoint commits the report itself
+// (image/worker.sh), so "one commit, and it is the report" is the did-nothing
+// shape on this substrate — and until tick 94u this was the one collect path
+// that could still read it as done.
+//
+// Driven through the REAL collector over a stubbed GitHub — the whole door
+// path (write-ref push, collect, the AttemptReport mapping), not a fake that
+// already agrees — so the refusal is proven on the wiring a deployment runs.
+describe("the door's collect refuses a report-only worker (tick 94u)", () => {
+  const API = "https://github.example.test";
+  const PROJECT = "acme/project";
+  const saved: Record<string, unknown> = {};
+
+  /** Sets a deployment variable for this describe, restored after each test. */
+  function set(name: string, value: unknown): void {
+    if (!(name in saved)) saved[name] = (env as unknown as Record<string, unknown>)[name];
+    (env as unknown as Record<string, unknown>)[name] = value;
+  }
+  afterEach(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete (env as unknown as Record<string, unknown>)[name];
+      else (env as unknown as Record<string, unknown>)[name] = value;
+      delete saved[name];
+    }
+  });
+
+  /** UTF-8-safe base64, matching how GitHub actually encodes file contents. */
+  function b64(text: string): string {
+    const bytes = new TextEncoder().encode(text);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
+  /** Stubs GitHub's compare and contents endpoints with one report-only branch. */
+  function stubReportOnlyGithub(): () => void {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!url.startsWith(API)) return original(input as RequestInfo, init);
+      // One commit beyond the base, and its only change is the report the
+      // container's own entrypoint committed — the shape a worker that did
+      // nothing leaves on this substrate.
+      if (url.includes("/compare/")) {
+        return Response.json(
+          { ahead_by: 1, files: [{ filename: "RESULT-k4s.md" }] },
+          { status: 200 },
+        );
+      }
+      if (url.includes("/contents/")) {
+        return Response.json({ content: b64("STATUS: DONE"), encoding: "base64" }, { status: 200 });
+      }
+      return new Response("unexpected request in test", { status: 500 });
+    }) as typeof fetch;
+    return () => void (globalThis.fetch = original);
+  }
+
+  it("refuses it — never done — with the sentence that names the one commit", async () => {
+    set("GITHUB_API_BASE_URL", API);
+    set("GITHUB_TOKEN", "ghp_repo_scoped");
+    const restore = stubReportOnlyGithub();
+    try {
+      const deps: SandboxExecutorDeps = {
+        binding: new FakeSandboxes(),
+        // The REAL collector, reading a stubbed GitHub: the refusal has to
+        // come from the collect the deployment wires, not from a fake.
+        collector: githubWorkerCollector(env, PROJECT),
+        refs: new FakeRefWriter(),
+        boot: async (spec) => bootInput(spec),
+        boots: new FakeBootRecord(),
+        spawn: { sleep: async () => {} },
+      };
+      const executor = sandboxExecutor(deps);
+      const handle = await executor.start(SPEC);
+      const report = await executor.collect(handle);
+      // The refusal: a worker whose only commit is its report is failed, the
+      // same outcome the Go executor settles from its own no-commits.
+      expect(report.outcome).toBe("failed");
+      // And the sentence names the shape rather than collapsing to the
+      // worker's own claim — "no-commits: STATUS: DONE" is the collapsed
+      // message A9 refuses, and it is what the status line would have shown.
+      expect(report.detail).toContain("no-commits");
+      expect(report.detail).toContain("RESULT-k4s.md");
+      expect(report.detail).toContain("not a deliverable");
+    } finally {
+      restore();
+    }
   });
 });
 
