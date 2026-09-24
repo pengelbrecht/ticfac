@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 79,
-  "state": "running",
-  "reason": "nwn try 1 (run dispatch #11) is rejected (missing-result): there is no report at the path this executor owns, so the attempt never said what it did",
-  "updated_at": "2026-09-24T05:35:41Z",
+  "sequence": 80,
+  "state": "failed",
+  "reason": "nwn try 1 (run dispatch #11) is missing-result: there is no report at the path this executor owns, so the attempt never said what it did",
+  "updated_at": "2026-09-24T05:35:47Z",
   "ticks": [
     {
       "tick_id": "uqi",
