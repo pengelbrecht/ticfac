@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 90,
-  "state": "dispatching",
-  "reason": "dispatching 6gr as attempt 14",
-  "updated_at": "2026-09-24T05:53:50Z",
+  "sequence": 91,
+  "state": "running",
+  "reason": "6gr is running as attempt 14",
+  "updated_at": "2026-09-24T05:54:12Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -67,7 +67,8 @@
     },
     {
       "tick_id": "6gr",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 14
     },
     {
       "tick_id": "cs1",
