@@ -50,7 +50,6 @@ import { WORKER_COMMAND, WORKER_PROBE_MARKER } from "../../src/worker-boot";
 // SANDBOXES namespace (the fake below plays that binding), so the class is
 // present but never addressed.
 export {
-  EpicReconcilerWorkflow,
   RepoRoom,
   RunRoom,
   RunWorkflow,
