@@ -2,10 +2,10 @@
   "id": "6gr",
   "title": "Prove sandbox adoption end to end through the real Go executor and the real door",
   "description": "Triaged 2026-09-23 from xte's close-out, which held on untriaged findings; the finding keys it absorbs are in this tick's notes. xte was merged as building blocks (operator's choice B) and its unmet goal moved here, because it is the same single cloud path yoh reconciles.\n\navx proved adoption with fixtures; dccd84cf asks for the real thing: a restarted orchestrator re-derives, finds a sandbox still running its tick through the real door, and adopts it rather than dispatching a rival. Unreachable must still not read as absent.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "xev",
     "a08"
@@ -14,5 +14,6 @@
   "acceptance_criteria": "A test drives the real Go executor against the real door (miniflare): an attempt is dispatched, the orchestrator is restarted, and the second incarnation adopts the running sandbox; an unreachable door is not treated as no sandbox; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.195116Z",
-  "updated_at": "2026-09-23T10:57:51.195116Z"
+  "updated_at": "2026-09-24T05:54:04.592227Z",
+  "started_at": "2026-09-24T05:54:04.592226Z"
 }
