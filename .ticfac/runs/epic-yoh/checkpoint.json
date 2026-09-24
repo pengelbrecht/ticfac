@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 171,
-  "state": "gating",
-  "reason": "running the integrated gate for 0ye on 0f01c4a7a997",
-  "updated_at": "2026-09-24T13:39:53Z",
+  "sequence": 172,
+  "state": "publishing",
+  "reason": "closing 0ye behind the integrated gate on 0f01c4a7a997",
+  "updated_at": "2026-09-24T13:41:18Z",
   "ticks": [
     {
       "tick_id": "uqi",
