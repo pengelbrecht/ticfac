@@ -1,6 +1,7 @@
 {
   "id": "r1t",
   "title": "Close out yoh: retro, and what the next epic is",
+  "notes": "2026-09-24 18:31 - ticfac run epic-yoh: r1t try 1 (run dispatch #25) reported a finding drafted for triage — proposed-tick \"Decide whether the repo room's publish still needs the GitHub contents API now the orchestrator has a clone\" (key ddb0679f985aec3fa9336297682a1d0633c3845b73d26f00ddc02d33f6b5ae52, severity medium, for this repository). Triage with `ticfac finding yoh ddb0679f985aec3fa9336297682a1d0633c3845b73d26f00ddc02d33f6b5ae52 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -18,6 +19,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-21T06:19:53.358546Z",
-  "updated_at": "2026-09-24T16:26:34.535434Z",
+  "updated_at": "2026-09-24T16:31:28.01549Z",
   "started_at": "2026-09-24T16:26:34.535433Z"
 }
