@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "dl8",
   "attempt": 17,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-24T11:13:50Z",
+  "triaged_at": "2026-09-24T11:53:15Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pengelbrecht/ticks:f6y",
   "provenance": {
     "run_id": "epic-yoh",
     "tick_id": "dl8",
