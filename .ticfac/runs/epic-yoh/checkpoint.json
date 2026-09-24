@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 101,
-  "state": "failed",
-  "reason": "l6t did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the integrated gate on 65ed80e7cce6 did not pass for l6t: go (fail). The tick is NOT closed: a close behind a failing gate is a close nothing stands behind. The merge is already on epic/yoh, so the repair is to fix the check or the tree, push it to epic/yoh, and run the epic again under this run id: the gate runs again because this record is keyed by the commit it ran on and the fixed tree is a different commit. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-09-24T08:01:50Z",
+  "sequence": 102,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-24T08:16:21Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -77,6 +77,10 @@
     {
       "tick_id": "r1t",
       "state": "ready"
+    },
+    {
+      "tick_id": "3ed",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -84,7 +88,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/yoh",
-    "source_sha": "16c21a1add977442ff641ef5adfa465641587559",
+    "source_sha": "236f4d22d11884bbde1393a5448972d419f2abab",
     "integration_ref": "refs/heads/epic/yoh",
     "phase": "worker",
     "executor": null,
