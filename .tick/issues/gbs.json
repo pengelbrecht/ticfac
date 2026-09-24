@@ -2,6 +2,7 @@
   "id": "gbs",
   "title": "The container's run-epic dispatches with the cloud profiles, so no worker shares the orchestrator's container",
   "description": "Triaged 2026-09-23 from xte's close-out, which held on untriaged findings; the finding keys it absorbs are in this tick's notes. xte was merged as building blocks (operator's choice B) and its unmet goal moved here, because it is the same single cloud path yoh reconciles.\n\nThe container runs ticfac run-epic with the COMPILED-IN profiles/ (executor local-subprocess), so every cloud worker runs as a subprocess inside the orchestrator's own container (5d5e3f93, high) - which is how the 2026-09-23 smoke tick ran. The staged entrypoint must run run-epic with the cloud profile set (profiles-cloudflare-sandbox) and the cloud substrate, proven through the staged script rather than by reading it (7be27471).",
+  "notes": "2026-09-24 06:45 - ticfac run epic-yoh: gbs try 1 (run dispatch #7) reported a finding drafted for triage — defect \"TestTheBuiltBinaryExitsTwo exits 1 on this host — already drafted as finding be565e25\" (key ac59a110d0f0ccace5bea0e4bf0a989eecca7277c485555c9d82cd9dbe50238a, severity medium, for this repository). Triage with `ticfac finding yoh ac59a110d0f0ccace5bea0e4bf0a989eecca7277c485555c9d82cd9dbe50238a --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -14,6 +15,6 @@
   "acceptance_criteria": "A cloud run's run-epic resolves profiles-cloudflare-sandbox and the cloud substrate, proven by a test that runs the staged entrypoint; no role in a cloud run resolves to executor local-subprocess; and the full suites pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T10:57:51.125201Z",
-  "updated_at": "2026-09-23T21:50:14.650942Z",
+  "updated_at": "2026-09-24T04:45:51.759171Z",
   "started_at": "2026-09-23T21:50:14.650941Z"
 }
