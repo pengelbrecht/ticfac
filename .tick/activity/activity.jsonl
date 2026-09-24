@@ -1445,3 +1445,4 @@
 {"ts":"2026-09-24T12:14:02.613538Z","tick":"3h0","action":"create","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"priority":1,"title":"A running epic sees ticks and blockers added after it started; its close-out never runs past an open blocker","type":"task"}}
 {"ts":"2026-09-24T12:15:12.263047Z","tick":"4lv","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"A Run Workflow whose boot step exhausts its retries still finalizes"}}
 {"ts":"2026-09-24T12:15:53.599935Z","tick":"78v","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate"}}
+{"ts":"2026-09-24T12:16:31.359989Z","tick":"9iz","action":"start","actor":"ticfac","epic":"yoh","data":{"title":"The sandbox dispatch door carries the worker's harness and prompt, and the worker's logs stream"}}
