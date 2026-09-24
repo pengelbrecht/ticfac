@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-yoh",
   "epic_id": "yoh",
-  "sequence": 55,
-  "state": "integrating",
-  "reason": "integrating lkd attempt 5 into epic/yoh",
-  "updated_at": "2026-09-24T05:15:45Z",
+  "sequence": 56,
+  "state": "failed",
+  "reason": "lkd try 1 (run dispatch #5) does not merge onto epic/yoh: 1 conflict: content in internal/reconcile/dispatch.go",
+  "updated_at": "2026-09-24T05:16:09Z",
   "ticks": [
     {
       "tick_id": "uqi",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "lkd",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 5
     },
     {
