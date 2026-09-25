@@ -2138,6 +2138,31 @@ const (
 	// names the failing job, and the repair is the close-out's own writes —
 	// the retro, the learnings, the records — rather than the epic's tree.
 	RefusedCloseoutCIOnClose = "closeout_ci_failed_on_close" // the close-out's own commits turned CI red
+
+	// The two a RUNNING epic's own liveness adds (tick 3h0). A run is not
+	// working a snapshot: a person absorbs a finding into the epic as a new
+	// tick while the run is going, adds a blocked_by edge to it mid-run, or
+	// reopens a child it had already closed — and the run, which replans as
+	// ticks close, has to see each of those the same way it sees a close,
+	// or it works a graph that stopped existing. The two refusals below are
+	// the boundaries the live epic keeps, each sending the next repair
+	// somewhere different:
+	//
+	//   - RefusedTickBlocked is the dispatch's own read: the tick the run is
+	//     about to claim still names an OPEN blocker, and nothing this run is
+	//     doing can close it — the blocker sits outside the run's plan, so no
+	//     pass of this run reaches it. The repair is the blocker's, wherever
+	//     it lives, and a re-run of the epic resumes from the graph as it
+	//     stands. A blocker the run CAN still close is not refused at all:
+	//     it is dispatched first and the blocked tick waits behind it.
+	//   - RefusedCloseoutChildrenOpen is the close-out's definition-of-done
+	//     gate, wider than its edges: the close-out does not START while any
+	//     child of the epic other than itself is open, blocked or not — a
+	//     close-out that runs past an open blocker could close an epic whose
+	//     definition of done is not met, which is the worst answer an
+	//     unattended factory can give: green over a goal nobody reached.
+	RefusedTickBlocked          = "tick_blocked_open"      // an open blocker the run cannot close
+	RefusedCloseoutChildrenOpen = "closeout_children_open" // a child of the epic is still open at the close-out
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9

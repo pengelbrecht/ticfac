@@ -2,8 +2,11 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -182,6 +185,18 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			queue = queue[1:]
 			fl, err := r.admit(ctx, entry)
 			if err != nil {
+				// A tick the tracker still holds behind an open blocker (tick
+				// 3h0) is not the tick's refusal: it is the run's own
+				// sequencing catching up with an edge the plan did not carry,
+				// and the answer is to honour it — requeue the tick behind the
+				// blocker and dispatch the blocker first — not to stop.
+				var blocked *blockedTickErr
+				if errors.As(err, &blocked) {
+					plan, queue, err = r.requeueBlocked(ctx, plan, queue, entry, blocked, window.holders())
+					if err == nil {
+						continue
+					}
+				}
 				var refusal *Refusal
 				if !asRefusal(err, &refusal) {
 					return nil, err
@@ -388,7 +403,19 @@ func refusedTickState(refusal *Refusal) string {
 // cost is one whole run incarnation per dependency edge, which is what "we
 // have gone very sequential" was.
 //
-// So the tracker is asked again. It is the authority on what is closed —
+// Since tick 3h0 the same re-derivation admits the other way a live epic
+// changes: a tick CREATED under it after the run started — a person
+// absorbing a gating finding into the epic is the production shape, observed
+// on epic-yoh — and a blocked_by edge added mid-run. Both were invisible to
+// the run: the new tick never entered the plan, so neither its work nor its
+// dependents' edges were ever worked, and the run walked straight into its
+// close-out over four open blockers and opened the epic PR anyway. So the
+// re-derivation now ADDS what the fresh graph carries and the plan does not,
+// beside refreshing what it already had — and the dispatch itself re-reads
+// the tick's blockers (settleBeforeDispatch, tick 3h0) so an edge that landed
+// between two re-derivations is still honoured before the tick is dispatched.
+//
+// The tracker is asked again. It is the authority on what is closed —
 // settleBeforeDispatch already re-reads it per tick for exactly that reason —
 // and the wave numbers it layers now are about the graph as it now is. What is
 // re-derived is only the two facts that go stale, the wave and the open
@@ -404,8 +431,9 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 	if err != nil {
 		return nil, nil, fmt.Errorf("reconcile: re-read the epic graph of %s: %w", r.opts.EpicID, err)
 	}
+	freshEntries := planFrom(graph)
 	fresh := map[string]planEntry{}
-	for _, entry := range planFrom(graph) {
+	for _, entry := range freshEntries {
 		fresh[entry.TickID] = entry
 	}
 
@@ -414,9 +442,31 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 	plan, queue = refreshClaims(plan, fresh), refreshClaims(queue, fresh)
 
 	rederived := resequence(plan, fresh)
+	// What the fresh graph carries that the plan never did (tick 3h0): a tick
+	// created under the epic after this run started — or one closed before it
+	// and reopened while it was going. Both are children the close-out would
+	// otherwise stand over unworked, so both are admitted to the plan and the
+	// queue and dispatched by THIS run rather than by a restart nobody
+	// attended.
+	added := unplannedTicks(plan, freshEntries)
+	if len(added) > 0 {
+		rederived = append(rederived, added...)
+		sortPlan(rederived)
+	}
 	moved := movedTicks(plan, rederived)
-	if len(moved) == 0 {
+	if len(moved) == 0 && len(added) == 0 {
 		return plan, queue, nil
+	}
+
+	r.seedTicks(added)
+	r.seedTitles(added)
+	for _, entry := range added {
+		r.record(entry.TickID, StageReplanned,
+			"the tracker carries %s, which was created under %s after this run planned its waves: the tick is admitted "+
+				"by THIS run — sequenced into the waves the tracker layers now, dispatched and closed without a restart — "+
+				"because a run that works only the graph as it was when it started is a run a person has to kill so a "+
+				"resume can replan from scratch",
+			entry.TickID, r.opts.EpicID)
 	}
 
 	// The composition check the admitted plan passed says nothing about this
@@ -433,12 +483,34 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 	// refusing SILENTLY would be the quiet deferral composition.go refuses to
 	// make. The loud refusal still belongs at admission, where it costs
 	// nothing and where a person can re-wave the ticks.
+	//
+	// With additions in the re-derivation (tick 3h0) there is one more answer
+	// the old rule could not give: a composition refusal can name a tick the
+	// plan never carried, and "keeping the sequencing it was admitted with"
+	// does not exist for a tick that was never sequenced at all — keeping it
+	// would be the quiet deferral again, pointed at the run's own plan. So the
+	// old ticks keep the sequencing they were admitted with, the NEW tick joins
+	// at the wave the tracker layers it into, and any overlap between them is
+	// discovered where every undeclared overlap already is: at the merge,
+	// loudly, refusing the attempt that crossed it.
 	if refusal := r.checkWaveComposition(rederived); refusal != nil {
+		if len(added) == 0 {
+			r.record("", StageReplanned,
+				"%s is no longer blocked and would join wave %d, but the re-derived plan cannot merge, so the run "+
+					"keeps the sequencing it was admitted with and dispatches them one after the other: %s",
+				moved[0].TickID, moved[0].Wave, refusal.Message)
+			return plan, queue, nil
+		}
 		r.record("", StageReplanned,
-			"%s is no longer blocked and would join wave %d, but the re-derived plan cannot merge, so the run "+
-				"keeps the sequencing it was admitted with and dispatches them one after the other: %s",
-			moved[0].TickID, moved[0].Wave, refusal.Message)
-		return plan, queue, nil
+			"the re-derived plan cannot merge — %s — so the run keeps the sequencing it was admitted with and admits "+
+				"%s at the wave the tracker layers it into; any overlap between them is refused at the merge, where every "+
+				"undeclared overlap already is",
+			refusal.Message, tickIDs(added))
+		kept := append(append([]planEntry{}, plan...), added...)
+		sortPlan(kept)
+		queue = append(resequence(queue, fresh), added...)
+		sortPlan(queue)
+		return kept, queue, nil
 	}
 
 	for _, entry := range moved {
@@ -449,7 +521,156 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 			entry.TickID, entry.Wave, waveOf(plan, entry.TickID))
 	}
 	r.recordWaveCompositionDecision(rederived)
-	return rederived, resequence(queue, fresh), nil
+	queue = append(resequence(queue, fresh), added...)
+	sortPlan(queue)
+	return rederived, queue, nil
+}
+
+// unplannedTicks is the fresh reading's ticks the plan does not carry (tick
+// 3h0): created under the epic after the run started, or closed before it and
+// reopened while it was going. A tick the plan carries is not an addition
+// however the tracker now reads it — the plan keeps every entry it was ever
+// admitted with, so an entry that is gone from the fresh graph is a closed
+// tick settleBeforeDispatch settles, and an entry that is BACK in the fresh
+// graph is a child this run already worked whose reopening the close-out's
+// open-children gate answers for.
+func unplannedTicks(plan []planEntry, fresh []planEntry) []planEntry {
+	carried := map[string]bool{}
+	for _, entry := range plan {
+		carried[entry.TickID] = true
+	}
+	var added []planEntry
+	for _, entry := range fresh {
+		if !carried[entry.TickID] {
+			added = append(added, entry)
+		}
+	}
+	return added
+}
+
+// tickIDs is the plan's tick ids in order, for the one feed line that names a
+// set rather than a tick.
+func tickIDs(entries []planEntry) string {
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.TickID)
+	}
+	return strings.Join(ids, ", ")
+}
+
+// ------------------------------------------------- edges added mid-run (3h0) ---
+
+// blockedTickErr is settleBeforeDispatch's answer for a tick whose own
+// dispatch-time read found it must not be claimed yet — either an OPEN blocker
+// its tracker record still names (an edge added while the run was going, or a
+// blocker reopened behind the plan's back), or, for the close-out, an OPEN
+// CHILD of the epic the close-out's own gate found (tick 3h0) — in which case
+// the gate's refusal rides along, because when nothing this run is doing can
+// close the children, that refusal — its reason, its tick, its own words — is
+// the answer, not the edge vocabulary's. It is not a refusal by itself: the
+// run has not yet decided what the open blockers mean, because whether one of
+// them is a thing IT can still close is a fact about the plan, and the plan is
+// re-derived here (requeueBlocked) rather than guessed at. The blockers are
+// the OPEN ones only, in the tracker's own order, as the dispatch-time read
+// found them.
+type blockedTickErr struct {
+	tick     string
+	blockers []string
+	// refusal is the gate's own answer for the close-out, carried so that the
+	// refusal requeueBlocked falls back to is the one the open-children gate
+	// wrote (closeout_children_open, naming the children) rather than the
+	// edge vocabulary's tick_blocked_open. nil for a plain blocked_by edge.
+	refusal *Refusal
+}
+
+func (b *blockedTickErr) Error() string {
+	return fmt.Sprintf("%s is blocked by %s", b.tick, strings.Join(b.blockers, ", "))
+}
+
+// requeueBlocked honours a blocked_by edge the plan did not carry: the tick is
+// put back behind the blocker rather than dispatched past it.
+//
+// The observed failure this exists for (epic-yoh, 2026-09-24): four ticks were
+// absorbed into the running epic and its close-out was made blocked-by each of
+// them — and the live run, whose plan carried none of it, dispatched the
+// close-out anyway and opened the epic PR over four open blockers. The three
+// answers the run can give, in the order it prefers them:
+//
+//   - the blocker is one this run has not dispatched yet: it is in the queue,
+//     so the blocked tick is requeued BEHIND it and the blocker is dispatched
+//     first. This is the whole incident repaired — the absorbed tick is worked
+//     by the running run, and the blocked tick waits for it, with no restart.
+//   - the blocker is one this run is already holding: it is a claim in the
+//     window, so the blocked tick is requeued at the head with its blockers
+//     refreshed in place — mayAdmit's own holder boundary then holds it until
+//     the holder closes and the next re-derivation drops the edge. No settle
+//     runs again until then, so the edge costs one dispatch-time read, not one
+//     per poll.
+//   - neither: nothing this run is doing can close the blocker, and a run that
+//     waits anyway is a spin nobody asked for. The refusal names the blocker
+//     and says the repair is the blocker's own, wherever it lives — a re-run
+//     of the epic resumes from the graph as it stands.
+//
+// The plan is re-derived before any of the three answers is chosen, because
+// the edge may name a tick the plan does not carry at all — a tick created
+// after the last re-derivation — and the queue placement question ("is the
+// blocker in the queue?") is a question about the plan as it should be, not as
+// it was.
+func (r *Reconciler) requeueBlocked(ctx context.Context, plan, queue []planEntry, entry planEntry,
+	blocked *blockedTickErr, holders []*inflightAttempt) ([]planEntry, []planEntry, error) {
+	if blocked.refusal != nil {
+		// The close-out's own gate found the open children (tick 3h0), and the
+		// incident's timing is why this branch exists: the children landed
+		// while the REVIEW ran, a role job settles inline, and nothing replans
+		// between the review's close and the close-out's settle. So the run
+		// asks the fresh graph one question before the gate's refusal stands:
+		// can THIS run still work any of them?
+		r.record(entry.TickID, StageWaiting,
+			"the close-out is still behind %s — child(ren) of the epic its own gate found open at dispatch, added or "+
+				"reopened while this run was going: the run asks the fresh graph whether it can work them first, and the "+
+				"close-out refuses to start over whatever remains",
+			strings.Join(blocked.blockers, ", "))
+	} else {
+		r.record(entry.TickID, StageWaiting,
+			"%s is still behind %s at dispatch — a blocked_by edge the tracker added, or a blocker reopened, while this "+
+				"run was going: the edge is honoured BEFORE the tick is dispatched rather than discovered by a worker after "+
+				"an hour of thinking",
+			entry.TickID, strings.Join(blocked.blockers, ", "))
+	}
+	plan, queue, err := r.replan(ctx, plan, queue)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The blockers the settle read found are the tick's current ones, and the
+	// entry carries them so the window's own boundary — which reads the plan,
+	// not the tracker — holds the tick while they stand.
+	entry.BlockedBy = blocked.blockers
+	last := -1
+	for i, queued := range queue {
+		if slices.Contains(blocked.blockers, queued.TickID) {
+			last = i
+		}
+	}
+	if last >= 0 {
+		return plan, slices.Insert(queue, last+1, entry), nil
+	}
+	for _, fl := range holders {
+		if slices.Contains(blocked.blockers, fl.entry.TickID) {
+			return plan, slices.Insert(queue, 0, entry), nil
+		}
+	}
+	if blocked.refusal != nil {
+		// Nothing this run is doing can close the children, so the gate's own
+		// refusal stands exactly as it was written: closeout_children_open,
+		// filed against the close-out, naming the children in its own words.
+		return nil, nil, blocked.refusal
+	}
+	return nil, nil, r.refuse(RefusedTickBlocked, entry.TickID,
+		"%s is blocked by %s, which the tracker still reads as open, and nothing this run is doing can close it: the "+
+			"edge is honoured before the tick is dispatched rather than discovered by a worker after one. The blocker is "+
+			"outside this run's plan, so its repair belongs wherever the blocker lives; re-run the epic under this run id "+
+			"once it closes and the resume re-derives the plan from the tracker as it stands",
+		entry.TickID, strings.Join(blocked.blockers, ", "))
 }
 
 // resequence refreshes a plan's graph-derived facts from a fresh reading of
