@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 43,
-  "state": "publishing",
-  "reason": "closing nfo behind the integrated gate on 824b95fdf1c0",
-  "updated_at": "2026-09-25T18:31:37Z",
+  "sequence": 44,
+  "state": "running",
+  "reason": "nfo is closed",
+  "updated_at": "2026-09-25T18:31:50Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "nfo",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 5
     },
     {
