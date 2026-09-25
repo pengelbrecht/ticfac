@@ -91,7 +91,10 @@ nocommit)
 findings)
 	# The findings channel (tick 7vn): a worker that commits, reports DONE,
 	# and reports two discoveries outside its tick as a typed block — one for
-	# this repository and one routed upstream.
+	# this repository and one routed upstream. Since tick nfo the first also
+	# carries its DONE EVIDENCE and the second deliberately carries none: a
+	# linked finding and an unlinked one are both shapes the real worker
+	# produces, and collect must lift both honestly.
 	commit
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
@@ -103,7 +106,9 @@ findings)
 		printf '%s\n' '  "title": "A finding the fake runner proposes",'
 		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
 		printf '%s\n' '  "severity": "medium",'
-		printf '%s\n' '  "target": ""'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "go"'
 		printf '%s\n' '}, {'
 		printf '%s\n' '  "kind": "upstream-tick",'
 		printf '%s\n' '  "title": "An upstream finding routed to another repository",'

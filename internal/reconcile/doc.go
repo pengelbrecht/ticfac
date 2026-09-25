@@ -163,7 +163,14 @@
 // repeat proposing nothing new whatever the human did with the original —
 // except a FIXED original (tick her): a finding reported again after the
 // triage that named its repairing commit is the proof the fix did not hold,
-// and the re-report re-opens the draft instead of deduplicating. A tick
+// and the re-report re-opens the draft instead of deduplicating. Since tick
+// nfo a finding may also carry DONE EVIDENCE — the [A<n>] acceptance item
+// of the epic's definition of done the reporter says it breaks, and the
+// command or test that would demonstrate it — which rides the draft and is
+// marked on every surface a person deciding reads (the event feed, the
+// triage listing, the hold, the epic PR body); a finding reported without
+// it is accepted and marked UNLINKED, because the evidence is a claim to
+// score, never a verdict. A tick
 // whose findings are untriaged CLOSES, the finding rides to the close-out,
 // and the close-out does not hand over while one is untriaged or missing
 // from the epic PR — which is the one thing that stops a finding falling

@@ -3,6 +3,8 @@ package subprocess
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -15,8 +17,13 @@ import (
 //
 //   - the FINAL complete ```findings block wins, for the same reason the
 //     final status line does — a report may quote the template;
-//   - the block is a JSON array of CLOSED records: every field required,
-//     empty included, and no field the record does not have;
+//   - the FINAL complete ```findings block wins, for the same reason the
+//     final status line does — a report may quote the template;
+//   - the block is a JSON array of CLOSED records: the five pinned fields
+//     required, empty included, and no field the record does not have;
+//   - the two EVIDENCE fields (tick nfo) are OPTIONAL — a finding missing
+//     them is accepted and reads as UNLINKED, because refusing findings
+//     nobody thought to link is how a channel loses them;
 //   - a block that opens and never closes, or does not parse, is a PROBLEM,
 //     never silently dropped — dropping findings is the failure the channel
 //     exists to remove.
@@ -158,6 +165,83 @@ func TestAnEmptyFindingsBlockProposesNothing(t *testing.T) {
 	}
 }
 
+// The finding's EVIDENCE fields (tick nfo): done_item and demonstrating_check
+// carry the reporter's claim about the epic's definition of done — which
+// [A<n>]-marked acceptance item the finding breaks (`none` when it breaks
+// none) and the command or test that would demonstrate the breakage. Both
+// are OPTIONAL: a finding missing them is accepted and reads as UNLINKED,
+// because refusing findings nobody thought to link is how a channel loses
+// them. The claim is never the verdict — it is what the oracle runs, what
+// the classifier takes as one input where nothing can run yet, and what the
+// reporter is later scored against.
+func TestParseFindingsCarriesTheDoneEvidenceFields(t *testing.T) {
+	body := "```findings\n" +
+		`[
+  {"kind": "defect", "title": "the gate is red at base", "body": "", "severity": "high", "target": "",
+   "done_item": "A1", "demonstrating_check": "go"},
+  {"kind": "proposed-tick", "title": "an unlinked finding", "body": "", "severity": "low", "target": ""},
+  {"kind": "defect", "title": "breaks no done item", "body": "", "severity": "low", "target": "",
+   "done_item": "none"}
+]` + "\n```\n"
+	findings, problem := ParseFindings(body)
+	if problem != "" {
+		t.Fatalf("problem %q", problem)
+	}
+	if len(findings) != 3 {
+		t.Fatalf("findings %v, want the three the block carried", findings)
+	}
+	// LINKED: the claim names the acceptance item and the check that would
+	// show the breakage — field for field, as the worker reported them.
+	if findings[0].DoneItem != "A1" || findings[0].DemonstratingCheck != "go" {
+		t.Errorf("finding[0] done evidence is done_item %q, demonstrating_check %q, want A1 and go",
+			findings[0].DoneItem, findings[0].DemonstratingCheck)
+	}
+	// UNLINKED: neither field reported — accepted, not refused.
+	if findings[1].DoneItem != "" || findings[1].DemonstratingCheck != "" {
+		t.Errorf("finding[1] done evidence is done_item %q, demonstrating_check %q, want both empty",
+			findings[1].DoneItem, findings[1].DemonstratingCheck)
+	}
+	// NONE: the reporter's answer that the finding breaks no done item — a
+	// claim, distinguishable from making none.
+	if findings[2].DoneItem != "none" {
+		t.Errorf("finding[2].done_item %q, want the reporter's none", findings[2].DoneItem)
+	}
+}
+
+func TestADoneItemThatIsNotAnAnswerIsRefused(t *testing.T) {
+	cases := []struct {
+		name     string
+		doneItem string
+	}{
+		{"lowercase", "a1"},
+		{"leading zero", "A03"},
+		{"item zero", "A0"},
+		{"beyond the range", "A1000"},
+		{"prose wearing a bracket", "[A3]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			block := `[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "", "done_item": ` +
+				strconv.Quote(tc.doneItem) + `}]`
+			problem := parseFindingsProblem(t, block)
+			if !strings.Contains(problem, "finding.done_item") {
+				t.Fatalf("problem %q, want it to name finding.done_item", problem)
+			}
+		})
+	}
+}
+
+// The field set the parity reader pins against the bundle's $defs.finding:
+// the five required fields plus the two evidence fields, and nothing a
+// worker invented.
+func TestTheFindingFieldNamesAreTheClosedSet(t *testing.T) {
+	got := FindingFieldNames()
+	want := []string{"body", "demonstrating_check", "done_item", "kind", "severity", "target", "title"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("FindingFieldNames() = %v, want %v", got, want)
+	}
+}
+
 func TestAReportWithoutABlockCarriesNoFindings(t *testing.T) {
 	report := ParseReport("STATUS: DONE — the work is in\n")
 	if report.Findings != nil || report.FindingsProblem != "" {
@@ -201,5 +285,35 @@ func TestTheEnvelopeStatesFindingsEvenWhenEmpty(t *testing.T) {
 	}
 	if !bytes.Contains(raw, []byte(`"findings":[]`)) {
 		t.Fatalf("an absent list must marshal as \"findings\":[] — a missing key is a record the schema refuses: %s", raw)
+	}
+}
+
+// The envelope carries findings as the PINNED five-field record (tick nfo):
+// the two done-evidence fields ride the report block and the draft, and join
+// the envelope when the contract bundle adopts them — the pending set is
+// named in internal/contracts/parity, so the pin bump is a paired change the
+// build forces rather than drift this half carries silently. The envelope is
+// the one surface the compiled-in schema validates at runtime
+// (ValidateRoleResult), and a record it refuses would fail a whole role job's
+// answer, not just the finding.
+func TestTheEnvelopeCarriesFindingsAsThePinnedRecord(t *testing.T) {
+	envelope := RoleResult{Findings: []Finding{{
+		Kind: FindingKindDefect, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "",
+		DoneItem: "A1", DemonstratingCheck: "go",
+	}}}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pinned := range []string{`"kind":"defect"`, `"title":"t"`, `"body":"b"`, `"severity":"high"`, `"target":""`} {
+		if !bytes.Contains(raw, []byte(pinned)) {
+			t.Errorf("the envelope lost the pinned field %s: %s", pinned, raw)
+		}
+	}
+	for _, pending := range []string{"done_item", "demonstrating_check"} {
+		if bytes.Contains(raw, []byte(pending)) {
+			t.Errorf("the envelope carries %q, which the pinned $defs.finding refuses (additionalProperties: "+
+				"false) until the bundle adopts it: %s", pending, raw)
+		}
 	}
 }

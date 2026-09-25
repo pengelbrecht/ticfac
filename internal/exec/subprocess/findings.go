@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // The findings channel: how a worker reports something it discovered OUTSIDE
@@ -16,11 +19,16 @@ import (
 // writes — a fenced code block with the info string `findings` holding a
 // JSON array of typed findings — lifted by collect into the role-result
 // envelope's FIRST-CLASS Findings field, where the bundle's $defs.finding
-// (since 4.0.0) validates the five closed shapes rather than trusting the
-// open result payload. The reconciler turns each finding into a DRAFT tick
-// proposal; the worker never writes `.tick/`, which is a protected prefix,
-// and the reconciler never opens a tick on a worker's word — the draft is
-// triaged by a person, which is what keeps the scope decision human.
+// (since 4.0.0) validates the five pinned closed shapes rather than trusting
+// the open result payload. Since tick nfo each finding also carries two
+// OPTIONAL done-evidence fields (done_item, demonstrating_check): they ride
+// this block and the draft the reconciler files, and join the ENVELOPE — the
+// one surface the compiled-in schema validates at runtime — when the
+// contract bundle adopts them (see FindingFieldNames and the parity reader
+// that pins the pending set). The reconciler turns each finding into a DRAFT
+// tick proposal; the worker never writes `.tick/`, which is a protected
+// prefix, and the reconciler never opens a tick on a worker's word — the
+// draft is triaged by a person, which is what keeps the scope decision human.
 //
 // The block is deliberately INSIDE the report rather than a second file: the
 // report is the one deliverable collect already reads durably (off the branch
@@ -64,32 +72,75 @@ var FindingSeverities = []string{
 	FindingSeverityLow, FindingSeverityMedium, FindingSeverityHigh,
 }
 
+// FindingDoneItemNone is the reporter's answer that the finding breaks no
+// item of the epic's definition of done (tick nfo): a CLAIM, deliberately
+// distinct from reporting no done_item at all. The one is an answer the
+// run can score; the other is a finding nobody linked, and the two must not
+// look identical.
+const FindingDoneItemNone = "none"
+
 // targetRepositoryPattern is the shape of a finding's target: an owner/name
 // GitHub repository, e.g. pengelbrecht/ticks. An upstream finding belongs on a
 // DIFFERENT tracker, so the target names which one; an empty target means the
 // repository the run is working on.
 var targetRepositoryPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
-// Finding is one thing a worker discovered outside its tick. Every field is
-// REQUIRED in the report block — kind, title, body, severity and the target
-// repository — with body and target allowed to be empty, so "no target" and
-// "target forgotten" cannot look identical.
+// Finding is one thing a worker discovered outside its tick. The five pinned
+// fields are REQUIRED in the report block — kind, title, body, severity and
+// the target repository — with body and target allowed to be empty, so "no
+// target" and "target forgotten" cannot look identical.
+//
+// Two more fields carry the finding's EVIDENCE against the epic's definition
+// of done (tick nfo), and they are OPTIONAL — a finding missing them is
+// accepted and reads as UNLINKED, because refusing findings nobody thought
+// to link is how a channel loses them. The reporter's claim is never the
+// verdict on whether the finding gates its epic: the named check is what
+// the run runs where the item is runnable (the done check is the
+// authoritative verdict), one input to a prediction where it is not yet, and
+// the claim is what the reporter is later scored against — evidence, not
+// judgement.
 type Finding struct {
 	Kind     string `json:"kind"`
 	Title    string `json:"title"`
 	Body     string `json:"body"`
 	Severity string `json:"severity"`
 	Target   string `json:"target"`
+	// DoneItem is the acceptance item of the EPIC being worked — an [A<n>]
+	// id as the epic's acceptance criteria mark its items — that the
+	// reporter believes this finding breaks, or "none" when the reporter
+	// believes it breaks none. Empty means no claim was made: UNLINKED.
+	DoneItem string `json:"done_item,omitempty"`
+	// DemonstratingCheck is the command or test the reporter says would
+	// demonstrate the breakage — the id of one of the repository's declared
+	// testing commands where one fits, else the test's name. Empty means no
+	// claim was made.
+	DemonstratingCheck string `json:"demonstrating_check,omitempty"`
 }
 
-// findingFields is every field of the record, for the closed-key check: a
-// findings block carrying a field this record does not have is refused rather
-// than read as if it were smaller.
+// findingFields is every REQUIRED field of the record, for the closed-key
+// check: a findings block carrying a field this record does not have is
+// refused rather than read as if it were smaller.
 var findingFields = []string{"kind", "title", "body", "severity", "target"}
 
-// knownFindingField is the closed key set of the finding record.
+// knownFindingField is the closed key set of the finding record: the five
+// required fields plus the two optional evidence fields.
 var knownFindingField = map[string]bool{
 	"kind": true, "title": true, "body": true, "severity": true, "target": true,
+	"done_item": true, "demonstrating_check": true,
+}
+
+// FindingFieldNames is every field the report-block record answers to, in
+// alphabetical order. The parity reader pins this set against the bundle's
+// $defs.finding: a bundle field ticfac cannot read is a refusal nobody
+// issued, and a field ticfac reads that the bundle has not pinned yet is a
+// pending bump this repository has to name rather than drift behind.
+func FindingFieldNames() []string {
+	names := make([]string, 0, len(knownFindingField))
+	for name := range knownFindingField {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Validate refuses a finding this channel will not carry. Every refusal names
@@ -112,7 +163,30 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding.target is empty: an upstream tick belongs on another repository's tracker, " +
 			"and a finding that names none is routed nowhere")
 	}
-	return nil
+	return ValidateDoneItem(f.DoneItem)
+}
+
+// ValidateDoneItem refuses a done_item the channel will not carry: an
+// acceptance item id — the epic's [A<n>] marks, the same shape
+// [evidence.acceptance] keys on — the reporter's "none", or empty (no claim
+// made). runstate reuses this for the draft half of the channel, so the two
+// records cannot disagree about what a claim looks like.
+func ValidateDoneItem(doneItem string) error {
+	if doneItem == "" || doneItem == FindingDoneItemNone || ValidFindingDoneItem(doneItem) {
+		return nil
+	}
+	return fmt.Errorf("finding.done_item %q is neither an acceptance item id (%s) nor %q: a done item a "+
+		"reader cannot key to the epic's items is a link nobody can follow", doneItem,
+		runconfig.AcceptanceItemPattern.String(), FindingDoneItemNone)
+}
+
+// ValidFindingDoneItem reports whether doneItem is an acceptance item id —
+// the reporter's link to an item, neither empty (no claim made) nor the
+// reporter's "none". The draft's linkage mark reads it, so linked, none
+// and unlinked stay three states rather than two spellings of two.
+func ValidFindingDoneItem(doneItem string) bool {
+	return doneItem != "" && doneItem != FindingDoneItemNone &&
+		runconfig.AcceptanceItemPattern.MatchString(doneItem)
 }
 
 // findingsFence is the opening line of the findings block: a code fence with
