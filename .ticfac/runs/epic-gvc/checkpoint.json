@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 17,
-  "state": "collecting",
-  "reason": "collecting 3h0 attempt 2",
-  "updated_at": "2026-09-25T09:38:47Z",
+  "sequence": 18,
+  "state": "failed",
+  "reason": "3h0 try 1 (run dispatch #2) reported a findings block this reconciler cannot read: findings[1] carries \"title_note\", which is not a finding field. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
+  "updated_at": "2026-09-25T09:38:51Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "3h0",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 2
     },
     {
