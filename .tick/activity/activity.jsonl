@@ -1504,3 +1504,4 @@
 {"ts":"2026-09-25T09:39:59.546918Z","tick":"ryv","action":"create","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"priority":1,"title":"An unrecognised field in a finding is kept in its body, not a rejection of the tick's work","type":"task"}}
 {"ts":"2026-09-25T09:39:59.60021Z","tick":"ryv","action":"block","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"blockers":["nfo"],"title":"An unrecognised field in a finding is kept in its body, not a rejection of the tick's work"}}
 {"ts":"2026-09-25T09:39:59.626134Z","tick":"npq","action":"block","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"blockers":["pzp","bse","ryv"],"title":"A gating finding becomes a tick in the running epic, with no person"}}
+{"ts":"2026-09-25T12:49:18.347114Z","tick":"o82","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"A run-state write whose acknowledgement was lost is recognised as the run's own, not a conflict","type":"task"}}

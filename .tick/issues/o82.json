@@ -1,0 +1,13 @@
+{
+  "id": "o82",
+  "title": "A run-state write whose acknowledgement was lost is recognised as the run's own, not a conflict",
+  "description": "epic-gvc, 2026-09-25 12:44 UTC, on this Mac's flaky network: the reconciler wrote the 'collecting' checkpoint to epic/gvc. The write LANDED (commit 5137b27d at 12:44:07 UTC), but the reconciler did not get the acknowledgement. Its retry then saw the ref already moved and failed with conflict_stale_sha ('the run state moved under this reconciler'). That is an unclassified stop, so the run halted for a person. Fix: on conflict_stale_sha, re-read the ref. If its head carries exactly the content this writer was writing (same path, same bytes, parent = the expected old head), it is this writer's own lost-ack write, so proceed. Only a genuinely foreign change is a conflict.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A compare-and-swap write whose ack is lost but which landed is recognised as the writer's own and the run continues; a genuinely foreign change still refuses as conflict_stale_sha; a test simulates a lost ack (write succeeds, error returned) and asserts the run continues",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-25T12:49:18.343592Z",
+  "updated_at": "2026-09-25T12:49:18.343592Z"
+}
