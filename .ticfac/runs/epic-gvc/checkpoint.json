@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 36,
-  "state": "running",
-  "reason": "pzp is closed",
-  "updated_at": "2026-09-25T13:47:28Z",
+  "sequence": 37,
+  "state": "collecting",
+  "reason": "collecting nfo attempt 5",
+  "updated_at": "2026-09-25T18:21:42Z",
   "ticks": [
     {
       "tick_id": "2p6",
