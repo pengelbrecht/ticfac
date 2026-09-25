@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 33,
-  "state": "integrating",
-  "reason": "integrating pzp attempt 7 into epic/gvc",
-  "updated_at": "2026-09-25T13:10:37Z",
+  "sequence": 34,
+  "state": "gating",
+  "reason": "running the integrated gate for pzp on fb00f4da7e08",
+  "updated_at": "2026-09-25T13:11:04Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "pzp",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
