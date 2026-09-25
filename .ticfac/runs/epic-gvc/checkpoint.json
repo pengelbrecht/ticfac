@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 58,
-  "state": "running",
-  "reason": "wj6 is running as attempt 9",
-  "updated_at": "2026-09-25T18:55:48Z",
+  "sequence": 59,
+  "state": "collecting",
+  "reason": "collecting ryv attempt 8",
+  "updated_at": "2026-09-25T21:02:56Z",
   "ticks": [
     {
       "tick_id": "2p6",
