@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 50,
-  "state": "publishing",
-  "reason": "closing 3h0 behind the integrated gate on 2520acb871b2",
-  "updated_at": "2026-09-25T18:38:55Z",
+  "sequence": 51,
+  "state": "running",
+  "reason": "3h0 is closed",
+  "updated_at": "2026-09-25T18:39:22Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "3h0",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
