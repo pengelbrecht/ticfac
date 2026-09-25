@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 61,
-  "state": "gating",
-  "reason": "running the integrated gate for ryv on af453139e920",
-  "updated_at": "2026-09-25T21:03:22Z",
+  "sequence": 62,
+  "state": "publishing",
+  "reason": "closing ryv behind the integrated gate on af453139e920",
+  "updated_at": "2026-09-25T21:04:42Z",
   "ticks": [
     {
       "tick_id": "2p6",
