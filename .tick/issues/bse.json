@@ -2,7 +2,7 @@
   "id": "bse",
   "title": "Predict gating where the done cannot yet be run",
   "description": "The classifier half, and the reason gvc is not purely mechanical (operator, 2026-09-22: 'are there still scenarios where an llm classifier is useful... i would imagine yes').\n\nRunning the done is an oracle only for items runnable NOW. The case that defeats it is not exotic - it is the ordinary one, and this session produced the exemplar. qu3's finding says: 'when s45 wires the table's value into a cloud dispatch, a value routed into a container boot will be refused', and then says why no test caught it: 'no test boots a container'. Nothing was red. The finding IS a prediction, and deciding whether it gates the done is reasoning about prose against prose.\n\nTHE QUESTION, which is Jev-shaped on purpose: a Choice over THIS EPIC'S OWN ACCEPTANCE\nITEMS plus 'none', with confidence. A closed enum per epic is Jev's sweet spot, and the\nanswer doubles as the item id that absorption has to name. Reuse the classifier wne's\n0ju built rather than starting a second one.\n\nERR TOWARD ABSORBING, and put the reasoning in the code where someone will later be\ntempted to tune it the other way: a false positive costs the epic work it did not need;\na false negative closes an epic whose goal is unmet, in a factory where nobody is\nwatching. Those are not the same cost. The threshold sits on the cheap side.\n\nThe verdict is recorded as PREDICTED, never as observed. A retro that cannot tell a\nguess from a measurement cannot report honestly, and the next tick scores predictions\nagainst what the done later did - which is impossible if the two are indistinguishable.",
-  "notes": "2026-09-23 12:58 - ABSORBS wne finding dc02fb31 (2026-09-23): internal/jev only knows the work-type Choice; generalise it before bse classifies findings against a run's [A\u003cn\u003e] items.",
+  "notes": "2026-09-23 12:58 - ABSORBS wne finding dc02fb31 (2026-09-23): internal/jev only knows the work-type Choice; generalise it before bse classifies findings against a run's [A\u003cn\u003e] items.\n2026-09-25 11:49 - ticfac run epic-gvc: bse try 1 (run dispatch #4) merged into epic/gvc as ac8a5faaf1bb; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -14,6 +14,6 @@
   "acceptance_criteria": "A finding whose relevant acceptance items are not yet runnable is classified against the epic's own items plus 'none', with confidence, reusing the existing Jev client; the verdict is recorded as PREDICTED and is distinguishable from an OBSERVED one in the record; the threshold is documented as deliberately biased toward absorbing with the cost asymmetry stated; an unreachable classifier falls back to absorbing rather than to deferring; and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:30:54.970377Z",
-  "updated_at": "2026-09-25T08:59:15.083129Z",
+  "updated_at": "2026-09-25T09:49:08.991669Z",
   "started_at": "2026-09-25T08:59:15.083128Z"
 }
