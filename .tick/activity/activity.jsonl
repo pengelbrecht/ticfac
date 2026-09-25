@@ -1534,3 +1534,4 @@
 {"ts":"2026-09-25T18:55:45.332007Z","tick":"wj6","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"A gate that fails after an attempt merged dispatches a repair job instead of stopping the run"}}
 {"ts":"2026-09-25T21:04:47.261568Z","tick":"ryv","action":"note","actor":"ticfac","epic":"gvc","data":{"note":"2026-09-25 23:04 - ticfac run epic-gvc: ryv try 1 (run dispatch #8) merged into epic/gvc as af453139e920; the integrated gate (go, ts) passed.","title":"An unrecognised field in a finding is kept in its body, not a rejection of the tick's work"}}
 {"ts":"2026-09-25T21:04:50.641468Z","tick":"ryv","action":"close","actor":"ticfac","epic":"gvc","data":{"title":"An unrecognised field in a finding is kept in its body, not a rejection of the tick's work"}}
+{"ts":"2026-09-25T21:05:09.404911Z","tick":"npq","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"A gating finding becomes a tick in the running epic, with no person"}}
