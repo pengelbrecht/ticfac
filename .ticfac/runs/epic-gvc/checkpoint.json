@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 15,
-  "state": "dispatching",
-  "reason": "dispatching nfo as attempt 5",
-  "updated_at": "2026-09-25T08:59:25Z",
+  "sequence": 16,
+  "state": "running",
+  "reason": "nfo is running as attempt 5",
+  "updated_at": "2026-09-25T08:59:33Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -29,7 +29,8 @@
     },
     {
       "tick_id": "nfo",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "pzp",
