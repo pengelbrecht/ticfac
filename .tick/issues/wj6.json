@@ -3,10 +3,10 @@
   "title": "A gate that fails after an attempt merged dispatches a repair job instead of stopping the run",
   "description": "Observed twice on epic-yoh, 2026-09-24. l6t deleted the wave path and its merge failed the Go gate: the lifecycle contract still pointed at the deleted symbols. mn7 deleted the TypeScript reconciler and its merge failed the TS gate: a test harness still re-exported the deleted class. Both times the run stopped for a person, who fixed the tree by hand, pushed to the epic branch and resumed. Both fixes were small and mechanical, and the gate's own output named the failing test or the exact tsc error. The factory runs unattended; a stop whose only remedy is a person reading a gate log and patching the tree is a design defect (sibling of 2p6, which does the same for merge conflicts).\n\nDO: on gate_failed after an attempt's merge is on the epic branch, dispatch a repair job instead of stopping. Its prompt carries: the failing check's output from the evidence record, the tick's description, and the attempt's diff. It works on a fresh worktree of the epic head, and its commits are merged and gated as usual. Route it at the policy's ceiling tier (claude locally; a Workers AI model in the cloud, never claude there). Bound it: one repair per failed gate, and a repair whose gate also fails is the stop, as today, naming both failures. A gate that fails on a commit the run did not produce (a base-refresh fold, a hand push) is also in scope, since the tree is what is being repaired.\n\nAlso worth a planning check: both failures were deletions whose dependents lived outside the files the tick declared (a vendored contract, a test harness). A deletion tick's worker should run the full gate before reporting done, not just the tests it thinks are affected.",
   "notes": "2026-09-25 10:33 - Sequenced after 2p6 on purpose: both dispatch a repair-shaped job from the integrate path (a conflict resolver, a gate repairer), so wj6 should reuse 2p6's job mechanism rather than build a second one, and a same-wave pair here would collide in the same files (the yoh lesson).",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "2p6"
   ],
@@ -14,5 +14,6 @@
   "acceptance_criteria": "A run whose integrated gate fails after an attempt merged dispatches one repair job with the gate output and the tick's diff in its prompt, merges and re-gates its result, and continues without a person when the repair passes; the repair routes at the ceiling tier and never to claude in the cloud; a failed repair is a stop naming both gate failures; a test drives a real gate failure (a stale reference left by a deletion) through repair to a closed tick",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T11:12:06.96106Z",
-  "updated_at": "2026-09-25T08:33:55.867053Z"
+  "updated_at": "2026-09-25T18:55:45.33167Z",
+  "started_at": "2026-09-25T18:55:45.331669Z"
 }
