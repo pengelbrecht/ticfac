@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 39,
-  "state": "failed",
-  "reason": "nfo did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: nfo try 1 (run dispatch #5) reported a findings block this reconciler cannot read: findings[0] carries \"done_item\", which is not a finding field. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
-  "updated_at": "2026-09-25T18:21:50Z",
+  "sequence": 40,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-25T18:28:14Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -71,7 +71,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/gvc",
-    "source_sha": "cc7699ce3a8eb9b3f390e45bdad0ac6b1e994309",
+    "source_sha": "b5ea640e9a72ca3066c33229e38d61abcc7592eb",
     "integration_ref": "refs/heads/epic/gvc",
     "phase": "worker",
     "executor": null,
