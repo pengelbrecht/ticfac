@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 60,
-  "state": "integrating",
-  "reason": "integrating ryv attempt 8 into epic/gvc",
-  "updated_at": "2026-09-25T21:03:08Z",
+  "sequence": 61,
+  "state": "gating",
+  "reason": "running the integrated gate for ryv on af453139e920",
+  "updated_at": "2026-09-25T21:03:22Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "ryv",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 8
     }
   ],
