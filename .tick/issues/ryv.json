@@ -2,6 +2,7 @@
   "id": "ryv",
   "title": "An unrecognised field in a finding is kept in its body, not a rejection of the tick's work",
   "description": "epic-gvc, 2026-09-25: 3h0's worker finished its tick and wrote a findings block where one finding carried an extra key, \"title_note\". The strict findings parser (internal/exec/subprocess/findings.go) refuses the whole report on any unknown key, so the attempt was rejected as finding_report_invalid and the run halted for a person. The work was fine; a person released it with carry-work. The strictness exists so a half-understood list never silently loses the half it did not understand. Keeping unknown keys inside the finding's body as a labelled line serves that goal without throwing away a tick's work over an annotation. Do this after nfo, which is extending the same record.",
+  "notes": "2026-09-25 23:04 - ticfac run epic-gvc: ryv try 1 (run dispatch #8) merged into epic/gvc as af453139e920; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -13,6 +14,6 @@
   "acceptance_criteria": "A finding with an unknown key is accepted with the key and value appended to its body (and a note in the attempt's records that it was folded); missing required fields and invalid values still refuse; tests cover an unknown key, a missing key and a bad kind",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-25T09:39:59.546623Z",
-  "updated_at": "2026-09-25T18:32:08.0431Z",
+  "updated_at": "2026-09-25T21:04:47.261239Z",
   "started_at": "2026-09-25T18:32:08.043099Z"
 }
