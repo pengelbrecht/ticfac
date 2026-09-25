@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 18,
+  "sequence": 19,
   "state": "failed",
-  "reason": "3h0 try 1 (run dispatch #2) reported a findings block this reconciler cannot read: findings[1] carries \"title_note\", which is not a finding field. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
-  "updated_at": "2026-09-25T09:38:51Z",
+  "reason": "3h0 did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 3h0 try 1 (run dispatch #2) reported a findings block this reconciler cannot read: findings[1] carries \"title_note\", which is not a finding field. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
+  "updated_at": "2026-09-25T09:38:55Z",
   "ticks": [
     {
       "tick_id": "2p6",
