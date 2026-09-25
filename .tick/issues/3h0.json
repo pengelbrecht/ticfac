@@ -10,6 +10,6 @@
   "acceptance_criteria": "A tick created under the running epic after the run started is dispatched by that run without a restart; a blocked_by edge added mid-run is honoured before the blocked tick is dispatched; the close-out refuses to start while any child of the epic other than itself is open; tests drive all three",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:14:02.61324Z",
-  "updated_at": "2026-09-25T08:34:37.543093Z",
+  "updated_at": "2026-09-25T09:40:29.680417Z",
   "started_at": "2026-09-25T08:34:37.543093Z"
 }
