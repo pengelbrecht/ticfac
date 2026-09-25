@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 47,
-  "state": "collecting",
-  "reason": "collecting 3h0 attempt 6",
-  "updated_at": "2026-09-25T18:36:32Z",
+  "sequence": 48,
+  "state": "integrating",
+  "reason": "integrating 3h0 attempt 6 into epic/gvc",
+  "updated_at": "2026-09-25T18:37:07Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "3h0",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
