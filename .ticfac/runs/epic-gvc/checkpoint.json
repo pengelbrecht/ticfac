@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 56,
-  "state": "running",
-  "reason": "2p6 is closed",
-  "updated_at": "2026-09-25T18:55:32Z",
+  "sequence": 57,
+  "state": "dispatching",
+  "reason": "dispatching wj6 as attempt 9",
+  "updated_at": "2026-09-25T18:55:40Z",
   "ticks": [
     {
       "tick_id": "2p6",
