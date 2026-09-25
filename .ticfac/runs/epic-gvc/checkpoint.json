@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 53,
-  "state": "integrating",
-  "reason": "integrating 2p6 attempt 1 into epic/gvc",
-  "updated_at": "2026-09-25T18:39:44Z",
+  "sequence": 54,
+  "state": "gating",
+  "reason": "running the integrated gate for 2p6 on 76abdf32ae12",
+  "updated_at": "2026-09-25T18:40:00Z",
   "ticks": [
     {
       "tick_id": "2p6",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
