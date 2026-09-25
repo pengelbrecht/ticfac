@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 57,
-  "state": "dispatching",
-  "reason": "dispatching wj6 as attempt 9",
-  "updated_at": "2026-09-25T18:55:40Z",
+  "sequence": 58,
+  "state": "running",
+  "reason": "wj6 is running as attempt 9",
+  "updated_at": "2026-09-25T18:55:48Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -39,7 +39,8 @@
     },
     {
       "tick_id": "wj6",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "npq",
