@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 6,
-  "state": "dispatching",
-  "reason": "dispatching klq as attempt 3",
-  "updated_at": "2026-09-25T08:34:47Z",
+  "sequence": 7,
+  "state": "running",
+  "reason": "klq is running as attempt 3",
+  "updated_at": "2026-09-25T08:34:57Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "klq",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 3
     },
     {
       "tick_id": "bse",
