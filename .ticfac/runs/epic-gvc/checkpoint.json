@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 55,
-  "state": "publishing",
-  "reason": "closing 2p6 behind the integrated gate on 76abdf32ae12",
-  "updated_at": "2026-09-25T18:55:20Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "2p6 is closed",
+  "updated_at": "2026-09-25T18:55:32Z",
   "ticks": [
     {
       "tick_id": "2p6",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
