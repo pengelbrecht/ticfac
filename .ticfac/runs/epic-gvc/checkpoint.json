@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 12,
-  "state": "running",
-  "reason": "klq is closed",
-  "updated_at": "2026-09-25T08:59:02Z",
+  "sequence": 13,
+  "state": "dispatching",
+  "reason": "dispatching bse as attempt 4",
+  "updated_at": "2026-09-25T08:59:09Z",
   "ticks": [
     {
       "tick_id": "2p6",
