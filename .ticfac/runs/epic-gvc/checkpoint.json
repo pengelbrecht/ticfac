@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 37,
-  "state": "collecting",
-  "reason": "collecting nfo attempt 5",
-  "updated_at": "2026-09-25T18:21:42Z",
+  "sequence": 38,
+  "state": "failed",
+  "reason": "nfo try 1 (run dispatch #5) reported a findings block this reconciler cannot read: findings[0] carries \"done_item\", which is not a finding field. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
+  "updated_at": "2026-09-25T18:21:48Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "nfo",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 5
     },
     {
