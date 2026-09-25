@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,7 +29,7 @@ type merge struct {
 	Merged      bool
 }
 
-func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Collection) (merge, error) {
+func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collected *subprocess.Collection) (merge, error) {
 	tick := marker.TickID
 	branch := branchOf(marker.WriteRef)
 
@@ -84,14 +85,41 @@ func (r *Reconciler) integrate(marker attemptHandle, collected *subprocess.Colle
 			return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
 		}
 
-		merged, err := r.mergeInWorktree(tick, marker.Attempt, branch, head, epicHead)
+		// A resolve in flight: set once the conflict is handed to the
+		// resolve-conflict job, run once the push below has landed it. The
+		// decision record and the teardown are the resolve's writes to the run
+		// branch, and a write between the mint and the push is a lease the
+		// push loses — so they wait for it.
+		var finalize func() error
+		merged, conflict, err := r.mergeInWorktree(tick, marker.Attempt, branch, head, epicHead)
 		if err != nil {
 			return merge{}, err
+		}
+		if conflict != nil {
+			// A content or add/add conflict between an attempt and the branch
+			// is two same-wave intents, and two same-wave intents are a union a
+			// worker holding BOTH descriptions can make (tick 2p6): the run
+			// dispatches a resolve-conflict job instead of stopping for a
+			// person. Every other conflict, and every failure of the resolve,
+			// is the stop it always was — naming the files, as ky5 made it.
+			merged, finalize, err = r.resolveConflict(ctx, marker, head, epicHead, conflict)
+			if err != nil {
+				return merge{}, err
+			}
 		}
 		_, stderr, pushErr := r.git.try("", "push",
 			"--force-with-lease="+refFor(r.branch)+":"+epicHead,
 			r.opts.Remote, merged+":"+refFor(r.branch))
 		if pushErr == nil {
+			if finalize != nil {
+				// The merge is on the branch: land the resolve's own records and
+				// retire the branch its resolution rode in on. A failure here is
+				// returned, never swallowed — the next incarnation would finish
+				// the same resolve from the branch and re-record what it owes.
+				if err := finalize(); err != nil {
+					return merge{}, err
+				}
+			}
 			r.setTick(tick, "integrated")
 			r.record(tick, StageIntegrated, "merged %s into %s as %s", short(head), r.branch, short(merged))
 			return merge{AttemptHead: head, EpicHead: merged, GateSHA: merged, Merged: true}, nil
@@ -145,13 +173,15 @@ func (r *Reconciler) integratedAlready(tick, branch string) (merge, error) {
 	return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
 }
 
-// mergeInWorktree performs the merge itself. A conflict is refused rather than
-// resolved: resolving one is a role-job with its own contract, and a
-// reconciler that resolved it silently would be a reconciler inventing code.
-func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epicHead string) (string, error) {
+// mergeInWorktree performs the merge itself. A conflict is returned as a
+// conflict rather than resolved here: resolving one is the resolve-conflict
+// job's (tick 2p6), and a reconciler that resolved it silently would be a
+// reconciler inventing code. The RESOLVABLE kinds are handed to that job by
+// integrate; every other failure of this merge is refused as it always was.
+func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epicHead string) (string, *mergeConflict, error) {
 	dir, remove, err := r.git.tempWorktree("ticfac-merge-", epicHead)
 	if err != nil {
-		return "", fmt.Errorf("prepare the merge worktree at %s: %w", short(epicHead), err)
+		return "", nil, fmt.Errorf("prepare the merge worktree at %s: %w", short(epicHead), err)
 	}
 	defer remove()
 
@@ -164,11 +194,21 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 		// describeMergeFailure).
 		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
 		_, _, _ = r.git.try(dir, "merge", "--abort")
-		return "", r.refuse(RefusedMerge, tick,
+		if conflict := classifyMergeFailure(stdout, stderr, unmerged, err); conflict != nil && conflict.resolvable() {
+			// Two same-wave intents (content, add/add): the resolve-conflict
+			// job's kinds, decided by integrate — not here, where the refusal
+			// is the only other thing this merge can produce.
+			return "", conflict, nil
+		}
+		return "", nil, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s: %s", r.attemptName(tick, attempt), r.branch,
 			describeMergeFailure(stdout, stderr, unmerged, err))
 	}
-	return r.git.run(dir, "rev-parse", "HEAD")
+	merged, err := r.git.run(dir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", nil, err
+	}
+	return merged, nil, nil
 }
 
 // describeMergeFailure is the sentence a merge_failed refusal ends with: which

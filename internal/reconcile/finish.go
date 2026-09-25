@@ -116,7 +116,7 @@ func (r *Reconciler) advanceFinish(ctx context.Context, f *finishing) (bool, err
 	case finishCollecting:
 		return false, r.finishCollect(ctx, f)
 	case finishIntegrating:
-		return false, r.finishIntegrate(f)
+		return false, r.finishIntegrate(ctx, f)
 	case finishGating:
 		return false, r.finishGate(ctx, f)
 	case finishClosing:
@@ -172,8 +172,8 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 }
 
 // finishIntegrate merges the attempt into the integration branch.
-func (r *Reconciler) finishIntegrate(f *finishing) error {
-	merged, err := r.integrate(f.fl.marker, f.collected)
+func (r *Reconciler) finishIntegrate(ctx context.Context, f *finishing) error {
+	merged, err := r.integrate(ctx, f.fl.marker, f.collected)
 	if err != nil {
 		r.disposeFinished(f, err)
 		return err
