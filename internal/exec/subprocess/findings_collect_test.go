@@ -1,6 +1,9 @@
 package subprocess
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The findings channel through a REAL collect: the block a worker wrote in its
 // report arrives in the collection the reconciler reads, and in the
@@ -80,6 +83,57 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	// open payload must not carry a second, unvalidated copy of it.
 	if _, still := answer.Result["findings"]; still {
 		t.Error("the envelope still carries result[\"findings\"] — the first-class field is the record now, and a second spelling is the drift the bundle was cut to retire")
+	}
+}
+
+// The fold through a REAL collect (tick ryv): the 3h0 shape — a worker whose
+// work is fine reports a finding carrying a key the record does not know
+// ("title_note") — and the attempt must NOT be refused over the annotation.
+// The finding arrives with the key folded into its body as a labelled line,
+// the collection names what was folded, and the envelope's result map states
+// it too: the attempt's own durable record says the worker's unknown half
+// was KEPT rather than thrown away with the tick's work.
+func TestCollectFoldsAnUnknownFindingKeyAndNotesTheFold(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "findings_folds"})
+	handle := f.Start(f.spec("run-42/tick-fld/attempt-1", "fld"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	// The work was fine, and the fold is not a refusal: the verdict is the
+	// branch's, as it would have been for any other finished attempt.
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want %s: an unknown finding key must not reject a finished tick's work",
+			collected.Verdict, VerdictReadyToMerge)
+	}
+	if collected.FindingsProblem != "" {
+		t.Fatalf("findings problem %q: a folded key is not a problem", collected.FindingsProblem)
+	}
+	if len(collected.Findings) != 1 {
+		t.Fatalf("findings %v, want the one the block carried", collected.Findings)
+	}
+	want := "Discovered beside the work, reported mechanically.\n" +
+		"folded title_note: an annotation the record has no field for"
+	if collected.Findings[0].Body != want {
+		t.Fatalf("body %q, want the worker's body with the unknown key folded in as a labelled line:\n%q",
+			collected.Findings[0].Body, want)
+	}
+	if len(collected.FindingsFolded) != 1 || !strings.Contains(collected.FindingsFolded[0], "title_note") {
+		t.Fatalf("folded %v, want the unknown key named for the attempt's records", collected.FindingsFolded)
+	}
+
+	answer := collected.Result.RoleResult
+	if answer == nil {
+		t.Fatal("no role-result envelope")
+	}
+	if got, _ := answer.Result["findings_folded"].([]string); len(got) != 1 || !strings.Contains(got[0], "title_note") {
+		t.Fatalf("the envelope's result map does not state the fold: %v — the attempt's record must name "+
+			"what was kept, or the fold is a silent rewrite of what the worker wrote", answer.Result)
+	}
+	// The envelope's findings ride as the PINNED five-field record, and the
+	// fold rides inside the pinned body — nothing about the fold needs a
+	// field the bundle has not adopted.
+	if len(answer.Findings) != 1 || !strings.Contains(answer.Findings[0].Body, "folded title_note:") {
+		t.Fatalf("envelope findings %v, want the folded body on the record the schema validates", answer.Findings)
 	}
 }
 
