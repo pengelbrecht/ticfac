@@ -1508,3 +1508,4 @@
 {"ts":"2026-09-25T08:58:54.104679Z","tick":"klq","action":"note","actor":"ticfac","epic":"gvc","data":{"note":"\n2026-09-25 10:58 - ticfac run epic-gvc: klq try 1 (run dispatch #3) merged into epic/gvc as 46195302cc43; the integrated gate (go, ts) passed.","title":"An epic's definition of done becomes enumerable items"}}
 {"ts":"2026-09-25T08:58:59.860504Z","tick":"klq","action":"close","actor":"ticfac","epic":"gvc","data":{"title":"An epic's definition of done becomes enumerable items"}}
 {"ts":"2026-09-25T08:59:15.08351Z","tick":"bse","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"Predict gating where the done cannot yet be run"}}
+{"ts":"2026-09-25T08:59:30.174042Z","tick":"nfo","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"A finding names the done item it breaks and the check that would show it"}}

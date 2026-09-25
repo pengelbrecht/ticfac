@@ -2,10 +2,10 @@
   "id": "nfo",
   "title": "A finding names the done item it breaks and the check that would show it",
   "description": "OPERATOR, 2026-09-24, agreed design: the reporting LLM supplies EVIDENCE, never the verdict on whether a finding gates its epic. Today a finding is free text, so every gating decision needed a person to read it (yoh: ~40 findings triaged by hand, six absorbed).\n\nDO: extend the finding format with structured fields: the epic done item (klq's enumerated id) the reporter believes it breaks, or 'none'; and the command/test that would demonstrate the breakage, from the repo's declared commands where one fits. Workers are prompted to fill them and a finding missing them is still accepted (marked unlinked). These fields are what pzp runs (the done check is the authoritative verdict), what bse's Jev classifier takes as one input when the check cannot run yet, and what jlv scores the reporter against afterwards, per model.\n\nDecision order this enables (the gvc design, stated once): (1) the named check runs now on the epic head, and its result is the verdict; (2) otherwise Jev predicts from finding text + the epic's done items + the reporter's claim; (3) an uncertain band routes to the operator mechanically. The reporter's own claim is never the verdict.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "klq"
   ],
@@ -16,5 +16,6 @@
   "acceptance_criteria": "The finding schema carries done_item (an enumerated id or none) and demonstrating_check; the worker prompt asks for both; findings without them are accepted and marked unlinked; the contract and both readers are updated; a test round-trips a linked and an unlinked finding",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:17:17.402525Z",
-  "updated_at": "2026-09-25T08:33:55.824318Z"
+  "updated_at": "2026-09-25T08:59:30.173633Z",
+  "started_at": "2026-09-25T08:59:30.173632Z"
 }
