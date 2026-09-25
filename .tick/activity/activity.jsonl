@@ -1515,3 +1515,4 @@
 {"ts":"2026-09-25T09:39:59.626134Z","tick":"npq","action":"block","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"blockers":["pzp","bse","ryv"],"title":"A gating finding becomes a tick in the running epic, with no person"}}
 {"ts":"2026-09-25T09:49:08.992344Z","tick":"bse","action":"note","actor":"ticfac","epic":"gvc","data":{"note":"\n2026-09-25 11:49 - ticfac run epic-gvc: bse try 1 (run dispatch #4) merged into epic/gvc as ac8a5faaf1bb; the integrated gate (go, ts) passed.","title":"Predict gating where the done cannot yet be run"}}
 {"ts":"2026-09-25T09:49:13.599601Z","tick":"bse","action":"close","actor":"ticfac","epic":"gvc","data":{"title":"Predict gating where the done cannot yet be run"}}
+{"ts":"2026-09-25T09:49:34.086962Z","tick":"pzp","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"Running the done is the authoritative verdict on a finding"}}
