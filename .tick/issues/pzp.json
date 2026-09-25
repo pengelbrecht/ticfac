@@ -3,7 +3,7 @@
   "title": "Running the done is the authoritative verdict on a finding",
   "description": "The oracle half of gvc's two-tier rule. Given a finding and the epic's acceptance items, run every item that IS runnable and answer whether the done is reachable with the finding standing.\n\nThe rule this establishes, and nothing later may weaken it: where an item can be run, running it WINS. No classifier overrides an observation. A prediction that disagrees with a run is the prediction being wrong, and that is the whole reason the oracle is built first.\n\nThe two worked cases from the session gvc came out of, both of which this tier handles:\n  - two fixtures made go test -short red at base, so no tick could close behind the gate\n    and the done was unreachable. GATING, observed, no judgement needed.\n  - ky5 (a merge_failed refusal naming no conflicting file) cost an operator an hour and\n    left every acceptance item reachable. NOT GATING, and it correctly stayed backlog.\n\nRecord the verdict as OBSERVED, with the item id and the command's evidence, in the\nshape gate evidence already takes - keyed by the commit it ran on, so the record means\nsomething on a re-derivation rather than being a timestamped opinion.\n\nItems that are not runnable are NOT this tick's answer. Return them as unresolved and\nlet the next tick predict them. An oracle that guesses is not an oracle.",
   "notes": "2026-09-25 15:10 - ticfac run epic-gvc: pzp try 1 (run dispatch #7) reported a finding drafted for triage — proposed-tick \"The gate's 16 KiB inline-output bound is now declared twice and can drift\" (key b383d294474e1d25b701bbbfbb7887c54567102b46c2d7dbe78a87b09c4397de, severity low, for this repository). Triage with `ticfac finding gvc b383d294474e1d25b701bbbfbb7887c54567102b46c2d7dbe78a87b09c4397de --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-25 15:47 - ticfac run epic-gvc: pzp try 1 (run dispatch #7) merged into epic/gvc as fb00f4da7e08; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -17,6 +17,6 @@
   "acceptance_criteria": "Given a finding and an epic's acceptance, every runnable item is run and the finding is reported GATING or NOT GATING as an OBSERVED verdict naming the item and its evidence; unrunnable items come back unresolved rather than assumed either way; the verdict is keyed by the commit it ran on; and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:30:54.936508Z",
-  "updated_at": "2026-09-25T13:47:19.24547Z",
-  "started_at": "2026-09-25T09:49:34.086289Z"
+  "updated_at": "2026-09-25T13:47:24.493242Z",
+  "closed_at": "2026-09-25T13:47:24.493242Z"
 }
