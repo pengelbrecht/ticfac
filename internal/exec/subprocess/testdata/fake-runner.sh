@@ -134,6 +134,30 @@ findings_bad)
 		printf '\nSTATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 	;;
+findings_folds)
+	# The fold case (tick ryv): a finding carrying a key the record does not
+	# know — the 3h0 shape, an extra "title_note" — from a worker whose work
+	# is otherwise DONE. Collect must ACCEPT the finding with the key folded
+	# into its body as a labelled line, carry the fold so the attempt's
+	# records can note it, and not turn the annotation into a refusal.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner reported a finding with an extra key.\n\n'
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "defect",'
+		printf '%s\n' '  "title": "A finding carrying an extra key",'
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "medium",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "title_note": "an annotation the record has no field for"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
 report_then_addall)
 	# The shape wtd exists for: the report is written FIRST, then the worker
 	# runs `git add -A` and commits everything in the worktree, exactly the

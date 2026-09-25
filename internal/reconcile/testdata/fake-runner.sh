@@ -257,6 +257,39 @@ finding_blocked)
 		report
 	fi
 	;;
+finding_folds)
+	# The fold case (tick ryv): a1's report carries a finding with a key the
+	# record does not know — the 3h0 shape, an extra "title_note" — over
+	# otherwise DONE work. The attempt must be ACCEPTED, not refused as
+	# finding_report_invalid: the finding is drafted with the key folded into
+	# its body as a labelled line, the run's records note the fold, and the
+	# tick closes as it would for any other discovery. Every other tick is
+	# the plain report mode.
+	if [ "$TICFAC_TICK" = "a1" ]; then
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The fake runner also found things outside its tick.\n\n'
+			printf '%s\n' '```findings'
+			printf '%s\n' '[{'
+			printf '%s\n' '  "kind": "proposed-tick",'
+			printf '%s\n' '  "title": "A finding carrying an extra key",'
+			printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+			printf '%s\n' '  "severity": "medium",'
+			printf '%s\n' '  "target": "",'
+			printf '%s\n' '  "title_note": "an annotation the record has no field for"'
+			printf '%s\n' '}]'
+			printf '%s\n' '```'
+			printf '\n'
+			verdict_line
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	else
+		commit
+		report
+	fi
+	;;
 blocked-first)
 	# A tick's FIRST TRY is a worker that found a blocker of its own still open
 	# and said so: a report with STATUS: BLOCKED, and no commit at all. Every

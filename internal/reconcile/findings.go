@@ -88,6 +88,19 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		return nil
 	}
 
+	// The fold, noted in the attempt's records (tick ryv): keys the finding
+	// record does not know were kept inside the finding's body as labelled
+	// lines, and this line says so — naming them and the attempt — because a
+	// fold nobody recorded is indistinguishable from a channel that silently
+	// rewrites what a worker wrote. It is a NOTE, not a problem: the attempt
+	// stands, the finding is drafted with the fold in its body, and a person
+	// triaging the draft reads the unknown half where it rode.
+	if len(collected.FindingsFolded) > 0 {
+		r.record(marker.TickID, StageFindingFolded,
+			"%s reported finding keys the record does not know, folded into the finding bodies rather than refused: %s",
+			r.attemptName(marker.TickID, marker.Attempt), strings.Join(collected.FindingsFolded, ", "))
+	}
+
 	if _, err := r.store.Fetch(); err != nil {
 		return err
 	}

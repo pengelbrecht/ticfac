@@ -769,6 +769,16 @@ const (
 	StageFindingFiled     = "finding_filed"
 	StageFindingDuplicate = "finding_duplicate"
 
+	// StageFindingFolded is the attempt's own record that its report carried
+	// finding keys the finding record does not know (tick ryv): each one was
+	// folded into its finding's body as a labelled line rather than refusing
+	// the attempt — the 3h0 worker's finished tick was once rejected as
+	// finding_report_invalid over an extra "title_note", and a person had to
+	// release work that was fine. The fold itself is the repair; this line is
+	// what keeps the repair visible in the attempt's records instead of a
+	// silent rewrite of what the worker wrote.
+	StageFindingFolded = "finding_folded"
+
 	// StageClosedCarrying is the line a tick's close leaves when it closes
 	// behind findings nobody has triaged yet (tick aqm): the per-tick hold is
 	// gone, the tick closes, and the finding rides to the close-out — so the
