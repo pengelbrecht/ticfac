@@ -85,6 +85,12 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 		"Discovered beside the work, reported mechanically.",
 		"An upstream finding routed to another repository",
 		"pengelbrecht/ticks",
+		// THE DONE EVIDENCE (tick nfo): the claim against the epic's definition
+		// of done rides beside the finding's text, because the PR is where a
+		// person decides — a finding whose claim nobody can see is evidence
+		// the absorption decision does not have.
+		"breaks done item A1",
+		"unlinked: names no done item",
 	} {
 		if got := strings.Count(body, want); got != 1 {
 			t.Errorf("the body carries %q %d times, want exactly 1:\n%s", want, got, body)

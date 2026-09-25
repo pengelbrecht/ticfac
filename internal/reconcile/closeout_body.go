@@ -126,6 +126,12 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			for i, finding := range byTick[tick] {
 				fmt.Fprintf(&body, "%d. %s — %s (%s, for %s), triaged %s\n",
 					i+1, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target), finding.Status)
+				// The linkage mark (tick nfo): the claim against the epic's
+				// definition of done — which [A<n>] item the reporter says is
+				// broken, demonstrated by what — or the unlinked mark. The PR
+				// is where a person decides, and a claim the decision cannot
+				// see is evidence the absorption decision does not have.
+				fmt.Fprintf(&body, "   %s\n", finding.LinkageText())
 				if finding.Body != "" {
 					// The finding's own text, indented under its identity: "every
 					// finding's text" is the acceptance, not just every title.

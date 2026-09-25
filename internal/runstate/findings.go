@@ -99,6 +99,25 @@ type Finding struct {
 	TickID  string `json:"tick_id"`
 	Attempt int    `json:"attempt"`
 
+	// The finding's DONE EVIDENCE (tick nfo): the claim the reporting worker
+	// made against the EPIC's definition of done, carried field for field as
+	// reported. The claim is never the verdict on whether the finding gates
+	// the done — the named check is what the run runs where the item is
+	// runnable, one input to a prediction where it is not yet, and the claim
+	// is what the reporter is later scored against.
+	//
+	// DoneItem is the [A<n>] acceptance item the reporter believes the
+	// finding breaks, or "none" when the reporter believes it breaks none.
+	// DemonstratingCheck is the command or test the reporter says would
+	// demonstrate the breakage — one of the repository's declared testing
+	// commands where one fits, else the test's name. BOTH are optional at
+	// the report: a draft that carries neither is UNLINKED, and is accepted —
+	// Linkage states it rather than leaving a reader to infer it from
+	// silence, the same visible-third-state rule an unbound acceptance item
+	// gets (UNVERIFIED, not false).
+	DoneItem           string `json:"done_item,omitempty"`
+	DemonstratingCheck string `json:"demonstrating_check,omitempty"`
+
 	// Status is the triage state; the fields below name the triage.
 	Status     string `json:"status"`
 	ProposedAt string `json:"proposed_at"`
@@ -113,6 +132,55 @@ type Finding struct {
 	FixedAs string `json:"fixed_as,omitempty"`
 
 	Provenance Provenance `json:"provenance"`
+}
+
+// The linkage states of a draft's done-item claim (tick nfo): what the
+// reporter said about the epic's definition of done, as a stated fact rather
+// than something a reader infers from absent keys.
+const (
+	// FindingLinkedToAnItem: done_item names the acceptance item the
+	// reporter believes the finding breaks — the claim pzp runs the named
+	// check against, and bse's classifier takes as one input.
+	FindingLinkedToAnItem = "linked"
+	// FindingClaimsNoItem: done_item is the reporter's answer that the
+	// finding breaks no item. A claim, scored like any other — never the
+	// verdict, because the reporter's own claim is never the verdict.
+	FindingClaimsNoItem = "none"
+	// FindingUnlinked: neither evidence field was reported. Accepted, and
+	//	marked — the state an absorption decision treats as "no evidence from
+	// the reporter", not as a claim of non-gating.
+	FindingUnlinked = "unlinked"
+)
+
+// Linkage states what the draft's done_item claim is: linked to an item, the
+// reporter's none, or unlinked. Derived from the record rather than stored
+// beside it, so the mark cannot drift from the fields it marks.
+func (f Finding) Linkage() string {
+	switch {
+	case subprocess.ValidFindingDoneItem(f.DoneItem):
+		return FindingLinkedToAnItem
+	case f.DoneItem == subprocess.FindingDoneItemNone:
+		return FindingClaimsNoItem
+	default:
+		return FindingUnlinked
+	}
+}
+
+// LinkageText is the mark as the surfaces spell it — one wording, shared by
+// the event feed, the triage listing and the close-out's PR body, because a
+// mark three surfaces spell three ways is three marks.
+func (f Finding) LinkageText() string {
+	switch f.Linkage() {
+	case FindingLinkedToAnItem:
+		if f.DemonstratingCheck == "" {
+			return "breaks done item " + f.DoneItem
+		}
+		return fmt.Sprintf("breaks done item %s (demonstrated by %q)", f.DoneItem, f.DemonstratingCheck)
+	case FindingClaimsNoItem:
+		return "claims to break no done item"
+	default:
+		return "unlinked: names no done item"
+	}
 }
 
 // Validate applies the draft's own rules: the closed triage vocabulary, the
@@ -143,6 +211,9 @@ func (f Finding) Validate() error {
 	}
 	if !oneOf(f.Severity, subprocess.FindingSeverities) {
 		return fmt.Errorf("finding.severity %q is not one of %s", f.Severity, strings.Join(subprocess.FindingSeverities, ", "))
+	}
+	if err := subprocess.ValidateDoneItem(f.DoneItem); err != nil {
+		return err
 	}
 	if f.TickID == "" || f.Attempt < 1 {
 		return fmt.Errorf("finding names no tick or attempt: the tick whose worker found it is where a " +

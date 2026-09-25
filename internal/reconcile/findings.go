@@ -110,11 +110,21 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			Body:           finding.Body,
 			Severity:       finding.Severity,
 			Target:         finding.Target,
-			TickID:         marker.TickID,
-			Attempt:        marker.Attempt,
-			Status:         runstate.FindingProposed,
-			ProposedAt:     r.now().UTC().Format("2006-01-02T15:04:05Z"),
-			Provenance:     r.attemptProvenance(dispatch),
+			// The finding's DONE EVIDENCE (tick nfo) rides the draft field for
+			// field as reported: which acceptance item of the epic's definition
+			// of done the reporter says is broken ("none" when none), and the
+			// command or test that would demonstrate it. This is the half the
+			// absorption decision runs on — the done check where the item is
+			// runnable, a prediction's input where it is not — and the claim is
+			// what the reporter is later scored against, so it is preserved
+			// with the discovery, never summarised into it.
+			DoneItem:           finding.DoneItem,
+			DemonstratingCheck: finding.DemonstratingCheck,
+			TickID:             marker.TickID,
+			Attempt:            marker.Attempt,
+			Status:             runstate.FindingProposed,
+			ProposedAt:         r.now().UTC().Format("2006-01-02T15:04:05Z"),
+			Provenance:         r.attemptProvenance(dispatch),
 		}
 		outcome, err := r.store.PutFinding(draft)
 		if err != nil {
@@ -139,9 +149,9 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			continue
 		}
 		r.record(marker.TickID, StageFindingFiled,
-			"finding %s drafted for triage: %s %q, severity %s, for %s (discovered by %s)",
+			"finding %s drafted for triage: %s %q, severity %s, for %s (discovered by %s), %s",
 			key, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target),
-			r.attemptName(marker.TickID, marker.Attempt))
+			r.attemptName(marker.TickID, marker.Attempt), draft.LinkageText())
 		// The tick's own record names the draft, so a person reading the
 		// tracker — not only the run state — sees that a finding is waiting
 		// for them, and sees where to triage it.
@@ -239,8 +249,11 @@ func (r *Reconciler) gateCloseoutOnFindings(tick string, prNumber int) (*Refusal
 	titles := make([]string, 0, len(untriaged))
 	for _, finding := range untriaged {
 		keys = append(keys, finding.Key)
-		titles = append(titles, fmt.Sprintf("%q (%s, severity %s, tick %s, for %s)",
-			finding.Title, finding.Kind, finding.Severity, finding.TickID, targetName(finding.Target)))
+		// The linkage mark (tick nfo) rides the hold's naming of each finding:
+		// the person triaging sees which acceptance item the reporter says is
+		// broken — and which finding made no claim — without opening the draft.
+		titles = append(titles, fmt.Sprintf("%q (%s, severity %s, tick %s, for %s, %s)",
+			finding.Title, finding.Kind, finding.Severity, finding.TickID, targetName(finding.Target), finding.LinkageText()))
 	}
 	return r.refuse(RefusedFindingUntriaged, tick,
 		"%d finding(s) this run drafted are still waiting for a person — %s — and the close-out does "+

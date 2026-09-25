@@ -99,6 +99,7 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 		"An upstream finding routed to another repository",
 		"tick a1",
 		"close-out does not hand over",
+		"breaks done item A1", // the hold names each finding's claim against the done (tick nfo)
 	} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",
@@ -152,6 +153,45 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	}
 	if !routed {
 		t.Error("the upstream finding lost its target repository: a finding routed elsewhere was dropped into this one")
+	}
+
+	// THE DONE EVIDENCE RODE WITH THE DRAFTS (tick nfo), linked and unlinked
+	// alike: the finding that claimed to break the epic's acceptance item kept
+	// its claim and the check that would demonstrate it, and the one reported
+	// without the evidence fields is marked UNLINKED rather than reading as
+	// no claim — the round trip the channel promises, what the worker reported
+	// is what the draft says.
+	var linkedSeen bool
+	for _, finding := range findings {
+		if finding.Title == "A finding the fake runner proposes" {
+			linkedSeen = true
+			if finding.DoneItem != "A1" || finding.DemonstratingCheck != "go" {
+				t.Errorf("the linked draft lost its claim: done_item %q, demonstrating_check %q",
+					finding.DoneItem, finding.DemonstratingCheck)
+			}
+			if finding.Linkage() != runstate.FindingLinkedToAnItem {
+				t.Errorf("linkage %q, want %q", finding.Linkage(), runstate.FindingLinkedToAnItem)
+			}
+			continue
+		}
+		if finding.Linkage() != runstate.FindingUnlinked {
+			t.Errorf("linkage %q, want %q: a finding reported without the evidence fields is accepted and marked",
+				finding.Linkage(), runstate.FindingUnlinked)
+		}
+	}
+	if !linkedSeen {
+		t.Fatal("the finding that carried done evidence was not among the drafts")
+	}
+	// The run's own record says the same thing the drafts do, so the feed
+	// names each finding's claim — a person reading the event stream sees
+	// which done item the reporter says is broken, and which finding made no
+	// claim at all.
+	for _, event := range reconciler.Journal() {
+		if event.Stage == StageFindingFiled && strings.Contains(event.Detail, "A finding the fake runner proposes") {
+			if !strings.Contains(event.Detail, "breaks done item A1") {
+				t.Errorf("the filed event does not carry the claim: %q", event.Detail)
+			}
+		}
 	}
 
 	// The tick's own record names the drafts, so a person reading the tracker

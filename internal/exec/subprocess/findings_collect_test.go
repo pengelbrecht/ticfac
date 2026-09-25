@@ -36,6 +36,19 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	if collected.Findings[0].Kind != FindingKindProposedTick || collected.Findings[0].Target != "" {
 		t.Errorf("finding[0] %+v, want a proposed tick for this repository", collected.Findings[0])
 	}
+	// THE DONE EVIDENCE (tick nfo): the linked finding's claim against the
+	// epic's definition of done rides the collection — the draft the
+	// reconciler files is where the absorption decision reads it — and the
+	// finding reported without the fields is carried unlinked, not refused.
+	if collected.Findings[0].DoneItem != "A1" || collected.Findings[0].DemonstratingCheck != "go" {
+		t.Errorf("finding[0] done evidence is done_item %q, demonstrating_check %q, want A1 and go — "+
+			"the claim must reach the reconciler with the finding", collected.Findings[0].DoneItem,
+			collected.Findings[0].DemonstratingCheck)
+	}
+	if collected.Findings[1].DoneItem != "" || collected.Findings[1].DemonstratingCheck != "" {
+		t.Errorf("finding[1] done evidence is done_item %q, demonstrating_check %q, want an unlinked finding",
+			collected.Findings[1].DoneItem, collected.Findings[1].DemonstratingCheck)
+	}
 	if collected.Findings[1].Kind != FindingKindUpstreamTick || collected.Findings[1].Target != "pengelbrecht/ticks" {
 		t.Errorf("finding[1] %+v, want an upstream tick routed to pengelbrecht/ticks", collected.Findings[1])
 	}
@@ -52,6 +65,13 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	}
 	if answer.Findings[1].Kind != FindingKindUpstreamTick || answer.Findings[1].Target != "pengelbrecht/ticks" {
 		t.Errorf("envelope findings[1] %+v, want an upstream tick routed to pengelbrecht/ticks", answer.Findings[1])
+	}
+	// The envelope's copy is the PINNED five-field record when it is WRITTEN
+	// (see TestTheEnvelopeCarriesFindingsAsThePinnedRecord): the evidence
+	// rides the block and the draft, and joins the envelope when the bundle
+	// adopts it. In memory the same typed list the collection carries.
+	if answer.Findings[0].DoneItem != "A1" || answer.Findings[1].DoneItem != "" {
+		t.Errorf("the in-memory envelope findings are not the same list the collection carries: %+v", answer.Findings)
 	}
 	if got := answer.Result["findings_problem"]; got != "" {
 		t.Errorf("findings_problem %v, want the empty string", got)

@@ -45,6 +45,10 @@ findings_block() {
 	# discoveries in. Two findings, deliberately different in target: one for
 	# the repository being run, one routed upstream — a worker that discovers
 	# something on ANOTHER tracker names which one, and the draft keeps it.
+	# Since tick nfo the block also carries the first finding's DONE EVIDENCE
+	# (done_item + demonstrating_check), and the second finding deliberately
+	# carries none: a linked finding and an unlinked one are both shapes the
+	# real worker produces, and the drafts must keep both claims honestly.
 	{
 		printf '%s\n' '```findings'
 		printf '%s\n' '[{'
@@ -52,7 +56,9 @@ findings_block() {
 		printf '%s\n' '  "title": "A finding the fake runner proposes",'
 		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
 		printf '%s\n' '  "severity": "high",'
-		printf '%s\n' '  "target": ""'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "go"'
 		printf '%s\n' '}, {'
 		printf '%s\n' '  "kind": "upstream-tick",'
 		printf '%s\n' '  "title": "An upstream finding routed to another repository",'
