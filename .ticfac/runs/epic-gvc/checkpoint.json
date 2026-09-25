@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 22,
-  "state": "running",
-  "reason": "3h0 is running as attempt 6",
-  "updated_at": "2026-09-25T09:40:33Z",
+  "sequence": 23,
+  "state": "collecting",
+  "reason": "collecting bse attempt 4",
+  "updated_at": "2026-09-25T09:46:54Z",
   "ticks": [
     {
       "tick_id": "2p6",
