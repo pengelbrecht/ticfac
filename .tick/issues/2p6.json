@@ -2,6 +2,7 @@
   "id": "2p6",
   "title": "A merge conflict between attempts dispatches a resolve-conflict job instead of stopping the run",
   "description": "Observed 2026-09-23 on epic-yoh: cr4 and 7eq (same wave) both rewrote supervisePass in cloudflare/src/run-workflow.ts. cr4's attempt then failed to merge onto epic/yoh (merge_failed), and the run STOPPED for a person with lkd, ppt and gbs still running. The same shape stopped epic-wne twice (0ju/mrn add/add). The factory runs unattended; a stop whose only remedy is a person hand-merging two agents' work is a design defect (memory: factory-runs-unattended).\n\nDO: on merge_failed for a content or add/add conflict between an attempt and the epic branch, dispatch a resolve-conflict job (the role already exists in the job contract, Phase 2) on a fresh worktree of the epic branch with the attempt's head merged in, conflict markers present, and both ticks' descriptions in the prompt. Its result is a merge commit whose parents are the epic head and the attempt head; the reconciler then treats the attempt as integrated (head contained) and runs the gate as usual. Route the job at the policy's ceiling tier (locally that is claude; in the cloud pi/GLM - never claude). A resolve job that fails, or a second conflict on the same tick, is the stop, as today.\n\nAlso: the planner should see this coming. Two same-wave ticks whose descriptions name one file (as cr4 and 7eq both named run-workflow.ts supervisePass) is a planning defect ky5's add/add note already calls out; a planning check that refuses same-wave ticks declaring the same file is the cheaper fix, and belongs with it.",
+  "notes": "2026-09-25 20:39 - ticfac run epic-gvc: 2p6 try 1 (run dispatch #1) reported a finding drafted for triage — proposed-tick \"git log --full-history is required to read a merge commit against its path\" (key daf02ac71924190018656adcb05ebabd6e1cabf948463ce7767d472760383df0, severity low, for this repository). Triage with `ticfac finding gvc daf02ac71924190018656adcb05ebabd6e1cabf948463ce7767d472760383df0 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -10,6 +11,6 @@
   "acceptance_criteria": "A run whose attempt conflicts with the epic branch dispatches a resolve-conflict job, integrates its merge, gates it and continues without a person; the job routes at the ceiling tier and never to claude in the cloud; a failed resolve is still a stop naming the files; a test drives a real content conflict through to integration",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T21:53:11.168502Z",
-  "updated_at": "2026-09-25T08:34:22.525971Z",
+  "updated_at": "2026-09-25T18:39:36.233585Z",
   "started_at": "2026-09-25T08:34:22.52597Z"
 }
