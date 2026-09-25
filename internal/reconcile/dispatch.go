@@ -275,6 +275,43 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 			"so this dispatch waits for a person and not for the clock", unit)
 	}
 
+	// The close-out's definition-of-done precondition (tick 3h0), read fresh
+	// from the tracker rather than from the plan: the close-out does not
+	// START while any child of the epic other than itself is open, whether or
+	// not an edge names it. This is the boundary the production incident
+	// crossed — a close-out dispatched over four open blockers, which opened
+	// the epic PR over an epic whose definition of done was not met — and it
+	// is deliberately WIDER than the edges: blocked_by is the plan's own
+	// sequencing vocabulary, while this gate is about what the epic IS. It
+	// runs before the PR + CI admission because it is the cheaper question and
+	// the one whose answer nothing downstream can repair: no PR needs opening
+	// for an epic whose own children are still open.
+	if entry.Role == "closeout-epic" {
+		if refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry); err != nil {
+			return true, err
+		} else if refusal != nil {
+			return true, refusal
+		}
+	}
+
+	// A blocked_by edge added mid-run is honoured HERE, at the last moment
+	// before the claim (tick 3h0): the tracker's own record for this tick is
+	// re-read for its blockers, and each blocker's status is the tracker's
+	// answer. The plan's re-derivation refreshes edges on every close, but a
+	// close is not guaranteed between an edge landing and this dispatch — a
+	// tick can reach the head of an empty window with nothing else to settle
+	// — and an edge the plan never saw is precisely the one this read exists
+	// for. What happens next is requeueBlocked's: a blocker this run can
+	// still close is dispatched first and this tick waits behind it; one it
+	// cannot is refused named. An OPEN blocker was, before this, discovered
+	// by the worker after an hour of thinking — the answer BLOCKED is the
+	// worker's, but the question was the run's to ask for nothing.
+	if open, err := r.openBlockersAtDispatch(ctx, current); err != nil {
+		return false, err
+	} else if len(open) > 0 {
+		return false, &blockedTickErr{tick: tick, blockers: open}
+	}
+
 	if isRoleJob(entry.Role) {
 		// Review and closeout are jobs like any other, on the same executor —
 		// what differs is that the reconciler acts on the ANSWER they return
@@ -293,6 +330,37 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 	}
 
 	return false, nil
+}
+
+// openBlockersAtDispatch is the tracker's own answer about which of this
+// tick's blocked_by edges still name an OPEN tick, read at the moment the run
+// is about to claim it (tick 3h0). It is the fresh half of the boundary the
+// window keeps: mayAdmit reads the PLAN — which a re-derivation refreshes on
+// every close — while this reads the TRACKER, so an edge that landed between
+// two re-derivations, or a blocker a person reopened behind the plan's back,
+// is still seen before anything is claimed or paid for.
+//
+// Only the tick's own blockers are read, one Show per blocker, because the
+// common case carries none and pays nothing — a tick the plan sequenced
+// correctly reaches this read with its edges already closed.
+func (r *Reconciler) openBlockersAtDispatch(ctx context.Context, current tk.Tick) ([]string, error) {
+	if len(current.BlockedBy) == 0 {
+		return nil, nil
+	}
+	var open []string
+	for _, id := range current.BlockedBy {
+		blocker, err := r.tracker.Show(ctx, id)
+		if err != nil {
+			// A blocker the tracker cannot answer for is a fact about the world,
+			// not a guess to make: the plan's own rule — never guess a blocker
+			// closed — is kept here, one edge further out.
+			return nil, fmt.Errorf("read the blocker %s of tick %s: %w", id, current.ID, err)
+		}
+		if blocker.Status != "closed" {
+			open = append(open, id)
+		}
+	}
+	return open, nil
 }
 
 // beginTick claims the tick and starts its attempt, and stops there.
