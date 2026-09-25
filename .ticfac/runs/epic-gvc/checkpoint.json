@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 11,
-  "state": "publishing",
-  "reason": "closing klq behind the integrated gate on 46195302cc43",
-  "updated_at": "2026-09-25T08:58:50Z",
+  "sequence": 12,
+  "state": "running",
+  "reason": "klq is closed",
+  "updated_at": "2026-09-25T08:59:02Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "klq",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 3
     },
     {
