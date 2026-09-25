@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 23,
-  "state": "collecting",
-  "reason": "collecting bse attempt 4",
-  "updated_at": "2026-09-25T09:46:54Z",
+  "sequence": 24,
+  "state": "integrating",
+  "reason": "integrating bse attempt 4 into epic/gvc",
+  "updated_at": "2026-09-25T09:47:02Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "bse",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 4
     },
     {
