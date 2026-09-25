@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 25,
-  "state": "gating",
-  "reason": "running the integrated gate for bse on ac8a5faaf1bb",
-  "updated_at": "2026-09-25T09:47:14Z",
+  "sequence": 26,
+  "state": "publishing",
+  "reason": "closing bse behind the integrated gate on ac8a5faaf1bb",
+  "updated_at": "2026-09-25T09:49:02Z",
   "ticks": [
     {
       "tick_id": "2p6",
