@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 9,
-  "state": "integrating",
-  "reason": "integrating klq attempt 3 into epic/gvc",
-  "updated_at": "2026-09-25T08:57:45Z",
+  "sequence": 10,
+  "state": "gating",
+  "reason": "running the integrated gate for klq on 46195302cc43",
+  "updated_at": "2026-09-25T08:57:58Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "klq",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 3
     },
     {
