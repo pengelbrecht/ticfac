@@ -70,11 +70,29 @@ var Roles = []string{"implement-tick", "review-epic", "closeout-epic"}
 // files spell it with, most specific first. ticks' own files say `implement`,
 // `review` and `closeout`; a file that spells the full role name is read too,
 // because an operator who wrote the longer name meant the same thing.
+//
+// resolve-conflict (ticfac tick 2p6) is routed ON DEMAND — it is not one of
+// [Roles], the set a run resolves at construction, because a role that exists
+// for the rare merge conflict must not make every cloud run refuse at start
+// over a cell the operator was never asked to declare. Its candidates end at
+// the REVIEW cell deliberately: the resolve job is a judgement job the run
+// routes at the policy's CEILING tier, and the review cell is the frontier
+// judgement routing every config already declares — claude locally, a Workers
+// AI model in the cloud, where [CloudRule] refuses anything else. A dedicated
+// `[roles.resolve-conflict]` (or `resolve`) cell always wins when an operator
+// declares one.
 var runnersConfigRoles = map[string][]string{
-	"implement-tick": {"implement-tick", "implement"},
-	"review-epic":    {"review-epic", "review"},
-	"closeout-epic":  {"closeout-epic", "closeout", "close-out"},
+	"implement-tick":   {"implement-tick", "implement"},
+	"review-epic":      {"review-epic", "review"},
+	"closeout-epic":    {"closeout-epic", "closeout", "close-out"},
+	"resolve-conflict": {"resolve-conflict", "resolve", "review"},
 }
+
+// RoleResolveConflict is the job-protocol role dispatched when an attempt's
+// merge onto the integration branch hits a conflict two intents caused
+// (ticfac tick 2p6). It is exported for the reconciler, which resolves it
+// lazily rather than through [ResolveAll].
+const RoleResolveConflict = "resolve-conflict"
 
 // RunnersRoleCandidates returns the roles-table names a profile role routes
 // through, first declared first — the same candidates route() walks. A caller

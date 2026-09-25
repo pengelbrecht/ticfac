@@ -75,10 +75,87 @@ report_with_findings() {
 		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 }
+
+# The resolve-conflict worker (tick 2p6): every file that still carries
+# git's conflict markers is rewritten as the resolved union — the fake
+# stands in for an agent that read both ticks' records and made the tree
+# both intents live in. The markers are the fixture's own: the reconciler
+# hands the job a worktree cut at the conflicted merge itself.
+resolve_union() {
+	for f in $(grep -rl '^<<<<<<<' "$TICFAC_WORKTREE" --exclude-dir=.git 2>/dev/null); do
+		printf 'resolved by the resolve-conflict job\n' > "$f"
+	done
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "resolve-conflict: $TICFAC_TICK" >/dev/null 2>&1
+}
+
+# One side of a CONTENT conflict between two same-wave ticks (tick 2p6): the
+# ticks $CONFLICT_TICKS names both edit one file that exists at the base, so
+# whichever of them merges second meets a real content conflict.
+#
+# The two workers SYNC before either commits, so both branch from one epic
+# head; the SECOND side then waits out the first's merge, so the conflict is
+# deterministic — the first tick merges cleanly, the second conflicts. The
+# wait is on the other side's .started marker (an event), bounded so a run
+# that never makes the other dispatch still ends and fails the test on its
+# assertion rather than on a timeout.
+conflict_side() {
+	mkdir -p "${CONFLICT_SYNC:?the conflict fixture needs CONFLICT_SYNC}"
+	: > "$CONFLICT_SYNC/$TICFAC_TICK.started"
+	set -- ${CONFLICT_TICKS:?the conflict fixture needs CONFLICT_TICKS}
+	first="$1"
+	needed=$(printf '%s\n' $CONFLICT_TICKS | grep -c .)
+	waited=0
+	while [ "$(ls "$CONFLICT_SYNC" 2>/dev/null | grep -c '\.started$')" -lt "$needed" ] && [ "$waited" -lt 60 ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	if [ "$TICFAC_TICK" != "$first" ]; then
+		sleep 2
+	fi
+	printf 'the %s side of the shared file\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/shared-work.txt"
+	commit
+	report
+}
+
+in_conflict_ticks() {
+	case " ${CONFLICT_TICKS:-} " in *" $TICFAC_TICK "*) return 0 ;; esac
+	return 1
+}
 case "$mode" in
 report)
 	commit
 	report
+	;;
+conflict)
+	# Two same-wave ticks rewrite one shared file (tick 2p6): whichever
+	# merges second hits a real content conflict, and the run's answer is
+	# the resolve-conflict job — dispatched by the reconciler with role
+	# resolve-conflict, whose fake worker makes the union. Every other
+	# tick behaves like the plain report mode.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		resolve_union
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+conflict_unresolvable)
+	# The same conflict, and a resolve job that cannot resolve it: it
+	# answers BLOCKED over an empty branch — a resolve that asks for a
+	# person, which is the stop the acceptance still names the files for.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		status=BLOCKED
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
 	;;
 stall-then-report)
 	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
