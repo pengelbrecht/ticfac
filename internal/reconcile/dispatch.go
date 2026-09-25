@@ -286,11 +286,24 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 	// runs before the PR + CI admission because it is the cheaper question and
 	// the one whose answer nothing downstream can repair: no PR needs opening
 	// for an epic whose own children are still open.
+	//
+	// The refusal it raises is first offered to the run's own sequencing
+	// rather than returned flat, as a blockedTickErr carrying the gate's own
+	// refusal (tick 3h0): the incident's ticks landed while the REVIEW ran,
+	// and a role job settles inline, so no re-derivation runs between the
+	// review's close and this settle — a flat refusal would make every
+	// mid-review absorption a failed run and a person's re-run, exactly what
+	// the tick exists to remove. requeueBlocked decides: children the fresh
+	// graph offers as work this run has not done are worked first, and this
+	// settle runs again over a graph that has closed them; only when nothing
+	// this run is doing can close a child does the gate's refusal stand.
 	if entry.Role == "closeout-epic" {
-		if refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry); err != nil {
+		open, refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry)
+		if err != nil {
 			return true, err
-		} else if refusal != nil {
-			return true, refusal
+		}
+		if refusal != nil {
+			return false, &blockedTickErr{tick: tick, blockers: open, refusal: refusal}
 		}
 	}
 

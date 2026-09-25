@@ -149,10 +149,22 @@ func parseCloseoutRule(document string) (CloseoutRule, error) {
 // mid-run the plan never picked up, a child a person reopened after the run
 // closed it, or an edge nobody drew at all.
 //
-// It answers nil,nil when the close-out may start, a refusal when a child is
-// open, and a plain error when the tracker cannot answer — the same rule every
-// graph read keeps: a graph the tracker cannot answer for stops the run rather
-// than being guessed at.
+// The incident's own timing is why the refusal is not returned flat. The
+// absorbed ticks landed while the REVIEW ran, and a role job settles inline
+// — its close is not a window-held attempt's close, so nothing replans
+// between the review and the close-out. A flat refusal would make every
+// mid-review absorption a failed run and a person's re-run, which is the
+// thing the tick exists to remove. So the gate hands its refusal to the
+// run's own sequencing instead (settleBeforeDispatch returns a blockedTickErr
+// carrying it, and requeueBlocked decides): the open children the fresh
+// graph offers as work this run has not done are WORKED first — admitted by
+// the re-derivation, dispatched, closed — and the refusal that finally
+// stands names only the children this run could do nothing about.
+//
+// It answers the open children and a refusal naming them when a child is
+// open, nothing when the close-out may start, and a plain error when the
+// tracker cannot answer — the same rule every graph read keeps: a graph the
+// tracker cannot answer for stops the run rather than being guessed at.
 //
 // The refusal is a FAILURE, not a hold: the next actor can be another run.
 // Once the children close — by a person, by whatever absorbed them — a re-run
@@ -160,10 +172,10 @@ func parseCloseoutRule(document string) (CloseoutRule, error) {
 // what it finds open, and reaches this gate again. What the run must never do
 // is the thing the old code did: keep going as though the epic's definition
 // of done were a fact about the plan rather than about the tracker.
-func (r *Reconciler) gateCloseoutOnOpenChildren(ctx context.Context, entry planEntry) (*Refusal, error) {
+func (r *Reconciler) gateCloseoutOnOpenChildren(ctx context.Context, entry planEntry) ([]string, *Refusal, error) {
 	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
 	if err != nil {
-		return nil, fmt.Errorf("reconcile: read the epic graph of %s before admitting the close-out: %w",
+		return nil, nil, fmt.Errorf("reconcile: read the epic graph of %s before admitting the close-out: %w",
 			r.opts.EpicID, err)
 	}
 	var open []string
@@ -175,9 +187,9 @@ func (r *Reconciler) gateCloseoutOnOpenChildren(ctx context.Context, entry planE
 		}
 	}
 	if len(open) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return r.refuse(RefusedCloseoutChildrenOpen, entry.TickID,
+	return open, r.refuse(RefusedCloseoutChildrenOpen, entry.TickID,
 		"the close-out of %s does not start while any child of the epic other than itself is open: %s %s still "+
 			"open, so the epic's definition of done is not met and this run refuses to close over it — a close-out that "+
 			"runs past an open child could hand over an epic whose goal nobody reached. The child(ren) may be ticks "+

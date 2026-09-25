@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -206,6 +207,76 @@ func TestABlockedByEdgeAddedMidRunIsHonouredBeforeTheBlockedTickIsDispatched(t *
 		t.Errorf("b1 was dispatched at %d, before n9 — the tick it was made blocked-by mid-run — closed at %d: "+
 			"the edge added while the run was going was not honoured before the blocked tick was dispatched",
 			dispatched["b1"], closed["n9"])
+	}
+}
+
+// TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun is
+// tick 3h0's production incident composed, end to end — the two behaviours
+// the individual tests drive, landed on the incident's own subject. On
+// epic-yoh (2026-09-24), while the review ran, four ticks were absorbed into
+// the epic AND the close-out was made blocked-by each of them; the live run
+// — whose plan carried none of it — went straight from the review into the
+// close-out and opened the epic PR over four open children. The first two
+// tests drive each behaviour alone (the admission on a work queue, the edge
+// on a work tick); this one drives them together on the close-out, because
+// that is the composition a person actually performed and the one whose
+// failure is an epic closed over an unmet definition of done: a close-out
+// made blocked-by a tick absorbed mid-run is worked AFTER that tick, by the
+// same run, with no restart.
+func TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: wideGate})
+	layerDynamically(t, f, map[string][]string{
+		"rv": {"a1", "a2", "b1"},
+		"co": {"a1", "a2", "b1", "rv"},
+	})
+
+	// While the review runs — the last thing before the close-out, exactly
+	// where the incident happened — a person absorbs a finding into the epic:
+	// a new child n9 appears AND the close-out is made blocked-by it.
+	f.wrap = func(inner Executor) Executor {
+		return &trackerMutator{Executor: inner, tracker: f.Tracker, on: "rv",
+			mutate: func(state *trackerState) {
+				addTick(state, "n9")
+				state.BlockedBy["co"] = []string{"a1", "a2", "b1", "rv", "n9"}
+			}}
+	}
+
+	r, result, err := f.run(f.Repo, fixtureOptions{gate: wideGate})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(result.Closed) != 6 {
+		t.Fatalf("closed %v, want every tick of the epic — n9 was absorbed while the review ran and the close-out was made "+
+			"blocked-by it, so the run must work n9 and only then close the epic; the run ended %s: %+v",
+			result.Closed, result.State, result.Failure)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s, want completed: absorbing a gating finding into a running epic must not need a person "+
+			"to kill the run so a resume can replan from scratch: %+v", result.State, result.Failure)
+	}
+
+	dispatched := map[string]int{}
+	closed := map[string]int{}
+	for i, event := range r.Journal() {
+		switch event.Stage {
+		case StageDispatched, StageAdopted, StageRedispatched:
+			if _, seen := dispatched[event.Tick]; !seen {
+				dispatched[event.Tick] = i
+			}
+		case StageClosed:
+			closed[event.Tick] = i
+		}
+	}
+	if _, ok := dispatched["n9"]; !ok {
+		t.Fatalf("n9 was never dispatched by the running run: %v", dispatched)
+	}
+	if dispatched["co"] < closed["n9"] {
+		t.Errorf("the close-out was dispatched at %d, before n9 — the tick it was made blocked-by while the review ran — "+
+			"closed at %d: the incident's own shape, a close-out dispatched over its open blocker", dispatched["co"], closed["n9"])
+	}
+	if dispatched["co"] < dispatched["n9"] {
+		t.Errorf("the close-out was dispatched at %d, before n9 was even dispatched at %d", dispatched["co"], dispatched["n9"])
 	}
 }
 

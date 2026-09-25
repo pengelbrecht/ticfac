@@ -560,17 +560,27 @@ func tickIDs(entries []planEntry) string {
 
 // ------------------------------------------------- edges added mid-run (3h0) ---
 
-// blockedTickErr is settleBeforeDispatch's answer for a tick whose tracker
-// record still names an OPEN blocker at the moment it was about to be claimed
-// — an edge added while the run was going, or a blocker reopened behind the
-// plan's back. It is not a refusal: the run has not yet decided what the edge
-// means, because whether the blocker is one IT can still close is a fact about
-// the plan, and the plan is re-derived here (requeueBlocked) rather than
-// guessed at. The blockers are the OPEN ones only, in the tracker's own
-// order, as the dispatch-time read found them.
+// blockedTickErr is settleBeforeDispatch's answer for a tick whose own
+// dispatch-time read found it must not be claimed yet — either an OPEN blocker
+// its tracker record still names (an edge added while the run was going, or a
+// blocker reopened behind the plan's back), or, for the close-out, an OPEN
+// CHILD of the epic the close-out's own gate found (tick 3h0) — in which case
+// the gate's refusal rides along, because when nothing this run is doing can
+// close the children, that refusal — its reason, its tick, its own words — is
+// the answer, not the edge vocabulary's. It is not a refusal by itself: the
+// run has not yet decided what the open blockers mean, because whether one of
+// them is a thing IT can still close is a fact about the plan, and the plan is
+// re-derived here (requeueBlocked) rather than guessed at. The blockers are
+// the OPEN ones only, in the tracker's own order, as the dispatch-time read
+// found them.
 type blockedTickErr struct {
 	tick     string
 	blockers []string
+	// refusal is the gate's own answer for the close-out, carried so that the
+	// refusal requeueBlocked falls back to is the one the open-children gate
+	// wrote (closeout_children_open, naming the children) rather than the
+	// edge vocabulary's tick_blocked_open. nil for a plain blocked_by edge.
+	refusal *Refusal
 }
 
 func (b *blockedTickErr) Error() string {
@@ -608,11 +618,25 @@ func (b *blockedTickErr) Error() string {
 // it was.
 func (r *Reconciler) requeueBlocked(ctx context.Context, plan, queue []planEntry, entry planEntry,
 	blocked *blockedTickErr, holders []*inflightAttempt) ([]planEntry, []planEntry, error) {
-	r.record(entry.TickID, StageWaiting,
-		"%s is still behind %s at dispatch — a blocked_by edge the tracker added, or a blocker reopened, while this "+
-			"run was going: the edge is honoured BEFORE the tick is dispatched rather than discovered by a worker after "+
-			"an hour of thinking",
-		entry.TickID, strings.Join(blocked.blockers, ", "))
+	if blocked.refusal != nil {
+		// The close-out's own gate found the open children (tick 3h0), and the
+		// incident's timing is why this branch exists: the children landed
+		// while the REVIEW ran, a role job settles inline, and nothing replans
+		// between the review's close and the close-out's settle. So the run
+		// asks the fresh graph one question before the gate's refusal stands:
+		// can THIS run still work any of them?
+		r.record(entry.TickID, StageWaiting,
+			"the close-out is still behind %s — child(ren) of the epic its own gate found open at dispatch, added or "+
+				"reopened while this run was going: the run asks the fresh graph whether it can work them first, and the "+
+				"close-out refuses to start over whatever remains",
+			strings.Join(blocked.blockers, ", "))
+	} else {
+		r.record(entry.TickID, StageWaiting,
+			"%s is still behind %s at dispatch — a blocked_by edge the tracker added, or a blocker reopened, while this "+
+				"run was going: the edge is honoured BEFORE the tick is dispatched rather than discovered by a worker after "+
+				"an hour of thinking",
+			entry.TickID, strings.Join(blocked.blockers, ", "))
+	}
 	plan, queue, err := r.replan(ctx, plan, queue)
 	if err != nil {
 		return nil, nil, err
@@ -634,6 +658,12 @@ func (r *Reconciler) requeueBlocked(ctx context.Context, plan, queue []planEntry
 		if slices.Contains(blocked.blockers, fl.entry.TickID) {
 			return plan, slices.Insert(queue, 0, entry), nil
 		}
+	}
+	if blocked.refusal != nil {
+		// Nothing this run is doing can close the children, so the gate's own
+		// refusal stands exactly as it was written: closeout_children_open,
+		// filed against the close-out, naming the children in its own words.
+		return nil, nil, blocked.refusal
 	}
 	return nil, nil, r.refuse(RefusedTickBlocked, entry.TickID,
 		"%s is blocked by %s, which the tracker still reads as open, and nothing this run is doing can close it: the "+
