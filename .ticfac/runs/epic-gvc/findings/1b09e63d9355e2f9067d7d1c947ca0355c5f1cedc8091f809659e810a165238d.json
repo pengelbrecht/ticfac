@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "wz0",
   "attempt": 15,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-26T09:41:19Z",
+  "triaged_at": "2026-09-26T23:45:09Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "tc2",
   "provenance": {
     "run_id": "epic-gvc",
     "tick_id": "wz0",
