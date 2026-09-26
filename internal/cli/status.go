@@ -55,9 +55,14 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 		interval = defaultStatusFollowInterval
 	}
 
+	// Labels are read once per follow, not once per frame: a frame every two
+	// seconds must not spawn tk every two seconds, and a tick added mid-run
+	// only costs its label (it shows as its bare id), never its line.
+	labels := tickLabels(ctx, repo)
+
 	previous := 0
 	for {
-		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, stdout)
+		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, stdout)
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
@@ -89,7 +94,7 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 // liveness first, then one line per tick — its stage, its attempt, and how
 // long it has been where it is. The first return says the run reached its own
 // end, which ends the follow.
-func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, out io.Writer) (ended bool, lines []string, err error) {
+func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, labels map[string]string, out io.Writer) (ended bool, lines []string, err error) {
 	located, _, err := feedStanding(ctx, source)
 	if err != nil {
 		return false, nil, err
@@ -148,10 +153,10 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 	// fifth try when it was its third.
 	for _, id := range order {
 		event := latest[id]
-		who := "tick " + id
+		who := "tick " + tickRef(labels, id)
 		if event.Attempt != nil {
 			try, _ := tries.Of(id, *event.Attempt)
-			who = "tick " + reconcile.AttemptLabel(id, try, *event.Attempt)
+			who = "tick " + reconcile.AttemptLabel(tickRef(labels, id), try, *event.Attempt)
 		}
 		lines = append(lines, fmt.Sprintf("%s: %s for %s — %s",
 			who, event.Stage, ageOf(event.At, time.Now()), event.Detail))
@@ -251,10 +256,16 @@ func statusCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		fmt.Fprintf(stdout, "%s\n", raw)
 	} else {
 		fmt.Fprintf(stdout, "run %s: %s — %s\n", status.RunID, status.State, status.Reason)
+		// Labels only when a line will name a tick: a run with nothing in
+		// flight does not pay for a tk call.
+		labels := map[string]string{}
+		if len(status.Attempts) > 0 || (status.LastEvent != nil && status.LastEvent.TickID != nil) {
+			labels = tickLabels(ctx, *repo)
+		}
 		if status.LastEvent != nil {
 			tick := "-"
 			if status.LastEvent.TickID != nil {
-				tick = *status.LastEvent.TickID
+				tick = tickRef(labels, *status.LastEvent.TickID)
 			}
 			fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n", status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
 		}
@@ -270,7 +281,7 @@ func statusCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		for _, a := range status.Attempts {
 			try, _ := tries.Of(a.TickID, a.Attempt)
 			line := fmt.Sprintf("%s: branch %s last moved %s ago; worktree %s last changed %s ago",
-				reconcile.AttemptLabel(a.TickID, try, a.Attempt), a.Branch, gapOf(a.BranchIdle), a.Worktree,
+				reconcile.AttemptLabel(tickRef(labels, a.TickID), try, a.Attempt), a.Branch, gapOf(a.BranchIdle), a.Worktree,
 				gapOf(a.WorktreeIdle))
 			// The attempt's own wall clock firing joins the line by the identity
 			// both carry (tick q1e): the run said the bound passed and the

@@ -1,9 +1,9 @@
 {
   "$comment": "How ticfac gets contracts/. Read CONTRACTS.md before editing. `bundleVersion` is the EXACT contracts/bundle.json version this repository's code is written against (SPEC 3.2), checked on every test run; `ref` is the immutable ticks commit the vendored bytes were fetched at. They are different claims and move independently. Regenerate `files` and `digests` with `go run ./cmd/contracts sync`; never hand-edit a vendored fixture.",
-  "bundleVersion": "6.2.0",
+  "bundleVersion": "6.3.0",
   "mode": "pinned",
   "repository": "pengelbrecht/ticks",
-  "ref": "c0f19aa7047c503ebfa267996fa1280377d57919",
+  "ref": "3c433914fec19a59033f03b51f3e998bae0af189",
   "directory": "contracts",
   "files": [
     "collect-vocabulary.json",
@@ -23,9 +23,9 @@
     "worker-boot-contract.json"
   ],
   "digests": {
-    "CHANGELOG.md": "06a6dc450790a90da6817300dd7689b486edc580355fd4dc5c0af439a8926ccd",
+    "CHANGELOG.md": "498528e14e65383fadd635b5433fdf0a3624b1d2533b5444e51720a53bd7d539",
     "README.md": "d16d244f6efcc3c536549e4c36101763e0196607b16a33a1d3880d731c45e99c",
-    "bundle.json": "cbf8d84ad35465fe55e98bb1fcb996808dd7daeec99295308a97716efd63cca4",
+    "bundle.json": "9ac1cb18d73303a9cfc42b1284642a86b976743c99898aa2671c06d2695308e6",
     "collect-vocabulary.json": "b2094cfbeec03ea2d6df78dab40eb6cbe8b0a9c256b7fe91c10ab679759e705e",
     "credential-ownership.json": "2648e83088dfe42ab626ffed07985205996d9b317a5c0bfe6833bc44cc67a3ba",
     "job-protocol.json": "ce5110a5bf27ce55e2e277f887b3ec7cf334ab6928c19c72bf3e218967677e7a",
@@ -38,7 +38,7 @@
     "sweep-policy-cases.json": "7006ba3391618fdaf249084acf799f4fa67e49e3e89ac0baf89ba838b5641d0e",
     "sweep-selection-contract.json": "3d2eafd42b93b7d6e0b1bf45379c3e4008f3757bea5e03d70d58d5f8625f05ef",
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
-    "tk-json-manifest.json": "99b46c1b134c5f7452604582a351da4347fe4c00377a5008e7dbdce00940c45d",
+    "tk-json-manifest.json": "0f6cfb221727ce9fe4319557124165fbeb9302ae909fe2262a2d8df9a10f9686",
     "tracker-layout.json": "6d12f0f67854e4c6de50150485c7b91e6e9087187a315e6bc919a243263857ef",
     "worker-boot-contract.json": "7326ba972f6d8b16bd5f127d644586082da0cf2a8ff78281ff411c366df7ca27"
   }

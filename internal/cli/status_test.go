@@ -243,3 +243,40 @@ func TestStatusReportsNoFiringFromProseAlone(t *testing.T) {
 		t.Errorf("prose that names the wall clock reported a firing:\n%s", out.String())
 	}
 }
+
+// Status names a tick "id (label)" (ticfac q90): a person reading a run should
+// not have to look up three-letter ids. Not parallel — it swaps the label
+// lookup, and parallel tests only resume once the serial ones are done.
+func TestStatusNamesAnAttemptByItsLabel(t *testing.T) {
+	repo := statusFixture(t, time.Now())
+	life, err := runlife.Claim(repo, "r-status")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	real := tickLabels
+	t.Cleanup(func() { tickLabels = real })
+	tickLabels = func(context.Context, string) map[string]string {
+		return map[string]string{"a1": "wire the door"}
+	}
+
+	var out bytes.Buffer
+	if code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live run exited %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "a1 (wire the door) (run dispatch #1)") {
+		t.Errorf("the attempt is not named by its label:\n%s", out.String())
+	}
+}
+
+// A tracker that cannot be read costs the labels, never the line.
+func TestTickLabelsOnAnUnreadableTrackerIsEmpty(t *testing.T) {
+	t.Parallel()
+	if got := tickLabels(context.Background(), t.TempDir()); len(got) != 0 {
+		t.Errorf("labels from a directory with no tracker: %v", got)
+	}
+	if got := tickRef(nil, "a1"); got != "a1" {
+		t.Errorf("tickRef with no labels = %q", got)
+	}
+}

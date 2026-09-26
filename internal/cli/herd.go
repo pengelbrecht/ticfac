@@ -271,6 +271,7 @@ func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	combined.TTLMs = uint64(*ttlMs)
 	combined.DryRun = scope.DryRun
 
+	labels := tickLabels(ctx, scope.Repo)
 	for _, runID := range scope.Runs {
 		attempts, err := herdr.Attempts(scope.Root, runID)
 		if err != nil {
@@ -280,7 +281,7 @@ func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) err
 			continue
 		}
 		res, err := paint.Run(ctx, herd, paint.Options{
-			Attempts: attemptsToPaint(attempts),
+			Attempts: attemptsToPaint(attempts, labels),
 			Statuses: tickStatuses(scope.Repo, runID),
 			TTL:      time.Duration(*ttlMs) * time.Millisecond,
 			Seq:      *seq,
@@ -302,12 +303,12 @@ func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) err
 }
 
 // attemptsToPaint converts the executor's attempt facts into paint's worker
-// records.
-func attemptsToPaint(attempts []herdr.AttemptFacts) []paint.Attempt {
+// records, each carrying its tick's label from labels when there is one.
+func attemptsToPaint(attempts []herdr.AttemptFacts, labels map[string]string) []paint.Attempt {
 	out := make([]paint.Attempt, 0, len(attempts))
 	for _, a := range attempts {
 		out = append(out, paint.Attempt{
-			Tick: a.TickID, Epic: a.EpicID, Role: a.Role,
+			Tick: a.TickID, Epic: a.EpicID, Role: a.Role, Label: labels[a.TickID],
 			WorkspaceID: a.WorkspaceID, PaneID: a.PaneID,
 		})
 	}
