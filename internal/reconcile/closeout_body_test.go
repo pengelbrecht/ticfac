@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // The epic PR's BODY (tick 4sb): the write half of the PR + CI close-out rule.
@@ -398,5 +399,57 @@ func TestACloseOutIsNotAdmittedWhenThePRBodyCannotBeWritten(t *testing.T) {
 		if current.Status != "closed" {
 			t.Errorf("%s is %s: the body is a close-out gate, not a work gate", tick, current.Status)
 		}
+	}
+}
+
+// WHAT THIS EPIC ABSORBED, on the PR a person merges behind (tick jlv): the
+// close-out must be able to say what was absorbed, against which acceptance
+// item, whether the verdict was observed or predicted, and — for each
+// prediction later checked — whether it was right. An epic that absorbed
+// silently is an epic whose shape changed with no account of why, so the
+// body carries the absorption decision and the score of its checked
+// prediction, composed from the durable records the scoring pass wrote before
+// the close-out was ever dispatched — which is why the scoring happens where
+// it does, not after the retro that would have to discover it.
+func TestTheEpicPRCarriesWhatWasAbsorbedAndEachCheckedPrediction(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	forge := &fakeForge{}
+	f := newFixture(t, fixtureOptions{mode: "finding_local", pullRequests: forge})
+	declareCloseoutRule(t, f.Repo)
+	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
+	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.7, "none": 0.3}, "A2")}
+	record := scoredPrediction(t, f, classifier, fixtureOptions{pullRequests: forge})
+
+	// The item becomes runnable between the legs, the way the epic's own
+	// merged work would bind it — and the done's command PASSES, so the
+	// checked prediction is the wrong one: the fact the retro must report
+	// rather than hide.
+	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), scoringGate)
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", gatingClassifier: classifier,
+		pullRequests: forge})
+	if err != nil {
+		t.Fatalf("the resumed run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+
+	body := forge.body()
+	for _, want := range []string{
+		"## What this epic absorbed",
+		"absorbed into the running epic: gates done item A2, basis predicted, confidence 0.62",
+		"placed before the final review",
+		// THE SCORE, both halves: what the run did, and the label.
+		"The prediction was later CHECKED: the command done answered pass",
+		"the prediction was incorrect",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the body does not carry %q:\n%s", want, body)
+		}
+	}
+	if !strings.Contains(body, record.TickID) {
+		t.Errorf("the body does not name the absorbed tick %s:\n%s", record.TickID, body)
 	}
 }
