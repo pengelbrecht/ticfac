@@ -418,7 +418,13 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 			"until one is configured.\n", epicID, pullsErr)
 	}
 
-	reconciler, err := reconcile.New(reconcile.Options{
+	// The one client, when a credential built one, is handed to BOTH exchanges
+	// that ask it: the work-type classification and the gating prediction the
+	// absorption decision drives (tick npq). The wrap is a nil CHECK and not
+	// a plain field assignment because a typed nil *jev.Client inside an
+	// interface is not nil — the seam would dial a client that does not exist,
+	// and the nil check each exchange runs would pass it straight through.
+	opts := reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
 		EpicID:            epicID,
@@ -439,8 +445,12 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		CeilingUSD:        *ceiling,
 		PullRequests:      pulls,
 		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
-		Classifier:        classifier,
-	})
+	}
+	if classifier != nil {
+		opts.Classifier = classifier
+		opts.GatingClassifier = classifier
+	}
+	reconciler, err := reconcile.New(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		return 1
@@ -652,10 +662,14 @@ func startupLine(runID string) string {
 // credential source the process found (tick x0k): the run's own gateway route
 // inside a cloud sandbox, the operator's key in $TICFAC_JEV_API_KEY locally,
 // and nil — with the note saying what the run does without one — when neither
-// resolves, which is the documented degradation to [tier_policy.start]. It is
-// a function of its own so the wiring is the same under test as in production:
-// what run-epic hands the reconciler is exactly what these tests build.
-func classifierForRun() (classifier reconcile.Classifier, note string) {
+// resolves, which is the documented degradation to [tier_policy.start]. The
+// one client is handed to BOTH exchanges that ask it: the work-type
+// classification (reconcile.Classifier) and the gating prediction the
+// absorption decision drives (gating.Classifier, tick npq) — the same
+// credential, the same client, two different questions. It is a function of
+// its own so the wiring is the same under test as in production: what
+// run-epic hands the reconciler is exactly what these tests build.
+func classifierForRun() (classifier *jev.Client, note string) {
 	source := jev.ResolveCredential(os.Getenv)
 	if !source.Configured {
 		return nil, source.Note

@@ -68,6 +68,14 @@ func checkIndex(kind string, n int) error {
 	return nil
 }
 
+// AbsorptionPath is `.ticfac/runs/<run-id>/absorptions/<key>.json`, where
+// <key> is the finding's dedup key — one absorption decision record per
+// finding the run itself triaged (tick npq), so the reasoning that changed
+// the epic's shape mid-run is on the run branch beside the tick it created.
+func AbsorptionPath(runID, key string) string {
+	return RunDir(runID) + "/absorptions/" + key + ".json"
+}
+
 // FindingPath is `.ticfac/runs/<run-id>/findings/<key>.json`, where <key> is
 // the draft's own dedup key — the external_ref half of (source, external_ref).
 func FindingPath(runID, key string) string {

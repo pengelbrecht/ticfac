@@ -12,6 +12,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -525,6 +526,15 @@ type Options struct {
 	// answer, not the capability to ask.
 	Classifier Classifier
 
+	// GatingClassifier is the classifier the absorption decision asks where
+	// the epic's done cannot yet be run (tick bse, wired by tick npq): the
+	// same *jev.Client the work-type exchange uses, asked a different
+	// question. Nil — the default — is not a stop: every prediction falls
+	// back to the documented absorb-anyway decision, recorded as a fallback,
+	// because deferring would stop an unattended run on the one actor only a
+	// person can play — the exact stop this tick exists to remove.
+	GatingClassifier gating.Classifier
+
 	// Substrate is the substrate this run executes on, the axis role
 	// routing resolves against (tick 84z): under "cloud" the target
 	// repository's `.tick/runners.cloud.toml` role cells apply (tick 5uo), and a
@@ -786,6 +796,27 @@ const (
 	// "nothing found". A close with nothing to carry stays silent, exactly
 	// as it always was.
 	StageClosedCarrying = "closed_carrying"
+
+	// The absorption's own stages (tick npq): what the run did with a finding
+	// nobody triaged, said at the moment it does it — an absorption nobody can
+	// see is indistinguishable from a finding that vanished, and a refusal to
+	// decide is a fact a person reading the feed needs at the moment the run
+	// reaches the close-out that will hold on it.
+	//
+	// StageAbsorbed: the finding was judged GATING against the epic's own
+	// definition of done and promoted into the running epic as a tick, placed
+	// before the final review, with nobody triaging.
+	StageAbsorbed = "finding_absorbed"
+	// StageBacklogged: the finding was judged NOT GATING — the done is
+	// reachable with it standing — and promoted to a backlog tick with an
+	// owner. Still reported: unattended means nobody has to be there, not
+	// that nobody is ever told.
+	StageBacklogged = "finding_backlogged"
+	// StageAbsorptionRefused is the refusal's line: the epic's acceptance
+	// carries no [A<n>] items, so its done is prose, nothing can be pointed
+	// at, and the run refuses to absorb rather than guessing — the finding
+	// stays a person's, at the close-out hold.
+	StageAbsorptionRefused = "finding_absorption_refused"
 
 	// StageStartFailed is the line a failed Start leaves (tick d6s): an
 	// attempt whose marker is on origin but never started. It is recorded

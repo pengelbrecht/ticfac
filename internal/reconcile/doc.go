@@ -174,9 +174,15 @@
 // whose findings are untriaged CLOSES, the finding rides to the close-out,
 // and the close-out does not hand over while one is untriaged or missing
 // from the epic PR — which is the one thing that stops a finding falling
-// on the floor; a person triages with
-// `ticfac finding`, promoting into the repository the finding targets (never
-// this package: a draft is not a tick, and the scope decision stays human).
+// on the floor. And since tick npq the run TRIAGES what its own decision
+// machinery can reach: a finding judged GATING against the epic's own
+// definition of done is absorbed into the running epic as a tick placed
+// before the final review, a non-gating one becomes a backlog tick with an
+// owner, and the decision — item id, verdict, observed or predicted,
+// confidence — is a record on the run branch (absorb.go). What the run
+// cannot decide is still a person's, triaged with `ticfac finding`: a
+// finding routed to another repository, and an epic whose acceptance is
+// prose — the refusal the absorption refuses to guess past.
 //
 // Four of the five are kept by the shipped binary. A11's read site is
 // (MayDispatch, before every dispatch) and its release is (`ticfac settle`,
