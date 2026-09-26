@@ -2,6 +2,7 @@
   "id": "i1r",
   "title": "Follow ticfac from a phone: the factory serves every run's status on a mobile page, and pings Telegram when a person is needed",
   "description": "OPERATOR, 2026-09-26: 'Would be nice to have a mobile app or web app where i can follow ticfac status when i close my laptop'.\n\n- The factory stores and serves the 6dh status model for EVERY run: cloud runs report it natively, and local runs push small snapshots when opted in (a ticfac config flag), so one place shows both. Snapshots carry no secrets and no work product, only the model.\n- A mobile-first, read-only page served by the factory Worker itself (e.g. /status): the same attention-first view as bare 'ticfac' (2qz), installable to a phone home screen (PWA manifest), authenticated with the operator's factory credential (a login link or a token cookie, never a token in the URL that lands in history). It keeps working with stale data labelled STALE, as 'ticfac factory dashboard' does.\n- Telegram notifications through the existing operator channel for: needs a person (with the reason and the clearing command), epic done, run failed. Rate-limited and deduplicated per stop, not per poll.\n- Absorbs the idea in n0r (structured real-time run feed) where it serves this; n0r keeps anything beyond it.\nNote: a LOCAL run pauses when the laptop sleeps; following one remotely shows it as paused/stale, which the page must say plainly rather than look stuck.",
+  "notes": "2026-09-26 13:36 - Name ticks as 'id (label)' in the phone page and Telegram alerts: labels come from internal/cli tickLabels / tk.Label (gloss, else title cut to 40 chars), added by q90 (glosses in pane titles and status).",
   "status": "open",
   "priority": 1,
   "type": "task",
@@ -14,5 +15,5 @@
   "acceptance_criteria": "From a phone with the laptop closed: the factory page lists cloud runs live and local runs with their last snapshot marked paused/stale; a run needing a person produces one Telegram message naming the reason and the clearing command; the page needs the operator's credential and never puts it in a URL; tests cover the snapshot push, the page's auth and the notification dedup",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T09:30:31.675613Z",
-  "updated_at": "2026-09-26T09:30:31.793376Z"
+  "updated_at": "2026-09-26T13:36:38.331140339Z"
 }

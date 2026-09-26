@@ -224,3 +224,31 @@ func TestRunReportsErrors(t *testing.T) {
 		t.Fatal("a report refusal must fail the run")
 	}
 }
+
+// A tick's label joins the pane title so a person can tell panes apart, but
+// the TICK token stays the bare id: the token is what matching reads.
+func TestRunTitlesThePaneWithTheTicksLabel(t *testing.T) {
+	h := &fakeHerd{snapshot: liveSession()}
+	res, err := Run(context.Background(), h, Options{
+		Attempts: []Attempt{{
+			Tick: "a11", Epic: "9pd", Role: "implement-tick", Label: "wire the door",
+			WorkspaceID: "ws-1", PaneID: "pane-1",
+		}},
+		Statuses: map[string]string{"a11": "in_progress"},
+	})
+	if err != nil {
+		t.Fatalf("paint: %v", err)
+	}
+	if len(h.panes) != 1 {
+		t.Fatalf("pane reports: %+v", h.panes)
+	}
+	if got := h.panes[0].Title; got == nil || *got != "a11 (wire the door) · implement-tick · in_progress" {
+		t.Fatalf("pane title: %v", got)
+	}
+	if h.panes[0].Tokens["TICK"] != "a11" {
+		t.Errorf("TICK token = %q, want the bare id", h.panes[0].Tokens["TICK"])
+	}
+	if res.Badges[0].Label != "wire the door" {
+		t.Errorf("badge label = %q", res.Badges[0].Label)
+	}
+}
