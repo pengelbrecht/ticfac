@@ -2,6 +2,7 @@
   "id": "jlv",
   "title": "Score predictions against what the done later did, and report it",
   "description": "The property that makes gvc self-correcting, and it is free: a prediction made while an acceptance item was unrunnable becomes CHECKABLE the moment that item becomes runnable. What the classifier said, and what the done actually did, is a labelled pair.\n\nThat is a calibration set the factory generates BY OPERATING. It is the thing wne's 49-tick measurement could not have - that sample could only test face validity, because every tick ran at its role's base model and no capability boundary was ever exercised. Here the ground truth arrives on its own, as a consequence of the epic finishing.\n\nSo: when an item that was predicted becomes runnable, run it and score the prediction. Record both. A prediction that was wrong is not a failure to hide - it is the only evidence anyone will ever have for where the threshold belongs, and gvc deliberately set that threshold by argument rather than measurement.\n\nAND THE RETRO REPORTS IT. The close-out must be able to say, for this epic: what was absorbed, against which acceptance item, whether the verdict was observed or predicted, and for each prediction later checked, whether it was right. An epic that absorbed silently is an epic whose shape changed with no account of why.",
+  "notes": "2026-09-26 09:45 - ticfac run epic-gvc: jlv try 1 (run dispatch #11) reported a finding drafted for triage — defect \"runstate's maintenance control-arm test fails on this host at base, proving nothing\" (key 4a5552730648d9ad7d0be145b72be946392fdee7ee5a92f492bb8d8f01caf786, severity low, for this repository). Triage with `ticfac finding gvc 4a5552730648d9ad7d0be145b72be946392fdee7ee5a92f492bb8d8f01caf786 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -13,6 +14,6 @@
   "acceptance_criteria": "A prediction whose acceptance item later becomes runnable is scored against the run, both the prediction and the outcome are recorded, the score survives on the run branch for a later measurement across epics, the close-out retro reports what was absorbed with its item id and observed-or-predicted status and the score of each checked prediction, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:32:25.921864Z",
-  "updated_at": "2026-09-26T06:05:57.787935Z",
+  "updated_at": "2026-09-26T07:45:24.29824Z",
   "started_at": "2026-09-26T06:05:57.787935Z"
 }
