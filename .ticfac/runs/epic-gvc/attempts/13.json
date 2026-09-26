@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 13,
+  "tick_id": "ovh",
+  "dispatched_at": "2026-09-26T07:48:44Z",
+  "job_handle": {
+    "attempt": 13,
+    "base_sha": "4fdcde0a02b5b00afc967142ddd994ea1ff0adf1",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-gvc/tick-ovh/attempt-13",
+    "model": "opus",
+    "prompt_digest": "sha256:15322187027279d5bfe259c995f7f20e7effdc37d8b7cccefb8a769a158dafe9",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "review-epic",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "ovh",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "write_ref": "refs/heads/ticfac/run-epic-gvc/tick-ovh/attempt-13"
+  },
+  "provenance": {
+    "run_id": "epic-gvc",
+    "tick_id": "ovh",
+    "attempt": 13,
+    "source_ref": "refs/heads/epic/gvc",
+    "source_sha": "4fdcde0a02b5b00afc967142ddd994ea1ff0adf1",
+    "integration_ref": "refs/heads/epic/gvc",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
