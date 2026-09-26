@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 119,
-  "state": "integrating",
-  "reason": "integrating wz0 attempt 15 into epic/gvc",
-  "updated_at": "2026-09-26T16:10:13Z",
+  "sequence": 120,
+  "state": "gating",
+  "reason": "running the integrated gate for wz0 on 99ef52e2fcbc",
+  "updated_at": "2026-09-26T16:10:22Z",
   "ticks": [
     {
       "tick_id": "2p6",
