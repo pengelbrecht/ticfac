@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pzp",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-25T13:10:22Z",
+  "triaged_at": "2026-09-26T08:43:17Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "s4d",
   "provenance": {
     "run_id": "epic-gvc",
     "tick_id": "pzp",
