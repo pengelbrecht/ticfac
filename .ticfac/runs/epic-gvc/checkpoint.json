@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 117,
-  "state": "gating",
-  "reason": "running the integrated gate for wz0 on a11500cbadf2",
-  "updated_at": "2026-09-26T09:41:46Z",
+  "sequence": 118,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-26T16:10:02Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -87,7 +87,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/gvc",
-    "source_sha": "b9a0671abf0fbdcec653e18908f6d879f965b5f4",
+    "source_sha": "5feef2f602868721b05878fda6fd3a2afff4690b",
     "integration_ref": "refs/heads/epic/gvc",
     "phase": "worker",
     "executor": null,
