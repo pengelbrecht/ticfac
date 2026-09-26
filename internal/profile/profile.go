@@ -71,21 +71,23 @@ var Roles = []string{"implement-tick", "review-epic", "closeout-epic"}
 // `review` and `closeout`; a file that spells the full role name is read too,
 // because an operator who wrote the longer name meant the same thing.
 //
-// resolve-conflict (ticfac tick 2p6) is routed ON DEMAND — it is not one of
-// [Roles], the set a run resolves at construction, because a role that exists
-// for the rare merge conflict must not make every cloud run refuse at start
-// over a cell the operator was never asked to declare. Its candidates end at
-// the REVIEW cell deliberately: the resolve job is a judgement job the run
-// routes at the policy's CEILING tier, and the review cell is the frontier
-// judgement routing every config already declares — claude locally, a Workers
-// AI model in the cloud, where [CloudRule] refuses anything else. A dedicated
-// `[roles.resolve-conflict]` (or `resolve`) cell always wins when an operator
-// declares one.
+// resolve-conflict (ticfac tick 2p6) and plan-repair (tick wj6) are routed
+// ON DEMAND — neither is one of [Roles], the set a run resolves at
+// construction, because a role that exists for the rare merge conflict or the
+// rare failed gate must not make every cloud run refuse at start over a cell
+// the operator was never asked to declare. Their candidates end at the
+// REVIEW cell deliberately: both are judgement jobs the run routes at the
+// policy's CEILING tier, and the review cell is the frontier judgement routing
+// every config already declares — claude locally, a Workers AI model in the
+// cloud, where [CloudRule] refuses anything else. A dedicated
+// `[roles.resolve-conflict]` (or `resolve`) cell and a `[roles.plan-repair]`
+// (or `repair`) cell always win when an operator declares one.
 var runnersConfigRoles = map[string][]string{
 	"implement-tick":   {"implement-tick", "implement"},
 	"review-epic":      {"review-epic", "review"},
 	"closeout-epic":    {"closeout-epic", "closeout", "close-out"},
 	"resolve-conflict": {"resolve-conflict", "resolve", "review"},
+	"plan-repair":      {"plan-repair", "repair", "review"},
 }
 
 // RoleResolveConflict is the job-protocol role dispatched when an attempt's
@@ -93,6 +95,14 @@ var runnersConfigRoles = map[string][]string{
 // (ticfac tick 2p6). It is exported for the reconciler, which resolves it
 // lazily rather than through [ResolveAll].
 const RoleResolveConflict = "resolve-conflict"
+
+// RoleRepairGate is the job-protocol role dispatched when the integrated gate
+// fails over a merge that is already on the integration branch (ticfac tick
+// wj6): the closed vocabulary's repair slot, dispatched to fix the tree a
+// failing check named instead of stopping for a person to read a gate log.
+// It is exported for the reconciler, which resolves it lazily rather than
+// through [ResolveAll], for the same reason the resolve-conflict role is.
+const RoleRepairGate = "plan-repair"
 
 // RunnersRoleCandidates returns the roles-table names a profile role routes
 // through, first declared first — the same candidates route() walks. A caller

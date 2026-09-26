@@ -394,8 +394,9 @@ func (r *Reconciler) collectResolve(ctx context.Context, handle *subprocess.JobH
 	return collected, nil
 }
 
-// awaitResolve addresses one resolve job until it settles. It is the resolve
-// job's own wait rather than the window's: the job is not an attempt of the
+// awaitResolve addresses one dispatched job of the run's own — a
+// resolve-conflict job or a repair job — until it settles. It is the job's
+// own wait rather than the window's: neither job is an attempt of the
 // plan, holds no slot, was never claimed in the tracker, and its wall clock
 // is enforced by its executor — so what is left to wait on is the executor's
 // own answer about whether the job has settled, at the executor's cadence.
@@ -410,14 +411,14 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 		}
 		status, err := executor.Inspect(handle, cursor)
 		if err != nil {
-			return nil, fmt.Errorf("inspect the resolve-conflict job %s: %w", marker.JobID, err)
+			return nil, fmt.Errorf("inspect the %s job %s: %w", marker.Role, marker.JobID, err)
 		}
 		if status == nil {
-			return nil, fmt.Errorf("the executor reports nothing about the resolve-conflict job %s", marker.JobID)
+			return nil, fmt.Errorf("the executor reports nothing about the %s job %s", marker.Role, marker.JobID)
 		}
 		if status.State == subprocess.StateLost {
 			return nil, fmt.Errorf(
-				"the resolve-conflict job %s can no longer be addressed and has not settled", marker.JobID)
+				"the %s job %s can no longer be addressed and has not settled", marker.Role, marker.JobID)
 		}
 		if status.Terminal {
 			return status, nil
