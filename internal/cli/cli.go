@@ -93,10 +93,14 @@ run-epic flags:
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
   --absorption-depth <n>  how many absorptions ONE chain of the recursion may carry before the
-                      run stops for a person carrying the whole chain (default 3: the first link
-                      is what the epic exists to absorb, the second is a defect in the absorbed
+                      run stops for a person carrying the whole chain. The default is 3 (the first
+                      link is what the epic exists to absorb, the second is a defect in the absorbed
                       fix's own ground, a third is already far from home, and past that a person
-                      should judge the chain rather than let the run keep going)
+                      should judge the chain rather than let the run keep going). The bound the
+                      run applies is RECORDED on the run branch, so a restart without this flag
+                      applies the bound the run already ran with; naming the flag explicitly is
+                      the person's raise — it overrides the record (0, the default, means not
+                      named: adopt what the run records)
   --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
                       in-flight work and writing the checkpoint before the process exits anyway — the
                       platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
@@ -357,13 +361,23 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		// anyone asked for, and only a person can judge that. The default's
 		// reasoning lives on the constant; here the operator reads what the
 		// number governs and where to raise it when the stop is wrong.
-		absorptionDepth = fs.Int("absorption-depth", reconcile.DefaultAbsorptionDepthBound,
+		//
+		// The default here is 0 — NOT NAMED — rather than the constant,
+		// because the reconciler cannot tell an operator who wrote
+		// --absorption-depth 3 from one who wrote nothing (tick wz0, finding
+		// 95f5ee1a): a named bound is the person's raise over the recorded
+		// one, and an unnamed one adopts what the run branch records, so a
+		// cold restart honours the bound the warm run ran with. Zero and
+		// below still mean the DEFAULT inside the options' own normalising,
+		// never an unbounded recursion.
+		absorptionDepth = fs.Int("absorption-depth", 0,
 			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
 				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
-				"before the run stops for a person carrying the whole chain (default 3: the first link is "+
-				"what the epic exists to absorb, the second is a defect in the absorbed fix's own ground, a "+
-				"third is already far from home, and past that a person should judge the chain rather than "+
-				"let the run keep going)")
+				"before the run stops for a person carrying the whole chain (0, the default, means not "+
+				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
+				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
+				"ground, a third is already far from home, and past that a person should judge the chain "+
+				"rather than let the run keep going)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -463,6 +477,10 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		PullRequests:         pulls,
 		AutoResumeCap:        autoResumeCap(*supervise, *maxResumes),
 		AbsorptionDepthBound: *absorptionDepth,
+		// The person's raise (tick wz0): a bound named on the command line —
+		// and only one named there, never the default the flag merely carries
+		// — overrides the bound recorded on the run branch.
+		AbsorptionDepthExplicit: *absorptionDepth > 0,
 	}
 	if classifier != nil {
 		opts.Classifier = classifier

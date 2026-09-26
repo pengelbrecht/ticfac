@@ -68,6 +68,30 @@ type Finding struct {
 	ID    string
 	Title string
 	Body  string
+
+	// The reporter's DONE EVIDENCE (tick nfo), wired in as INPUTS and never
+	// as verdicts (tick wz0, finding c244ce2c): the worker prompt promises
+	// that the claim is evidence, never the verdict — the run runs the named
+	// check where it can, predicts where it cannot yet, and scores the claim
+	// against what the done actually did. Both tiers read these fields:
+	// the predictor carries them into the classifier's state as evidence the
+	// answer weighs, and the oracle scores the claim against what ran in the
+	// reason a person reads. Neither lets the claim BE the verdict — a
+	// confirmed claim proves nothing the command did not show, and a refuted
+	// one un-breaks nothing.
+	//
+	// DoneItem is the [A<n>] acceptance item the reporter believes the
+	// finding breaks, or 'none' when the reporter believes it breaks none.
+	// Empty is the visible third state — unlinked, no claim — never a claim
+	// of non-gating.
+	DoneItem string
+	// DemonstratingCheck is the command or test the reporter names as what
+	// would demonstrate the breakage. Where the claimed item is runnable the
+	// run runs the command the evidence table binds to it — the table is the
+	// authorisation, and the oracle's verdict on it is authoritative — and
+	// where it is not runnable the check is named to the classifier as part
+	// of the claim.
+	DemonstratingCheck string
 }
 
 // Verdict is the decision record one prediction produces. It is the shape both
@@ -235,6 +259,24 @@ func ask(finding Finding, items []acceptance.Resolved) (string, jev.Question) {
 	}
 	if strings.TrimSpace(finding.Body) != "" {
 		fmt.Fprintf(&state, "body: %s\n", strings.TrimSpace(finding.Body))
+	}
+	// The reporter's claim, as evidence in front of the classifier (tick
+	// wz0, finding c244ce2c): the reporter already read the epic's acceptance
+	// and answered the question this prediction is about, so the answer is
+	// weighed with the claim in front of it — and still never believed,
+	// which is why the claim rides the state and never widens the enum: a
+	// reporter can be wrong in either direction, and the mass still decides.
+	if claim := strings.TrimSpace(finding.DoneItem); claim != "" {
+		if claim == NoneLabel {
+			fmt.Fprintf(&state, "the reporter claims the finding breaks no acceptance item\n")
+		} else {
+			fmt.Fprintf(&state, "the reporter claims the finding breaks done item %s", claim)
+			if check := strings.TrimSpace(finding.DemonstratingCheck); check != "" {
+				fmt.Fprintf(&state, ", and names %q as what would demonstrate the breakage", check)
+			}
+			fmt.Fprintf(&state, "\n")
+		}
+		fmt.Fprintf(&state, "the claim is evidence, never the verdict\n")
 	}
 
 	choices := make([]jev.Choice, 0, len(items)+1)

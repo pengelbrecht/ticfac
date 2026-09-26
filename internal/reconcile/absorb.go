@@ -122,6 +122,28 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return findingDecision{}, nil
 	}
 
+	// The decision already recorded: an earlier incarnation decided this
+	// finding and was killed before finishing. The record IS the decision —
+	// it names the tick and carries the verdict — and what remains is to
+	// finish behind it: create the tick if the kill came first, place it,
+	// complete the triage. A cold incarnation reaches the same epic as the
+	// warm one by reading this record, which is the whole of its existence.
+	//
+	// THIS CHECK IS FIRST, before the target, evidence-table and acceptance
+	// gates below (finding d6356432, tick wz0): a restart mid-absorption must
+	// finish behind the recorded decision rather than re-decide it
+	// differently, and the gates below are INPUTS to a fresh decision this
+	// one has already made — an acceptance that became prose or malformed, a
+	// runners.toml that stopped loading, between the warm and the cold
+	// incarnation, is a fact about the NEXT decision, never a way to strand a
+	// recorded one. A record that exists with no tick is the re-derivation
+	// hole the record exists to close.
+	if recorded, ok, err := r.store.Absorption(key); err != nil {
+		return findingDecision{}, err
+	} else if ok {
+		return r.finishAbsorption(ctx, marker, *standing, *recorded)
+	}
+
 	// A finding routed to ANOTHER repository is not this run's to absorb: the
 	// tick it becomes lives in the repository it targets, and writing another
 	// repository's tracker from here would be the routing the finding carried,
@@ -160,23 +182,23 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return findingDecision{Left: refusal.Reason}, nil
 	}
 
-	// The decision already recorded: an earlier incarnation decided this
-	// finding and was killed before finishing. The record IS the decision —
-	// it names the tick and carries the verdict — and what remains is to
-	// finish behind it: create the tick if the kill came first, place it,
-	// complete the triage. A cold incarnation reaches the same epic as the
-	// warm one by reading this record, which is the whole of its existence.
-	if recorded, ok, err := r.store.Absorption(key); err != nil {
-		return findingDecision{}, err
-	} else if ok {
-		return r.finishAbsorption(ctx, marker, *standing, *recorded)
-	}
-
 	// The verdict: the oracle where the done can be run, the predictor where
 	// it cannot yet be, and the documented absorb fallback where neither tier
 	// can answer — never a stop, because stopping is the one actor only a
 	// person can play, and this tick is what takes the person out.
-	finding := gating.Finding{ID: standing.Key, Title: standing.Title, Body: standing.Body}
+	//
+	// The reporter's DONE EVIDENCE rides along (tick wz0, finding c244ce2c):
+	// done_item and demonstrating_check reach both tiers as INPUTS — the
+	// classifier weighs the claim as evidence, the oracle scores it against
+	// what ran — and never as the verdict, which is the whole distinction
+	// the record's Basis field exists to keep.
+	finding := gating.Finding{
+		ID:                 standing.Key,
+		Title:              standing.Title,
+		Body:               standing.Body,
+		DoneItem:           standing.DoneItem,
+		DemonstratingCheck: standing.DemonstratingCheck,
+	}
 	verdict, err := r.gatingVerdict(ctx, finding, done, evidenceRunner{r: r, commands: commands})
 	if err != nil {
 		return findingDecision{}, err
@@ -198,10 +220,18 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		if err != nil {
 			return findingDecision{}, err
 		}
-		if absorptionDepthExceeded(links, r.opts.AbsorptionDepthBound) {
+		// The bound THIS decision applies, resolved against the run branch and
+		// recorded there (tick wz0, finding 95f5ee1a): a cold restart applies
+		// the same bound the warm run did, and only a person's explicit raise
+		// changes it.
+		bound, err := r.absorptionDepthBound(dispatch)
+		if err != nil {
+			return findingDecision{}, err
+		}
+		if absorptionDepthExceeded(links, bound) {
 			r.record(marker.TickID, StageAbsorptionBoundExceeded,
 				"the absorption of finding %s would be the %s absorption of one chain and the bound is %d: %s",
-				standing.Key, ordinal(len(links)+1), r.opts.AbsorptionDepthBound, chainNarrative(links))
+				standing.Key, ordinal(len(links)+1), bound, chainNarrative(links))
 			return findingDecision{}, r.refuse(RefusedAbsorptionDepth, marker.TickID,
 				"absorbing the finding %s (%q), reported by %s, would be the %s absorption of ONE chain that "+
 					"already carries %d and the bound is %d (tick qjj): the run stops for a person rather than recurse "+
@@ -212,7 +242,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 					"the criterion is wrong and the bound is hiding it — the chain above is what a person judges "+
 					"it by",
 				standing.Key, standing.Title, r.attemptName(marker.TickID, marker.Attempt),
-				ordinal(len(links)+1), len(links), r.opts.AbsorptionDepthBound, chainNarrative(links),
+				ordinal(len(links)+1), len(links), bound, chainNarrative(links),
 				r.opts.EpicID, standing.Key)
 		}
 	}
@@ -486,8 +516,16 @@ func (r *Reconciler) gatingVerdict(ctx context.Context, finding gating.Finding, 
 //     an item with no evidence is never read as demonstrated, which would be
 //     the false negative this epic exists to prevent, manufactured by the
 //     decision itself.
-//   - nothing observed: the prediction, or the fallback when neither tier
-//     answered.
+//   - nothing observed: the prediction where its scope is the whole done,
+//     and the combined fallback where neither tier answered. NOTHING
+//     OBSERVED WHILE A RUNNABLE ITEM EXISTS is NOT the prediction's to
+//     answer: the oracle observed nothing — no runner is configured, or no
+//     command produced evidence about any runnable item — so every runnable
+//     item is unresolved, and an absence of observation is not an
+//     observation (finding 88ea36a8, tick wz0). A prediction answered only
+//     the UNVERIFIED half cannot carry a done whose runnable half nobody
+//     observed, so where a runnable item exists and the prediction does not
+//     absorb, the combined fallback absorbs naming the runnable items.
 func combineGating(findingID string, done acceptance.Done, observed *gating.Observed, observedReason string,
 	predicted *gating.Verdict, predictedReason string) (*gating.Verdict, string) {
 	if observed != nil && observed.Gating {
@@ -527,8 +565,28 @@ func combineGating(findingID string, done acceptance.Done, observed *gating.Obse
 		return &observed.Verdict, ""
 	}
 
-	// Nothing was observed at all: the prediction decides where it exists,
-	// and the combined fallback answers where neither tier could.
+	// Nothing was observed at all: the prediction decides only where its
+	// scope is the whole done, and the combined fallback answers where
+	// neither tier could. A RUNNABLE item makes all the difference: the
+	// oracle's nil answer means every runnable item produced no evidence,
+	// and no prediction covers a runnable item — so the fallback absorbs
+	// naming them rather than letting a prediction over the unverified half
+	// close a done whose runnable half was never observed.
+	var runnable []string
+	for _, item := range done.Items {
+		if item.State == acceptance.Runnable {
+			runnable = append(runnable, item.ID)
+		}
+	}
+	if predicted != nil && predicted.Gating {
+		return predicted, ""
+	}
+	if len(runnable) > 0 {
+		return absorbFallback(findingID, runnable, fmt.Sprintf(
+			"the oracle observed nothing (%s) while the done carries runnable items %s, and no prediction covers a "+
+				"runnable item: an absence of observation is not an observation, and a runnable item with no evidence is "+
+				"unresolved, never demonstrated", observedReason, strings.Join(runnable, ", "))), ""
+	}
 	if predicted != nil {
 		return predicted, ""
 	}

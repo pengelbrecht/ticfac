@@ -3,6 +3,7 @@ package reconcile
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -111,6 +112,97 @@ func (r *Reconciler) absorptionChain(discoveredBy string) ([]chainLink, error) {
 // misconfigured bound must not silently UNBOUND the recursion.
 func absorptionDepthExceeded(links []chainLink, bound int) bool {
 	return bound > 0 && len(links) >= bound
+}
+
+// ------------------------------------------------- the recorded bound ---
+
+// resolvedAbsorptionDepth is the precedence of the four facts that name the
+// bound a decision applies (tick wz0, finding 95f5ee1a), pure so the order is
+// pinned without a fixture:
+//
+//  1. an EXPLICIT flag is the person's raise — the escape hatch the depth
+//     refusal itself names ("raise the bound with --absorption-depth and run
+//     the epic again") — and it WINS over the record, because a record that
+//     out-ranked the person would turn that hatch into a no-op;
+//  2. otherwise the RECORDED bound is the run's: the first incarnation's
+//     bound outlives it, and a cold restart without the flag applies the same
+//     bound the warm run did rather than silently dropping back to the
+//     default over git state it had already absorbed past;
+//  3. otherwise the flag's own value — which the options' defaulting has
+//     already made the real number, never a zero that would unbound the
+//     recursion.
+func resolvedAbsorptionDepth(recorded int, recordedStands bool, flagBound int, explicit bool) int {
+	if explicit {
+		return flagBound
+	}
+	if recordedStands {
+		return recorded
+	}
+	return flagBound
+}
+
+// absorptionDepthBound resolves the bound THIS decision applies, and makes
+// it durable: the resolution above decides, and the outcome is recorded on
+// the run branch — create-if-absent where no bound stands, so the first
+// incarnation's bound is the run's, and a guarded update where an explicit
+// raise overrides a standing one, so the person's escape hatch works after a
+// restart too. Both races resolve the same way: the repository's answer
+// stands, and this decision reads it back rather than re-deciding.
+func (r *Reconciler) absorptionDepthBound(dispatch Dispatch) (int, error) {
+	// Origin's view, fetched: a cold restart reads the record the warm run
+	// left, and a warm run reads whatever a racing incarnation wrote.
+	if _, err := r.store.Fetch(); err != nil {
+		return 0, fmt.Errorf("read the run state to resolve the absorption depth bound: %w", err)
+	}
+	recorded, stands, err := r.store.AbsorptionBound()
+	if err != nil {
+		return 0, fmt.Errorf("read the recorded absorption depth bound: %w", err)
+	}
+	bound := resolvedAbsorptionDepth(0, false, r.opts.AbsorptionDepthBound, r.opts.AbsorptionDepthExplicit)
+	if stands {
+		bound = resolvedAbsorptionDepth(recorded.Bound, true, r.opts.AbsorptionDepthBound, r.opts.AbsorptionDepthExplicit)
+		if bound == recorded.Bound {
+			// The precedence above adopted the standing record — write
+			// nothing: a cold restart honours the recorded bound here, and a
+			// warm incarnation without the flag does the same.
+			return recorded.Bound, nil
+		}
+	}
+
+	// The record to write: the person's explicit raise over a standing
+	// record (a guarded update, because the record is the run's and the
+	// raise must not overwrite a racing writer silently), or the first
+	// decision's own bound where none stands yet (create-if-absent, so the
+	// first incarnation's bound is the run's).
+	boundRecord := runstate.AbsorptionBound{
+		RunID:      r.runID,
+		Bound:      bound,
+		RecordedAt: r.now().UTC().Format(time.RFC3339),
+		Provenance: r.attemptProvenance(dispatch),
+	}
+	var outcome runstate.Outcome
+	if stands {
+		outcome, err = r.store.UpdateAbsorptionBound(boundRecord)
+	} else {
+		outcome, err = r.store.PutAbsorptionBound(boundRecord)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("record the absorption depth bound %d on the run branch: %w", bound, err)
+	}
+	if outcome.EffectPermitted() {
+		return bound, nil
+	}
+	// A racing incarnation moved the record between this decision's fetch and
+	// its write: theirs stands, and this decision adopts it — never a blind
+	// retry over a guarded write.
+	if _, err := r.store.Fetch(); err != nil {
+		return 0, fmt.Errorf("re-read the run state a racing incarnation of the absorption depth bound: %w", err)
+	}
+	standing, ok, err := r.store.AbsorptionBound()
+	if err != nil || !ok {
+		return 0, fmt.Errorf("read the absorption depth bound a concurrent incarnation left: %v %v", ok, err)
+	}
+	return standing.Bound, nil
 }
 
 // chainNarrative is the chain as a person reads it: which tick reported which
