@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "klq",
   "attempt": 3,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-09-25T08:57:28Z",
+  "triaged_at": "2026-09-26T08:42:40Z",
+  "triaged_by": "claude (operator-delegated)",
+  "fixed_as": "9c31e1c7",
   "provenance": {
     "run_id": "epic-gvc",
     "tick_id": "klq",
