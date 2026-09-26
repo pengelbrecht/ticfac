@@ -440,6 +440,7 @@ func TestTheEpicPRCarriesWhatWasAbsorbedAndEachCheckedPrediction(t *testing.T) {
 	for _, want := range []string{
 		"## What this epic absorbed",
 		"absorbed into the running epic: gates done item A2, basis predicted, confidence 0.62",
+		"answered by jev-2026-09",
 		"placed before the final review",
 		// THE SCORE, both halves: what the run did, and the label.
 		"The prediction was later CHECKED: the command done answered pass",

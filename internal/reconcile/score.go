@@ -26,23 +26,31 @@ import (
 // child closed, before the close-out job is claimed or dispatched — every
 // PREDICTED absorption whose named item is NOW runnable has that item's
 // command run, through the same oracle and the same evidence table the
-// absorption decision used, and the prediction is scored against the run:
+// absorption decision used, ON THE TREE THE PREDICTION WAS ABOUT (tick ce4,
+// finding cfd74936): the tree the finding was made on — the discovering
+// dispatch's base, recorded on the absorption's own provenance — never the
+// tree the close-out hands over, because that tree carries the absorbed fix
+// the prediction drove, and a correct "this gates" prediction scored against
+// it reads INCORRECT: the label would measure the repair, not the classifier.
+// On the finding's own tree:
 //
 //   - the item's command answered FAIL — the done does not demonstrate the
-//     item on the tree the close-out hands over — the prediction was RIGHT;
+//     item while the finding stands — the prediction was RIGHT;
 //
-//   - the item's command PASSED — the done demonstrates the item as the epic
-//     hands it over, which carries the absorbed fix — the prediction was
-//     WRONG, recorded as wrong, because the wrongness is the measurement.
+//   - the item's command PASSED there — the item was demonstrated even with
+//     the finding standing — the prediction was WRONG, recorded as wrong,
+//     because the wrongness is the measurement.
 //
 // What stays unchecked stays unchecked, visibly: an observed absorption is a
 // measurement and is never scored against itself; a non-gating prediction and
-// the absorb fallback named no item, so no one command checks them; and an
-// item whose command produced no evidence (still not runnable, could not run,
-// error, skipped) leaves the prediction unscored rather than guessed either
-// way — the oracle's own rule, one pass further out. The retro reports the
-// difference: what was absorbed, against which item, observed or predicted,
-// and the score of each CHECKED prediction.
+// the absorb fallback named no item, so no one command checks them; an item
+// whose command produced no evidence (still not runnable, could not run,
+// error, skipped, or a discovery whose tree the close-out cannot check out —
+// a resumed attempt's carried work) leaves the prediction unscored rather
+// than guessed either way — the oracle's own rule, one pass further out. The
+// retro reports the difference: what was absorbed, against which item,
+// observed or predicted, by which model, and the score of each CHECKED
+// prediction.
 //
 // The record is on the run branch beside the absorption it scores —
 // `.ticfac/runs/<run-id>/predictions/<key>.json`, keyed by the same finding
@@ -106,7 +114,6 @@ func (r *Reconciler) scorePredictions(ctx context.Context, tick string) error {
 		return nil
 	}
 
-	oracle := gating.NewOracle(evidenceRunner{r: r, commands: commands})
 	for _, record := range records {
 		// Only a PREDICTION is scored. An observed absorption is what a
 		// command said; a non-gating prediction and the fallback named no
@@ -132,14 +139,32 @@ func (r *Reconciler) scorePredictions(ctx context.Context, tick string) error {
 			continue
 		}
 
-		// The item's OWN command, through the oracle: one item, one run,
-		// keyed by the commit it ran on — the branch head as origin has it,
-		// the tree the close-out hands over.
+		// The tree the prediction was about (tick ce4, finding cfd74936): the
+		// tree the finding was made on — the discovering dispatch's base,
+		// recorded on the absorption's own provenance — never the tree the
+		// close-out hands over. That tree carries the absorbed fix the
+		// prediction drove, and a correct "this gates" prediction scored
+		// against it would read INCORRECT because the fix worked: the label
+		// would measure the repair, not the classifier.
+		about := predictionTree(record)
+		oracle := gating.NewOracle(evidenceRunner{r: r, commands: commands, about: about})
+
+		// The item's OWN command, through the oracle: one item, one run, on the
+		// tree the finding was made on — keyed by the commit it ran on.
 		observed, _, err := oracle.Observe(ctx, gating.Finding{ID: record.Key},
 			acceptance.Done{Items: []acceptance.Resolved{item}})
 		if err != nil {
 			return fmt.Errorf("run the done's command for %s to score the prediction of finding %s: %w",
 				record.ItemID, record.Key, err)
+		}
+		if observed != nil && observed.Commit != about {
+			// A defect, not a state: the runner was pinned to the finding's own
+			// tree and answered on another. A score keyed by the wrong tree is
+			// the mismeasurement this pass exists to prevent, and it is refused
+			// loudly rather than recorded as a label.
+			return fmt.Errorf("the run scored the prediction of finding %s on the wrong tree: the oracle answered on "+
+				"%s, want %s — the tree the finding was made on, which never carries the absorbed fix",
+				record.Key, short(observed.Commit), short(about))
 		}
 		prediction := gating.Verdict{
 			FindingID:  record.Key,
@@ -150,9 +175,10 @@ func (r *Reconciler) scorePredictions(ctx context.Context, tick string) error {
 			Fallback:   record.Fallback,
 			Reason:     record.Reason,
 		}
-		checked, ok := gating.ScorePrediction(prediction, observed)
+		checked, ok := gating.ScorePrediction(prediction, observed, about)
 		if !ok {
-			// No evidence about the item: unchecked, never guessed either way.
+			// No evidence about the item on the tree it was made about:
+			// unchecked, never guessed either way.
 			continue
 		}
 		observation, ok := observationOf(observed, record.ItemID)
@@ -166,17 +192,22 @@ func (r *Reconciler) scorePredictions(ctx context.Context, tick string) error {
 			ItemID:          record.ItemID,
 			PredictedGating: true,
 			Confidence:      record.Confidence,
-			Fallback:        record.Fallback,
-			Score:           string(checked.Score),
-			Reason:          checked.Reason,
-			Check:           observation.Evidence.Check,
-			Commit:          observed.Commit,
-			Result:          observation.Evidence.Result,
-			ExitCode:        observation.Evidence.ExitCode,
-			Output:          observation.Evidence.Output,
-			StartedAt:       observation.Evidence.StartedAt,
-			FinishedAt:      observation.Evidence.FinishedAt,
-			ScoredAt:        r.now().UTC().Format(time.RFC3339),
+			// The answering model, carried from the absorption record so the
+			// labelled pairs are per model (tick ce4, finding b8137057): the
+			// later measurement calibrates against the model that actually
+			// answered, never against whoever's guesses share the record.
+			Model:      record.Model,
+			Fallback:   record.Fallback,
+			Score:      string(checked.Score),
+			Reason:     checked.Reason,
+			Check:      observation.Evidence.Check,
+			Commit:     observed.Commit,
+			Result:     observation.Evidence.Result,
+			ExitCode:   observation.Evidence.ExitCode,
+			Output:     observation.Evidence.Output,
+			StartedAt:  observation.Evidence.StartedAt,
+			FinishedAt: observation.Evidence.FinishedAt,
+			ScoredAt:   r.now().UTC().Format(time.RFC3339),
 		}
 		tickID := tick
 		score.Provenance = r.provenance(&tickID, nil, runstate.PhaseCloseout, "")
@@ -192,11 +223,23 @@ func (r *Reconciler) scorePredictions(ctx context.Context, tick string) error {
 			continue
 		}
 		r.record(tick, StagePredictionScored,
-			"the prediction that finding %s gates item %s — %s, basis %s%s — was scored %s against the run: %s",
-			record.Key, record.ItemID, verdictLine(record), record.Basis, confidenceLine(record), checked.Score,
-			checked.Reason)
+			"the prediction that finding %s gates item %s — %s, basis %s%s%s — was scored %s against the tree the "+
+				"finding was made on (%s), not the one carrying the absorbed fix: %s",
+			record.Key, record.ItemID, verdictLine(record), record.Basis, confidenceLine(record), modelLine(record),
+			checked.Score, short(about), checked.Reason)
 	}
 	return nil
+}
+
+// predictionTree is the tree a prediction is scored against (tick ce4,
+// finding cfd74936): the tree the finding was made on — the base of the
+// discovering attempt's dispatch, recorded on the absorption decision's own
+// provenance — never the tree the close-out hands over, which carries the
+// absorbed fix the prediction drove. A prediction is a claim about the done
+// WHILE THE FINDING STANDS; the fix is what the prediction bought, and a
+// score read against it measures the repair rather than the classifier.
+func predictionTree(record runstate.Absorption) string {
+	return record.Provenance.SourceSHA
 }
 
 // scoredItem is the item the prediction named as the done holds it now:

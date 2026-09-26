@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ A2 = "done"
 
 // scoringGateBroken is scoringGate with the done's command FAILING: the
 // close-out runs it, it answers non-zero, and the prediction was right — the
-// done does not demonstrate the item on the tree the epic hands over.
+// done does not demonstrate the item on the tree the finding was made on.
 const scoringGateBroken = passingGate + `
 [evidence.commands]
 done = { command = "exit 3", description = "the done's check, broken at the close-out" }
@@ -54,6 +55,22 @@ done = { command = "exit 3", description = "the done's check, broken at the clos
 [evidence.acceptance]
 A2 = "done"
 `
+
+// scoringGateFor is scoringGate with the done's command answered ONLY by the
+// absorbed tick's own work: the file its fake worker commits is the fix the
+// prediction bought, so the command passes on the tree the close-out hands
+// over and fails on the tree the finding was made on — the pair that proves a
+// correct gating prediction is scored against the finding's own tree rather
+// than against the repair (tick ce4, finding cfd74936).
+func scoringGateFor(tickID string) string {
+	return passingGate + fmt.Sprintf(`
+[evidence.commands]
+done = { command = "test -f work-%s.txt", description = "the done's check, satisfied only by the absorbed tick's fix" }
+
+[evidence.acceptance]
+A2 = "done"
+`, tickID)
+}
 
 // scoredPrediction drives the fixture's one finding to a PREDICTED absorption
 // naming item [A2], cut the moment the decision is durable — the classifier
@@ -83,6 +100,13 @@ func scoredPrediction(t *testing.T, f *fixture, classifier *fakeGatingClassifier
 	if !record.Gating || record.ItemID != "A2" || record.Basis != runstate.AbsorptionPredicted {
 		t.Fatalf("the warm run's decision is %+v, want predicted gating over item A2 — nothing was bound, so the "+
 			"item was the classifier's to predict", record)
+	}
+	// The decision names the model that answered it (tick ce4, finding
+	// b8137057): the scores the close-out grades against this record are per
+	// model, and a record that cannot say which model guessed is a label the
+	// later measurement cannot calibrate with.
+	if record.Model != "jev-2026-09" {
+		t.Errorf("the decision names the answering model %q, want the classifier's own jev-2026-09", record.Model)
 	}
 	return record
 }
@@ -163,6 +187,21 @@ func TestAPredictionIsScoredAgainstTheRunWhenItsItemBecomesRunnable(t *testing.T
 	if score.Commit == "" {
 		t.Error("the score is keyed by no commit: a label with nothing under it is a timestamped opinion")
 	}
+	// THE SCORE IS KEYED BY THE TREE THE FINDING WAS MADE ON (tick ce4,
+	// finding cfd74936) — the discovering dispatch's base — never the tree
+	// the close-out hands over, which carries the absorbed fix the
+	// prediction drove: scoring against that tree measures the repair, not
+	// the classifier.
+	if score.Commit != record.Provenance.SourceSHA {
+		t.Errorf("the score is keyed by commit %s, want %s — the tree the finding was made on, not the tree the close-out hands over",
+			score.Commit, record.Provenance.SourceSHA)
+	}
+	// The score names the model whose prediction it grades, carried from the
+	// absorption record so the labelled pairs are per model.
+	if score.Model != record.Model || score.Model == "" {
+		t.Errorf("the score names the answering model %q, want the absorption's own %q: a score nobody can attribute to the model that guessed is a label the later measurement cannot calibrate with",
+			score.Model, record.Model)
+	}
 	if score.ScoredAt == "" {
 		t.Error("the score carries no scored_at")
 	}
@@ -181,8 +220,8 @@ func TestAPredictionIsScoredAgainstTheRunWhenItsItemBecomesRunnable(t *testing.T
 }
 
 // 1b. THE RUN AGREED: the item's command answered fail on the tree the
-// close-out hands over, so the done does not demonstrate the item and the
-// prediction was RIGHT.
+// finding was made on, so the done does not demonstrate the item while the
+// finding stands, and the prediction was RIGHT.
 func TestAPredictionTheRunAgreesWithIsScoredCorrect(t *testing.T) {
 	shorttest.EndToEnd(t)
 	t.Parallel()
@@ -214,6 +253,71 @@ func TestAPredictionTheRunAgreesWithIsScoredCorrect(t *testing.T) {
 	}
 	if scores[0].Result != "fail" || scores[0].ExitCode == 0 {
 		t.Errorf("the outcome is %+v, want the done's command failing", scores[0])
+	}
+}
+
+// 1c. THE FIX THE PREDICTION BOUGHT IS ON THE TREE THE CLOSE-OUT HANDS OVER,
+// and the prediction is still scored on the tree the finding was made on
+// (tick ce4, finding cfd74936): a CORRECT gating prediction scores CORRECT.
+// The item's command — bound between the legs, the way the epic's own work
+// binds it — is satisfied only by the absorbed tick's own work, so it fails
+// on the finding's tree and passes on the close-out's. The old scoring ran it
+// on the branch head, read the pass as the prediction being wrong, and a
+// correct "this gates" answer scored INCORRECT — the label measured the
+// repair, not the classifier.
+func TestACorrectGatingPredictionIsScoredOnTheTreeTheFindingWasMadeAbout(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "finding_local"})
+	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
+	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.7, "none": 0.3}, "A2")}
+	record := scoredPrediction(t, f, classifier, fixtureOptions{})
+
+	// The item becomes runnable against a command only the ABSORBED TICK's
+	// fix satisfies: the prediction bought exactly that fix.
+	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), scoringGateFor(record.TickID))
+
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", gatingClassifier: classifier})
+	if err != nil {
+		t.Fatalf("the resumed run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+
+	// THE FIX IS ON THE TREE THE CLOSE-OUT HANDS OVER: the pass the old
+	// scoring would have read as INCORRECT is one command away on the branch
+	// head — the premise the label below is meaningless without.
+	branch := r.IntegrationBranch()
+	if !mustRunAllowingFailure(f.Repo.Origin, "git", "cat-file", "-e",
+		"refs/heads/"+branch+":work-"+record.TickID+".txt") {
+		t.Fatalf("the absorbed tick's fix is not on the tree the close-out hands over: the fixture's premise — a command that passes on %s because the fix landed — does not hold", branch)
+	}
+
+	scores, err := openRunStore(t, f.Repo.Dir, branch, r.RunID()).PredictionScores()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scores) != 1 {
+		t.Fatalf("the run scored %d prediction(s), want one: %+v", len(scores), scores)
+	}
+	score := scores[0]
+	if score.Score != runstate.PredictionScoreCorrect {
+		t.Errorf("the score is %q, want %s: the item's command failed on the tree the finding was made on, so the done does not demonstrate the item while the finding stands and the finding was gating as predicted",
+			score.Score, runstate.PredictionScoreCorrect)
+	}
+	if score.Result != "fail" {
+		t.Errorf("the outcome is %q on commit %s, want the done's command failing: the command is satisfied only by the fix the branch carries, so a fail names the tree the finding was made on",
+			score.Result, score.Commit)
+	}
+	if score.Commit != record.Provenance.SourceSHA {
+		t.Errorf("the score is keyed by commit %s, want %s — the tree the finding was made on (the discovering dispatch's base), never the tree carrying the absorbed fix",
+			score.Commit, record.Provenance.SourceSHA)
+	}
+	if score.Model != record.Model || score.Model == "" {
+		t.Errorf("the score names the answering model %q, want the absorption's own %q: the labelled pairs are per model",
+			score.Model, record.Model)
 	}
 }
 
@@ -276,5 +380,23 @@ func TestAnObservedAbsorptionIsNotAScoredPrediction(t *testing.T) {
 	}
 	if len(scores) != 0 {
 		t.Fatalf("the run scored %d prediction(s) over an observed absorption: %+v", len(scores), scores)
+	}
+}
+
+// The tree a prediction is scored on is the tree the finding was made on —
+// the discovering dispatch's base, recorded on the absorption decision's own
+// provenance (tick ce4, finding cfd74936) — never the tree the close-out hands
+// over, which carries the absorbed fix the prediction drove. The wiring is one
+// field of one record already in memory; the end-to-end cases above prove the
+// close-out runs the item's command on it.
+//
+// short: the tree is a field of a record already in memory
+func TestTheTreeAPredictionIsScoredOnIsTheTreeTheFindingWasMadeAbout(t *testing.T) {
+	t.Parallel()
+	about := "9f1c2ab37de49f1c2d5e"
+	record := runstate.Absorption{Key: "dc02fb31", Provenance: runstate.Provenance{SourceSHA: about}}
+	if got := predictionTree(record); got != about {
+		t.Errorf("the prediction is scored on %q, want %s — the tree the finding was made on, never the tree "+
+			"carrying the absorbed fix", got, about)
 	}
 }

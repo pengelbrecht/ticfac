@@ -38,13 +38,15 @@ import (
 // record keeps for the basis vocabulary.
 const (
 	// PredictionScoreCorrect: the run agreed with the prediction — the item's
-	// command answered fail, the done did not demonstrate the item, and the
-	// finding was gating as predicted.
+	// command answered fail on the tree the finding was made on, the done did
+	// not demonstrate the item while the finding stood, and the finding was
+	// gating as predicted.
 	PredictionScoreCorrect = "correct"
-	// PredictionScoreIncorrect: the run disagreed — the item's command
-	// passed on the tree the close-out scores, the done demonstrated the item
-	// as the epic hands it over. Recorded, never hidden: a wrong prediction
-	// is the evidence the threshold's next reader needs.
+	// PredictionScoreIncorrect: the run disagreed — the item's command passed
+	// on the tree the finding was made on, so the item was demonstrated even
+	// with the finding standing, and the prediction was wrong about the
+	// finding. Recorded, never hidden: a wrong prediction is the evidence the
+	// threshold's next reader needs.
 	PredictionScoreIncorrect = "incorrect"
 )
 
@@ -73,6 +75,13 @@ type PredictionScore struct {
 	// calibrating the threshold is calibrating against THIS number. Zero for
 	// the fallback, which no model answered.
 	Confidence float64 `json:"confidence,omitempty"`
+	// Model is the answering model whose prediction this grade is of —
+	// carried from the absorption record (tick ce4, finding b8137057) so the
+	// labelled pairs are PER MODEL: a later measurement across epics
+	// calibrates the threshold against the model that actually answered,
+	// not against whoever's guesses happen to share the record. Empty for
+	// the fallback, which no model answered.
+	Model string `json:"model,omitempty"`
 	// Fallback, when non-empty, is why no model answered — the prediction
 	// was the documented absorb fallback standing in for one.
 	Fallback string `json:"fallback,omitempty"`
@@ -112,11 +121,13 @@ type PredictionScore struct {
 
 // Validate applies the record's own rules: the closed score vocabulary, the
 // outcome's agreement with the label it carries (a correct prediction is one
-// whose item's command FAILED — the done did not demonstrate the item — and
-// an incorrect one is one whose command PASSED), the pair's completeness
-// (both halves: what was predicted, what ran, keyed by the commit it ran on),
-// and the same discipline every other decision record here is held to — a
-// score nobody can attribute is one nobody can audit.
+// whose item's command FAILED on the tree the finding was made on — the done
+// did not demonstrate the item while the finding stood — and an incorrect one
+// is one whose command PASSED there — the item was demonstrated even with the
+// finding standing), the pair's completeness (both halves: what was predicted,
+// what ran, keyed by the commit it ran on), and the same discipline every
+// other decision record here is held to — a score nobody can attribute is one
+// nobody can audit.
 func (p PredictionScore) Validate() error {
 	if p.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("prediction score schema_version is %d, want %d", p.SchemaVersion, SchemaVersion)

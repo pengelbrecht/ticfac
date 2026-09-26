@@ -51,6 +51,9 @@ func testObserved(gating bool, result Result, exit int) *Observed {
 // prediction was right; the run demonstrated the item and the prediction was
 // wrong — recorded, never hidden, because a wrong prediction is the only
 // evidence anyone will ever have for where the absorb threshold belongs.
+// The observation answers on the tree the finding was made on — about — which
+// is what makes the label a measurement of the classifier rather than of the
+// repair (tick ce4).
 func TestAScoredPredictionIsLabelledAgainstWhatTheRunDid(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -67,7 +70,7 @@ func TestAScoredPredictionIsLabelledAgainstWhatTheRunDid(t *testing.T) {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			checked, ok := ScorePrediction(testPrediction(), testCase.run)
+			checked, ok := ScorePrediction(testPrediction(), testCase.run, testObservedAbout)
 			if !ok {
 				t.Fatalf("the prediction over A2 was refused against an observation that produced evidence")
 			}
@@ -76,8 +79,9 @@ func TestAScoredPredictionIsLabelledAgainstWhatTheRunDid(t *testing.T) {
 			}
 			// The reason is written for the retro a person reads: it names
 			// the item, the command that answered, and the commit the answer
-			// ran on, so the label can be re-read against the tree it is
-			// about rather than trusted as a bare word.
+			// ran on — the tree the finding was made on — so the label can be
+			// re-read against the tree it is about rather than trusted as a
+			// bare word.
 			for _, want := range []string{"A2", "done", "9f1c2ab37de4"} {
 				if !strings.Contains(checked.Reason, want) {
 					t.Errorf("the %s reason does not name %q: %q", testCase.want, want, checked.Reason)
@@ -87,6 +91,11 @@ func TestAScoredPredictionIsLabelledAgainstWhatTheRunDid(t *testing.T) {
 	}
 }
 
+// testObservedAbout is the tree the test's observation answered on — the
+// tree the finding was made on, which the scoring pass pins (tick ce4). The
+// fixture's observation reports the same commit, so the pair exists.
+const testObservedAbout = "9f1c2ab37de4"
+
 // ONLY A PREDICTION IS SCORED: an observed verdict is a measurement, and
 // scoring a measurement against itself would dress an echo up as calibration
 // data.
@@ -94,7 +103,7 @@ func TestAnObservedVerdictIsNotAScoredPrediction(t *testing.T) {
 	t.Parallel()
 	observed := testPrediction()
 	observed.Basis = BasisObserved
-	if _, ok := ScorePrediction(observed, testObserved(true, ResultFail, 3)); ok {
+	if _, ok := ScorePrediction(observed, testObserved(true, ResultFail, 3), testObservedAbout); ok {
 		t.Error("an observed verdict was scored: only a guess becomes a labelled pair, never a measurement")
 	}
 }
@@ -114,7 +123,7 @@ func TestAFallbackNamingNoItemIsNeverScored(t *testing.T) {
 			t.Parallel()
 			prediction := testPrediction()
 			warp(&prediction)
-			if _, ok := ScorePrediction(prediction, testObserved(true, ResultFail, 3)); ok {
+			if _, ok := ScorePrediction(prediction, testObserved(true, ResultFail, 3), testObservedAbout); ok {
 				t.Errorf("a prediction that names no item was scored: nothing was run for it and nothing was checked")
 			}
 		})
@@ -142,7 +151,7 @@ func TestAnUnresolvedItemIsNeverScored(t *testing.T) {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			if _, ok := ScorePrediction(testPrediction(), testCase.run); ok {
+			if _, ok := ScorePrediction(testPrediction(), testCase.run, testObservedAbout); ok {
 				t.Errorf("the prediction was scored over no evidence: a label with nothing under it is a guess wearing a score's clothes")
 			}
 		})
@@ -156,7 +165,39 @@ func TestAScoresOwnItemDecidesItAndNoOther(t *testing.T) {
 	t.Parallel()
 	other := testObserved(true, ResultFail, 3)
 	other.Items[0].ItemID = "A3"
-	if _, ok := ScorePrediction(testPrediction(), other); ok {
+	if _, ok := ScorePrediction(testPrediction(), other, testObservedAbout); ok {
 		t.Error("the prediction over A2 was scored against A3's observation: the labelled pair is per item, never borrowed")
+	}
+}
+
+// THE SCORE IS ON THE TREE THE PREDICTION WAS ABOUT (tick ce4, finding
+// cfd74936): the tree the finding was made on, which never carries the fix
+// the prediction drove. The tree the close-out hands over DOES carry it, and
+// a correct "this gates" prediction scored there reads INCORRECT — the label
+// measured the repair, not the classifier. A gating prediction whose item's
+// command answered FAIL on the tree it was made about scores CORRECT; an
+// observation that answered on any OTHER tree is refused rather than labelled,
+// and so is one with no tree named at all.
+func TestACorrectGatingPredictionScoresCorrectOnTheTreeItWasMadeAbout(t *testing.T) {
+	t.Parallel()
+	checked, ok := ScorePrediction(testPrediction(), testObserved(true, ResultFail, 3), testObservedAbout)
+	if !ok || checked.Score != ScoreCorrect {
+		t.Fatalf("a gating prediction whose item's command failed on the tree it was made about scored (%s, ok=%v), want correct", checked.Score, ok)
+	}
+	if !strings.Contains(checked.Reason, "the tree the finding was made on") {
+		t.Errorf("the reason does not say which tree the answer ran on: %q", checked.Reason)
+	}
+
+	for name, about := range map[string]string{
+		"a tree carrying the absorbed fix": "7e2d94c1b8a0",
+		"no tree named at all":             "",
+	} {
+		about := about
+		t.Run("the observation answered on "+name, func(t *testing.T) {
+			t.Parallel()
+			if _, ok := ScorePrediction(testPrediction(), testObserved(true, ResultFail, 3), about); ok {
+				t.Errorf("the prediction was scored against %q, want the refusal: a label against the wrong tree measures the repair, not the classifier", about)
+			}
+		})
 	}
 }
