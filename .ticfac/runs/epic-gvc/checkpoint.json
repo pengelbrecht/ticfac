@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 105,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for 9xp",
-  "updated_at": "2026-09-26T08:24:45Z",
+  "sequence": 106,
+  "state": "integrating",
+  "reason": "integrating 9xp attempt 14 into epic/gvc",
+  "updated_at": "2026-09-26T08:24:50Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "9xp",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 14
     },
     {
