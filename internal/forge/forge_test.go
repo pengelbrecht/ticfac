@@ -332,6 +332,16 @@ func TestCIReadsOnlyTheLatestRunOfEachCheck(t *testing.T) {
 			{"name": "go", "status": "completed", "conclusion": "success", "started_at": "2026-09-23T09:00:00Z"},
 			failed,
 		}, CIRed, []int64{111}},
+		// CI skips an epic branch's pull_request run (the push run carries the
+		// checks); a later skip must not shadow the red run that executed.
+		{"a later skipped run does not hide a failure", []map[string]string{
+			failed,
+			{"name": "go", "status": "completed", "conclusion": "skipped", "started_at": "2026-09-23T11:00:00Z"},
+		}, CIRed, []int64{111}},
+		{"a skipped run does not stand in for a pending one", []map[string]string{
+			{"name": "go", "status": "completed", "conclusion": "skipped", "started_at": "2026-09-23T11:00:00Z"},
+			{"name": "go", "status": "in_progress", "conclusion": "", "started_at": "2026-09-23T10:30:00Z"},
+		}, CIPending, nil},
 	} {
 		runs := tc.runs
 		g, _ := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {

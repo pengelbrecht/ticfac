@@ -13,7 +13,19 @@ on:
     # attaches its check runs to the same head commit the close-out reads
     # (commits/<sha>/check-runs), whatever GitHub thinks of the merge.
     branches: [main, "epic/**"]
+    # A run's own durable records (.ticfac/: checkpoints, attempt records,
+    # evidence) are pushed to the epic branch several times a minute. With
+    # cancel-in-progress below, every such push cancelled the CI run on the
+    # code before it and started another: epic/gvc's close-out on 2026-09-26
+    # saw a dozen cancelled runs in one hour. Those commits carry no code, and
+    # the close-out already accepts "CI green on the newest commit it ran on,
+    # with only .ticfac/ changes since" (closeout.go). .tick/ is NOT ignored:
+    # the close-out's own tracker commits must get CI on their head.
+    paths-ignore:
+      - ".ticfac/**"
   pull_request:
+    paths-ignore:
+      - ".ticfac/**"
 
 permissions:
   contents: read
@@ -25,6 +37,11 @@ concurrency:
 jobs:
   go:
     name: go
+    # An epic branch already gets a push-triggered run on the same head
+    # commit (see `on:` above), so its PR's pull_request run was the same
+    # checks twice. Feature-branch PRs still run here: their branches are not
+    # in the push filter.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -32,10 +49,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          # No dependency cache: this module is stdlib-only, so there is no
-          # go.sum for setup-go to key a cache on. Turn this on in the same
-          # commit as the first dependency.
-          cache: false
+          # Cached on go.sum: the module cache and, more importantly, the
+          # build and test cache, so an unchanged package's tests answer from
+          # cache exactly as they do on a laptop and in the per-tick gate.
+          cache: true
 
       - name: gofmt
         run: |
@@ -79,14 +96,12 @@ jobs:
         working-directory: cloudflare
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      # -timeout is pinned via the Makefile (not a bare `go test ./...`):
-      # internal/reconcile's suite runs 600-620s even under -short, past go
-      # test's default 10-minute per-package timeout.
-      - name: go test -short
-        run: make test-short
-
-      # The full suite, which additionally builds the binary and asserts the
-      # exit code a shell sees for `ticfac run-epic <id>`.
+      # The full suite. It used to run after `make test-short`, which ran the
+      # short subset a second time inside the same job: the full suite is a
+      # superset (every short test runs in it too), so the extra step bought
+      # minutes of CI and no coverage. -timeout is pinned via the Makefile (not
+      # a bare `go test ./...`): internal/reconcile's suite runs past go test's
+      # default 10-minute per-package timeout.
       - name: go test
         run: make test
 
@@ -108,6 +123,11 @@ jobs:
 
   contracts:
     name: contracts
+    # An epic branch already gets a push-triggered run on the same head
+    # commit (see `on:` above), so its PR's pull_request run was the same
+    # checks twice. Feature-branch PRs still run here: their branches are not
+    # in the push filter.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -115,10 +135,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          # No dependency cache: this module is stdlib-only, so there is no
-          # go.sum for setup-go to key a cache on. Turn this on in the same
-          # commit as the first dependency.
-          cache: false
+          # Cached on go.sum: the module cache and, more importantly, the
+          # build and test cache, so an unchanged package's tests answer from
+          # cache exactly as they do on a laptop and in the per-tick gate.
+          cache: true
 
       # The offline gate. It makes no network call, so no network failure can
       # turn this job green by skipping it: the vendored bundle is verified
@@ -162,6 +182,11 @@ jobs:
   # THIS one. sandbox.pin.json is the pin; cmd/sandbox is the check.
   typescript:
     name: typescript
+    # An epic branch already gets a push-triggered run on the same head
+    # commit (see `on:` above), so its PR's pull_request run was the same
+    # checks twice. Feature-branch PRs still run here: their branches are not
+    # in the push filter.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -220,6 +245,11 @@ jobs:
 
   sandbox:
     name: sandbox
+    # An epic branch already gets a push-triggered run on the same head
+    # commit (see `on:` above), so its PR's pull_request run was the same
+    # checks twice. Feature-branch PRs still run here: their branches are not
+    # in the push filter.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -227,10 +257,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          # No dependency cache: this module is stdlib-only, so there is no
-          # go.sum for setup-go to key a cache on. Turn this on in the same
-          # commit as the first dependency.
-          cache: false
+          # Cached on go.sum: the module cache and, more importantly, the
+          # build and test cache, so an unchanged package's tests answer from
+          # cache exactly as they do on a laptop and in the per-tick gate.
+          cache: true
 
       # The offline gate. It makes no network call, so no network failure can
       # turn this job green by skipping it: the vendored tree is verified

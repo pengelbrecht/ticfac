@@ -12,7 +12,7 @@
 // nothing.
 //
 // So `-short` now means what it says: an end-to-end test does not run in the
-// per-tick gate. It still runs — CI runs `make test-short` AND `make test`,
+// per-tick gate. It still runs — CI runs `make test` (the full suite),
 // and epic close-out runs the full suite — but it no longer stands between a
 // tick and its merge.
 //
