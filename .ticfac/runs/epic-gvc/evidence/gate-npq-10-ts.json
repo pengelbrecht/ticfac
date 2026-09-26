@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-npq-10-ts",
+  "provenance": {
+    "run_id": "epic-gvc",
+    "tick_id": "npq",
+    "attempt": 10,
+    "source_ref": "refs/heads/epic/gvc",
+    "source_sha": "d5855cf52abf99b3118aa2379159a6f0b89e4b75",
+    "integration_ref": "refs/heads/epic/gvc",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:bf8e76166ecb63a4990e78fbe5ec56be86eb6e7a204f301cce776dbf44e1b141",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-09-26T06:05:18Z",
+  "finished_at": "2026-09-26T06:05:23Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "✓ Lockfile passes supply-chain policies (verified 1d ago)\nLockfile is up to date, resolution step is skipped\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: \u003credacted-host-path\u003e/Library/pnpm/store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +94\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 94, reused 94, downloaded 0, added 94, done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.21.3\n+ @cloudflare/workers-types 5.20260819.1\n+ esbuild 0.28.1\n+ miniflare 5.20260815.0-alpha\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.124.0\n\nDone in 370ms using pnpm v12.3.4\n\u001b[0m\u001b[34mChecked 125 files in 274\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 15 contract(s) at bundle 6.2.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:2c0039b0a970ec709bd249aa1a20cfaef62cf132d56ba8ab125ee640d859a8d8",
+  "persistence_uri": "git:refs/heads/epic/gvc:.ticfac/runs/epic-gvc/evidence/gate-npq-10-ts.json"
+}
