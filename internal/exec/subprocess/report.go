@@ -99,6 +99,14 @@ type Report struct {
 	Findings        []Finding
 	FindingsProblem string
 
+	// FindingsFolded names every finding key the block carried that the
+	// finding record does not know (tick ryv): such a key is folded into the
+	// finding's BODY as a labelled line rather than refused, and what was
+	// folded rides here so the attempt's records can note it — the 3h0
+	// worker's finished tick was once rejected over an extra "title_note",
+	// and the fold is the repair: kept, visibly, never thrown away.
+	FindingsFolded []string
+
 	// ReviewVerdict is the review's own judgement parsed off its typed
 	// REVIEW-VERDICT line — READY or NOT READY, the closed vocabulary above.
 	// Empty when the report carries none, whatever its prose says: prose is
@@ -124,8 +132,8 @@ func (r Report) NeedsHuman() bool {
 // verdict, so a body that stops matching here is a verdict change too.
 func ParseReport(body string) Report {
 	var out Report
-	findings, problem := ParseFindings(body)
-	out.Findings, out.FindingsProblem = findings, problem
+	findings, problem, folded := ParseFindings(body)
+	out.Findings, out.FindingsProblem, out.FindingsFolded = findings, problem, folded
 	for _, raw := range strings.Split(body, "\n") {
 		trimmed := strings.Trim(strings.TrimRight(raw, "\r"), decorationCutset)
 		if m := statusLine.FindStringSubmatch(trimmed); m != nil {

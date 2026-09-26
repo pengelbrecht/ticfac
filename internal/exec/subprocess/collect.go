@@ -42,6 +42,13 @@ type Collection struct {
 	// but the reconciler acts on the typed list, not on a map it re-reads.
 	Findings        []Finding
 	FindingsProblem string
+	// FindingsFolded names every finding key the report's block carried that
+	// the finding record does not know (tick ryv): the key and its value were
+	// FOLDED into the finding's body rather than refused, and this is what
+	// the attempt's records note about that — the fold is stated, never
+	// silent, because a fold nobody recorded is indistinguishable from a
+	// worker that never said it.
+	FindingsFolded []string
 
 	Message string
 }
@@ -146,6 +153,7 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 		ArtifactViolations: artifactViolations,
 		Findings:           report.Findings,
 		FindingsProblem:    report.FindingsProblem,
+		FindingsFolded:     report.FindingsFolded,
 		Message:            e.message(reason, class, record, append(append([]string{}, violations...), artifactViolations...)),
 	}
 

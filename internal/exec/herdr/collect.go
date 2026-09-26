@@ -156,6 +156,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		ArtifactViolations: artifactViolations,
 		Findings:           report.Findings,
 		FindingsProblem:    report.FindingsProblem,
+		FindingsFolded:     report.FindingsFolded,
 		Message:            collectMessage(reason, class, record, allViolations),
 	}
 

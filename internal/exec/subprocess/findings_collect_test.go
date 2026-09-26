@@ -1,6 +1,9 @@
 package subprocess
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The findings channel through a REAL collect: the block a worker wrote in its
 // report arrives in the collection the reconciler reads, and in the
@@ -36,6 +39,19 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	if collected.Findings[0].Kind != FindingKindProposedTick || collected.Findings[0].Target != "" {
 		t.Errorf("finding[0] %+v, want a proposed tick for this repository", collected.Findings[0])
 	}
+	// THE DONE EVIDENCE (tick nfo): the linked finding's claim against the
+	// epic's definition of done rides the collection — the draft the
+	// reconciler files is where the absorption decision reads it — and the
+	// finding reported without the fields is carried unlinked, not refused.
+	if collected.Findings[0].DoneItem != "A1" || collected.Findings[0].DemonstratingCheck != "go" {
+		t.Errorf("finding[0] done evidence is done_item %q, demonstrating_check %q, want A1 and go — "+
+			"the claim must reach the reconciler with the finding", collected.Findings[0].DoneItem,
+			collected.Findings[0].DemonstratingCheck)
+	}
+	if collected.Findings[1].DoneItem != "" || collected.Findings[1].DemonstratingCheck != "" {
+		t.Errorf("finding[1] done evidence is done_item %q, demonstrating_check %q, want an unlinked finding",
+			collected.Findings[1].DoneItem, collected.Findings[1].DemonstratingCheck)
+	}
 	if collected.Findings[1].Kind != FindingKindUpstreamTick || collected.Findings[1].Target != "pengelbrecht/ticks" {
 		t.Errorf("finding[1] %+v, want an upstream tick routed to pengelbrecht/ticks", collected.Findings[1])
 	}
@@ -53,6 +69,13 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	if answer.Findings[1].Kind != FindingKindUpstreamTick || answer.Findings[1].Target != "pengelbrecht/ticks" {
 		t.Errorf("envelope findings[1] %+v, want an upstream tick routed to pengelbrecht/ticks", answer.Findings[1])
 	}
+	// The envelope's copy is the PINNED five-field record when it is WRITTEN
+	// (see TestTheEnvelopeCarriesFindingsAsThePinnedRecord): the evidence
+	// rides the block and the draft, and joins the envelope when the bundle
+	// adopts it. In memory the same typed list the collection carries.
+	if answer.Findings[0].DoneItem != "A1" || answer.Findings[1].DoneItem != "" {
+		t.Errorf("the in-memory envelope findings are not the same list the collection carries: %+v", answer.Findings)
+	}
 	if got := answer.Result["findings_problem"]; got != "" {
 		t.Errorf("findings_problem %v, want the empty string", got)
 	}
@@ -60,6 +83,57 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 	// open payload must not carry a second, unvalidated copy of it.
 	if _, still := answer.Result["findings"]; still {
 		t.Error("the envelope still carries result[\"findings\"] — the first-class field is the record now, and a second spelling is the drift the bundle was cut to retire")
+	}
+}
+
+// The fold through a REAL collect (tick ryv): the 3h0 shape — a worker whose
+// work is fine reports a finding carrying a key the record does not know
+// ("title_note") — and the attempt must NOT be refused over the annotation.
+// The finding arrives with the key folded into its body as a labelled line,
+// the collection names what was folded, and the envelope's result map states
+// it too: the attempt's own durable record says the worker's unknown half
+// was KEPT rather than thrown away with the tick's work.
+func TestCollectFoldsAnUnknownFindingKeyAndNotesTheFold(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "findings_folds"})
+	handle := f.Start(f.spec("run-42/tick-fld/attempt-1", "fld"))
+	f.waitSettled(handle)
+
+	collected := f.collect(handle)
+	// The work was fine, and the fold is not a refusal: the verdict is the
+	// branch's, as it would have been for any other finished attempt.
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want %s: an unknown finding key must not reject a finished tick's work",
+			collected.Verdict, VerdictReadyToMerge)
+	}
+	if collected.FindingsProblem != "" {
+		t.Fatalf("findings problem %q: a folded key is not a problem", collected.FindingsProblem)
+	}
+	if len(collected.Findings) != 1 {
+		t.Fatalf("findings %v, want the one the block carried", collected.Findings)
+	}
+	want := "Discovered beside the work, reported mechanically.\n" +
+		"folded title_note: an annotation the record has no field for"
+	if collected.Findings[0].Body != want {
+		t.Fatalf("body %q, want the worker's body with the unknown key folded in as a labelled line:\n%q",
+			collected.Findings[0].Body, want)
+	}
+	if len(collected.FindingsFolded) != 1 || !strings.Contains(collected.FindingsFolded[0], "title_note") {
+		t.Fatalf("folded %v, want the unknown key named for the attempt's records", collected.FindingsFolded)
+	}
+
+	answer := collected.Result.RoleResult
+	if answer == nil {
+		t.Fatal("no role-result envelope")
+	}
+	if got, _ := answer.Result["findings_folded"].([]string); len(got) != 1 || !strings.Contains(got[0], "title_note") {
+		t.Fatalf("the envelope's result map does not state the fold: %v — the attempt's record must name "+
+			"what was kept, or the fold is a silent rewrite of what the worker wrote", answer.Result)
+	}
+	// The envelope's findings ride as the PINNED five-field record, and the
+	// fold rides inside the pinned body — nothing about the fold needs a
+	// field the bundle has not adopted.
+	if len(answer.Findings) != 1 || !strings.Contains(answer.Findings[0].Body, "folded title_note:") {
+		t.Fatalf("envelope findings %v, want the folded body on the record the schema validates", answer.Findings)
 	}
 }
 

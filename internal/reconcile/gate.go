@@ -55,9 +55,24 @@ type gateProgress struct {
 	passed      bool
 	failures    []string
 
+	// failed is the failing checks with the keys of the evidence records
+	// that hold their output, in the order they failed — what a repair job
+	// is handed so its prompt can carry the gate's own answer about what
+	// broke (tick wj6). failures alone carries only the check names.
+	failed []gateCheck
+
 	// running is the command that has been started and not yet answered for.
 	// Nil between commands, and nil once every command has been answered.
 	running *gateCommand
+}
+
+// gateCheck is one check of the gate: its declared name, and the key of the
+// evidence record that holds what it printed. The pair is what a failed
+// gate hands a repair job — the NAME says which check, the KEY says where
+// the output a person would have read by hand is recorded.
+type gateCheck struct {
+	Name string
+	Key  string
 }
 
 // gateAndClose runs the integrated gate over the merge, records its evidence,
@@ -200,6 +215,7 @@ func (r *Reconciler) stepGate(ctx context.Context, marker attemptHandle, merged 
 			return false, nil
 		}
 		record, err := r.finishGateCommand(g.running, marker, merged, g.fingerprint)
+		key := g.running.key
 		g.running = nil
 		if err != nil {
 			return false, err
@@ -207,6 +223,7 @@ func (r *Reconciler) stepGate(ctx context.Context, marker attemptHandle, merged 
 		if record.Result != "pass" {
 			g.passed = false
 			g.failures = append(g.failures, fmt.Sprintf("%s (%s)", record.Check.ID, record.Result))
+			g.failed = append(g.failed, gateCheck{Name: record.Check.ID, Key: key})
 		}
 		g.index++
 		return g.index >= len(r.gate), nil
@@ -240,6 +257,7 @@ func (r *Reconciler) stepGate(ctx context.Context, marker attemptHandle, merged 
 		if existing.Result != "pass" {
 			g.passed = false
 			g.failures = append(g.failures, fmt.Sprintf("%s (%s)", command.Name, existing.Result))
+			g.failed = append(g.failed, gateCheck{Name: command.Name, Key: key})
 		}
 		g.index++
 		return g.index >= len(r.gate), nil
@@ -257,8 +275,28 @@ func (r *Reconciler) closeAfterGate(ctx context.Context, entry planEntry, marker
 	fingerprint, keys, failures := g.fingerprint, g.keys, g.failures
 
 	if !g.passed {
-		r.setTick(tick, "rejected")
 		r.record(tick, StageGateFailed, "the integrated gate did not pass: %s", strings.Join(failures, ", "))
+		// A gate that fails over a merge that is ALREADY ON the integration
+		// branch used to be a stop whose only remedy was a person reading a
+		// gate log and patching the tree by hand (tick wj6) — twice on epic-yoh,
+		// both times a small mechanical fix the gate's own output named. The
+		// run dispatches a repair job instead: it works on a fresh worktree of
+		// the epic head, and its commits are merged and gated as usual. One
+		// repair per tick, and a repair whose gate also fails is the stop, as
+		// today — naming both failures. A gate with NO failing check (an
+		// operational failure, a structural refusal) never gets here: there is
+		// no evidence output for a repair to read, and the stops those cases
+		// already are stay as they were.
+		if len(g.failed) > 0 {
+			if err := r.repairFailedGate(ctx, entry, marker, merged, g); err != nil {
+				r.setTick(tick, "rejected")
+				return err
+			}
+			// The repair merged, its gate passed, and the recursive close
+			// behind it closed the tick: this caller's finish is over.
+			return nil
+		}
+		r.setTick(tick, "rejected")
 		return r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s: %s. The tick is NOT closed: a close behind a failing "+
 				"gate is a close nothing stands behind. The merge is already on %s, so the repair is to fix the "+

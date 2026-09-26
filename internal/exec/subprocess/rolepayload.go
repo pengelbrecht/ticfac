@@ -42,10 +42,14 @@ func RoleResultPayload(role string, report Report, verdict string, commits int, 
 		"report_path":         report.Path,
 		"boundary_violations": stringsOrEmpty(violations),
 		"needs_human":         report.NeedsHuman(),
-		// The findings channel's one open-payload problem (tick 7vn): a block
-		// that would not parse is stated as a problem, never as an empty
-		// list, whichever executor collected it.
+		// The findings channel's open-payload facts (tick 7vn, tick ryv): a
+		// block that would not parse is stated as a problem, never as an
+		// empty list, whichever executor collected it — and a block whose
+		// findings carried keys the record does not know states the FOLD,
+		// because a fold the attempt's record does not name is a silent
+		// rewrite of what the worker wrote.
 		"findings_problem": report.FindingsProblem,
+		"findings_folded":  stringsOrEmpty(report.FindingsFolded),
 	}
 	if role == "review-epic" {
 		payload["review_verdict"] = report.ReviewVerdict

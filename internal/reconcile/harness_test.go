@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -181,6 +183,17 @@ func newTracker(t *testing.T, dir string) *fakeTracker {
 	}
 	for _, id := range state.Order {
 		state.Ticks[id] = tk.Tick{ID: id, Title: "tick " + id, Status: "open", Type: "task", Parent: "qeu", Priority: 2}
+	}
+	// The epic's own record, which a run reads to decide a finding against the
+	// epic's definition of done (tick npq): a tick record is a file, and the
+	// fake carries it like any other — out of Order, because the epic is not
+	// work the run dispatches. Its acceptance criteria are the fixture
+	// default: NONE, which is the refusal's case — a done that is prose, so
+	// the run refuses to absorb against it and the finding stays a person's.
+	// A test that drives an absorption sets an enumerated acceptance here.
+	state.Ticks["qeu"] = tk.Tick{
+		ID: "qeu", Title: "the fixture epic", Status: "open", Type: "epic",
+		Owner: "operator@example.com", Priority: 1,
 	}
 	tracker.write(t, state)
 	return tracker
@@ -391,6 +404,101 @@ func (f *fakeTracker) Note(_ context.Context, tickID, text string) (tk.Tick, err
 	})
 }
 
+// CreateTick is the fake's half of the promotion seam (tick npq): a new tick
+// record, added to the state and mirrored to the checkout the tracker is
+// pointed at — which is what tk does when a person files a tick, and what the
+// durable layer commits and pushes. CREATE-IF-ABSENT: a record already there
+// is the truth and is returned untouched, because a resume finishing a
+// half-made promotion calls this twice on one tick and the standing record
+// — a person may have edited it between the two — must never be clobbered.
+// The required fields are defaulted exactly the way the pinned layout
+// defaults them, so a reconciler that leaves one empty is caught here rather
+// than certified: a fake that invents its own record shape certifies the
+// defect it hides.
+func (f *fakeTracker) CreateTick(_ context.Context, tick tk.Tick) (tk.Tick, error) {
+	f.tally("create:" + tick.ID)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state, err := f.load()
+	if err != nil {
+		return tk.Tick{}, err
+	}
+	if standing, exists := state.Ticks[tick.ID]; exists {
+		return standing, nil
+	}
+	if tick.Status == "" {
+		tick.Status = "open"
+	}
+	if tick.Type == "" {
+		tick.Type = "task"
+	}
+	if tick.Priority == 0 {
+		tick.Priority = 2
+	}
+	if tick.CreatedAt == "" || tick.UpdatedAt == "" {
+		at := time.Now().UTC().Format(time.RFC3339)
+		tick.CreatedAt, tick.UpdatedAt = at, at
+	}
+	state.Ticks[tick.ID] = tick
+	state.Order = append(state.Order, tick.ID)
+	// A tick with no edges of its own layers into the FIRST wave — exactly as
+	// tk layers it — so the fixture with declared waves (no BlockedBy) still
+	// shows the run the tick it has to work. A fixture that declared edges is
+	// layered dynamically and needs nothing here.
+	//
+	// Only a CHILD of the epic enters its graph: a backlog tick a promotion
+	// files has no parent, and an epic's graph is its children — a fake that
+	// waved a backlog tick into the run would see it claimed, worked and
+	// closed by a run that has no business with it, which is the opposite of
+	// the thing under test.
+	if len(state.BlockedBy) == 0 && len(state.Waves) > 0 && tick.Parent == state.Epic {
+		state.Waves[0] = append(state.Waves[0], tick.ID)
+	}
+	if err := f.save(state); err != nil {
+		return tick, err
+	}
+	return tick, f.record(tick)
+}
+
+// BlockOn is the fake's half of the placement seam (tick npq): one blocked_by
+// edge, appended idempotently. When the fixture declared its waves rather than
+// its edges, the edge is what turns the layering dynamic, so the declared
+// waves are seeded as edges FIRST — wave n blocked-by wave n-1, the layering
+// the declaration stated — and the graph re-layers to the same order plus the
+// new edge rather than collapsing onto it.
+func (f *fakeTracker) BlockOn(_ context.Context, tickID, blocker string) error {
+	f.tally("blockon:" + tickID)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state, err := f.load()
+	if err != nil {
+		return err
+	}
+	if len(state.BlockedBy) == 0 {
+		state.BlockedBy = map[string][]string{}
+		for depth := 1; depth < len(state.Waves); depth++ {
+			for _, blocked := range state.Waves[depth] {
+				state.BlockedBy[blocked] = append(state.BlockedBy[blocked], state.Waves[depth-1]...)
+			}
+		}
+	}
+	if !slices.Contains(state.BlockedBy[tickID], blocker) {
+		state.BlockedBy[tickID] = append(state.BlockedBy[tickID], blocker)
+	}
+	if err := f.save(state); err != nil {
+		return err
+	}
+	// The record file mirrors the edge — the branch is what a cold
+	// re-derivation reads, and a fake that only mutated its own state would
+	// leave the thing under test with nothing to commit.
+	tick, ok := state.Ticks[tickID]
+	if !ok {
+		return fmt.Errorf("no tick %s", tickID)
+	}
+	tick.BlockedBy = state.BlockedBy[tickID]
+	return f.record(tick)
+}
+
 func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	f.tally("close:" + tickID)
 	// The claim ends HERE and nowhere earlier, which is the whole of tick 3mp:
@@ -417,6 +525,14 @@ func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, erro
 		return tk.Tick{}, fmt.Errorf("no tick %s", tickID)
 	}
 	apply(&tick)
+	// The edges a test (or an absorption) drew live in state.BlockedBy, and a
+	// tick record carries its own blocked_by — that is where tk keeps it, and
+	// the mirrored record is what a cold re-derivation reads from the branch.
+	// A mirror that dropped the edges at the next note or close would be a
+	// fake quieter than the tracker it stands in for.
+	if edges := state.BlockedBy[tickID]; len(edges) > 0 {
+		tick.BlockedBy = edges
+	}
 	state.Ticks[tickID] = tick
 	if err := f.save(state); err != nil {
 		return tick, err
@@ -627,6 +743,50 @@ model = "sonnet"
 tree = { command = "exit 3", description = "always refuses" }
 `
 
+// absorbingGate is the fixture of an epic whose done is ENUMERATED and partly
+// RUNNABLE (tick npq): [A1] is bound to the `done` command the oracle runs —
+// observed, authoritative — and [A2] is bound to nothing, so it is the
+// classifier's to predict. The command is deliberately trivial and PASSING;
+// a test that wants the observed-gating case overrides it (observedGate), and
+// the binding is the authorisation: [evidence.acceptance] names the id of the
+// one command that proves the item, and that table is the only thing that
+// lets the oracle run anything.
+const absorbingGate = `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
+
+[evidence.commands]
+done = { command = "test -f README.md", description = "the done's check" }
+
+[evidence.acceptance]
+A1 = "done"
+`
+
+// observedGate is absorbingGate with the done's command FAILING: the oracle
+// runs it, it answers non-zero, and the verdict is OBSERVED gating — the
+// worked case that wrote this whole two-tier shape (a red gate at base means
+// no tick can close behind it and the done is unreachable).
+const observedGate = `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
+
+[evidence.commands]
+done = { command = "exit 3", description = "the done's check, broken at the base" }
+
+[evidence.acceptance]
+A1 = "done"
+`
+
 // --------------------------------------------------------- the fixture ---
 
 type fixture struct {
@@ -717,6 +877,26 @@ type fixtureOptions struct {
 	// the TICKS_SUBSTRATE override, else the config's own declaration
 	// through the decision procedure.
 	substrate string
+
+	// absorptionDepth overrides the absorption recursion's bound (tick qjj)
+	// for this run. Zero is the production default — the bound the constant
+	// argues for — and a test that drives the recursion to its stop sets ONE:
+	// the shortest chain whose second link trips a bound, with no three-deep
+	// fixture to build first.
+	//
+	// A nonzero depth is EXPLICIT (tick wz0) exactly as the CLI's named flag
+	// is: it wins over the bound recorded on the run branch, where zero
+	// adopts the recorded one — so a test can drive both sides of the
+	// recorded bound's precedence without the fixture learning a second
+	// field.
+	absorptionDepth int
+
+	// gatingClassifier is the classifier the absorption decision asks where
+	// the epic's done cannot yet be run (tick npq): a fake standing in for
+	// *jev.Client at the seam, exactly as the work-type tests fake theirs. Nil
+	// — the default — is the documented fallback: no classifier configured,
+	// every prediction falls back to absorbing.
+	gatingClassifier gating.Classifier
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -800,16 +980,22 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		// A supervised resume waits before the next incarnation, and the wait
 		// is spent through Sleep above — milliseconds here, the production
 		// number everywhere else.
-		AutoResumeBackoff:  time.Millisecond,
-		PullRequests:       opts.pullRequests,
-		StallWarnAfter:     opts.stallWarn,
-		ProgressProbeEvery: progressProbe,
-		GateHeartbeatEvery: opts.gateHeartbeat,
-		Sleep:              func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:          opts.guardsOff,
-		stopAfter:          opts.stopAfter,
-		NewExecutor:        f.newExecutor,
-		Substrate:          opts.substrate,
+		AutoResumeBackoff:    time.Millisecond,
+		PullRequests:         opts.pullRequests,
+		StallWarnAfter:       opts.stallWarn,
+		ProgressProbeEvery:   progressProbe,
+		GateHeartbeatEvery:   opts.gateHeartbeat,
+		Sleep:                func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:            opts.guardsOff,
+		stopAfter:            opts.stopAfter,
+		NewExecutor:          f.newExecutor,
+		Substrate:            opts.substrate,
+		GatingClassifier:     opts.gatingClassifier,
+		AbsorptionDepthBound: opts.absorptionDepth,
+		// A depth the test NAMES is explicit — the person's raise over the
+		// recorded bound — and zero adopts whatever the run branch records
+		// (tick wz0), exactly as the CLI's flag does.
+		AbsorptionDepthExplicit: opts.absorptionDepth > 0,
 	}
 }
 

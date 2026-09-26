@@ -39,11 +39,13 @@ import (
 // holds the tick. Both leave a hand-merged attempt unclosed.
 func TestAMergeFailedAttemptAPersonMergedIsIntegratedNotHeld(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{})
+	f := newFixture(t, fixtureOptions{mode: "conflict_unresolvable"})
 
-	// The merge_failed rejection, made the way TestAMergeRefusalIsHeldForAPerson
-	// makes it: the attempt is collected, the integration branch then gains a
-	// conflicting edit of the same file, and the resumed run refuses the merge.
+	// The merge_failed rejection: the attempt is collected, the integration
+	// branch then gains a commit that creates the same file with different
+	// content (add/add), and the resolve-conflict job the run dispatches over
+	// it fails (mode conflict_unresolvable: it answers BLOCKED over an empty
+	// branch) — the stop a failed resolve is (tick 2p6).
 	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageCollected)})
 	killedAfter(t, err, "a1", StageCollected)
 	conflictOnIntegrationBranch(t, f.Repo, "work-a1.txt", "a change nobody merged around\n")

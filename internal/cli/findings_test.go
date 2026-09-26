@@ -102,7 +102,13 @@ func testDraftFinding(key, target string) runstate.Finding {
 
 func TestFindingsListsTheDraftsAndHowToTriageThem(t *testing.T) {
 	repo := newFindingsRepo(t)
-	seedFinding(t, repo, testDraftFinding("d34db33f", ""))
+	// The first draft carries its DONE EVIDENCE (tick nfo); the routed one
+	// carries none — one listing, both marks: the person deciding sees which
+	// acceptance item the reporter says is broken, and which finding made no
+	// claim at all.
+	linked := testDraftFinding("d34db33f", "")
+	linked.DoneItem, linked.DemonstratingCheck = "A2", "go"
+	seedFinding(t, repo, linked)
 	seedFinding(t, repo, testDraftFinding("c0ffee00", "pengelbrecht/ticks"))
 
 	var stdout, stderr bytes.Buffer
@@ -117,6 +123,8 @@ func TestFindingsListsTheDraftsAndHowToTriageThem(t *testing.T) {
 		"discovered by run-epic-qeu/tick-a1/attempt-1",
 		"ticfac finding qeu d34db33f --promote-as <tick>",
 		"waiting for a person",
+		`breaks done item A2 (demonstrated by "go")`,
+		"unlinked: names no done item",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout does not carry %q:\n%s", want, out)

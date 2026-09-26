@@ -68,8 +68,32 @@ func checkIndex(kind string, n int) error {
 	return nil
 }
 
+// AbsorptionPath is `.ticfac/runs/<run-id>/absorptions/<key>.json`, where
+// <key> is the finding's dedup key — one absorption decision record per
+// finding the run itself triaged (tick npq), so the reasoning that changed
+// the epic's shape mid-run is on the run branch beside the tick it created.
+func AbsorptionPath(runID, key string) string {
+	return RunDir(runID) + "/absorptions/" + key + ".json"
+}
+
+// AbsorptionBoundPath is `.ticfac/runs/<run-id>/absorption-bound.json` —
+// exactly one per run: the recursion bound the run applies, recorded so a
+// cold restart applies the same bound the warm run did (tick wz0, finding
+// 95f5ee1a).
+func AbsorptionBoundPath(runID string) string {
+	return RunDir(runID) + "/absorption-bound.json"
+}
+
 // FindingPath is `.ticfac/runs/<run-id>/findings/<key>.json`, where <key> is
 // the draft's own dedup key — the external_ref half of (source, external_ref).
 func FindingPath(runID, key string) string {
 	return RunDir(runID) + "/findings/" + key + ".json"
+}
+
+// PredictionScorePath is `.ticfac/runs/<run-id>/predictions/<key>.json`, where
+// <key> is the finding's dedup key — the same key the absorption decision
+// record carries, so a checked prediction is joined to the prediction it
+// scores without any reader guessing (tick jlv).
+func PredictionScorePath(runID, key string) string {
+	return RunDir(runID) + "/predictions/" + key + ".json"
 }

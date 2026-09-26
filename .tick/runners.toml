@@ -45,6 +45,20 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
+# The ceiling-tier overlay of the review cell (tick 2p6): the resolve-conflict
+# job — dispatched when two same-wave attempts meet a content or add/add
+# conflict — routes at the policy's ceiling through the REVIEW cell's
+# candidates (a dedicated [roles.resolve-conflict] cell would always win),
+# and locally the ceiling is the frontier tier of .tick/runners.local.toml's
+# ladder. Without this cell the overlay the ceiling asks for is refused, and
+# a refused routing is a resolve that stops the run over config. The cloud
+# never reads this cell: its own review cell routes the job to a Workers AI
+# model, and nothing in the cloud runs claude.
+[roles.review.tiers.frontier]
+kind = "claude"
+model = "opus"
+effort = "high"
+
 [roles.closeout]
 kind = "claude"
 model = "opus"

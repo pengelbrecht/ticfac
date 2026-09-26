@@ -1,0 +1,19 @@
+{
+  "id": "ce4",
+  "title": "Prediction scoring compares against the tree the prediction was about",
+  "description": "Absorbed from gvc final-review findings cfd74936 (high) and b8137057. jlv scores a prediction against what the done did once its item became runnable, but it runs the check on the tree that ALREADY carries the absorbed fix, so a correct 'this gates' prediction scores INCORRECT (A8). Score against the tree the finding was made on (the base, or the pre-fix head), and carry the answering model's identity through to the absorption and score records so scores are per model.",
+  "notes": "2026-09-27 01:42 - ticfac run epic-gvc: ce4 try 1 (run dispatch #16) reported a finding drafted for triage — defect \"runstate's maintenance control-arm fixture fails on this host at base (already drafted as finding 4a5552730648)\" (key be52c84d5470606340e9648f3302cc174ce1d7308dca28795783ed9144b6a600, severity low, for this repository). Triage with `ticfac finding gvc be52c84d5470606340e9648f3302cc174ce1d7308dca28795783ed9144b6a600 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-27 01:43 - ticfac run epic-gvc: ce4 try 1 (run dispatch #16) merged into epic/gvc as 807f7b238ec1; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "blocked_by": [
+    "wz0"
+  ],
+  "parent": "gvc",
+  "acceptance_criteria": "A prediction is scored on the tree it was made about, never on the tree carrying the fix; a correct gating prediction scores CORRECT in a test; absorption and score records name the answering model; go gate passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T08:41:50.064304Z",
+  "updated_at": "2026-09-26T23:43:27.154407Z",
+  "closed_at": "2026-09-26T23:43:27.154407Z"
+}

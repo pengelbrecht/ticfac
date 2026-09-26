@@ -3,9 +3,11 @@ package parity
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -378,6 +380,52 @@ func TestTheRoleResultCarriesTheFindingsChannel(t *testing.T) {
 	}
 	if finding.AdditionalProperties == nil || *finding.AdditionalProperties {
 		t.Error("finding must be closed — a field the reporting side invents is a triage decision smuggled in as data")
+	}
+}
+
+// The finding's EVIDENCE fields (tick nfo): done_item and demonstrating_check
+// carry the reporter's claim against the epic's definition of done — which
+// [A<n>]-marked acceptance item the finding breaks ("none" when it breaks
+// none) and the command or test that would demonstrate it. ticfac's readers
+// carry them AHEAD of the bundle, and this test holds the gap honestly, in
+// both directions:
+//
+//   - every field the pinned $defs.finding declares is a field the report
+//     reader knows — a bundle field ticfac cannot read is a refusal nobody
+//     issued, and the bundle is the authority on the channel's shape;
+//   - the fields the reader carries BEYOND the pinned bundle are exactly the
+//     two evidence fields — the pending bump, named here in one place. The
+//     day the bundle adopts them, this assertion fails and the adoption
+//     moves the envelope's pinned-record view across with it
+//     (subprocess.RoleResult.MarshalJSON) rather than letting the reader
+//     drift on ahead of the pin by another field nobody pinned.
+func TestTheFindingEvidenceFieldsArePinnedOrPending(t *testing.T) {
+	_, _, defs := loadJobProtocol(t)
+	finding, ok := defs["finding"]
+	if !ok {
+		t.Fatal("$defs.finding is missing")
+	}
+
+	known := map[string]bool{}
+	for _, name := range subprocess.FindingFieldNames() {
+		known[name] = true
+	}
+	for name := range finding.Properties {
+		if !known[name] {
+			t.Errorf("the pinned bundle declares finding.%q, which the report reader does not know: the "+
+				"reader is behind the contract, and a bundle field nobody reads is a closed record half-open", name)
+		}
+	}
+	pending := []string{}
+	for name := range known {
+		if _, pinned := finding.Properties[name]; !pinned {
+			pending = append(pending, name)
+		}
+	}
+	sort.Strings(pending)
+	if fmt.Sprint(pending) != "[demonstrating_check done_item]" {
+		t.Errorf("the fields the reader carries beyond the pinned bundle are %v, want exactly the two done-evidence "+
+			"fields pending their bundle bump", pending)
 	}
 }
 

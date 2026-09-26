@@ -163,13 +163,35 @@
 // repeat proposing nothing new whatever the human did with the original —
 // except a FIXED original (tick her): a finding reported again after the
 // triage that named its repairing commit is the proof the fix did not hold,
-// and the re-report re-opens the draft instead of deduplicating. A tick
+// and the re-report re-opens the draft instead of deduplicating. Since tick
+// nfo a finding may also carry DONE EVIDENCE — the [A<n>] acceptance item
+// of the epic's definition of done the reporter says it breaks, and the
+// command or test that would demonstrate it — which rides the draft, is
+// marked on every surface a person deciding reads (the event feed, the
+// triage listing, the hold, the epic PR body), and — since tick wz0 —
+// REACHES THE DECISION ITSELF AS AN INPUT: the oracle scores the claim
+// against what the done actually did, and the predictor carries it into the
+// classifier's question as evidence — never as the verdict, which is the
+// whole distinction the record's Basis field keeps; a finding reported
+// without it is accepted and marked UNLINKED, because the evidence is a
+// claim to score, never a verdict. A tick
 // whose findings are untriaged CLOSES, the finding rides to the close-out,
 // and the close-out does not hand over while one is untriaged or missing
 // from the epic PR — which is the one thing that stops a finding falling
-// on the floor; a person triages with
-// `ticfac finding`, promoting into the repository the finding targets (never
-// this package: a draft is not a tick, and the scope decision stays human).
+// on the floor. And since tick npq the run TRIAGES what its own decision
+// machinery can reach: a finding judged GATING against the epic's own
+// definition of done is absorbed into the running epic as a tick placed
+// before the final review, a non-gating one becomes a backlog tick with an
+// owner, and the decision — item id, verdict, observed or predicted,
+// confidence — is a record on the run branch (absorb.go), and so is the
+// recursion's depth bound (tick wz0, absorb_bound.go): the first decision
+// that needs it records it, a cold restart without the flag applies the
+// recorded bound rather than dropping back to the default over git state it
+// had already absorbed past, and only a person's explicit raise — the
+// escape hatch the depth refusal itself names — overrides it. What the run
+// cannot decide is still a person's, triaged with `ticfac finding`: a
+// finding routed to another repository, and an epic whose acceptance is
+// prose — the refusal the absorption refuses to guess past.
 //
 // Four of the five are kept by the shipped binary. A11's read site is
 // (MayDispatch, before every dispatch) and its release is (`ticfac settle`,

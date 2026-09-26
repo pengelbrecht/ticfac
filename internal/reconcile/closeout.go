@@ -133,6 +133,79 @@ func parseCloseoutRule(document string) (CloseoutRule, error) {
 
 // ------------------------------------------------- the admission itself ---
 
+// gateCloseoutOnOpenChildren is the close-out's definition-of-done precondition
+// (tick 3h0): the close-out does not START while any child of the epic other
+// than itself is open.
+//
+// The production incident this gate exists for was observed on epic-yoh,
+// 2026-09-24: while the run was in its final review, four ticks were absorbed
+// into the epic and the close-out was made blocked-by each of them — and the
+// live run, which never re-admitted the new ticks nor re-read the edges, went
+// straight from the last tick's close into the close-out and OPENED THE EPIC
+// PR over four open blockers. The blocker edges were the incident's shape;
+// the gate is deliberately wider than they are, because blocked_by is the
+// plan's sequencing vocabulary and a close-out must not start while the
+// epic's own children stand open however they got that way: a tick created
+// mid-run the plan never picked up, a child a person reopened after the run
+// closed it, or an edge nobody drew at all.
+//
+// The incident's own timing is why the refusal is not returned flat. The
+// absorbed ticks landed while the REVIEW ran, and a role job settles inline
+// — its close is not a window-held attempt's close, so nothing replans
+// between the review and the close-out. A flat refusal would make every
+// mid-review absorption a failed run and a person's re-run, which is the
+// thing the tick exists to remove. So the gate hands its refusal to the
+// run's own sequencing instead (settleBeforeDispatch returns a blockedTickErr
+// carrying it, and requeueBlocked decides): the open children the fresh
+// graph offers as work this run has not done are WORKED first — admitted by
+// the re-derivation, dispatched, closed — and the refusal that finally
+// stands names only the children this run could do nothing about.
+//
+// It answers the open children and a refusal naming them when a child is
+// open, nothing when the close-out may start, and a plain error when the
+// tracker cannot answer — the same rule every graph read keeps: a graph the
+// tracker cannot answer for stops the run rather than being guessed at.
+//
+// The refusal is a FAILURE, not a hold: the next actor can be another run.
+// Once the children close — by a person, by whatever absorbed them — a re-run
+// of the epic under this run id resumes from the graph as it stands, plans
+// what it finds open, and reaches this gate again. What the run must never do
+// is the thing the old code did: keep going as though the epic's definition
+// of done were a fact about the plan rather than about the tracker.
+func (r *Reconciler) gateCloseoutOnOpenChildren(ctx context.Context, entry planEntry) ([]string, *Refusal, error) {
+	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reconcile: read the epic graph of %s before admitting the close-out: %w",
+			r.opts.EpicID, err)
+	}
+	var open []string
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.ID != entry.TickID && task.Status != "closed" {
+				open = append(open, task.ID)
+			}
+		}
+	}
+	if len(open) == 0 {
+		return nil, nil, nil
+	}
+	return open, r.refuse(RefusedCloseoutChildrenOpen, entry.TickID,
+		"the close-out of %s does not start while any child of the epic other than itself is open: %s %s still "+
+			"open, so the epic's definition of done is not met and this run refuses to close over it — a close-out that "+
+			"runs past an open child could hand over an epic whose goal nobody reached. The child(ren) may be ticks "+
+			"created under the epic after this run planned it, or ones reopened since it closed them; re-run the epic "+
+			"under this run id once they close and the resume re-derives the plan from the tracker as it stands",
+		r.opts.EpicID, strings.Join(open, ", "), plural(len(open), "is", "are")), nil
+}
+
+// plural is the one word a count has to agree with, for the message above.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
 // admitCloseout is the close-out phase's admission precondition: the rule
 // the target repo declares, enforced by the run before the close-out job is
 // claimed or dispatched — never left to the close-out worker's diligence.
