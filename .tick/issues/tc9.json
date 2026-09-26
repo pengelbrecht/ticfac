@@ -2,6 +2,7 @@
   "id": "tc9",
   "title": "The integrated gate runs vitest, so TypeScript behaviour ticks are gated by their tests",
   "description": "From yoh final-review finding dfae216d (cs1). The ts gate in .tick/runners.toml runs format, lint, contracts and tsc, but no vitest, so a TS behaviour change merges without its tests running in the gate (mn7's worker ran them; the gate did not). Add the vitest suite to the ts gate once the suite is deterministic under load (3cq and the slot-refused fix were the known flakes); watch its wall time against the gate bound.",
+  "notes": "2026-09-26 10:14 - Same gap for Go (2026-09-26): the per-tick gate runs go test -short, CI runs the full suite. gvc's epic PR went red on TestTheClassificationRecordIsPinnedAsItIsWritten (a non-short pin test) after jlv changed a profile; no per-tick gate had run it. Either run the pin tests in the gate, or have the gate run the same test set as CI.",
   "status": "open",
   "priority": 1,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "The ts gate runs the vitest suite; it passes deterministically on this host and in CI across several runs; the Makefile gate parity test still holds",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:12:09.649879Z",
-  "updated_at": "2026-09-24T12:12:09.649879Z"
+  "updated_at": "2026-09-26T08:14:01.173962Z"
 }
