@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 130,
-  "state": "running",
-  "reason": "CI is green on the epic PR #55; the close-out of gvc is admitted",
-  "updated_at": "2026-09-26T23:43:38Z",
+  "sequence": 131,
+  "state": "integrating",
+  "reason": "integrating 9xp attempt 14 into epic/gvc",
+  "updated_at": "2026-09-26T23:43:45Z",
   "ticks": [
     {
       "tick_id": "2p6",
