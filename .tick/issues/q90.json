@@ -1,0 +1,13 @@
+{
+  "id": "q90",
+  "title": "Show tick glosses in pane titles, alerts and status",
+  "description": "ticks is adding an optional 'gloss' field — a few-word label to show next to a tick id (upstream: ticks zs7 (tick gloss field)). ticfac's own surfaces show bare ids today: herdr pane titles are 'id · role · status' (internal/herd/paint Title), and ticfac status, the event feed and Telegram alerts name ticks by id only.\n\nBlocked on upstream: this cannot start until ticks zs7 ships and ticfac's pinned contract bundle is re-cut to include the field (CONTRACTS.md: sync to a ticks commit carrying it). Cross-repo, so the dependency is stated here rather than as blocked_by.\n\nChange: internal/tk reads gloss; every human-facing surface renders 'id (gloss)', falling back to the title cut to the same cap when gloss is empty or the field is absent; --json outputs carry gloss as its own field, never baked into the id.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[A1] contracts.pin.json points at a ticks commit whose tk-json manifest has gloss, and contracts check passes. [A2] herdr pane titles, ticfac status (human view) and the phone alerts render id (gloss); a test covers both gloss-present and empty-gloss fallback. [A3] --json outputs carry gloss as a separate field. [A4] make test is green.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T13:18:26.795604419Z",
+  "updated_at": "2026-09-26T13:18:26.795604419Z"
+}
