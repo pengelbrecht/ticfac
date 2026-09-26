@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 96,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for ovh",
-  "updated_at": "2026-09-26T07:53:12Z",
+  "sequence": 97,
+  "state": "publishing",
+  "reason": "closing ovh behind its validated review-epic answer",
+  "updated_at": "2026-09-26T07:54:09Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -59,7 +59,7 @@
     },
     {
       "tick_id": "ovh",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 13
     },
     {
