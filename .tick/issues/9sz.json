@@ -1,0 +1,14 @@
+{
+  "id": "9sz",
+  "title": "ticfac run \u003cepic\u003e: one command starts, resumes and attaches, with no flags, env or paths",
+  "description": "The friction list in 2jn's description. 'ticfac run \u003cepic\u003e' replaces 'GITHUB_TOKEN=$(gh auth token) nohup ticfac run-epic -profiles \u003cpath\u003e -wall 86400 \u003cepic\u003e \u0026'. It starts the run in the background (detached, surviving the terminal) and attaches the live view (89m); Ctrl-C detaches, it never stops the run. Running it again on a live run attaches; on a stopped run it resumes. It accepts the epic id everywhere (the run id epic-\u003cid\u003e stays the internal identity). It fetches the GitHub token from gh auth token when, and only when, the repo's close-out rule needs a forge, and says so. It detects a live herdr (socket) and dispatches into herdr panes using an EMBEDDED profile set (no filesystem path; --no-herdr opts out, --profiles stays as an expert override). There is no wall-clock default: liveness belongs to b1t, and the -wall bound becomes an opt-in backstop. run-epic stays as an alias for scripts.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "2jn",
+  "acceptance_criteria": "'ticfac run \u003cepic\u003e' in a repo with herdr running starts an epic in herdr panes with no flag, env var or path; a second invocation attaches, and on a stopped run resumes; Ctrl-C detaches without stopping; the token is fetched from gh only when the close-out needs it; run-epic still works; tests cover detach/attach/resume and the herdr detection",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T09:28:27.528023Z",
+  "updated_at": "2026-09-26T09:28:27.528023Z"
+}
