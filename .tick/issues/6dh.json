@@ -13,5 +13,5 @@
   "acceptance_criteria": "ticfac status --json emits a versioned model covering every local and cloud run: epic lifecycle phase, every wave with its ticks, per-tick state from durable records with try history, tier/model/executor and elapsed, per-worker silence and last turn, what the run waits on with an unblocking command when a person is needed, retries/interventions, CI per check per head, and cost; a contract fixture pins its shape; and it reads only existing records",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T12:41:19.922879Z",
-  "updated_at": "2026-09-23T12:41:20.073123Z"
+  "updated_at": "2026-09-26T09:28:52.847607Z"
 }
