@@ -92,6 +92,11 @@ run-epic flags:
   --budget <usd>      the budget an operator asks for
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
+  --absorption-depth <n>  how many absorptions ONE chain of the recursion may carry before the
+                      run stops for a person carrying the whole chain (default 3: the first link
+                      is what the epic exists to absorb, the second is a defect in the absorbed
+                      fix's own ground, a third is already far from home, and past that a person
+                      should judge the chain rather than let the run keep going)
   --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
                       in-flight work and writing the checkpoint before the process exits anyway — the
                       platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
@@ -347,6 +352,18 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		evacuateSeconds = fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
 			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
 				"and writing the checkpoint before the process exits anyway (0 disables the flush)")
+		// The absorption recursion's bound (tick qjj). Depth rather than wall
+		// clock: depth counts how far the run has travelled from the epic
+		// anyone asked for, and only a person can judge that. The default's
+		// reasoning lives on the constant; here the operator reads what the
+		// number governs and where to raise it when the stop is wrong.
+		absorptionDepth = fs.Int("absorption-depth", reconcile.DefaultAbsorptionDepthBound,
+			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
+				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
+				"before the run stops for a person carrying the whole chain (default 3: the first link is "+
+				"what the epic exists to absorb, the second is a defect in the absorbed fix's own ground, a "+
+				"third is already far from home, and past that a person should judge the chain rather than "+
+				"let the run keep going)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -425,26 +442,27 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// interface is not nil — the seam would dial a client that does not exist,
 	// and the nil check each exchange runs would pass it straight through.
 	opts := reconcile.Options{
-		Repo:              *repo,
-		Remote:            *remote,
-		EpicID:            epicID,
-		RunID:             *runID,
-		IntegrationBranch: *branch,
-		BaseRef:           *base,
-		Owner:             *owner,
-		Tracker:           tracker,
-		NewExecutor:       executorFactory(*runner, *gate),
-		Executors:         knownExecutors(),
-		ExecStateRoot:     *stateRoot,
-		GateConfig:        *gate,
-		ProfileDir:        *profiles,
-		Tier:              *tier,
-		WallSeconds:       *wall,
-		StallWarnAfter:    time.Duration(*stallWarn) * time.Second,
-		BudgetUSD:         *budget,
-		CeilingUSD:        *ceiling,
-		PullRequests:      pulls,
-		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
+		Repo:                 *repo,
+		Remote:               *remote,
+		EpicID:               epicID,
+		RunID:                *runID,
+		IntegrationBranch:    *branch,
+		BaseRef:              *base,
+		Owner:                *owner,
+		Tracker:              tracker,
+		NewExecutor:          executorFactory(*runner, *gate),
+		Executors:            knownExecutors(),
+		ExecStateRoot:        *stateRoot,
+		GateConfig:           *gate,
+		ProfileDir:           *profiles,
+		Tier:                 *tier,
+		WallSeconds:          *wall,
+		StallWarnAfter:       time.Duration(*stallWarn) * time.Second,
+		BudgetUSD:            *budget,
+		CeilingUSD:           *ceiling,
+		PullRequests:         pulls,
+		AutoResumeCap:        autoResumeCap(*supervise, *maxResumes),
+		AbsorptionDepthBound: *absorptionDepth,
 	}
 	if classifier != nil {
 		opts.Classifier = classifier

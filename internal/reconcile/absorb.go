@@ -182,6 +182,41 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return findingDecision{}, err
 	}
 
+	// THE RECURSION'S BOUND (tick qjj): a gating verdict is about to make
+	// this finding the next link of a chain, and the chain is bounded. The
+	// check sits AFTER the verdict, never before it, because only a GATING
+	// finding extends the recursion — a non-gating one goes to the backlog
+	// and stops the chain where it stands, and a run that stopped over one
+	// would be holding a person for a decision the run itself was about to
+	// make. A chain already at the bound refuses to absorb and stops the run
+	// for a person, carrying the chain that produced the stop, so the stop is
+	// rare and meaningful rather than the human gate this epic exists to
+	// remove, rebuilt under a different name.
+	var links []chainLink
+	if verdict.Gating {
+		links, err = r.absorptionChain(standing.TickID)
+		if err != nil {
+			return findingDecision{}, err
+		}
+		if absorptionDepthExceeded(links, r.opts.AbsorptionDepthBound) {
+			r.record(marker.TickID, StageAbsorptionBoundExceeded,
+				"the absorption of finding %s would be the %s absorption of one chain and the bound is %d: %s",
+				standing.Key, ordinal(len(links)+1), r.opts.AbsorptionDepthBound, chainNarrative(links))
+			return findingDecision{}, r.refuse(RefusedAbsorptionDepth, marker.TickID,
+				"absorbing the finding %s (%q), reported by %s, would be the %s absorption of ONE chain that "+
+					"already carries %d and the bound is %d (tick qjj): the run stops for a person rather than recurse "+
+					"past the bound, because unbounded the recursion is an epic that never closes and nothing "+
+					"announces it. The chain that produced the stop: %s. The finding stays a person's — triage it "+
+					"with `ticfac finding %s %s --promote-as <tick> --by \"<who>\"` or `--discard --by \"<who>\"`, or "+
+					"raise the bound with --absorption-depth and run the epic again. If this bound trips often, "+
+					"the criterion is wrong and the bound is hiding it — the chain above is what a person judges "+
+					"it by",
+				standing.Key, standing.Title, r.attemptName(marker.TickID, marker.Attempt),
+				ordinal(len(links)+1), len(links), r.opts.AbsorptionDepthBound, chainNarrative(links),
+				r.opts.EpicID, standing.Key)
+		}
+	}
+
 	// The tick the promotion will create, minted before the record that names
 	// it: the record is what a killed incarnation is resumed by.
 	tickID, err := r.mintTickID()
