@@ -24,25 +24,33 @@ import (
 //     own bound command. The fallback absorbed naming every unverified item
 //     at risk in its reason and names no single item, so no one command
 //     checks it — it is reported unchecked, never half-scored.
+//   - THE SCORE IS ON THE TREE THE PREDICTION WAS ABOUT (tick ce4, finding
+//     cfd74936): the tree the finding was made on, which never carries the
+//     absorbed fix. The close-out's own tree carries the fix the prediction
+//     drove, and scoring against it reads every correct "this gates"
+//     prediction as INCORRECT — the label would measure the repair, not the
+//     classifier. The caller names the tree, and this function refuses a
+//     score against any other, and a score with no tree named at all.
 //   - NOTHING IS GUESSED PAST: a run that produced no evidence about the item
 //     leaves the prediction unchecked, never labelled either way. The oracle's
 //     own rule, one pass further out.
 
 // Score is the label a checked prediction is scored with: CORRECT — the run
-// agreed with the prediction, the done did not demonstrate the item; or
-// INCORRECT — the run disagreed, the done demonstrated the item as the epic
-// hands it over. A wrong prediction is not a failure to hide: it is the
-// evidence the threshold's next reader needs, which is why it is a typed
-// field on the record and never prose a retro paraphrases.
+// agreed with the prediction, the done did not demonstrate the item while the
+// finding stood; or INCORRECT — the run disagreed, the item was demonstrated
+// even with the finding standing. A wrong prediction is not a failure to hide:
+// it is the evidence the threshold's next reader needs, which is why it is a
+// typed field on the record and never prose a retro paraphrases.
 type Score string
 
 const (
-	// ScoreCorrect: the item's command answered fail on the tree the close-out
-	// scores, so the done does not demonstrate the item and the finding was
-	// gating as predicted.
+	// ScoreCorrect: the item's command answered fail on the tree the finding
+	// was made on, so the done does not demonstrate the item while the
+	// finding stands, and the finding was gating as predicted.
 	ScoreCorrect Score = "correct"
-	// ScoreIncorrect: the item's command passed on the tree the close-out
-	// scores, so the done demonstrates the item as the epic hands it over.
+	// ScoreIncorrect: the item's command passed on the tree the finding was
+	// made on, so the item was demonstrated even with the finding standing —
+	// the prediction was wrong about the finding. Recorded, never hidden.
 	ScoreIncorrect Score = "incorrect"
 )
 
@@ -60,18 +68,29 @@ type Checked struct {
 }
 
 // ScorePrediction labels one prediction against one observation of the item
-// it named. It answers (Checked, true) when the pair exists — the prediction
-// was a guess about a named item, and that item's command produced evidence —
-// and (Checked{}, false) when it does not, and every false is a state the
-// CALLER reports rather than papers over:
+// it named, made on the tree the prediction was about — about, the tree the
+// finding was made on (tick ce4, finding cfd74936): the pre-fix tree, never
+// the one carrying the absorbed fix the prediction drove, because a correct
+// "this gates" prediction scored against the fix measures the repair rather
+// than the classifier and reads every correct answer INCORRECT. The
+// observation must have run on exactly that commit; one that answered anywhere
+// else — the branch head the close-out hands over — is refused rather than
+// labelled, and so is a score with no tree named at all. It answers (Checked,
+// true) when the pair exists — the prediction was a guess about a named item,
+// that item's command produced evidence, and the evidence is of the
+// prediction's own tree — and (Checked{}, false) when it does not, and every
+// false is a state the CALLER reports rather than papers over:
 //
 //   - the verdict was observed, not predicted: nothing to score — the
 //     observation is its own answer;
 //   - the prediction broke no item or named none (a non-gating prediction,
 //     or the absorb fallback): no one command checks it;
+//   - the observation did not answer on the tree the prediction was about:
+//     never labelled — a score against the wrong tree is the mismeasurement
+//     this signature exists to prevent;
 //   - nothing was observed, or the observation does not decide the predicted
 //     item: the prediction is reported unchecked, never labelled either way.
-func ScorePrediction(prediction Verdict, observed *Observed) (Checked, bool) {
+func ScorePrediction(prediction Verdict, observed *Observed, about string) (Checked, bool) {
 	if prediction.Basis != BasisPredicted {
 		// An observation is what a command said. Scoring it against itself
 		// would dress an echo up as calibration data.
@@ -86,6 +105,14 @@ func ScorePrediction(prediction Verdict, observed *Observed) (Checked, bool) {
 	if observed == nil {
 		return Checked{}, false
 	}
+	if strings.TrimSpace(about) == "" || observed.Commit != about {
+		// The observation did not answer on the tree the prediction was made
+		// about: a label against any other tree — the one the close-out hands
+		// over, which carries the fix the prediction drove — measures the
+		// repair rather than the classifier, and is refused rather than
+		// recorded (tick ce4, finding cfd74936).
+		return Checked{}, false
+	}
 	for _, observation := range observed.Items {
 		if observation.ItemID != prediction.ItemID {
 			continue
@@ -94,9 +121,9 @@ func ScorePrediction(prediction Verdict, observed *Observed) (Checked, bool) {
 			return Checked{
 				Score: ScoreCorrect,
 				Reason: fmt.Sprintf(
-					"the prediction was RIGHT: at the close-out the command %s for %s answered fail (exit %d) on %s — "+
-						"the tree the epic hands over, which carries the absorbed fix — so the done does not demonstrate "+
-						"the item and the finding was gating as predicted",
+					"the prediction was RIGHT: the command %s for %s answered fail (exit %d) on %s — the tree "+
+						"the finding was made on, before the absorbed fix — so the done does not demonstrate the "+
+						"item while the finding stands, and the finding was gating as predicted",
 					observation.Evidence.Check.ID, prediction.ItemID, observation.Evidence.ExitCode,
 					shortCommit(observed.Commit)),
 			}, true
@@ -104,10 +131,10 @@ func ScorePrediction(prediction Verdict, observed *Observed) (Checked, bool) {
 		return Checked{
 			Score: ScoreIncorrect,
 			Reason: fmt.Sprintf(
-				"the prediction was WRONG: at the close-out the command %s for %s passed on %s — the tree the epic "+
-					"hands over, which carries the absorbed fix — so the done demonstrates the item as handed over. "+
-					"A wrong prediction is not a failure to hide: it is the only evidence anyone will ever have for "+
-					"where the absorb threshold belongs",
+				"the prediction was WRONG: the command %s for %s passed on %s — the tree the finding was made on, "+
+					"before the absorbed fix — so the item was demonstrated even with the finding standing, and "+
+					"the finding did not gate it as predicted. A wrong prediction is not a failure to hide: it is "+
+					"the only evidence anyone will ever have for where the absorb threshold belongs",
 				observation.Evidence.Check.ID, prediction.ItemID, shortCommit(observed.Commit)),
 		}, true
 	}

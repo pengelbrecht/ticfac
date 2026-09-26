@@ -44,6 +44,15 @@ func TestAnAbsorptionRecordValidates(t *testing.T) {
 	if err := testAbsorption("dc02fb31").Validate(); err != nil {
 		t.Fatalf("a decided absorption does not validate: %v", err)
 	}
+	// A PREDICTED decision names the model that answered it (tick ce4,
+	// finding b8137057): the scores the close-out grades against it are per
+	// model, and a record that cannot say which model guessed is a label the
+	// later measurement cannot calibrate with.
+	predicted := testAbsorption("dc02fb31")
+	predicted.Basis, predicted.Confidence, predicted.Model = AbsorptionPredicted, 0.62, "jev-2026-09"
+	if err := predicted.Validate(); err != nil {
+		t.Fatalf("a predicted absorption naming its answering model does not validate: %v", err)
+	}
 }
 
 // short: Validate over records already in memory
@@ -71,6 +80,9 @@ func TestAnAbsorptionRecordRefusesWhatItCannotSay(t *testing.T) {
 		{"observed with a confidence", func(a *Absorption) {
 			a.Confidence = 0.62
 		}, "an observation is what a command said"},
+		{"observed but names an answering model", func(a *Absorption) {
+			a.Model = "jev-2026-09"
+		}, "no model answered it"},
 		{"confidence outside a probability", func(a *Absorption) {
 			a.Basis, a.Confidence = AbsorptionPredicted, 1.5
 		}, "not a probability"},

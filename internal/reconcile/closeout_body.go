@@ -143,14 +143,15 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 
 	// WHAT THIS EPIC ABSORBED (tick jlv): the close-out must be able to say,
 	// for this epic, what was absorbed, against which acceptance item,
-	// whether the verdict was observed or predicted, and — for each
-	// prediction later checked — whether it was right. An epic that absorbed
-	// silently is an epic whose shape changed with no account of why, so the
-	// body carries every absorption decision with its item id, its basis and
-	// the score of each checked prediction, composed from the same durable
-	// records the retro reads — never from memory of what the run intended.
-	// The write is an overwrite like the whole body is, so a resumed close-out
-	// composed after a second scoring pass carries each fact once.
+	// whether the verdict was observed or predicted, by WHICH MODEL it was
+	// predicted, and — for each prediction later checked — whether it was
+	// right. An epic that absorbed silently is an epic whose shape changed
+	// with no account of why, so the body carries every absorption decision
+	// with its item id, its basis, its answering model and the score of each
+	// checked prediction, composed from the same durable records the retro
+	// reads — never from memory of what the run intended. The write is an
+	// overwrite like the whole body is, so a resumed close-out composed after
+	// a second scoring pass carries each fact once.
 	absorptions, err := r.store.Absorptions()
 	if err != nil {
 		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
@@ -174,14 +175,14 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 		for _, record := range absorptions {
 			fmt.Fprintf(&body, "\n- tick %s — ", record.TickID)
 			if record.Gating {
-				fmt.Fprintf(&body, "absorbed into the running epic: %s, basis %s%s; %s",
-					verdictLine(record), record.Basis, confidenceLine(record), placementLine(record))
+				fmt.Fprintf(&body, "absorbed into the running epic: %s, basis %s%s%s; %s",
+					verdictLine(record), record.Basis, confidenceLine(record), modelLine(record), placementLine(record))
 			} else {
-				fmt.Fprintf(&body, "promoted to a backlog tick with an owner: %s, basis %s%s",
-					verdictLine(record), record.Basis, confidenceLine(record))
+				fmt.Fprintf(&body, "promoted to a backlog tick with an owner: %s, basis %s%s%s",
+					verdictLine(record), record.Basis, confidenceLine(record), modelLine(record))
 			}
 			if score, checked := scored[record.Key]; checked {
-				fmt.Fprintf(&body, ". The prediction was later CHECKED: the command %s answered %s on %s, and the prediction was %s",
+				fmt.Fprintf(&body, ". The prediction was later CHECKED: the command %s answered %s on %s — the tree the finding was made on, not the one carrying the absorbed fix — and the prediction was %s",
 					score.Check.ID, score.Result, short(score.Commit), score.Score)
 			} else if record.Basis == runstate.AbsorptionPredicted && record.Gating {
 				if record.ItemID != "" {

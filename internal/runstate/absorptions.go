@@ -106,6 +106,14 @@ type Absorption struct {
 	// Confidence is what the classifier answered for its own choice — zero
 	// for the fallback and for an observation, which no confidence qualifies.
 	Confidence float64 `json:"confidence,omitempty"`
+	// Model is the answering model's identity when a classifier answered the
+	// prediction (tick ce4, finding b8137057) — the model whose guess this
+	// decision recorded, so the scores the close-out grades against it are
+	// PER MODEL: a calibration set that cannot say which model it measured
+	// calibrates nobody, because one model's guesses are not another's.
+	// Empty for an observation, which no model answered, and for the
+	// documented fallback, which stood in for one.
+	Model string `json:"model,omitempty"`
 	// Fallback, when non-empty, is why NO MODEL answered — the classifier
 	// unreachable, or neither tier able to reach the item at all — and the
 	// verdict is the documented absorb-anyway fallback standing in for one.
@@ -172,6 +180,10 @@ func (a Absorption) Validate() error {
 	if a.Basis == AbsorptionObserved && a.Confidence != 0 {
 		return fmt.Errorf("absorption of %s is observed and carries confidence %.2f: an observation is what a "+
 			"command said, and no confidence qualifies it", a.Key, a.Confidence)
+	}
+	if a.Basis == AbsorptionObserved && a.Model != "" {
+		return fmt.Errorf("absorption of %s is observed and names the answering model %q: an observation is what a "+
+			"command said, and no model answered it", a.Key, a.Model)
 	}
 	if a.Confidence < 0 || a.Confidence > 1 {
 		return fmt.Errorf("absorption of %s carries confidence %.2f, which is not a probability", a.Key, a.Confidence)

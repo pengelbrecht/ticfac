@@ -26,8 +26,9 @@ func testPredictionScore(key string) PredictionScore {
 		ItemID:          "A2",
 		PredictedGating: true,
 		Confidence:      0.62,
+		Model:           "jev-2026-09",
 		Score:           PredictionScoreIncorrect,
-		Reason:          "the prediction was WRONG: at the close-out the command done for A2 passed, so the done demonstrates the item as handed over",
+		Reason:          "the prediction was WRONG: the command done for A2 passed on the tree the finding was made on, so the item was demonstrated even with the finding standing",
 		Check:           Check{ID: "done", Kind: "command"},
 		Commit:          "9f1c2ab37de4",
 		Result:          "pass",
@@ -138,6 +139,12 @@ func TestAPredictionScoreIsDurableOnOriginAndScoredOnce(t *testing.T) {
 	if read.ItemID != "A2" || read.Score != PredictionScoreIncorrect || read.Result != "pass" ||
 		read.PredictedGating != true || read.Confidence != 0.62 {
 		t.Fatalf("the record read back as %+v, not the labelled pair that was made", read)
+	}
+	// The model that answered survives the round trip (tick ce4, finding
+	// b8137057): the pair is the one record a later measurement reads, and a
+	// calibration that cannot say WHICH model it measured calibrates nobody.
+	if read.Model != "jev-2026-09" {
+		t.Fatalf("the record read back naming the answering model %q, want jev-2026-09: the score is per model", read.Model)
 	}
 
 	// A second write of the SAME pair — the killed close-out's resume, or a

@@ -265,6 +265,9 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 
 	// The decision record, on the run branch, BEFORE the tick exists: the
 	// reasoning that changed the epic's shape, durable, keyed by the finding.
+	// Model names the classifier that answered where the verdict was a
+	// prediction (tick ce4, finding b8137057), so the scores the close-out
+	// later grades against this record are per model.
 	record := runstate.Absorption{
 		Key:        standing.Key,
 		TickID:     tickID,
@@ -272,6 +275,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		ItemID:     verdict.ItemID,
 		Basis:      string(verdict.Basis),
 		Confidence: verdict.Confidence,
+		Model:      verdict.Model,
 		Fallback:   verdict.Fallback,
 		Reason:     verdict.Reason,
 		Placement:  placement,
@@ -382,8 +386,9 @@ func (r *Reconciler) finishAbsorption(ctx context.Context, marker attemptHandle,
 		stage, what = StageBacklogged, "promoted to a backlog tick with an owner"
 	}
 	r.record(marker.TickID, stage,
-		"finding %s is %s as tick %s: %s (basis %s%s), %s",
-		record.Key, what, record.TickID, verdictLine(record), record.Basis, confidenceLine(record), placementLine(record))
+		"finding %s is %s as tick %s: %s (basis %s%s%s), %s",
+		record.Key, what, record.TickID, verdictLine(record), record.Basis, confidenceLine(record),
+		modelLine(record), placementLine(record))
 
 	return findingDecision{TickID: record.TickID, Backlog: !record.Gating}, nil
 }
@@ -419,6 +424,18 @@ func verdictLine(record runstate.Absorption) string {
 func confidenceLine(record runstate.Absorption) string {
 	if record.Basis == runstate.AbsorptionPredicted && record.Confidence > 0 {
 		return fmt.Sprintf(", confidence %.2f", record.Confidence)
+	}
+	return ""
+}
+
+// modelLine is the answering model when one answered, and nothing when none
+// did — an observation, or the documented fallback (tick ce4, finding
+// b8137057). The feed's reader and the scores the close-out grades are per
+// model: a decision that cannot say which model guessed is a label the later
+// measurement cannot calibrate with.
+func modelLine(record runstate.Absorption) string {
+	if record.Basis == runstate.AbsorptionPredicted && record.Model != "" {
+		return fmt.Sprintf(", answered by %s", record.Model)
 	}
 	return ""
 }
@@ -654,15 +671,24 @@ func (r *Reconciler) evidenceTable() (map[string]string, map[string]string, erro
 }
 
 // evidenceRunner is the oracle's seam (pzp): it runs one command id the
-// evidence table authorises, on the integration branch as origin has it, and
-// reports the commit it ran on — the key of the observed verdict, so the
-// record says "this tree, while the finding stands" rather than "once, at
-// some point". The command runs in a throwaway worktree of the branch head,
-// through the gate's own shell and bound, so the oracle reuses the one path
-// the run already runs declared commands down.
+// evidence table authorises, on the tree the caller named — the integration
+// branch as origin has it, or a pinned commit — and reports the commit it ran
+// on — the key of the observed verdict, so the record says "this tree" rather
+// than "once, at some point". The command runs in a throwaway worktree of
+// that tree, through the gate's own shell and bound, so the oracle reuses the
+// one path the run already runs declared commands down.
 type evidenceRunner struct {
 	r        *Reconciler
 	commands map[string]string
+	// about, when non-empty, is the tree the observation must answer ON: the
+	// tree a prediction was made about — the finding's own tree, never the
+	// one that carries the absorbed fix the prediction drove (tick ce4,
+	// finding cfd74936), so a correct "this gates" prediction is scored
+	// against what the finding actually broke rather than against the repair
+	// the prediction bought. Empty runs the integration head as origin has
+	// it: the absorption decision's own rule, where the finding stands on the
+	// tree being handed over.
+	about string
 }
 
 // Run executes the command the evidence table bound to an item, and reports
@@ -680,9 +706,19 @@ func (e evidenceRunner) Run(ctx context.Context, command string) (gating.Run, er
 	if err := e.r.git.fetch(e.r.branch); err != nil {
 		return gating.Run{}, fmt.Errorf("fetch %s to run the done's command %s: %w", e.r.branch, command, err)
 	}
-	head, err := e.r.git.run("", "rev-parse", ref)
-	if err != nil {
-		return gating.Run{}, err
+	// The tree the observation answers on: the pinned about tree when one is
+	// named — the tree the finding was made on, a commit of the discovery's
+	// own moment that the fetch above already brought with the branch's
+	// history — else the branch head as origin has it, the tree the run hands
+	// over. A tree the repository cannot check out is the runner's error to
+	// report and the oracle's to read as unresolved, never a silent stand-in.
+	head := e.about
+	if head == "" {
+		var err error
+		head, err = e.r.git.run("", "rev-parse", ref)
+		if err != nil {
+			return gating.Run{}, err
+		}
 	}
 	dir, remove, err := e.r.git.tempWorktree("ticfac-done-", head)
 	if err != nil {
