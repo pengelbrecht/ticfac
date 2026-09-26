@@ -382,7 +382,18 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 		if !seen {
 			order = append(order, run.Name)
 		}
-		if !seen || run.StartedAt > prev.StartedAt {
+		// A SKIPPED run never supersedes one that actually ran. CI skips its
+		// pull_request run for an epic branch (the push run on the same head
+		// already carries the checks), and a later-started skip would
+		// otherwise shadow a red push run and read as not-failing: a false
+		// green. A run that executed replaces a skip whatever the order.
+		switch {
+		case !seen:
+			latest[run.Name] = run
+		case run.Conclusion == "skipped" && prev.Conclusion != "skipped":
+		case prev.Conclusion == "skipped" && run.Conclusion != "skipped":
+			latest[run.Name] = run
+		case run.StartedAt > prev.StartedAt:
 			latest[run.Name] = run
 		}
 	}
