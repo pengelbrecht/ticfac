@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -144,6 +145,85 @@ func TestExceedingTheAbsorptionDepthBoundStopsTheRunForAPersonWithTheChain(t *te
 	}
 }
 
+// The recorded bound, end to end (tick wz0, finding 95f5ee1a): the warm run
+// is started with a RAISED bound and killed the moment its first absorption
+// is durable, and the cold restart — invoked without the flag, carrying
+// nothing but what is on origin — must apply the bound the warm run ran
+// with: the chain that stops the run carries FOUR links and the stop names
+// the RECORDED bound, where a restart applying the bare default of 3 stops
+// a chain at three links it would never have let reach four.
+func TestAColdRestartHonoursTheRecordedAbsorptionDepthBound(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{gate: observedGate, mode: "finding_chain"})
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
+
+	// The warm run: the bound is RAISED to 4 explicitly, and the kill lands
+	// at the first absorption — after the decision record, the bound record
+	// and the created tick, all durable on origin.
+	killed := fixtureOptions{gate: observedGate, mode: "finding_chain", absorptionDepth: 4,
+		stopAfter: stopAt("a1", StageAbsorbed)}
+	warm, _, err := f.run(f.Repo, killed)
+	if err != nil {
+		if _, ok := err.(*killedAt); !ok {
+			t.Fatalf("the warm run ended with %v, not the kill at the first absorption", err)
+		}
+	}
+
+	// THE BOUND IS ON THE RUN BRANCH, not only in the invocation that named
+	// it: read from origin, by a fresh reader holding nothing warm.
+	reader := openRunStore(t, f.Repo.Dir, "epic/qeu", warm.RunID())
+	recorded, ok, err := reader.AbsorptionBound()
+	if err != nil || !ok {
+		t.Fatalf("the warm run recorded no depth bound on the run branch: %v %v — a bound that lives only in "+
+			"the invocation dies with it", ok, err)
+	}
+	if recorded.Bound != 4 {
+		t.Fatalf("the recorded bound is %d, want the 4 the warm run was raised to", recorded.Bound)
+	}
+
+	// The cold restart, WITHOUT the flag: adopts the recorded bound, and the
+	// chain grows past the depth a bare default would have stopped it at.
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	cold, result, err := f.run(clone, fixtureOptions{gate: observedGate, mode: "finding_chain"})
+	if err != nil {
+		t.Fatalf("the cold run did not finish: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the run ended %s, want failed on the depth bound's hold: the chain fixture grows past any bound: %+v",
+			result.State, result.Failure)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedAbsorptionDepth {
+		t.Fatalf("the failure is %+v, want the absorption depth bound's hold", result.Failure)
+	}
+
+	// THE STOP NAMES THE RECORDED BOUND AND A CHAIN THE DEFAULT COULD NEVER
+	// HAVE — the one observable that separates "the restart honoured the
+	// record" from "the restart silently dropped back to 3": a run applying
+	// the default stops a chain at THREE links, and no chain of it ever
+	// reaches four.
+	for _, named := range []string{"the bound is 4", "already carries 4"} {
+		if !strings.Contains(result.Failure.Message, named) {
+			t.Errorf("the stop's message does not say %q, the recorded bound the restart was bound by: %s",
+				named, result.Failure.Message)
+		}
+	}
+
+	// And the record says the same thing the decision applied: untouched by
+	// the restart, because a cold restart adopts the record, it does not
+	// rewrite it.
+	store := openRunStore(t, clone.Dir, cold.IntegrationBranch(), cold.RunID())
+	standing, ok, err := store.AbsorptionBound()
+	if err != nil || !ok {
+		t.Fatalf("read the recorded bound after the restart: %v %v", ok, err)
+	}
+	if standing.Bound != 4 {
+		t.Errorf("the recorded bound is %d after the restart, want the 4 untouched: a cold restart adopts the "+
+			"record, it does not rewrite it", standing.Bound)
+	}
+}
+
 // The bound's arithmetic, so every edge is pinned without a fixture: a chain
 // may carry up to the bound's worth of links, and only a chain already at the
 // bound refuses the next absorption. Depth counts absorption links, never
@@ -170,6 +250,45 @@ func TestAbsorptionDepthIsExceededOnlyByAChainTheBoundCannotCarry(t *testing.T) 
 	if absorptionDepthExceeded(one, 3) {
 		t.Error("a chain of one absorption exceeds the bound of 3: the stop must be rare, and this " +
 			"chain is not yet at the bound")
+	}
+}
+
+// The bound's precedence (tick wz0, finding 95f5ee1a), pinned without a
+// fixture so the ORDER is the tested thing, not a side effect of a run: an
+// explicit flag is the person's raise and wins over the record — the depth
+// refusal's own escape hatch must not be dead — while an unnamed bound
+// adopts whatever the run branch records, so a cold restart honours the
+// bound the warm run ran with instead of dropping to the default over git
+// state it had already absorbed past.
+//
+// short: pure precedence over numbers already in memory
+func TestTheRecordedBoundOutranksAnUnnamedFlagAndYieldsToAnExplicitOne(t *testing.T) {
+	t.Parallel()
+
+	// An unnamed invocation over a standing record: the RECORD wins — the
+	// cold-restart case the record exists for.
+	if got := resolvedAbsorptionDepth(5, true, 3, false); got != 5 {
+		t.Errorf("an unnamed bound of 3 over a recorded 5 resolved to %d, want the recorded 5: "+
+			"a cold restart applies the bound the warm run ran with", got)
+	}
+	// An explicit raise over a standing record: the FLAG wins — the escape
+	// hatch the refusal names, and a record that out-ranked it would be a
+	// no-op.
+	if got := resolvedAbsorptionDepth(5, true, 7, true); got != 7 {
+		t.Errorf("an explicit raise to 7 over a recorded 5 resolved to %d, want the person's 7", got)
+	}
+	// An explicit LOWERING is still explicit: the person named a number, and
+	// the run applies it — never a record that out-ranks the person.
+	if got := resolvedAbsorptionDepth(5, true, 2, true); got != 2 {
+		t.Errorf("an explicit lowering to 2 over a recorded 5 resolved to %d, want the person's 2", got)
+	}
+	// No record, no explicit flag: the flag's own (already-defaulted) value.
+	if got := resolvedAbsorptionDepth(0, false, 3, false); got != 3 {
+		t.Errorf("no record and an unnamed flag resolved to %d, want the default 3", got)
+	}
+	// No record, explicit: the first decision records what the person named.
+	if got := resolvedAbsorptionDepth(0, false, 5, true); got != 5 {
+		t.Errorf("no record and an explicit 5 resolved to %d, want 5 recorded", got)
 	}
 }
 

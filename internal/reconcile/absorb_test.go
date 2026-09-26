@@ -62,14 +62,18 @@ func localFindingReport() subprocess.Finding {
 }
 
 // fakeGatingClassifier stands in for *jev.Client at the prediction seam: one
-// answer, handed back for whatever question the predictor asks.
+// answer, handed back for whatever question the predictor asks — with the
+// state captured, because the question's inputs are themselves under test
+// (tick wz0: the reporter's claim must reach the classifier as evidence).
 type fakeGatingClassifier struct {
 	result jev.AnswerResult
 	calls  int
+	state  string
 }
 
-func (f *fakeGatingClassifier) Ask(_ context.Context, _ string, _ []jev.Question) (jev.AnswerResult, error) {
+func (f *fakeGatingClassifier) Ask(_ context.Context, state string, _ []jev.Question) (jev.AnswerResult, error) {
 	f.calls++
+	f.state = state
 	return f.result, nil
 }
 
@@ -707,6 +711,158 @@ func TestAKilledRunsHalfMadeAbsorptionIsFinishedBehindItsRecord(t *testing.T) {
 	}
 }
 
+// 3c. THE RECORDED DECISION OUTRANKS THE GATES (finding d6356432, tick
+// wz0): the kill lands between the decision record and the triage, and the
+// epic's acceptance becomes PROSE before the restart — the very gate a
+// fresh decision consults, moved between the two incarnations. A recorded
+// absorption is finished BEFORE the target, evidence-table and acceptance
+// gates are re-evaluated: those gates are inputs to a decision this run has
+// already made, and a restart that re-consulted them would re-decide the
+// finding differently — refuse over a done that is now prose, leave the
+// record standing with no tick and the draft untriaged — the re-derivation
+// hole the record exists to close.
+func TestARecordedAbsorptionIsFinishedBeforeTheGatesAreReEvaluated(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{gate: observedGate, mode: "finding_local"})
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
+
+	// The cut: the moment the created tick's publish lands — after the
+	// record and the tick, before the placement edge and the triage.
+	atTheCreate := func(e Event) bool {
+		return e.Stage == StagePublished && strings.Contains(e.Detail, "create tick ")
+	}
+	if _, _, err := f.run(f.Repo, fixtureOptions{gate: observedGate, mode: "finding_local", stopAfter: atTheCreate}); err != nil {
+		if _, ok := err.(*killedAt); !ok {
+			t.Fatalf("the warm run ended with %v, not the kill at the created tick's publish", err)
+		}
+	}
+	reader := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	records, err := reader.Absorptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("origin carries %d absorption record(s) at the cut, want the one the warm run made", len(records))
+	}
+	warmRecord := records[0]
+	if finding, ok, err := reader.Finding(records[0].Key); err != nil || !ok {
+		t.Fatalf("read the finding at the cut: %v %v", ok, err)
+	} else if finding.Status != runstate.FindingProposed {
+		t.Fatalf("the finding is %s at the cut, want still proposed: the kill landed before the triage", finding.Status)
+	}
+
+	// THE GATE THAT MOVED: the epic's acceptance becomes prose between the
+	// incarnations — the input a fresh decision consults, changed under a
+	// decision already recorded.
+	setEpicAcceptance(t, f, "The epic is done when a person says it is: prose, with no items marked.")
+
+	// The restart, from a fresh clone: the recorded decision is FINISHED —
+	// not re-made and not refused — behind the record the kill left, and the
+	// run completes with nothing left holding the close-out.
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	cold, result, err := f.run(clone, fixtureOptions{gate: observedGate, mode: "finding_local"})
+	if err != nil {
+		t.Fatalf("the cold run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the cold run ended %s: %s — a recorded decision stranded behind a gate that moved is the "+
+			"re-derivation hole the record exists to close: %+v", result.State, result.Reason, result.Failure)
+	}
+	store := openRunStore(t, clone.Dir, cold.IntegrationBranch(), cold.RunID())
+	records, err = store.Absorptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].TickID != warmRecord.TickID {
+		t.Fatalf("the finished run carries %+v, want the killed run's one decision finished — never a second one", records)
+	}
+	finding, ok, err := store.Finding(records[0].Key)
+	if err != nil || !ok {
+		t.Fatalf("read the finding after the restart: %v %v", ok, err)
+	}
+	if finding.Status != runstate.FindingPromoted || finding.PromotedAs != records[0].TickID {
+		t.Fatalf("the finding is %s promoted as %s, want promoted as the record's tick %s: the recorded decision was "+
+			"finished behind the record, not re-decided against the prose acceptance",
+			finding.Status, finding.PromotedAs, records[0].TickID)
+	}
+	// The refusal never spoke: a restart that re-consulted the acceptance
+	// gate would have refused over the prose done and held the close-out on an
+	// untriaged finding — the failure the reorder exists to make impossible.
+	events := feedStages(t, clone.Dir, "r-fixture")
+	if line := detailOfStage(events, StageAbsorptionRefused); line != "" {
+		t.Errorf("the restart refused to absorb (%s) although the decision was already recorded and standing: %q",
+			StageAbsorptionRefused, line)
+	}
+	if line := detailOfStage(events, StageRunHeld); strings.Contains(line, RefusedFindingUntriaged) {
+		t.Errorf("the restart held the close-out on the finding as untriaged although the recorded decision finished it: %q", line)
+	}
+}
+
+// 6. THE REPORTER'S CLAIM REACHES THE DECISION (finding c244ce2c, tick wz0):
+// done_item and demonstrating_check — the done evidence the worker prompt
+// has promised the run would weigh since tick nfo — are wired into BOTH
+// tiers as INPUTS, never as verdicts. The fixture's finding claims done
+// item A1 demonstrated by `done`: the oracle that runs A1's command sees
+// the claim and SCORES it in the reason the record keeps, and the predictor
+// the unverified half is handed to carries the same claim into the
+// classifier's question as evidence.
+func TestTheReportersClaimReachesTheAbsorptionDecisionAsAnInput(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	// THE ORACLE'S HALF, on the observed path: the claimed item's command is
+	// observed broken while the finding stands, and the recorded reason
+	// scores the claim — confirmed by the run — beside the run's own verdict.
+	// The claim is never the verdict: the observation decided, and the claim
+	// is named as scored evidence on the record a person reads.
+	observed := newFixture(t, fixtureOptions{gate: observedGate, mode: "finding_local"})
+	setEpicAcceptance(t, observed, "[A1] Every tick closes behind a green gate.")
+	r, result, err := observed.run(observed.Repo, fixtureOptions{gate: observedGate, mode: "finding_local"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+	record := absorbingAbsorption(t, observed.Repo, r)
+	if record.Basis != runstate.AbsorptionObserved {
+		t.Fatalf("the decision's basis is %q, want observed: this case is the oracle's own", record.Basis)
+	}
+	for _, named := range []string{"confirmed", "A1"} {
+		if !strings.Contains(record.Reason, named) {
+			t.Errorf("the recorded reason does not score the reporter's claim (%q missing): %q — the claim must "+
+				"reach the decision as an input, and the reason is where the score is kept", named, record.Reason)
+		}
+	}
+
+	// THE PREDICTOR'S HALF, on the predicted path: A1's command passes, A2 is
+	// unverified, and the classifier is asked — with the reporter's claim in
+	// front of it, done_item and demonstrating_check both, so the answer is
+	// made WITH the reporter's evidence rather than beside it.
+	predicted := newFixture(t, fixtureOptions{gate: absorbingGate, mode: "finding_local"})
+	setEpicAcceptance(t, predicted, "[A1] Every tick closes behind a green gate.\n"+
+		"[A2] A cloud run dispatches on the model the gateway names.")
+	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.9, "none": 0.1}, "A2")}
+	_, result, err = predicted.run(predicted.Repo, fixtureOptions{gate: absorbingGate, mode: "finding_local", gatingClassifier: classifier})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+	if classifier.calls == 0 {
+		t.Fatal("the classifier was never asked, so nothing can be said about what reached it")
+	}
+	for _, named := range []string{"A1", "\"done\""} {
+		if !strings.Contains(classifier.state, named) {
+			t.Errorf("the classifier's state does not carry %q, the reporter's done evidence the decision "+
+				"must take as an input: %q", named, classifier.state)
+		}
+	}
+}
+
 // The pure half of the two-tier meeting point, so every branch of the
 // combination is pinned without a fixture: an observation wins, an unresolved
 // runnable item is never read as demonstrated, and where neither tier can
@@ -764,10 +920,46 @@ func TestCombineGatingAnswersEveryTierState(t *testing.T) {
 		t.Errorf("neither tier answering combined to %+v, want the absorb fallback — deferring would stop an unattended run", verdict)
 	}
 
-	// Nothing observed, a prediction: the prediction is the answer.
-	verdict, _ = combineGating("k", done, nil, "no runnable item", predictedFine, "")
+	// Nothing observed, every item the prediction's own: the prediction is the
+	// answer — no runnable item exists for an absent observation to leave
+	// undecided.
+	unverifiedOnly := acceptance.Done{Items: []acceptance.Resolved{
+		{Item: acceptance.Item{ID: "A2"}, State: acceptance.Unverified},
+	}}
+	verdict, _ = combineGating("k", unverifiedOnly, nil, "every acceptance item is unverified", predictedFine, "")
 	if verdict.Gating {
-		t.Errorf("a predicted none combined to gating %+v", verdict)
+		t.Errorf("a predicted none over the prediction's own items combined to gating %+v", verdict)
+	}
+
+	// Nothing observed while the done carries a RUNNABLE item (finding
+	// 88ea36a8, tick wz0): the oracle observed nothing — no runner, or no
+	// command produced evidence — and the prediction answered only the
+	// UNVERIFIED half. A runnable item with no evidence is unresolved, never
+	// demonstrated: an absence of observation is not an observation, so a
+	// non-gating prediction cannot carry the decision, and the combined
+	// fallback absorbs naming the runnable item.
+	verdict, _ = combineGating("k", done, nil, "no command produced evidence about any runnable item", predictedFine, "")
+	if !verdict.Gating || verdict.Basis != gating.BasisPredicted || verdict.Fallback == "" {
+		t.Errorf("a predicted none over an unobserved runnable item combined to %+v, want the absorb fallback — "+
+			"an absence of observation is not an observation", verdict)
+	}
+	if !strings.Contains(verdict.Reason, "A1") {
+		t.Errorf("the fallback reason does not name the unobserved runnable item: %q", verdict.Reason)
+	}
+
+	// The same state with no prediction at all: the fallback absorbs naming
+	// the runnable items, never the whole done as if nothing was answered.
+	verdict, _ = combineGating("k", done, nil, "no runner is configured", nil, "every item is the oracle's")
+	if !verdict.Gating || !strings.Contains(verdict.Reason, "A1") {
+		t.Errorf("neither tier answering over a runnable item combined to %+v, want the absorb fallback naming the runnable item", verdict)
+	}
+
+	// Nothing observed, the prediction GATING: the prediction stands — the
+	// decision absorbs either way, and the prediction is the tier that
+	// answered.
+	verdict, _ = combineGating("k", done, nil, "no command produced evidence about any runnable item", predictedGating, "")
+	if !verdict.Gating || verdict.ItemID != "A2" || verdict.Basis != gating.BasisPredicted {
+		t.Errorf("a predicted break over an unobserved runnable item combined to %+v, want the prediction to stand", verdict)
 	}
 }
 

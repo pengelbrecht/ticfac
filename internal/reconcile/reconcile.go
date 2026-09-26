@@ -573,7 +573,24 @@ type Options struct {
 	// never "unbounded": a misconfiguration must not silently unbound the
 	// recursion, because an epic that recurses forever is worse than a stop
 	// — nothing announces it.
+	//
+	// The bound is also a RECORD on the run branch (tick wz0, finding
+	// 95f5ee1a): the first decision that needs it records it, and a cold
+	// restart without the flag applies the RECORDED bound rather than
+	// dropping back to the default over git state the warm run had already
+	// absorbed past.
 	AbsorptionDepthBound int
+
+	// AbsorptionDepthExplicit says the bound was named EXPLICITLY on this
+	// invocation — the person's raise, the escape hatch the depth refusal
+	// itself names ("raise the bound with --absorption-depth and run the epic
+	// again"). An explicit bound WINS over the recorded one and rewrites it;
+	// an invocation that names no bound adopts whatever the run branch
+	// records, so a cold restart honours the bound the warm run ran with.
+	// What names it explicitly is the CALLER (the CLI passes the flag only
+	// when the operator wrote it); the reconciler cannot tell a default from
+	// a coincidence, and never guesses.
+	AbsorptionDepthExplicit bool
 
 	// Substrate is the substrate this run executes on, the axis role
 	// routing resolves against (tick 84z): under "cloud" the target

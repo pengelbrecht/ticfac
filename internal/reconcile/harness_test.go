@@ -883,6 +883,12 @@ type fixtureOptions struct {
 	// argues for — and a test that drives the recursion to its stop sets ONE:
 	// the shortest chain whose second link trips a bound, with no three-deep
 	// fixture to build first.
+	//
+	// A nonzero depth is EXPLICIT (tick wz0) exactly as the CLI's named flag
+	// is: it wins over the bound recorded on the run branch, where zero
+	// adopts the recorded one — so a test can drive both sides of the
+	// recorded bound's precedence without the fixture learning a second
+	// field.
 	absorptionDepth int
 
 	// gatingClassifier is the classifier the absorption decision asks where
@@ -986,6 +992,10 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		Substrate:            opts.substrate,
 		GatingClassifier:     opts.gatingClassifier,
 		AbsorptionDepthBound: opts.absorptionDepth,
+		// A depth the test NAMES is explicit — the person's raise over the
+		// recorded bound — and zero adopts whatever the run branch records
+		// (tick wz0), exactly as the CLI's flag does.
+		AbsorptionDepthExplicit: opts.absorptionDepth > 0,
 	}
 }
 

@@ -377,6 +377,9 @@ func (o *Oracle) Observe(ctx context.Context, finding Finding, done acceptance.D
 			"the command for %s is observed broken on %s while the finding stands, so the done is not reachable "+
 				"with it standing — observed, no judgement needed, and no classifier overrides it. Observed broken: %s",
 			broken[0], shortCommit(commit), strings.Join(broken, ", "))
+		if score := claimScore(finding, done, observed, broken); score != "" {
+			observed.Reason += ". " + score
+		}
 		return observed, "", nil
 	}
 
@@ -400,8 +403,79 @@ func (o *Oracle) Observe(ctx context.Context, finding Finding, done acceptance.D
 			". The items this verdict does not decide are %s: they come back unresolved rather than assumed "+
 				"either way, and the prediction tier's to answer", strings.Join(ids, ", "))
 	}
+	if score := claimScore(finding, done, observed, broken); score != "" {
+		reason += ". " + score
+	}
 	observed.Reason = reason
 	return observed, "", nil
+}
+
+// claimScore is the reporter's done_item claim scored against what the
+// observation actually answered (tick wz0, finding c244ce2c): the worker
+// prompt promises the claim is scored against what the done actually did,
+// and this is where the promise is kept. The score is a line on the verdict's
+// reason, never a vote on the verdict: a confirmed claim proves nothing the
+// command did not already show, and a refuted one un-breaks nothing — the
+// run's own observation stands either way.
+//
+// The cases, all stated rather than silent: a claim the run CONFIRMED (the
+// claimed item is observed broken), one the run REFUTED (the claimed item
+// was demonstrated while the finding stands, or the reporter claimed none
+// and an item broke), one that could not be scored (the claimed item produced
+// no evidence), and one that names an item this done does not carry. Empty
+// when the reporter made no claim — an unlinked finding is the visible third
+// state, and there is nothing to score.
+func claimScore(finding Finding, done acceptance.Done, observed *Observed, broken []string) string {
+	claim := strings.TrimSpace(finding.DoneItem)
+	if claim == "" {
+		return ""
+	}
+	if claim == NoneLabel {
+		if len(broken) > 0 {
+			return fmt.Sprintf(
+				"the reporter's claim that the finding breaks no acceptance item is refuted by the run: %s is "+
+					"observed broken while the finding stands", strings.Join(broken, ", "))
+		}
+		return "the reporter's claim that the finding breaks no acceptance item is confirmed as far as this " +
+			"observation reaches"
+	}
+	// An item of this done at all? A claim naming something the acceptance
+	// does not carry is scored against nothing, and said so.
+	ofTheDone := false
+	for _, item := range done.Items {
+		if item.ID == claim {
+			ofTheDone = true
+			break
+		}
+	}
+	if !ofTheDone {
+		return fmt.Sprintf(
+			"the reporter's claim names %s, which is no item of this done — scored against nothing", claim)
+	}
+	for _, item := range broken {
+		if item == claim {
+			return fmt.Sprintf(
+				"the reporter's claim is confirmed by the run: %s is observed broken while the finding stands", claim)
+		}
+	}
+	for _, observation := range observed.Items {
+		if observation.ItemID == claim {
+			return fmt.Sprintf(
+				"the reporter's claim is refuted by the run: the command for %s passed while the finding stands", claim)
+		}
+	}
+	for _, unresolved := range observed.Unresolved {
+		if unresolved.ItemID == claim {
+			return fmt.Sprintf(
+				"the reporter's claim could not be scored: %s produced no evidence about the item", claim)
+		}
+	}
+	// The claimed item is unverified: the classifier's to answer, and the
+	// prediction carries the claim as evidence there — the oracle scored what
+	// it ran and hands the rest to the other tier.
+	return fmt.Sprintf(
+		"the reporter's claim over %s is the prediction tier's to score: the item is unverified and the claim "+
+			"reaches the classifier as evidence", claim)
 }
 
 // shortCommit spells a commit the way the run's own records spell it, so a

@@ -76,6 +76,14 @@ func AbsorptionPath(runID, key string) string {
 	return RunDir(runID) + "/absorptions/" + key + ".json"
 }
 
+// AbsorptionBoundPath is `.ticfac/runs/<run-id>/absorption-bound.json` —
+// exactly one per run: the recursion bound the run applies, recorded so a
+// cold restart applies the same bound the warm run did (tick wz0, finding
+// 95f5ee1a).
+func AbsorptionBoundPath(runID string) string {
+	return RunDir(runID) + "/absorption-bound.json"
+}
+
 // FindingPath is `.ticfac/runs/<run-id>/findings/<key>.json`, where <key> is
 // the draft's own dedup key — the external_ref half of (source, external_ref).
 func FindingPath(runID, key string) string {
