@@ -15,5 +15,5 @@
   "acceptance_criteria": "ticfac watch renders the status model in place with no alternate screen: a top line only when a person is needed, naming the unblocking command; per epic the lifecycle as a progress bar with elapsed and cost; done waves one line each, the active wave one fixed row per tick, upcoming waves one line each; rows never reorder; per-tick silence shown as a colour-graded timer; it fits the pane's width and height as described; and when stdout is not a TTY it streams plain lines",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T12:20:47.465084Z",
-  "updated_at": "2026-09-23T12:41:20.025617Z"
+  "updated_at": "2026-09-26T09:28:59.215799Z"
 }

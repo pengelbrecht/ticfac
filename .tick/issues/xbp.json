@@ -1,0 +1,25 @@
+{
+  "id": "xbp",
+  "title": "Final review of the 2jn diff",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "9sz",
+    "2qz",
+    "o0d",
+    "sg5",
+    "8v3",
+    "ejw",
+    "4yb",
+    "89m",
+    "6dh",
+    "i1r"
+  ],
+  "parent": "2jn",
+  "role": "review",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T09:28:44.16159Z",
+  "updated_at": "2026-09-26T09:30:31.853624Z"
+}

@@ -62,6 +62,11 @@ type Attempt struct {
 	Epic string
 	// Role is the dispatch's role (implement-tick, review-epic, …).
 	Role string
+	// Label is the tick's short human label — its gloss, or its title cut
+	// to the gloss width — or "" when the tracker could not be read. It
+	// joins the pane title only; the tick token stays the bare id, because
+	// the token is what matching reads.
+	Label string
 	// WorkspaceID is the herdr workspace the attempt lives in.
 	WorkspaceID string
 	// PaneID is the herdr pane the attempt's agent occupies.
@@ -111,7 +116,9 @@ type Badge struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	PaneID      string `json:"pane_id,omitempty"`
 
-	// Title is the pane title: `<tick-id> · <role> · <status>`.
+	// Label is the tick's short human label the title carries, when known.
+	Label string `json:"label,omitempty"`
+	// Title is the pane title: `<tick-id> (<label>) · <role> · <status>`.
 	Title string `json:"title"`
 	// StateLabels is the label herdr shows while the pane is in the
 	// worker's current agent status. Empty when the pane is not live.
@@ -303,7 +310,8 @@ func badgeFor(m Attempt, tickStatus string, live sessionIndex) Badge {
 		TickStatus:  tickStatus,
 		WorkspaceID: m.WorkspaceID,
 		PaneID:      m.PaneID,
-		Title:       Title(m.Tick, m.Role, tickStatus),
+		Label:       m.Label,
+		Title:       Title(tickRef(m), m.Role, tickStatus),
 		Tokens:      tokensFor(m, tickStatus),
 	}
 
@@ -341,7 +349,17 @@ func badgeFor(m Attempt, tickStatus string, live sessionIndex) Badge {
 	return b
 }
 
-// Title renders the painted pane title: `<tick-id> · <role> · <status>`.
+// tickRef names the attempt's tick to a person: `<tick-id> (<label>)`, or the
+// bare id when no label is known.
+func tickRef(m Attempt) string {
+	if strings.TrimSpace(m.Label) == "" {
+		return m.Tick
+	}
+	return m.Tick + " (" + m.Label + ")"
+}
+
+// Title renders the painted pane title: `<tick-id> · <role> · <status>`,
+// where the tick is named `<tick-id> (<label>)` when a label is known.
 // Empty fields are dropped rather than rendered as a gap, so an attempt with
 // no role still produces a readable title.
 func Title(tickID, role, status string) string {

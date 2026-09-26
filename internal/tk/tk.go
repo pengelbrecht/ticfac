@@ -815,6 +815,7 @@ type VersionResponse = VersionInfo
 type Tick struct {
 	ID                 string   `json:"id"`
 	Title              string   `json:"title"`
+	Gloss              string   `json:"gloss,omitempty"`
 	Description        string   `json:"description,omitempty"`
 	Notes              string   `json:"notes,omitempty"`
 	Status             string   `json:"status"`
@@ -887,6 +888,7 @@ type GraphResponse = Graph
 type GraphEpic struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+	Gloss string `json:"gloss,omitempty"`
 }
 
 type GraphStats struct {
@@ -919,6 +921,7 @@ type GraphWave struct {
 type GraphTask struct {
 	ID                 string   `json:"id"`
 	Title              string   `json:"title"`
+	Gloss              string   `json:"gloss,omitempty"`
 	Description        string   `json:"description,omitempty"`
 	AcceptanceCriteria string   `json:"acceptance_criteria,omitempty"`
 	Priority           int      `json:"priority"`
