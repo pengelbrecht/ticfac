@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 115,
-  "state": "collecting",
-  "reason": "collecting wz0 attempt 15",
-  "updated_at": "2026-09-26T09:41:11Z",
+  "sequence": 116,
+  "state": "integrating",
+  "reason": "integrating wz0 attempt 15 into epic/gvc",
+  "updated_at": "2026-09-26T09:41:33Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -74,7 +74,7 @@
     },
     {
       "tick_id": "wz0",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 15
     },
     {
