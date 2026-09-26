@@ -320,7 +320,7 @@ func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 		RefusedHeld, RefusedUnaddressed, RefusedRejectedWork, RefusedNeedsHuman, RefusedRoleAnswer,
 		RefusedFindingUntriaged, RefusedFindingInvalid, RefusedGate, RefusedBoundary, RefusedMerge,
 		RefusedBaseRefresh, RefusedEpicAbsent, RefusedWaveOverlap, RefusedUndeclaredTouch, RefusedTierLabel,
-		RefusedWiped,
+		RefusedWiped, RefusedAbsorptionDepth,
 		RefusedCloseoutCI, RefusedCloseoutCIOnClose, "", "something this build has never heard of",
 	} {
 		if resumesWithoutAPerson(reason) {

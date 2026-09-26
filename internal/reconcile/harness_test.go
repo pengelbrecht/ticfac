@@ -878,6 +878,13 @@ type fixtureOptions struct {
 	// through the decision procedure.
 	substrate string
 
+	// absorptionDepth overrides the absorption recursion's bound (tick qjj)
+	// for this run. Zero is the production default — the bound the constant
+	// argues for — and a test that drives the recursion to its stop sets ONE:
+	// the shortest chain whose second link trips a bound, with no three-deep
+	// fixture to build first.
+	absorptionDepth int
+
 	// gatingClassifier is the classifier the absorption decision asks where
 	// the epic's done cannot yet be run (tick npq): a fake standing in for
 	// *jev.Client at the seam, exactly as the work-type tests fake theirs. Nil
@@ -967,17 +974,18 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		// A supervised resume waits before the next incarnation, and the wait
 		// is spent through Sleep above — milliseconds here, the production
 		// number everywhere else.
-		AutoResumeBackoff:  time.Millisecond,
-		PullRequests:       opts.pullRequests,
-		StallWarnAfter:     opts.stallWarn,
-		ProgressProbeEvery: progressProbe,
-		GateHeartbeatEvery: opts.gateHeartbeat,
-		Sleep:              func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:          opts.guardsOff,
-		stopAfter:          opts.stopAfter,
-		NewExecutor:        f.newExecutor,
-		Substrate:          opts.substrate,
-		GatingClassifier:   opts.gatingClassifier,
+		AutoResumeBackoff:    time.Millisecond,
+		PullRequests:         opts.pullRequests,
+		StallWarnAfter:       opts.stallWarn,
+		ProgressProbeEvery:   progressProbe,
+		GateHeartbeatEvery:   opts.gateHeartbeat,
+		Sleep:                func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:            opts.guardsOff,
+		stopAfter:            opts.stopAfter,
+		NewExecutor:          f.newExecutor,
+		Substrate:            opts.substrate,
+		GatingClassifier:     opts.gatingClassifier,
+		AbsorptionDepthBound: opts.absorptionDepth,
 	}
 }
 

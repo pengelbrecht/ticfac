@@ -2408,8 +2408,18 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	// the only outcome here, and it fails CLOSED: a findings block nobody could
 	// read is not a report with no findings.
 	if err := r.fileFindings(ctx, marker, collected); err != nil {
-		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
-			" reported a findings block that could not be read")
+		// The disposal's reason is the error's OWN, not the invalid-block
+		// default: the two refusals this path raises send a person looking
+		// different places (a report that cannot be read at the worker's
+		// block; the recursion's bound at the chain the refusal carries), and
+		// the disposition record is where the next reader starts.
+		disposal := fmt.Sprintf("attempt %d of %s reported a findings block that could not be read",
+			marker.Attempt, marker.TickID)
+		if refusal, ok := err.(*Refusal); ok {
+			disposal = fmt.Sprintf("attempt %d of %s was refused (%s): %s",
+				marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message))
+		}
+		r.disposeRejected(handle, executor, marker, disposal)
 		return nil, err
 	}
 

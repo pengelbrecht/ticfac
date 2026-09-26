@@ -141,6 +141,41 @@ in_gate_break_tick() {
 	return 1
 }
 
+findings_block_chain() {
+	# The recursion fixture (tick qjj): ONE finding whose identity is the tick
+	# that reported it, so every attempt of every tick discovers a NEW defect
+	# — an absorbed tick's own work reports the next link of an absorption
+	# chain rather than deduplicating against the finding that created it.
+	# Like finding_local it claims done item A1, so against the observed gate
+	# every link of the chain is judged gating and the chain grows until the
+	# bound stops it.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' "  \"title\": \"A finding the fake runner reports from $TICFAC_TICK\","
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "done"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
+report_with_chained_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_chain
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
 report_with_local_findings() {
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
@@ -333,6 +368,15 @@ finding_local)
 	# discovery that the absorption decision is driven on.
 	commit
 	report_with_local_findings
+	;;
+finding_chain)
+	# The recursion case (tick qjj): same as finding_local, but the finding's
+	# identity is the reporting tick, so every attempt discovers a NEW defect
+	# and an absorbed tick's own work grows the chain. The run's answer is the
+	# depth bound: a chain at the bound refuses to absorb and stops the run for
+	# a person, carrying the chain that produced the stop.
+	commit
+	report_with_chained_findings
 	;;
 review_finding)
 	# The 604 shape: only the review job reports findings — an upstream
