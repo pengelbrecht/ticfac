@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // The findings channel: how a worker reports something it discovered OUTSIDE
@@ -16,11 +19,23 @@ import (
 // writes — a fenced code block with the info string `findings` holding a
 // JSON array of typed findings — lifted by collect into the role-result
 // envelope's FIRST-CLASS Findings field, where the bundle's $defs.finding
-// (since 4.0.0) validates the five closed shapes rather than trusting the
-// open result payload. The reconciler turns each finding into a DRAFT tick
-// proposal; the worker never writes `.tick/`, which is a protected prefix,
-// and the reconciler never opens a tick on a worker's word — the draft is
-// triaged by a person, which is what keeps the scope decision human.
+// (since 4.0.0) validates the five pinned closed shapes rather than trusting
+// the open result payload. Since tick nfo each finding also carries two
+// OPTIONAL done-evidence fields (done_item, demonstrating_check): they ride
+// this block and the draft the reconciler files, and join the ENVELOPE — the
+// one surface the compiled-in schema validates at runtime — when the
+// contract bundle adopts them (see FindingFieldNames and the parity reader
+// that pins the pending set). Since tick ryv a key the record does not know
+// is no longer a refusal: it is FOLDED into the finding's body as a labelled
+// line and named in the attempt's records, so a finished tick's work is
+// never thrown away over an annotation — while a missing required field or
+// an invalid value still refuses, because those are the cases where the
+// record can mean nothing by what it read.
+//
+// The reconciler turns each finding into a DRAFT tick proposal; the worker
+// never writes `.tick/`, which is a protected prefix, and the reconciler
+// never opens a tick on a worker's word — the draft is triaged by a person,
+// which is what keeps the scope decision human.
 //
 // The block is deliberately INSIDE the report rather than a second file: the
 // report is the one deliverable collect already reads durably (off the branch
@@ -64,32 +79,75 @@ var FindingSeverities = []string{
 	FindingSeverityLow, FindingSeverityMedium, FindingSeverityHigh,
 }
 
+// FindingDoneItemNone is the reporter's answer that the finding breaks no
+// item of the epic's definition of done (tick nfo): a CLAIM, deliberately
+// distinct from reporting no done_item at all. The one is an answer the
+// run can score; the other is a finding nobody linked, and the two must not
+// look identical.
+const FindingDoneItemNone = "none"
+
 // targetRepositoryPattern is the shape of a finding's target: an owner/name
 // GitHub repository, e.g. pengelbrecht/ticks. An upstream finding belongs on a
 // DIFFERENT tracker, so the target names which one; an empty target means the
 // repository the run is working on.
 var targetRepositoryPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
-// Finding is one thing a worker discovered outside its tick. Every field is
-// REQUIRED in the report block — kind, title, body, severity and the target
-// repository — with body and target allowed to be empty, so "no target" and
-// "target forgotten" cannot look identical.
+// Finding is one thing a worker discovered outside its tick. The five pinned
+// fields are REQUIRED in the report block — kind, title, body, severity and
+// the target repository — with body and target allowed to be empty, so "no
+// target" and "target forgotten" cannot look identical.
+//
+// Two more fields carry the finding's EVIDENCE against the epic's definition
+// of done (tick nfo), and they are OPTIONAL — a finding missing them is
+// accepted and reads as UNLINKED, because refusing findings nobody thought
+// to link is how a channel loses them. The reporter's claim is never the
+// verdict on whether the finding gates its epic: the named check is what
+// the run runs where the item is runnable (the done check is the
+// authoritative verdict), one input to a prediction where it is not yet, and
+// the claim is what the reporter is later scored against — evidence, not
+// judgement.
 type Finding struct {
 	Kind     string `json:"kind"`
 	Title    string `json:"title"`
 	Body     string `json:"body"`
 	Severity string `json:"severity"`
 	Target   string `json:"target"`
+	// DoneItem is the acceptance item of the EPIC being worked — an [A<n>]
+	// id as the epic's acceptance criteria mark its items — that the
+	// reporter believes this finding breaks, or "none" when the reporter
+	// believes it breaks none. Empty means no claim was made: UNLINKED.
+	DoneItem string `json:"done_item,omitempty"`
+	// DemonstratingCheck is the command or test the reporter says would
+	// demonstrate the breakage — the id of one of the repository's declared
+	// testing commands where one fits, else the test's name. Empty means no
+	// claim was made.
+	DemonstratingCheck string `json:"demonstrating_check,omitempty"`
 }
 
-// findingFields is every field of the record, for the closed-key check: a
-// findings block carrying a field this record does not have is refused rather
-// than read as if it were smaller.
+// findingFields is every REQUIRED field of the record, for the closed-key
+// check: a findings block carrying a field this record does not have is
+// refused rather than read as if it were smaller.
 var findingFields = []string{"kind", "title", "body", "severity", "target"}
 
-// knownFindingField is the closed key set of the finding record.
+// knownFindingField is the closed key set of the finding record: the five
+// required fields plus the two optional evidence fields.
 var knownFindingField = map[string]bool{
 	"kind": true, "title": true, "body": true, "severity": true, "target": true,
+	"done_item": true, "demonstrating_check": true,
+}
+
+// FindingFieldNames is every field the report-block record answers to, in
+// alphabetical order. The parity reader pins this set against the bundle's
+// $defs.finding: a bundle field ticfac cannot read is a refusal nobody
+// issued, and a field ticfac reads that the bundle has not pinned yet is a
+// pending bump this repository has to name rather than drift behind.
+func FindingFieldNames() []string {
+	names := make([]string, 0, len(knownFindingField))
+	for name := range knownFindingField {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Validate refuses a finding this channel will not carry. Every refusal names
@@ -112,7 +170,30 @@ func (f Finding) Validate() error {
 		return fmt.Errorf("finding.target is empty: an upstream tick belongs on another repository's tracker, " +
 			"and a finding that names none is routed nowhere")
 	}
-	return nil
+	return ValidateDoneItem(f.DoneItem)
+}
+
+// ValidateDoneItem refuses a done_item the channel will not carry: an
+// acceptance item id — the epic's [A<n>] marks, the same shape
+// [evidence.acceptance] keys on — the reporter's "none", or empty (no claim
+// made). runstate reuses this for the draft half of the channel, so the two
+// records cannot disagree about what a claim looks like.
+func ValidateDoneItem(doneItem string) error {
+	if doneItem == "" || doneItem == FindingDoneItemNone || ValidFindingDoneItem(doneItem) {
+		return nil
+	}
+	return fmt.Errorf("finding.done_item %q is neither an acceptance item id (%s) nor %q: a done item a "+
+		"reader cannot key to the epic's items is a link nobody can follow", doneItem,
+		runconfig.AcceptanceItemPattern.String(), FindingDoneItemNone)
+}
+
+// ValidFindingDoneItem reports whether doneItem is an acceptance item id —
+// the reporter's link to an item, neither empty (no claim made) nor the
+// reporter's "none". The draft's linkage mark reads it, so linked, none
+// and unlinked stay three states rather than two spellings of two.
+func ValidFindingDoneItem(doneItem string) bool {
+	return doneItem != "" && doneItem != FindingDoneItemNone &&
+		runconfig.AcceptanceItemPattern.MatchString(doneItem)
 }
 
 // findingsFence is the opening line of the findings block: a code fence with
@@ -131,10 +212,23 @@ var anyFence = regexp.MustCompile("^```")
 // to remove, so a truncated one is reported as unparseable.
 //
 // The return is the typed list and, when the report carries a block this
-// reader cannot accept, the problem with it. (nil, "") means the report
-// carries no findings block at all; ([]Finding{}, "") is not a return value —
-// a block that proposes nothing is the same as no block.
-func ParseFindings(body string) (findings []Finding, problem string) {
+// reader cannot accept, the problem with it. (nil, "", nil) means the report
+// carries no findings block at all; ([]Finding{}, "", nil) is not a return
+// value — a block that proposes nothing is the same as no block.
+//
+// The third return names every finding key the block carried that the
+// finding record does not know, one per key, as `findings[<i>] "<key>"`.
+// Such a key is not a problem (tick ryv): the 3h0 worker finished its tick
+// and wrote a finding with an extra "title_note", and refusing the whole
+// attempt as finding_report_invalid threw away work that was fine. The key
+// and its value are FOLDED into the finding's body as a labelled line — the
+// strictness the fold replaces existed so a half-understood list never
+// silently loses the half it did not understand, and a labelled line in the
+// body keeps that promise: the unknown half is kept, visibly, beside the
+// finding it rode, and the fold is named so the attempt's records can note
+// it. What still refuses is everything the record can mean nothing by:
+// a missing required field, and a value the vocabularies do not carry.
+func ParseFindings(body string) (findings []Finding, problem string, folded []string) {
 	var last []string
 	var block []string
 	open := false
@@ -152,53 +246,98 @@ func ParseFindings(body string) (findings []Finding, problem string) {
 		}
 	}
 	if open {
-		return nil, "the report opens a findings block and never closes it"
+		return nil, "the report opens a findings block and never closes it", nil
 	}
 	if last == nil {
-		return nil, ""
+		return nil, "", nil
 	}
 
-	// Strict decode: an unknown field is refused rather than ignored, because
-	// a findings list a reader half-understands is one that silently loses
-	// the half it did not.
+	// Strict decode: the array itself is refused on anything but a JSON
+	// array, because a findings list a reader half-understands is one that
+	// silently loses the half it did not.
 	var raw []json.RawMessage
 	dec := json.NewDecoder(bytes.NewReader([]byte(strings.Join(last, "\n"))))
-	dec.DisallowUnknownFields()
 	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Sprintf("the findings block is not a JSON array: %v", err)
+		return nil, fmt.Sprintf("the findings block is not a JSON array: %v", err), nil
 	}
 	if dec.More() {
-		return nil, "the findings block carries trailing content after the array"
+		return nil, "the findings block carries trailing content after the array", nil
 	}
 	out := []Finding{}
 	for i, item := range raw {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(item, &fields); err != nil {
-			return nil, fmt.Sprintf("findings[%d] is not an object: %v", i, err)
+			return nil, fmt.Sprintf("findings[%d] is not an object: %v", i, err), nil
 		}
 		for _, name := range findingFields {
 			if _, ok := fields[name]; !ok {
-				return nil, fmt.Sprintf("findings[%d] omits %q; every field is required, empty included", i, name)
+				return nil, fmt.Sprintf("findings[%d] omits %q; every field is required, empty included", i, name), nil
 			}
 		}
-		for name := range fields {
-			if !knownFindingField[name] {
-				return nil, fmt.Sprintf("findings[%d] carries %q, which is not a finding field", i, name)
+		// The fold (tick ryv): keys the finding record does not know are KEPT
+		// — appended to the finding's body as labelled lines, in key order —
+		// rather than refusing the attempt over an annotation. The strict
+		// decode still runs, over the KNOWN keys only, so what the record does
+		// not know is labelled as not known, never guessed at, and what it
+		// half-understands still cannot pass for what it reads.
+		unknown := make([]string, 0)
+		known := make(map[string]json.RawMessage, len(fields))
+		for name, value := range fields {
+			if knownFindingField[name] {
+				known[name] = value
+				continue
 			}
+			unknown = append(unknown, name)
+		}
+		sort.Strings(unknown)
+		filtered, err := json.Marshal(known)
+		if err != nil {
+			return nil, fmt.Sprintf("findings[%d] could not be read: %v", i, err), nil
 		}
 		var finding Finding
-		dec := json.NewDecoder(bytes.NewReader(item))
+		dec := json.NewDecoder(bytes.NewReader(filtered))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&finding); err != nil {
-			return nil, fmt.Sprintf("findings[%d]: %v", i, err)
+			return nil, fmt.Sprintf("findings[%d]: %v", i, err), nil
+		}
+		for _, name := range unknown {
+			finding.Body = foldIntoBody(finding.Body, name, fields[name])
+			folded = append(folded, fmt.Sprintf("findings[%d] %q", i, name))
 		}
 		if err := finding.Validate(); err != nil {
-			return nil, err.Error()
+			return nil, err.Error(), nil
 		}
 		out = append(out, finding)
 	}
 	if len(out) == 0 {
-		return nil, ""
+		return nil, "", nil
 	}
-	return out, ""
+	return out, "", folded
+}
+
+// foldIntoBody appends one unknown key and its value to the finding's body
+// as a labelled line (tick ryv): `folded <key>: <value>`. A JSON string rides
+// unquoted — the way a person triaging the finding reads it — and anything
+// else as compact JSON, so a number, an array or an object the worker
+// attached keeps its shape rather than being flattened into prose.
+func foldIntoBody(body, key string, value json.RawMessage) string {
+	line := "folded " + key + ": " + foldValue(value)
+	if body == "" {
+		return line
+	}
+	return body + "\n" + line
+}
+
+// foldValue renders one folded value: the string itself when the value is a
+// JSON string, compact JSON otherwise.
+func foldValue(value json.RawMessage) string {
+	var asString string
+	if err := json.Unmarshal(value, &asString); err == nil {
+		return asString
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, value); err != nil {
+		return string(value)
+	}
+	return compact.String()
 }

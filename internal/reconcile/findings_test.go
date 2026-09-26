@@ -32,7 +32,10 @@ import (
 //     suppressed: the fix did not hold, the run hears it again, and what the
 //     re-report reaches is the close-out's hold;
 //  5. a role job's (the final review's) findings ride the same way: the review
-//     tick closes behind its validated answer and the close-out holds.
+//     tick closes behind its validated answer and the close-out holds;
+//  6. a finding carrying a key the record does not know is FOLDED into its
+//     body as a labelled line and the fold is noted in the attempt's
+//     records (tick ryv) — never a rejection of a finished tick's work.
 
 // draftsStore is the run's finding drafts, read and triaged the way the CLI
 // does it: a store over the same repo, remote, branch and run the reconciler
@@ -99,6 +102,7 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 		"An upstream finding routed to another repository",
 		"tick a1",
 		"close-out does not hand over",
+		"breaks done item A1", // the hold names each finding's claim against the done (tick nfo)
 	} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",
@@ -152,6 +156,45 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	}
 	if !routed {
 		t.Error("the upstream finding lost its target repository: a finding routed elsewhere was dropped into this one")
+	}
+
+	// THE DONE EVIDENCE RODE WITH THE DRAFTS (tick nfo), linked and unlinked
+	// alike: the finding that claimed to break the epic's acceptance item kept
+	// its claim and the check that would demonstrate it, and the one reported
+	// without the evidence fields is marked UNLINKED rather than reading as
+	// no claim — the round trip the channel promises, what the worker reported
+	// is what the draft says.
+	var linkedSeen bool
+	for _, finding := range findings {
+		if finding.Title == "A finding the fake runner proposes" {
+			linkedSeen = true
+			if finding.DoneItem != "A1" || finding.DemonstratingCheck != "go" {
+				t.Errorf("the linked draft lost its claim: done_item %q, demonstrating_check %q",
+					finding.DoneItem, finding.DemonstratingCheck)
+			}
+			if finding.Linkage() != runstate.FindingLinkedToAnItem {
+				t.Errorf("linkage %q, want %q", finding.Linkage(), runstate.FindingLinkedToAnItem)
+			}
+			continue
+		}
+		if finding.Linkage() != runstate.FindingUnlinked {
+			t.Errorf("linkage %q, want %q: a finding reported without the evidence fields is accepted and marked",
+				finding.Linkage(), runstate.FindingUnlinked)
+		}
+	}
+	if !linkedSeen {
+		t.Fatal("the finding that carried done evidence was not among the drafts")
+	}
+	// The run's own record says the same thing the drafts do, so the feed
+	// names each finding's claim — a person reading the event stream sees
+	// which done item the reporter says is broken, and which finding made no
+	// claim at all.
+	for _, event := range reconciler.Journal() {
+		if event.Stage == StageFindingFiled && strings.Contains(event.Detail, "A finding the fake runner proposes") {
+			if !strings.Contains(event.Detail, "breaks done item A1") {
+				t.Errorf("the filed event does not carry the claim: %q", event.Detail)
+			}
+		}
 	}
 
 	// The tick's own record names the drafts, so a person reading the tracker
@@ -326,6 +369,78 @@ func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 	}
 	if findings, err := draftsStore(t, f.Repo).Findings(); err != nil || len(findings) != 0 {
 		t.Fatalf("findings %v (err %v): an unreadable block drafts nothing", findings, err)
+	}
+}
+
+// 6. THE FOLD (tick ryv): the 3h0 shape — a worker finishes its tick and
+// its report carries a finding with a key the record does not know, an
+// extra "title_note". The strict reader used to refuse the whole attempt
+// as finding_report_invalid and halt the run for a person over an
+// annotation while the work was fine. The fold: the attempt is accepted,
+// the unknown key and its value ride the finding's body as a labelled
+// line, and the run's records NOTE the fold — the attempt's records say
+// what was kept, so the repair is visible rather than a silent rewrite of
+// what the worker wrote.
+func TestAFindingWithAnUnknownKeyIsFoldedIntoItsBodyAndNoted(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "finding_folds"})
+	repo := f.Repo
+	reconciler, result, err := f.run(repo, fixtureOptions{mode: "finding_folds"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// The attempt was NOT rejected over the annotation: the tick that
+	// reported the folded finding closed, and the run reached the
+	// close-out — the one hold is the one aqm put there, over the draft
+	// waiting for a person, never over the fold itself.
+	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
+		t.Fatalf("failure %+v, want %s: an unknown key is folded, never a refusal of the tick's work",
+			result.Failure, RefusedFindingUntriaged)
+	}
+	if result.Failure.TickID != "co" {
+		t.Fatalf("failure tick %s, want co: the hold belongs to the close-out, not the tick that reported", result.Failure.TickID)
+	}
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Fatalf("a1 was closed %d times, want 1: the fold is not a refusal of the tick's work", got)
+	}
+
+	// The draft keeps the worker's words AND the unknown half: the labelled
+	// fold line rides the body, so a person triaging the finding reads what
+	// the worker actually said — nothing dropped, nothing guessed at.
+	s := draftsStore(t, repo)
+	findings, err := s.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings %v, want the one the block carried", findings)
+	}
+	want := "Discovered beside the work, reported mechanically.\n" +
+		"folded title_note: an annotation the record has no field for"
+	if findings[0].Body != want {
+		t.Errorf("draft body %q, want the worker's body with the unknown key folded in as a labelled line:\n%q",
+			findings[0].Body, want)
+	}
+
+	// The attempt's records NOTE the fold, naming the keys and the attempt:
+	// a fold nobody recorded is indistinguishable from a channel that
+	// silently rewrites what a worker wrote.
+	var noted bool
+	for _, event := range reconciler.Journal() {
+		if event.Stage != StageFindingFolded || event.Tick != "a1" {
+			continue
+		}
+		noted = true
+		if !strings.Contains(event.Detail, `findings[0] "title_note"`) {
+			t.Errorf("the fold note does not name the folded key: %q", event.Detail)
+		}
+		if !strings.Contains(event.Detail, "a1 try 1") {
+			t.Errorf("the fold note does not name the attempt: %q", event.Detail)
+		}
+	}
+	if !noted {
+		t.Errorf("no fold note in the attempt's records: %v", reconciler.Stages("a1"))
 	}
 }
 

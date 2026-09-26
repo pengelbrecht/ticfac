@@ -430,11 +430,56 @@ type RoleResult struct {
 // REQUIRES it: a report that carried no findings block and one whose block said
 // nothing are the same thing, and that is exactly what `findings: []` says —
 // the absence is a stated fact, never a missing key.
+//
+// The findings ride the envelope as the PINNED five-field record (tick nfo):
+// the contract bundle's $defs.finding is closed (additionalProperties: false)
+// at five fields, and this envelope is the one surface the compiled-in schema
+// validates at runtime (reconcile.ValidateRoleResult) — a field the bundle has
+// not adopted would fail a whole role job's answer, not just the finding. The
+// two done-evidence fields ride the report block and the draft the reconciler
+// files, and join the envelope when the bundle adopts them; internal/
+// contracts/parity names the pending set, so the pin bump is a paired change
+// the build forces rather than drift this half carries silently.
 func (r RoleResult) MarshalJSON() ([]byte, error) {
-	type roleResult RoleResult // shed this method, keep the field tags
-	out := roleResult(r)
-	if out.Findings == nil {
-		out.Findings = []Finding{}
+	// The pinned record, field for field as $defs.finding carries it.
+	type pinnedFinding struct {
+		Kind     string `json:"kind"`
+		Title    string `json:"title"`
+		Body     string `json:"body"`
+		Severity string `json:"severity"`
+		Target   string `json:"target"`
+	}
+	type roleResult struct { // the envelope's own shape, findings as pinned
+		SchemaVersion int             `json:"schema_version"`
+		SchemaID      string          `json:"schema_id"`
+		Role          string          `json:"role"`
+		Status        string          `json:"status"`
+		Summary       string          `json:"summary"`
+		Result        map[string]any  `json:"result"`
+		Findings      []pinnedFinding `json:"findings"`
+		Evidence      []EvidenceRef   `json:"evidence,omitempty"`
+		Decisions     []Decision      `json:"decisions,omitempty"`
+	}
+	out := roleResult{
+		SchemaVersion: r.SchemaVersion,
+		SchemaID:      r.SchemaID,
+		Role:          r.Role,
+		Status:        r.Status,
+		Summary:       r.Summary,
+		Result:        r.Result,
+		Evidence:      r.Evidence,
+		Decisions:     r.Decisions,
+	}
+	if len(r.Findings) == 0 {
+		out.Findings = []pinnedFinding{}
+	} else {
+		out.Findings = make([]pinnedFinding, 0, len(r.Findings))
+		for _, finding := range r.Findings {
+			out.Findings = append(out.Findings, pinnedFinding{
+				Kind: finding.Kind, Title: finding.Title, Body: finding.Body,
+				Severity: finding.Severity, Target: finding.Target,
+			})
+		}
 	}
 	return json.Marshal(out)
 }

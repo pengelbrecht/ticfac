@@ -1,0 +1,104 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-gvc",
+  "epic_id": "gvc",
+  "sequence": 120,
+  "state": "gating",
+  "reason": "running the integrated gate for wz0 on 99ef52e2fcbc",
+  "updated_at": "2026-09-26T16:10:22Z",
+  "ticks": [
+    {
+      "tick_id": "2p6",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "3h0",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "klq",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "bse",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "nfo",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "pzp",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "wj6",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "npq",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "jlv",
+      "state": "closed",
+      "attempt": 11
+    },
+    {
+      "tick_id": "qjj",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "ovh",
+      "state": "closed",
+      "attempt": 13
+    },
+    {
+      "tick_id": "9xp",
+      "state": "rejected",
+      "attempt": 14
+    },
+    {
+      "tick_id": "ryv",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "wz0",
+      "state": "integrated",
+      "attempt": 15
+    },
+    {
+      "tick_id": "ce4",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-gvc",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/gvc",
+    "source_sha": "5feef2f602868721b05878fda6fd3a2afff4690b",
+    "integration_ref": "refs/heads/epic/gvc",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:f96b10aefd58876b117f04711f6e6c34d3e72cc50549b5843ec31d68ce984a62",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

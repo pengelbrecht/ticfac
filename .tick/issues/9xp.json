@@ -2,17 +2,20 @@
   "id": "9xp",
   "title": "Close out gvc: retro, then flesh out the next feasible epic",
   "description": "Run the epic-close retro, verifying the code against gvc's acceptance outside-in. Then pick the next feasible epic in soft order and partition it into child ticks including its own EPIC-SKELETON pair.\n\nSpecific to this epic: gvc is the first epic that can absorb its own findings, so the retro should report whether it DID - what it absorbed, against which item, observed or predicted - and that report is itself the first test of jlv's reporting. An epic about absorption that absorbed nothing and cannot say so has not been demonstrated.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
-    "ovh"
+    "ovh",
+    "wz0",
+    "ce4"
   ],
   "parent": "gvc",
   "role": "closeout",
   "acceptance_criteria": "The retro verifies gvc's definition of done item by item against the code, reports what this epic absorbed with item ids and observed-or-predicted status, and the next feasible epic has child ticks and a skeleton",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:32:41.698392Z",
-  "updated_at": "2026-09-22T16:32:41.698392Z"
+  "updated_at": "2026-09-26T08:42:03.060594Z",
+  "started_at": "2026-09-26T08:19:58.843648Z"
 }

@@ -92,9 +92,13 @@ var (
 	// commandIDPattern is the schema's CommandId pattern: the key of a command
 	// table and the value of an acceptance mapping.
 	commandIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-	// acceptanceItemPattern is the schema's Acceptance.propertyNames pattern —
-	// the `A<n>` written in a tick's acceptance criteria.
-	acceptanceItemPattern = regexp.MustCompile(`^A[1-9][0-9]{0,2}$`)
+	// AcceptanceItemPattern is the schema's Acceptance.propertyNames pattern
+	// — the `A<n>` written in a container's acceptance criteria. Exported
+	// because it is the ONE definition of a stable item id: the parser that
+	// reads [A<n>] marks out of an epic's acceptance criteria
+	// (internal/acceptance) reads ids through it, so the id a mark writes and
+	// the id [evidence.acceptance] binds cannot drift apart.
+	AcceptanceItemPattern = regexp.MustCompile(`^A[1-9][0-9]{0,2}$`)
 	// imagePattern is the schema's Sandbox.image pattern: a container image
 	// reference with an optional tag and digest. Deliberately narrow — an
 	// image reference is a name, never a place to hide a shell fragment.
@@ -528,8 +532,8 @@ func validateCommands(cfg *Config, md toml.MetaData, add addFunc) {
 	}
 	for _, item := range sortedKeys(cfg.Evidence.Acceptance) {
 		path := "evidence.acceptance." + item
-		if !acceptanceItemPattern.MatchString(item) {
-			add(path, fmt.Sprintf("%q is not a stable acceptance item id — use A<n> as written in the tick's acceptance criteria (%s)", item, acceptanceItemPattern.String()))
+		if !AcceptanceItemPattern.MatchString(item) {
+			add(path, fmt.Sprintf("%q is not a stable acceptance item id — use A<n> as written in the tick's acceptance criteria (%s)", item, AcceptanceItemPattern.String()))
 		}
 		ref := cfg.Evidence.Acceptance[item]
 		if !commandIDPattern.MatchString(ref) {

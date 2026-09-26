@@ -1,0 +1,16 @@
+{
+  "id": "wz0",
+  "title": "Absorption decisions stand on what was observed, and survive a cold restart",
+  "description": "Absorbed from gvc final-review findings 88ea36a8 (high), c244ce2c, d6356432 and 95f5ee1a (2026-09-26). These bear on gvc's own done, items A3, A5 and A7:\n- combineGating reads a runnable acceptance item that has NO evidence as 'demonstrated' when the oracle observed nothing. An absence of observation is not an observation (A3: running the item is the authoritative verdict).\n- The reporter's done_item and demonstrating_check (nfo) are promised in the prompt but not fed into the absorption decision. Wire them in as inputs (never as the verdict), or stop promising them.\n- A recorded absorption must be finished before the target, evidence-table and acceptance gates in decideFinding, so a restart mid-absorption does not re-decide it differently (A5).\n- The absorption depth bound (qjj) must be recorded on the run branch, so a cold restart applies the same bound (A7).",
+  "notes": "2026-09-26 11:41 - ticfac run epic-gvc: wz0 try 1 (run dispatch #15) reported a finding drafted for triage — defect \"The runstate maintenance fixture fails on this host at base, making the full runstate suite red regardless of any tick's work\" (key 8f39fbbae8a8b27848466d84c53ec43a22708be93a43728b10c4179a82dbf128, severity medium, for this repository). Triage with `ticfac finding gvc 8f39fbbae8a8b27848466d84c53ec43a22708be93a43728b10c4179a82dbf128 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-26 11:41 - ticfac run epic-gvc: wz0 try 1 (run dispatch #15) reported a finding drafted for triage — contract \"The pinned run-state contract's layout entries predate the absorption-era records\" (key 1b09e63d9355e2f9067d7d1c947ca0355c5f1cedc8091f809659e810a165238d, severity low, for this repository). Triage with `ticfac finding gvc 1b09e63d9355e2f9067d7d1c947ca0355c5f1cedc8091f809659e810a165238d --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.",
+  "status": "in_progress",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "gvc",
+  "acceptance_criteria": "A runnable item with no evidence reads as unobserved, never demonstrated; done_item/demonstrating_check reach the decision as inputs; a recorded absorption completes before the gates are re-evaluated; the depth bound is on the run branch and a cold restart honours it; tests cover each; go gate passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T08:41:50.003916Z",
+  "updated_at": "2026-09-26T09:41:24.114367Z",
+  "started_at": "2026-09-26T08:43:55.420684Z"
+}

@@ -1,0 +1,105 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "gvc",
+    "job_id": "run-epic-gvc/tick-ovh/attempt-13",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "4fdcde0a02b5b00afc967142ddd994ea1ff0adf1",
+    "tick_id": "ovh"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "When every runnable item's command fails to run (runner error, timeout or killed command, code<0), Oracle.Observe returns nil, and combineGating's observed==nil branch (internal/reconcile/absorb.go:530-534) returns the prediction as it stands. That prediction only covered UNVERIFIED items. A done [A1 runnable, A2 unverified] where A1 could not run and the classifier says none becomes NOT GATING and goes to the backlog, which is the false negative gvc exists to prevent. Confirmed with the real Oracle, Predictor and combineGating. TestCombineGatingAnswersEveryTierState's last case (absorb_test.go:767) asserts the bug. Fix: in that branch, fall back to absorbing whenever a Runnable item exists and the prediction is not gating.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "combineGating reads a runnable item with no evidence as demonstrated when the oracle observed nothing"
+      },
+      {
+        "body": "scorePredictions runs at close-out admission (dispatch.go:317), after the absorbed fix closed, and gating.ScorePrediction labels a pass INCORRECT. A correct prediction whose fix worked is therefore recorded as wrong, and only a failed fix scores CORRECT. The calibration set gvc promised is systematically mislabelled toward 'raise the threshold'. Score against the commit the finding stood on (before the absorbed tick integrated), or record the result unscoreable, and update score_test.go:156.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Prediction scoring runs on the tree that carries the absorbed fix, so a right prediction scores INCORRECT"
+      },
+      {
+        "body": "klq's acceptance requires xte, wne and gvc to carry marked acceptance. At HEAD all three are prose, and the operator finding (klq, high) is still proposed. Until they are marked, acceptance.Decide refuses on every real epic including gvc itself, so no finding is ever absorbed outside fixtures. This needs a tracker write plus an [evidence.acceptance] binding in .tick/runners.toml, which only a person can land.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Land the [A<n>]-marked acceptance and evidence binding for gvc, xte and wne (klq's unmet item)"
+      },
+      {
+        "body": "decideFinding looks up an existing absorption record only after the Target early return, evidenceTable() and acceptance.Decide (absorb.go:130-172). If the epic's acceptance becomes prose or malformed, or runners.toml stops loading, between a warm and a cold incarnation, the recorded decision is never finished: the record exists with no tick, and the re-derivation reaches a smaller epic. Move the recorded-absorption check to right after the standing-draft check.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Finish a recorded absorption before the target, evidence-table and acceptance gates in decideFinding"
+      },
+      {
+        "body": "--absorption-depth is only a CLI flag (cli.go:360). A warm run started with a raised bound and cold-restarted without the flag stops at the default of 3 over the same git state the warm run would have continued past. Persist the bound in the run's checkpoint or first decision, and read it back on resume.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Record the absorption depth bound on the run branch so a cold restart applies the same bound"
+      },
+      {
+        "body": "nfo carries done_item and demonstrating_check onto the draft, and the worker prompts now say the run runs the named check and scores the claim. decideFinding passes only id, title and body to the oracle and predictor, and nothing scores the reporter's claim. Either give the classifier the claim as evidence and score it, or correct the prompt text in profiles*/closeout-epic.md, implement-tick.md and review-epic.md.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Feed the reporter's done_item and demonstrating_check into the absorption decision, or stop promising it"
+      },
+      {
+        "body": "The absorb, cold re-derivation, recursion-bound and scoring fixtures all call shorttest.EndToEnd and are skipped under the gate's go test -short, so every tick of gvc closed behind a gate that never ran them. CI's non-short step covers them only on the epic PR. Consider a short, fixture-free test for the resume and cold-derivation invariants, or bind an [evidence.acceptance] command that runs the absorb tests without -short.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "The gate's -short run skips every end-to-end absorption test; only CI's full run exercises them"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-gvc/tick-ovh/attempt-13",
+      "commits": 0,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-gvc/ovh/RESULT-ovh.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "The end-to-end absorption, cold re-derivation and scoring tests could not run here: this attempt blocks git push, and the gate's -short run skips them. Confirm CI's non-short go test run on the epic PR."
+  },
+  "validated": true,
+  "requested_at": "2026-09-26T07:54:07Z",
+  "answered_at": "2026-09-26T07:54:07Z",
+  "provenance": {
+    "run_id": "epic-gvc",
+    "tick_id": "ovh",
+    "attempt": 13,
+    "source_ref": "refs/heads/epic/gvc",
+    "source_sha": "4fdcde0a02b5b00afc967142ddd994ea1ff0adf1",
+    "integration_ref": "refs/heads/epic/gvc",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a18ecb497a9cec2060e7eb39d1a970852b96674e8d43fe00952578217b1a7d20",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

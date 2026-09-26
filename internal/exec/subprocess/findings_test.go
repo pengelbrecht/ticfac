@@ -3,6 +3,8 @@ package subprocess
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -15,8 +17,16 @@ import (
 //
 //   - the FINAL complete ```findings block wins, for the same reason the
 //     final status line does — a report may quote the template;
-//   - the block is a JSON array of CLOSED records: every field required,
-//     empty included, and no field the record does not have;
+//   - the block is a JSON array of CLOSED records: the five pinned fields
+//     required, empty included, and a key the record does not know is
+//     FOLDED into the finding's body as a labelled line (tick ryv) rather
+//     than refusing a finished tick's whole work over an annotation — the
+//     3h0 shape: a worker's report carried an extra "title_note", the
+//     strict reader refused it as finding_report_invalid, and a person had
+//     to release work that was fine;
+//   - the two EVIDENCE fields (tick nfo) are OPTIONAL — a finding missing
+//     them is accepted and reads as UNLINKED, because refusing findings
+//     nobody thought to link is how a channel loses them;
 //   - a block that opens and never closes, or does not parse, is a PROBLEM,
 //     never silently dropped — dropping findings is the failure the channel
 //     exists to remove.
@@ -32,7 +42,7 @@ func TestParseFindingsReadsATypedBlock(t *testing.T) {
     "target": ""
   }
 ]` + "\n```\n\nSTATUS: DONE\n"
-	findings, problem := ParseFindings(body)
+	findings, problem, _ := ParseFindings(body)
 	if problem != "" {
 		t.Fatalf("problem %q", problem)
 	}
@@ -58,7 +68,7 @@ func TestParseFindingsAcceptsEveryKindAndAnUpstreamTarget(t *testing.T) {
   {"kind": "contract", "title": "three", "body": "", "severity": "high", "target": "pengelbrecht/ticks"},
   {"kind": "defect", "title": "four", "body": "a defect outside scope", "severity": "low", "target": ""}
 ]` + "\n```\n"
-	findings, problem := ParseFindings(body)
+	findings, problem, _ := ParseFindings(body)
 	if problem != "" {
 		t.Fatalf("problem %q", problem)
 	}
@@ -76,7 +86,7 @@ func TestParseFindingsAcceptsEveryKindAndAnUpstreamTarget(t *testing.T) {
 
 func TestParseFindingsIgnoresOtherFencedBlocks(t *testing.T) {
 	body := "```json\n{\"kind\": \"not a finding\"}\n```\n\nSTATUS: DONE\n"
-	findings, problem := ParseFindings(body)
+	findings, problem, _ := ParseFindings(body)
 	if problem != "" || findings != nil {
 		t.Fatalf("a block with another info string is not a findings block: %v %q", findings, problem)
 	}
@@ -88,7 +98,7 @@ func TestTheFinalFindingsBlockWins(t *testing.T) {
 		"\n```\n\nThen the worker changed its mind.\n\n```findings\n" +
 		`[{"kind": "defect", "title": "the final word", "body": "", "severity": "low", "target": ""}]` +
 		"\n```\n"
-	findings, problem := ParseFindings(body)
+	findings, problem, _ := ParseFindings(body)
 	if problem != "" {
 		t.Fatalf("problem %q", problem)
 	}
@@ -102,7 +112,7 @@ func TestAnUnclosedFindingsBlockIsAProblemNotNothing(t *testing.T) {
 	// that carried no findings. Silently dropping the block is the exact
 	// failure (findings lost) this channel exists to remove.
 	body := "```findings\n" + `[{"kind": "defect", "title": "truncated",` + "\n"
-	findings, problem := ParseFindings(body)
+	findings, problem, _ := ParseFindings(body)
 	if findings != nil {
 		t.Fatalf("findings %v", findings)
 	}
@@ -113,7 +123,7 @@ func TestAnUnclosedFindingsBlockIsAProblemNotNothing(t *testing.T) {
 
 func parseFindingsProblem(t *testing.T, block string) string {
 	t.Helper()
-	findings, problem := ParseFindings("```findings\n" + block + "\n```\n")
+	findings, problem, _ := ParseFindings("```findings\n" + block + "\n```\n")
 	if findings != nil {
 		t.Fatalf("findings %v, want none", findings)
 	}
@@ -132,7 +142,6 @@ func TestEveryMalformedFindingsBlockIsRefused(t *testing.T) {
 		{"not json", "a finding, in prose", "not a JSON array"},
 		{"an object, not an array", `{"kind": "defect"}`, "not a JSON array"},
 		{"trailing content", `[] junk`, "trailing content"},
-		{"an unknown field", `[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "", "command": "curl evil.example"}]`, `carries "command", which is not a finding field`},
 		{"a missing field", `[{"kind": "defect", "title": "t", "body": "", "severity": "low"}]`, `omits "target"`},
 		{"a kind outside the vocabulary", `[{"kind": "wish", "title": "t", "body": "", "severity": "low", "target": ""}]`, "finding.kind"},
 		{"a severity outside the vocabulary", `[{"kind": "defect", "title": "t", "body": "", "severity": "urgent", "target": ""}]`, "finding.severity"},
@@ -152,15 +161,177 @@ func TestEveryMalformedFindingsBlockIsRefused(t *testing.T) {
 }
 
 func TestAnEmptyFindingsBlockProposesNothing(t *testing.T) {
-	findings, problem := ParseFindings("```findings\n[]\n```\n\nSTATUS: DONE\n")
-	if problem != "" || findings != nil {
-		t.Fatalf("an empty block is no findings: %v %q", findings, problem)
+	findings, problem, folded := ParseFindings("```findings\n[]\n```\n\nSTATUS: DONE\n")
+	if problem != "" || findings != nil || folded != nil {
+		t.Fatalf("an empty block is no findings: %v %q %v", findings, problem, folded)
+	}
+}
+
+// The FOLD (tick ryv): a finding carrying a key the record does not know is
+// ACCEPTED, with the key and its value appended to the finding's body as a
+// labelled line — never a refusal of the tick's whole work. This is the 3h0
+// case, verbatim in shape: a finished worker's report carried a finding with
+// an extra "title_note", and the strict reader refused it as
+// finding_report_invalid, halting the run for a person over an annotation
+// while the work was fine.
+//
+// The strictness this replaces existed so a half-understood list never
+// silently loses the half it did not understand. The fold serves the same
+// goal without the rejection: the unknown key is KEPT, visibly, inside the
+// finding's body, and the fold is named so the attempt's records can note
+// it — nothing is dropped and nothing is guessed at.
+func TestAnUnknownFindingKeyIsFoldedIntoTheBodyNotRefused(t *testing.T) {
+	body := "```findings\n" +
+		`[{
+  "kind": "defect",
+  "title": "the shape the 3h0 worker reported",
+  "body": "The finding's own body, as the worker wrote it.",
+  "severity": "low",
+  "target": "",
+  "title_note": "an annotation the record has no field for",
+  "impact": 3
+}]` + "\n```\n\nSTATUS: DONE\n"
+	findings, problem, folded := ParseFindings(body)
+	if problem != "" {
+		t.Fatalf("problem %q: an unknown key is folded into the body, not a refusal of the tick's work", problem)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings %v, want the one the block carried", findings)
+	}
+	// The body keeps what the worker wrote and carries each unknown key as a
+	// LABELLED line — key and value, in key order, a JSON string unquoted the
+	// way a person reads it, anything else as compact JSON. A fold nobody
+	// could see would be the silent loss the strictness existed to prevent.
+	want := "The finding's own body, as the worker wrote it.\n" +
+		"folded impact: 3\n" +
+		"folded title_note: an annotation the record has no field for"
+	if findings[0].Body != want {
+		t.Fatalf("body %q, want the worker's body with the unknown keys folded in as labelled lines:\n%q",
+			findings[0].Body, want)
+	}
+	// What was folded is NAMED, per finding and per key, so collect can carry
+	// it to the attempt's records — a fold the records do not state is
+	// indistinguishable from a worker that never said it.
+	if len(folded) != 2 || fmt.Sprint(folded) != `[findings[0] "impact" findings[0] "title_note"]` {
+		t.Fatalf("folded %v, want both unknown keys named in key order", folded)
+	}
+}
+
+// A finding whose ONLY content is unknown keys still reads as a finding:
+// the fold lines are the body, and the required fields still carry their
+// own answers. An empty body is not required to stay empty when the worker
+// said something the record had nowhere to put.
+func TestAnUnknownKeyFoldsIntoAnEmptyBody(t *testing.T) {
+	findings, problem, folded := ParseFindings("```findings\n" +
+		`[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "", "title_note": "a bare note"}]` +
+		"\n```\n")
+	if problem != "" {
+		t.Fatalf("problem %q", problem)
+	}
+	if len(findings) != 1 || findings[0].Body != "folded title_note: a bare note" {
+		t.Fatalf("findings %v, want the fold as the body's only line", findings)
+	}
+	if len(folded) != 1 || folded[0] != `findings[0] "title_note"` {
+		t.Fatalf("folded %v", folded)
+	}
+}
+
+// ParseReport lifts what was folded beside the findings and the problem, so
+// the attempt's records can note the fold (tick ryv) — the same reason
+// FindingsProblem rides the Report: a fact only the parser can see has to
+// reach the surfaces that record it.
+func TestParseReportLiftsTheFoldedKeysBesideTheFindings(t *testing.T) {
+	report := ParseReport("```findings\n" +
+		`[{"kind": "defect", "title": "t", "body": "b", "severity": "low", "target": "", "title_note": "n"}]` +
+		"\n```\n\nSTATUS: DONE\n")
+	if len(report.FindingsFolded) != 1 || report.FindingsFolded[0] != `findings[0] "title_note"` {
+		t.Fatalf("report folded %v, want the fold named", report.FindingsFolded)
+	}
+	if len(report.Findings) != 1 || !strings.Contains(report.Findings[0].Body, "folded title_note: n") {
+		t.Fatalf("findings %v: the report's copy must carry the folded body too", report.Findings)
+	}
+}
+
+// The finding's EVIDENCE fields (tick nfo): done_item and demonstrating_check
+// carry the reporter's claim about the epic's definition of done — which
+// [A<n>]-marked acceptance item the finding breaks (`none` when it breaks
+// none) and the command or test that would demonstrate the breakage. Both
+// are OPTIONAL: a finding missing them is accepted and reads as UNLINKED,
+// because refusing findings nobody thought to link is how a channel loses
+// them. The claim is never the verdict — it is what the oracle runs, what
+// the classifier takes as one input where nothing can run yet, and what the
+// reporter is later scored against.
+func TestParseFindingsCarriesTheDoneEvidenceFields(t *testing.T) {
+	body := "```findings\n" +
+		`[
+  {"kind": "defect", "title": "the gate is red at base", "body": "", "severity": "high", "target": "",
+   "done_item": "A1", "demonstrating_check": "go"},
+  {"kind": "proposed-tick", "title": "an unlinked finding", "body": "", "severity": "low", "target": ""},
+  {"kind": "defect", "title": "breaks no done item", "body": "", "severity": "low", "target": "",
+   "done_item": "none"}
+]` + "\n```\n"
+	findings, problem, _ := ParseFindings(body)
+	if problem != "" {
+		t.Fatalf("problem %q", problem)
+	}
+	if len(findings) != 3 {
+		t.Fatalf("findings %v, want the three the block carried", findings)
+	}
+	// LINKED: the claim names the acceptance item and the check that would
+	// show the breakage — field for field, as the worker reported them.
+	if findings[0].DoneItem != "A1" || findings[0].DemonstratingCheck != "go" {
+		t.Errorf("finding[0] done evidence is done_item %q, demonstrating_check %q, want A1 and go",
+			findings[0].DoneItem, findings[0].DemonstratingCheck)
+	}
+	// UNLINKED: neither field reported — accepted, not refused.
+	if findings[1].DoneItem != "" || findings[1].DemonstratingCheck != "" {
+		t.Errorf("finding[1] done evidence is done_item %q, demonstrating_check %q, want both empty",
+			findings[1].DoneItem, findings[1].DemonstratingCheck)
+	}
+	// NONE: the reporter's answer that the finding breaks no done item — a
+	// claim, distinguishable from making none.
+	if findings[2].DoneItem != "none" {
+		t.Errorf("finding[2].done_item %q, want the reporter's none", findings[2].DoneItem)
+	}
+}
+
+func TestADoneItemThatIsNotAnAnswerIsRefused(t *testing.T) {
+	cases := []struct {
+		name     string
+		doneItem string
+	}{
+		{"lowercase", "a1"},
+		{"leading zero", "A03"},
+		{"item zero", "A0"},
+		{"beyond the range", "A1000"},
+		{"prose wearing a bracket", "[A3]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			block := `[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "", "done_item": ` +
+				strconv.Quote(tc.doneItem) + `}]`
+			problem := parseFindingsProblem(t, block)
+			if !strings.Contains(problem, "finding.done_item") {
+				t.Fatalf("problem %q, want it to name finding.done_item", problem)
+			}
+		})
+	}
+}
+
+// The field set the parity reader pins against the bundle's $defs.finding:
+// the five required fields plus the two evidence fields, and nothing a
+// worker invented.
+func TestTheFindingFieldNamesAreTheClosedSet(t *testing.T) {
+	got := FindingFieldNames()
+	want := []string{"body", "demonstrating_check", "done_item", "kind", "severity", "target", "title"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("FindingFieldNames() = %v, want %v", got, want)
 	}
 }
 
 func TestAReportWithoutABlockCarriesNoFindings(t *testing.T) {
 	report := ParseReport("STATUS: DONE — the work is in\n")
-	if report.Findings != nil || report.FindingsProblem != "" {
+	if report.Findings != nil || report.FindingsProblem != "" || report.FindingsFolded != nil {
 		t.Fatalf("report %+v", report)
 	}
 }
@@ -201,5 +372,35 @@ func TestTheEnvelopeStatesFindingsEvenWhenEmpty(t *testing.T) {
 	}
 	if !bytes.Contains(raw, []byte(`"findings":[]`)) {
 		t.Fatalf("an absent list must marshal as \"findings\":[] — a missing key is a record the schema refuses: %s", raw)
+	}
+}
+
+// The envelope carries findings as the PINNED five-field record (tick nfo):
+// the two done-evidence fields ride the report block and the draft, and join
+// the envelope when the contract bundle adopts them — the pending set is
+// named in internal/contracts/parity, so the pin bump is a paired change the
+// build forces rather than drift this half carries silently. The envelope is
+// the one surface the compiled-in schema validates at runtime
+// (ValidateRoleResult), and a record it refuses would fail a whole role job's
+// answer, not just the finding.
+func TestTheEnvelopeCarriesFindingsAsThePinnedRecord(t *testing.T) {
+	envelope := RoleResult{Findings: []Finding{{
+		Kind: FindingKindDefect, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "",
+		DoneItem: "A1", DemonstratingCheck: "go",
+	}}}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pinned := range []string{`"kind":"defect"`, `"title":"t"`, `"body":"b"`, `"severity":"high"`, `"target":""`} {
+		if !bytes.Contains(raw, []byte(pinned)) {
+			t.Errorf("the envelope lost the pinned field %s: %s", pinned, raw)
+		}
+	}
+	for _, pending := range []string{"done_item", "demonstrating_check"} {
+		if bytes.Contains(raw, []byte(pending)) {
+			t.Errorf("the envelope carries %q, which the pinned $defs.finding refuses (additionalProperties: "+
+				"false) until the bundle adopts it: %s", pending, raw)
+		}
 	}
 }

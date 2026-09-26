@@ -331,6 +331,80 @@ func TestNoRuleMeansNoForgeAndNoQuestions(t *testing.T) {
 	}
 }
 
+// TestTheCloseoutRefusesToStartWhileAnyChildOfTheEpicIsOpen is the third
+// acceptance of tick 3h0: the close-out does not START while any child of
+// the epic other than itself is open. The production shape was epic-yoh:
+// the live run went straight from the last tick's close into the close-out
+// over four open blockers and opened the epic PR anyway — green over a goal
+// nobody reached, which is the worst answer an unattended factory can give.
+// Here the open child is one a PERSON reopened behind the run's back, which
+// no re-derivation can re-offer (the plan already carries the tick, admitted
+// and closed once), so the close-out has to ask the TRACKER rather than the
+// plan — and refuse rather than start.
+func TestTheCloseoutRefusesToStartWhileAnyChildOfTheEpicIsOpen(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+
+	// While the review runs — the last thing before the close-out — a person
+	// reopens a1, a child the run has already closed.
+	f.wrap = func(inner Executor) Executor {
+		return &trackerMutator{Executor: inner, tracker: f.Tracker, on: "rv",
+			mutate: func(state *trackerState) {
+				tick := state.Ticks["a1"]
+				tick.Status, tick.ClosedReason, tick.ClosedAt = "open", "", ""
+				state.Ticks["a1"] = tick
+			}}
+	}
+
+	r, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateFailed {
+		t.Fatalf("the run ended %s, want failed: an epic whose child was reopened behind the run's back "+
+			"must not close green: %+v", result.State, result.Failure)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutChildrenOpen {
+		t.Fatalf("the run failed as %+v, want a %s refusal naming the open child",
+			result.Failure, RefusedCloseoutChildrenOpen)
+	}
+	if result.Failure.TickID != "co" {
+		t.Errorf("the refusal is filed against %q, want the close-out tick co", result.Failure.TickID)
+	}
+	if !strings.Contains(result.Failure.Message, "a1") {
+		t.Errorf("the refusal does not name a1, the child that is open: %q", result.Failure.Message)
+	}
+	// The close-out never started: no attempt of it exists at all, and the
+	// epic's work and its review closed as they normally would.
+	if f.spec("co") != nil {
+		t.Errorf("the close-out was started although a child of the epic was open")
+	}
+	closed := map[string]bool{}
+	for _, tick := range result.Closed {
+		closed[tick] = true
+	}
+	for _, tick := range []string{"a1", "a2", "b1", "rv"} {
+		if !closed[tick] {
+			t.Errorf("%s did not close before the close-out was refused: closed %v", tick, result.Closed)
+		}
+	}
+	if closed["co"] {
+		t.Errorf("the close-out closed while a child of the epic was open: closed %v", result.Closed)
+	}
+	// And the run said so where a person reads, not only in the terminal
+	// reason a resumed run carries.
+	var rejected bool
+	for _, event := range r.Journal() {
+		if event.Tick == "co" && event.Stage == StageRejected {
+			rejected = true
+		}
+	}
+	if !rejected {
+		t.Errorf("no %s line for co: a refusal that exists only in the terminal reason is one a watcher of "+
+			"the feed cannot see", StageRejected)
+	}
+}
+
 // While no PR exists and none can be opened, the close-out is NOT admitted:
 // nothing is claimed, nothing dispatched, the tick stays open, and the
 // refusal names the precondition rather than reading as a generic failure.

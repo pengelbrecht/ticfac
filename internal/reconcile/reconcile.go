@@ -12,6 +12,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -81,6 +82,34 @@ const (
 	// guard: the same refusal over an unchanged tree halts on the first
 	// repeat, long before this.
 	DefaultAutoResumeCap = 12
+
+	// DefaultAbsorptionDepthBound bounds the absorption recursion (tick qjj):
+	// how many absorptions ONE chain may carry before the run stops for a
+	// person. The number is an argument, so here it is.
+	//
+	// The FIRST link needs no argument: a gating defect discovered in the
+	// ground the epic stands on is the absorption this epic (gvc) exists to
+	// make, and nobody should be woken for it. The SECOND is the case the
+	// bound exists to ALLOW: a defect discovered while fixing the absorbed
+	// one — the fix stood on ground that turned out broken too, the worked
+	// example in gvc's own session (a fixture that made the gate red at
+	// base). A THIRD is already unusual — a run three absorbed fixes deep
+	// is far from the epic anyone asked for — but still more plausibly an
+	// epic that genuinely needs it than a runaway, so it happens without a
+	// person. Past three, the more likely explanation is not an epic that
+	// needs a fourth chained fix but a criterion mis-judging — each fix
+	// manufacturing the next finding — which is exactly what a person should
+	// look at, with the chain the stop carries to judge it by.
+	//
+	// The stop is deliberately RARE: the bound governs the recursion — DEPTH,
+	// not breadth — and only GATING findings extend a chain, so an epic that
+	// absorbs ten independent findings at depth one never sees it. Depth is
+	// the honest measure of the failure mode because it counts how far the
+	// run has travelled from the epic anyone asked for; wall clock bounds
+	// the RESOURCE and every attempt already carries one. If the bound trips
+	// often in practice, the criterion is wrong and the bound is hiding it —
+	// the chain the stop carries is the evidence.
+	DefaultAbsorptionDepthBound = 3
 
 	// DefaultAutoResumeBackoff is the wait before the first automatic
 	// continuation, doubling to AutoResumeBackoffMax. The wait is not
@@ -525,6 +554,44 @@ type Options struct {
 	// answer, not the capability to ask.
 	Classifier Classifier
 
+	// GatingClassifier is the classifier the absorption decision asks where
+	// the epic's done cannot yet be run (tick bse, wired by tick npq): the
+	// same *jev.Client the work-type exchange uses, asked a different
+	// question. Nil — the default — is not a stop: every prediction falls
+	// back to the documented absorb-anyway decision, recorded as a fallback,
+	// because deferring would stop an unattended run on the one actor only a
+	// person can play — the exact stop this tick exists to remove.
+	GatingClassifier gating.Classifier
+
+	// AbsorptionDepthBound bounds the absorption recursion (tick qjj): how
+	// many absorptions ONE chain may carry — a gating finding discovered by
+	// the epic's own plan work is the first link, one discovered while fixing
+	// an absorbed defect is the next, and so on. A gating finding whose chain
+	// already carries the bound's worth of links REFUSES to absorb and holds
+	// the run for a person, carrying the whole chain rather than only the
+	// count. Zero or below is the DEFAULT (DefaultAbsorptionDepthBound),
+	// never "unbounded": a misconfiguration must not silently unbound the
+	// recursion, because an epic that recurses forever is worse than a stop
+	// — nothing announces it.
+	//
+	// The bound is also a RECORD on the run branch (tick wz0, finding
+	// 95f5ee1a): the first decision that needs it records it, and a cold
+	// restart without the flag applies the RECORDED bound rather than
+	// dropping back to the default over git state the warm run had already
+	// absorbed past.
+	AbsorptionDepthBound int
+
+	// AbsorptionDepthExplicit says the bound was named EXPLICITLY on this
+	// invocation — the person's raise, the escape hatch the depth refusal
+	// itself names ("raise the bound with --absorption-depth and run the epic
+	// again"). An explicit bound WINS over the recorded one and rewrites it;
+	// an invocation that names no bound adopts whatever the run branch
+	// records, so a cold restart honours the bound the warm run ran with.
+	// What names it explicitly is the CALLER (the CLI passes the flag only
+	// when the operator wrote it); the reconciler cannot tell a default from
+	// a coincidence, and never guesses.
+	AbsorptionDepthExplicit bool
+
 	// Substrate is the substrate this run executes on, the axis role
 	// routing resolves against (tick 84z): under "cloud" the target
 	// repository's `.tick/runners.cloud.toml` role cells apply (tick 5uo), and a
@@ -721,7 +788,14 @@ const (
 	StageCleanedUp    = "cleaned_up"
 	StageResumed      = "resumed"
 	StageSettled      = "settled"
-	StageRunFinished  = "run_finished"
+	// StageRepairDispatched is the dispatch of the repair job a failed gate
+	// dispatches (tick wj6) — its own line rather than StageDispatched because
+	// the two answer different questions: a dispatch admits a tick's work,
+	// a repair dispatch answers a gate refusal over work already admitted,
+	// and the journal's readers — like the test that proves the run admits
+	// nothing past a refusal — must be able to tell them apart.
+	StageRepairDispatched = "repair_dispatched"
+	StageRunFinished      = "run_finished"
 	// StageBudgetSet is the effective budget, said at ADMISSION while the run
 	// can still be cancelled cheaply. It is NOT run_finished: a subscriber to
 	// the run feed must not be told the run ended seconds after it started,
@@ -769,6 +843,16 @@ const (
 	StageFindingFiled     = "finding_filed"
 	StageFindingDuplicate = "finding_duplicate"
 
+	// StageFindingFolded is the attempt's own record that its report carried
+	// finding keys the finding record does not know (tick ryv): each one was
+	// folded into its finding's body as a labelled line rather than refusing
+	// the attempt — the 3h0 worker's finished tick was once rejected as
+	// finding_report_invalid over an extra "title_note", and a person had to
+	// release work that was fine. The fold itself is the repair; this line is
+	// what keeps the repair visible in the attempt's records instead of a
+	// silent rewrite of what the worker wrote.
+	StageFindingFolded = "finding_folded"
+
 	// StageClosedCarrying is the line a tick's close leaves when it closes
 	// behind findings nobody has triaged yet (tick aqm): the per-tick hold is
 	// gone, the tick closes, and the finding rides to the close-out — so the
@@ -776,6 +860,45 @@ const (
 	// "nothing found". A close with nothing to carry stays silent, exactly
 	// as it always was.
 	StageClosedCarrying = "closed_carrying"
+
+	// The absorption's own stages (tick npq): what the run did with a finding
+	// nobody triaged, said at the moment it does it — an absorption nobody can
+	// see is indistinguishable from a finding that vanished, and a refusal to
+	// decide is a fact a person reading the feed needs at the moment the run
+	// reaches the close-out that will hold on it.
+	//
+	// StageAbsorbed: the finding was judged GATING against the epic's own
+	// definition of done and promoted into the running epic as a tick, placed
+	// before the final review, with nobody triaging.
+	StageAbsorbed = "finding_absorbed"
+	// StageBacklogged: the finding was judged NOT GATING — the done is
+	// reachable with it standing — and promoted to a backlog tick with an
+	// owner. Still reported: unattended means nobody has to be there, not
+	// that nobody is ever told.
+	StageBacklogged = "finding_backlogged"
+	// StageAbsorptionRefused is the refusal's line: the epic's acceptance
+	// carries no [A<n>] items, so its done is prose, nothing can be pointed
+	// at, and the run refuses to absorb rather than guessing — the finding
+	// stays a person's, at the close-out hold.
+	StageAbsorptionRefused = "finding_absorption_refused"
+	// StageAbsorptionBoundExceeded is the recursion's bound, said at the
+	// tick whose attempt reported the finding that would extend a chain
+	// past the bound (tick qjj): the refusal reaches the feed as the run's
+	// hold, and this line is the moment itself — the chain it names is what
+	// a person judges the stop by, so it is recorded where the tick's own
+	// story is, not only in the run-level refusal.
+	StageAbsorptionBoundExceeded = "absorption_bound_exceeded"
+
+	// StagePredictionScored is the line the self-measurement leaves (tick
+	// jlv): a prediction made while an acceptance item was unrunnable became
+	// checkable — the item became runnable — the close-out ran the item's
+	// command, and the prediction was scored against what the done actually
+	// did. Recorded at the CLOSE-OUT tick's scope, once per scored
+	// prediction, because the close-out is the moment the epic's ground
+	// truth arrives; the score itself is the durable record under
+	// .ticfac/runs/<run-id>/predictions/, which a later measurement across
+	// epics reads.
+	StagePredictionScored = "prediction_scored"
 
 	// StageStartFailed is the line a failed Start leaves (tick d6s): an
 	// attempt whose marker is on origin but never started. It is recorded
@@ -999,6 +1122,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.AutoResumeCap == 0 {
 		opts.AutoResumeCap = DefaultAutoResumeCap
+	}
+	if opts.AbsorptionDepthBound <= 0 {
+		opts.AbsorptionDepthBound = DefaultAbsorptionDepthBound
 	}
 	if opts.AutoResumeBackoff <= 0 {
 		opts.AutoResumeBackoff = DefaultAutoResumeBackoff
@@ -2070,6 +2196,24 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
+	// The one the ABSORPTION RECURSION adds (tick qjj): a gating finding
+	// would extend an absorption chain that already carries the bound's
+	// worth of links — a defect discovered while fixing an absorbed defect,
+	// discovered while fixing THAT one, and so on. It is a HOLD rather than
+	// a failure because the next actor is a PERSON, and deliberately so:
+	// unbounded, the recursion is an epic that never closes, which in an
+	// unattended factory is worse than a stop because nothing announces it
+	// — so exceeding the bound IS the stop, and the message carries the FULL
+	// CHAIN that produced it, never only the count, so an operator can see
+	// which finding led to which and judge whether the run was right to keep
+	// going. If the bound trips often in practice, the criterion is wrong
+	// and the bound is hiding it. It is distinct from
+	// RefusedFindingUntriaged because that hold asks a person to triage ONE
+	// finding at the close-out, while this one asks them to judge a RUN that
+	// recursed past what it was bounded to — a different question, sent to
+	// the person with the chain as its evidence.
+	RefusedAbsorptionDepth = "absorption_depth_exceeded"
+
 	// RefusedClaimWidth is the tracker refusing a claim because the epic's
 	// declared dispatch width is already full (tk exit 8, tk.ErrDispatchWidth).
 	//
@@ -2138,6 +2282,31 @@ const (
 	// names the failing job, and the repair is the close-out's own writes —
 	// the retro, the learnings, the records — rather than the epic's tree.
 	RefusedCloseoutCIOnClose = "closeout_ci_failed_on_close" // the close-out's own commits turned CI red
+
+	// The two a RUNNING epic's own liveness adds (tick 3h0). A run is not
+	// working a snapshot: a person absorbs a finding into the epic as a new
+	// tick while the run is going, adds a blocked_by edge to it mid-run, or
+	// reopens a child it had already closed — and the run, which replans as
+	// ticks close, has to see each of those the same way it sees a close,
+	// or it works a graph that stopped existing. The two refusals below are
+	// the boundaries the live epic keeps, each sending the next repair
+	// somewhere different:
+	//
+	//   - RefusedTickBlocked is the dispatch's own read: the tick the run is
+	//     about to claim still names an OPEN blocker, and nothing this run is
+	//     doing can close it — the blocker sits outside the run's plan, so no
+	//     pass of this run reaches it. The repair is the blocker's, wherever
+	//     it lives, and a re-run of the epic resumes from the graph as it
+	//     stands. A blocker the run CAN still close is not refused at all:
+	//     it is dispatched first and the blocked tick waits behind it.
+	//   - RefusedCloseoutChildrenOpen is the close-out's definition-of-done
+	//     gate, wider than its edges: the close-out does not START while any
+	//     child of the epic other than itself is open, blocked or not — a
+	//     close-out that runs past an open blocker could close an epic whose
+	//     definition of done is not met, which is the worst answer an
+	//     unattended factory can give: green over a goal nobody reached.
+	RefusedTickBlocked          = "tick_blocked_open"      // an open blocker the run cannot close
+	RefusedCloseoutChildrenOpen = "closeout_children_open" // a child of the epic is still open at the close-out
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9
@@ -2193,7 +2362,10 @@ const collapsedMessage = "the tick did not pass"
 //     answered BLOCKED or NEEDS_CONTEXT, and the answer is its deliverable;
 //   - RefusedFindingUntriaged: the close-out does not hand over while a
 //     finding of the run is untriaged (tick aqm moved the hold here from the
-//     per-tick close), and the triage is a person's.
+//     per-tick close), and the triage is a person's;
+//   - RefusedAbsorptionDepth: the absorption recursion reached its bound
+//     (tick qjj) — whether the run was right to keep going is a judgement
+//     about the CHAIN, and the chain the stop carries is a person's to read.
 //
 // Every other refusal is a repair another RUN can make — a gate that runs
 // again on a fixed tree, an attempt that is redispatched once its blocker
@@ -2202,7 +2374,7 @@ func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
 		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
-		RefusedClaimWidth:
+		RefusedClaimWidth, RefusedAbsorptionDepth:
 		return true
 	}
 	return false

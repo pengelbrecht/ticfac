@@ -126,12 +126,71 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			for i, finding := range byTick[tick] {
 				fmt.Fprintf(&body, "%d. %s — %s (%s, for %s), triaged %s\n",
 					i+1, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target), finding.Status)
+				// The linkage mark (tick nfo): the claim against the epic's
+				// definition of done — which [A<n>] item the reporter says is
+				// broken, demonstrated by what — or the unlinked mark. The PR
+				// is where a person decides, and a claim the decision cannot
+				// see is evidence the absorption decision does not have.
+				fmt.Fprintf(&body, "   %s\n", finding.LinkageText())
 				if finding.Body != "" {
 					// The finding's own text, indented under its identity: "every
 					// finding's text" is the acceptance, not just every title.
 					fmt.Fprintf(&body, "\n   %s\n", strings.ReplaceAll(finding.Body, "\n", "\n   "))
 				}
 			}
+		}
+	}
+
+	// WHAT THIS EPIC ABSORBED (tick jlv): the close-out must be able to say,
+	// for this epic, what was absorbed, against which acceptance item,
+	// whether the verdict was observed or predicted, and — for each
+	// prediction later checked — whether it was right. An epic that absorbed
+	// silently is an epic whose shape changed with no account of why, so the
+	// body carries every absorption decision with its item id, its basis and
+	// the score of each checked prediction, composed from the same durable
+	// records the retro reads — never from memory of what the run intended.
+	// The write is an overwrite like the whole body is, so a resumed close-out
+	// composed after a second scoring pass carries each fact once.
+	absorptions, err := r.store.Absorptions()
+	if err != nil {
+		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
+	}
+	scored := map[string]runstate.PredictionScore{}
+	if scores, err := r.store.PredictionScores(); err != nil {
+		return "", 0, fmt.Errorf("read the run's checked predictions: %w", err)
+	} else {
+		for _, score := range scores {
+			scored[score.Key] = score
+		}
+	}
+	body.WriteString("\n## What this epic absorbed\n\n")
+	if len(absorptions) == 0 {
+		body.WriteString("This run decided no finding's absorption: nothing was absorbed into " +
+			"the epic, and nothing was backlogged by the run itself.\n")
+	} else {
+		body.WriteString("Every finding the run itself triaged, from the decision records under " +
+			"`.ticfac/runs/" + r.runID + "/absorptions/`, with the score of each prediction the " +
+			"close-out checked against what the done actually did.\n")
+		for _, record := range absorptions {
+			fmt.Fprintf(&body, "\n- tick %s — ", record.TickID)
+			if record.Gating {
+				fmt.Fprintf(&body, "absorbed into the running epic: %s, basis %s%s; %s",
+					verdictLine(record), record.Basis, confidenceLine(record), placementLine(record))
+			} else {
+				fmt.Fprintf(&body, "promoted to a backlog tick with an owner: %s, basis %s%s",
+					verdictLine(record), record.Basis, confidenceLine(record))
+			}
+			if score, checked := scored[record.Key]; checked {
+				fmt.Fprintf(&body, ". The prediction was later CHECKED: the command %s answered %s on %s, and the prediction was %s",
+					score.Check.ID, score.Result, short(score.Commit), score.Score)
+			} else if record.Basis == runstate.AbsorptionPredicted && record.Gating {
+				if record.ItemID != "" {
+					body.WriteString(". The prediction was not checked: no command for the item produced evidence before the close-out")
+				} else {
+					body.WriteString(". The prediction was never checkable by one command: it named no single item (the fallback named every item at risk in its reason)")
+				}
+			}
+			body.WriteString("\n")
 		}
 	}
 

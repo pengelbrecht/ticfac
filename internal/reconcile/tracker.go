@@ -2,9 +2,13 @@ package reconcile
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -447,4 +451,213 @@ func relocate(tracker Tracker, dir string) (Tracker, bool) {
 		return t.In(dir), true
 	}
 	return tracker, false
+}
+
+// ------------------------------------------------- the promotion's writes ---
+
+// tickWriter is the tracker's half of a PROMOTION (tick npq): the two writes
+// an absorption makes — a new tick record, and one blocked_by edge placing it
+// before the final review. A test tracker implements both so the run is
+// observable against the same seam production uses; the tk client implements
+// neither, because `tk --json` publishes no create verb, so the durable
+// wrapper writes the record itself — the same way the cloud control plane
+// does, against the layout contracts/tracker-layout.json pins (required
+// fields, defaults, the id alphabet): the pinned bundle is the contract that
+// authorises the write, and the file this layer writes is the file tk reads.
+type tickWriter interface {
+	// CreateTick files a new tick record. It refuses an id that already
+	// exists, the way the repository refuses a create with no sha: the tracker
+	// is the index.
+	CreateTick(ctx context.Context, tick tk.Tick) (tk.Tick, error)
+	// BlockOn appends one blocker to a tick's blocked_by, idempotently —
+	// the edge a person draws when absorbing a finding into a running epic,
+	// made by the run on the decision a recorded verdict drove.
+	BlockOn(ctx context.Context, tickID, blocker string) error
+}
+
+// tickIDCandidates are the ids one promotion will try, in order, widening the
+// way Go's own minter does — three candidates at a length before the next —
+// from the pinned alphabet and lengths of contracts/tracker-layout.json.
+// Mirrored from the layout rather than asked of tk, because the minting
+// happens where the commit happens and there is no tk verb for it; the
+// layout fixture is what keeps the two honest.
+func tickIDCandidates() []string {
+	const (
+		alphabet  = "abcdefghijklmnopqrstuvwxyz0123456789"
+		minLength = 3
+		maxLength = 4
+		perLength = 3
+	)
+	var out []string
+	for length := minLength; length <= maxLength; length++ {
+		for attempt := 0; attempt < perLength; attempt++ {
+			id := make([]byte, length)
+			for i := range id {
+				n, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+				if err != nil {
+					// No candidate rather than a predictable one: an id a run
+					// cannot mint unpredictably is one a test can force and a
+					// person cannot trust to be unique.
+					return nil
+				}
+				id[i] = alphabet[n.Int64()]
+			}
+			out = append(out, string(id))
+		}
+	}
+	return out
+}
+
+// MintTickID answers a tick id the tracker does not already carry, minted from
+// the pinned alphabet and checked against the tracker's own worktree — the
+// branch carries the records, so the branch is the index. The id is minted
+// BEFORE the absorption record is written, because the record names the tick
+// and the record is what a killed incarnation is resumed by.
+func (d *durableTracker) MintTickID() (string, error) {
+	if err := d.tree.sync(); err != nil {
+		return "", err
+	}
+	for _, id := range tickIDCandidates() {
+		if _, err := os.Stat(trackerRecordPath(d.tree.dir, id)); err == nil {
+			continue // taken: the tracker is the index, not a cache of itself
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		return id, nil
+	}
+	return "", fmt.Errorf("no tick id of the pinned 3-4 character alphabet is free in this tracker: " +
+		"the promotion refuses rather than colliding, and a person must file the tick by hand")
+}
+
+// CreateTick files a new tick record durably — CREATE-IF-ABSENT, so a
+// resume finishing a half-made promotion behind its decision record can
+// call it again on the tick the kill already created: the standing record is
+// the truth and is never clobbered, exactly as a finding draft's repeat is
+// refused by the repository rather than overwriting the original. The write,
+// then the commit and push that make it a record the next wave's worker can
+// read — the same order every tracker write here keeps.
+func (d *durableTracker) CreateTick(ctx context.Context, tick tk.Tick) (tk.Tick, error) {
+	if err := d.tree.sync(); err != nil {
+		return tk.Tick{}, err
+	}
+	if w, ok := d.inner.(tickWriter); ok {
+		created, err := w.CreateTick(ctx, tick)
+		if err != nil {
+			return created, err
+		}
+		if created.ID == "" {
+			// A seam that answered nothing: refused rather than published,
+			// because an empty record is a file the tracker refuses to read.
+			return tk.Tick{}, fmt.Errorf("the tracker's create answered no tick")
+		}
+		if created.ID != tick.ID {
+			return created, fmt.Errorf("the tracker created tick %s, not the %s the decision record names: the "+
+				"promotion is what makes the record resumable, and an id that drifted is a record that lies", created.ID, tick.ID)
+		}
+		// The idempotent resume — the record already there — must publish
+		// nothing rather than a no-change commit, and publish answers ""
+		// for exactly that.
+		tick = created
+	} else {
+		// The tk client has no create verb, so this layer writes the record
+		// itself against the layout the pinned bundle pins — the control
+		// plane's argument one verb along: a tick is a tracked file, and a
+		// file written exactly as the tracker's owner writes it is a record
+		// the tracker reads back unchanged. Create-if-absent is the file's
+		// existence: a record already there is the truth, never clobbered.
+		path := trackerRecordPath(d.tree.dir, tick.ID)
+		if _, err := os.Stat(path); err == nil {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return tk.Tick{}, err
+			}
+			var standing tk.Tick
+			if err := json.Unmarshal(raw, &standing); err != nil {
+				return tk.Tick{}, fmt.Errorf("the record of %s does not read back as a tick: %w", tick.ID, err)
+			}
+			return standing, nil
+		} else if !os.IsNotExist(err) {
+			return tk.Tick{}, err
+		}
+		if err := writeTrackerRecord(d.tree, tick); err != nil {
+			return tk.Tick{}, err
+		}
+	}
+	reason := "create tick " + tick.ID
+	commit, err := d.tree.publish(reason)
+	if err != nil {
+		return tick, fmt.Errorf("%s reached the tracker and not %s: a tracker record that is not pushed is a record "+
+			"the next wave's worker cannot read: %w", reason, d.tree.remote, err)
+	}
+	if commit != "" && d.r != nil {
+		d.r.record(tick.ID, StagePublished, "%s is on %s as %s", reason, d.tree.branch, short(commit))
+	}
+	return tick, nil
+}
+
+// BlockOn places one blocked_by edge durably: the review a promotion places
+// the absorbed tick before is sequenced behind it by the tracker itself, so a
+// COLD re-derivation — a fresh tk graph from the branch — reaches the same
+// epic the warm run arranged, which is the whole of Axiom 1's demand on the
+// placement half.
+func (d *durableTracker) BlockOn(ctx context.Context, tickID, blocker string) error {
+	if err := d.tree.sync(); err != nil {
+		return err
+	}
+	if w, ok := d.inner.(tickWriter); ok {
+		if err := w.BlockOn(ctx, tickID, blocker); err != nil {
+			return err
+		}
+	} else if err := placeBlocker(d.tree, tickID, blocker); err != nil {
+		return err
+	}
+	reason := "place " + tickID + " behind " + blocker
+	commit, err := d.tree.publish(reason)
+	if err != nil {
+		return fmt.Errorf("%s reached the tracker and not %s: an edge that is not pushed is an edge the next "+
+			"wave's worker cannot read: %w", reason, d.tree.remote, err)
+	}
+	if commit != "" && d.r != nil {
+		d.r.record(tickID, StagePublished, "%s is blocked-by %s on %s as %s",
+			tickID, blocker, d.tree.branch, short(commit))
+	}
+	return nil
+}
+
+// writeTrackerRecord writes one tick record exactly the way the tracker's
+// owner writes it: two-space indent, the pinned required fields set, optional
+// fields omitted rather than nulled (contracts/tracker-layout.json — the same
+// fixture the control plane's writer is pinned by, which is what makes a file
+// this layer writes one Go's Store accepts unchanged).
+func writeTrackerRecord(tree *trackerTree, tick tk.Tick) error {
+	raw, err := json.MarshalIndent(tick, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(trackerRecordPath(tree.dir, tick.ID))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(trackerRecordPath(tree.dir, tick.ID), append(raw, '\n'), 0o644)
+}
+
+// placeBlocker rewrites one tick record with a blocker appended, for the
+// tracker that has no verb of its own for the edge. Idempotent: an edge
+// already drawn is left alone, because a resume finishing a half-made
+// promotion re-places the same placement the record names.
+func placeBlocker(tree *trackerTree, tickID, blocker string) error {
+	path := trackerRecordPath(tree.dir, tickID)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s to place it behind %s: %w", tickID, blocker, err)
+	}
+	var tick tk.Tick
+	if err := json.Unmarshal(raw, &tick); err != nil {
+		return fmt.Errorf("the record of %s does not read back as a tick: %w", tickID, err)
+	}
+	if slices.Contains(tick.BlockedBy, blocker) {
+		return nil
+	}
+	tick.BlockedBy = append(tick.BlockedBy, blocker)
+	return writeTrackerRecord(tree, tick)
 }

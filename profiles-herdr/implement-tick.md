@@ -45,7 +45,9 @@ isolated git worktree that is yours alone. Nobody will answer a question.
       "title": "One line an orchestrator can triage without reading the body",
       "body": "What you found and why it matters, in two or three sentences.",
       "severity": "low",
-      "target": ""
+      "target": "",
+      "done_item": "A3",
+      "demonstrating_check": "go"
     }
   ]
   ```
@@ -54,8 +56,18 @@ isolated git worktree that is yours alone. Nobody will answer a question.
   `upstream-tick` (a tick for ANOTHER repository — its `target` names which,
   as owner/name), `contract` (a pinned contract bundle change) or `defect`
   (a defect outside your tick's scope). `severity` is `low`, `medium` or
-  `high`. Every field is required, empty included. A finding is a DRAFT a
-  person promotes — proposing scope costs you nothing, but nothing opens
+  `high`. The five fields above are required, empty included. Two more fields
+  are the finding's EVIDENCE against the epic's definition of done, and they
+  are optional — a finding without them is still accepted, marked unlinked.
+  `done_item` names the `[A<n>]` item of the epic's acceptance criteria that
+  you believe this finding breaks, or `none` when it breaks none; read the
+  epic's tracker record for its `[A<n>]` marks. `demonstrating_check` names
+  the command or test that would demonstrate the breakage — one of the
+  repository's declared testing commands where one fits, else the test's
+  name. The claim is evidence, never the verdict: the run runs the named
+  check where it can, predicts where it cannot yet, and scores the claim
+  against what the done actually did. A finding is a DRAFT a person
+  promotes — proposing scope costs you nothing, but nothing opens
   without the promotion, and the same finding repeated on a later attempt
   deduplicates rather than re-proposing.
 - Commit source and tests only — never build output, caches or coverage files.

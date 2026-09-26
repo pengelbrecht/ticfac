@@ -275,6 +275,68 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 			"so this dispatch waits for a person and not for the clock", unit)
 	}
 
+	// The close-out's definition-of-done precondition (tick 3h0), read fresh
+	// from the tracker rather than from the plan: the close-out does not
+	// START while any child of the epic other than itself is open, whether or
+	// not an edge names it. This is the boundary the production incident
+	// crossed — a close-out dispatched over four open blockers, which opened
+	// the epic PR over an epic whose definition of done was not met — and it
+	// is deliberately WIDER than the edges: blocked_by is the plan's own
+	// sequencing vocabulary, while this gate is about what the epic IS. It
+	// runs before the PR + CI admission because it is the cheaper question and
+	// the one whose answer nothing downstream can repair: no PR needs opening
+	// for an epic whose own children are still open.
+	//
+	// The refusal it raises is first offered to the run's own sequencing
+	// rather than returned flat, as a blockedTickErr carrying the gate's own
+	// refusal (tick 3h0): the incident's ticks landed while the REVIEW ran,
+	// and a role job settles inline, so no re-derivation runs between the
+	// review's close and this settle — a flat refusal would make every
+	// mid-review absorption a failed run and a person's re-run, exactly what
+	// the tick exists to remove. requeueBlocked decides: children the fresh
+	// graph offers as work this run has not done are worked first, and this
+	// settle runs again over a graph that has closed them; only when nothing
+	// this run is doing can close a child does the gate's refusal stand.
+	if entry.Role == "closeout-epic" {
+		open, refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry)
+		if err != nil {
+			return true, err
+		}
+		if refusal != nil {
+			return false, &blockedTickErr{tick: tick, blockers: open, refusal: refusal}
+		}
+		// The self-measurement (tick jlv): every predicted absorption whose
+		// item became runnable is scored against the run HERE — after the
+		// open-children gate has every child closed (the epic's own work is
+		// what made the item runnable), and before the close-out job is
+		// claimed — so the retro the dispatched close-out writes, and the epic
+		// PR's body, report scores that already exist rather than discovering
+		// them. The pass is idempotent across resumes: a prediction is scored
+		// once, keyed by the finding, and the record is on the run branch for a
+		// later measurement across epics.
+		if err := r.scorePredictions(ctx, tick); err != nil {
+			return true, err
+		}
+	}
+
+	// A blocked_by edge added mid-run is honoured HERE, at the last moment
+	// before the claim (tick 3h0): the tracker's own record for this tick is
+	// re-read for its blockers, and each blocker's status is the tracker's
+	// answer. The plan's re-derivation refreshes edges on every close, but a
+	// close is not guaranteed between an edge landing and this dispatch — a
+	// tick can reach the head of an empty window with nothing else to settle
+	// — and an edge the plan never saw is precisely the one this read exists
+	// for. What happens next is requeueBlocked's: a blocker this run can
+	// still close is dispatched first and this tick waits behind it; one it
+	// cannot is refused named. An OPEN blocker was, before this, discovered
+	// by the worker after an hour of thinking — the answer BLOCKED is the
+	// worker's, but the question was the run's to ask for nothing.
+	if open, err := r.openBlockersAtDispatch(ctx, current); err != nil {
+		return false, err
+	} else if len(open) > 0 {
+		return false, &blockedTickErr{tick: tick, blockers: open}
+	}
+
 	if isRoleJob(entry.Role) {
 		// Review and closeout are jobs like any other, on the same executor —
 		// what differs is that the reconciler acts on the ANSWER they return
@@ -293,6 +355,37 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 	}
 
 	return false, nil
+}
+
+// openBlockersAtDispatch is the tracker's own answer about which of this
+// tick's blocked_by edges still name an OPEN tick, read at the moment the run
+// is about to claim it (tick 3h0). It is the fresh half of the boundary the
+// window keeps: mayAdmit reads the PLAN — which a re-derivation refreshes on
+// every close — while this reads the TRACKER, so an edge that landed between
+// two re-derivations, or a blocker a person reopened behind the plan's back,
+// is still seen before anything is claimed or paid for.
+//
+// Only the tick's own blockers are read, one Show per blocker, because the
+// common case carries none and pays nothing — a tick the plan sequenced
+// correctly reaches this read with its edges already closed.
+func (r *Reconciler) openBlockersAtDispatch(ctx context.Context, current tk.Tick) ([]string, error) {
+	if len(current.BlockedBy) == 0 {
+		return nil, nil
+	}
+	var open []string
+	for _, id := range current.BlockedBy {
+		blocker, err := r.tracker.Show(ctx, id)
+		if err != nil {
+			// A blocker the tracker cannot answer for is a fact about the world,
+			// not a guess to make: the plan's own rule — never guess a blocker
+			// closed — is kept here, one edge further out.
+			return nil, fmt.Errorf("read the blocker %s of tick %s: %w", id, current.ID, err)
+		}
+		if blocker.Status != "closed" {
+			open = append(open, id)
+		}
+	}
+	return open, nil
 }
 
 // beginTick claims the tick and starts its attempt, and stops there.
@@ -2327,8 +2420,18 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	// the only outcome here, and it fails CLOSED: a findings block nobody could
 	// read is not a report with no findings.
 	if err := r.fileFindings(ctx, marker, collected); err != nil {
-		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
-			" reported a findings block that could not be read")
+		// The disposal's reason is the error's OWN, not the invalid-block
+		// default: the two refusals this path raises send a person looking
+		// different places (a report that cannot be read at the worker's
+		// block; the recursion's bound at the chain the refusal carries), and
+		// the disposition record is where the next reader starts.
+		disposal := fmt.Sprintf("attempt %d of %s reported a findings block that could not be read",
+			marker.Attempt, marker.TickID)
+		if refusal, ok := err.(*Refusal); ok {
+			disposal = fmt.Sprintf("attempt %d of %s was refused (%s): %s",
+				marker.Attempt, marker.TickID, refusal.Reason, firstLine(refusal.Message))
+		}
+		r.disposeRejected(handle, executor, marker, disposal)
 		return nil, err
 	}
 

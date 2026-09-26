@@ -16,35 +16,73 @@ import (
 //     result.answers gets zero answers and no error.
 //   - The response carries the FULL PROBABILITY MAP, not just a winner:
 //     {choice, confidence, probabilities: {…}}. Confidence is computed from
-//     the shape of that distribution, so a marginal tick is VISIBLY marginal
+//     the shape of that distribution, so a marginal answer is VISIBLY marginal
 //     rather than silently decided.
 //
-// One request is a STATE (every asked tick's own text) plus one Choice
-// question per tick, keyed by tick id. The API documents that questions in
-// one call are "evaluated in parallel and in isolation against the same
-// state" — the isolation is what makes one round trip for a whole epic safe
-// rather than merely cheap, because tick A's classification cannot drag
-// tick B's.
+// One request is a STATE (the material every question is judged against) plus
+// one Choice question per thing asked, keyed by its id. The API documents that
+// questions in one call are "evaluated in parallel and in isolation against the
+// same state" — the isolation is what makes one round trip for a whole batch
+// safe rather than merely cheap, because question A's answer cannot drag
+// question B's.
+//
+// THE CORE IS GENERAL (tick bse, absorbing wne's finding dc02fb31): a Choice
+// question is a question over ANY closed enum — the enum is whatever set of
+// labels the question offers criteria for, and the reader validates every
+// answer against THAT question's own labels. The work-type classification
+// (tick 0ju, epic wne) is this core's first user, and the gating prediction
+// (internal/gating, tick bse, epic gvc) — a Choice over a run's acceptance
+// items plus 'none' — is its second. Neither user's vocabulary lives here:
+// this package knows the WIRE, and each question carries its own enum in.
 
-// criterion is one work type's entry in a Choice question's criteria: the
-// object shape the docs allow — what, not_for, examples. 'not_for' earns its
-// place: construction-vs-diagnosis is the contentious boundary, and a
-// negative example pins a boundary better than another positive one.
-type criterion struct {
+// Criterion is one choice's entry in a Choice question's criteria: the object
+// shape the docs allow — what, not_for, examples. 'not_for' earns its place: a
+// negative example pins a boundary better than another positive one, and the
+// contentious boundary this package's first question had (construction versus
+// diagnosis) is pinned exactly there.
+type Criterion struct {
 	What     string   `json:"what"`
 	NotFor   string   `json:"not_for"`
 	Examples []string `json:"examples"`
 }
 
-// workTypeCriteria is the criteria sent with every Choice question, in the
-// measured shape — an object per work type with what, not_for and examples
-// — carrying the enum's recorded definitions and this repository's own
-// boundary cases as examples (8xd construction against qsn diagnosis, and
-// so on). The exact prose of the 49-tick measurement is not recorded in the
-// tracker, so this is the reconstruction from the recorded shape and
-// definitions, not a copy; a test refuses a criteria table that does not
-// cover exactly [runconfig.WorkTypeNames].
-var workTypeCriteria = map[runconfig.WorkType]criterion{
+// Choice is one option of a [Question]: its label — a member of the closed
+// enum the question asks over; a work type for the classification question, an
+// acceptance item id or 'none' for the gating question — and the criterion
+// that says what the label means. The label and its criterion travel together
+// so a question cannot offer a choice it did not define, and the slice (not a
+// map) is what carries the enum's own ORDER, which a choice derived from a
+// distribution needs to break ties deterministically.
+type Choice struct {
+	// Label is the choice's name on its question's closed enum.
+	Label string
+	// Criterion is what the label means: what it is, what it is not for, and
+	// examples that pin its boundary.
+	Criterion Criterion
+}
+
+// Question is one Choice question over a closed enum: what to judge, in
+// Instructions, and the closed set of answers to judge between, in Choices.
+// The enum is the question — a question offering no choices is a caller
+// defect, refused before the wire.
+type Question struct {
+	// ID keys the question's answer, so it must be unique in a batch.
+	ID string
+	// Instructions say what the question asks.
+	Instructions string
+	// Choices are the closed enum, in the caller's own order.
+	Choices []Choice
+}
+
+// workTypeCriteria is the criteria the classification question sends with
+// every work-type Choice, in the measured shape — an object per work type with
+// what, not_for and examples — carrying the enum's recorded definitions and
+// this repository's own boundary cases as examples (8xd construction against
+// qsn diagnosis, and so on). The exact prose of the 49-tick measurement is not
+// recorded in the tracker, so this is the reconstruction from the recorded
+// shape and definitions, not a copy; a test refuses a criteria table that does
+// not cover exactly [runconfig.WorkTypeNames].
+var workTypeCriteria = map[runconfig.WorkType]Criterion{
 	runconfig.WorkMechanical: {
 		What: "The change is stated, not decided. Done is knowable by construction: the tick already names the exact edit, and carrying it out is applying it.",
 		NotFor: "Work where anything must be worked out first, however small the edit. A one-line change whose shape is not given is not mechanical; " +
@@ -88,24 +126,32 @@ var workTypeCriteria = map[runconfig.WorkType]criterion{
 	},
 }
 
-// question is one Choice question in a request: the tick it asks about, keyed
-// by tick id, against the shared state the request carries.
+// question is one Choice question on the wire: the id, the Choice primitive,
+// the instructions, and the criteria — one entry per label on the closed enum.
 type question struct {
-	ID           string                           `json:"id"`
-	Type         string                           `json:"type"`
-	Instructions string                           `json:"instructions"`
-	Criteria     map[runconfig.WorkType]criterion `json:"criteria"`
+	ID           string               `json:"id"`
+	Type         string               `json:"type"`
+	Instructions string               `json:"instructions"`
+	Criteria     map[string]Criterion `json:"criteria"`
+
+	// order is the enum's own label order, carried beside the wire shape
+	// because the criteria object is unordered JSON and a choice derived from
+	// a distribution needs a deterministic walk to break ties. It is not
+	// serialised; the enum the classifier sees is the criteria object, and
+	// the order is this package's own.
+	order []string
 }
 
-// request is one classifier round trip: the state is every asked tick's own
-// text, and the questions are one per tick.
+// request is one classifier round trip: the state is the material every
+// question is judged against, and the questions are one per thing asked.
 type request struct {
 	State     string     `json:"state"`
 	Questions []question `json:"questions"`
 }
 
-// stateText is the shared state: each asked tick's title, description and
-// acceptance criteria — the input the measurement used — under its id.
+// stateText is the classification question's shared state: each asked tick's
+// title, description and acceptance criteria — the input the measurement
+// used — under its id.
 func stateText(ticks []Tick) string {
 	var builder strings.Builder
 	for i, one := range ticks {
@@ -126,13 +172,36 @@ func stateText(ticks []Tick) string {
 	return builder.String()
 }
 
-// buildRequest assembles the one round trip for a batch. It returns the
-// request and the ids of the ticks actually asked, which is every tick that
-// does NOT carry a role: a role-carrying tick is never classified — the enum
-// has no right answer for "read a diff and judge it", and [roles.*] already
-// maps review and closeout to a model, so asking as well buys a worse answer
-// from a menu that has no right option on it. This is a precondition, not an
-// optimisation.
+// workTypeQuestion builds the classification question for one tick: a Choice
+// over the work-type enum, keyed by tick id, against the shared state the
+// request carries. The criteria are one shared table — the enum is the same
+// for every tick — and the enum's order is [runconfig.WorkTypeNames], which is
+// load-bearing: a tie in a derived choice lands on the cheaper work type.
+func workTypeQuestion(tickID string) question {
+	criteria := make(map[string]Criterion, len(runconfig.WorkTypeNames))
+	order := make([]string, 0, len(runconfig.WorkTypeNames))
+	for _, one := range runconfig.WorkTypeNames {
+		criteria[string(one)] = workTypeCriteria[one]
+		order = append(order, string(one))
+	}
+	return question{
+		ID:   tickID,
+		Type: "choice",
+		Instructions: fmt.Sprintf(
+			"What kind of work is tick %s? Judge only that tick's own text above, on the axis of how much of the work is deciding what to do rather than doing it.",
+			tickID),
+		Criteria: criteria,
+		order:    order,
+	}
+}
+
+// buildRequest assembles the classification round trip for a batch of ticks.
+// It returns the request and the ids of the ticks actually asked, which is
+// every tick that does NOT carry a role: a role-carrying tick is never
+// classified — the enum has no right answer for "read a diff and judge it",
+// and [roles.*] already maps review and closeout to a model, so asking as
+// well buys a worse answer from a menu that has no right option on it. This is
+// a precondition, not an optimisation.
 func buildRequest(ticks []Tick) (request, []string, error) {
 	asked := make([]Tick, 0, len(ticks))
 	seen := make(map[string]bool, len(ticks))
@@ -156,23 +225,68 @@ func buildRequest(ticks []Tick) (request, []string, error) {
 	built := request{State: stateText(asked), Questions: make([]question, 0, len(asked))}
 	ids := make([]string, 0, len(asked))
 	for _, one := range asked {
+		built.Questions = append(built.Questions, workTypeQuestion(one.ID))
+		ids = append(ids, one.ID)
+	}
+	return built, ids, nil
+}
+
+// buildAsk assembles a general round trip: the caller's state, and one wire
+// question per [Question], each carrying its own closed enum as its criteria.
+// The only errors are caller defects the wire would mis-key: a question with
+// no id, two questions sharing one id, a question offering no choices, and
+// choices with no label or a label used twice — the enum is the question, so
+// a broken enum cannot be asked.
+func buildAsk(state string, questions []Question) (request, []string, error) {
+	built := request{State: state, Questions: make([]question, 0, len(questions))}
+	ids := make([]string, 0, len(questions))
+	seen := make(map[string]bool, len(questions))
+	for _, one := range questions {
+		if strings.TrimSpace(one.ID) == "" {
+			return request{}, nil, fmt.Errorf(
+				"a question with no id cannot be keyed into the batch, so the classifier cannot answer it")
+		}
+		if seen[one.ID] {
+			return request{}, nil, fmt.Errorf(
+				"question %s appears twice in the batch: one Choice question is keyed by its id, so a duplicate would answer as one question",
+				one.ID)
+		}
+		seen[one.ID] = true
+		if len(one.Choices) == 0 {
+			return request{}, nil, fmt.Errorf(
+				"question %s offers no choices: a Choice question's closed enum is the question, so an empty one cannot be asked", one.ID)
+		}
+		criteria := make(map[string]Criterion, len(one.Choices))
+		order := make([]string, 0, len(one.Choices))
+		labelSeen := make(map[string]bool, len(one.Choices))
+		for _, choice := range one.Choices {
+			if strings.TrimSpace(choice.Label) == "" {
+				return request{}, nil, fmt.Errorf(
+					"question %s offers a choice with no label: a label is how an answer names its choice", one.ID)
+			}
+			if labelSeen[choice.Label] {
+				return request{}, nil, fmt.Errorf(
+					"question %s offers the label %q twice: one label is one choice, and a duplicate would answer as one", one.ID, choice.Label)
+			}
+			labelSeen[choice.Label] = true
+			criteria[choice.Label] = choice.Criterion
+			order = append(order, choice.Label)
+		}
 		built.Questions = append(built.Questions, question{
-			ID:   one.ID,
-			Type: "choice",
-			Instructions: fmt.Sprintf(
-				"What kind of work is tick %s? Judge only that tick's own text above, on the axis of how much of the work is deciding what to do rather than doing it.",
-				one.ID),
-			Criteria: workTypeCriteria,
+			ID:           one.ID,
+			Type:         "choice",
+			Instructions: one.Instructions,
+			Criteria:     criteria,
+			order:        order,
 		})
 		ids = append(ids, one.ID)
 	}
 	return built, ids, nil
 }
 
-// wireAnswer is one answer as the API returns it. The choice is the argmax
-// and confidence is computed from the shape of the distribution; the
-// distribution is the payload the next stage routes on, and an argmax that
-// throws it away cannot be recovered.
+// wireAnswer is one answer as the API returns it. The choice is the argmax and
+// confidence is computed from the shape of the distribution; the distribution
+// is the payload and an argmax that throws it away cannot be recovered.
 type wireAnswer struct {
 	ID            string             `json:"id"`
 	Choice        string             `json:"choice"`
@@ -237,55 +351,64 @@ func parseResponse(body []byte) (answers answerSet, model string, usage Usage, u
 	return envelope.Result.Result.Answers, envelope.Result.Result.Model, envelope.Result.Result.Usage, ""
 }
 
-// assemble turns one response's answers into the batch's result: one
-// classification per answered tick, one named reason per asked tick that
-// got no valid answer. A work type off the enum in an answer is a protocol
-// change, not a judgement call, so that tick gets no answer and says why —
-// and the rest of the batch survives it, because questions were asked in
-// isolation.
-func assemble(asked []string, answers answerSet, model string, usage Usage) Result {
-	result := Result{
-		Classifications: map[string]Classification{},
-		Unanswered:      map[string]string{},
-		Model:           model,
-		Usage:           usage,
+// assemble turns one response's answers into the asked questions' results: one
+// answer per answered question, one named reason per asked question that got
+// no valid answer. Every answer is validated against ITS OWN question's
+// closed enum — the criteria are the question, so a label off them is a
+// protocol change, not a judgement call — and that question gets no answer
+// and says why, while the rest of the batch survives it, because questions
+// were asked in isolation.
+func assemble(questions []question, askedIDs []string, answers answerSet, model string, usage Usage) AnswerResult {
+	byID := make(map[string]question, len(questions))
+	for _, one := range questions {
+		byID[one.ID] = one
 	}
-	for _, id := range asked {
+	result := AnswerResult{
+		Answers:    map[string]Answer{},
+		Unanswered: map[string]string{},
+		Model:      model,
+		Usage:      usage,
+	}
+	for _, id := range askedIDs {
+		asked := byID[id]
+		known := make(map[string]bool, len(asked.order))
+		for _, label := range asked.order {
+			known[label] = true
+		}
 		one, ok := answers[id]
 		if !ok {
-			result.Unanswered[id] = "no answer came back for this tick"
+			result.Unanswered[id] = "no answer came back for this question"
 			continue
 		}
-		probabilities := make(map[runconfig.WorkType]float64, len(one.Probabilities))
+		probabilities := make(map[string]float64, len(one.Probabilities))
 		offEnum := make([]string, 0)
-		for name, mass := range one.Probabilities {
-			if !runconfig.IsKnownWorkType(name) {
-				offEnum = append(offEnum, name)
+		for label, mass := range one.Probabilities {
+			if !known[label] {
+				offEnum = append(offEnum, label)
 				continue
 			}
-			probabilities[runconfig.WorkType(name)] = mass
+			probabilities[label] = mass
 		}
 		if len(offEnum) > 0 {
 			result.Unanswered[id] = fmt.Sprintf(
-				"the answer put probability on %s, which is not a work type on the closed enum: the enum is the question, so this is a protocol change, not a judgement call",
+				"the answer put probability on %s, which is not a choice on the closed enum this question asked over: the criteria are the question, so this is a protocol change, not a judgement call",
 				quoteList(offEnum))
 			continue
 		}
 		if len(probabilities) == 0 {
-			result.Unanswered[id] = "the answer carries no probability distribution, and the distribution is what the next stage routes on"
+			result.Unanswered[id] = "the answer carries no probability distribution, and the distribution is what the answer is for"
 			continue
 		}
-		choice := runconfig.WorkType(one.Choice)
-		if one.Choice == "" {
-			choice = argmax(probabilities)
-		} else if !runconfig.IsKnownWorkType(one.Choice) {
+		choice := one.Choice
+		if choice == "" {
+			choice = argmax(probabilities, asked.order)
+		} else if !known[choice] {
 			result.Unanswered[id] = fmt.Sprintf(
-				"the answer chose %q, which is not a work type on the closed enum: the enum is the question, so this is a protocol change, not a judgement call",
-				one.Choice)
+				"the answer chose %q, which is not a choice on the closed enum this question asked over: the criteria are the question, so this is a protocol change, not a judgement call",
+				choice)
 			continue
 		}
-		result.Classifications[id] = Classification{
-			TickID:        id,
+		result.Answers[id] = Answer{
 			Choice:        choice,
 			Confidence:    one.Confidence,
 			Probabilities: probabilities,
@@ -294,21 +417,22 @@ func assemble(asked []string, answers answerSet, model string, usage Usage) Resu
 	return result
 }
 
-// argmax is the distribution's own maximum, used only when the answer carried
-// no choice. The distribution, not the argmax, is the payload — routing spends
-// the mass — so the choice here is a label for reading, never a decision.
-func argmax(probabilities map[runconfig.WorkType]float64) runconfig.WorkType {
-	var best runconfig.WorkType
+// argmax is the distribution's own maximum over the question's own choice
+// order, used only when the answer carried no choice. The distribution, not
+// the argmax, is the payload — every decision downstream spends the mass — so
+// the choice here is a label for reading, never a decision. Walking the
+// question's order (not a map) is what makes a tie land deterministically on
+// the enum's own first choice rather than on whatever the map handed over.
+func argmax(probabilities map[string]float64, order []string) string {
+	var best string
 	var bestMass = -1.0
-	// Walk the enum in order, so a tie lands on the cheaper work type
-	// deterministically rather than on whatever the map handed over first.
-	for _, one := range runconfig.WorkTypeNames {
-		mass, ok := probabilities[one]
+	for _, label := range order {
+		mass, ok := probabilities[label]
 		if !ok {
 			continue
 		}
 		if mass > bestMass {
-			best, bestMass = one, mass
+			best, bestMass = label, mass
 		}
 	}
 	return best

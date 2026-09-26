@@ -45,6 +45,10 @@ findings_block() {
 	# discoveries in. Two findings, deliberately different in target: one for
 	# the repository being run, one routed upstream — a worker that discovers
 	# something on ANOTHER tracker names which one, and the draft keeps it.
+	# Since tick nfo the block also carries the first finding's DONE EVIDENCE
+	# (done_item + demonstrating_check), and the second finding deliberately
+	# carries none: a linked finding and an unlinked one are both shapes the
+	# real worker produces, and the drafts must keep both claims honestly.
 	{
 		printf '%s\n' '```findings'
 		printf '%s\n' '[{'
@@ -52,13 +56,37 @@ findings_block() {
 		printf '%s\n' '  "title": "A finding the fake runner proposes",'
 		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
 		printf '%s\n' '  "severity": "high",'
-		printf '%s\n' '  "target": ""'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "go"'
 		printf '%s\n' '}, {'
 		printf '%s\n' '  "kind": "upstream-tick",'
 		printf '%s\n' '  "title": "An upstream finding routed to another repository",'
 		printf '%s\n' '  "body": "",'
 		printf '%s\n' '  "severity": "low",'
 		printf '%s\n' '  "target": "pengelbrecht/ticks"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
+findings_block_local() {
+	# The absorption fixture (tick npq): ONE finding, for the repository being
+	# run, claiming done item A1 — the shape a worker's report carries when the
+	# discovery is this epic's own ground. The upstream half of the two-finding
+	# block is deliberately absent: a routed finding stays a person's at the
+	# close-out, and a test that drives an absorption all the way to a completed
+	# run needs nothing holding the hand-over.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "A finding the fake runner proposes",'
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "done"'
 		printf '%s\n' '}]'
 		printf '%s\n' '```'
 	}
@@ -75,10 +103,219 @@ report_with_findings() {
 		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 }
+
+# The gate-repair worker (tick wj6): the gate failed because a deletion left
+# a stale reference — a check that reads a file the tick deleted. The fake
+# stands in for an agent that read the failing check's output out of the
+# evidence record its inputs name, read the tick's own diff, and made the
+# same small mechanical fix a person made by hand twice on epic-yoh: the
+# harness stops referencing the deleted file.
+repair_gate_failure() {
+	printf 'cat README.md >/dev/null\n' > "$TICFAC_WORKTREE/check.sh"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "repair: the harness stops referencing the deleted file" >/dev/null 2>&1
+}
+
+# The repair that lands work but fixes nothing: its merge is gated again,
+# fails again, and that is the stop that names BOTH failures — the bound on
+# how much a run repairs by itself.
+repair_gate_nothing() {
+	printf 'a repair that did not fix the gate\n' > "$TICFAC_WORKTREE/repair-note.txt"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "repair: a change that fixes nothing" >/dev/null 2>&1
+}
+
+# One side of the wj6 fixture (tick 2p6's conflict_side shape, single-sided):
+# the tick $GATE_BREAK_TICK names deletes a file the gate's own check still
+# references — a deletion whose dependent lives OUTSIDE the files the tick
+# declared — so whichever merge lands it fails the integrated gate with the
+# check's own output naming the missing file.
+gate_break_side() {
+	rm -f "$TICFAC_WORKTREE/stale-ref.txt"
+	commit
+	report
+}
+
+in_gate_break_tick() {
+	case " ${GATE_BREAK_TICK:-a1} " in *" $TICFAC_TICK "*) return 0 ;; esac
+	return 1
+}
+
+findings_block_chain() {
+	# The recursion fixture (tick qjj): ONE finding whose identity is the tick
+	# that reported it, so every attempt of every tick discovers a NEW defect
+	# — an absorbed tick's own work reports the next link of an absorption
+	# chain rather than deduplicating against the finding that created it.
+	# Like finding_local it claims done item A1, so against the observed gate
+	# every link of the chain is judged gating and the chain grows until the
+	# bound stops it.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' "  \"title\": \"A finding the fake runner reports from $TICFAC_TICK\","
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "done"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
+report_with_chained_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_chain
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
+report_with_local_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_local
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
+# The resolve-conflict worker (tick 2p6): every file that still carries
+# git's conflict markers is rewritten as the resolved union — the fake
+# stands in for an agent that read both ticks' records and made the tree
+# both intents live in. The markers are the fixture's own: the reconciler
+# hands the job a worktree cut at the conflicted merge itself.
+resolve_union() {
+	for f in $(grep -rl '^<<<<<<<' "$TICFAC_WORKTREE" --exclude-dir=.git 2>/dev/null); do
+		printf 'resolved by the resolve-conflict job\n' > "$f"
+	done
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "resolve-conflict: $TICFAC_TICK" >/dev/null 2>&1
+}
+
+# One side of a CONTENT conflict between two same-wave ticks (tick 2p6): the
+# ticks $CONFLICT_TICKS names both edit one file that exists at the base, so
+# whichever of them merges second meets a real content conflict.
+#
+# The two workers SYNC before either commits, so both branch from one epic
+# head; the SECOND side then waits out the first's merge, so the conflict is
+# deterministic — the first tick merges cleanly, the second conflicts. The
+# wait is on the other side's .started marker (an event), bounded so a run
+# that never makes the other dispatch still ends and fails the test on its
+# assertion rather than on a timeout.
+conflict_side() {
+	mkdir -p "${CONFLICT_SYNC:?the conflict fixture needs CONFLICT_SYNC}"
+	: > "$CONFLICT_SYNC/$TICFAC_TICK.started"
+	set -- ${CONFLICT_TICKS:?the conflict fixture needs CONFLICT_TICKS}
+	first="$1"
+	needed=$(printf '%s\n' $CONFLICT_TICKS | grep -c .)
+	waited=0
+	while [ "$(ls "$CONFLICT_SYNC" 2>/dev/null | grep -c '\.started$')" -lt "$needed" ] && [ "$waited" -lt 60 ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+	if [ "$TICFAC_TICK" != "$first" ]; then
+		sleep 2
+	fi
+	printf 'the %s side of the shared file\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/shared-work.txt"
+	commit
+	report
+}
+
+in_conflict_ticks() {
+	case " ${CONFLICT_TICKS:-} " in *" $TICFAC_TICK "*) return 0 ;; esac
+	return 1
+}
 case "$mode" in
 report)
 	commit
 	report
+	;;
+conflict)
+	# Two same-wave ticks rewrite one shared file (tick 2p6): whichever
+	# merges second hits a real content conflict, and the run's answer is
+	# the resolve-conflict job — dispatched by the reconciler with role
+	# resolve-conflict, whose fake worker makes the union. Every other
+	# tick behaves like the plain report mode.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		resolve_union
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+conflict_unresolvable)
+	# The same conflict, and a resolve job that cannot resolve it: it
+	# answers BLOCKED over an empty branch — a resolve that asks for a
+	# person, which is the stop the acceptance still names the files for.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		status=BLOCKED
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_repair)
+	# The wj6 shape: a tick deletes a file the gate's own check still
+	# references (a deletion whose dependent lives outside the files the
+	# tick declared), so the merge lands and the integrated gate fails with
+	# the check's own output naming the missing file. The run's answer is the
+	# plan-repair job — dispatched at the policy's ceiling tier, with the
+	# failing check's evidence record in its inputs — whose fake worker makes
+	# the small mechanical fix and reports; the merge is gated again and the
+	# tick closes behind a passing gate without a person.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_failure
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_unresolvable)
+	# The same gate failure, and a repair job that cannot fix it: it answers
+	# BLOCKED over an empty branch — a repair that asks for a person, which is
+	# the stop the acceptance still names both the gate and the repair for.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		status=BLOCKED
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_wrong_repair)
+	# The repair that lands work but fixes nothing: its merge is merged and
+	# gated as usual, the gate fails again over the repaired tree, and that is
+	# the stop naming BOTH failures — one repair per tick is all a run
+	# dispatches.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_nothing
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
 	;;
 stall-then-report)
 	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
@@ -124,6 +361,22 @@ finding)
 	# repository and one routed upstream.
 	commit
 	report_with_findings
+	;;
+finding_local)
+	# The absorption case (tick npq): the work is done, the report is DONE, and
+	# the report carries ONE in-repository finding claiming done item A1 — the
+	# discovery that the absorption decision is driven on.
+	commit
+	report_with_local_findings
+	;;
+finding_chain)
+	# The recursion case (tick qjj): same as finding_local, but the finding's
+	# identity is the reporting tick, so every attempt discovers a NEW defect
+	# and an absorbed tick's own work grows the chain. The run's answer is the
+	# depth bound: a chain at the bound refuses to absorb and stops the run for
+	# a person, carrying the chain that produced the stop.
+	commit
+	report_with_chained_findings
 	;;
 review_finding)
 	# The 604 shape: only the review job reports findings — an upstream
@@ -246,6 +499,39 @@ finding_blocked)
 	elif [ "$TICFAC_TICK" = "a1" ]; then
 		commit
 		report_with_findings
+	else
+		commit
+		report
+	fi
+	;;
+finding_folds)
+	# The fold case (tick ryv): a1's report carries a finding with a key the
+	# record does not know — the 3h0 shape, an extra "title_note" — over
+	# otherwise DONE work. The attempt must be ACCEPTED, not refused as
+	# finding_report_invalid: the finding is drafted with the key folded into
+	# its body as a labelled line, the run's records note the fold, and the
+	# tick closes as it would for any other discovery. Every other tick is
+	# the plain report mode.
+	if [ "$TICFAC_TICK" = "a1" ]; then
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The fake runner also found things outside its tick.\n\n'
+			printf '%s\n' '```findings'
+			printf '%s\n' '[{'
+			printf '%s\n' '  "kind": "proposed-tick",'
+			printf '%s\n' '  "title": "A finding carrying an extra key",'
+			printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+			printf '%s\n' '  "severity": "medium",'
+			printf '%s\n' '  "target": "",'
+			printf '%s\n' '  "title_note": "an annotation the record has no field for"'
+			printf '%s\n' '}]'
+			printf '%s\n' '```'
+			printf '\n'
+			verdict_line
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
 	else
 		commit
 		report

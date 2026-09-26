@@ -77,7 +77,7 @@
       "id": "D31",
       "tick": "sz0",
       "title": "Integration and the integrated gate are a wired boundary, not the reconciler's own half",
-      "go": "The finish is the reconciler's own serial half — collect, merge into the EpicRun integration branch, run the integrated gate the repository declares, close, clean up (advanceFinish) — and a tick never closes behind a gate that did not run.",
+      "go": "The finish is the reconciler's own serial half — collect, merge into the EpicRun integration branch, run the integrated gate the repository declares, close, clean up (advanceFinish) — and a tick never closes behind a gate that did not run. The merge step absorbs a content or add/add conflict by dispatching the resolve-conflict job over the conflicted tree and minting its two-parent merge (ticfac tick 2p6): a resolve that fails is the stop the bare merge refusal always was.",
       "workflow": "Historical — tick mn7 deleted the Workflow implementation this half described (cloudflare/src/epic-reconciler.ts and the client beneath it); the recorded anchors went with it: The reconciler refuses to close a reported tick unless an IntegrationHost is wired; with none, the run ends failed naming the integration boundary rather than writing completed over unproven work. The close-out's close gate also runs BEFORE the integration call — one step left of the local order (there: integrated gate, then CI gate) — so a held gate re-derives every pass without re-performing the merge the row says is still pending.",
       "why": "Recorded before this record existed (the module header's 'one recorded decision'); this entry gives it a number and pins both sides. The boundary is this phase's own sequencing: the serialized publisher (tick ef7) and the container executor (tick k4s) exist, and the Workflow's runs stop at the boundary until the merge-and-gate half is wired as an IntegrationHost. When it is, its integrate() must BE the merge and the gate — or a new decision must record why the host's close is allowed to rest on less.",
       "anchors": [
@@ -85,7 +85,7 @@
           "side": "go",
           "file": "internal/reconcile/finish.go",
           "region": "finish",
-          "digest": "sha256:5e97ecc62888b79bd23cfb3705ed65af9e9cfb28bad2989e84b34e75f222ff55"
+          "digest": "sha256:7eb2f263d1cf034bccf507f32dbe1c0d2c873316245f4c0b116e9079b818e11e"
         }
       ]
     },
