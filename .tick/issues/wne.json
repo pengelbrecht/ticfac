@@ -7,10 +7,10 @@
   "priority": 2,
   "type": "epic",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "A dispatch chooses its worker model from a Jev-classified work type recorded on the run branch: a role-carrying tick is never classified, a role-less tick is classified once and re-read on every later pass including after a restart, routing is on probability mass over the dear work types, an absent or unreachable classifier degrades to [[tier_policy.start]] rather than stopping a run, and the ceiling and the failure ladder still bound everything on top. Proven by a cold re-derivation reaching the same dispatch as the warm process.",
+  "acceptance_criteria": "[A1] A dispatch chooses its worker model from a Jev-classified work type recorded on the run branch.\n[A2] A role-carrying tick is never classified; a role-less tick is classified once and re-read on every later pass, including after a restart.\n[A3] Routing is on probability mass over the dear work types.\n[A4] An absent or unreachable classifier degrades to [[tier_policy.start]] rather than stopping a run.\n[A5] The ceiling and the failure ladder still bound everything on top.\n[A6] Proven by a cold re-derivation reaching the same dispatch as the warm process.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T12:43:12.683158Z",
-  "updated_at": "2026-09-23T20:19:00.296009Z",
+  "updated_at": "2026-09-26T08:41:42.340484Z",
   "closed_at": "2026-09-23T20:19:00.296009Z",
   "closed_reason": "run epic-wne completed; epic PR #32 merged locally with the tk drivers"
 }
