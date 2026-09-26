@@ -2,6 +2,7 @@
   "id": "qjj",
   "title": "Bound the absorption recursion; exceeding the bound is the stop",
   "description": "The criterion in gvc does most of the bounding already: only goal-gating findings absorb, and a goal is finite. What it does not bound is the RECURSION - a defect discovered while fixing an absorbed defect, which may itself gate the done, and so on.\n\nUnbounded, that is an epic that never closes, which in an unattended factory is worse than a stop because nothing announces it. So pick a bound and make EXCEEDING it the thing that stops for a person.\n\nDepth and wall clock are the candidates. Depth is the more honest measure of the failure mode - it counts how far the run has travelled from the epic anyone asked for - while wall clock bounds the resource. They are not exclusive.\n\nTHE PROPERTY THAT MATTERS MORE THAN THE NUMBER: the stop must be RARE AND MEANINGFUL. A bound tuned so it trips routinely rebuilds the human gate this epic exists to remove, wearing a different name. If the bound is tripping often in practice, the criterion is wrong and the bound is hiding it - so the stop must carry the absorption chain that produced it, not just the count, so an operator can see WHICH finding led to which and judge whether the run was right to keep going.\n\nThe ceiling is unchanged and still bounds everything above this.",
+  "notes": "2026-09-26 09:48 - ticfac run epic-gvc: qjj try 1 (run dispatch #12) merged into epic/gvc as 3344718a949c; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -13,6 +14,6 @@
   "acceptance_criteria": "Absorption recursion is bounded, exceeding the bound stops the run for a person, the stop carries the full absorption chain that produced it rather than only a count, the bound is configurable and its default is documented with the reasoning for the number, and go test -short ./... passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T16:31:59.421444Z",
-  "updated_at": "2026-09-26T06:06:14.029509Z",
+  "updated_at": "2026-09-26T07:48:29.734216Z",
   "started_at": "2026-09-26T06:06:14.029508Z"
 }
