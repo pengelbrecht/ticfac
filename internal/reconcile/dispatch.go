@@ -305,6 +305,18 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 		if refusal != nil {
 			return false, &blockedTickErr{tick: tick, blockers: open, refusal: refusal}
 		}
+		// The self-measurement (tick jlv): every predicted absorption whose
+		// item became runnable is scored against the run HERE — after the
+		// open-children gate has every child closed (the epic's own work is
+		// what made the item runnable), and before the close-out job is
+		// claimed — so the retro the dispatched close-out writes, and the epic
+		// PR's body, report scores that already exist rather than discovering
+		// them. The pass is idempotent across resumes: a prediction is scored
+		// once, keyed by the finding, and the record is on the run branch for a
+		// later measurement across epics.
+		if err := r.scorePredictions(ctx, tick); err != nil {
+			return true, err
+		}
 	}
 
 	// A blocked_by edge added mid-run is honoured HERE, at the last moment

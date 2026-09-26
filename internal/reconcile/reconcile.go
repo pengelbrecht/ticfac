@@ -825,6 +825,17 @@ const (
 	// stays a person's, at the close-out hold.
 	StageAbsorptionRefused = "finding_absorption_refused"
 
+	// StagePredictionScored is the line the self-measurement leaves (tick
+	// jlv): a prediction made while an acceptance item was unrunnable became
+	// checkable — the item became runnable — the close-out ran the item's
+	// command, and the prediction was scored against what the done actually
+	// did. Recorded at the CLOSE-OUT tick's scope, once per scored
+	// prediction, because the close-out is the moment the epic's ground
+	// truth arrives; the score itself is the durable record under
+	// .ticfac/runs/<run-id>/predictions/, which a later measurement across
+	// epics reads.
+	StagePredictionScored = "prediction_scored"
+
 	// StageStartFailed is the line a failed Start leaves (tick d6s): an
 	// attempt whose marker is on origin but never started. It is recorded
 	// at TICK scope, carrying the attempt it is about, so a feed reader who

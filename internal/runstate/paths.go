@@ -81,3 +81,11 @@ func AbsorptionPath(runID, key string) string {
 func FindingPath(runID, key string) string {
 	return RunDir(runID) + "/findings/" + key + ".json"
 }
+
+// PredictionScorePath is `.ticfac/runs/<run-id>/predictions/<key>.json`, where
+// <key> is the finding's dedup key — the same key the absorption decision
+// record carries, so a checked prediction is joined to the prediction it
+// scores without any reader guessing (tick jlv).
+func PredictionScorePath(runID, key string) string {
+	return RunDir(runID) + "/predictions/" + key + ".json"
+}
