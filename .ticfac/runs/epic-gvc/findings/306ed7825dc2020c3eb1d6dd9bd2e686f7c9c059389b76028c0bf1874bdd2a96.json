@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "wj6",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-26T00:58:31Z",
+  "triaged_at": "2026-09-26T08:42:47Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "pqs",
   "provenance": {
     "run_id": "epic-gvc",
     "tick_id": "wj6",
