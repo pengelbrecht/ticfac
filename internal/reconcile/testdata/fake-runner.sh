@@ -82,6 +82,43 @@ report_with_findings() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+# The gate-repair worker (tick wj6): the gate failed because a deletion left
+# a stale reference — a check that reads a file the tick deleted. The fake
+# stands in for an agent that read the failing check's output out of the
+# evidence record its inputs name, read the tick's own diff, and made the
+# same small mechanical fix a person made by hand twice on epic-yoh: the
+# harness stops referencing the deleted file.
+repair_gate_failure() {
+	printf 'cat README.md >/dev/null\n' > "$TICFAC_WORKTREE/check.sh"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "repair: the harness stops referencing the deleted file" >/dev/null 2>&1
+}
+
+# The repair that lands work but fixes nothing: its merge is gated again,
+# fails again, and that is the stop that names BOTH failures — the bound on
+# how much a run repairs by itself.
+repair_gate_nothing() {
+	printf 'a repair that did not fix the gate\n' > "$TICFAC_WORKTREE/repair-note.txt"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "repair: a change that fixes nothing" >/dev/null 2>&1
+}
+
+# One side of the wj6 fixture (tick 2p6's conflict_side shape, single-sided):
+# the tick $GATE_BREAK_TICK names deletes a file the gate's own check still
+# references — a deletion whose dependent lives OUTSIDE the files the tick
+# declared — so whichever merge lands it fails the integrated gate with the
+# check's own output naming the missing file.
+gate_break_side() {
+	rm -f "$TICFAC_WORKTREE/stale-ref.txt"
+	commit
+	report
+}
+
+in_gate_break_tick() {
+	case " ${GATE_BREAK_TICK:-a1} " in *" $TICFAC_TICK "*) return 0 ;; esac
+	return 1
+}
+
 # The resolve-conflict worker (tick 2p6): every file that still carries
 # git's conflict markers is rewritten as the resolved union — the fake
 # stands in for an agent that read both ticks' records and made the tree
@@ -158,6 +195,54 @@ conflict_unresolvable)
 		report
 	elif in_conflict_ticks; then
 		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_repair)
+	# The wj6 shape: a tick deletes a file the gate's own check still
+	# references (a deletion whose dependent lives outside the files the
+	# tick declared), so the merge lands and the integrated gate fails with
+	# the check's own output naming the missing file. The run's answer is the
+	# plan-repair job — dispatched at the policy's ceiling tier, with the
+	# failing check's evidence record in its inputs — whose fake worker makes
+	# the small mechanical fix and reports; the merge is gated again and the
+	# tick closes behind a passing gate without a person.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_failure
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_unresolvable)
+	# The same gate failure, and a repair job that cannot fix it: it answers
+	# BLOCKED over an empty branch — a repair that asks for a person, which is
+	# the stop the acceptance still names both the gate and the repair for.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		status=BLOCKED
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_wrong_repair)
+	# The repair that lands work but fixes nothing: its merge is merged and
+	# gated as usual, the gate fails again over the repaired tree, and that is
+	# the stop naming BOTH failures — one repair per tick is all a run
+	# dispatches.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_nothing
+		report
+	elif in_gate_break_tick; then
+		gate_break_side
 	else
 		commit
 		report

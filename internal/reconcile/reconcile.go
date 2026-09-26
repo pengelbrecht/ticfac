@@ -721,7 +721,14 @@ const (
 	StageCleanedUp    = "cleaned_up"
 	StageResumed      = "resumed"
 	StageSettled      = "settled"
-	StageRunFinished  = "run_finished"
+	// StageRepairDispatched is the dispatch of the repair job a failed gate
+	// dispatches (tick wj6) — its own line rather than StageDispatched because
+	// the two answer different questions: a dispatch admits a tick's work,
+	// a repair dispatch answers a gate refusal over work already admitted,
+	// and the journal's readers — like the test that proves the run admits
+	// nothing past a refusal — must be able to tell them apart.
+	StageRepairDispatched = "repair_dispatched"
+	StageRunFinished      = "run_finished"
 	// StageBudgetSet is the effective budget, said at ADMISSION while the run
 	// can still be cancelled cheaply. It is NOT run_finished: a subscriber to
 	// the run feed must not be told the run ended seconds after it started,
