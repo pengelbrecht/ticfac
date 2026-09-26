@@ -1571,3 +1571,4 @@
 {"ts":"2026-09-26T08:42:03.093575Z","tick":"ce4","action":"block","actor":"peter@engelbrecht.dk","epic":"gvc","data":{"blockers":["wz0"],"title":"Prediction scoring compares against the tree the prediction was about"}}
 {"ts":"2026-09-26T08:42:03.155319Z","tick":"9si","action":"create","actor":"peter@engelbrecht.dk","epic":"t8u","data":{"priority":2,"title":"A test that holds a gate slot is not flaky under the suite's own -parallel 12","type":"task"}}
 {"ts":"2026-09-26T08:42:03.217708Z","tick":"lyq","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"Decide whether [evidence.commands] may run at absorption decision time, not only at close-out","type":"task"}}
+{"ts":"2026-09-26T08:43:55.420918Z","tick":"wz0","action":"start","actor":"ticfac","epic":"gvc","data":{"title":"Absorption decisions stand on what was observed, and survive a cold restart"}}
