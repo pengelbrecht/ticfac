@@ -70,6 +70,28 @@ findings_block() {
 	}
 }
 
+findings_block_local() {
+	# The absorption fixture (tick npq): ONE finding, for the repository being
+	# run, claiming done item A1 — the shape a worker's report carries when the
+	# discovery is this epic's own ground. The upstream half of the two-finding
+	# block is deliberately absent: a routed finding stays a person's at the
+	# close-out, and a test that drives an absorption all the way to a completed
+	# run needs nothing holding the hand-over.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "A finding the fake runner proposes",'
+		printf '%s\n' '  "body": "Discovered beside the work, reported mechanically.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "done"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
 report_with_findings() {
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
@@ -117,6 +139,18 @@ gate_break_side() {
 in_gate_break_tick() {
 	case " ${GATE_BREAK_TICK:-a1} " in *" $TICFAC_TICK "*) return 0 ;; esac
 	return 1
+}
+
+report_with_local_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_local
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
 }
 
 # The resolve-conflict worker (tick 2p6): every file that still carries
@@ -292,6 +326,13 @@ finding)
 	# repository and one routed upstream.
 	commit
 	report_with_findings
+	;;
+finding_local)
+	# The absorption case (tick npq): the work is done, the report is DONE, and
+	# the report carries ONE in-repository finding claiming done item A1 — the
+	# discovery that the absorption decision is driven on.
+	commit
+	report_with_local_findings
 	;;
 review_finding)
 	# The 604 shape: only the review job reports findings — an upstream

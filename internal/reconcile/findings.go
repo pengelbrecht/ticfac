@@ -26,6 +26,15 @@ import (
 //     `discovered_from` is never empty again;
 //   - a finding targeting ANOTHER repository keeps its target and is routed
 //     there at promotion, rather than dropped;
+//   - the ABSORPTION DECISION (tick npq) is made where the finding is
+//     discovered, by the run, against the epic's own definition of done
+//     (absorb.go): a gating finding is promoted into the running epic as a
+//     tick placed before the final review, a non-gating one becomes a
+//     backlog tick with an owner, and what the run cannot decide — a routed
+//     finding, an epic whose done is prose — stays a person's at the
+//     close-out. The scope decision is no longer a person's by DEFAULT; it
+//     is a person's where the run's own rules say it must be, and every
+//     decision the run makes is a record on the run branch;
 //   - a tick whose findings are untriaged CLOSES, and the finding rides to the
 //     CLOSE-OUT (tick aqm), which does not hand over while any finding of the
 //     run is untriaged — one decision point at the end, where a person is
@@ -33,10 +42,10 @@ import (
 //
 // The worker never writes the tracker: `.tick/` is a protected prefix, and the
 // draft this package files lives in `.ticfac/`, on the integration branch the
-// run owns. The DRAFT is not a tick: a tick is what a person's promotion
-// creates, which keeps the scope decision human (the 9t0 case — a genuinely
-// useful tick, filed with no provenance and no review — is the failure both
-// halves of that rule exist for).
+// run owns. A promoted tick carries `discovered_from` either way — a person's
+// promotion records the tick they created, the run's promotion creates the tick
+// itself behind a recorded decision — so a promoted tick is never the 9t0
+// shape: filed with no provenance and no review.
 
 // findingSource is the funnel source a worker's report arrives as. A source
 // name is half the dedup key: the same finding, from the same channel, for the
@@ -159,22 +168,36 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			r.record(marker.TickID, StageFindingDuplicate,
 				"finding %s (%q) was already drafted by %s and is %s: nothing new is proposed",
 				key, finding.Title, r.attemptName(original.TickID, original.Attempt), original.Status)
+			// The absorption decision still runs on a repeat (tick npq): a
+			// draft left PROPOSED by an incarnation that was killed between
+			// drafting and deciding is decided by this one, once. A draft a
+			// person or an earlier incarnation already decided is left alone
+			// by the decision's own standing-draft check.
+			if _, err := r.decideFinding(ctx, marker, key, dispatch); err != nil {
+				return err
+			}
 			continue
 		}
 		r.record(marker.TickID, StageFindingFiled,
 			"finding %s drafted for triage: %s %q, severity %s, for %s (discovered by %s), %s",
 			key, finding.Kind, finding.Title, finding.Severity, targetName(finding.Target),
 			r.attemptName(marker.TickID, marker.Attempt), draft.LinkageText())
-		// The tick's own record names the draft, so a person reading the
-		// tracker — not only the run state — sees that a finding is waiting
-		// for them, and sees where to triage it.
-		note := fmt.Sprintf("ticfac run %s: %s reported a finding drafted for triage — %s %q "+
-			"(key %s, severity %s, for %s). Triage with `ticfac finding %s %s --promote-as <tick> --by "+
-			"\"<who>\"`, `--discard --by \"<who>\"`, or — when it was repaired inside this epic — "+
-			"`--fixed-as <commit> --by \"<who>\"`; the tick closes and the finding rides to the close-out, "+
-			"which does not hand over while it is untriaged.",
-			r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key, finding.Severity,
-			targetName(finding.Target), r.opts.EpicID, key)
+		// THE ABSORPTION DECISION (tick npq): the step that used to wait for a
+		// person, taken by the run — a gating finding is promoted into the
+		// running epic before the final review, a non-gating one becomes a
+		// backlog tick with an owner, and what the run cannot decide stays a
+		// person's. The decision is made where the finding is discovered, so
+		// the absorbed tick is fixed before the items it gates are asserted
+		// rather than appended after the review that asserts them.
+		decided, err := r.decideFinding(ctx, marker, key, dispatch)
+		if err != nil {
+			return err
+		}
+		// The tick's own record names what happened to the draft, so a person
+		// reading the tracker — not only the run state — sees the finding and
+		// where it went: the triage commands when the run left it for them,
+		// the tick the run promoted it to when it did not.
+		note := r.findingLeftNote(marker, finding, key, decided)
 		if _, err := r.tracker.Note(ctx, marker.TickID, note); err != nil {
 			return fmt.Errorf("note the drafted finding %s on %s: %w", key, marker.TickID, err)
 		}

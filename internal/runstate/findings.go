@@ -23,15 +23,18 @@ import (
 //     a repeat is refused by the repository and read back as the original,
 //     which is what keeps `discovered_from` naming the attempt that FIRST
 //     reported it;
-//   - TRIAGED by a person, and a triage is the one rewrite: promote records
-//     the tick that was created (and where, when the finding was routed to
-//     another repository), discard records that a person looked and said no,
-//     and FIXED records the commit that repaired it inside the epic (tick her)
-//     — the verdict a repaired finding needs, because there is no tick to
-//     promote it to and a discard would mean the opposite of what happened.
-//     A repeat after promote or discard proposes nothing new; a repeat after
-//     FIXED is the proof the fix did not hold, and it re-opens the draft —
-//     exactly when the run must hear it, never suppress it;
+//   - TRIAGED by a person — or, since tick npq, by the run's own absorption
+//     decision against the epic's definition of done, recorded on the run
+//     branch and attributed to the run — and a triage is the one rewrite:
+//     promote records the tick that was created (and where, when the finding
+//     was routed to another repository), discard records that a person
+//     looked and said no, and FIXED records the commit that repaired it
+//     inside the epic (tick her) — the verdict a repaired finding needs,
+//     because there is no tick to promote it to and a discard would mean the
+//     opposite of what happened. A repeat after promote or discard proposes
+//     nothing new; a repeat after FIXED is the proof the fix did not hold, and
+//     it re-opens the draft — exactly when the run must hear it, never
+//     suppress it;
 //   - a BLOCKER on the close of the tick whose attempts reported it while it
 //     is still `proposed` — a finding nobody triaged is the 604 shape: real,
 //     filed only because an orchestrator read that far, and lost the moment
