@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "npq",
   "attempt": 10,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-26T05:43:05Z",
+  "triaged_at": "2026-09-26T08:43:02Z",
+  "triaged_by": "claude (operator-delegated)",
+  "promoted_as": "lyq",
   "provenance": {
     "run_id": "epic-gvc",
     "tick_id": "npq",
