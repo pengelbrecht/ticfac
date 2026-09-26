@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-gvc",
   "epic_id": "gvc",
-  "sequence": 127,
-  "state": "publishing",
-  "reason": "closing ce4 behind the integrated gate on 807f7b238ec1",
-  "updated_at": "2026-09-26T23:43:20Z",
+  "sequence": 128,
+  "state": "running",
+  "reason": "ce4 is closed",
+  "updated_at": "2026-09-26T23:43:29Z",
   "ticks": [
     {
       "tick_id": "2p6",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "ce4",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 16
     }
   ],
