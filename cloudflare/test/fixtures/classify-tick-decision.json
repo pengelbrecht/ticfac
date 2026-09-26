@@ -43,7 +43,7 @@
     "backend": null,
     "role": null,
     "tier": null,
-    "profile_digest": "sha256:dbbb412d896b88c4fbdb8d3e33679e13482a632baaa56dff854ec031fad513f6",
+    "profile_digest": "sha256:578c7f2d2584046fa7d4e62b7f86595388d05b03ff48ca55e36f2dc2aacd1474",
     "model": "jev-1",
     "context_manifest_digest": "sha256:dbaeb2b6a70cdbd399e4c84838e86df9021fa4bf9df85f42079c11cfd46ad7f3",
     "substrate_protocol": null,
