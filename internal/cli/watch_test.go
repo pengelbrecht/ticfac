@@ -401,7 +401,6 @@ func syncWatchMarker(t *testing.T, repo string, stdout *bytes.Buffer) {
 	t.Fatalf("the watch never showed a sync marker; it did not join the resumed run's feed: %q", stdout.String())
 }
 
-<<<<<<< HEAD
 // The exit table's failed class (tick bot, epic 2jn's A4): a run whose own
 // terminal line says it FAILED — the integrated gate refused the work, a
 // worker answered BLOCKED, the run stopped rather than integrating over an
@@ -467,7 +466,9 @@ func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "ended FAILED") {
 		t.Errorf("the death is not said to the person reading the stream: %q", stderr.String())
-=======
+	}
+}
+
 // TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory: `ticfac watch
 // <epic-id>` follows the run the factory holds for this checkout's project
 // when nothing runs here (tick nyi) — the same one command the operator
@@ -514,6 +515,50 @@ func TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), cloudRun) {
 		t.Errorf("stderr does not name the resolution from epic id to the factory's run:\n%s", stderr.String())
->>>>>>> 7abfa3d1c0f78e6c4ffd1e33c1dcdab2961b2eac
+	}
+}
+
+// A watch that reached the factory's run by EPIC id (tick nyi) names the
+// clearing commands by that epic, never by the factory's `run_` plus hex id
+// it resolved to (tick gtk): the resolved run's source carries the epic the
+// operator typed, so the failed end's resume is one a person can paste.
+func TestWatchByEpicIDNamesTheResumeByTheEpicNotTheFactoryRunID(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e998")
+
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "", nil,
+		reconcile.StageRunFinished, "failed: t1 did not pass: the integrated gate refused the work"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "failed",
+			}}}
+		case request.Path == "/api/runs/"+cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "failed",
+			}}
+		case request.Path == "/api/runs/"+cloudRun+"/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "failed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit %d for the factory's failed run, want %d:\n%s\n%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	if want := statusmodel.ResumeCommand(statusmodel.HostCloud, "epic1"); !strings.Contains(stderr.String(), want) {
+		t.Errorf("the failed end does not name the resume %q by the epic:\n%s", want, stderr.String())
+	}
+	if bad := statusmodel.ResumeCommand(statusmodel.HostCloud, cloudRun); strings.Contains(stderr.String(), bad) {
+		t.Errorf("the failed end names the resume by the factory's run id %q:\n%s", bad, stderr.String())
 	}
 }

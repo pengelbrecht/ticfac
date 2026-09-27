@@ -227,7 +227,11 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 			if err != nil {
 				return nil, "", "", err
 			}
-			return &cloudFeedSource{client: client, runID: resolved, warn: stderr}, "cloud", resolved, nil
+			// The epic id the operator typed rides the source (tick gtk): the
+			// resolved run id is the factory's `run_` plus hex, which spells
+			// no epic for the clearing commands to be addressed by.
+			epicID, _ := epicIDOfRunID(runID)
+			return &cloudFeedSource{client: client, runID: resolved, epic: epicID, warn: stderr}, "cloud", resolved, nil
 		}
 		return runfeed.FileSource(path), "local", runID, nil
 	}
@@ -262,14 +266,10 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 	if err := decodeCloudJSON(data, &response); err != nil {
 		return nil, "", "", err
 	}
-<<<<<<< HEAD
 	// The record's own epic id rides the source: the clearing commands a
 	// hold names are addressed by it, and a cloud run's id (run_ plus hex)
 	// does not spell the epic the way a local run's does (tick gtk).
-	return &cloudFeedSource{client: client, runID: runID, epic: response.Run.Epic, warn: stderr}, "cloud", nil
-=======
-	return &cloudFeedSource{client: client, runID: runID, warn: stderr}, "cloud", runID, nil
->>>>>>> 7abfa3d1c0f78e6c4ffd1e33c1dcdab2961b2eac
+	return &cloudFeedSource{client: client, runID: runID, epic: response.Run.Epic, warn: stderr}, "cloud", runID, nil
 }
 
 // looksLikeCloudRunID reports whether an id can only name a cloud run:
