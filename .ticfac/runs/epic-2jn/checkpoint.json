@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 352,
-  "state": "gating",
-  "reason": "running the integrated gate for il6 on 701db46b9564",
-  "updated_at": "2026-09-27T17:51:58Z",
+  "sequence": 353,
+  "state": "publishing",
+  "reason": "closing il6 behind the integrated gate on 701db46b9564",
+  "updated_at": "2026-09-27T17:53:55Z",
   "ticks": [
     {
       "tick_id": "nwj",
