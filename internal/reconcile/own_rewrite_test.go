@@ -105,7 +105,8 @@ func TestOnlyAStateTheAttemptBranchHeldIsReplacedByItsCollectedHead(t *testing.T
 	const other = "ticfac/run-epic-2jn/tick-rix/attempt-46"
 	wt, _ = attempt(other)
 	amended = amend(wt)
-	foreign := strings.TrimSpace(mustRun(t, repo.Origin, "git", "commit-tree", "-p", repo.Base, "-m", "foreign",
+	foreign := strings.TrimSpace(mustRun(t, repo.Origin, "git",
+		"-c", "user.name=somebody", "-c", "user.email=somebody@example.com", "commit-tree", "-p", repo.Base, "-m", "foreign",
 		strings.TrimSpace(mustRun(t, repo.Origin, "git", "rev-parse", repo.Base+"^{tree}"))))
 	mustRun(t, repo.Origin, "git", "update-ref", refFor(other), foreign)
 	if _, err := r.durableAttemptHead(other, head(amended)); err == nil ||
