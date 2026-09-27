@@ -42,20 +42,16 @@ adopt a new bundle version. Never edit a file under `contracts/` here.
 
 ## image
 
-`image/` — the sandbox image's build context, the container a cloud run
-boots in either role, moved there from `cloud/sandbox` by SPEC §12 Phase 4
-item 4 — is **vendored and pinned**, like `contracts/`. ticks owns the tree:
-its `internal/sandbox` suite runs those scripts from its own copy at
-`cloud/sandbox`, and this repository consumes it at the immutable commit
-recorded in `sandbox.pin.json`, verified offline by digest and git mode on
-every test run (`internal/sandboxpin`), and against GitHub at the pinned ref
-in CI (`go run ./cmd/sandbox check` / `verify-upstream` / `sync`). Two
-repositories carrying one tree with no check between them is how the shipped
-image diverges from the tested one. Never edit a file under `image/` here.
-Change it in ticks, move `ref` in `sandbox.pin.json`, and run
-`go run ./cmd/sandbox sync` — then commit `image/` and `sandbox.pin.json`
-together. The bytes did not change in the move, so the pinned ref is
-unchanged; only where the vendored copy lives here moved.
+`image/` is the sandbox image's build context: the container a cloud run
+boots in either role. **ticfac authors it** (tick r6w). It was ticks'
+`cloud/sandbox`, vendored here and pinned by digest until ticks became
+tracker-only (ticks epic chz); the tree and the suite that runs its scripts
+now live only here, so the image that ships and the image that is tested are
+one tree. Edit `image/` directly. `internal/sandboximage` runs the scripts
+against stub harnesses and real git (end-to-end: `make test` and CI run it, the
+`-short` gate runs its text checks), and checks that the tree on disk is the
+tree `embedded.go` ships. `ticfac factory deploy` builds the image from the
+copy embedded in the binary; nothing fetches it from ticks.
 
 ## Development
 
@@ -64,7 +60,6 @@ go build ./...                    # the ticfac binary
 make test-short                   # the short suite: seconds, and what a tick's gate runs
 make test                         # the full suite, end-to-end included (-timeout 45m)
 go run ./cmd/contracts check      # verify the vendored bundle, offline
-go run ./cmd/sandbox check        # verify the vendored image context, offline
 ```
 
 `-short` means something here (tick miu). `internal/reconcile`,

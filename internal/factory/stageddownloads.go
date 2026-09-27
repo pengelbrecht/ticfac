@@ -23,12 +23,13 @@ import (
 //
 // So the staged copy's downloads are rewritten to survive a drop instead of
 // dying on it. This is the same mechanism SetSandboxTkPins and
-// SetSandboxTicfacPins use — image/ is vendored from ticks and never edited
-// here, while the STAGED copy is the deploy's to specialise.
+// SetSandboxTicfacPins use — the committed image/ tree is left alone, while the
+// STAGED copy is the deploy's to specialise.
 //
-// This belongs upstream in ticks eventually, where it would help everyone
-// building that image on a bad connection rather than only this deploy. Until
-// then, the rewrite lives where the deploy already rewrites.
+// This belongs in image/Dockerfile itself eventually, where it would help
+// everyone building that image on a bad connection rather than only this
+// deploy — possible since ticfac authors image/ (tick r6w). Until then, the
+// rewrite lives where the deploy already rewrites.
 
 // resumableCurlFlags make a download survive a dropped connection AND a
 // stalled one.

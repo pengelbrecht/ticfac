@@ -7,7 +7,7 @@
 # `RESULT-<tick>.md`, exit with a code that says which class of thing happened
 # (docs/design/cloud-factory.md, "Worker agents"; tick tap).
 #
-# It is the container-side half of cloud/factory/src/worker-dispatch.ts. That
+# It is the container-side half of cloudflare/src/worker-dispatch.ts. That
 # module boots the sandbox, probes it, confirms dispatch, waits, collects from
 # git and tears it down; it deliberately does not invent what the container
 # runs. This script is what it runs.
@@ -26,7 +26,7 @@
 # it has to check for is content this script has to promise. `ticks-worker
 # --probe` is that promise: it proves the container's essentials answer and
 # prints WORKER_PROBE_MARKER. Nothing in the dispatcher guesses at it — the
-# constant travels through internal/sandbox (Go), cloud/factory/src/worker-boot.ts
+# constant travels through internal/sandboximage (Go), cloudflare/src/worker-boot.ts
 # (TypeScript) and the shared fixture that pins the three together.
 #
 # WHY IT DOES NOT `exec` THE HARNESS. The orchestrator entrypoint execs, so the
@@ -131,7 +131,8 @@ tick_id="${TICKS_TICK:-}"
 # The rendered role prompt the dispatch resolved for this attempt (tick nue;
 # ticfac yoh tick 9iz). A factory's sandbox dispatch door carries the
 # profile's own prompt TEXT — not a path, not a reference — in this variable,
-# bounded at 64 KiB of printable ASCII plus tab/LF/CR, and the run's records
+# bounded as UTF-8 prose with no control character but tab/LF/CR, at most
+# 65536 bytes (the door's rule since ticfac #66), and the run's records
 # digest exactly that text into `prompt_digest`. When it is set the harness
 # runs on it verbatim; when it is absent (an older factory, or the image
 # driven by hand) the worker renders today's prompt from the checkout. See
@@ -349,7 +350,7 @@ worker_repo_setup() {
 # only channel, so that is where the attempt goes.
 # ---------------------------------------------------------------------------
 # What the shim prints and what heads the report's section. Both are pinned in
-# internal/sandbox/worker.go — the repository's tests assert the agent was
+# internal/sandboximage/sandboximage.go — the repository's tests assert the agent was
 # handed this refusal and that the marker reached the report, and a string
 # edited in one place only would make those assertions test nothing.
 readonly BOUNDARY_TK_DENIED="tk is not available to a worker agent"

@@ -27,7 +27,7 @@ func stagedEntrypoint(t *testing.T) string {
 // image installs as /usr/local/bin/ticks-orchestrator boots ticfac, and boots
 // it with a real base branch rather than the literal "HEAD" (tick udu).
 //
-// Run against the VENDORED image/entrypoint.sh this fails, which is the point:
+// Run against the COMMITTED image/entrypoint.sh this fails, which is the point:
 // that script execs a harness on the ticks skill loop.
 func TestStagedOrchestratorEntrypointExecsTicfac(t *testing.T) {
 	path := stagedEntrypoint(t)
@@ -106,9 +106,9 @@ func TestSetSandboxOrchestratorEntrypointRefusesASecondApplication(t *testing.T)
 
 // Every anchor this rewrite depends on is a STOP when it moves.
 //
-// image/ is vendored from ticks and gets bumped with sandbox.pin.json. The
-// outcome being guarded against is the quiet one: a staged script that bash
-// still accepts and that still boots, but whose override is never reached — a
+// image/entrypoint.sh is edited on its own schedule (ticfac authors it since
+// tick r6w; it was vendored from ticks before). The outcome being guarded
+// against is the quiet one: a staged script that bash still accepts and that still boots, but whose override is never reached — a
 // model orchestrating again, invisible until somebody reads a run log. So the
 // deploy must fail rather than ship it.
 func TestSetSandboxOrchestratorEntrypointRefusesEveryMovedAnchor(t *testing.T) {

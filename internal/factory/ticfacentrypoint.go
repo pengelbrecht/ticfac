@@ -36,15 +36,16 @@ import (
 //     ticfac, so a ticks image that booted `ticfac run-epic` would be a ticks
 //     image that cannot boot at all.
 //
-//   - So it goes where the deploy's other image edits already go. image/ is
-//     ticfac's VENDORED copy of ticks' cloud/sandbox tree, and sandbox.pin.json
-//     states the rule outright: "ticfac never edits a file under image/". CI
-//     enforces it from both ends (`go run ./cmd/sandbox check` and
-//     `verify-upstream`). The STAGED copy is a different thing: SetSandboxTkPins
-//     rewrites the staged Dockerfile's pins, SetSandboxTicfacPins inserts
-//     ticfac's, and MaterializeSandbox rewrites the whole staged tree from the
-//     embedded one on every deploy — so an edit there cannot accumulate and the
-//     vendored bytes are never touched. This is that, applied to entrypoint.sh.
+//   - So it goes where the deploy's other image edits already go. When this
+//     was written image/ was ticfac's VENDORED copy of ticks' cloud/sandbox
+//     tree, pinned by digest, and ticfac could not edit it. The STAGED copy is
+//     a different thing: SetSandboxTkPins rewrites the staged Dockerfile's
+//     pins, SetSandboxTicfacPins inserts ticfac's, and MaterializeSandbox
+//     rewrites the whole staged tree from the embedded one on every deploy —
+//     so an edit there cannot accumulate. This is that, applied to
+//     entrypoint.sh. Since tick r6w ticfac AUTHORS image/, so this block could
+//     now live in image/entrypoint.sh itself; until that fold is done the
+//     staged rewrite stays, and the anchors below still guard it.
 //
 // WHY IT WRAPS THE FUNCTION RATHER THAN PATCHING ITS BODY.
 // The inserted block is appended immediately before the script's final
@@ -53,8 +54,8 @@ import (
 // called after both. The original is kept under another name — captured with
 // `declare -f`, so the capture depends on no text in it — because one phase
 // must still reach it (see below). A rewrite that edited the body would have
-// to match the vendored script's prose, and would break the next time ticks
-// changed a word of it.
+// to match the script's prose, and would break the next time anyone changed a
+// word of it.
 //
 // WHY `review` IS NOT REDIRECTED.
 // A review boot reads a hostile pull request and writes prose; it holds no
@@ -68,7 +69,7 @@ const ticfacEntrypointName = "entrypoint.sh"
 
 // entrypointReDerive is the remedy every anchor refusal ends with. One
 // sentence, because all three failures have the same fix and the same owner.
-const entrypointReDerive = "the vendored entrypoint changed shape under sandbox.pin.json " +
+const entrypointReDerive = "image/entrypoint.sh changed shape " +
 	"and this rewrite has to be re-derived against it (internal/factory/ticfacentrypoint.go). " +
 	"The deploy stops here on purpose: an override that does not apply is a container that boots " +
 	"a model on the skill loop, which is what tick hn0 removed."
@@ -86,8 +87,9 @@ const ticfacEntrypointCloseMarker = "# <<< ticfac run-epic (tick hn0)"
 
 // THE THREE ANCHORS, AND WHY EACH ONE IS A STOP.
 //
-// This rewrite is coupled to three structural facts about a file ticfac does
-// not own and that gets vendor-bumped with sandbox.pin.json. Each is checked,
+// This rewrite is coupled to three structural facts about image/entrypoint.sh,
+// a file edited on its own schedule (it was vendored from ticks until tick
+// r6w; ticfac authors it now). Each is checked,
 // and a missing one FAILS THE DEPLOY. The outcome being guarded against is
 // specific and quiet: a rewrite that still produces a script bash accepts —
 // `bash -n` green, the image builds, the container boots — but whose override
@@ -101,13 +103,13 @@ const ticfacEntrypointCloseMarker = "# <<< ticfac run-epic (tick hn0)"
 //   - a function named `start_harness` is defined. It is what `declare -f`
 //     captures for the review phase and what the block redefines.
 //
-//   - `main` CALLS it by that name. This is the one that matters most: if ticks
-//     renames the call site, the block still parses, still defines
+//   - `main` CALLS it by that name. This is the one that matters most: if an
+//     edit renames the call site, the block still parses, still defines
 //     `start_harness`, and nothing ever calls it. Every other failure is loud
 //     on its own; this one is not.
 //
-// When one of these fires, the rewrite has to be re-derived against the new
-// vendored script — which is a person's job, at the moment the pin moves.
+// When one of these fires, the rewrite has to be re-derived against the edited
+// script — which is a person's job, in the change that moved the anchor.
 var (
 	entrypointMainPattern = regexp.MustCompile(`(?m)^main "\$@"[ \t]*$`)
 
@@ -120,7 +122,7 @@ var (
 // so that a run boot execs `ticfac run-epic` instead of a headless harness.
 //
 // Same contract as SetSandboxTkPins and SetSandboxTicfacPins: the staged copy
-// is edited, the vendored tree is not, and it must run after MaterializeSandbox
+// is edited, the committed tree is not, and it must run after MaterializeSandbox
 // — which writes the staged copy fresh — or it would be appending to a file
 // about to be overwritten.
 func SetSandboxOrchestratorEntrypoint(dir string) error {
@@ -170,8 +172,7 @@ const ticfacEntrypointBlock = ticfacEntrypointMarker + `
 # The orchestrator is a DETERMINISTIC reconciler, not a model following a skill
 # loop. Inserted into the STAGED copy of this script by ` + "`ticfac factory deploy`" + `
 # (internal/factory/ticfacentrypoint.go); it is not in the committed
-# image/entrypoint.sh and cannot be — image/ is ticfac's vendored copy of ticks'
-# cloud/sandbox tree, which ticfac never edits.
+# image/entrypoint.sh, which was vendored from ticks when this was written.
 #
 # Everything main() does before start_harness is unchanged: the clone at the
 # submitted SHA, the run branch, tk's verification, toolchain provisioning, the

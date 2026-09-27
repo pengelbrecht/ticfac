@@ -44,9 +44,10 @@ The Workflow port changed reconciler semantics in places without recording
 those changes anywhere, so the two implementations could diverge with nothing
 stating which is intended (tick `sz0`, from the `pxc` review's finding
 f8ef8154). This is the same drift the vendored contract bundle (`contracts/`,
-verified by `internal/contracts`) and the vendored image context (`image/`,
-verified by `internal/sandboxpin`) are already answered with: **a decision
-recorded in prose with no check is how the copies got here**. So each
+verified by `internal/contracts`) is already answered with — and the image
+context (`image/`) was, by a digest pin, until ticfac took ownership of it
+(tick r6w): **a decision recorded in prose with no check is how the copies got
+here**. So each
 decision here is pinned, not just written.
 
 ## The pin, and the check that holds it

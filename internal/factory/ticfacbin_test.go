@@ -102,7 +102,7 @@ func TestSetSandboxTicfacPinsTeachesTheDockerfileToInstallTicfac(t *testing.T) {
 
 	// TARGETARCH has to be re-declared with NO default before the COPYs.
 	// Measured against docker 29.4.0: a stage declaring `ARG TARGETARCH=amd64`
-	// — which the vendored Dockerfile above does — reports amd64 even for
+	// — which image/Dockerfile above does — reports amd64 even for
 	// `--platform linux/arm64`, so without this line the image would carry the
 	// wrong architecture's orchestrator. A bare re-declaration restores
 	// BuildKit's real value.

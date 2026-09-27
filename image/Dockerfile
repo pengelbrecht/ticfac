@@ -5,7 +5,7 @@
 #
 # ONE image serves every enrolled repository. Enrolling a repo is enrolment,
 # not deployment — it costs zero image work. The image is built and pushed at
-# `tk factory deploy` cadence, pinned to the tk version it embeds, and is
+# `ticfac factory deploy` cadence, pinned to the tk version it embeds, and is
 # rebuilt only when tk, a harness CLI, or the batteries below change.
 #
 # Batteries included, because this factory's project mix is known: Node/TS with
@@ -34,7 +34,7 @@ FROM docker.io/cloudflare/sandbox:0.12.7-python@sha256:6dfa7301e69d3e5cd8e0404b9
 #                  the tk on PATH reports.
 #   TK_SOURCE_REF  the source that tk is built from — a release tag, or a full
 #                  commit for a build that has not been released.
-# `tk factory deploy` rewrites BOTH in its staged copy of this file, to the
+# `ticfac factory deploy` rewrites BOTH in its staged copy of this file, to the
 # version and the source of the binary running the deploy — which is what keeps
 # the container's tk and the bundle it boots the same code.
 #
@@ -56,9 +56,9 @@ ARG CLAUDE_CODE_VERSION=2.1.227
 # against (ticfac tick gjk). It needs Node >= 22.19; the base image carries 22.23.
 ARG PI_VERSION=0.85.1
 
-ARG GO_VERSION=1.24.11
-ARG GO_SHA256_AMD64=bceca00afaac856bc48b4cc33db7cd9eb383c81811379faed3bdbc80edb0af65
-ARG GO_SHA256_ARM64=beaf0f51cbe0bd71b8289b2b6fa96c0b11cd86aa58672691ef2f1de88eb621de
+ARG GO_VERSION=1.27.1
+ARG GO_SHA256_AMD64=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
+ARG GO_SHA256_ARM64=3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec
 
 ARG UV_VERSION=0.12.5
 ARG UV_SHA256_AMD64=68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2
@@ -188,7 +188,7 @@ RUN set -euo pipefail; \
 # released tk does not have it yet — so the image could only ever be one
 # release behind the bundle it boots, and a container booted, streamed, and
 # then died with "unknown command: sandbox". Source removes the lag entirely:
-# the image needs a PUSHED COMMIT, not a published release, and `tk factory
+# the image needs a PUSHED COMMIT, not a published release, and `ticfac factory
 # deploy` pins it to the very source the deploying binary was built from.
 #
 # The Go toolchain this needs is already here — it is one of the batteries
@@ -224,7 +224,7 @@ RUN set -euo pipefail; \
       if ! timeout 60 tk $sub --help >/dev/null 2>&1; then \
         echo "the tk built into this image (${TK_VERSION}, from ${TK_SOURCE_REF}) has no \`tk $sub\`," >&2; \
         echo "but the orchestrator entrypoint runs it. Build the image from a source ref that has" >&2; \
-        echo "the subcommand: ./build.sh --tk-ref <pushed commit>. \`tk factory deploy\` pins" >&2; \
+        echo "the subcommand: ./build.sh --tk-ref <pushed commit>. \`ticfac factory deploy\` pins" >&2; \
         echo "TK_SOURCE_REF to its own source for you." >&2; \
         missing=1; \
       fi; \

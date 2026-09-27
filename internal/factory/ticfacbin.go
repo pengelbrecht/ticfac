@@ -33,20 +33,18 @@ import (
 // deployed from are the same commit by construction.
 //
 // WHY THE BLOCK IS APPENDED TO THE STAGED DOCKERFILE AND NOT COMMITTED.
-// image/ is ticfac's VENDORED copy of ticks' cloud/sandbox tree. sandbox.pin.json
-// states the ownership rule outright — "ticfac never edits a file under image/"
-// — and CI enforces it from both ends: `go run ./cmd/sandbox check` verifies
-// the vendored bytes against the pin offline, and `go run ./cmd/sandbox
-// verify-upstream` fetches ticks at the pinned ref and compares byte for byte.
-// Committing these lines under image/ would fail both. Putting them UPSTREAM in
-// ticks would be worse: ticks' own build context has no ticfac binaries to
-// COPY, so every ticks image build would break on them.
+// When this was written image/ was ticfac's VENDORED copy of ticks'
+// cloud/sandbox tree, pinned by digest and checked against ticks in CI, so
+// committing these lines under image/ would have failed the pin — and ticks'
+// own build context had no ticfac binaries to COPY.
 //
 // So the block goes where the deploy's other image edits already go. The tk
-// pins are rewritten in the STAGED copy by SetSandboxTkPins for exactly this
-// reason, and MaterializeSandbox re-writes that copy from the embedded tree on
-// every deploy — which means the append cannot accumulate and the vendored
-// tree is never touched.
+// pins are rewritten in the STAGED copy by SetSandboxTkPins, and
+// MaterializeSandbox re-writes that copy from the embedded tree on every
+// deploy — which means the append cannot accumulate and the committed tree is
+// never touched. Since tick r6w ticfac authors image/, so the COPY lines could
+// now be committed there (the binaries still have to be staged by the deploy);
+// until that fold is done this stays the one place they are written.
 
 const (
 	// ticfacBinary is the orchestrator itself.
@@ -267,7 +265,7 @@ const ticfacPinMarker = "ARG TICFAC_VERSION="
 // and the install block that copies the staged binaries onto PATH at the end.
 //
 // Same contract as SetSandboxTkPins — the staged copy is edited and the
-// vendored tree is not — with one addition it cannot share: the vendored
+// committed tree is not — with one addition it cannot share: the committed
 // Dockerfile has no ticfac lines to rewrite, so this inserts them.
 func SetSandboxTicfacPins(dir, version string, sums map[string]string) error {
 	if !validTkPin.MatchString(version) {
@@ -335,26 +333,25 @@ func ticfacPinBlock(version string, sums map[string]string) string {
 
 // ticfacInstallBlock is appended to the staged Dockerfile. It is last on
 // purpose: everything above it is identical across deploys of the same
-// vendored tree, so the binaries — the only layer that changes every deploy —
+// image/ tree, so the binaries — the only layer that changes every deploy —
 // invalidate nothing but themselves.
 //
 // `ARG TARGETARCH` is RE-DECLARED with no default, and that is load-bearing
-// rather than tidy. The declaration at the top of the vendored Dockerfile
+// rather than tidy. The declaration at the top of image/Dockerfile
 // carries `=amd64`, and a default SHADOWS the value BuildKit sets: measured
 // against docker 29.4.0, `docker build --platform linux/arm64` on a stage
 // declaring `ARG TARGETARCH=amd64` reports amd64 and resolves
 // `COPY blob-linux-${TARGETARCH}` to the amd64 file. A bare re-declaration
 // restores the real value — verified in the same way, arm64 selecting the
 // arm64 file and amd64 the amd64 one. (That the DEFAULT is wrong for every
-// battery above is a pre-existing fault in the vendored tree, fixable only in
-// ticks; this block does not inherit it.)
+// battery above is a pre-existing fault in image/Dockerfile — fixable here now
+// that ticfac authors image/ (tick r6w), but not yet fixed; this block does
+// not inherit it.)
 const ticfacInstallBlock = `
 # ---------------------------------------------------------------------------
 # ticfac, the orchestrator itself, CROSS-COMPILED INTO THIS BUILD CONTEXT BY
-# THE DEPLOY. This block is not in the committed image/Dockerfile and cannot
-# be: image/ is ticfac's vendored copy of ticks' cloud/sandbox tree
-# (sandbox.pin.json), which ticfac never edits — and ticks, whose build context
-# holds no ticfac binaries, could not carry these COPY lines either.
+# THE DEPLOY. This block is not in the committed image/Dockerfile: the binaries
+# it copies exist only in the staged build context the deploy prepares.
 #
 # Not ` + "`go install`" + `d from the module path the way tk is above: ticfac is a
 # PRIVATE repository, so that would need credentials inside the Docker build.
