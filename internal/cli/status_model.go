@@ -84,8 +84,10 @@ func statusCI(ctx context.Context, repo, epicID string) (*statusmodel.CIInput, e
 	if epicID == "" {
 		return nil, nil
 	}
-	token := forge.ResolveToken()
-	if token == "" {
+	// The same credential ladder doctor and the run read (tick vo4). A ladder
+	// with no rung that answers is "no token" — the honest no-forge answer.
+	token, _, err := resolveForgeToken()
+	if err != nil || token == "" {
 		return nil, nil
 	}
 	out, err := exec.Command("git", "-C", repo, "remote", "get-url", "origin").Output()
