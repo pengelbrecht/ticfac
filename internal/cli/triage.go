@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -57,6 +58,21 @@ import (
 // the person, the same one-var shape newTracker is.
 var triageStdin io.Reader = os.Stdin
 
+// triageStdinIsTerminal reports whether the walk's input is a terminal a
+// person is deciding on. The walk is for a person AT a terminal: anything
+// else — a redirected file, /dev/null, an open pipe nobody will write a
+// verdict into — can only look like a walk that decided nothing (or one that
+// never ends), so the walk refuses it and names the two halves that work
+// without a terminal: the scripted decisions and --json. A seam for exactly
+// the tests that script the person, the same one-var shape triageStdin is.
+var triageStdinIsTerminal = func(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
+}
+
 // The decisions the surface settles, as the person and the agent both spell
 // them. The words are the epic's own (absorb / file / fixed / discard); the
 // letters are their interactive shorthands.
@@ -79,12 +95,15 @@ the epic's close-out while one is untriaged — without typing a 64-hex key.
 
 With no decisions passed, each untriaged finding is walked interactively:
 kind, severity, title, body and the discovering tick, then one word — absorb,
-file, fixed <commit>, discard, skip or quit.
+file, fixed <commit>, discard, skip or quit. The walk reads a person's
+verdicts from a terminal; without one it refuses and names the two halves
+that work without — the decisions below, or --json.
 
 With decisions passed, each is <key-prefix>=<decision>, settled in order:
 d34=absorb (creates the tick under the epic, so the close-out waits on it),
 d34=file (a backlog tick, owned by you), d34=fixed:<commit> (repaired inside
-the epic), d34=discard. A prefix that matches more than one draft is refused
+the epic — the commit must exist in this repository, so the claim is checked,
+not asserted), d34=discard. A prefix that matches more than one draft is refused
 naming them.
 
 The actor defaults from git config (user.name, then user.email). A finding
@@ -171,6 +190,12 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		return exitUsage
 	}
 	epicID := args[0]
+	// The epic id is accepted with its own `epic-` prefix everywhere — a
+	// prefix with nothing behind it names no epic.
+	if strings.TrimPrefix(epicID, "epic-") == "" {
+		fmt.Fprintf(stderr, "ticfac triage %q names no epic\n", epicID)
+		return exitUsage
+	}
 	decisions := make([]scriptedDecision, 0, len(args)-1)
 	for _, arg := range args[1:] {
 		decision, err := parseScriptedDecision(arg)
@@ -186,8 +211,9 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 
 	// The run's address, resolved once for the drafts and the promotions: the
 	// same defaults `run-epic` derives, so the two surfaces name the same
-	// branch for the same epic.
-	repoDir, remoteName, branchName, runName, err := resolveFindingsRun(epicID, *repo, *remote, *branch, *runID)
+	// branch for the same epic — under the epic's CANONICAL id, because the
+	// tick an absorb files names the epic the tracker knows.
+	epicID, repoDir, remoteName, branchName, runName, err := resolveFindingsRun(epicID, *repo, *remote, *branch, *runID)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
 		return exitGeneric
@@ -202,7 +228,7 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		return exitUsage
 	}
 
-	store, err := openFindingsStore(epicID, repoDir, remoteName, branchName, runName)
+	store, _, err := openFindingsStore(epicID, repoDir, remoteName, branchName, runName)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
 		return exitGeneric
@@ -270,7 +296,7 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 			}
 			continue
 		}
-		result := settleTriage(store, promo, epicID, actor, *finding, decision.verb, decision.commit,
+		result := settleTriage(store, promo, epicID, actor, *finding, decision.verb, decision.commit, repoDir,
 			!*asJSON, stdout)
 		results = append(results, result)
 		if result.Error != "" {
@@ -322,18 +348,40 @@ type triageDecisionsJSON struct {
 }
 
 // triageWalk settles the drafts a person reads one at a time: the finding's
-// own text, then its verdict, one word per draft. A skip and a closed stream
-// are honest stops, not failures — the finding stays proposed, the walk says
-// so, and the close-out keeps holding the hand-over.
+// own text, then its verdict, one word per draft. The walk is for a person AT
+// a terminal — anything else is refused, naming the halves that work without
+// one — and a skip and a closed stream are honest stops, not failures: the
+// finding stays proposed, the walk says so, and the close-out keeps holding
+// the hand-over. A settle error is not an honest stop: it settled nothing, so
+// the walk ends failed, never reporting the gate clear while a draft still
+// holds it.
 func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.Finding,
 	repoDir, remoteName, branchName, runName string, in io.Reader, stdout, stderr io.Writer) int {
+	if !triageStdinIsTerminal(in) {
+		fmt.Fprintf(stderr, "ticfac triage %s: the interactive walk reads a person's verdicts from a terminal, "+
+			"and this input is not one.\n", epicID)
+		fmt.Fprintf(stderr, "settle the drafts by short key prefix — ticfac triage %s <key-prefix>=absorb|file|fixed:<commit>|discard "+
+			"— or list them with ticfac triage %s --json.\n", epicID, epicID)
+		return exitUsage
+	}
 	reader := bufio.NewReader(in)
 	promo := &lazyPromotions{opts: reconcile.PromotionOptions{
 		Repo: repoDir, Remote: remoteName, Branch: branchName, RunID: runName,
 	}}
 	defer promo.close()
 
-	settled, left := 0, len(waiting)
+	settled, left, failed := 0, len(waiting), false
+	// unfinished is every stop that leaves drafts waiting: the summary the
+	// person reads, and the exit code that agrees with what actually happened
+	// — failed when any decision settled nothing.
+	unfinished := func() int {
+		fmt.Fprintf(stdout, "run %s: %d settled, %d still waiting for a person; the epic's close-out does not "+
+			"hand over while a finding is untriaged.\n", store.RunID(), settled, left)
+		if failed {
+			return exitGeneric
+		}
+		return exitSuccess
+	}
 	for i := range waiting {
 		finding := waiting[i]
 		printTriageFinding(stdout, i+1, len(waiting), finding)
@@ -346,9 +394,7 @@ func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.
 				// decided stays exactly as it was — waiting, and gating the
 				// close-out — and the walk says so rather than guessing.
 				fmt.Fprintf(stdout, "\nno more decisions to read.\n")
-				fmt.Fprintf(stdout, "run %s: %d settled, %d still waiting for a person; the epic's close-out does not "+
-					"hand over while a finding is untriaged.\n", store.RunID(), settled, left)
-				return exitSuccess
+				return unfinished()
 			}
 			parsedVerb, parsedCommit, parseErr := parseInteractiveDecision(line)
 			if parseErr != nil {
@@ -357,16 +403,12 @@ func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.
 					// A last line the walk cannot parse, and nothing behind it:
 					// the honest stop, not a re-prompt nobody can answer.
 					fmt.Fprintf(stdout, "\nno more decisions to read.\n")
-					fmt.Fprintf(stdout, "run %s: %d settled, %d still waiting for a person; the epic's close-out does not "+
-						"hand over while a finding is untriaged.\n", store.RunID(), settled, left)
-					return exitSuccess
+					return unfinished()
 				}
 				continue
 			}
 			if parsedVerb == triageQuit {
-				fmt.Fprintf(stdout, "run %s: %d settled, %d still waiting for a person; the epic's close-out does not "+
-					"hand over while a finding is untriaged.\n", store.RunID(), settled, left)
-				return exitSuccess
+				return unfinished()
 			}
 			verb, commit = parsedVerb, parsedCommit
 			break
@@ -375,9 +417,10 @@ func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.
 			fmt.Fprintf(stdout, "%s left as proposed — still waiting for a person.\n", shortTriageKey(finding.Key))
 			continue
 		}
-		result := settleTriage(store, promo, epicID, actor, finding, verb, commit, true, stdout)
+		result := settleTriage(store, promo, epicID, actor, finding, verb, commit, repoDir, true, stdout)
 		if result.Error != "" {
 			fmt.Fprintln(stderr, "ticfac triage "+epicID+": "+result.Error)
+			failed = true
 			continue
 		}
 		if result.Note == "" {
@@ -389,9 +432,7 @@ func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.
 		fmt.Fprintf(stdout, "run %s: %d settled, none waiting; the triage gate is down.\n", store.RunID(), settled)
 		return exitSuccess
 	}
-	fmt.Fprintf(stdout, "run %s: %d settled, %d still waiting for a person; the epic's close-out does not hand over "+
-		"while a finding is untriaged.\n", store.RunID(), settled, left)
-	return exitSuccess
+	return unfinished()
 }
 
 // triagePrompt is the one line each decision is read on. A finding routed to
@@ -495,9 +536,13 @@ func parseScriptedDecision(arg string) (scriptedDecision, error) {
 }
 
 // looksLikeCommit reports whether s is shaped like a commit id — hexadecimal,
-// abbreviated or full length. Shape, not existence: the commit may live on
-// any of the repositories a finding can target, and runstate's own validator
-// re-reads the verdict the triage records.
+// abbreviated or full length. Shape is the PARSE-time check, so a decision
+// typed on a command line or at a prompt is refused before anything is
+// settled; existence is checked at settle time, in the repository the run
+// works in (commitExists) — and for a finding routed to another repository
+// the shape is all this surface can check, because the commit lives where it
+// cannot read. runstate's own validator re-reads the verdict the triage
+// records.
 func looksLikeCommit(s string) bool {
 	if len(s) < 7 || len(s) > 40 {
 		return false
@@ -508,6 +553,16 @@ func looksLikeCommit(s string) bool {
 		}
 	}
 	return true
+}
+
+// commitExists reports whether commit names a commit the repository the run
+// works in can resolve — full or abbreviated, reachable or merely present.
+// The check is git's own resolution, so what the checkout holds is what counts:
+// a repair the run's durable branch carries resolves, and an invented id
+// names nothing.
+func commitExists(repo, commit string) bool {
+	cmd := exec.Command("git", "-C", repo, "rev-parse", "--verify", "--quiet", commit+"^{commit}")
+	return cmd.Run() == nil
 }
 
 // resolveFindingPrefix addresses one draft by the short key prefix an agent
@@ -540,9 +595,11 @@ func resolveFindingPrefix(epicID string, findings []runstate.Finding, prefix str
 // settleTriage records ONE decision on ONE draft — the shared body of the
 // interactive walk and the scripted pass, so the two cannot drift. The result
 // carries what happened; prose goes to stdout only when a person is reading
-// (quiet is --json's pass).
+// (quiet is --json's pass). repoDir is the repository the run works in, where
+// the fixed verdict's commit must be resolvable — the claim is checked, not
+// asserted.
 func settleTriage(store *runstate.Store, promo *lazyPromotions, epicID, actor string,
-	finding runstate.Finding, verb, commit string, prose bool, stdout io.Writer) triageResult {
+	finding runstate.Finding, verb, commit, repoDir string, prose bool, stdout io.Writer) triageResult {
 	result := triageResult{Key: finding.Key, Decision: verb, By: actor, Commit: commit}
 
 	// A decision is never made twice: the standing triage is the person's
@@ -580,6 +637,16 @@ func settleTriage(store *runstate.Store, promo *lazyPromotions, epicID, actor st
 		result.Tick = tickID
 		triage = runstate.Triage{Status: runstate.FindingPromoted, By: actor, PromotedAs: tickID}
 	case triageFixed:
+		// The verdict's value is that the claim is checkable: the commit must
+		// exist in the repository the run works in — an id that names nothing
+		// is an assertion wearing the verdict's clothes. A finding routed to
+		// another repository keeps the shape check alone: its commit lives
+		// where this surface cannot read.
+		if finding.Target == "" && !commitExists(repoDir, commit) {
+			result.Error = fmt.Sprintf("%q names no commit in this repository: the fixed verdict names the commit "+
+				"that repaired it, so the claim is checked, not asserted", commit)
+			return result
+		}
 		triage = runstate.Triage{Status: runstate.FindingFixed, By: actor, FixedAs: commit}
 	case triageDiscard:
 		triage = runstate.Triage{Status: runstate.FindingDiscarded, By: actor}
