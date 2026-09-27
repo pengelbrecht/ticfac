@@ -277,6 +277,11 @@ type AttemptWork struct {
 	Worktree string `json:"worktree"`
 	Remote   string `json:"remote"`
 
+	// BaseSHA is the commit the job's worktree was cut from: what a later
+	// incarnation re-addressing the same identity states as its base, rather
+	// than a base it minted afresh that the job never saw.
+	BaseSHA string `json:"base_sha"`
+
 	// ArtifactPrefix is the job's own artifact prefix, off the recorded
 	// spec: the flush's snapshot excludes it exactly as the teardown's does.
 	ArtifactPrefix string `json:"-"`

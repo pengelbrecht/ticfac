@@ -101,16 +101,12 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		Repo: r.opts.Repo, Remote: r.opts.Remote, WriteRef: writeRef, StateRoot: stateDir,
 	}
 
-	// A resolve an earlier incarnation dispatched and never folded in: its
-	// branch is durable on the remote, and the fold is finished from it
-	// rather than paid for twice.
-	if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-		merged, err := r.finishBaseFoldFromBranch(base, baseHead, remote, marker, conflict, sides)
-		if err != nil {
-			return "", nil, err
-		}
-		return merged, r.finalizeBaseFold(nil, nil, marker, base, baseHead, epicHead, "merged", merged, remote, conflict, true), nil
-	}
+	// A resolve an earlier incarnation dispatched and never folded in is NOT
+	// finished from its branch merely because the branch is on origin: a live
+	// job's supervisor pushes it, and so does a SIGTERM flush — at the
+	// conflicted fold the job was cut at, until the job commits (epic-2jn,
+	// 4mv's resolve). The executor's Start below is what says whether it
+	// settled; role_resume.go has the whole argument.
 
 	// The ceiling tier, resolved on demand through the same routing every
 	// role resolves through (resolve.go says why).
@@ -137,10 +133,15 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 	// the tracker's drivers so only what the fold could not merge has markers.
 	message := fmt.Sprintf("ticfac run %s: the conflicted fold of %s into %s for the resolve-conflict job",
 		r.runID, base, r.branch)
-	wip, err := r.conflictedMerge(epicHead, baseHead, message, driverConfig(drivers))
+	// A job an earlier incarnation dispatched under this identity keeps the
+	// base it was cut from, or continues from what it pushed.
+	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		return r.conflictedMerge(epicHead, baseHead, message, driverConfig(drivers))
+	})
 	if err != nil {
 		return "", nil, err
 	}
+	wip := job.base
 	marker.BaseSHA = wip
 
 	// The prompt: the role's own, and the brief that says what THIS conflict
@@ -194,6 +195,9 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 			}
 		}
 		return "", nil, failed("it could not be started: %v", err)
+	}
+	if note := roleJobResumeNote(job, "the resolve-conflict job for the fold of "+base); note != "" {
+		r.record("", StageAdopted, "%s", note)
 	}
 
 	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, failed)
@@ -465,7 +469,7 @@ func (r *Reconciler) baseFoldBrief(base, baseHead, epicHead string, conflict *me
 		}
 		return strings.Split(strings.TrimSpace(out), "\n")
 	}
-	ticks := r.conflictingTickIDs(epicHead, "", conflict.Files)
+	ticks := r.conflictingTickIDs(epicHead, baseHead, "", conflict.Files)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## This conflict: folding %s into the epic\n\n", base)

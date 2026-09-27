@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -179,19 +180,16 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, status, branch)
 	}
 
-	// A resolve job an earlier incarnation dispatched but never integrated:
-	// its branch is durable on the remote, and the work is finished from the
-	// evidence rather than paid for twice (the learnings' rule: settle
-	// in-flight state from durable evidence by whoever finds it). A branch
-	// that does not verify is the stop, naming the files and the branch.
-	branch := branchOf(resolveWriteRef(r.runID, tick, marker.Attempt))
-	if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-		merged, err := r.finishResolveFromBranch(marker, head, epicHead, conflict, remote)
-		if err != nil {
-			return "", nil, err
-		}
-		return merged, r.finalizeResolve(marker, head, branch, merged, remote, conflict), nil
-	}
+	// A resolve job an earlier incarnation dispatched but never integrated is
+	// NOT finished from its branch merely because the branch is on origin: a
+	// live job's supervisor pushes it, and so does a SIGTERM flush — at the
+	// conflicted commit the job was cut at, until the job commits (epic-2jn,
+	// 4mv attempt 33). The executor's Start below is what says whether it
+	// settled; role_resume.go has the whole argument.
+	jobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
+	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt)
+	branch := branchOf(writeRef)
+	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt))
 
 	// The ceiling tier: the strongest worker the declared policy allows. The
 	// profile is resolved on demand, through the same routing every other
@@ -219,25 +217,28 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 	// The conflicted tree the job starts from: the merge of the attempt's head
 	// into the integration branch, left unresolved, committed so the
 	// executor's ordinary worktree — cut at a commit — IS the conflicted
-	// merge, markers present.
-	wip, err := r.conflictedTree(epicHead, head, marker)
+	// merge, markers present. A job an earlier incarnation dispatched under
+	// this identity keeps the base it was cut from, or continues from what it
+	// pushed.
+	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		return r.conflictedTree(epicHead, head, marker)
+	})
 	if err != nil {
 		return "", nil, err
 	}
+	wip := job.base
 
 	// Both ticks' descriptions: the attempt's own tick, and the tick(s) whose
 	// merged work sits on the other side of the conflict, read out of the
-	// integration branch's own history for exactly the files that conflict.
-	others := r.conflictingTickIDs(epicHead, tick, conflict.Files)
+	// integration branch's own history since the attempt forked from it, for
+	// exactly the files that conflict.
+	others := r.conflictingTickIDs(epicHead, head, tick, conflict.Files)
 	r.record(tick, StageDispatched,
 		"%s does not merge onto %s (%s); a resolve-conflict job is dispatched to make the union — the two "+
 			"intents in conflict are %s, routed at tier %q (%s)",
 		r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail,
 		strings.Join(append([]string{tick}, others...), " and "), tier, tierNote)
 
-	jobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
-	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt)
-	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt))
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
 		Try: marker.Try, JobID: jobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote,
@@ -283,6 +284,9 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		return "", nil, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: %v",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
+	}
+	if note := roleJobResumeNote(job, "the resolve-conflict job for "+r.attemptName(tick, marker.Attempt)); note != "" {
+		r.record(tick, StageAdopted, "%s", note)
 	}
 
 	collected, rerr := r.collectResolve(ctx, handle, executor, resolveMarker, conflict)
@@ -505,21 +509,43 @@ var tickRefSpelling = regexp.MustCompile(`tick-([A-Za-z0-9_-]+)/attempt-[0-9]+`)
 // that touched the files that conflict, and the tick each of them merged —
 // the run's own merge records say which, twice over. `self` (the conflicting
 // attempt's tick) is never in the answer.
-func (r *Reconciler) conflictingTickIDs(epicHead, self string, files []string) []string {
+//
+// The other side is what landed on the integration branch SINCE `otherHead`
+// forked from it — merge-base(otherHead, epicHead)..epicHead — and nothing
+// older. epic-2jn on 2026-09-27 named "4mv and 0z0 and 2qz and 35l … and
+// asked and bot and closed … and it … and must" as the two intents of one
+// conflict: the parse read the whole history of README.md (every tick that
+// ever touched it, long merged before 4mv forked and already in 4mv's own
+// base), and took any word after "tick" in a commit body for an id ("the tick
+// closed", "tick it"). So a name is also kept only when it IS a tick: its
+// record `.tick/issues/<id>.json` is in the tree at epicHead. The tracker's
+// records are files in that tree (trackerRecordPath), so "is this a tick" is
+// a fact about the commit, read with one ls-tree — not a guess from the
+// word's shape.
+func (r *Reconciler) conflictingTickIDs(epicHead, otherHead, self string, files []string) []string {
+	span := epicHead
+	if otherHead != "" {
+		forkPoint, err := r.git.run("", "merge-base", otherHead, epicHead)
+		if err != nil || forkPoint == "" {
+			return nil
+		}
+		span = forkPoint + ".." + epicHead
+	}
 	// --full-history: without it, history simplification attributes the
 	// merged side's change to the side commit and prunes the MERGE that
 	// landed it — and the merge commit is exactly the record that names the
 	// tick this parse is looking for.
-	args := []string{"log", "-n", "200", "--full-history", "--format=%B", epicHead, "--"}
+	args := []string{"log", "-n", "200", "--full-history", "--format=%B", span, "--"}
 	args = append(args, files...)
 	out, _, err := r.git.try("", args...)
 	if err != nil {
 		return nil
 	}
+	known := r.trackerIDsAt(epicHead)
 	seen := map[string]bool{self: true}
 	var ids []string
 	add := func(id string) {
-		if !seen[id] && isTickIDLike(id) {
+		if !seen[id] && isTickIDLike(id) && known[id] {
 			seen[id] = true
 			ids = append(ids, id)
 		}
@@ -534,6 +560,26 @@ func (r *Reconciler) conflictingTickIDs(epicHead, self string, files []string) [
 		}
 	}
 	sort.Strings(ids)
+	return ids
+}
+
+// trackerIDsAt is the set of records the tracker holds in the tree at
+// `commit`: the ids of `.tick/issues/<id>.json`, the layout trackerRecordPath
+// names. A tree whose listing cannot be read holds none — the other side of a
+// conflict is then named by nobody rather than by prose.
+func (r *Reconciler) trackerIDsAt(commit string) map[string]bool {
+	issues := path.Join(trackerRoot, "issues") + "/"
+	out, _, err := r.git.try("", "ls-tree", "--name-only", commit, issues)
+	if err != nil {
+		return nil
+	}
+	ids := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		name := strings.TrimPrefix(strings.TrimSpace(line), issues)
+		if id, ok := strings.CutSuffix(name, ".json"); ok && id != "" && !strings.Contains(id, "/") {
+			ids[id] = true
+		}
+	}
 	return ids
 }
 

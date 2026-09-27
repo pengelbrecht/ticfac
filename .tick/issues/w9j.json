@@ -1,0 +1,14 @@
+{
+  "id": "w9j",
+  "title": "ticfac leaves its temp dirs behind: 1,370 ticfac-* dirs in TMPDIR, growing without bound",
+  "gloss": "temp dir leak",
+  "description": "Found 2026-09-27: $TMPDIR (/var/folders/.../T) holds ~1,370 ticfac-* dirs, 11 GB, dating back to Sep 12: ticfac-tracker (603), ticfac-gate (240), ticfac-merge (225), ticfac-reconcile-bin (93), ticfac-index (78), ticfac-gate-io (73), ticfac-tracker-index (34), plus cli-registry, exec-bin, door-harness. Some come from runs (tracker/merge/gate trees made with os.MkdirTemp and git worktree add, not removed on every path, including SIGTERM), some from tests that don't use t.TempDir. About 10 are still registered as git worktrees of the main checkout. Find each creator, remove on every exit path (defer, the evacuation path, t.TempDir in tests), and have ticfac doctor (or run start) sweep ticfac-* dirs whose owning pid is gone.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A full reconcile test run and a run-epic start/stop cycle leave no new ticfac-* dirs in TMPDIR; a test asserts it for the tracker/merge/gate temp trees",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-27T15:26:50.938977Z",
+  "updated_at": "2026-09-27T15:41:29.262745Z"
+}
