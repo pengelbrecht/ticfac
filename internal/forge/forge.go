@@ -197,9 +197,11 @@ type PullRequests interface {
 // GitHub speaks the seam against GitHub's REST API.
 //
 // Repo is the `owner/name` the API addresses; ParseRepo resolves it from a
-// git remote URL. Token is required by the API for every one of the four
+// GitHub remote URL (and refuses a remote on a host api.github.com cannot
+// speak with). Token is required by the API for every one of the four
 // operations. Client is optional (http.DefaultClient with a timeout when
-// nil); API is optional (DefaultAPI).
+// nil); API is optional (DefaultAPI) — and nothing a run constructs ever
+// sets it, which is why ParseRepo checks the host.
 type GitHub struct {
 	Token  string
 	API    string
@@ -207,11 +209,38 @@ type GitHub struct {
 	Client *http.Client
 }
 
-// ParseRepo resolves the `owner/name` a remote URL addresses, in the forms a
-// git checkout actually carries: scp-like SSH (`git@host:owner/name.git`),
-// scheme URLs (`https://host/owner/name.git`), and proxied forms that
-// prepend path segments, where the owner/repo pair is the LAST two segments
-// — the same resolution the cloud command line performs on its own remotes.
+// githubHosts are the hosts GitHub's own remotes live on: github.com
+// itself, the www form a checkout may carry, and ssh.github.com — the host
+// ssh-over-443 addresses. Repositories on all of them are addressed by
+// api.github.com, the API the surface below speaks; no run ever wires that
+// surface to another API, so no OTHER host is a repository this surface can
+// do anything with.
+var githubHosts = map[string]bool{
+	"github.com":     true,
+	"www.github.com": true,
+	"ssh.github.com": true,
+}
+
+// ParseRepo resolves the `owner/name` a GitHub remote addresses, in the
+// forms a git checkout actually carries: scp-like SSH
+// (`git@github.com:owner/name.git`), scheme URLs
+// (`https://github.com/owner/name.git`), and proxied forms that prepend
+// path segments, where the owner/repo pair is the LAST two segments — the
+// same resolution the cloud command line performs on its own remotes.
+//
+// The HOST is checked, not just parsed (tick 4zo): the GitHub surface this
+// package builds always addresses api.github.com — its API field is
+// optional, but nothing a run constructs ever sets it — so a remote on
+// another host (gitlab.com, bitbucket.org, a GitHub Enterprise host) is a
+// remote the surface cannot speak with. Before the check, such a remote
+// resolved to an owner/name slug that passed every reader that means
+// "GitHub remote" — init's close-out guess, doctor's remote check, the
+// run's own surface — and the failure surfaced only at close-out time, as
+// 404s against api.github.com the operator could no longer act on. The
+// check lives HERE, in the one reader all of those share, so they cannot
+// disagree about what counts as a GitHub remote. A GitHub Enterprise host
+// is refused with the same words until the surface's API field is wired to
+// a host of its own.
 func ParseRepo(remote string) (string, error) {
 	remote = strings.TrimSpace(remote)
 	remote = strings.TrimSuffix(remote, "/")
@@ -225,9 +254,15 @@ func ParseRepo(remote string) (string, error) {
 		if slash == -1 {
 			return "", fmt.Errorf("unsupported remote format: %s", remote)
 		}
+		if err := requireGitHubHost(authorityHost(rest[:slash]), remote); err != nil {
+			return "", err
+		}
 		path = rest[slash+1:]
 	case strings.ContainsRune(remote, ':'):
 		// scp-like SSH form: [user@]host:owner/name
+		if err := requireGitHubHost(authorityHost(remote[:strings.IndexRune(remote, ':')]), remote); err != nil {
+			return "", err
+		}
 		path = remote[strings.IndexRune(remote, ':')+1:]
 	default:
 		return "", fmt.Errorf("unsupported remote format: %s", remote)
@@ -238,6 +273,37 @@ func ParseRepo(remote string) (string, error) {
 		return "", fmt.Errorf("no owner/name in the remote %s", remote)
 	}
 	return parts[len(parts)-2] + "/" + parts[len(parts)-1], nil
+}
+
+// authorityHost reads the host a remote's authority names: the [user@]host
+// before the path of a scheme URL, or the [user@]host before the colon of
+// the scp-like SSH form. A trailing :port (a scheme URL may carry one)
+// names the same host and is trimmed; the scp-like form never reaches here
+// with a port, because its first colon is the path separator.
+func authorityHost(authority string) string {
+	if at := strings.LastIndexByte(authority, '@'); at >= 0 {
+		authority = authority[at+1:]
+	}
+	if colon := strings.LastIndexByte(authority, ':'); colon >= 0 &&
+		authority[colon+1:] != "" && strings.Trim(authority[colon+1:], "0123456789") == "" {
+		authority = authority[:colon]
+	}
+	return authority
+}
+
+// requireGitHubHost refuses a remote on a host the GitHub surface cannot
+// speak with, naming the host it found and github.com it needed — the one
+// refusal every reader that means "GitHub remote" shares, so an operator
+// meets it where a fix is still cheap (tick 4zo).
+func requireGitHubHost(host, remote string) error {
+	if host == "" {
+		return fmt.Errorf("unsupported remote format: %s", remote)
+	}
+	if !githubHosts[strings.ToLower(host)] {
+		return fmt.Errorf("the remote %s is hosted on %s, not github.com: the GitHub surface "+
+			"speaks api.github.com only, and no run wires it to another API", remote, host)
+	}
+	return nil
 }
 
 func (g GitHub) client() *http.Client {

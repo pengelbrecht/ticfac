@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -599,5 +600,34 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 	}
 	if len(*requests) == 0 {
 		t.Error("the factory was never asked")
+	}
+}
+
+// TestStatusCIRefusesAnotherForge (tick 4zo): the CI gatherer resolves the
+// repository the forge mirrors through the same reader everything else
+// does, so a GitLab origin is refused by the host check — naming the host —
+// rather than resolved to a slug and asked of api.github.com, where it
+// would answer 404s the status view could only repeat. The refusal names
+// gitlab, which no network answer does: this test fails on the old
+// resolution whatever the network says.
+func TestStatusCIRefusesAnotherForge(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	git("init", "--quiet", "-b", "main")
+	git("remote", "add", "origin", "git@gitlab.com:example/example.git")
+	t.Setenv(forge.TokenEnv, "a-token")
+
+	if _, err := statusCI(context.Background(), dir, "e1"); err == nil {
+		t.Fatal("the CI gatherer resolved a GitLab origin")
+	} else if !strings.Contains(err.Error(), "gitlab.com") {
+		t.Errorf("the refusal does not name the host it found: %v", err)
 	}
 }

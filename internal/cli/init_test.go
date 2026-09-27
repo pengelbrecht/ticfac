@@ -191,6 +191,40 @@ func TestInitOnARepositoryWithNoGitHubOriginNeedsNoForge(t *testing.T) {
 	}
 }
 
+// TestInitOnARepositoryWhoseOriginIsAnotherForgeWritesNoRule (tick 4zo):
+// the close-out guess keys on the one fact the repository holds — origin —
+// and before the host check a GitLab origin resolved to an owner/name slug,
+// so init guessed a PR close-out for a repository whose epic PR could
+// never satisfy it: the run would refuse to start, or worse, fail at
+// close-out time as 404s against api.github.com. The guess now reads the
+// same host check the run's own surface reads — a remote on another forge
+// is not a repository whose epics integrate through a GitHub PR.
+func TestInitOnARepositoryWhoseOriginIsAnotherForgeWritesNoRule(t *testing.T) {
+	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+	mustGit(t, repo, "remote", "add", "origin", "git@gitlab.com:example/example.git")
+	code, stdout, stderr := runInitOn(t, repo, "", "--yes")
+	if code != exitSuccess {
+		t.Fatalf("init exits %d: %s%s", code, stderr, stdout)
+	}
+	rule, err := reconcile.ReadCloseoutRule(filepath.Join(repo, filepath.FromSlash(initConfigMDName)))
+	if err != nil {
+		t.Fatalf("the written config.md does not read: %v", err)
+	}
+	if rule.Declared {
+		t.Fatal("init wrote the close-out rule for a repository whose origin is GitLab — " +
+			"the run would address api.github.com over it")
+	}
+	// And the production entry point's construction path, with no forge
+	// surface handed to it: nothing about the rule demands one.
+	if _, err := reconcile.New(reconcile.Options{
+		Repo: repo, EpicID: "e1", Tracker: &initFakeTracker{},
+		NewExecutor: executorFactory("claude", initRunnersPath(repo)),
+		Executors:   knownExecutors(), // no PullRequests: no forge to build one from
+	}); err != nil {
+		t.Fatalf("reconcile.New refuses a repository whose origin is another forge: %v", err)
+	}
+}
+
 // TestInitTakesTheCloseoutAnswerFromTheFlagOrTheQuestion (tick 6vp): the
 // close-out rule is an answer like the others — a flag for a script, a
 // question for a person, a guess from the repository for the default —

@@ -248,6 +248,49 @@ func TestPullRequestsForRunNamesTheFixWhenTheRuleHasNoForgeRemote(t *testing.T) 
 	}
 }
 
+// TestPullRequestsForRunRefusesARemoteOnAnotherForge (tick 4zo): a remote
+// on another forge resolves to an owner/name slug, and before the host
+// check that slug passed this builder, doctor's remote check and init's
+// close-out guess alike — the run then constructed a GitHub surface
+// addressed at api.github.com over a repository that lives on GitLab, and
+// the failure surfaced only at close-out time, as 404s the operator could
+// no longer act on. The refusal is HERE now, at build time, naming the host
+// and both remedies — and no credential is resolved for a remote the
+// surface cannot speak with.
+func TestPullRequestsForRunRefusesARemoteOnAnotherForge(t *testing.T) {
+	for _, remote := range []string{
+		"git@gitlab.com:example/example.git",
+		"https://gitlab.com/example/example.git",
+		// A GitHub Enterprise host is the same refusal: forge.GitHub's API
+		// field is wired by nothing a run constructs, so api.github.com is
+		// the only API this surface can speak with.
+		"https://ghe.example.com/example/example.git",
+	} {
+		dir := closeoutRuleDir(t, "Epic integration goes through a PR + CI gate: the orchestrator opens a PR, and CI must be green.")
+		mustGit(t, dir, "remote", "set-url", "origin", remote)
+		ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
+		saveForgeTokenLadder(t, ladder)
+
+		if pulls, note, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil || note != "" {
+			t.Fatalf("a GitHub surface was built over %q: %v", remote, err)
+		} else {
+			if !strings.Contains(err.Error(), "not a GitHub repository") {
+				t.Errorf("the refusal does not say the remote is not GitHub's:\n%v", err)
+			}
+			if !strings.Contains(err.Error(), "point origin at GitHub") ||
+				!strings.Contains(err.Error(), "remove the rule") {
+				t.Errorf("the refusal does not name both remedies:\n%v", err)
+			}
+			if !strings.Contains(err.Error(), reconcile.RepoConfigPath(dir)) {
+				t.Errorf("the refusal does not name the config the rule lives in:\n%v", err)
+			}
+		}
+		if *ran {
+			t.Error("the credential ladder ran although the remote is on another forge")
+		}
+	}
+}
+
 // The rule the builder reads is the reconciler's own, from the same path —
 // so a config the reconciler cannot read is a config the builder refuses
 // rather than guessing at, and the refusal names the file: the reconciler
