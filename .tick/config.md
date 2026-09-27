@@ -7,6 +7,7 @@
 - Package management is pnpm only — never npm or yarn. Go stdlib-first.
 - **This is a public repository. Nothing operator-specific is ever committed.** No secrets or tokens, and no identifiers tying the repo to one operator: cloud account IDs, workspace IDs, organisation names, personal or work email addresses, real bucket/database names, deployment URLs. This applies to `.tick/` notes and activity as much as to source. Use placeholders; fixtures and tests use example.com addresses.
 - Third-party credential tooling is always an optional rung, never a dependency.
+- Before you settle, run the whole-repo gate (`make gate`), not only the package you touched. Repo-wide guards run only in a whole-repo pass: every end-to-end test must call `shorttest.EndToEnd(t)` or carry a `short:` doc-comment line saying why the per-tick gate should pay for it (`internal/shorttest`). Pass `-timeout` whenever you run `go test ./internal/reconcile/` directly; it outlives go's 10-minute default.
 
 ## Standing orders
 
