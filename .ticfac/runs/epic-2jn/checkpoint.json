@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 111,
+  "sequence": 112,
   "state": "failed",
-  "reason": "eih did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: absorbing the finding 38cb04758cceac6d2837ca81ebaab51e34bdf7e43714c8a7d4501aee7ceb234b (\"Five stray run registrations from pre-fix cli test runs remain in the operator's real ~/.ticfac/registry, pointing at deleted temp dirs\"), reported by eih try 1 (run dispatch #17), would be the 4th absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj): the run stops for a person rather than recurse past the bound, because unbounded the recursion is an epic that never closes and nothing announces it. The chain that produced the stop: tick 6dh reported finding 8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a (\"waits_on for a dead run and the per-checkout liveness answer: the listing surface needs one probing convention\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick aj9; tick aj9 reported finding 760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85 (\"Claim's live-driver refusal is per-checkout: a second run-epic from another checkout of the same repo is not refused\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick 9oo; tick 9oo reported finding ffcf041e457da2d27c37ee2a64907547eed5cc6aed94382a86e992ea6a0c2b2c (\"internal/cli tests claim runs without redirecting TICFAC_REGISTRY_DIR, writing test registrations into the operator's real ~/.ticfac/registry\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick eih. The finding stays a person's — triage it with `ticfac finding 2jn 38cb04758cceac6d2837ca81ebaab51e34bdf7e43714c8a7d4501aee7ceb234b --promote-as <tick> --by \"<who>\"` or `--discard --by \"<who>\"`, or raise the bound with --absorption-depth and run the epic again. If this bound trips often, the criterion is wrong and the bound is hiding it — the chain above is what a person judges it by",
-  "updated_at": "2026-09-27T08:41:07Z",
+  "reason": "386f87eafeed of main does not fold into epic/2jn: go.mod, go.sum, internal/forge/forge.go. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
+  "updated_at": "2026-09-27T08:42:10Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -123,7 +123,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "b3fc7e01f838f3eb74b580c9d007b39b3b1d764b",
+    "source_sha": "61f5403b71e5060e91512f384dac7a54cc4a193e",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
