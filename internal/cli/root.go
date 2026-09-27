@@ -122,6 +122,7 @@ work, 1 a failure that is not a usage mistake,
 	// Subcommands inherit this through cobra's FlagErrorFunc parent lookup.
 	root.SetFlagErrorFunc(usageFlagError)
 	root.AddCommand(
+		newRunCommand(stdout, stderr),
 		newRunEpicCommand(stdout, stderr),
 		newInitCommand(stdout, stderr),
 		newDoctorCommand(stdout, stderr),

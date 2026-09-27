@@ -90,7 +90,7 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 		owner:     fs.String("owner", "ticfac", "who claims a tick in the tracker"),
 		runner:    fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi"),
 		tier:      fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])"),
-		profiles:  fs.String("profiles", "", "resolve role profiles from this directory"),
+		profiles:  fs.String("profiles", "", "resolve role profiles from this directory (\"herdr\" names the herdr set embedded in this binary)"),
 		stateRoot: fs.String("state-root", "", "where attempt state lives, outside the repository"),
 		gate:      fs.String("gate", "", "the runners.toml the integrated gate is read from"),
 		budget:    fs.Float64("budget", 0, "the budget an operator asks for"),
@@ -292,7 +292,12 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 			repoDir = wd
 		}
 	}
-	pulls, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
+	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz),
+	// built with the note naming which rung answered (tick 9sz). The note is
+	// SAID on the wrapped stdout below — beside the classifier's — so it
+	// lands in run.log with the run's other startup facts rather than on a
+	// stdout `ticfac run`'s child has already redirected elsewhere.
+	pulls, forgeNote, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
 	if pullsErr != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: no code-hosting surface: %v. "+
 			"A repository that declares the PR + CI close-out rule in .tick/config.md will be refused "+
@@ -371,6 +376,16 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// that silently classifies nothing is exactly the silence the startup line
 	// exists to break.
 	fmt.Fprintf(stdout, "%s\n", classifierNote)
+
+	// Which rung the forge's credential came from — or nothing at all, said
+	// by hio's gate itself: a repo that declares no close-out rule resolves
+	// no credential and needs no note. This is the "says so" half of the
+	// one-command run (tick 9sz): a token fetched from gh's own auth is
+	// otherwise invisible, and a run that used it without naming it is a run
+	// whose credential story starts with a question.
+	if forgeNote != "" {
+		fmt.Fprintf(stdout, "%s\n", forgeNote)
+	}
 
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
@@ -724,7 +739,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 			repoDir = wd
 		}
 	}
-	pulls, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
+	pulls, _, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
 	if pullsErr != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: no code-hosting surface: %v. "+
 			"A repository that declares the PR + CI close-out rule in .tick/config.md is refused until one is "+

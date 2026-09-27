@@ -81,7 +81,7 @@ func TestPullRequestsForRunBuildsTheSurfaceADeclaredRuleNeeds(t *testing.T) {
 	ran, ladder := recordingLadder(t, "a-token")
 	saveForgeTokenLadder(t, ladder)
 
-	pulls, err := pullRequestsForRun(dir, "origin")
+	pulls, note, err := pullRequestsForRun(dir, "origin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,6 +94,12 @@ func TestPullRequestsForRunBuildsTheSurfaceADeclaredRuleNeeds(t *testing.T) {
 	}
 	if !*ran {
 		t.Error("the credential ladder did not run for a repo that declares the rule")
+	}
+	// The note names the rung that answered (tick 9sz): the run SAYS where
+	// its forge credential came from, and a repo that needs a forge must not
+	// leave that a question.
+	if !strings.Contains(note, forge.TokenEnv) || !strings.Contains(note, "the close-out rule needs a forge") {
+		t.Errorf("the note does not name the env rung: %q", note)
 	}
 
 	// No token: no surface, and the error names the one thing missing —
@@ -110,7 +116,7 @@ func TestPullRequestsForRunBuildsTheSurfaceADeclaredRuleNeeds(t *testing.T) {
 			forge.TokenEnv)
 	})
 	t.Setenv(forge.TokenEnv, "")
-	if pulls, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil {
+	if pulls, _, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil {
 		t.Fatalf("a surface was built with no credential: %v", err)
 	} else if !strings.Contains(err.Error(), forge.TokenEnv) {
 		t.Errorf("the failure does not name the missing credential: %v", err)
@@ -118,7 +124,7 @@ func TestPullRequestsForRunBuildsTheSurfaceADeclaredRuleNeeds(t *testing.T) {
 
 	// No remote to resolve a repository from: the same fail-closed answer.
 	mustGit(t, dir, "remote", "remove", "origin")
-	if pulls, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil {
+	if pulls, _, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil {
 		t.Fatalf("a surface was built for a checkout with no remote: %v", err)
 	}
 }
@@ -134,7 +140,7 @@ func TestPullRequestsForRunAcceptsGhsTokenWhenTheEnvHoldsNone(t *testing.T) {
 		return "from-gh", forge.TokenSourceGH, nil
 	})
 
-	pulls, err := pullRequestsForRun(dir, "origin")
+	pulls, note, err := pullRequestsForRun(dir, "origin")
 	if err != nil {
 		t.Fatalf("the surface was not built on gh's answer: %v", err)
 	}
@@ -145,6 +151,12 @@ func TestPullRequestsForRunAcceptsGhsTokenWhenTheEnvHoldsNone(t *testing.T) {
 	if github.Repo != "example/example" || github.Token != "from-gh" {
 		t.Errorf("the surface addresses %q with token %q, want example/example on gh's token",
 			github.Repo, github.Token)
+	}
+	// The note names the rung that answered (tick 9sz): a token fetched
+	// from gh's own auth is otherwise invisible — the subprocess that got
+	// it is the fact the run owes its own stdout.
+	if !strings.Contains(note, "gh auth token") || !strings.Contains(note, "fetched") {
+		t.Errorf("the note does not say the token was fetched from gh: %q", note)
 	}
 }
 
@@ -163,12 +175,15 @@ func TestPullRequestsForRunSkipsTheCredentialWhenNoRuleIsDeclared(t *testing.T) 
 	ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
 	saveForgeTokenLadder(t, ladder)
 
-	pulls, err := pullRequestsForRun(dir, "origin")
+	pulls, note, err := pullRequestsForRun(dir, "origin")
 	if err != nil {
 		t.Fatalf("a repo with no close-out rule is not an error: %v", err)
 	}
 	if pulls != nil {
 		t.Fatalf("a surface was built for a repo that declares no rule: %T", pulls)
+	}
+	if note != "" {
+		t.Errorf("a run that fetched no credential said one: %q", note)
 	}
 	if *ran {
 		t.Error("the credential ladder ran for a repo that declares no close-out rule")
@@ -178,7 +193,7 @@ func TestPullRequestsForRunSkipsTheCredentialWhenNoRuleIsDeclared(t *testing.T) 
 	// section saying other things is not this rule (the reader anchors on
 	// the phrase, and so does the builder's decision to resolve a forge).
 	writeCloseoutRule(t, dir, "Package management is pnpm only — never npm or yarn.")
-	if pulls, err := pullRequestsForRun(dir, "origin"); err != nil || pulls != nil {
+	if pulls, _, err := pullRequestsForRun(dir, "origin"); err != nil || pulls != nil {
 		t.Fatalf("a surface was built for a config that declares no rule: %v", err)
 	}
 	if *ran {
@@ -188,7 +203,7 @@ func TestPullRequestsForRunSkipsTheCredentialWhenNoRuleIsDeclared(t *testing.T) 
 	// And a repo with no remote needs no credential resolved either: the
 	// refusal the reconciler would make of a missing remote only exists
 	// where a rule demands the surface.
-	if pulls, err := pullRequestsForRun(t.TempDir(), "origin"); err != nil || pulls != nil {
+	if pulls, _, err := pullRequestsForRun(t.TempDir(), "origin"); err != nil || pulls != nil {
 		t.Fatalf("a surface was built for a checkout with no remote and no rule: %v", err)
 	}
 }
@@ -212,11 +227,9 @@ func TestPullRequestsForRunRefusesAConfigItCannotRead(t *testing.T) {
 	ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
 	saveForgeTokenLadder(t, ladder)
 
-	pulls, err := pullRequestsForRun(dir, "origin")
-	if err == nil || pulls != nil {
+	if pulls, note, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil || note != "" {
 		t.Fatalf("a surface was built over an unreadable config: %v", err)
-	}
-	if !strings.Contains(err.Error(), reconcile.RepoConfigPath(dir)) {
+	} else if !strings.Contains(err.Error(), reconcile.RepoConfigPath(dir)) {
 		t.Errorf("the refusal does not name the config it could not read: %v", err)
 	}
 	if *ran {
