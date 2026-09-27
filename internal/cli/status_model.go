@@ -136,6 +136,17 @@ func statusCI(ctx context.Context, repo, epicID string) (*statusmodel.CIInput, e
 	return input, nil
 }
 
+// modelGatherers is the per-frame source policy for a FOLLOWING surface:
+// `status --json` answers once and pays every read on the way, but the live
+// watch (89m) re-gathers every frame, and a frame every two seconds must
+// not spawn a tracker subprocess or ask a forge every two seconds — the rule
+// `status --follow` already set for its labels. The one-shot surface passes
+// the direct reads; the watch passes the caches (watch.go).
+type modelGatherers struct {
+	graph func(context.Context, string, string) *tk.Graph
+	ci    func(context.Context, string, string) (*statusmodel.CIInput, error)
+}
+
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
 // the checkpoint's own epic_id when the records carry one, and the caller's
 // word for a cloud run (its record carries the epic).
@@ -152,6 +163,7 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 // localStatusModel gathers everything a LOCAL run's model reads and builds
 // it. The liveness answer is the probe's own, carried as data; every age the
 // model states is measured against the one `now` the gathering stamps.
+<<<<<<< HEAD
 //
 // The probe is deliberately PER-CHECKOUT (tick aj9): status is a snapshot of
 // what this checkout can read, and --repo names another. A surface that reads
@@ -159,6 +171,9 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 // resolve each run's working repo through internal/runregistry first and
 // probe THERE; that package's doc comment is the convention.
 func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Status) statusmodel.Model {
+=======
+func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Status, gather modelGatherers) statusmodel.Model {
+>>>>>>> ffc40ce9126d3b137ce735e06207b45affdadfdd
 	now := time.Now()
 	degraded := []string{}
 
@@ -169,7 +184,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 	}
 	epicID := epicIDOf(runID, records)
 
-	graph := epicGraph(ctx, repo, epicID)
+	graph := gather.graph(ctx, repo, epicID)
 	if graph == nil {
 		degraded = append(degraded, "tracker")
 	}
@@ -183,7 +198,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 
 	standing, standingErr := runprogress.Standing(repo, runID, now)
 
-	ci, ciErr := statusCI(ctx, repo, epicID)
+	ci, ciErr := gather.ci(ctx, repo, epicID)
 	if ciErr != nil {
 		degraded = append(degraded, "forge")
 	}
@@ -229,7 +244,7 @@ func epicHintOf(runID string) string {
 // taken, and the model's workers field states null — "cannot be counted
 // here", which is a different claim from "none stand". Its records live on
 // origin like any run's; its feed is the factory's own stream.
-func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID string, record cloudRunRecord, liveness cloudLiveness, warn io.Writer) statusmodel.Model {
+func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID string, record cloudRunRecord, liveness cloudLiveness, warn io.Writer, gather modelGatherers) statusmodel.Model {
 	now := time.Now()
 	degraded := []string{}
 
@@ -244,7 +259,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		epicID = epicIDOf(runID, records)
 	}
 
-	graph := epicGraph(ctx, repo, epicID)
+	graph := gather.graph(ctx, repo, epicID)
 	if graph == nil {
 		degraded = append(degraded, "tracker")
 	}
@@ -259,7 +274,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		degraded = append(degraded, "feed")
 	}
 
-	ci, ciErr := statusCI(ctx, repo, epicID)
+	ci, ciErr := gather.ci(ctx, repo, epicID)
 	if ciErr != nil {
 		degraded = append(degraded, "forge")
 	}
