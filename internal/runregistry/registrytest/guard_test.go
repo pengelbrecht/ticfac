@@ -98,6 +98,37 @@ func TestScanReadsARegistrationThroughItsSymlinkedSpelling(t *testing.T) {
 	}
 }
 
+// The shape the guard exists for: a stray registration names a temp dir that
+// is already gone — every gate run leaves exactly that behind when a test
+// writes the real registry — and the guard must still attribute it, because
+// a path that stopped existing is not a licence to stop reading it.
+//
+// Serial: t.Setenv cannot be used with t.Parallel.
+func TestScanAttributesARegistrationWhoseRepoIsGone(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	operator := t.TempDir()
+	t.Setenv(runregistry.RegistryDirEnv, operator)
+	if err := runregistry.Register("r-gone", repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+
+	leaks := scan(operator, root)
+	if len(leaks) != 1 {
+		t.Fatalf("scan found %d leaks for a registration naming a deleted repo, want 1:\n%v",
+			len(leaks), leaks)
+	}
+	if leaks[0].RunID != "r-gone" {
+		t.Errorf("the leak reads as run %q, want r-gone", leaks[0].RunID)
+	}
+}
+
 // A machine with no registry yet has nothing this run could have written,
 // and an entry that cannot be decoded is nobody's write: the guard reads
 // past both without failing, because a guard that crashes on its own

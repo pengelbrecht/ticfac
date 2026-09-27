@@ -114,15 +114,15 @@ the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's 
 a derived key a function of the thing it identifies, not of its history.
 
 **Problem:** The integrated gate refused innocent work six times through wall-clock tests measuring
-the host; a host-dependent git fixture failed at base in NINE yoh ticks, and the runstate
-maintenance fixture was filed FOUR more times in gvc. **Rule:** A gate verdict is about the tree only
-if the host is bounded. Telling workers to look a failure up does not work; show them the drafts.
+the host; a host-dependent git fixture failed at base in NINE yoh ticks, four gvc refiles. **Rule:**
+A gate verdict is about the tree only if the host is bounded — and a guard on shared machine state
+(7ag: sibling suites write ~/.ticfac/registry mid-gate) attributes by a per-process temp root, not
+a snapshot diff (registrytest.GuardMain). Show workers the drafts, not a lookup.
 
 **Problem:** wne's per-tick gates went green while 7 of 10 relevant tests skipped under `-short`;
-yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate, and the
-review found three high defects there.
-**Rule:** A tick's evidence runs under the gate's own flags. A test the gate does not run is not
-evidence — add it to the gate, or name the gap in the acceptance.
+yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate; the
+review found three high defects there. **Rule:** A tick's evidence runs under the gate's own
+flags — a test the gate does not run is not evidence: add it to the gate, or name the gap.
 
 ## Fixtures
 

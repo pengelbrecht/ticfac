@@ -2,7 +2,6 @@ package runlife
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,23 +12,23 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runregistry"
+	"github.com/pengelbrecht/ticfac/internal/runregistry/registrytest"
 )
 
 // Claim writes a machine-local registration beside the run's pidfile (tick
-// aj9), so this package's tests redirect the registry away from the
-// operator's home BEFORE any test runs: a test that claims a run must not
-// write on the machine that runs it, and parallel tests could not each hold
-// the one environment variable that names where registrations live.
+// aj9), so this package's tests must not write on the machine that runs
+// them. registrytest.GuardMain is the whole TestMain (tick 7ag): it
+// redirects the registry away from the operator's home BEFORE any test
+// runs — a test that claims a run must not write on the machine that runs
+// it, and parallel tests could not each hold the one environment variable
+// that names where registrations live — and afterwards it scans the
+// operator's real registry and fails the package if this test run wrote
+// anything there, so a claim that reaches the real registry by any path
+// (a child spawned with an environment that drops the redirect) goes red
+// here instead of surfacing later as a phantom run in the bare `ticfac`
+// overview.
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "ticfac-runlife-registry-")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	os.Setenv(runregistry.RegistryDirEnv, dir)
-	code := m.Run()
-	os.RemoveAll(dir)
-	os.Exit(code)
+	registrytest.GuardMain(m)
 }
 
 // startSleeper starts a real process and records it as the run's driver, the

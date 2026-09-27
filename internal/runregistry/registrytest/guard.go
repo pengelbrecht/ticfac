@@ -111,7 +111,7 @@ func operatorDir() string {
 // failing the scan, because a guard that cannot read past a corrupt entry
 // cannot guard anything.
 func scan(operatorDir, root string) []runregistry.Registration {
-	roots := spellings(root)
+	rootCanon := canonical(root)
 	entries, err := os.ReadDir(operatorDir)
 	if err != nil {
 		return nil // no registry yet: nothing this run could have written
@@ -129,29 +129,44 @@ func scan(operatorDir, root string) []runregistry.Registration {
 		if err := json.Unmarshal(raw, &reg); err != nil || reg.Repo == "" {
 			continue
 		}
-		for _, r := range roots {
-			if under(reg.Repo, r) {
-				leaks = append(leaks, reg)
-				break
-			}
+		if under(canonical(reg.Repo), rootCanon) {
+			leaks = append(leaks, reg)
 		}
 	}
 	return leaks
 }
 
-// spellings returns every spelling of a path this host will treat as the
-// same directory: the path as given, and its symlink-resolved form when they
-// differ. On macOS TMPDIR and its contents are reached through links
-// (/var → /private/var, /tmp → /private/tmp), and a test that resolves its
-// fixture's symlinks before claiming writes the resolved spelling into the
-// registration — the guard must recognise both.
-func spellings(path string) []string {
+// canonical is a path with its symlinked prefixes resolved, for comparison,
+// even when the path itself no longer stands — the shape of a stray
+// registration is precisely one naming a temp dir that is gone. On macOS
+// every temp path is reached through links (/var → /private/var,
+// /tmp → /private/tmp), and a test that resolves its fixture's symlinks
+// before claiming writes the resolved spelling into the registration, so
+// two spellings of one directory must compare equal: both sides are
+// canonicalized, and the longest ancestor that still stands is resolved
+// when the path itself does not.
+func canonical(path string) string {
 	path = filepath.Clean(path)
-	resolved, err := filepath.EvalSymlinks(path)
-	if err != nil || filepath.Clean(resolved) == path {
-		return []string{path}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(resolved)
 	}
-	return []string{path, filepath.Clean(resolved)}
+	// The path is gone. Walk up to the longest ancestor that stands,
+	// resolve that, and carry the rest along unchanged.
+	tail := ""
+	for {
+		parent, base := filepath.Split(path)
+		parent = filepath.Clean(parent)
+		tail = filepath.Join(base, tail)
+		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+			return filepath.Clean(filepath.Join(resolved, tail))
+		}
+		if parent == path {
+			// The filesystem root itself will not resolve; nothing better
+			// than the path as given remains.
+			return filepath.Clean(filepath.Join(path, tail))
+		}
+		path = parent
+	}
 }
 
 // under says whether path lies inside root (or is root itself).
