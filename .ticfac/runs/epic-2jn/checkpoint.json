@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 382,
-  "state": "failed",
-  "reason": "vqc did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: vqc try 2 (run dispatch #51) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and a resolve-conflict job already ran for this tick — its recorded outcome is \"failed\" and its work is on ticfac/run-epic-2jn/tick-vqc/resolve-50. A second conflict on the same tick is the stop, as it always was: read the recorded resolve, take its merge or settle the tick, and run the epic again",
-  "updated_at": "2026-09-27T19:51:38Z",
+  "sequence": 383,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-27T19:53:24Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -225,6 +225,14 @@
       "tick_id": "vqc",
       "state": "rejected",
       "attempt": 51
+    },
+    {
+      "tick_id": "8d6",
+      "state": "ready"
+    },
+    {
+      "tick_id": "c2g",
+      "state": "ready"
     }
   ],
   "provenance": {
@@ -232,7 +240,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "a046329b25e69c4dd9bfcf144b0c6084524f57b7",
+    "source_sha": "2c3f09c52e013f99650f2b48edbc5b9477e53575",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
