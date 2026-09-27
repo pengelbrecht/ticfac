@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 123,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-27T09:03:11Z",
+  "sequence": 124,
+  "state": "dispatching",
+  "reason": "dispatching eih as attempt 20",
+  "updated_at": "2026-09-27T09:03:25Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -109,7 +109,7 @@
     },
     {
       "tick_id": "eih",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 19
     },
     {
