@@ -446,8 +446,9 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	} else if held {
 		return finish(agentStateHeld, nil)
 	}
-	// No hold stands: the run's own terminal line decides failed from done
-	// (tick bot), on every path the model was or was not gathered on.
+	// No hold stands: the run's own terminal line decides failed, cancelled
+	// or done (ticks bot, rix and vqc), on every path the model was or was
+	// not gathered on.
 	if watchLineEndedFailed(terminal, terminalDetail) {
 		// The run ended in its own failure, holding nothing for a person
 		// (tick bot, epic 2jn's A4): that is the exit table's failed class,
@@ -490,13 +491,18 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 // run_finished's detail LED by the runstate word it checkpointed ("failed:
 // the integrated gate refused ...", "completed: every tick closed ..."), and
 // a death (run_died) is a run that did not reach its own run_finished: the
-// process erred, panicked or was signalled. Every other ending — completed,
-// cancelled, a detail that carries no state word — is "ended", and ended
-// without a failure is the done class's own answer; the last line says how.
+// process erred, panicked or was signalled — EXCEPT the one death that is a
+// deliberate stop (tick vqc): a person's SIGINT, whose line the handler
+// leads with the cancelled state word, the same word run_finished's
+// deliberate stops are led by. Evictions, panics and operational errors
+// keep the failed class a run's death has always had. Every other ending —
+// completed, cancelled, a detail that carries no state word — is "ended",
+// and ended without a failure is the done class's own answer; the last line
+// says how.
 func watchLineEndedFailed(stage, detail string) bool {
 	switch stage {
 	case reconcile.StageRunDied:
-		return true
+		return !strings.HasPrefix(detail, string(runstate.StateCancelled)+":")
 	case reconcile.StageRunFinished:
 		return strings.HasPrefix(detail, string(runstate.StateFailed)+":")
 	}
@@ -518,11 +524,24 @@ func watchLineEndedFailed(stage, detail string) bool {
 //   - "stopped: …" — the cloud factory's own word for a deliberate stop,
 //     the word its finalize writes to the same run_finished stage — and the
 //     word the overview already classifies a run's row by as cancelled.
+//   - run_died LED by "cancelled: …" — the signal death a person's Ctrl-C
+//     of a foreground run-epic writes (tick vqc): the one death that is a
+//     deliberate stop, not a death to fix. The state-led word is the same
+//     one run_finished spells, so the classifier reads one vocabulary
+//     across both terminal stages; a SIGTERM eviction carries no state word
+//     and stays the failed class.
 //
 // A COMPLETED ending is the done class's answer — "the run is already
 // completed: …" is a resume replay that ended the work — so nothing broader
 // than these words is classified here.
 func watchLineEndedCancelled(stage, detail string) bool {
+	// run_died accepts ONLY the state-led word (tick vqc): the deliberate
+	// signal stop a person's SIGINT writes. Every other death — an eviction,
+	// a panic, an operational error — is the failed class, and the words
+	// below are run_finished's, never a death's.
+	if stage == reconcile.StageRunDied {
+		return strings.HasPrefix(detail, string(runstate.StateCancelled)+":")
+	}
 	if stage != reconcile.StageRunFinished {
 		return false
 	}

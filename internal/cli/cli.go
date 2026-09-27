@@ -28,6 +28,10 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
+<<<<<<< HEAD
+=======
+	"github.com/pengelbrecht/ticfac/internal/runstate"
+>>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -477,7 +481,7 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		select {
 		case <-finished:
 		case sig := <-signals:
-			detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
+			detail := signalStopDetail(sig)
 			life.Logf("%s", detail)
 			// The eviction flush (tick ppt): SIGTERM is the platform saying the
 			// container is going away, so the run spends a BOUNDED slice of the
@@ -489,7 +493,12 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 			//
 			// SIGINT keeps the immediate exit it always had: that is a person
 			// at a terminal, not a platform eviction, and a person's stop wants
-			// no ceremony. The flush is SIGTERM's.
+			// no ceremony. The flush is SIGTERM's. But no ceremony is not the
+			// failed class: since tick vqc the SIGINT death line is LED by the
+			// cancelled state word (signalStopDetail), so the watch answers a
+			// deliberate stop with the cancelled class (7) — the same
+			// distinction the run_finished cancelled words got (tick rix) —
+			// while the SIGTERM eviction stays a death like a panic.
 			if sig == syscall.SIGTERM && *fl.evacuateSeconds > 0 {
 				budget := time.Duration(*fl.evacuateSeconds) * time.Second
 				lines := reconciler.Evacuate(sig.String(), budget)
@@ -631,12 +640,21 @@ type runEpicTickJSON struct {
 // continuations (each an intervention a caller reporting "unattended" must
 // count), and the never-silent notes about the feed and liveness records.
 // The state word is the table's — done when the run completed, held when the
+<<<<<<< HEAD
 // run stopped holding something only a person can move (tick 4mv), cancelled
 // when it was stopped deliberately (tick rix: the resume path replays an
 // already-terminal checkpoint as a Result, and a cancelled replay must
 // answer the same word the watch answers), failed otherwise — so the exit
 // code and the document cannot disagree; the run's own terminal word
 // travels as run_state.
+=======
+// run stopped holding something only a person can move, cancelled when it
+// was stopped deliberately (tick rix: the resume path replays an
+// already-terminal checkpoint as a Result, and a cancelled replay must
+// answer the same word the watch answers), failed otherwise (tick 4mv) — so
+// the exit code and the document cannot disagree; the run's own terminal
+// word travels as run_state.
+>>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 type runEpicResultJSON struct {
 	agentDoc
 	RunID         string              `json:"run_id"`
@@ -702,6 +720,23 @@ func autoResumeCap(supervise bool, cap int) int {
 // to perform, which is a real and reportable gain — and it is NOT the same
 // claim as a run that never stopped, so the line names each stop rather than
 // only counting them.
+
+// signalStopDetail is the run_died line a signal writes (tick vqc): the
+// plain sentence for SIGTERM — the platform's eviction, a death like a
+// panic — and, for SIGINT, the cancelled state word LED in front of the
+// same sentence, because a person at a terminal stopping the run is the
+// cancelled class's own case, not a failure to fix. The watch reads the
+// state word — the same vocabulary run_finished's details are led by — and
+// never has to parse the prose; the eviction keeps the failed class a
+// run's death has always had.
+func signalStopDetail(sig os.Signal) string {
+	detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
+	if sig == syscall.SIGINT {
+		detail = string(runstate.StateCancelled) + ": " + detail
+	}
+	return detail
+}
+
 func resumeLine(result *reconcile.Result) string {
 	stops := make([]string, 0, len(result.Resumes))
 	for _, resume := range result.Resumes {

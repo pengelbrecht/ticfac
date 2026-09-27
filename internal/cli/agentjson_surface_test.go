@@ -321,3 +321,27 @@ func TestRunEpicJSONCancelledResultAnswersCancelled(t *testing.T) {
 		t.Errorf("a cancelled run's document is %v with exit %d, want cancelled/%d", doc["state"], code, exitCancelled)
 	}
 }
+
+// watch --json, the deliberate stop (tick vqc): a person's Ctrl-C of a
+// foreground run-epic answers the cancelled state word with its own exit
+// code — never failed/1, which names a fix nobody needs to make, and never
+// done/0, which reads a stopped run as a finished epic.
+func TestWatchJSONAnswersCancelledWhenAPersonStoppedTheRun(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-cc", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 13, 5, 0, 0, time.UTC), "r-cc", "a1", nil, "dispatched", "attempt 1 started"))
+	writeFeedEvent(t, repo, "r-cc", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 13, 6, 2, 0, time.UTC), "r-cc", "", nil, reconcile.StageRunDied,
+		"cancelled: stopped by a signal (interrupt) before the run finished"))
+
+	doc, stderr, code := jsonAnswer(t, []string{"watch", "--json", "--repo", repo, "r-cc"})
+	if code != exitCancelled {
+		t.Fatalf("a watch of a person-stopped run exited %d, want %d: %s", code, exitCancelled, stderr)
+	}
+	mustSchema(t, doc, "ticfac.watch.v1")
+	if doc["state"] != agentStateCancelled {
+		t.Errorf("the state word is %v, want %q — a deliberate stop is neither done nor failed", doc["state"], agentStateCancelled)
+	}
+}

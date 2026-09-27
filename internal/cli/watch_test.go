@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
@@ -639,5 +641,83 @@ func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
 		if code != exitSuccess {
 			t.Errorf("a completed run's ending %q exited %d, want %d (done)", detail, code, exitSuccess)
 		}
+<<<<<<< HEAD
+=======
+	}
+}
+
+// A person's SIGINT stop of a foreground run-epic (tick vqc): the signal
+// handler writes run_died for it, and before this tick the watch classified
+// every run_died as the failed class — "the work has to be fixed and the
+// epic run again" — for a stop a person chose to make. A deliberate stop is
+// the cancelled class's own case, the same distinction rix made for the
+// run_finished cancelled words: the handler leads the death line with the
+// cancelled state word, and the classifier reads the word, never the prose.
+func TestWatchExitsCancelledWhenAPersonStoppedTheRun(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 13, 5, 0, 0, time.UTC), "r-1", "a1", nil, "dispatched", "attempt 1 started"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 13, 6, 2, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
+		"cancelled: stopped by a signal (interrupt) before the run finished"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+	if code != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a run a person stopped with Ctrl-C; stderr %q",
+			code, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the deliberate stop is not said to the person reading the stream: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "FAILED") {
+		t.Errorf("a person's stop was spoken of as a failure to fix: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "HOLDING") {
+		t.Errorf("a person's stop raised the hold alert: %q", stderr.String())
+	}
+	// The terminal line still prints — the last line says how the run was
+	// stopped, and the exit code says which class of ending it was.
+	if !strings.Contains(stdout.String(), "run_died") {
+		t.Errorf("the terminal line never printed: %q", stdout.String())
+	}
+}
+
+// The control for the split (tick vqc): a SIGTERM is the platform saying
+// the container is going away — an eviction, a death like a panic, not a
+// person's stop — so its death line carries no state word and stays the
+// failed class. Only the interrupt is the cancelled class's own case.
+func TestWatchKeepsTheEvictionADeath(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 13, 6, 2, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
+		"stopped by a signal (terminated) before the run finished; evacuated: pushed the integration branch"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run the platform evicted; stderr %q",
+			code, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the eviction is not said to the person reading the stream: %q", stderr.String())
+	}
+}
+
+// The death line's two spellings, straight from the handler (tick vqc):
+// SIGINT — a person at a terminal — is led by the cancelled state word, the
+// word the classifier branches on, exactly as run_finished's details are
+// state-led; SIGTERM — the platform's eviction — keeps the plain death
+// sentence, because a death is what it is.
+func TestSignalStopDetailLeadsOnlyThePersonStopWithTheCancelledWord(t *testing.T) {
+	if got := signalStopDetail(syscall.SIGINT); !strings.HasPrefix(got, string(runstate.StateCancelled)+":") {
+		t.Errorf("the SIGINT death line %q is not led by the cancelled state word", got)
+	}
+	if got := signalStopDetail(syscall.SIGTERM); strings.HasPrefix(got, string(runstate.StateCancelled)+":") {
+		t.Errorf("the SIGTERM death line %q is led by the cancelled state word — an eviction is a death, not a stop", got)
+	}
+	if !strings.Contains(signalStopDetail(syscall.SIGINT), "stopped by a signal") {
+		t.Errorf("the SIGINT death line lost the sentence that says what happened: %q", signalStopDetail(syscall.SIGINT))
+>>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 	}
 }
