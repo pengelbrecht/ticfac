@@ -780,8 +780,16 @@ func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
 	}
 }
 
-// A merge refusal is a verdict about work that EXISTS, and the next run has to
+// A merge refusal is a verdict about work that EXISTS, and the next run has
 // be able to say so.
+//
+// Since tick 2p6 the conflict this fixture makes — add/add, the ordinary
+// two-ticks-one-file shape — is absorbed by a resolve-conflict job, so the
+// fixture runs that job and makes IT fail (mode conflict_unresolvable: the
+// job answers BLOCKED over an empty branch). A resolve that fails is the stop
+// the old merge stop became, and everything this guard pins — the refusal's
+// shape, the branch it keeps, the next run's hold — is unchanged by the job
+// in front of it.
 //
 // This is a REGRESSION GUARD rather than the proof of a repair, and the
 // difference is worth writing down. The gcx review reported it as a blocker:
@@ -800,7 +808,7 @@ func TestAnAttemptThatAnsweredDoneWithConcernsIsStillMerged(t *testing.T) {
 // which is what a person sees rather than which function wrote it down.
 func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{})
+	f := newFixture(t, fixtureOptions{mode: "conflict_unresolvable"})
 
 	// Stop once the attempt is collected: its work is on its branch and
 	// nothing has merged it yet, which is where a conflict is made.

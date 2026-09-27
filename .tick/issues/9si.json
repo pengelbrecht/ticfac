@@ -1,0 +1,14 @@
+{
+  "id": "9si",
+  "title": "A test that holds a gate slot is not flaky under the suite's own -parallel 12",
+  "description": "From gvc finding 45e76fc4 (3h0): TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot fails intermittently under the suite's own -parallel 12. Flaky means a bug: reproduce it deterministically (load, or a controlled delay), find the race, fix it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The race is reproduced deterministically, fixed, and the test passes 50/50 under -parallel 12 with CPU load",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T08:42:03.155093Z",
+  "updated_at": "2026-09-26T08:42:03.155093Z"
+}

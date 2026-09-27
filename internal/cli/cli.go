@@ -92,6 +92,15 @@ run-epic flags:
   --budget <usd>      the budget an operator asks for
   --ceiling <usd>     the deployment ceiling it is clamped to
   --wall <seconds>    the wall clock one job is bounded by
+  --absorption-depth <n>  how many absorptions ONE chain of the recursion may carry before the
+                      run stops for a person carrying the whole chain. The default is 3 (the first
+                      link is what the epic exists to absorb, the second is a defect in the absorbed
+                      fix's own ground, a third is already far from home, and past that a person
+                      should judge the chain rather than let the run keep going). The bound the
+                      run applies is RECORDED on the run branch, so a restart without this flag
+                      applies the bound the run already ran with; naming the flag explicitly is
+                      the person's raise — it overrides the record (0, the default, means not
+                      named: adopt what the run records)
   --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
                       in-flight work and writing the checkpoint before the process exits anyway — the
                       platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
@@ -221,10 +230,13 @@ finding flags:
 A worker that discovers something outside its tick reports it as a typed
 findings block in its report; the reconciler drafts each finding under
 .ticfac/runs/<run-id>/findings/ on the integration branch, stamped with the
-attempt that discovered it. The tick that reported it closes, the run
-continues, and the finding rides to the close-out — which does not hand
-over while any finding is untriaged, and refuses the hand-over when one is
-missing from the epic PR. Promotion keeps the
+attempt that discovered it. Each finding may carry done evidence — the
+[A<n>] acceptance item of the epic's definition of done the reporter says it
+breaks, and the command or test that would demonstrate it; the listing marks
+a finding that carries none as unlinked. The tick that reported it closes,
+the run continues, and the finding rides to the close-out — which does not
+hand over while any finding is untriaged, and refuses the hand-over when one
+is missing from the epic PR. Promotion keeps the
 scope decision human: it records the tick YOU created — pass the draft's
 discovered_from to the tracker when you file it, so the attempt that found
 it is never lost again — and nothing here writes the tracker for you.
@@ -344,6 +356,28 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		evacuateSeconds = fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
 			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
 				"and writing the checkpoint before the process exits anyway (0 disables the flush)")
+		// The absorption recursion's bound (tick qjj). Depth rather than wall
+		// clock: depth counts how far the run has travelled from the epic
+		// anyone asked for, and only a person can judge that. The default's
+		// reasoning lives on the constant; here the operator reads what the
+		// number governs and where to raise it when the stop is wrong.
+		//
+		// The default here is 0 — NOT NAMED — rather than the constant,
+		// because the reconciler cannot tell an operator who wrote
+		// --absorption-depth 3 from one who wrote nothing (tick wz0, finding
+		// 95f5ee1a): a named bound is the person's raise over the recorded
+		// one, and an unnamed one adopts what the run branch records, so a
+		// cold restart honours the bound the warm run ran with. Zero and
+		// below still mean the DEFAULT inside the options' own normalising,
+		// never an unbounded recursion.
+		absorptionDepth = fs.Int("absorption-depth", 0,
+			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
+				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
+				"before the run stops for a person carrying the whole chain (0, the default, means not "+
+				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
+				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
+				"ground, a third is already far from home, and past that a person should judge the chain "+
+				"rather than let the run keep going)")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -415,29 +449,44 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 			"until one is configured.\n", epicID, pullsErr)
 	}
 
-	reconciler, err := reconcile.New(reconcile.Options{
-		Repo:              *repo,
-		Remote:            *remote,
-		EpicID:            epicID,
-		RunID:             *runID,
-		IntegrationBranch: *branch,
-		BaseRef:           *base,
-		Owner:             *owner,
-		Tracker:           tracker,
-		NewExecutor:       executorFactory(*runner, *gate),
-		Executors:         knownExecutors(),
-		ExecStateRoot:     *stateRoot,
-		GateConfig:        *gate,
-		ProfileDir:        *profiles,
-		Tier:              *tier,
-		WallSeconds:       *wall,
-		StallWarnAfter:    time.Duration(*stallWarn) * time.Second,
-		BudgetUSD:         *budget,
-		CeilingUSD:        *ceiling,
-		PullRequests:      pulls,
-		AutoResumeCap:     autoResumeCap(*supervise, *maxResumes),
-		Classifier:        classifier,
-	})
+	// The one client, when a credential built one, is handed to BOTH exchanges
+	// that ask it: the work-type classification and the gating prediction the
+	// absorption decision drives (tick npq). The wrap is a nil CHECK and not
+	// a plain field assignment because a typed nil *jev.Client inside an
+	// interface is not nil — the seam would dial a client that does not exist,
+	// and the nil check each exchange runs would pass it straight through.
+	opts := reconcile.Options{
+		Repo:                 *repo,
+		Remote:               *remote,
+		EpicID:               epicID,
+		RunID:                *runID,
+		IntegrationBranch:    *branch,
+		BaseRef:              *base,
+		Owner:                *owner,
+		Tracker:              tracker,
+		NewExecutor:          executorFactory(*runner, *gate),
+		Executors:            knownExecutors(),
+		ExecStateRoot:        *stateRoot,
+		GateConfig:           *gate,
+		ProfileDir:           *profiles,
+		Tier:                 *tier,
+		WallSeconds:          *wall,
+		StallWarnAfter:       time.Duration(*stallWarn) * time.Second,
+		BudgetUSD:            *budget,
+		CeilingUSD:           *ceiling,
+		PullRequests:         pulls,
+		AutoResumeCap:        autoResumeCap(*supervise, *maxResumes),
+		AbsorptionDepthBound: *absorptionDepth,
+		// The person's raise (tick wz0): a bound named on the command line —
+		// and only one named there, never the default the flag merely carries
+		// — overrides the bound recorded on the run branch.
+		AbsorptionDepthExplicit: *absorptionDepth > 0,
+	}
+	if classifier != nil {
+		opts.Classifier = classifier
+		opts.GatingClassifier = classifier
+	}
+	reconciler, err := reconcile.New(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		return 1
@@ -649,10 +698,14 @@ func startupLine(runID string) string {
 // credential source the process found (tick x0k): the run's own gateway route
 // inside a cloud sandbox, the operator's key in $TICFAC_JEV_API_KEY locally,
 // and nil — with the note saying what the run does without one — when neither
-// resolves, which is the documented degradation to [tier_policy.start]. It is
-// a function of its own so the wiring is the same under test as in production:
-// what run-epic hands the reconciler is exactly what these tests build.
-func classifierForRun() (classifier reconcile.Classifier, note string) {
+// resolves, which is the documented degradation to [tier_policy.start]. The
+// one client is handed to BOTH exchanges that ask it: the work-type
+// classification (reconcile.Classifier) and the gating prediction the
+// absorption decision drives (gating.Classifier, tick npq) — the same
+// credential, the same client, two different questions. It is a function of
+// its own so the wiring is the same under test as in production: what
+// run-epic hands the reconciler is exactly what these tests build.
+func classifierForRun() (classifier *jev.Client, note string) {
 	source := jev.ResolveCredential(os.Getenv)
 	if !source.Configured {
 		return nil, source.Note

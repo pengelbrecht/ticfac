@@ -65,7 +65,7 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 		r.record(entry.TickID, StageCollected,
 			"the %s job, %s, is already merged into %s at %s; it is not collected a second time",
 			entry.Role, r.attemptName(entry.TickID, marker.Attempt), r.branch, short(integrated))
-		merged, err := r.integrate(marker, nil)
+		merged, err := r.integrate(ctx, marker, nil)
 		if err != nil {
 			r.disposeRefused(handle, executor, marker, err)
 			return err
@@ -94,7 +94,7 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 	// actually produced is integrated and gated like any other change before
 	// its tick closes. A review is dispatched read-only and has none.
 	if sourceGradeFor(entry.Role) == "write" && collected.Result.Source.Commits > 0 {
-		merged, err := r.integrate(marker, collected)
+		merged, err := r.integrate(ctx, marker, collected)
 		if err != nil {
 			r.disposeRefused(handle, executor, marker, err)
 			return err

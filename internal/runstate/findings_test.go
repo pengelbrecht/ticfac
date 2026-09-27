@@ -1,6 +1,7 @@
 package runstate
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"strings"
 	"testing"
@@ -69,6 +70,109 @@ func TestAFindingIsProposedAsADraftOnOrigin(t *testing.T) {
 	}
 	if reread.Status != FindingProposed {
 		t.Errorf("status %q, want %q", reread.Status, FindingProposed)
+	}
+}
+
+// THE DONE EVIDENCE (tick nfo): the draft carries the finding's claim
+// against the epic's definition of done — the [A<n>] acceptance item the
+// reporter believes it breaks, and the command or test that would
+// demonstrate the breakage — and marks the three states of that claim so no
+// reader has to infer one from silence: LINKED (an item is named), NONE
+// (the reporter answered that it breaks no item) and UNLINKED (no claim was
+// reported at all).
+//
+// short: the record's own rules, decided in memory
+func TestADraftMarksItsDoneEvidence(t *testing.T) {
+	linked := testFinding("1inked00")
+	linked.DoneItem, linked.DemonstratingCheck = "A1", "go"
+	if err := linked.Validate(); err != nil {
+		t.Fatalf("a linked draft does not validate: %v", err)
+	}
+	if got := linked.Linkage(); got != FindingLinkedToAnItem {
+		t.Errorf("linkage %q, want %q", got, FindingLinkedToAnItem)
+	}
+	if got, want := linked.LinkageText(), `breaks done item A1 (demonstrated by "go")`; got != want {
+		t.Errorf("linkage text %q, want %q", got, want)
+	}
+
+	none := testFinding("c1aimed0")
+	none.DoneItem = subprocess.FindingDoneItemNone
+	if err := none.Validate(); err != nil {
+		t.Fatalf("a draft claiming to break no item does not validate: %v", err)
+	}
+	if got := none.Linkage(); got != FindingClaimsNoItem {
+		t.Errorf("linkage %q, want %q: 'none' is the reporter's answer, not an absent claim", got, FindingClaimsNoItem)
+	}
+
+	unlinked := testFinding("un1inked")
+	if err := unlinked.Validate(); err != nil {
+		t.Fatalf("an unlinked draft does not validate: a finding missing the evidence fields is still accepted")
+	}
+	if got := unlinked.Linkage(); got != FindingUnlinked {
+		t.Errorf("linkage %q, want %q", got, FindingUnlinked)
+	}
+	if got, want := unlinked.LinkageText(), "unlinked: names no done item"; got != want {
+		t.Errorf("linkage text %q, want %q", got, want)
+	}
+
+	// A done item that is neither an id nor the reporter's none is refused,
+	// naming the field: a claim a reader cannot key to the epic's items is a
+	// link nobody can follow.
+	bad := testFinding("badc1aim")
+	bad.DoneItem = "a1"
+	if err := bad.Validate(); err == nil || !strings.Contains(err.Error(), "finding.done_item") {
+		t.Fatalf("err %v, want a refusal naming finding.done_item", err)
+	}
+}
+
+// The evidence fields ride the draft to origin and back — a linked and an
+// unlinked finding both round-trip — and the triage that decides a draft
+// cannot rewrite its claim: the discovery is the worker's report, not the
+// person's decision.
+func TestADraftRoundTripsItsDoneEvidenceOnOrigin(t *testing.T) {
+	shorttest.EndToEnd(t)
+	o := newOrigin(t)
+	s := o.actor("reconciler", testRun)
+
+	linked := testFinding("1inked01")
+	linked.DoneItem, linked.DemonstratingCheck = "A3", "ts"
+	if _, err := s.PutFinding(linked); err != nil {
+		t.Fatalf("propose the linked finding: %v", err)
+	}
+	unlinked := testFinding("un1inked2")
+	if _, err := s.PutFinding(unlinked); err != nil {
+		t.Fatalf("propose the unlinked finding: %v", err)
+	}
+
+	reader := o.actor("reader", testRun)
+	if _, err := reader.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	reread, ok, err := reader.Finding("1inked01")
+	if err != nil || !ok {
+		t.Fatalf("the linked draft is not on origin: %v %v", ok, err)
+	}
+	if reread.DoneItem != "A3" || reread.DemonstratingCheck != "ts" {
+		t.Errorf("the draft lost its done evidence: done_item %q, demonstrating_check %q",
+			reread.DoneItem, reread.DemonstratingCheck)
+	}
+	reread, ok, err = reader.Finding("un1inked2")
+	if err != nil || !ok {
+		t.Fatalf("the unlinked draft is not on origin: %v %v", ok, err)
+	}
+	if reread.DoneItem != "" || reread.DemonstratingCheck != "" || reread.Linkage() != FindingUnlinked {
+		t.Errorf("the unlinked draft came back claimed: done_item %q, demonstrating_check %q, linkage %q",
+			reread.DoneItem, reread.DemonstratingCheck, reread.Linkage())
+	}
+
+	// The triage decides the draft and moves nothing but the decision: the
+	// evidence the worker reported is what the absorption decision later
+	// reads, and a person deciding cannot rewrite the claim.
+	if _, decided, err := s.TriageFinding("1inked01", Triage{Status: FindingPromoted, By: "the operator", PromotedAs: "zz9"}); err != nil {
+		t.Fatalf("triage: %v", err)
+	} else if decided.DoneItem != "A3" || decided.DemonstratingCheck != "ts" {
+		t.Errorf("the triage rewrote the discovery: done_item %q, demonstrating_check %q",
+			decided.DoneItem, decided.DemonstratingCheck)
 	}
 }
 

@@ -103,6 +103,11 @@ func findingsCommand(args []string, stdout, stderr io.Writer) int {
 			findingTarget(finding.Target), finding.Title)
 		fmt.Fprintf(stdout, "    discovered by %s (tick %s, run dispatch #%d)\n",
 			finding.DiscoveredFrom, finding.TickID, finding.Attempt)
+		// The linkage mark (tick nfo): the claim against the epic's definition
+		// of done — which [A<n>] item the reporter says is broken, demonstrated
+		// by what — or the unlinked mark, so a finding nobody linked reads as
+		// making no claim rather than as claiming to break nothing.
+		fmt.Fprintf(stdout, "    %s\n", finding.LinkageText())
 		switch finding.Status {
 		case runstate.FindingPromoted:
 			fmt.Fprintf(stdout, "    promoted as %s by %s at %s\n", finding.PromotedAs, finding.TriagedBy, finding.TriagedAt)

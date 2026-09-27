@@ -1,0 +1,55 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "gvc",
+    "job_id": "run-epic-gvc/tick-9xp/attempt-14",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "b1ddebf3d6931cf8291619b574fbad8487976342",
+    "tick_id": "9xp"
+  },
+  "response": {
+    "findings": [],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-gvc/tick-9xp/attempt-14",
+      "commits": 1,
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-gvc/9xp/RESULT-9xp.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "provisional report; the ezj partition is not yet written"
+  },
+  "validated": true,
+  "requested_at": "2026-09-26T08:24:48Z",
+  "answered_at": "2026-09-26T08:24:48Z",
+  "provenance": {
+    "run_id": "epic-gvc",
+    "tick_id": "9xp",
+    "attempt": 14,
+    "source_ref": "refs/heads/epic/gvc",
+    "source_sha": "b1ddebf3d6931cf8291619b574fbad8487976342",
+    "integration_ref": "refs/heads/epic/gvc",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:99aa0c821cd10c6f9760599c37a8b35224bab8d7a22f64ab2f50bdb925bf0c64",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

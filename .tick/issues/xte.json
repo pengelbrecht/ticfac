@@ -7,10 +7,10 @@
   "priority": 2,
   "type": "epic",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "A cloud epic run dispatches each tick into its OWN Cloudflare sandbox running pi on GLM 5.3 or GLM 5.3 Flash, and starts NO claude process anywhere in the container for ANY role, review and closeout included; no worker shares the orchestrator's container; a role with no cloud routing declared refuses the run at start rather than falling back to a default; the orchestrator survives a restart without dispatching a second sandbox for a tick already running one; proven by a run whose trace shows the expected provider per attempt.",
+  "acceptance_criteria": "[A1] A cloud epic run dispatches each tick into its own Cloudflare sandbox running a Workers AI model (today pi on GLM 5.3 or GLM 5.3 Flash).\n[A2] No claude process starts anywhere in the container for any role, review and closeout included.\n[A3] No worker shares the orchestrator's container.\n[A4] A role with no cloud routing declared refuses the run at start rather than falling back to a default.\n[A5] The orchestrator survives a restart without dispatching a second sandbox for a tick already running one.\n[A6] Proven by a run whose trace shows the expected provider per attempt.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-22T11:41:02.210105Z",
-  "updated_at": "2026-09-24T06:31:21.327023Z",
+  "updated_at": "2026-09-26T08:41:42.310416Z",
   "closed_at": "2026-09-24T06:31:21.327023Z",
   "closed_reason": "merged as building blocks in #33 (operator's choice B); its unmet goal lives in yoh (xev, gbs, a08, nwn, 6gr)"
 }
