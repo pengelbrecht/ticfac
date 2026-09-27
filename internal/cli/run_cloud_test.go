@@ -21,6 +21,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -271,8 +272,10 @@ func TestRunCloudReportsAQueuedSubmission(t *testing.T) {
 	}
 
 	code, stdout, stderr := runRunCloud(t, repo, "epic1")
-	if code != exitSuccess {
-		t.Fatalf("exit %d for a queued submission: %s\n%s", code, stderr.String(), stdout.String())
+	// Queued is in flight, not done: the exit table's running class (tick
+	// 8v3), the same code the local command exits for a run still starting.
+	if code != exitRunning {
+		t.Fatalf("exit %d for a queued submission, want %d (running): %s\n%s", code, exitRunning, stderr.String(), stdout.String())
 	}
 	if attached {
 		t.Error("a queued submission was attached to; there is no run to attach to yet")
@@ -416,8 +419,8 @@ func TestRunCloudDetachKeepsTheRunGoing(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := runCloudAttach(ctx, t.TempDir(), "epic1", live, &stdout, &stderr)
-	if code != exitSuccess {
-		t.Fatalf("exit %d for a detached live run, want 0: %s\n%s", code, stderr.String(), stdout.String())
+	if code != exitRunning {
+		t.Fatalf("exit %d for a detached live run, want %d (running): %s\n%s", code, exitRunning, stderr.String(), stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "detached from cloud run "+live) ||
 		!strings.Contains(stdout.String(), "`ticfac run epic1 --cloud` attaches again") {
@@ -470,5 +473,55 @@ func TestRunCloudNamesTheMissingFactory(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "factory") {
 		t.Fatalf("the refusal does not name the factory: %s", stderr.String())
+	}
+}
+
+// TestRunCloudJSONAnswersWithTheRunDocument: `run --cloud --json` holds the
+// agent contract the local command holds (tick 8v3 meets tick ejw): stdout
+// is one ticfac.run.v1 document naming the factory's run id, the prose and
+// the attached view go to stderr, and the exit code is the state's class —
+// here a detach from a live cloud run, the running class.
+func TestRunCloudJSONAnswersWithTheRunDocument(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	live := cloudRunIDOf("cc33")
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		if request.Method == http.MethodGet && request.Path == cloudIndexPath {
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": live, "epic": "epic1", "state": "running", "started_at": "2026-09-27T10:00:00Z",
+			}}}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	saveRunCloudAttach(t)
+	runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdout, stderr io.Writer) int {
+		fmt.Fprintf(stdout, "(attach seam) attached to cloud run %s\n", runID)
+		return exitRunning
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "--cloud", "--json", "--repo", repo, "epic1"}, &stdout, &stderr)
+	if code != exitRunning {
+		t.Fatalf("exit %d for a detached live cloud run, want %d (running): %s\n%s",
+			code, exitRunning, stderr.String(), stdout.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout with --cloud --json is not one document:\n%s\n--stderr--\n%s", stdout.String(), stderr.String())
+	}
+	for field, want := range map[string]any{
+		"schema": "ticfac.run.v1", "state": "running", "action": "attached",
+		"epic_id": "epic1", "run_id": live,
+	} {
+		if doc[field] != want {
+			t.Errorf("the document's %s is %#v, want %#v:\n%s", field, doc[field], want, stdout.String())
+		}
+	}
+	if !strings.Contains(stderr.String(), "cloud run "+live+" is alive") ||
+		!strings.Contains(stderr.String(), "(attach seam) attached to cloud run "+live) {
+		t.Fatalf("the prose and the attached view did not go to stderr:\n%s", stderr.String())
 	}
 }

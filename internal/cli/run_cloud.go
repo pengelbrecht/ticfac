@@ -15,8 +15,9 @@ package cli
 //   - ATTACH is watch's own body over the SAME feed source `ticfac watch`
 //     reads a cloud run through (feedSource, tick k7p): the same live
 //     block on a terminal, the same plain stream on a pipe, the same exit
-//     codes — 0 ended, 3 ended holding something for a person, 1 unreadable
-//     or interrupted. There is deliberately no second implementation of the
+//     codes — the exit table's (tick 8v3): 0 ended, 3 ended holding
+//     something for a person, 5 detached while the run keeps going, 1
+//     unreadable. There is deliberately no second implementation of the
 //     view; two is the drift every earlier surface had to settle.
 //
 //   - RESUME is a second invocation against a run the factory says has
@@ -34,8 +35,10 @@ package cli
 //     and the one triage command that clears it.
 //
 // Ctrl-C detaches without stopping, as locally: the watch ends, the run in
-// the factory keeps going, and the line that says so names the one command
-// that comes back.
+// the factory keeps going, the command exits the running class (5) and the
+// line that says so names the one command that comes back. --json answers
+// with the local command's own document (ticfac.run.v1), its run_id the
+// factory's, so an agent reads a cloud run the way it reads a local one.
 //
 // The expert `ticfac cloud run|status|logs|...` commands stay for what they
 // alone do — a queued submission, a budget ceiling, a hard stop — and this
@@ -60,7 +63,16 @@ import (
 var runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdout, stderr io.Writer) int {
 	repoArg := repo
 	interval := defaultWatchInterval
-	code := watchCommand(ctx, []string{runID}, &repoArg, &interval, stdout, stderr)
+	plainJSON := false
+	code := watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, stdout, stderr)
+	if code == exitRunning {
+		// The watch itself learned the run's claim and says the run keeps
+		// going: the same detach, in the local attach's words.
+		fmt.Fprintf(stdout, "detached from cloud run %s — the run keeps going in the factory; "+
+			"`ticfac run %s --cloud` attaches again, `ticfac status %s` asks whether it is alive\n",
+			runID, epicID, runID)
+		return exitRunning
+	}
 	if ctx.Err() != nil && code == 1 {
 		// Ctrl-C: the run keeps going in the factory — the same detach the
 		// local attach grants. The record is asked on a context that does not
@@ -73,7 +85,7 @@ var runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdou
 				fmt.Fprintf(stdout, "detached from cloud run %s — the run keeps going in the factory; "+
 					"`ticfac run %s --cloud` attaches again, `ticfac status %s` asks whether it is alive\n",
 					runID, epicID, runID)
-				return 0
+				return exitRunning
 			}
 		}
 	}
@@ -81,12 +93,28 @@ var runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdou
 }
 
 // runCloudCommand is `run --cloud`'s body: the same verbs as the local body,
-// against the factory.
-func runCloudCommand(ctx context.Context, epicID, repo string, stdout, stderr io.Writer) int {
+// against the factory — and the same --json contract (tick 8v3): prose and
+// the attached view on stderr, one ticfac.run.v1 document on stdout, and an
+// exit code that is the document's state class.
+func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, stdout, stderr io.Writer) int {
+	prose := stdout
+	if *fl.asJSON {
+		prose = stderr
+	}
+	finish := func(action, state, runID, note string) int {
+		if *fl.asJSON {
+			if err := emitRunJSON(action, state, note, epicID, runID, fl, stdout); err != nil {
+				fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
+				return exitGeneric
+			}
+		}
+		return stateExitClass(state)
+	}
+
 	client, err := newCloudClient()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
-		return 1
+		return finish("starting", agentStateFailed, "", err.Error())
 	}
 
 	// The run the epic already has in the factory, from the run index — the
@@ -96,12 +124,13 @@ func runCloudCommand(ctx context.Context, epicID, repo string, stdout, stderr io
 	existing, err := cloudRunsForEpic(ctx, client, epicID)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
-		return 1
+		return finish("starting", agentStateFailed, "", err.Error())
 	}
 	if existing != nil && cloudRunClaimsLife(existing.State) {
-		fmt.Fprintf(stdout, "cloud run %s is alive (the factory's record says %s) — attaching; "+
+		fmt.Fprintf(prose, "cloud run %s is alive (the factory's record says %s) — attaching; "+
 			"Ctrl-C detaches without stopping it\n", existing.RunID, stateOrUnknown(existing.State))
-		return runCloudAttach(ctx, repo, epicID, existing.RunID, stdout, stderr)
+		code := runCloudAttach(ctx, repo, epicID, existing.RunID, prose, stderr)
+		return finish("attached", runAttachState(repo, existing.RunID, code), existing.RunID, "")
 	}
 
 	// Not alive in the factory — never started, or finished. All three are
@@ -111,28 +140,32 @@ func runCloudCommand(ctx context.Context, epicID, repo string, stdout, stderr io
 	// invocation of `run` owes an operator who has run this epic before.
 	action := "starting"
 	if existing != nil {
-		fmt.Fprintf(stdout, "cloud run %s is not running (the factory's record says %s) — resuming the epic as a new submission\n",
+		fmt.Fprintf(prose, "cloud run %s is not running (the factory's record says %s) — resuming the epic as a new submission\n",
 			existing.RunID, stateOrUnknown(existing.State))
 		action = "resuming"
 	} else {
-		fmt.Fprintf(stdout, "no cloud run for epic %s in the factory — starting one\n", epicID)
+		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
 	}
 
-	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, stdout)
+	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, prose)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
-		return 1
+		return finish(action, agentStateFailed, "", err.Error())
 	}
 	if queued {
 		// The submission parked behind the project lease: the command did its
 		// work, the run just has not started yet, and an attach to a run with
 		// no feed would read as a failure it is not. The line says where it
-		// parks and how to come back.
-		return 0
+		// parks and how to come back. The work is in flight, not done — the
+		// exit table's running class (5), the same answer the local command
+		// gives a run detached before it claimed its life.
+		return finish(action, agentStateRunning, runID,
+			"queued in the factory behind the project lease; it starts when that run ends")
 	}
-	fmt.Fprintf(stdout, "cloud run %s %s in the factory — attaching; Ctrl-C detaches without stopping it\n",
+	fmt.Fprintf(prose, "cloud run %s %s in the factory — attaching; Ctrl-C detaches without stopping it\n",
 		runID, action)
-	return runCloudAttach(ctx, repo, epicID, runID, stdout, stderr)
+	code := runCloudAttach(ctx, repo, epicID, runID, prose, stderr)
+	return finish(action, runAttachState(repo, runID, code), runID, "")
 }
 
 // cloudRunClaimsLife is whether a run record's own state is one a live cloud

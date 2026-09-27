@@ -34,28 +34,35 @@ func newCloudLogsCommand(stdout, stderr io.Writer) *cobra.Command {
 	follow := fs.Bool("follow", false, "keep reading as the run prints, until it ends or its supervisor dies")
 	followShort := fs.Bool("f", false, "shorthand for --follow")
 	interval := fs.Duration("interval", defaultCloudLogsInterval, "how often --follow asks again")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.cloud-logs.v1): the log text with its bounds and the worker streams; with --follow it refuses — a live stream is not one document")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		changed := func(name string) bool { return c.Flags().Changed(name) }
-		return codeToErr(runCloudLogs(c.Context(), args, tail, tick, follow, followShort, interval, changed, stdout, stderr))
+		return codeToErr(runCloudLogs(c.Context(), args, tail, tick, follow, followShort, interval, asJSON, changed, stdout, stderr))
 	}
 	return cmd
 }
 
 func runCloudLogs(ctx context.Context, args []string, tail *int, tick *string, follow, followShort *bool,
-	interval *time.Duration, changed func(string) bool, stdout, stderr io.Writer) int {
-	err := cloudLogs(ctx, args, tail, tick, follow, followShort, interval, changed, stdout, stderr)
+	interval *time.Duration, asJSON *bool, changed func(string) bool, stdout, stderr io.Writer) int {
+	err := cloudLogs(ctx, args, tail, tick, follow, followShort, interval, asJSON, changed, stdout, stderr)
 	return reportCommand("cloud logs", err, stderr)
 }
 
 func cloudLogs(ctx context.Context, args []string, tail *int, tick *string, follow, followShort *bool,
-	interval *time.Duration, changed func(string) bool, stdout, stderr io.Writer) error {
+	interval *time.Duration, asJSON *bool, changed func(string) bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
 	}
 	if *followShort {
 		*follow = true
+	}
+	if *asJSON && *follow {
+		// One document is one answer; a read that stays open printing as the
+		// container prints is a stream, and its answer is the plain path.
+		return newExitError(exitUsage, "--json prints one document, the log as it stands — a live stream is "+
+			"not one document. Read it with --json, follow it with --follow")
 	}
 
 	if *tail < 0 {
@@ -104,6 +111,56 @@ func cloudLogs(ctx context.Context, args []string, tail *int, tick *string, foll
 		return newExitError(exitGeneric, "%v", err)
 	}
 
+	text := response.Text
+	dropped := false
+	if *tail > 0 {
+		text, dropped = lastLines(text, *tail)
+	}
+	if *asJSON {
+		// One document, the log as it stands — the same text the prose path
+		// prints below (the tail applied), with the bounds and the worker
+		// streams beside it. An empty log is an honest empty document, not
+		// the prose path's explanation of one. The run's state word is
+		// run_state: `state` is the exit table's, and the two must never be
+		// the same field.
+		doc := struct {
+			agentDoc
+			RunID       string           `json:"run_id"`
+			Project     string           `json:"project,omitempty"`
+			RunState    string           `json:"run_state,omitempty"`
+			TraceID     string           `json:"trace_id,omitempty"`
+			TickID      string           `json:"tick_id,omitempty"`
+			Text        string           `json:"text"`
+			Bytes       int              `json:"bytes"`
+			TotalBytes  int              `json:"total_bytes"`
+			Truncated   bool             `json:"truncated"`
+			Streams     []cloudLogStream `json:"streams"`
+			TailApplied bool             `json:"tail_applied"`
+			TailDropped bool             `json:"tail_dropped,omitempty"`
+		}{
+			agentDoc:    agentDoc{Schema: agentSchemaID("cloud-logs"), State: agentStateDone},
+			RunID:       response.RunID,
+			Project:     response.Project,
+			RunState:    response.State,
+			TraceID:     response.TraceID,
+			TickID:      response.TickID,
+			Text:        text,
+			Bytes:       response.Bytes,
+			TotalBytes:  response.TotalBytes,
+			Truncated:   response.Truncated,
+			Streams:     response.Streams,
+			TailApplied: *tail > 0,
+			TailDropped: dropped,
+		}
+		if doc.Streams == nil {
+			doc.Streams = []cloudLogStream{}
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			return newExitError(exitGeneric, "%v", err)
+		}
+		return nil
+	}
+
 	if strings.TrimSpace(response.Text) == "" && !*follow {
 		reportEmptyCloudLog(stdout, runID, tickID, response)
 		return nil
@@ -127,8 +184,8 @@ func cloudLogs(ctx context.Context, args []string, tail *int, tick *string, foll
 		}
 	}
 
-	text := response.Text
-	dropped := false
+	text = response.Text
+	dropped = false
 	if *tail > 0 {
 		text, dropped = lastLines(text, *tail)
 	}

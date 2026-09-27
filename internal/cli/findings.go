@@ -40,19 +40,28 @@ func findingRunOptions(fs *flag.FlagSet) (repo, remote, branch, runID *string) {
 	return repo, remote, branch, runID
 }
 
+// findingsFlags is the --json flag `findings` carries (tick 8v3): the
+// listing is data — one versioned document with every draft's full record,
+// the same fields `ticfac triage --json` lists and decides by.
+type findingsFlags struct {
+	asJSON *bool
+}
+
 // newFindingsCommand builds the cobra command for `findings`.
 func newFindingsCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "findings <epic-id>",
 		Short: "list the worker findings drafted for triage",
 		Long: `List the findings a run's workers drafted for triage: the key, the triage
-state, the target and the attempt that discovered each.`,
+state, the target and the attempt that discovered each. --json answers the
+same listing as one versioned document (ticfac.findings.v1).`,
 	}
 	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
 	repo, remote, branch, runID := findingRunOptions(fs)
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.findings.v1): every draft's full record")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(findingsCommand(args, repo, remote, branch, runID, stdout, stderr))
+		return codeToErr(findingsCommand(args, repo, remote, branch, runID, asJSON, stdout, stderr))
 	}
 	return cmd
 }
@@ -81,9 +90,10 @@ surface will not make for you.`,
 	discard := fs.Bool("discard", false, "record that a person looked and said no")
 	fixedAs := fs.String("fixed-as", "", "record that the finding was repaired inside this epic, naming the commit that repaired it")
 	by := fs.String("by", "", "the person triaging this draft")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.finding.v1) recording the decision")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(findingCommand(args, repo, remote, branch, runID, promoteAs, discard, fixedAs, by, stdout, stderr))
+		return codeToErr(findingCommand(args, repo, remote, branch, runID, promoteAs, discard, fixedAs, by, asJSON, stdout, stderr))
 	}
 	return cmd
 }
@@ -127,7 +137,7 @@ func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.St
 	return store, nil
 }
 
-func findingsCommand(args []string, repo, remote, branch, runID *string, stdout, stderr io.Writer) int {
+func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac findings: exactly one epic id is required\n")
@@ -144,6 +154,38 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, stdout,
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac findings %s: %v\n", epicID, err)
 		return 1
+	}
+	if *asJSON {
+		// One versioned document, every draft's FULL record — the same shape
+		// the triage surface lists and decides by, so an agent pipes one into
+		// the other without a translation: `ticfac findings --json` to read,
+		// `ticfac triage <epic> <prefix>=<decision>` to settle.
+		listed := make([]triageFindingJSON, 0, len(findings))
+		for _, finding := range findings {
+			listed = append(listed, newTriageFindingJSON(finding))
+		}
+		untriaged := 0
+		for _, finding := range findings {
+			if finding.Status == runstate.FindingProposed {
+				untriaged++
+			}
+		}
+		doc := struct {
+			agentDoc
+			RunID     string              `json:"run_id"`
+			Untriaged int                 `json:"untriaged"`
+			Findings  []triageFindingJSON `json:"findings"`
+		}{
+			agentDoc:  agentDoc{Schema: agentSchemaID("findings"), State: agentStateDone},
+			RunID:     store.RunID(),
+			Untriaged: untriaged,
+			Findings:  listed,
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			fmt.Fprintf(stderr, "ticfac findings %s: %v\n", epicID, err)
+			return 1
+		}
+		return 0
 	}
 	if len(findings) == 0 {
 		fmt.Fprintf(stdout, "run %s has no findings drafted for triage.\n", store.RunID())
@@ -232,7 +274,7 @@ func findingTarget(target string) string {
 	return target
 }
 
-func findingCommand(args []string, repo, remote, branch, runID, promoteAs *string, discard *bool, fixedAs, by *string, stdout, stderr io.Writer) int {
+func findingCommand(args []string, repo, remote, branch, runID, promoteAs *string, discard *bool, fixedAs, by *string, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 2 || rest[0] == "" || rest[1] == "" {
 		fmt.Fprintf(stderr, "ticfac finding: exactly one epic id and one finding key are required\n")
@@ -276,6 +318,10 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		return 1
 	}
 	if finding.Status != runstate.FindingProposed {
+		if *asJSON {
+			emitFindingJSON(stdout, key, finding.Status, *by, finding.PromotedAs, finding.FixedAs, "a decision is never made twice, and a repeat finding proposes nothing new")
+			return 0
+		}
 		fmt.Fprintf(stdout, "finding %s is already %s", key, finding.Status)
 		if finding.TriagedBy != "" {
 			fmt.Fprintf(stdout, " (by %s at %s)", finding.TriagedBy, finding.TriagedAt)
@@ -306,6 +352,11 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		return 1
 	}
 	if outcome.IsConflict() {
+		if *asJSON {
+			emitFindingJSON(stdout, key, decided.Status, decided.TriagedBy, decided.PromotedAs, decided.FixedAs,
+				"decided while you were deciding it: their decision stands")
+			return 0
+		}
 		fmt.Fprintf(stdout, "finding %s was decided while you were deciding it: it is %s", key, decided.Status)
 		if decided.TriagedBy != "" {
 			fmt.Fprintf(stdout, " (by %s)", decided.TriagedBy)
@@ -314,6 +365,10 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		return 0
 	}
 	if triage.Status == runstate.FindingFixed {
+		if *asJSON {
+			emitFindingJSON(stdout, key, "fixed", *by, "", decided.FixedAs, "")
+			return 0
+		}
 		fmt.Fprintf(stdout, "finding %s is recorded as fixed, repaired as %s, %s's decision of run %s.\n"+
 			"Ticks of the run whose findings are all triaged can now close. The same finding reported again is not suppressed: "+
 			"if it comes back, the fix did not hold, and that is exactly when the run must hear it.\n",
@@ -321,10 +376,19 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		return 0
 	}
 	if triage.Status == runstate.FindingPromoted {
+		if *asJSON {
+			emitFindingJSON(stdout, key, "promoted", *by, decided.PromotedAs, "",
+				fmt.Sprintf("file the tick carrying `discovered_from %s`", finding.DiscoveredFrom))
+			return 0
+		}
 		fmt.Fprintf(stdout, "finding %s is promoted as %s, recorded as %s's decision of run %s.\n"+
 			"File the tick carrying `discovered_from %s` so the attempt that found it is never lost again.\n"+
 			"Ticks of the run whose findings are all triaged can now close.\n",
 			key, decided.PromotedAs, *by, store.RunID(), finding.DiscoveredFrom)
+		return 0
+	}
+	if *asJSON {
+		emitFindingJSON(stdout, key, "discarded", *by, "", "", "")
 		return 0
 	}
 	fmt.Fprintf(stdout, "finding %s is discarded, recorded as %s's decision of run %s.\n"+
@@ -353,4 +417,31 @@ func checkPromotedAs(finding *runstate.Finding, promotedAs string) error {
 		return fmt.Errorf("this finding is routed to %s: promote it as \"%s:<tick-id>\", naming the tick", finding.Target, finding.Target)
 	}
 	return nil
+}
+
+// findingJSON is `finding --json`'s answer, ticfac.finding.v1: the decision
+// as it was recorded — the verdict word, the actor, the tick a promotion
+// created, the commit a fix named — the same fields the prose sentence
+// carries, so an agent never parses a sentence to learn what its own
+// command did.
+type findingJSON struct {
+	agentDoc
+	Key        string `json:"key"`
+	Decision   string `json:"decision"`
+	By         string `json:"by"`
+	PromotedAs string `json:"promoted_as,omitempty"`
+	FixedAs    string `json:"fixed_as,omitempty"`
+	Note       string `json:"note,omitempty"`
+}
+
+func emitFindingJSON(stdout io.Writer, key, decision, by, promotedAs, fixedAs, note string) {
+	_ = emitAgentJSON(stdout, findingJSON{
+		agentDoc:   agentDoc{Schema: agentSchemaID("finding"), State: agentStateDone},
+		Key:        key,
+		Decision:   decision,
+		By:         by,
+		PromotedAs: promotedAs,
+		FixedAs:    fixedAs,
+		Note:       note,
+	})
 }

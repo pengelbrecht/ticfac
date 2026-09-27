@@ -22,6 +22,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -489,8 +490,9 @@ func TestRunTreatsAnInterruptedAttachAsADetach(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the interrupted attach never returned")
 	}
-	if code != 0 {
-		t.Errorf("an interrupted attach of a live run exited %d, want 0 — detaching is not a failure", code)
+	if code != exitRunning {
+		t.Errorf("an interrupted attach of a live run exited %d, want %d — detaching is not a failure and not done either: "+
+			"the run keeps going, and the exit table's running class is how a script tells (tick 8v3)", code, exitRunning)
 	}
 	if !strings.Contains(stdout.String(), "detached from run epic-foo") ||
 		!strings.Contains(stdout.String(), "keeps going in the background") {
@@ -647,10 +649,12 @@ func TestRunStartsDetachedAttachesAndResumesForReal(t *testing.T) {
 	}
 
 	// 1. A run that never ran is started in the background, and Ctrl-C
-	//    detaches without stopping it.
+	//    detaches without stopping it — exiting the table's RUNNING class
+	//    (5, tick 8v3): the epic is in flight, and an agent waiting on this
+	//    command must not read "done" where the run keeps going.
 	code, out := oneRun()
-	if code != 0 {
-		t.Fatalf("the first invocation exited %d, want 0:\n%s", code, out)
+	if code != exitRunning {
+		t.Fatalf("the first invocation exited %d, want %d (detached with the run live):\n%s", code, exitRunning, out)
 	}
 	for _, want := range []string{
 		"starting it in the background",
@@ -675,8 +679,8 @@ func TestRunStartsDetachedAttachesAndResumesForReal(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out = oneRun()
-	if code != 0 {
-		t.Fatalf("the second invocation exited %d, want 0:\n%s", code, out)
+	if code != exitRunning {
+		t.Fatalf("the second invocation exited %d, want %d (detached with the run live):\n%s", code, exitRunning, out)
 	}
 	if !strings.Contains(out, "run epic-det is alive") {
 		t.Errorf("the second invocation does not say it is attaching to the live run:\n%s", out)
@@ -695,8 +699,8 @@ func TestRunStartsDetachedAttachesAndResumesForReal(t *testing.T) {
 		t.Fatalf("the run reads alive after its child was stopped: %s", probe.Reason)
 	}
 	code, out = oneRun()
-	if code != 0 {
-		t.Fatalf("the third invocation exited %d, want 0:\n%s", code, out)
+	if code != exitRunning {
+		t.Fatalf("the third invocation exited %d, want %d (detached with the resumed run live):\n%s", code, exitRunning, out)
 	}
 	if !strings.Contains(out, "resuming it in the background") {
 		t.Errorf("the stopped run is not said to be resumed:\n%s", out)
@@ -720,4 +724,44 @@ func equalArgv(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+// `run --json` answers once, at the command's end: what it did and how that
+// ended, as the exit table's state words, with the run's own prose on
+// stderr so stdout is the document's alone (tick 8v3). An attach that ends
+// clean is the done/0 pair; the detach pair is pinned by the interrupted
+// test above (running/5).
+func TestRunJSONAnswersOnceWithProseOnStderr(t *testing.T) {
+	saveRunSeams(t)
+	repo := t.TempDir()
+	life, err := runlife.Claim(repo, "epic-json")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+	attach := &attachRecorder{code: 0}
+	runAttach = attach.seam
+	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
+
+	var stdout, stderr bytes.Buffer
+	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout with --json is not one document:\n%s\n--stderr--\n%s", stdout.String(), stderr.String())
+	}
+	if doc["schema"] != "ticfac.run.v1" || doc["action"] != "attached" || doc["state"] != "done" {
+		t.Errorf("the document is %v, want the attached/done answer", doc)
+	}
+	if doc["run_id"] != "epic-json" || doc["epic_id"] != "json" {
+		t.Errorf("the document names the wrong run: %v", doc)
+	}
+	if !strings.Contains(stderr.String(), "attaching") {
+		t.Errorf("the prose went to stdout with the document, not stderr:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "attaching") {
+		t.Errorf("stdout carries prose beside the document:\n%s", stdout.String())
+	}
 }

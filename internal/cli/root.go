@@ -91,9 +91,12 @@ Run 'ticfac' with no arguments for the overview: every run this checkout and
 the factory know, attention first — every run held or failed names its
 reason and the one command that clears it. Run 'ticfac <command> --help'
 for a command's flags; 'ticfac help <command>' for any subcommand's. The
-exit codes are the contract a script branches on: 0 the command did its
-work, 1 a failure that is not a usage mistake,
-2 a malformed invocation, 4 a lookup that honestly came back empty.`,
+exit codes are the contract a script branches on — 0 done, 1 failed,
+2 usage, 3 held for a person (or, in the tk-ported cloud and factory
+family, not inside a repository), 4 a lookup that came back empty, 5 the
+command ended while the run is still going, 6 an unreadable local file —
+and every command takes --json: one versioned document, the schema named
+inside it, so an agent never parses prose.`,
 		// The bare invocation IS the overview (tick 2qz): every run this
 		// checkout and the factory know, attention first, every stop named
 		// with the one command that clears it. fi3's contract — a bare call
@@ -134,6 +137,7 @@ work, 1 a failure that is not a usage mistake,
 		newEventsCommand(stdout, stderr),
 		newWatchCommand(stdout, stderr),
 		newVersionCommand(stdout, stderr),
+		newSkillsCommand(stdout, stderr),
 		newFactoryCommand(stdout, stderr),
 		newHerdCommand(stdout, stderr),
 		newCloudCommand(stdout, stderr),

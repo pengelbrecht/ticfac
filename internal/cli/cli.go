@@ -75,6 +75,7 @@ type runEpicFlags struct {
 	budget, ceiling                                                                   *float64
 	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth                     *int
 	supervise, statusPush                                                             *bool
+	asJSON                                                                            *bool
 }
 
 // defineRunEpicFlags declares every run-epic flag on fs — defaults, usage
@@ -166,6 +167,10 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 				"and it is always best-effort: a push that fails is a line in run.log, never a failure of the run "+
 				"(default: $TICFAC_STATUS_PUSH, read as a strict bool - set it once to follow every run; "+
 				"the flag always wins)"),
+		asJSON: fs.Bool("json", false,
+			"answer as one versioned document (ticfac.run-epic.v1) when the run ends: the run's state, "+
+				"every tick's state, the refusal's reason class when it stopped, and the interventions it made — "+
+				"the run's own prose goes to stderr, so stdout is the document's alone"),
 	}
 }
 
@@ -237,6 +242,18 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	}
 	epicID := rest[0]
 
+	// The document's writer and the prose's, kept apart from the first line
+	// (tick 8v3): with --json the run's own words — the startup line, the
+	// classifier's note, the per-tick report — all go to STDERR (and to
+	// run.log through the wrap below), and stdout carries exactly one
+	// document at the end. Without --json, prose is stdout's as it always
+	// was, byte-for-byte.
+	answer := stdout
+	prose := stdout
+	if *fl.asJSON {
+		prose = stderr
+	}
+
 	// The refusal, and the reason it is a refusal rather than a no-op: without
 	// a host behind the four-operation protocol there is nothing that could
 	// start, inspect, cancel or collect a job, and reporting success here would
@@ -256,7 +273,7 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// worse than no line at all.
 	if *fl.budget > 0 || *fl.ceiling > 0 {
 		clamped := reconcile.ClampBudget(*fl.budget, *fl.ceiling)
-		fmt.Fprintf(stdout, "%s\n", budgetLine(clamped))
+		fmt.Fprintf(prose, "%s\n", budgetLine(clamped))
 	}
 
 	// The classifier's credential, resolved BEFORE anything is dispatched (tick
@@ -360,7 +377,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	}
 	operatorStderr := stderr
 	stderr = io.MultiWriter(stderr, life.Log())
-	stdout = io.MultiWriter(stdout, life.Log())
+	// The prose destination is the one chosen at the top: stdout for a
+	// person, stderr under --json where the document owns stdout.
+	stdout = io.MultiWriter(prose, life.Log())
 
 	// A redirected run-epic was silent until the run ended (tick bzx), so a
 	// redirected output was no monitoring signal. The run's id and the two
@@ -487,6 +506,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		// a whole cadence to learn what the container already knew. The branch
 		// may never have landed — the door takes a signal with no head.
 		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+		if *fl.asJSON {
+			emitRunEpicFailureJSON(epicID, err, answer)
+		}
 		return 1
 	}
 	defer life.Release(string(result.State))
@@ -528,7 +550,111 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// be delivered is said to the log (which is run.log here, the stream the
 	// Workflow drains to R2) and swallowed, never an exit code.
 	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+	if *fl.asJSON {
+		// The one document (tick 8v3): the run's whole answer as fields, so
+		// an agent branching on the exit code can read the same verdict's
+		// reason class — the refusal vocabulary, never prose — without a
+		// second command.
+		emitRunEpicResultJSON(result, answer)
+	}
 	return resultExitCode(result)
+}
+
+// runEpicFailureJSON is `run-epic --json`'s answer for a run that died
+// without a result: the error, as the one field it is.
+type runEpicFailureJSON struct {
+	agentDoc
+	EpicID string `json:"epic_id"`
+	Error  string `json:"error"`
+}
+
+func emitRunEpicFailureJSON(epicID string, err error, stdout io.Writer) {
+	doc := runEpicFailureJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("run-epic"), State: agentStateFailed},
+		EpicID:   epicID,
+		Error:    err.Error(),
+	}
+	_ = emitAgentJSON(stdout, doc)
+}
+
+// runEpicRefusalJSON is a run's typed refusal as the result document carries
+// it. Reason is the REASON CLASS — the stable refusal vocabulary
+// (reconcile's Refused* constants: finding_untriaged, closeout_ci_failed,
+// merge_failed...) an agent branches on; Message is the human sentence.
+type runEpicRefusalJSON struct {
+	Reason  string `json:"reason"`
+	TickID  string `json:"tick_id,omitempty"`
+	Message string `json:"message"`
+}
+
+// runEpicResumeJSON is one automatic continuation, the intervention record
+// the prose resume line counts.
+type runEpicResumeJSON struct {
+	Reason string `json:"reason"`
+	TickID string `json:"tick_id,omitempty"`
+}
+
+// runEpicTickJSON is one tick's durable state as the result names it.
+type runEpicTickJSON struct {
+	TickID string `json:"tick_id"`
+	State  string `json:"state"`
+}
+
+// runEpicResultJSON is `run-epic --json`'s answer, ticfac.run-epic.v1: the
+// whole Result — the run's own state word, every tick, the refusal that
+// stopped it with its REASON CLASS, the supervisor's halt, the automatic
+// continuations (each an intervention a caller reporting "unattended" must
+// count), and the never-silent notes about the feed and liveness records.
+// The state word is the table's — done when the run completed, failed
+// otherwise — so the exit code and the document cannot disagree; the run's
+// own terminal word travels as run_state.
+type runEpicResultJSON struct {
+	agentDoc
+	RunID         string              `json:"run_id"`
+	EpicID        string              `json:"epic_id"`
+	RunState      string              `json:"run_state"`
+	Reason        string              `json:"reason,omitempty"`
+	Failure       *runEpicRefusalJSON `json:"failure,omitempty"`
+	Halt          string              `json:"halt,omitempty"`
+	Resumes       []runEpicResumeJSON `json:"resumes,omitempty"`
+	Ticks         []runEpicTickJSON   `json:"ticks"`
+	FeedError     string              `json:"feed_error,omitempty"`
+	LivenessError string              `json:"liveness_error,omitempty"`
+}
+
+func emitRunEpicResultJSON(result *reconcile.Result, stdout io.Writer) {
+	doc := runEpicResultJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("run-epic"), State: agentStateFailed},
+		RunID:    result.RunID,
+		EpicID:   result.EpicID,
+		RunState: string(result.State),
+		Reason:   result.Reason,
+		Halt:     result.Halt,
+		Ticks:    make([]runEpicTickJSON, 0, len(result.Ticks)),
+	}
+	if result.State == "completed" {
+		doc.State = agentStateDone
+	}
+	if result.Failure != nil {
+		doc.Failure = &runEpicRefusalJSON{
+			Reason:  result.Failure.Reason,
+			TickID:  result.Failure.TickID,
+			Message: result.Failure.Message,
+		}
+	}
+	for _, resume := range result.Resumes {
+		doc.Resumes = append(doc.Resumes, runEpicResumeJSON{Reason: resume.Reason, TickID: resume.TickID})
+	}
+	for _, tick := range result.Ticks {
+		doc.Ticks = append(doc.Ticks, runEpicTickJSON{TickID: tick.TickID, State: tick.State})
+	}
+	if result.FeedError != nil {
+		doc.FeedError = result.FeedError.Error()
+	}
+	if result.LivenessError != nil {
+		doc.LivenessError = result.LivenessError.Error()
+	}
+	_ = emitAgentJSON(stdout, doc)
 }
 
 // autoResumeCap turns the operator's two flags into the one number the
@@ -638,6 +764,7 @@ func budgetLine(budget reconcile.Budget) string {
 type settleFlags struct {
 	repo, remote, branch, runID, runner, tier, profiles, stateRoot, gate, release *string
 	carryWork                                                                     *bool
+	asJSON                                                                        *bool
 }
 
 func defineSettleFlags(fs *flag.FlagSet) *settleFlags {
@@ -653,6 +780,7 @@ func defineSettleFlags(fs *flag.FlagSet) *settleFlags {
 		gate:      fs.String("gate", "", "the runners.toml the run's gate is read from"),
 		release:   fs.String("release", "", "the person releasing the attempt"),
 		carryWork: fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)"),
+		asJSON:    fs.Bool("json", false, "print one versioned document (ticfac.settle.v1) recording the release: the decision, where the released attempt's work lives, and whether the next run carries it"),
 	}
 }
 
@@ -777,6 +905,9 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
 	}
+	if *fl.asJSON {
+		return emitSettleJSON(epicID, tickID, attempt, settled, stdout, stderr)
+	}
 	// The released attempt is named the way every line written for a person
 	// names one (tick h58): the tick's own try first, the run-wide dispatch
 	// number — the one this command was addressed by — labelled after it.
@@ -821,10 +952,63 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// settleJSON is `settle --json`'s answer, ticfac.settle.v1: the release a
+// person made — attributed, recorded as the decision it landed as — and
+// WHERE the released attempt's work lives, the facts the prose paragraphs
+// say, as fields an agent can branch on without parsing them.
+type settleJSON struct {
+	agentDoc
+	EpicID      string `json:"epic_id"`
+	TickID      string `json:"tick_id"`
+	Attempt     int    `json:"attempt"`
+	Try         int    `json:"try"`
+	ReleasedBy  string `json:"released_by"`
+	State       string `json:"executor_state"`
+	Recorded    bool   `json:"recorded"`
+	Decision    int    `json:"decision"`
+	RunID       string `json:"run_id"`
+	Carried     bool   `json:"carried"`
+	CarryRef    string `json:"carry_ref,omitempty"`
+	WorkRef     string `json:"work_ref,omitempty"`
+	WorkSHA     string `json:"work_sha,omitempty"`
+	WorkDurable bool   `json:"work_durable"`
+	WorkIn      string `json:"work_in,omitempty"`
+}
+
+// emitSettleJSON prints the one document. An already-released attempt is a
+// done answer, not a failure: `recorded: false` is the fact a repeat caller
+// reads, and the exit code stays 0 either way.
+func emitSettleJSON(epicID, tickID string, attempt int, settled *reconcile.Settlement, stdout, stderr io.Writer) int {
+	doc := settleJSON{
+		agentDoc:    agentDoc{Schema: agentSchemaID("settle"), State: agentStateDone},
+		EpicID:      epicID,
+		TickID:      tickID,
+		Attempt:     attempt,
+		Try:         settled.Try,
+		ReleasedBy:  settled.ReleasedBy,
+		State:       settled.State,
+		Recorded:    settled.Recorded,
+		Decision:    settled.Decision,
+		RunID:       settled.RunID,
+		Carried:     settled.Carried,
+		CarryRef:    settled.CarryRef,
+		WorkRef:     settled.WorkRef,
+		WorkSHA:     settled.WorkSHA,
+		WorkDurable: settled.WorkDurable,
+		WorkIn:      settled.WorkIn,
+	}
+	if err := emitAgentJSON(stdout, doc); err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
+		return 1
+	}
+	return 0
+}
+
 // buildInfo is what `version --json` prints. The contract bundle is part of
 // the answer: a consumer holding only this executable can ask which contracts
 // it was built against, without a checkout.
 type buildInfo struct {
+	Schema           string `json:"schema"`
 	Ticfac           string `json:"ticfac"`
 	ContractBundle   string `json:"contract_bundle"`
 	TicksRepository  string `json:"ticks_repository"`
@@ -896,6 +1080,7 @@ func BuildInfo() (buildInfo, error) {
 	}
 
 	return buildInfo{
+		Schema:           agentSchemaID("version"),
 		Ticfac:           Version,
 		ContractBundle:   bundle.Version,
 		TicksRepository:  pin.Repository,

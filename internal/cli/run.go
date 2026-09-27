@@ -96,6 +96,7 @@ type runFlags struct {
 	profiles *string
 	wall     *int
 	cloud    *bool
+	asJSON   *bool
 }
 
 func defineRunFlags(fs *flag.FlagSet) *runFlags {
@@ -112,6 +113,8 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 		cloud: fs.Bool("cloud", false,
 			"run the epic in your cloud factory: submit it to the configured factory and attach the same live view "+
 				"— the same verbs, view and triage as a local run (the expert `ticfac cloud ...` commands stay for the rest)"),
+		asJSON: fs.Bool("json", false,
+			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed). The run's own prose goes to stderr, so stdout is the document's alone"),
 	}
 }
 
@@ -283,11 +286,14 @@ func (c *detachedChild) Pid() int { return c.pid }
 // runAttach is the live view `run` attaches with: watch's own command body,
 // so the two surfaces cannot drift — attaching to a run through this
 // command renders exactly what `ticfac watch <run-id>` renders, on a
-// terminal and on a pipe alike.
+// terminal and on a pipe alike. Under `run --json` the caller points the
+// attach's stdout at stderr, so the live view is prose beside the one
+// document the run command itself answers with.
 var runAttach = func(ctx context.Context, repo, runID string, stdout, stderr io.Writer) int {
 	interval := defaultWatchInterval
 	repoArg := repo
-	return watchCommand(ctx, []string{runID}, &repoArg, &interval, stdout, stderr)
+	plainJSON := false
+	return watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, stdout, stderr)
 }
 
 // runCommand is `run`'s body.
@@ -306,6 +312,26 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	if epicID == "" {
 		fmt.Fprintf(stderr, "ticfac run: %q names no epic\n", rest[0])
 		return 2
+	}
+	// Prose and document, kept apart (tick 8v3): with --json the command's
+	// own lines and the attached live view's go to stderr, and stdout
+	// carries exactly one document at the end. Without it, everything is
+	// stdout's as it always was.
+	prose := stdout
+	if *fl.asJSON {
+		prose = stderr
+	}
+	// finish emits the one document and returns the code the state names —
+	// every --json path below ends through here, so the document and the
+	// exit code cannot disagree.
+	finish := func(action, state, note string) int {
+		if *fl.asJSON {
+			if err := emitRunJSON(action, state, note, epicID, "epic-"+epicID, fl, stdout); err != nil {
+				fmt.Fprintf(stderr, "ticfac run %s: %v\n", epicID, err)
+				return 1
+			}
+		}
+		return stateExitClass(state)
 	}
 	repo := *fl.repo
 	if repo == "" {
@@ -335,7 +361,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"queue flags\n")
 			return 2
 		}
-		return runCloudCommand(ctx, epicID, repo, stdout, stderr)
+		return runCloudCommand(ctx, epicID, repo, fl, stdout, stderr)
 	}
 
 	runID := "epic-" + epicID
@@ -344,9 +370,10 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	// never a guess: runlife's probe, the same answer `ticfac status` gives.
 	probe := runlife.Probe(repo, runID, time.Now())
 	if probe.State == runlife.Alive {
-		fmt.Fprintf(stdout, "run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
+		fmt.Fprintf(prose, "run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
 			runID, probe.Reason)
-		return attachRun(ctx, epicID, repo, runID, stdout, stderr)
+		code := attachRun(ctx, epicID, repo, runID, prose, stderr)
+		return finish("attached", runAttachState(repo, runID, code), "")
 	}
 
 	// Not running here — it never started, it released on its way out, or it
@@ -357,7 +384,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	if runRanBefore(repo, runID) {
 		action = "resuming"
 	}
-	fmt.Fprintf(stdout, "run %s is not running here (%s) — %s it in the background\n",
+	fmt.Fprintf(prose, "run %s is not running here (%s) — %s it in the background\n",
 		runID, probe.Reason, action)
 
 	// The profile set: the herdr decision, or the operator's word over it.
@@ -367,17 +394,17 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	switch {
 	case *fl.profiles != "":
 		profileDir = *fl.profiles
-		fmt.Fprintf(stdout, "profiles: %s (named on the command line)\n", profileDir)
+		fmt.Fprintf(prose, "profiles: %s (named on the command line)\n", profileDir)
 	case *fl.noHerdr:
-		fmt.Fprintf(stdout, "herdr skipped (--no-herdr): dispatching with the profiles embedded as this binary's default\n")
+		fmt.Fprintf(prose, "herdr skipped (--no-herdr): dispatching with the profiles embedded as this binary's default\n")
 	default:
 		detail, err := runHerdrLive(ctx, repo)
 		if err != nil {
-			fmt.Fprintf(stdout, "no live herdr (%v) — dispatching with the profiles embedded as this binary's default; "+
+			fmt.Fprintf(prose, "no live herdr (%v) — dispatching with the profiles embedded as this binary's default; "+
 				"--no-herdr skips this probe\n", err)
 		} else {
 			profileDir = profile.EmbeddedHerdr
-			fmt.Fprintf(stdout, "%s — dispatching into herdr panes with the profile set embedded in this binary\n", detail)
+			fmt.Fprintf(prose, "%s — dispatching into herdr panes with the profile set embedded in this binary\n", detail)
 		}
 	}
 
@@ -388,7 +415,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	dir := runlife.Dir(repo, runID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s: the run's log directory could not be created: %v\n", epicID, err)
-		return 1
+		return finish(action, agentStateFailed, "the run's log directory could not be created")
 	}
 	argv := []string{"run-epic", epicID, "--repo", repo}
 	if profileDir != "" {
@@ -401,7 +428,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s: %s could not be opened: %v\n", epicID, logPath, err)
-		return 1
+		return finish(action, agentStateFailed, "the run's start log could not be opened")
 	}
 	fmt.Fprintf(logFile, "ticfac run started this run detached at %s: %s\n",
 		time.Now().UTC().Format(time.RFC3339), strings.Join(argv, " "))
@@ -409,9 +436,9 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	logFile.Close()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s: the background run could not be started: %v\n", epicID, err)
-		return 1
+		return finish(action, agentStateFailed, "the background run could not be started")
 	}
-	fmt.Fprintf(stdout, "run %s starting in the background (pid %d; its first words are in %s)\n",
+	fmt.Fprintf(prose, "run %s starting in the background (pid %d; its first words are in %s)\n",
 		runID, child.Pid(), logPath)
 
 	// The attach waits on the CLAIM, never on a guess about the child: the
@@ -422,9 +449,10 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	deadline := time.Now().Add(runClaimWait)
 	for {
 		if p := runlife.Probe(repo, runID, time.Now()); p.State == runlife.Alive {
-			fmt.Fprintf(stdout, "run %s claimed its life (pid %d) — attaching; Ctrl-C detaches without stopping it\n",
+			fmt.Fprintf(prose, "run %s claimed its life (pid %d) — attaching; Ctrl-C detaches without stopping it\n",
 				runID, p.Record.PID)
-			return attachRun(ctx, epicID, repo, runID, stdout, stderr)
+			code := attachRun(ctx, epicID, repo, runID, prose, stderr)
+			return finish(action, runAttachState(repo, runID, code), "")
 		}
 		if child.Exited() {
 			fmt.Fprintf(stderr, "ticfac run %s: the background run exited %d without claiming the run — what it said:\n",
@@ -438,38 +466,98 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 			if code <= 0 {
 				code = 1
 			}
+			// The child's refusal is the run's first word relayed — prose on
+			// stderr — and the document's note says the shape of it without
+			// pasting the whole log into a field a script cannot use.
+			if *fl.asJSON {
+				if err := emitRunJSON(action, agentStateFailed,
+					fmt.Sprintf("the background run exited %d without claiming the run; its words are on stderr and in %s", code, logPath),
+					epicID, runID, fl, stdout); err != nil {
+					fmt.Fprintf(stderr, "ticfac run %s: %v\n", epicID, err)
+				}
+			}
 			return code
 		}
 		if ctx.Err() != nil {
 			// The operator left before the run said its first word. The
 			// child keeps starting — that is the point of a detached start —
-			// and the honest line says where to ask about it.
-			fmt.Fprintf(stdout, "detached before run %s claimed its life — it is still starting; "+
+			// and the honest answer is the table's running class (5): the run
+			// is in flight, stdout's document says so, and the line below
+			// names where to ask about it.
+			fmt.Fprintf(prose, "detached before run %s claimed its life — it is still starting; "+
 				"`ticfac status %s` asks whether it is alive\n", runID, runID)
-			return 0
+			return finish(action, agentStateRunning, "detached before the run claimed its life; the background start continues")
 		}
 		if time.Now().After(deadline) {
 			fmt.Fprintf(stderr, "ticfac run %s: the background run did not claim its life within %s — it may still be "+
 				"starting; `ticfac status %s` asks whether it is alive, and its first words are in %s\n",
 				epicID, runClaimWait, runID, logPath)
-			return 1
+			return finish(action, agentStateFailed, fmt.Sprintf("the background run did not claim its life within %s", runClaimWait))
 		}
 		time.Sleep(runClaimPoll)
 	}
 }
 
-// attach runs the live view and says what detaching means. The only exit
-// codes it rewrites are its own interrupted ones: an attach that ended
-// because the operator left (the invocation's context, which a terminal
-// Ctrl-C cancels) is a detach, not a failure — the run keeps going, and the
+// runAttachState maps the attached watch's exit code to the state word the
+// document and the exit class share — the same mapping the table defines,
+// so `ticfac run` and `ticfac watch` cannot answer the same ending with
+// different words.
+func runAttachState(repo, runID string, code int) string {
+	switch code {
+	case exitSuccess:
+		return agentStateDone
+	case ExitHeld:
+		return agentStateHeld
+	case exitRunning:
+		return agentStateRunning
+	}
+	return agentStateFailed
+}
+
+// runJSON is `run --json`'s answer, ticfac.run.v1: what the command did —
+// attached, started, resumed — and how that ended, in the exit table's
+// state words. The note carries what prose says in one line: where the
+// child's refusal is, what the detach left running.
+type runJSON struct {
+	agentDoc
+	EpicID   string `json:"epic_id"`
+	RunID    string `json:"run_id"`
+	Action   string `json:"action"`
+	Profiles string `json:"profiles,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
+func emitRunJSON(action, state, note, epicID, runID string, fl *runFlags, stdout io.Writer) error {
+	return emitAgentJSON(stdout, runJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("run"), State: state},
+		EpicID:   epicID,
+		RunID:    runID,
+		Action:   action,
+		Profiles: *fl.profiles,
+		Note:     note,
+	})
+}
+
+// attach runs the live view and says what detaching means. The interrupted
+// codes are the running class (tick 8v3): an attach that ended because the
+// caller left — while the run keeps going — exits 5, not 0, so an agent
+// waiting on `ticfac run` never reads a live epic as a finished one; the
 // line that says so names the one command that comes back.
 func attachRun(ctx context.Context, epicID, repo, runID string, stdout, stderr io.Writer) int {
 	code := runAttach(ctx, repo, runID, stdout, stderr)
+	if code == exitRunning {
+		fmt.Fprintf(stdout, "detached from run %s — the run keeps going in the background; "+
+			"`ticfac run %s` attaches again, `ticfac status %s` asks whether it is alive\n", runID, epicID, runID)
+		return exitRunning
+	}
 	if ctx.Err() != nil && code == 1 {
+		// A seam's answer or an interrupted watch that never learned the
+		// run's own claim: the probe decides, and a live run is the running
+		// class here too, never a silent 0.
 		if probe := runlife.Probe(repo, runID, time.Now()); probe.State == runlife.Alive {
 			fmt.Fprintf(stdout, "detached from run %s — the run keeps going in the background; "+
 				"`ticfac run %s` attaches again, `ticfac status %s` asks whether it is alive\n", runID, epicID, runID)
-			return 0
+			return exitRunning
 		}
 	}
 	return code

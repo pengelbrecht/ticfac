@@ -152,20 +152,28 @@ something for one: which tick, which attempt, why, and the command that moves
 it on.
 
 Exit codes: 0 the run ended (the last line says how), 3 it ended holding
-something only a person can move, 1 the feed could not be read or the watch
-was interrupted, 2 usage.`,
+something only a person can move, 5 the watch was interrupted while the
+run is still going (the run keeps going; come back with the same command),
+1 the feed could not be read or the run is not alive, 2 usage.
+
+With --json, the watch answers ONCE, at its end: one document holding the
+versioned status model — the same object 'ticfac status --json' gathers —
+plus the exit-table state word and, when the run ended holding something,
+the wait kind that only a person moves. The document is stdout's only
+content.`,
 	}
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	interval := fs.Duration("interval", defaultWatchInterval, "how often the live view re-renders (a pipe gets one plain line per event instead)")
+	asJSON := fs.Bool("json", false, "answer once, at the watch's end: one versioned document (ticfac.watch.v1) holding the status model, the state word and — when it ended holding — the wait kind only a person moves")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(watchCommand(c.Context(), args, repo, interval, stdout, stderr))
+		return codeToErr(watchCommand(c.Context(), args, repo, interval, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, stdout, stderr io.Writer) int {
+func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac watch: exactly one run id is required\n")
@@ -244,9 +252,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	}
 
 	// A terminal gets the live view; everything else gets the plain stream.
-	// Both paths end the same way — on the run's own last word — and their
-	// exit codes mean the same things.
-	if watchIsTerminal(stdout) {
+	// --json is a pipe even on a terminal: the stream path is the one whose
+	// end is a single document, and a live block redrawn in place is not a
+	// document. Both paths end the same way — on the run's own last word —
+	// and their exit codes mean the same things.
+	if watchIsTerminal(stdout) && !*asJSON {
 		return watchLive(ctx, source, kind, *repo, runID, *interval, stdout, stderr)
 	}
 
@@ -282,7 +292,9 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				}
 			}
 		}
-		fmt.Fprintf(stdout, "%s %-12s %s: %s\n", clockOf(event.At), who, event.Stage, event.Detail)
+		if !*asJSON {
+			fmt.Fprintf(stdout, "%s %-12s %s: %s\n", clockOf(event.At), who, event.Stage, event.Detail)
+		}
 		if event.Stage == reconcile.StageRunHeld {
 			// The line the whole command exists for, said to a human: which
 			// tick, which attempt, why — all read off the line's own fields,
@@ -337,24 +349,124 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	}
 	if err := followFeed(followCtx, source, kind, 0, cursor, print); err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+		if *asJSON {
+			// A failed stream still answers once: the refusal document is the
+			// one thing stdout carries, so an agent's parse never sees silence.
+			emitWatchJSON(ctx, source, kind, *repo, runID, agentStateFailed, nil, stdout)
+		}
 		return 1
+	}
+	// The end, as one document under --json: the state word the exit code
+	// agrees with, the model gathered the way every surface gathers it, and
+	// the wait kind when the end holds something for a person.
+	finish := func(state string, attention *statusmodel.Attention) int {
+		if !*asJSON {
+			return stateExitClass(state)
+		}
+		if err := emitWatchJSON(ctx, source, kind, *repo, runID, state, attention, stdout); err != nil {
+			fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+			return 1
+		}
+		return stateExitClass(state)
 	}
 	if terminal == "" {
 		// The subscription was interrupted before the run wrote its terminal
 		// line — Ctrl-C, or the caller's context. That is neither "ended" nor
 		// an error, and it is not exit 0: a caller waiting on this command
-		// must not read an interrupted watch as a finished run.
+		// must not read an interrupted watch as a finished run. A run that is
+		// still ALIVE is the table's running class (5) — the work continues,
+		// nothing is wrong, and `ticfac run`'s detach relies on exactly this
+		// word to say “the run keeps going” without prose (tick 8v3).
 		fmt.Fprintf(stderr, "ticfac watch: the watch was interrupted before run %s said it ended; "+
 			"`ticfac status %s` asks whether it is still alive\n", runID, runID)
 		if held {
-			return ExitHeld
+			return finish(agentStateHeld, nil)
+		}
+		if watchRunStillAlive(source, kind, *repo, runID) {
+			return finish(agentStateRunning, nil)
+		}
+		if *asJSON {
+			emitWatchJSON(ctx, source, kind, *repo, runID, agentStateFailed, nil, stdout)
 		}
 		return 1
 	}
 	if held {
-		return ExitHeld
+		if !*asJSON {
+			return ExitHeld
+		}
+		model, err := watchGatherModel(ctx, source, kind, *repo, runID)
+		if err != nil {
+			emitWatchJSON(ctx, source, kind, *repo, runID, agentStateHeld, nil, stdout)
+			return ExitHeld
+		}
+		return finish(agentStateHeld, watchHoldAttention(model))
 	}
-	return 0
+	return finish(agentStateDone, nil)
+}
+
+// watchRunStillAlive answers whether the run's own claim says it is going,
+// the same way the watch's first question did: the pidfile for a local run,
+// the factory's record for one the Workflow hosts.
+func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
+	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
+		return cloudRunStillGoing(cloudSource.State())
+	}
+	return runlife.Probe(repo, runID, time.Now()).State == runlife.Alive
+}
+
+// watchGatherModel gathers the status model the same way watchLive's frame
+// builder does — the one model every surface renders, from the run's own
+// durable sources — so the watch's one document and the live view's last
+// frame cannot disagree.
+func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
+	gather := modelGatherers{graph: epicGraph, ci: statusCI}
+	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
+		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
+		if err != nil {
+			return statusmodel.Model{}, err
+		}
+		liveness := cloudRunLiveness(ctx, cloudSource.runID, record.State)
+		return cloudStatusModel(ctx, cloudSource.client, repo, cloudSource.runID, record, liveness, io.Discard, gather), nil
+	}
+	probe := runlife.Probe(repo, runID, time.Now())
+	return localStatusModel(ctx, repo, runID, probe, gather), nil
+}
+
+// watchHeldJSON is the one hold the ended run holds for a person, as the
+// --json document carries it: the wait KIND — the reason class, e.g.
+// held_for_person, merge, finding — what it holds, and the one command
+// that moves it on.
+type watchHeldJSON struct {
+	Kind      string  `json:"kind"`
+	What      string  `json:"what"`
+	ClearWith *string `json:"clear_with,omitempty"`
+}
+
+// emitWatchJSON prints the watch's one document, ticfac.watch.v1: the state
+// word, the model, and the hold when there is one. A model that cannot be
+// gathered (a read that failed) is a document without it, never a failed
+// command: the state word and the exit code carry the verdict.
+func emitWatchJSON(ctx context.Context, source runfeed.Source, kind, repo, runID, state string, attention *statusmodel.Attention, stdout io.Writer) error {
+	doc := struct {
+		agentDoc
+		RunID string             `json:"run_id"`
+		Held  *watchHeldJSON     `json:"held,omitempty"`
+		Model *statusmodel.Model `json:"model,omitempty"`
+	}{
+		agentDoc: agentDoc{Schema: agentSchemaID("watch"), State: state},
+		RunID:    runID,
+	}
+	if attention != nil {
+		clear := (*string)(nil)
+		if attention.UnblockCommand != nil {
+			clear = attention.UnblockCommand
+		}
+		doc.Held = &watchHeldJSON{Kind: attention.Kind, What: attention.What, ClearWith: clear}
+	}
+	if model, err := watchGatherModel(ctx, source, kind, repo, runID); err == nil {
+		doc.Model = &model
+	}
+	return emitAgentJSON(stdout, doc)
 }
 
 // watchLive is the live view: one frame of the status model per interval,
