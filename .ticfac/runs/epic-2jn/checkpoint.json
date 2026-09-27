@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 300,
-  "state": "failed",
-  "reason": "4mv did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the resolve-conflict job for the conflict of 4mv try 1 (run dispatch #33) committed README.md still carrying its conflict markers: a resolution that did not happen is not a merge, whatever the commit says",
-  "updated_at": "2026-09-27T15:25:19Z",
+  "sequence": 301,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-27T16:42:36Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -214,7 +214,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "a7fb9b06b595a16ab74d95f5e873ef1a107cf070",
+    "source_sha": "ab7de460ad6f131d322ec210dff52f0950c80a9a",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
