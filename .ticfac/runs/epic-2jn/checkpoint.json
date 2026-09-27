@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 373,
-  "state": "integrating",
-  "reason": "integrating vqc attempt 50 into epic/2jn",
-  "updated_at": "2026-09-27T19:08:05Z",
+  "sequence": 374,
+  "state": "failed",
+  "reason": "vqc try 1 (run dispatch #50) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): there is no report at the path this executor owns, so the attempt never said what it did. The tick is neither resolved nor re-dispatched",
+  "updated_at": "2026-09-27T19:27:06Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -223,7 +223,7 @@
     },
     {
       "tick_id": "vqc",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 50
     }
   ],
