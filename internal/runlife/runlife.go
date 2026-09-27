@@ -23,7 +23,11 @@
 // Both are per-checkout by nature — a run's pidfile lives in the repo it
 // works in — so Claim also writes one registration of that repo on the
 // machine (internal/runregistry, tick aj9): the single probing convention a
-// surface that reads runs from MANY checkouts settles on.
+// surface that reads runs from MANY checkouts settles on. And Claim reads
+// that registration back (tick 9oo): a claim from a second checkout of the
+// same repository is refused while the registered checkout's probe answers
+// alive with another process, so liveness's per-checkout nature cannot
+// start the second reconciler the run-state CAS alone would have to catch.
 package runlife
 
 import (
@@ -91,7 +95,14 @@ type Life struct {
 // Claim records this process as the run's live driver and opens its log. It
 // refuses when run.pid already names a LIVE process with the same start time: a
 // second run-epic for one run is a second reconciler, and the run-state CAS is
-// the last line of defence against that, not the first.
+// the last line of defence against that, not the first. The pidfile it reads
+// is per-checkout, so it also consults the machine registration (tick 9oo):
+// when the machine names ANOTHER checkout for this run and that checkout's
+// own pidfile answers alive with a process that is not the caller's, the
+// claim is refused from here too — without that, the same run id started
+// from a second checkout of the same repository would start the second
+// reconciler the CAS alone catches. A process re-claiming its own run is
+// the one driver, not a second one, and is exempt — as it is here.
 func Claim(repo, runID string) (*Life, error) {
 	dir := Dir(repo, runID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -101,6 +112,14 @@ func Claim(repo, runID string) (*Life, error) {
 		if matched, _ := startMatches(existing); matched && existing.PID != os.Getpid() {
 			return nil, fmt.Errorf("%w: pid %d, started %s (%s)", ErrAlreadyLive, existing.PID, existing.StartedAt, filepath.Join(dir, PIDName))
 		}
+	}
+
+	// The registration's half of the refusal (tick 9oo): the check above
+	// reads only THIS checkout's pidfile, and liveness is per-checkout — a
+	// live driver in another checkout of the same repository answers
+	// nothing here, which is the hole the machine registration closes.
+	if err := refuseWhenTheRegisteredCheckoutDrives(repo, runID); err != nil {
+		return nil, err
 	}
 
 	pid := os.Getpid()
@@ -138,6 +157,66 @@ func Claim(repo, runID string) (*Life, error) {
 		l.Logf("could not register this run's working repo on this machine: %v", err)
 	}
 	return l, nil
+}
+
+// refuseWhenTheRegisteredCheckoutDrives is Claim's cross-checkout refusal
+// (tick 9oo). Claim's pidfile check is per-checkout by nature — run.pid
+// lives in the repo the run works in — so a live driver in ANOTHER checkout
+// of the same repository answers nothing here, and the same run id started
+// from a second checkout would start a second reconciler with only the
+// run-state CAS left to catch it, the line Claim's own doc calls the last.
+// The machine registration (tick aj9) names the checkout whose pidfile is
+// live, so this reads it back and refuses the claim when that checkout's
+// probe answers alive with a process that is not the caller.
+//
+// Like the per-checkout check in Claim, this exempts the caller's own pid:
+// one process is one driver wherever it re-claims from, and re-claiming in
+// the same checkout rewrites the same pidfile. What is refused is a claim
+// by ANOTHER process — the second run-epic from a second checkout, the
+// second reconciler the CAS alone would have to catch. (A re-claim by the
+// driving process from a different checkout does leave the first
+// checkout's pidfile standing, but there is still one driver, and the next
+// claim by anyone else is refused by that pidfile or this registration
+// either way.)
+//
+// Every way this can be unable to know is a pass, never a failure: the
+// registration is best effort by design (Claim writes it on the same
+// terms), and a refusal this package cannot honestly make would lock a
+// resume into the very CAS-only world the refusal exists to end. So an
+// unreadable or absent registration, one written on another machine, a
+// named checkout whose pidfile is gone or unreadable, and a driver whose
+// start time no longer matches — the resumed run's own case — all leave
+// the claim proceeding, the registration overwritten by the new claim as
+// the last writer.
+func refuseWhenTheRegisteredCheckoutDrives(repo, runID string) error {
+	reg, ok, err := runregistry.Lookup(runID)
+	if err != nil || !ok || reg.Repo == "" {
+		return nil
+	}
+	here, err := filepath.Abs(repo)
+	if err != nil {
+		return nil
+	}
+	if filepath.Clean(reg.Repo) == filepath.Clean(here) {
+		return nil // the same checkout: its pidfile already spoke above
+	}
+	// A registration written on another machine names a path that is
+	// host-local there — probing it here would read some other checkout's
+	// directory, and the registry directory is machine-local besides.
+	if host, err := os.Hostname(); err == nil && reg.Host != "" && reg.Host != host {
+		return nil
+	}
+	record, ok, err := readRecord(Dir(reg.Repo, runID))
+	if err != nil || !ok {
+		return nil
+	}
+	matched, _ := startMatches(record)
+	if !matched || record.PID == os.Getpid() {
+		return nil
+	}
+	return fmt.Errorf("%w: pid %d, started %s, drives this run from %s (%s)",
+		ErrAlreadyLive, record.PID, record.StartedAt, reg.Repo,
+		filepath.Join(Dir(reg.Repo, runID), PIDName))
 }
 
 // Log is the writer stderr is teed into.

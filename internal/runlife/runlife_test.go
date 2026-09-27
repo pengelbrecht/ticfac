@@ -144,6 +144,97 @@ func TestASecondProcessIsRefusedWhileTheFirstLives(t *testing.T) {
 	}
 }
 
+// Acceptance for tick 9oo: Claim's refusal of a second driver was
+// per-checkout — it read only the pidfile in the checkout it ran in, so the
+// same run id started from a second checkout of the same repository started
+// a second reconciler, and the run-state CAS was left as the only defence,
+// the one Claim's own doc calls the last line. The machine registration
+// (tick aj9) names the checkout whose pidfile is live, so Claim now reads it
+// back and refuses a claim when the registered checkout's probe answers
+// alive with another process — from any checkout.
+func TestASecondCheckoutIsRefusedWhileTheFirstDrives(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	// A real second process as the run's driver in the working checkout —
+	// the shape a second run-epic actually meets — with the pidfile and
+	// the machine registration Claim writes from inside the driver
+	// (startSleeper writes the pidfile the way Claim would have; the
+	// registration is what Claim writes beside it).
+	startSleeper(t, working, "r-cross")
+	if err := runregistry.Register("r-cross", working); err != nil {
+		t.Fatal(err)
+	}
+
+	// The premise, checked first: this checkout holds no pidfile of the
+	// run, so the per-checkout check alone is blind here — exactly the hole
+	// the registration closes.
+	elsewhere := t.TempDir()
+	if _, ok, err := readRecord(Dir(elsewhere, "r-cross")); err != nil || ok {
+		t.Fatalf("the second checkout should hold no pidfile to refuse with: ok=%v err=%v", ok, err)
+	}
+
+	if _, err := Claim(elsewhere, "r-cross"); !errors.Is(err, ErrAlreadyLive) {
+		t.Fatalf("claiming a run a live driver holds, from a second checkout of the same repository: %v, want ErrAlreadyLive", err)
+	}
+
+	// The refusal is a refusal, not a takeover: the first checkout keeps its
+	// live claim and the registration still names it.
+	if got := Probe(working, "r-cross", time.Now()); got.State != Alive {
+		t.Errorf("the first checkout's claim reads %s (%s) after the refused one: a refusal must not disturb it", got.State, got.Reason)
+	}
+	abs, err := filepath.Abs(working)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, ok, err := runregistry.Lookup("r-cross")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || reg.Repo != abs {
+		t.Errorf("the registration names %q (found=%v), want the first checkout %q: a refused claim must not move it", reg.Repo, ok, abs)
+	}
+}
+
+// The refusal must not lock the run to one checkout forever (tick 9oo): a
+// driver that died without releasing in the checkout the registration names
+// leaves a pidfile naming a process that is gone, and a resume from a second
+// checkout proceeds — the registration moving to the new checkout as the
+// last claim, the way aj9 documented it.
+func TestADeadDriverInAnotherCheckoutDoesNotBlockTheResume(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	cmd := startSleeper(t, working, "r-cross-resume")
+	// The run claimed in the working checkout the way Claim would have:
+	// its pidfile stands and the machine registration names the checkout.
+	if err := runregistry.Register("r-cross-resume", working); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Process.Kill()
+	_, _ = cmd.Process.Wait()
+
+	elsewhere := t.TempDir()
+	life, err := Claim(elsewhere, "r-cross-resume")
+	if err != nil {
+		t.Fatalf("resuming a run whose driver died in another checkout: %v", err)
+	}
+	defer life.Release("test")
+
+	if got := Probe(elsewhere, "r-cross-resume", time.Now()); got.State != Alive {
+		t.Errorf("the resumed run reads %s (%s)", got.State, got.Reason)
+	}
+	abs, err := filepath.Abs(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, ok, err := runregistry.Lookup("r-cross-resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || reg.Repo != abs {
+		t.Errorf("the registration names %q (found=%v), want the resuming checkout %q: the last claim is the run that is driving", reg.Repo, ok, abs)
+	}
+}
+
 // A driver that died without releasing must not lock the run forever: the
 // next run-epic resumes it.
 func TestADeadDriverDoesNotBlockTheResume(t *testing.T) {
