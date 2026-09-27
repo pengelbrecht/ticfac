@@ -58,6 +58,223 @@ const ExitNoExecutor = 2
 // run that started.
 const NoExecutorMessage = reconcile.NoExecutorMessage
 
+<<<<<<< HEAD
+=======
+const usage = `ticfac — execution and orchestration for ticks
+
+usage:
+  ticfac run-epic <epic-id>                     run one epic through the reconciler
+  ticfac init                                  make this repository ready to run an epic (asks a few questions)
+  ticfac doctor                                say what a run still needs, each missing thing with its fix
+  ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
+  ticfac findings <epic-id>                     list the worker findings drafted for triage
+  ticfac finding <epic-id> <key>                triage one drafted finding
+  ticfac status <run-id> [--json]              is the run alive, and when did it last say anything
+  ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
+  ticfac watch <run-id>                        follow a run and say, to a human, when it ends holding something for one
+  ticfac version [--json]                       report this build and the contract bundle it serves
+  ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
+  ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
+  ticfac factory <status|dashboard>            what the factory has configured; the read-only board
+  ticfac factory webhook                        point Telegram at the factory (--status reads it, --delete withdraws it)
+  ticfac herd <paint|notify>                   badge herdr workspaces; chime when a worker blocks or a wave settles
+  ticfac cloud <run|stop|status|logs|trace|supervisor>   drive a self-deployed cloud factory
+
+run-epic flags:
+  --repo <dir>        the checkout attempts branch from (default: cwd)
+  --remote <name>     the remote holding the run's durable authority (default: origin)
+  --branch <name>     the EpicRun integration branch (default: epic/<epic-id>)
+  --base <ref>        what the integration branch is cut from (default: HEAD)
+  --run-id <id>       the run's id (default: epic-<epic-id>)
+  --owner <name>      who claims a tick in the tracker (default: ticfac)
+  --runner <name>     claude | codex | pi, when a profile routes none (default: $TICFAC_RUNNER, else claude)
+  --tier <name>       pin a [roles.*.tiers.<name>] overlay for EVERY dispatch of the run —
+                      an operator's explicit override; by default each dispatch DERIVES its
+                      tier from [tier_policy] in the target repo's runners.toml (tick facts,
+                      attempt number, declared ladder), or runs at the role's base values
+  --profiles <dir>    resolve role profiles from this directory instead of the compiled-in ones
+  --state-root <dir>  where attempt state lives, OUTSIDE the repository
+  --gate <file>       the runners.toml the integrated gate is read from
+  --budget <usd>      the budget an operator asks for
+  --ceiling <usd>     the deployment ceiling it is clamped to
+  --wall <seconds>    the wall clock one job is bounded by
+  --absorption-depth <n>  how many absorptions ONE chain of the recursion may carry before the
+                      run stops for a person carrying the whole chain. The default is 3 (the first
+                      link is what the epic exists to absorb, the second is a defect in the absorbed
+                      fix's own ground, a third is already far from home, and past that a person
+                      should judge the chain rather than let the run keep going). The bound the
+                      run applies is RECORDED on the run branch, so a restart without this flag
+                      applies the bound the run already ran with; naming the flag explicitly is
+                      the person's raise — it overrides the record (0, the default, means not
+                      named: adopt what the run records)
+  --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
+                      in-flight work and writing the checkpoint before the process exits anyway — the
+                      platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
+                      the flush is what spends a bounded slice of that window making the disk's loss
+                      survivable (0 disables the flush)
+
+Each dispatch goes through the executor its resolved profile names — a profile
+naming the herdr executor launches the attempt in a herdr workspace, a profile
+naming cloudflare-sandbox asks the factory's per-tick sandbox door to boot one
+attempt's worker container (the factory's base URL and the run's own gateway
+token come from TICKS_FACTORY_URL and TICKS_FACTORY_TOKEN), and the wall
+clock, the report and the boundary are judged from the branch and the report
+in git at collect. This build honours three executors — local-subprocess,
+herdr and cloudflare-sandbox — and refuses a profile naming any other before
+anything is claimed.
+
+The effective budget — what an operator asked for, clamped to the deployment
+ceiling — is printed before the run starts, while it can still be cancelled
+cheaply. It binds a METERED credential; the local subprocess executor issues a
+flat-rate one, so on this host the number travels with the job and is reported
+everywhere, and the wall clock is what actually stops one.
+
+Each role-less implementation tick is classified through Jev before its first
+dispatch, and the credential that call rides is resolved from the environment
+and printed at startup (tick x0k): inside a cloud sandbox it is the run's own
+gateway route (AI_GATEWAY_BASE_URL/jev) with the run token, locally it is the
+operator's own key in $TICFAC_JEV_API_KEY (an optional $TICFAC_JEV_API_BASE
+overrides the API root). No credential — or an unreachable, refused or
+misconfigured classifier — is the documented fallback, said at startup and
+recorded per ask: the run classifies nothing or records its no-answer, and
+every dispatch starts at [tier_policy.start].
+
+A long run wants the machine awake end to end. A machine that sleeps mid-run
+kills workers without settling them, and what it leaves — a held attempt, a
+missing report, a run stopped at nothing — looks exactly like a worker defect
+when it is the host's: wrap the run in caffeinate -i on macOS, or the
+equivalent elsewhere, rather than letting the machine sleep (tick 0z0).
+
+A target repository may declare, in .tick/config.md's Rules section, that an
+epic integrates through a PR + CI gate: the run opens the epic PR itself,
+holds the close-out until CI is green on it, and refuses typed — naming the
+failing job — when CI is red. That rule needs a code-hosting surface: the
+GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
+and a repo declaring the rule is refused at startup until the token is set
+(tick 0iz).
+
+init flags:
+  --repo <dir>        the repository to make ready (default: cwd)
+  --substrate <s>     local | cloud | both — where runs of this repo execute (default: local)
+  --runner <name>     claude | pi, the harness local dispatches run on (default: claude)
+  --model <model>     the model every role routes to (default: per runner)
+  --gate <command>    the testing gate, when it cannot be guessed from the repository
+  --yes               take every default and the guessed gate without asking
+
+"init" writes .tick/runners.toml (the dispatch routing and the guessed
+[testing.commands] gate — go test ./..., pnpm test, make test — shown for
+confirmation), .tick/runners.cloud.toml when the answer names the cloud
+(the cloud runs Workers AI models only, through the factory's gateway), and
+a .tick/config.md declaring the PR + CI close-out rule. It refuses to
+overwrite: a repository that already carries a file init would write keeps
+it, and the refusal names the file.
+
+doctor flags:
+  --repo <dir>        the repository a run is checked for (default: cwd)
+  --cloud             check the cloud prerequisites too, whatever the repository declares
+
+"doctor" checks what a run of this repository needs on the machine it starts
+on — tk, a herdr server, a GitHub credential, a git identity, and for cloud
+docker, wrangler and a configured factory — each missing thing with the
+command that fixes it. Exit 0 when everything is present, 1 when any check
+is missing.
+
+settle flags:
+  --release <who>     the person releasing the attempt (required); recorded as a stable
+                      pseudonymous id in the committed decision — the value you pass here
+                      never reaches the target repository, which may forbid operator
+                      identifiers in its tracked files; it is kept in run-local state under
+                      --state-root
+  --carry-work       base the next attempt of this tick on the released attempt's branch, so
+                      the next worker starts from its commits rather than redoing them — the
+                      gate still decides, and the new attempt's records state where its work
+                      came from
+  --repo, --remote, --branch, --run-id, --state-root, --gate, --profiles,
+  --tier, --runner    as for run-epic: the same run, addressed the same way
+
+An attempt whose supervisor died without settling it reads as lost, and every
+restart holds it rather than starting a second job over the same identity
+(Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
+the executor can still address, records the release durably as a decision
+naming who made it, and the next run dispatches a NEW attempt instead of
+adopting the released one. Whatever the released attempt committed stays on
+its own write ref — and the release says where that ref lives: on the remote,
+or only as a local branch in the checkout that holds it when the push never
+landed there.
+
+It releases one other attempt: one this run REJECTED while it was holding
+commits nothing merged. No run collects that attempt again (the teardown the
+refusal ran removed its worktree) and no run dispatches over it (that would
+orphan the only copy of the work), so a person reads the branch and then says
+here that the run may go on.
+
+--carry-work is the third option that situation actually needs: release the
+attempt AND base the next one on its branch, so the next worker starts from the
+work rather than redoing it. Nothing merges unproven — the gate still decides —
+but the evidence the interrupted attempt produced is not thrown away, and the
+next attempt's provenance records that its source is the released attempt's
+ref and commit (tick 0z0).
+
+watch flags:
+  --repo <dir>        the checkout the run works in (default: cwd)
+
+"watch" is the consumer the run event feed was built for: it subscribes like
+events --follow, and when the run stops holding a tick for a person it SAYS
+SO — which tick, which attempt, why, and the command that moves it on. With a
+live run it joins the CURRENT incarnation: the ending of a previous
+incarnation is not replayed, and a hold already standing when the watch
+starts is reported as the hold it joined. Exit codes: 0 the run ended (the
+last line says how), 3 it ended holding something only a person can move,
+1 the feed could not be read or the watch was interrupted, 2 usage. A run
+whose process died without a terminal line is
+ticfac status's question, not the feed's.
+
+events flags:
+  --repo <dir>        the checkout the run works in (default: cwd)
+  --follow            keep the stream open: each event as it lands, until Ctrl-C
+
+"events" is how a NON-PARTICIPANT learns a run finished: the run writes one
+append-only JSONL stream at .ticfac/logs/<run-id>/events.jsonl, and this
+follows it — every event with its run/tick/attempt identity — instead of
+sleeping blind against the run or polling its durable records. A line is a
+hint about when to LOOK, never a verdict: completion is still decided by the
+evidence on the integration branch, the commits plus the report, so a
+subscriber that reads run_finished goes and looks rather than believing it.
+
+findings and finding flags:
+  --repo <dir>         as for run-epic (default: cwd)
+  --remote <name>      as for run-epic (default: origin)
+  --branch <name>      as for run-epic (default: epic/<epic-id>)
+  --run-id <id>        as for run-epic (default: epic-<epic-id>)
+
+finding flags:
+  --promote-as <tick>  record the tick a promotion created — a bare tick id for a
+                       finding that belongs to this repository, <owner/name>:<tick-id>
+                       for one routed to the repository its target names
+  --discard            record that a person looked and said no
+  --fixed-as <commit>  record that the finding was repaired inside this epic, naming
+                       the commit that repaired it — the claim stays checkable, and a
+                       later report of the same finding is NOT suppressed: it means
+                       the fix did not hold, and the run hears it again
+  --by <who>           the person triaging (required): a decision nobody can
+                       attribute is one nobody can audit
+
+A worker that discovers something outside its tick reports it as a typed
+findings block in its report; the reconciler drafts each finding under
+.ticfac/runs/<run-id>/findings/ on the integration branch, stamped with the
+attempt that discovered it. Each finding may carry done evidence — the
+[A<n>] acceptance item of the epic's definition of done the reporter says it
+breaks, and the command or test that would demonstrate it; the listing marks
+a finding that carries none as unlinked. The tick that reported it closes,
+the run continues, and the finding rides to the close-out — which does not
+hand over while any finding is untriaged, and refuses the hand-over when one
+is missing from the epic PR. Promotion keeps the
+scope decision human: it records the tick YOU created — pass the draft's
+discovered_from to the tracker when you file it, so the attempt that found
+it is never lost again — and nothing here writes the tracker for you.
+`
+
+>>>>>>> 9a1f1c42216c202a4d06a7422354dfd050efbfbe
 // Run's old hand-rolled dispatcher is gone (tick nwj): the switch lived in
 // cli.go and became the cobra tree in root.go — and the usage text it
 // printed, a hand-rolled const that said every command and flag a second
