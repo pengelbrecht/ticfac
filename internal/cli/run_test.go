@@ -41,19 +41,6 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 )
 
-// TestMain doubles this binary as the detached child `ticfac run` starts:
-// the production spawn execs os.Executable() with argv ["run-epic", ...],
-// and under test that is THIS binary — the same re-exec trick the SIGTERM
-// evacuation test uses (tick ppt), at the other end. A go test invocation
-// never carries "run-epic" as its first argument, so this dispatch is
-// invisible to the suite itself.
-func TestMain(m *testing.M) {
-	if len(os.Args) > 1 && os.Args[1] == "run-epic" {
-		os.Exit(runDetachedChild(os.Args[2:]))
-	}
-	os.Exit(m.Run())
-}
-
 // runDetachedChild is the child's whole job in the end-to-end test below:
 // claim the run's life the way a real run-epic does (runlife.Claim), say one
 // feed line so the attach has the run's own word to show, and stay alive

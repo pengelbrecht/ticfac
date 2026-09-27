@@ -23,7 +23,19 @@ import (
 // cannot each hold the one environment variable that names where
 // registrations live, so the redirect happens once, before any test runs.
 // registry_redirect_test.go guards the day this file is lost.
+//
+// TestMain also doubles this binary as the detached child `ticfac run`
+// starts (tick 9sz): the production spawn execs os.Executable() with argv
+// ["run-epic", ...], and under test that is THIS binary — the same re-exec
+// trick the SIGTERM evacuation test uses (tick ppt), at the other end. A go
+// test invocation never carries "run-epic" as its first argument, so this
+// dispatch is invisible to the suite itself. The child dispatches BEFORE the
+// redirect: it inherits the parent test process's environment, redirect
+// included, so its claim registers where the parent's tests look.
 func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "run-epic" {
+		os.Exit(runDetachedChild(os.Args[2:]))
+	}
 	dir, err := os.MkdirTemp("", "ticfac-cli-registry-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
