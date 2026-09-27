@@ -144,6 +144,40 @@ func TestFindingsWithNothingDraftedSaysSo(t *testing.T) {
 	}
 }
 
+// A routed finding promoted as a LOCAL tracking tick that names its target is
+// not "elsewhere": it is the tick the run itself files when it may not file
+// into the target, and the routing stays visible in the tracker a person
+// reads. A local tick that does not name the target is still refused.
+func TestARoutedFindingMayBePromotedAsALocalTickThatNamesItsTarget(t *testing.T) {
+	repo := newFindingsRepo(t)
+	seedFinding(t, repo, testDraftFinding("c0ffee00", "pengelbrecht/ticks"))
+	issues := filepath.Join(repo, ".tick", "issues")
+	if err := os.MkdirAll(issues, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for id, title := range map[string]string{
+		"trk": "For pengelbrecht/ticks: A finding the surface lists",
+		"oth": "A tick about something else",
+	} {
+		record := `{"id":"` + id + `","title":"` + title + `","status":"open","priority":2,"type":"task",` +
+			`"owner":"o","created_by":"o","created_at":"2026-09-27T00:00:00Z","updated_at":"2026-09-27T00:00:00Z"}`
+		if err := os.WriteFile(filepath.Join(issues, id+".json"), []byte(record), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"finding", "--repo", repo, "--promote-as", "oth", "--by", "the operator", "qeu", "c0ffee00"},
+		&stdout, &stderr); code != 1 {
+		t.Fatalf("a local tick that does not name the target was accepted (exit %d): %s", code, stdout.String())
+	}
+	stderr.Reset()
+	if code := Run([]string{"finding", "--repo", repo, "--promote-as", "trk", "--by", "the operator", "qeu", "c0ffee00"},
+		&stdout, &stderr); code != 0 {
+		t.Fatalf("a local tracking tick naming the target was refused (exit %d): %s", code, stderr.String())
+	}
+}
+
 func TestAFindingIsPromotedWithProvenanceAndRouting(t *testing.T) {
 	repo := newFindingsRepo(t)
 	seedFinding(t, repo, testDraftFinding("d34db33f", ""))

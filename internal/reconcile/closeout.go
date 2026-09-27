@@ -425,6 +425,13 @@ func (r *Reconciler) prBase() string {
 // and only a `none` that survives that bound is the workflow's failure again.
 func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle, merged merge) error {
 	tick := marker.TickID
+	// Every routed finding still proposed is disposed of first (routed.go):
+	// one a transient failure deferred, or one an incarnation older than the
+	// rule left for a person. A finding routed to another repository never
+	// holds the hand-over — and the body below then lists where it went.
+	if err := r.disposeRoutedFindings(ctx, marker); err != nil {
+		return err
+	}
 	if !r.closeoutRule.Declared {
 		// No PR, no CI — but the findings gate still runs (tick aqm): the hold
 		// the per-tick close carried moved HERE, not away, and a repository

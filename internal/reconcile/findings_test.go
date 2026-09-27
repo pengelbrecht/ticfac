@@ -99,7 +99,6 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	}
 	for _, want := range []string{
 		"A finding the fake runner proposes",
-		"An upstream finding routed to another repository",
 		"tick a1",
 		"close-out does not hand over",
 		"breaks done item A1", // the hold names each finding's claim against the done (tick nfo)
@@ -108,6 +107,13 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",
 				want, result.Failure.Message)
 		}
+	}
+	// The ROUTED finding is not among what holds (the epic-2jn stall): the
+	// run disposed of it itself, as a local backlog tick naming its target,
+	// because nothing here declares pengelbrecht/ticks fileable (routed.go).
+	if strings.Contains(result.Failure.Message, "An upstream finding routed to another repository") {
+		t.Errorf("the hold names the finding routed to another repository, which never holds a run: %s",
+			result.Failure.Message)
 	}
 
 	// THE RUN CONTINUED: the tick that reported the findings closed, and so did
@@ -128,8 +134,9 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 			"nobody triaged must not read as nothing found", reconciler.Stages("a1"))
 	}
 
-	// The drafts are on origin: two findings, both proposed, both discovered
-	// by a1's first attempt — the routing target kept, the upstream one named.
+	// The drafts are on origin: two findings, both discovered by a1's first
+	// attempt — the routing target kept, the upstream one named. The local one
+	// is proposed; the routed one the run promoted itself.
 	s := draftsStore(t, repo)
 	findings, err := s.Findings()
 	if err != nil {
@@ -147,11 +154,17 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 			t.Errorf("discovered_from %q: the draft must name the attempt that discovered it, so the "+
 				"provenance is never lost", finding.DiscoveredFrom)
 		}
-		if finding.Status != runstate.FindingProposed {
-			t.Errorf("status %q, want proposed", finding.Status)
-		}
 		if finding.Target == "pengelbrecht/ticks" {
 			routed = true
+			if finding.Status != runstate.FindingPromoted || finding.PromotedAs == "" ||
+				strings.Contains(finding.PromotedAs, ":") {
+				t.Errorf("the routed finding is %s as %q, want promoted to a local backlog tick naming its "+
+					"target: nothing here declares its target fileable", finding.Status, finding.PromotedAs)
+			}
+			continue
+		}
+		if finding.Status != runstate.FindingProposed {
+			t.Errorf("status %q, want proposed", finding.Status)
 		}
 	}
 	if !routed {
@@ -283,9 +296,14 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 		}
 	}
 
-	// The person DISCARDS them both — the hard case: whatever the human did
-	// with the original, a redelivery proposes nothing new.
+	// The person DISCARDS the local one — the hard case: whatever the human
+	// did with the original, a redelivery proposes nothing new. The routed one
+	// the run already disposed of itself (routed.go), and its decision stands
+	// the same way.
 	for _, finding := range findings {
+		if finding.Target != "" {
+			continue
+		}
 		if _, _, err := s.TriageFinding(finding.Key, runstate.Triage{Status: runstate.FindingDiscarded, By: "the operator"}); err != nil {
 			t.Fatalf("discard %s: %v", finding.Key, err)
 		}
@@ -311,7 +329,7 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 	for _, event := range reconciler.Journal() {
 		if event.Stage == StageFindingDuplicate {
 			duplicates++
-			if !strings.Contains(event.Detail, "discarded") {
+			if !strings.Contains(event.Detail, "discarded") && !strings.Contains(event.Detail, "is promoted") {
 				t.Errorf("duplicate event %q does not name the human's decision", event.Detail)
 			}
 		}
@@ -335,8 +353,12 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 		t.Fatalf("findings %v, want exactly the originals", findings)
 	}
 	for _, finding := range findings {
-		if finding.Status != runstate.FindingDiscarded {
-			t.Errorf("status %q, want discarded", finding.Status)
+		want := runstate.FindingDiscarded
+		if finding.Target != "" {
+			want = runstate.FindingPromoted // the run's own disposition of the routed one
+		}
+		if finding.Status != want {
+			t.Errorf("status %q, want %s", finding.Status, want)
 		}
 		if finding.DiscoveredFrom != "run-r-fixture/tick-a1/attempt-1" {
 			t.Errorf("discovered_from %q: the original proposal must keep the attempt that first reported it",
@@ -486,6 +508,11 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 		t.Fatal("the fixture's integration branch has no head to name as the repair")
 	}
 	for _, finding := range findings {
+		if finding.Target != "" {
+			// Routed: the run disposed of it itself (routed.go) — there is
+			// nothing in this repository to have fixed.
+			continue
+		}
 		outcome, decided, err := s.TriageFinding(finding.Key, runstate.Triage{
 			Status: runstate.FindingFixed, By: "the operator", FixedAs: fixedAs,
 		})
@@ -545,6 +572,13 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 		t.Fatalf("findings %v, want the two re-opened drafts", reopened)
 	}
 	for _, finding := range reopened {
+		if finding.Target != "" {
+			if finding.Status != runstate.FindingPromoted {
+				t.Errorf("the routed finding %s is %s, want still promoted: the run's own disposition stands",
+					finding.Key, finding.Status)
+			}
+			continue
+		}
 		if finding.Status != runstate.FindingProposed {
 			t.Errorf("finding %s is %s, want proposed: the re-report re-opens the draft", finding.Key, finding.Status)
 		}
@@ -559,7 +593,8 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 	// draft, so a person reading the tracker hears it too.
 	var filed int
 	for _, event := range reconciler.Journal() {
-		if event.Stage == StageFindingDuplicate && event.Tick == "a1" {
+		if event.Stage == StageFindingDuplicate && event.Tick == "a1" &&
+			!strings.Contains(event.Detail, "routed to another repository") {
 			t.Errorf("the re-report of a fixed finding was recorded as a duplicate: %q — a fix that "+
 				"did not hold is exactly what the dedup must not swallow", event.Detail)
 		}
@@ -567,8 +602,8 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 			filed++
 		}
 	}
-	if filed != 2 {
-		t.Fatalf("%d findings filed on the resume run, want 2: the re-report must surface as a "+
+	if filed != 1 {
+		t.Fatalf("%d findings filed on the resume run, want the one fixed here: the re-report must surface as a "+
 			"draft waiting for a person", filed)
 	}
 	state, err := f.Tracker.load()
@@ -607,16 +642,14 @@ func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 	if !strings.Contains(result.Failure.Message, "tick rv") {
 		t.Errorf("the hold does not name rv, the tick whose review reported the finding: %s", result.Failure.Message)
 	}
-	// A finding routed to ANOTHER repository is untriaged like any other, and
-	// holds the close-out like any other. Neither the per-tick gate this
-	// replaced nor the close-out gate has ever looked at a finding's target:
-	// "triaged" is a decision a PERSON records, and a person can record one for
-	// a finding they will promote elsewhere — that is what --promote-as is for.
-	// Asserted because the alternative reading turns aqm's one stop per run
-	// into one permanent stop that nothing in this run could ever clear.
-	if !strings.Contains(result.Failure.Message, "for pengelbrecht/ticks") {
-		t.Errorf("the hold does not name the finding routed to another repository: a finding this run "+
-			"cannot fix is still a finding a person must decide about: %s", result.Failure.Message)
+	// A finding routed to ANOTHER repository does NOT hold the close-out (the
+	// epic-2jn stall, 2026-09-27): this run cannot fix it, so it gates
+	// nothing, and the run disposes of it itself — here, with no route
+	// declared, as a backlog tick naming the target (routed.go). Only the
+	// local finding, whose epic's done is prose, is left for a person.
+	if strings.Contains(result.Failure.Message, "for pengelbrecht/ticks") {
+		t.Errorf("the hold names the finding routed to another repository, which the run must dispose of "+
+			"itself: %s", result.Failure.Message)
 	}
 	if got := f.Tracker.count("close:rv"); got != 1 {
 		t.Fatalf("rv was closed %d times, want 1: a review whose findings wait for a person closes; "+

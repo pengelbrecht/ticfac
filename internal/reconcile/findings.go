@@ -25,14 +25,15 @@ import (
 //   - every draft is stamped with the ATTEMPT that discovered it, so
 //     `discovered_from` is never empty again;
 //   - a finding targeting ANOTHER repository keeps its target and is routed
-//     there at promotion, rather than dropped;
+//     there, rather than dropped — filed by the run in the target's own
+//     tracker when .tick/runners.toml allows it, else backlogged here naming
+//     the target — and never gates, holds or waits for a person (routed.go);
 //   - the ABSORPTION DECISION (tick npq) is made where the finding is
 //     discovered, by the run, against the epic's own definition of done
 //     (absorb.go): a gating finding is promoted into the running epic as a
 //     tick placed before the final review, a non-gating one becomes a
-//     backlog tick with an owner, and what the run cannot decide — a routed
-//     finding, an epic whose done is prose — stays a person's at the
-//     close-out. The scope decision is no longer a person's by DEFAULT; it
+//     backlog tick with an owner, and what the run cannot decide — an epic
+//     whose done is prose — stays a person's at the close-out. The scope decision is no longer a person's by DEFAULT; it
 //     is a person's where the run's own rules say it must be, and every
 //     decision the run makes is a record on the run branch;
 //   - a tick whose findings are untriaged CLOSES, and the finding rides to the

@@ -176,6 +176,38 @@ report_with_chained_findings() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+findings_block_routed() {
+	# The epic-2jn close-out stall (2026-09-27): ONE finding routed to ANOTHER
+	# repository that nonetheless claims to break a done item of this epic.
+	# This run can never fix another repository, so the claim cannot make it
+	# gate anything here, and the run must dispose of it with nobody triaging.
+	{
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "upstream-tick",'
+		printf '%s\n' '  "title": "An upstream finding routed to another repository",'
+		printf '%s\n' '  "body": "The upstream half, reported verbatim.",'
+		printf '%s\n' '  "severity": "low",'
+		printf '%s\n' '  "target": "pengelbrecht/ticks",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "none"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+	}
+}
+
+report_with_routed_findings() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_routed
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
 report_with_local_findings() {
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
@@ -490,6 +522,13 @@ finding_local)
 	# discovery that the absorption decision is driven on.
 	commit
 	report_with_local_findings
+	;;
+finding_routed)
+	# The routed case (the epic-2jn close-out stall): the work is done, the
+	# report is DONE, and the report carries ONE finding routed to another
+	# repository, claiming a done item of this epic it can never gate.
+	commit
+	report_with_routed_findings
 	;;
 finding_chain)
 	# The recursion case (tick qjj): same as finding_local, but the finding's

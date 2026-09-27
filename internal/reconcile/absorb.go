@@ -54,9 +54,10 @@ import (
 // WHAT STAYS: a finding the done is reachable without is still a backlog tick
 // with an owner, and it is still reported — unattended means nobody has to be
 // there, not that nobody is ever told. And a finding the run cannot decide —
-// one routed to ANOTHER repository, or an epic whose acceptance carries no
-// [A<n>] items (the refusal: klq) — stays a person's at the close-out, where
-// the hold already is.
+// an epic whose acceptance carries no [A<n>] items (the refusal: klq) — stays
+// a person's at the close-out, where the hold already is. A finding routed to
+// ANOTHER repository is no longer among them: it is filed in the target's
+// tracker or backlogged here naming it, and gates nothing (routed.go).
 
 // findingDecision is what one decision did, for the caller that reports it:
 // the tick the promotion created when the run decided, and why the finding
@@ -68,9 +69,9 @@ type findingDecision struct {
 	// Backlog says the verdict was NOT GATING: the tick is a backlog tick, not
 	// part of the running epic.
 	Backlog bool
-	// Left is why the run did not decide — the finding is routed to another
-	// repository, or the epic's acceptance is prose and the refusal owns the
-	// decision. Empty when the run decided.
+	// Left is why the run did not decide — the epic's acceptance is prose and
+	// the refusal owns the decision, or a routed finding's filing failed
+	// transiently and the close-out files it. Empty when the run decided.
 	Left string
 }
 
@@ -84,6 +85,9 @@ func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Fi
 		what := fmt.Sprintf("absorbed into the running epic as tick %s, with nobody triaging", decided.TickID)
 		if decided.Backlog {
 			what = fmt.Sprintf("promoted to a backlog tick with an owner, %s", decided.TickID)
+		}
+		if strings.Contains(decided.TickID, ":") {
+			what = fmt.Sprintf("filed in the tracker of the repository it is routed to, as %s", decided.TickID)
 		}
 		return fmt.Sprintf("ticfac run %s: %s reported a finding the run itself decided — %s %q "+
 			"(key %s, severity %s, for %s) is %s; the decision record is on the run branch at "+
@@ -144,14 +148,14 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return r.finishAbsorption(ctx, marker, *standing, *recorded)
 	}
 
-	// A finding routed to ANOTHER repository is not this run's to absorb: the
-	// tick it becomes lives in the repository it targets, and writing another
-	// repository's tracker from here would be the routing the finding carried,
-	// silently undone. It stays a person's, at the close-out where the hold
-	// already is and the finding's full text is on the PR.
-	if standing.Target != "" {
-		return findingDecision{Left: fmt.Sprintf(
-			"the finding is routed to %s and only a person can file it there", standing.Target)}, nil
+	// A finding routed to ANOTHER repository is not this run's to absorb —
+	// the fix lives in a tree this run does not build — and it is not a
+	// person's to wait for either (the epic-2jn close-out stall): the run
+	// files it in the target's own tracker when the repository allows it, and
+	// backlogs it here naming the target otherwise. It gates nothing here,
+	// whatever it claims (routed.go).
+	if standing.Target != "" && !r.isThisRepository(standing.Target) {
+		return r.decideRoutedFinding(ctx, marker, *standing, dispatch, false)
 	}
 
 	// The epic's own definition of done, decided once: [A<n>] items resolved
@@ -322,6 +326,24 @@ func (r *Reconciler) finishAbsorption(ctx context.Context, marker attemptHandle,
 		}
 	}
 
+	// A finding FILED in another repository's tracker (routed.go): the tick
+	// is the target's, already pushed there before this record was written,
+	// so what remains here is the triage and the feed line — nothing is
+	// created, placed or noted in this tracker.
+	if record.Placement == runstate.AbsorptionRouted {
+		if _, _, err := r.store.TriageFinding(record.Key, runstate.Triage{
+			Status:     runstate.FindingPromoted,
+			By:         fmt.Sprintf("ticfac run %s filing %s", r.runID, record.TickID),
+			PromotedAs: record.TickID,
+		}); err != nil {
+			return findingDecision{}, err
+		}
+		r.record(marker.TickID, StageFindingRouted,
+			"finding %s is filed in %s's own tracker as %s and gates nothing here: %s",
+			record.Key, record.Target, record.TickID, record.Reason)
+		return findingDecision{TickID: record.TickID, Backlog: true}, nil
+	}
+
 	// The tick, created if absent — the promotion's mechanism. The owner is
 	// the RUN for a tick inside the epic (the run works it), and a PERSON for
 	// a backlog tick (a backlog tick waits for whoever owns the epic).
@@ -400,7 +422,12 @@ func placementLine(record runstate.Absorption) string {
 		return fmt.Sprintf("placed before the final review, which is blocked-by %s", record.TickID)
 	case runstate.AbsorptionAfterReview:
 		return "placed before the close-out, which does not start while it is open; the review had already run"
+	case runstate.AbsorptionRouted:
+		return fmt.Sprintf("filed in %s's own tracker as %s", record.Target, record.TickID)
 	case runstate.AbsorptionBacklog:
+		if record.Target != "" {
+			return fmt.Sprintf("a backlog tick here naming %s, for a person to carry there", record.Target)
+		}
 		return "a backlog tick: the done is reachable with the finding standing"
 	default:
 		return "placed " + record.Placement
@@ -410,6 +437,10 @@ func placementLine(record runstate.Absorption) string {
 // verdictLine is the verdict as the record's reader reads it: which item, and
 // what decided.
 func verdictLine(record runstate.Absorption) string {
+	if record.Basis == runstate.AbsorptionRule {
+		return fmt.Sprintf("routed to %s, which this run cannot fix, so it gates no item of this epic's done",
+			record.Target)
+	}
 	if record.Gating {
 		if record.ItemID == "" {
 			return "gates the done, naming no single item (the fallback names every item at risk in its reason)"
@@ -462,10 +493,22 @@ func absorbedTickRecord(runID string, finding runstate.Finding, record runstate.
 				"absorb. The decision record is .ticfac/runs/%s/absorptions/%s.json on the run branch.",
 			runID, finding.Key, finding.DiscoveredFrom, runID, finding.Key)
 	}
+	title := finding.Title
+	if record.Target != "" {
+		// The local tracking tick of a finding routed to ANOTHER repository
+		// (routed.go): titled with the target and saying who it is for, so a
+		// person reading this tracker sees at once that the work is not here.
+		title = fmt.Sprintf("For %s: %s", record.Target, finding.Title)
+		how = fmt.Sprintf(
+			"This finding is for %s, not for this repository. ticfac run %s filed this backlog tick from the finding "+
+				"%s (reported by %s) so it is not lost: %s. Carry it to %s's tracker and close this tick. The "+
+				"decision record is .ticfac/runs/%s/absorptions/%s.json on the run branch.",
+			record.Target, runID, finding.Key, finding.DiscoveredFrom, record.Reason, record.Target, runID, finding.Key)
+	}
 	at := time.Now().UTC().Format(time.RFC3339)
 	tick := tk.Tick{
 		ID:             record.TickID,
-		Title:          finding.Title,
+		Title:          title,
 		Description:    strings.TrimSpace(description + "\n\n" + how),
 		Status:         "open",
 		Priority:       2,

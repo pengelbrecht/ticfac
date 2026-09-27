@@ -85,7 +85,9 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 		"A finding the fake runner proposes",
 		"Discovered beside the work, reported mechanically.",
 		"An upstream finding routed to another repository",
-		"pengelbrecht/ticks",
+		// The target, as the findings list names it: the routed section and
+		// the run's own disposition name it too, each in its own words.
+		"for pengelbrecht/ticks",
 		// THE DONE EVIDENCE (tick nfo): the claim against the epic's definition
 		// of done rides beside the finding's text, because the PR is where a
 		// person decides — a finding whose claim nobody can see is evidence
@@ -100,8 +102,13 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 	if !strings.Contains(body, "high") || !strings.Contains(body, "low") {
 		t.Errorf("the body does not carry each finding's severity:\n%s", body)
 	}
-	if got := strings.Count(body, "triaged proposed"); got != 2 {
+	// One untriaged: the local finding. The routed one the run disposed of
+	// itself (routed.go) and the body lists where it went.
+	if got := strings.Count(body, "triaged proposed"); got != 1 {
 		t.Errorf("the body carries the triage state %d times, want once per untriaged finding:\n%s", got, body)
+	}
+	if !strings.Contains(body, "## Findings routed to other repositories") {
+		t.Errorf("the body does not list the finding routed to another repository:\n%s", body)
 	}
 
 	// A person triages both drafts, promoting each into the repository it
