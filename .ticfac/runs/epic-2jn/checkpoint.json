@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 395,
-  "state": "publishing",
-  "reason": "closing 8d6 behind the integrated gate on 4230b469c676",
-  "updated_at": "2026-09-27T20:19:44Z",
+  "sequence": 396,
+  "state": "running",
+  "reason": "8d6 is closed",
+  "updated_at": "2026-09-27T20:19:53Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -228,7 +228,7 @@
     },
     {
       "tick_id": "8d6",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 52
     },
     {
