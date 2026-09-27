@@ -122,6 +122,7 @@ for any subcommand's. The exit codes are the contract a script branches on:
 		newSettleCommand(stdout, stderr),
 		newFindingsCommand(stdout, stderr),
 		newFindingCommand(stdout, stderr),
+		newTriageCommand(stdout, stderr),
 		newStatusCommand(stdout, stderr),
 		newEventsCommand(stdout, stderr),
 		newWatchCommand(stdout, stderr),
