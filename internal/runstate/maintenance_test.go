@@ -64,22 +64,40 @@ func TestTheStoresFetchStartsNoMaintenanceInTheRepositoryItWritesTo(t *testing.T
 	}
 }
 
-// unpinnedGitRun is gitRun WITHOUT the env-config pins: gitbin.WithoutPinnedConfig
-// strips GIT_CONFIG_COUNT and its numbered pairs — git reads those above every
-// config file, so they survive GIT_CONFIG_GLOBAL=/dev/null — and the two /dev/null
-// config files bound the host the way gitRun's do. It exists for this file's
-// CONTROL only: an assertion that a particular git starts no maintenance is
-// worth nothing on a machine where no git would, and whether this machine is
-// one is a property of the ENVIRONMENT, not of the tree. The store's own fetch
-// (the assertion) runs as production runs it, pins and all.
-func unpinnedGitRun(t *testing.T, dir string, args ...string) string {
-	t.Helper()
+// unpinnedGit is a git run WITHOUT the fixture's pins: an operator's own
+// command, which is a git that DOES end by starting background maintenance.
+//
+// It exists for the CONTROLS that need one — this file's (tick mel), and the
+// trace guard in maintenance_guard_test.go (tick 35l) — and both are the
+// same argument: an assertion that a particular git starts no maintenance is
+// worth nothing on a machine where no git would have. Nothing else in this
+// package may build a git command; TestEveryGitTheTestsStartGoesThroughThePinnedRunner
+// is what says so.
+//
+// The GIT_CONFIG_COUNT pins are stripped rather than merely overridden by
+// GIT_CONFIG_GLOBAL=/dev/null, because git reads the env-config entries
+// ABOVE every config file; and the two /dev/null config files keep the
+// host's own global config out of the control as well, for the same reason
+// in the other direction: whether a plain git starts maintenance is a
+// property of the ENVIRONMENT, and a control under a host that pins or arms
+// it measures nothing and reports it as the tree's failure.
+func unpinnedGit(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command(gitbin.Path(), args...)
 	cmd.Dir = dir
 	cmd.Env = append(gitbin.WithoutPinnedConfig(os.Environ()),
+		"GIT_AUTHOR_NAME=ticfac test", "GIT_AUTHOR_EMAIL=ticfac@example.com",
+		"GIT_COMMITTER_NAME=ticfac test", "GIT_COMMITTER_EMAIL=ticfac@example.com",
 		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
+	return cmd
+}
+
+// unpinnedGitRun is unpinnedGit with a helper's error reporting: fatal
+// rather than return, because a control git that fails says the fixture
+// cannot prove what it is about to assert.
+func unpinnedGitRun(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := unpinnedGit(dir, args...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
 	}
