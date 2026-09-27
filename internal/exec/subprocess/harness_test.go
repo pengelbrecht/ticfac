@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // The test harness: a real repository, a real origin, a real supervisor
@@ -32,11 +33,20 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
 		os.Exit(1)
 	}
-	dir, err := os.MkdirTemp("", "ticfac-exec-bin-")
+	dir, err := os.MkdirTemp("", tempdir.Pattern("ticfac-exec-bin-"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	// Every t.TempDir and every temp dir the executor under test makes lands
+	// inside this one (tick w9j): a killed suite leaves one directory the
+	// run-epic sweep attributes to a dead pid, not a scatter.
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	_ = os.Setenv("TMPDIR", tmp)
 	executorBin = filepath.Join(dir, "ticfac-exec-subprocess")
 	build := exec.Command("go", "build", "-o", executorBin, "./cmd/ticfac-exec-subprocess")
 	build.Dir = root

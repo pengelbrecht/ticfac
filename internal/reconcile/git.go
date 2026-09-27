@@ -11,6 +11,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // git, as the reconciler needs it: resolve, merge, push, and answer whether a
@@ -247,15 +248,19 @@ func refFor(branch string) string {
 // it lives in. A worktree inside the tree being merged would show up in the
 // diff the boundary check reads.
 func (g *repoGit) tempWorktree(prefix, commit string) (dir string, remove func(), err error) {
-	root, err := os.MkdirTemp("", prefix)
+	// tempdir, so that a run leaving by os.Exit (the signal handler) still
+	// removes it, and a killed one leaves a name the next run's sweep can
+	// attribute to a dead pid (tick w9j). The worktree goes through git first,
+	// so the repository's worktree list does not keep a line for it.
+	root, removeRoot, err := tempdir.Make(prefix)
 	if err != nil {
 		return "", nil, err
 	}
 	dir = filepath.Join(root, "tree")
-	remove = func() {
+	remove = tempdir.Register(func() {
 		g.removeWorktree(dir)
-		_ = os.RemoveAll(root)
-	}
+		removeRoot()
+	})
 	if err := g.worktreeAt(dir, commit); err != nil {
 		remove()
 		return "", nil, err
