@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 228,
-  "state": "gating",
-  "reason": "running the integrated gate for 4yb on 80404cce3436",
-  "updated_at": "2026-09-27T12:42:23Z",
+  "sequence": 229,
+  "state": "publishing",
+  "reason": "closing 4yb behind the integrated gate on 80404cce3436",
+  "updated_at": "2026-09-27T12:43:44Z",
   "ticks": [
     {
       "tick_id": "nwj",
