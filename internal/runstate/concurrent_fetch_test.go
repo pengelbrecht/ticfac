@@ -2,14 +2,11 @@ package runstate
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // TestAnOperatorFetchingInTheRunsCheckoutEndsNothing is the end-to-end proof
@@ -74,7 +71,13 @@ func TestAnOperatorFetchingInTheRunsCheckoutEndsNothing(t *testing.T) {
 				return
 			default:
 				// What a watcher does: fetch everything, in the run's checkout.
-				_ = exec.Command(gitbin.Path(), "-C", dir, "fetch", "--quiet", "origin").Run()
+				// Through gitCommand like every other git this suite starts
+				// (tick 35l): the watcher's plainness is not what this test
+				// measures — FETCH_HEAD is — and an unpinned fetch in a tight
+				// loop is the detached-maintenance leak this package pins
+				// everywhere else, started dozens of times over in the very
+				// repository the test is about to delete.
+				_ = gitCommand("fetch", "--quiet", "origin").command(dir).Run()
 			}
 		}
 	}()
