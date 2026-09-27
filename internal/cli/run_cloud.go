@@ -16,9 +16,10 @@ package cli
 //     reads a cloud run through (feedSource, tick k7p): the same live
 //     block on a terminal, the same plain stream on a pipe, the same exit
 //     codes — the exit table's (tick 8v3): 0 ended, 3 ended holding
-//     something for a person, 5 detached while the run keeps going, 1
-//     unreadable. There is deliberately no second implementation of the
-//     view; two is the drift every earlier surface had to settle.
+//     something for a person, 5 detached while the run keeps going, 1 the
+//     run ended failed (tick bot) or the feed was unreadable. There is
+//     deliberately no second implementation of the view; two is the drift
+//     every earlier surface had to settle.
 //
 //   - RESUME is a second invocation against a run the factory says has
 //     finished: a new submission, which the cloud orchestrator resumes from

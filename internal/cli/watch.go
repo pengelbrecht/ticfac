@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -52,9 +54,10 @@ const ExitHeld = 3
 // one-line-per-event stream it has always been, because a stream is what a
 // machine or a log wants and a glance is what a person wants, and the same
 // command owes both. The hold alert and the exit codes are the same on both
-// paths: 0 the run ended (the last line says how), 3 it ended holding
-// something only a person can move, 1 the feed could not be read or the
-// watch was interrupted, 2 usage.
+// paths: 0 the run ended without failing (the last line says how), 1 it
+// ended FAILED — its own terminal line names what did not pass — or the
+// feed could not be read, 3 it ended holding something only a person can
+// move, 5 the watch was interrupted while the run is still going, 2 usage.
 //
 // WHERE the subscription starts is decided from the run's own liveness claim
 // (tick usx). The feed is append-only per RUN ID, so a resumed run appends
@@ -151,10 +154,11 @@ lines, one per event, and says, to a human, when the run stops holding
 something for one: which tick, which attempt, why, and the command that moves
 it on.
 
-Exit codes: 0 the run ended (the last line says how), 3 it ended holding
-something only a person can move, 5 the watch was interrupted while the
-run is still going (the run keeps going; come back with the same command),
-1 the feed could not be read or the run is not alive, 2 usage.
+Exit codes: 0 the run ended (the last line says how — done or cancelled),
+3 it ended holding something only a person can move, 5 the watch was
+interrupted while the run is still going (the run keeps going; come back
+with the same command), 1 the run ended FAILED — its own terminal line
+names what did not pass — or the feed could not be read, 2 usage.
 
 With --json, the watch answers ONCE, at its end: one document holding the
 versioned status model — the same object 'ticfac status --json' gathers —
@@ -269,6 +273,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// and terminal.
 	held := false
 	terminal := ""
+	terminalDetail := ""
 	followCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// The '<tick>#<n>' prefix names the tick's own TRY (tick h58), not the
@@ -324,9 +329,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			// The run's own last word ends the watch: a watcher must not
 			// outlive the run it watches, and it must not decide an end the
 			// run did not write. What the terminal line SAYS is the line a
-			// person reads above; the exit code below is only ever "ended" or
-			// "holding for a person", never a verdict about the work.
+			// person reads above; the exit code below is only ever "ended",
+			// "ended holding for a person" or — since tick bot — "ended
+			// failed", never a verdict about the work beyond that.
 			terminal = event.Stage
+			terminalDetail = event.Detail
 			cancel()
 		}
 	}
@@ -401,7 +408,57 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		}
 		return finish(agentStateHeld, watchHoldAttention(model))
 	}
+	if watchLineEndedFailed(terminal, terminalDetail) {
+		// The run ended in its own failure, holding nothing for a person
+		// (tick bot, epic 2jn's A4): that is the exit table's failed class,
+		// not done — an agent that branched on 0 here read a failed run as a
+		// finished epic. The hold branch above keeps precedence: a run that
+		// failed while holding an attempt is the held class, because a
+		// person can release that before anything else matters.
+		if !*asJSON {
+			fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n"+
+				"Nothing is held for a person: the work has to be fixed and the epic run again — "+
+				"`ticfac run <epic-id>` resumes it under this run id, without redoing what "+
+				"already passed. The evidence is on the integration branch, not in this line.\n\n",
+				runID, terminalDetail)
+		}
+		return finish(agentStateFailed, nil)
+	}
 	return finish(agentStateDone, nil)
+}
+
+// watchLineEndedFailed says whether the run's own terminal line says the run
+// FAILED — never the watcher's guess about the work. The reconciler writes
+// run_finished's detail LED by the runstate word it checkpointed ("failed:
+// the integrated gate refused ...", "completed: every tick closed ..."), and
+// a death (run_died) is a run that did not reach its own run_finished: the
+// process erred, panicked or was signalled. Every other ending — completed,
+// cancelled, a detail that carries no state word — is "ended", and ended
+// without a failure is the done class's own answer; the last line says how.
+func watchLineEndedFailed(stage, detail string) bool {
+	switch stage {
+	case reconcile.StageRunDied:
+		return true
+	case reconcile.StageRunFinished:
+		return strings.HasPrefix(detail, string(runstate.StateFailed)+":")
+	}
+	return false
+}
+
+// watchModelEndedFailed is the live view's form of the same question (tick
+// bot), asked of the model the frames render: the lifecycle's own phase —
+// the checkpoint the run wrote — with the feed's last word beside it for a
+// run that died before it could write one. The same two authorities the
+// overview classifies one run's row by, so no two surfaces answer one
+// ending with different words.
+func watchModelEndedFailed(model statusmodel.Model) bool {
+	if model.Lifecycle.Phase == statusmodel.PhaseFailed {
+		return true
+	}
+	if model.Liveness.LastEvent == nil {
+		return false
+	}
+	return watchLineEndedFailed(model.Liveness.LastEvent.Stage, model.Liveness.LastEvent.Detail)
 }
 
 // watchRunStillAlive answers whether the run's own claim says it is going,
@@ -758,10 +815,23 @@ func watchHoldAttention(m statusmodel.Model) *statusmodel.Attention {
 // watchEndHolding is the live view's last word: the final frame stands, the
 // last line of the feed is in the scrollback, and what the run ended holding
 // for a person is said to stderr — where the stream path says it — with the
-// command that moves it on. The exit code is the contract a script waits on.
+// command that moves it on. The exit code is the contract a script waits on:
+// held (3) when a person can move the end, failed (1) when the run ended in
+// its own failure (tick bot), done (0) otherwise.
 func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) int {
 	attention := watchHoldAttention(model)
 	if attention == nil {
+		if watchModelEndedFailed(model) {
+			detail := ""
+			if model.Liveness.LastEvent != nil {
+				detail = model.Liveness.LastEvent.Detail
+			}
+			fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n", runID, detail)
+			fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again — "+
+				"`ticfac run %s` resumes it under this run id, without redoing what "+
+				"already passed. The evidence is on the integration branch, not in this line.\n\n", model.EpicID)
+			return exitGeneric
+		}
 		return 0
 	}
 	fmt.Fprintf(stderr, "\nticfac watch: run %s ended holding something for a person:\n%s\n", runID, attention.What)

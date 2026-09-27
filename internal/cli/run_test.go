@@ -765,3 +765,37 @@ func TestRunJSONAnswersOnceWithProseOnStderr(t *testing.T) {
 		t.Errorf("stdout carries prose beside the document:\n%s", stdout.String())
 	}
 }
+
+// An attach that ends on a FAILED run answers failed/1, not done/0 (tick
+// bot): `ticfac run` maps the watch's exit table word through
+// runAttachState — the same mapping `run --cloud` uses — so an agent
+// waiting on `ticfac run` reads the run's own failure in both the document's
+// state word and the process code, without parsing the stream's prose.
+func TestRunJSONAttachThatEndedFailedAnswersFailed(t *testing.T) {
+	saveRunSeams(t)
+	repo := t.TempDir()
+	life, err := runlife.Claim(repo, "epic-json")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+	attach := &attachRecorder{code: exitGeneric}
+	runAttach = attach.seam
+	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
+
+	var stdout, stderr bytes.Buffer
+	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit %d, want %d (the failed class) for an attach that ended on a failed run: %s%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout with --json is not one document:\n%s\n--stderr--\n%s", stdout.String(), stderr.String())
+	}
+	if doc["schema"] != "ticfac.run.v1" || doc["action"] != "attached" {
+		t.Errorf("the document is %v, want the attached answer", doc)
+	}
+	if doc["state"] != agentStateFailed {
+		t.Errorf("the document's state is %v, want %q — a failed run is not done", doc["state"], agentStateFailed)
+	}
+}

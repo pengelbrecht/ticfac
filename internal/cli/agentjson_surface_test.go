@@ -251,3 +251,29 @@ func TestWatchJSONAnswersOnceAtTheEnd(t *testing.T) {
 		t.Logf("watch stderr: %s", stderr) // informational; the doc is the answer
 	}
 }
+
+// watch --json, the failed end (tick bot): the same watch that answers
+// done for a completed run answers FAILED for one whose own terminal line
+// says so — the state word and the exit code are the pair an agent branches
+// on, and a failed run that answered done/0 was indistinguishable from a
+// finished epic.
+func TestWatchJSONAnswersFailedWhenTheRunEndedFailed(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-fail", runfeed.NewEvent(
+		time.Date(2026, 9, 14, 12, 40, 0, 0, time.UTC), "r-fail", "a1", nil,
+		reconcile.StageGateFailed, "the integrated gate refused the work"))
+	writeFeedEvent(t, repo, "r-fail", runfeed.NewEvent(
+		time.Date(2026, 9, 14, 12, 41, 3, 0, time.UTC), "r-fail", "", nil, "run_finished",
+		"failed: a1 did not pass"))
+
+	doc, stderr, code := jsonAnswer(t, []string{"watch", "--json", "--repo", repo, "r-fail"})
+	if code != exitGeneric {
+		t.Fatalf("a watch of a failed run exited %d, want %d: %s", code, exitGeneric, stderr)
+	}
+	mustSchema(t, doc, "ticfac.watch.v1")
+	if doc["state"] != agentStateFailed {
+		t.Errorf("the state word is %v, want %q — a failed run is not done", doc["state"], agentStateFailed)
+	}
+}

@@ -112,7 +112,7 @@ than maintained beside it:
 | `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
 | `ticfac status <run-id>` | is the run alive, and when did it last say anything |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
-| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one |
+| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person |
 | `ticfac version` | report this build and the contract bundle it serves |
 | `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
@@ -126,7 +126,7 @@ code is one of this table, the same words in `ticfac --help` and in every
 | code | name | meaning |
 |---|---|---|
 | `0` | done | the command did its work |
-| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class) |
+| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass) |
 | `2` | usage | a malformed invocation: wrong flags, wrong argument count, a refusal to guess |
 | `3` | held | the run ended holding something only a person can move (watch, run): the reason class is the wait kind in the line and the --json document; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
 | `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |

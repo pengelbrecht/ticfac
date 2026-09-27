@@ -341,3 +341,62 @@ func syncWatchMarker(t *testing.T, repo string, stdout *bytes.Buffer) {
 	}
 	t.Fatalf("the watch never showed a sync marker; it did not join the resumed run's feed: %q", stdout.String())
 }
+
+// The exit table's failed class (tick bot, epic 2jn's A4): a run whose own
+// terminal line says it FAILED — the integrated gate refused the work, a
+// worker answered BLOCKED, the run stopped rather than integrating over an
+// unproven change — ended the watch with exit 0, indistinguishable from a
+// run that closed every tick behind the gate. The failure is in the
+// terminal line's own LEADING state word (the runstate word the reconciler
+// checkpointed: "failed: nkf did not pass"), so the watch classifies on
+// that word — never on the absence of a run_held, which says only that
+// nothing waits for a person's release, not that the run succeeded.
+func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 14, 12, 40, 0, 0, time.UTC), "r-1", "nkf", nil,
+		reconcile.StageGateFailed, "the integrated gate refused the work: go test failed"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 14, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished,
+		"failed: nkf did not pass: the integrated gate refused the work"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run whose own last line says failed; stderr %q", code, exitGeneric, stderr.String())
+	}
+	// The failed end is said to the person reading, and it is NOT a hold:
+	// nothing waits for a release, the work has to be fixed and the epic
+	// run again.
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the stream: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "HOLDING") {
+		t.Errorf("a run that failed holding nothing raised the hold alert: %q", stderr.String())
+	}
+	// The terminal line still prints — the last line says why, and the exit
+	// code says which class of ending it was.
+	if !strings.Contains(stdout.String(), "run_finished") {
+		t.Errorf("the terminal line never printed: %q", stdout.String())
+	}
+}
+
+// A run that DIED without its own run_finished — the process erred, panicked
+// or was signalled — is the same failed class on the same seam: run_died
+// exists precisely so a death never reads as an ordinary success, and the
+// watch must not read it as done either (tick bot).
+func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 14, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
+		"run-epic: the reconciler returned an operational error"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run that died without its own run_finished; stderr %q", code, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the death is not said to the person reading the stream: %q", stderr.String())
+	}
+}

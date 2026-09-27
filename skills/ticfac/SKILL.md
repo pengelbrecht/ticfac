@@ -50,4 +50,7 @@ liveness, 0 alive, 1 not.
 The epic finishes when its run completes: every tick gated and merged onto
 the epic branch, the PR opened, CI green on it. The MERGE is a person's.
 A run that ends holding something for a person exits 3 and names the wait
-kind; clear it (triage, settle, the fix it names) and run again.
+kind; clear it (triage, settle, the fix it names) and run again. A run that
+ends FAILED — its last line names what did not pass — exits 1; fix what the
+line names and run again, the run resumes without redoing what already
+passed.
