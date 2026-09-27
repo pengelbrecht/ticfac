@@ -12,8 +12,11 @@
   "attempt": 54,
   "done_item": "none",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T20:47:35Z",
+  "triaged_at": "2026-09-27T20:47:47Z",
+  "triaged_by": "ticfac run epic-2jn absorbing p2s",
+  "promoted_as": "p2s",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "rrl",
