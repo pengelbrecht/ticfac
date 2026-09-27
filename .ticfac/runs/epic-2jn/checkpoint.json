@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 90,
-  "state": "gating",
-  "reason": "running the integrated gate for 89m on f75f8911d62f",
-  "updated_at": "2026-09-27T08:28:55Z",
+  "sequence": 91,
+  "state": "publishing",
+  "reason": "closing 89m behind the integrated gate on f75f8911d62f",
+  "updated_at": "2026-09-27T08:31:46Z",
   "ticks": [
     {
       "tick_id": "nwj",
