@@ -31,6 +31,32 @@ implicitly missing:
 The same table lives in `ticfac herd --help`, where the consumer (the
 plugin, or a person) looks.
 
+## Install
+
+One command, no build:
+
+    curl -fsSL https://raw.githubusercontent.com/pengelbrecht/ticfac/main/install.sh | sh
+
+That URL is the stable install URL: it serves `install.sh` from this
+repository's `main`, and the script resolves the latest release, downloads
+the archive for your platform (darwin and linux, amd64 and arm64), and
+installs `ticfac` and `ticfac-exec-subprocess` side by side into
+`~/.local/bin` (override with `INSTALL_DIR`) — side by side because a run
+refuses to start unless the local executor sits beside the ticfac that
+dispatches it. Then:
+
+    ticfac doctor                    # what a run still needs on this machine
+    ticfac skills install ticfac     # the execution skill, the way tk's installs
+
+Releases are cut by pushing a `v*` tag: `.github/workflows/release.yml`
+runs goreleaser with `.goreleaser.yaml`, which builds both binaries for
+every platform, packs each platform's pair in one archive, and publishes
+the archives, `checksums.txt` and release notes generated from the commit
+log. The whole distribution is guarded by `internal/release`'s tests — the
+platform matrix, the archive naming and the repository the release publishes
+to are pinned there, and the installer runs end to end against a fake forge
+in the per-tick gate.
+
 ## Command surface
 
 Every command runs on one cobra tree, styled by [fang](https://github.com/charmbracelet/fang)
@@ -176,9 +202,12 @@ four things, and the guard fails it otherwise:
 
 The last is the exception, and the bar is narrow: the test is the only proof
 that a path the run depends on works, and a regression in it would be
-expensive and silent. Today that is `internal/reconcile/supervise_test.go`'s
+expensive and silent. Today those are `internal/reconcile/supervise_test.go`'s
 three supervision tests (16.2s) — the continuation loop is what now keeps an
-autonomous run alive across resumable stops, and nothing else proves it.
+autonomous run alive across resumable stops, and nothing else proves it — and
+`internal/release`'s install test — the tick-4yb acceptance is a machine that
+never built ticfac installing it with one command and running `ticfac doctor`,
+and a broken installer ships silently broken releases.
 "This test is important" is not the bar; nearly every test is important, which
 is how a fast gate becomes a slow one. So the exception is bounded rather than
 argued: each `gate:` line carries a measured cost, the costs are summed against
