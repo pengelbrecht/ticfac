@@ -119,7 +119,7 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 	}
 	for _, runID := range ids {
 		probe := runlife.Probe(repo, runID, now)
-		runs = append(runs, overviewEntryOf(localStatusModel(ctx, repo, runID, probe)))
+		runs = append(runs, overviewEntryOf(localStatusModel(ctx, repo, runID, probe, modelGatherers{graph: epicGraph, ci: statusCI})))
 	}
 
 	// The cloud runs: the factory's run index, the same window a truncated
@@ -141,7 +141,7 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 		} else {
 			for _, record := range response.Runs {
 				liveness := cloudRunLiveness(ctx, record.RunID, record.State)
-				model := cloudStatusModel(ctx, client, repo, record.RunID, record, liveness, stderr)
+				model := cloudStatusModel(ctx, client, repo, record.RunID, record, liveness, stderr, modelGatherers{graph: epicGraph, ci: statusCI})
 				runs = append(runs, overviewEntryOf(model))
 			}
 		}
