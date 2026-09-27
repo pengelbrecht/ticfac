@@ -3,7 +3,7 @@
   "title": "A failed run exits 0 with state 'done' from ticfac watch / ticfac run / run --cloud",
   "description": "watch.go:386-403 finishes as done on any run_finished not preceded by run_held, and holdsForAPerson excludes gate failures, merge conflicts and CI failures; run.go:506 maps 0 to done. Reproduced: feed run_finished 'failed: the integrated gate refused ...' then watch --json exits 0 with schema ticfac.watch.v1 state=done; the TTY path also exits 0. Failed and done are not distinguishable by exit code, which A4 requires.\n\nticfac run epic-2jn created this tick by absorbing the finding b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6.json on the run branch.",
   "notes": "2026-09-27 16:07 - ticfac run epic-2jn: created by absorbing finding b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A4, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
   "created_by": "ticfac run epic-2jn",
   "created_at": "2026-09-27T14:07:47Z",
-  "updated_at": "2026-09-27T14:07:52.509086Z"
+  "updated_at": "2026-09-27T14:43:26.365254Z",
+  "started_at": "2026-09-27T14:43:26.365254Z"
 }
