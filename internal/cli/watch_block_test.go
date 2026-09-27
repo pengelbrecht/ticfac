@@ -17,7 +17,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -289,5 +292,89 @@ func TestWatchOnATerminalFollowsACloudRun(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "run_finished") {
 		t.Errorf("the cloud run's own last word never printed:\n%s", stdout.String())
+	}
+}
+
+// TestWatchOnATerminalEndsFailed: the exit code is the contract a script
+// waits on, and a run that ended in its own failure is the failed class
+// (1), not the done class (tick bot) — the same classification the pipe and
+// --json answer with, so the two paths cannot disagree about one ending.
+// The hold keeps precedence (the test above): a run that failed HOLDING an
+// attempt still exits 3, because a person can move that before anything
+// else matters.
+func TestWatchOnATerminalEndsFailed(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The durable words a failed run leaves: the checkpoint the reconciler
+	// wrote on its last state change, and the terminal feed line that says
+	// why it stopped.
+	setCheckpointState(t, repo, runID, "failed")
+	two := 2
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
+		reconcile.StageGateFailed, "the integrated gate refused: go test failed"))
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "failed: t2 did not pass"))
+
+	var stdout, stderr bytes.Buffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("ended failed")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run that ended failed; stderr:\n%s", got, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "HOLDING") {
+		t.Errorf("a run that failed holding nothing raised the hold alert:\n%s", stderr.String())
+	}
+	// The last word is still in the scrollback below the final frame.
+	if !strings.Contains(stdout.String(), "run_finished") {
+		t.Errorf("the run's own last word never printed:\n%s", stdout.String())
+	}
+}
+
+// setCheckpointState rewrites the run's durable checkpoint state: the word
+// the reconciler writes on its last state change, read by the model's
+// lifecycle the frames render from.
+func setCheckpointState(t *testing.T, repo, runID, state string) {
+	t.Helper()
+	path := filepath.Join(repo, ".ticfac", "runs", runID, "checkpoint.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the checkpoint: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse the checkpoint: %v", err)
+	}
+	doc["state"] = state
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the checkpoint: %v", err)
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatalf("write the checkpoint: %v", err)
 	}
 }
