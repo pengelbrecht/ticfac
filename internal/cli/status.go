@@ -46,11 +46,14 @@ const defaultStatusFollowInterval = 2 * time.Second
 // interrupts. One frame per interval; between frames the cursor is moved up
 // over the previous frame and the lines rewritten in place.
 func statusFollow(ctx context.Context, repo, runID string, interval time.Duration, stdout, stderr io.Writer) int {
-	source, kind, err := feedSource(ctx, repo, runID, stderr)
+	source, kind, resolved, err := feedSource(ctx, repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 		return 1
 	}
+	// The follow answers for the run the id names, resolved: an epic id that
+	// named a factory run answers for that run's own id (tick nyi).
+	runID = resolved
 	cloudSource, _ := source.(*cloudFeedSource)
 	if interval <= 0 {
 		interval = defaultStatusFollowInterval
@@ -269,6 +272,27 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		return cloudRunStatus(ctx, *repo, runID, *asJSON, stdout, stderr)
 	}
 
+	// An epic-shaped id that names nothing HERE may still name the run the
+	// factory holds for this checkout's project (tick nyi): `ticfac run
+	// <epic> --cloud` is how the epic got there, and `ticfac status
+	// <epic-id>` is how the operator asks about it. A local feed standing in
+	// this checkout wins first — that is the run's own evidence — and a
+	// factory with nothing this project can claim leaves the local answer
+	// standing, exactly as before.
+	if status.State != runlife.Alive {
+		if _, feedErr := os.Stat(runfeed.Path(*repo, runID)); feedErr != nil {
+			if resolved, note, err := cloudRunForEpic(ctx, *repo, runID); err == nil && resolved != "" {
+				fmt.Fprintln(stderr, note)
+				return cloudRunStatus(ctx, *repo, resolved, *asJSON, stdout, stderr)
+			} else if err != nil {
+				// A factory that cannot be read is named, never silent: the
+				// run may be there, and the local probe's answer alone would
+				// claim more than it knows.
+				fmt.Fprintf(stderr, "ticfac status: %s has no run here, and the factory could not be asked for it: %v\n", runID, err)
+			}
+		}
+	}
+
 	if *asJSON {
 		// The versioned model (tick 6dh): the one answer every surface
 		// renders — lifecycle, waves, ticks, workers, waits, health, CI and
@@ -377,7 +401,12 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
 		}
-		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr, modelGatherers{graph: epicGraph, ci: statusCI})
+		// Another project's run keeps this repo's records, tracker and PR
+		// unread for it (tick nyi): the model says so in its degraded list.
+		repoProject, _ := cloudProjectOf(repo)
+		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr,
+			modelGatherers{graph: epicGraph, ci: statusCI},
+			cloudRecordBelongsToRepo(repoProject, record.Project))
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 2

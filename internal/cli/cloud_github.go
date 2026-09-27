@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// cloudDetectOwner and cloudDetectProject below are a deliberate COPY of
+// cloudDetectOwner and cloudProjectOf below are deliberate COPIES of
 // internal/github's DetectOwner and DetectProject (owner.go, project.go),
 // not an import.
 //
@@ -41,18 +41,19 @@ func cloudDetectOwner() (string, error) {
 	return owner, nil
 }
 
-// cloudDetectProject resolves the current git remote project (owner/repo)
-// via origin.
-func cloudDetectProject() (string, error) {
-	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
+// cloudProjectOf resolves the GitHub project of the checkout at root: the
+// same parsing internal/github's DetectProject applies, asked of a NAMED
+// checkout rather than the process's own working directory. The cloud
+// commands take --repo, and a project read from the wrong directory is not
+// a detail — it is the identity a submission carries and the one a factory
+// run is matched by (tick nyi): the two must never disagree, so both read
+// the checkout the command was pointed at.
+func cloudProjectOf(root string) (string, error) {
+	out, err := exec.Command("git", "-C", root, "remote", "get-url", "origin").Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to read git remote: %w", err)
 	}
-	project, err := cloudParseProjectFromRemote(string(out))
-	if err != nil {
-		return "", err
-	}
-	return project, nil
+	return cloudParseProjectFromRemote(string(out))
 }
 
 // cloudParseProjectFromRemote extracts owner/repo from a git remote URL.

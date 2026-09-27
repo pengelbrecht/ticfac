@@ -468,3 +468,97 @@ func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
 		t.Errorf("the death is not said to the person reading the stream: %q", stderr.String())
 	}
 }
+
+// TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory: `ticfac watch
+// <epic-id>` follows the run the factory holds for this checkout's project
+// when nothing runs here (tick nyi) — the same one command the operator
+// uses for a local run, because the run's id alone should not decide which
+// host answers. Before the fix the epic id never looked in the factory and
+// the watch refused with "no feed".
+func TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e999")
+
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	attempt := 1
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "t1", &attempt, "dispatched", "t1 try 1 dispatched"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Minute), cloudRun, "", nil,
+		reconcile.StageRunFinished, "completed: every tick of epic1 is closed behind the integrated gate"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case request.Path == "/api/runs/"+cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+cloudRun+"/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d watching the factory's run for epic1, want 0:\n%s\n%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "run_finished") {
+		t.Errorf("the stream never printed the run's own terminal word:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), cloudRun) {
+		t.Errorf("stderr does not name the resolution from epic id to the factory's run:\n%s", stderr.String())
+	}
+}
+
+// A watch that reached the factory's run by EPIC id (tick nyi) names the
+// clearing commands by that epic, never by the factory's `run_` plus hex id
+// it resolved to (tick gtk): the resolved run's source carries the epic the
+// operator typed, so the failed end's resume is one a person can paste.
+func TestWatchByEpicIDNamesTheResumeByTheEpicNotTheFactoryRunID(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e998")
+
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "", nil,
+		reconcile.StageRunFinished, "failed: t1 did not pass: the integrated gate refused the work"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "failed",
+			}}}
+		case request.Path == "/api/runs/"+cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "failed",
+			}}
+		case request.Path == "/api/runs/"+cloudRun+"/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "failed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit %d for the factory's failed run, want %d:\n%s\n%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	if want := statusmodel.ResumeCommand(statusmodel.HostCloud, "epic1"); !strings.Contains(stderr.String(), want) {
+		t.Errorf("the failed end does not name the resume %q by the epic:\n%s", want, stderr.String())
+	}
+	if bad := statusmodel.ResumeCommand(statusmodel.HostCloud, cloudRun); strings.Contains(stderr.String(), bad) {
+		t.Errorf("the failed end names the resume by the factory's run id %q:\n%s", bad, stderr.String())
+	}
+}
