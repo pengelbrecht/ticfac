@@ -102,6 +102,12 @@ jobs:
       # minutes of CI and no coverage. -timeout is pinned via the Makefile (not
       # a bare `go test ./...`): internal/reconcile's suite runs past go test's
       # default 10-minute per-package timeout.
+      #
+      # This is also where the sandbox image's scripts are tested (tick r6w):
+      # internal/sandboximage runs image/'s entrypoints for real against stub
+      # harnesses and real git. ticfac authors image/, so there is no longer a
+      # pinned upstream copy to fetch and compare — the tree CI tests is the
+      # tree the binary embeds, and that package checks the two are one.
       - name: go test
         run: make test
 
@@ -173,13 +179,6 @@ jobs:
           git checkout -- contracts/message-context.json
           go run ./cmd/contracts check
 
-  # image/ is the sandbox image's build context (moved there from cloud/sandbox
-  # by SPEC §12 Phase 4 item 4) — ticks owns the tree (its internal/sandbox
-  # suite runs those scripts from its own copy) and this repository vendors it
-  # as the factory's embedded image context. Two repositories, one
-  # tree: without this job nothing stops the copies drifting while ticks' tests
-  # guard ITS copy and ticfac's cold-start budget bounds a container built from
-  # THIS one. sandbox.pin.json is the pin; cmd/sandbox is the check.
   typescript:
     name: typescript
     # An epic branch already gets a push-triggered run on the same head
@@ -242,52 +241,3 @@ jobs:
       - name: pnpm test
         working-directory: cloudflare
         run: pnpm test
-
-  sandbox:
-    name: sandbox
-    # An epic branch already gets a push-triggered run on the same head
-    # commit (see `on:` above), so its PR's pull_request run was the same
-    # checks twice. Feature-branch PRs still run here: their branches are not
-    # in the push filter.
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          # Cached on go.sum: the module cache and, more importantly, the
-          # build and test cache, so an unchanged package's tests answer from
-          # cache exactly as they do on a laptop and in the per-tick gate.
-          cache: true
-
-      # The offline gate. It makes no network call, so no network failure can
-      # turn this job green by skipping it: the vendored tree is verified
-      # against sandbox.pin.json's digests and git modes. It also runs inside
-      # `go test ./...` (internal/sandboxpin), so the gate and CI cannot
-      # disagree silently.
-      - name: Verify the vendored image context offline
-        run: go run ./cmd/sandbox check
-
-      # The online half: fetch pengelbrecht/ticks at the PINNED REF and
-      # require the vendored tree to be what ticks published there, byte for
-      # byte. This is the step that answers the drift question directly — the
-      # copy here is not merely self-consistent, it is ticks' tree.
-      - name: Verify the vendored image context against the pinned ticks ref
-        run: go run ./cmd/sandbox verify-upstream
-
-      # The negative control, made visible: break a vendored script on purpose
-      # and require the check to refuse it — then restore it and require the
-      # check to pass again. A check nothing has ever seen fail is not known to
-      # be a check.
-      - name: A deliberately broken vendored script fails
-        run: |
-          printf '\n' >> image/worker.sh
-          if go run ./cmd/sandbox check; then
-            echo "FAIL: the check passed with an edited vendored file — it is not a check"
-            exit 1
-          fi
-          echo "refused, as it must be"
-          git checkout -- image/worker.sh
-          go run ./cmd/sandbox check

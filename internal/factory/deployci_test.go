@@ -32,8 +32,8 @@ import (
 const deployWorkflowPath = ".github/workflows/deploy-factory.yml"
 
 // readDeployWorkflow returns the deploy workflow's bytes. It is read through
-// contracts.RepoRoot for the same reason internal/sandboxpin reads its pin
-// that way: the file is a repository artifact, not a package one.
+// contracts.RepoRoot because the file is a repository artifact, not a
+// package one.
 func readDeployWorkflow(t *testing.T) string {
 	t.Helper()
 	root, err := contracts.RepoRoot()

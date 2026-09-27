@@ -24,8 +24,8 @@ import (
 // reconciler (this package) and the Workflow reconciler the isolate used to
 // run (cloudflare/src/epic-reconciler.ts). Two implementations of one thing
 // with no statement of where they may differ is how drift happens — the same
-// subject the vendored contract bundle (internal/contracts) and the vendored
-// image context (internal/sandboxpin) already answer with a pin and a check.
+// subject the vendored contract bundle (internal/contracts) already answers
+// with a pin and a check (as the image context did until tick r6w).
 //
 // Tick mn7 deleted the Workflow implementation — a cloud epic runs through
 // ticfac in the orchestrator container, whose reconciler is this package —
@@ -338,8 +338,8 @@ func TestReconcilerParityDecisionsMatchTheImplementations(t *testing.T) {
 	}
 }
 
-// The negative controls, the way internal/sandboxpin runs one for the
-// vendored image context: a check nothing has ever seen fail is not known to
+// The negative controls, the way internal/contracts runs one for the
+// vendored bundle: a check nothing has ever seen fail is not known to
 // be a check. Each control copies only the anchored files into a throwaway
 // root — so a mutation cannot touch the tree the check runs against — and
 // requires the verification to refuse the changed copy naming the decision,

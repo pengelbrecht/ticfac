@@ -24,9 +24,12 @@ way, at model prices.
 | `build.sh` | Builds and optionally pushes, tagged with the tk version the Dockerfile pins. |
 | `required-tk-commands` | Derived list of every `tk` subcommand the run scripts invoke. The image build asserts each one against the tk it produced. |
 
-Guarded by `internal/sandbox` (`go test ./internal/sandbox`), which runs both
-entrypoints against stub harnesses — with a real git remote, a real clone and a
-real push for the worker — and checks the Dockerfile's pin discipline.
+ticfac authors this tree (tick r6w; until then it was vendored from ticks).
+Guarded by `internal/sandboximage` (`go test ./internal/sandboximage`), which
+runs both entrypoints against stub harnesses — with a real git remote, a real
+clone and a real push for the worker — and checks the Dockerfile's pin
+discipline. Those tests are end-to-end: CI's `make test` runs them all, and the
+`-short` per-tick gate runs only the ones that read text.
 
 ## The orchestrator role
 
@@ -43,9 +46,9 @@ and execs the headless harness on the ticks skill loop. See
 One sandbox per tick. `ticks-worker` clones at the epic base, branches
 `tick/<epic-id>/<tick-id>`, runs the harness on that one tick, then **commits
 `RESULT-<tick-id>.md`, pushes the branch, and exits**. Its caller is
-`cloud/factory/src/worker-dispatch.ts`, which probes the container, confirms
+`cloudflare/src/worker-dispatch.ts`, which probes the container, confirms
 dispatch, waits, collects from git and tears the sandbox down;
-`cloud/factory/src/worker-boot.ts` is where the control plane reads the command,
+`cloudflare/src/worker-boot.ts` is where the control plane reads the command,
 the probe and the environment from.
 
 Four things about it are load-bearing:
@@ -91,7 +94,7 @@ ticks-worker: ticks-worker-probe-ok tick=<id> tk=<version> harness=<kind> git ve
 The gate is **`ticks-worker-probe-ok` appearing in the output**, never the exit
 status — a probe that exits 0 having printed the wrong thing is exactly the
 trap. The marker is defined here and read from three places: `worker.sh`,
-`internal/sandbox/worker.go` and `cloud/factory/src/worker-boot.ts`, pinned
+`internal/sandboximage/sandboximage.go` and `cloudflare/src/worker-boot.ts`, pinned
 together by `contracts/worker-boot-contract.json`.
 
 The probe deliberately makes **no model call** and does **no clone**. It runs
@@ -142,7 +145,7 @@ plans no waves and dispatches nobody), plus:
 | Variable | Required | Meaning |
 |---|---|---|
 | `TICKS_TICK` | yes | The one tick this container implements. A worker with no tick refuses to boot (exit 2) rather than run something else's prompt. |
-| `TICKS_ROLE_PROMPT` | no | The rendered role prompt the dispatch resolved for this attempt — the prompt **text** itself (not a path), at most 64 KiB of printable ASCII plus tab/LF/CR, set by a factory's sandbox dispatch door (ticfac `worker-boot.ts`, yoh tick 9iz). When set (and not blank) the harness runs on it **verbatim** and `tk sandbox worker-prompt` is not called, so the worker runs on exactly the prompt the run's records digest into `prompt_digest`. When absent — an older factory, or the image driven by hand — the worker renders its prompt from the checkout as before (tick nue). |
+| `TICKS_ROLE_PROMPT` | no | The rendered role prompt the dispatch resolved for this attempt — the prompt **text** itself (not a path), UTF-8 prose with no control character but tab/LF/CR, at most 65536 bytes (the door's rule since ticfac #66), set by a factory's sandbox dispatch door (ticfac `worker-boot.ts`, yoh tick 9iz). When set (and not blank) the harness runs on it **verbatim** and `tk sandbox worker-prompt` is not called, so the worker runs on exactly the prompt the run's records digest into `prompt_digest`. When absent — an older factory, or the image driven by hand — the worker renders its prompt from the checkout as before (tick nue). |
 | `TICKS_WORKER_SETUP` | no | `always` (default) or `skip` — whether this worker runs the repository's `[sandbox]` setup. See below. |
 | `TICKS_WORKER_TIMEOUT` | no | Seconds the harness may run before the container stops waiting and pushes what it has; `0` (default) leaves it unbounded. Derived per run from its wall-clock allowance — see below. |
 | `TICKS_WORKER_STATE_DIR` | no | Where the container keeps the harness pid and any lodged cancellation, so `--cancel` (a second process) can find them. Defaults to `/tmp/ticks-worker`; overridden only by the repository's tests. |
@@ -284,7 +287,7 @@ So tk is **built from source in the image**, at a pinned ref:
 | `ARG TK_SOURCE_REF` | The source that tk is built from: a release tag (`v0.32.0`) or a full commit. |
 | `ARG TK_MODULE` | The module path `go install` resolves. |
 
-`tk factory deploy` **rewrites both pins in its staged copy of the Dockerfile**
+`ticfac factory deploy` **rewrites both pins in its staged copy of the Dockerfile**
 (`factory.SetSandboxTkPins`) to the version and the source of the binary running
 the deploy — a release tag for a released tk, the stamped commit for a
 development build. The container's tk is therefore the same code as the bundle
@@ -299,8 +302,13 @@ What this needs, and what it costs:
 - **Build time, not a new dependency.** The Go toolchain is already one of the
   batteries below. `GOTOOLCHAIN=local` keeps the build on the image's pinned Go,
   so a `go` directive in `go.mod` above `ARG GO_VERSION` fails the build loudly
-  instead of silently downloading a different compiler; bump `GO_VERSION` with
-  `go.mod`.
+  instead of silently downloading a different compiler. `GO_VERSION` tracks the
+  LATEST Go release (operator, 2026-09-27: workers build and test repositories
+  here, so an old toolchain is a class of bug), and it must never sit below
+  ticfac's own `go.mod` floor: tick 152's guard
+  (`internal/factory/gofloor_test.go`, `checkGoToolchainFloor`) reads the `go`
+  directive and refuses an `ARG GO_VERSION` below it, so raising the floor
+  re-checks this pin without anyone remembering to.
 - **The pin is still a pin.** The module proxy verifies the ref against the
   checksum database, which is what the `sha256sum -c` lines give the tarballs.
 
@@ -308,7 +316,7 @@ What this needs, and what it costs:
 
 Two checks make a too-old tk a *stop*, never a container that dies mid-run:
 
-1. **In the deploy, before anything is built.** `tk factory deploy` derives
+1. **In the deploy, before anything is built.** `ticfac factory deploy` derives
    every `tk` subcommand `entrypoint.sh` and `preflight.sh` invoke
    (`factory.EntrypointTkCommands`) and asserts this binary implements each one.
    A miss names the subcommand — ``this tk (0.31.0) has no `tk sandbox
@@ -328,7 +336,7 @@ regenerate the file.
 ## One image, many projects
 
 Adding a repository to the factory is **enrolment, not deployment**: it costs
-zero image work. The image is built and pushed at `tk factory deploy` cadence,
+zero image work. The image is built and pushed at `ticfac factory deploy` cadence,
 pinned to the tk version it embeds, and rebuilt only when tk, a harness CLI, or
 the toolchain set below changes.
 
@@ -384,7 +392,7 @@ skill's `references/runners-config.md`, *The sandbox a run gets*:
 
 | Key | What this image does with it |
 |---|---|
-| `image` | **Booted by the control plane**, which reads this file at the submitted SHA before it starts a container (`cloud/factory/src/repo-config.ts`). The entrypoint is the backstop: it compares what the repo declares against `TICKS_SANDBOX_IMAGE` and **refuses the boot** (exit 6) when they differ, because provisioning and spending in an image the repository did not ask for fails later and less legibly. A boot with no `TICKS_SANDBOX_IMAGE` at all — the image driven by hand — warns instead, having nothing to compare against. |
+| `image` | **Booted by the control plane**, which reads this file at the submitted SHA before it starts a container (`cloudflare/src/repo-config.ts`). The entrypoint is the backstop: it compares what the repo declares against `TICKS_SANDBOX_IMAGE` and **refuses the boot** (exit 6) when they differ, because provisioning and spending in an image the repository did not ask for fails later and less legibly. A boot with no `TICKS_SANDBOX_IMAGE` at all — the image driven by hand — warns instead, having nothing to compare against. |
 | `toolchain` | Provisioned with the ecosystem pins above, through `mise`, into `TICKS_CACHE_DIR`. |
 | `setup` | Run by `tk sandbox setup` after the checkout and before the harness — idempotent, cache-populating commands (`pnpm install --frozen-lockfile`, `go mod download`). A failure ends the boot with exit 6. |
 
@@ -735,8 +743,8 @@ the next diagnosis to the wrong place:
   abort path, not the harness.
 
 **What omp puts on the wire once it has executed a tool**, recorded rather than
-inferred (`cloud/factory/test/fixtures/omp-tool-call-exchange.json`, replayed by
-`cloud/factory/test/gateway-tool-calls.test.ts`):
+inferred (`cloudflare/test/fixtures/omp-tool-call-exchange.json`, replayed by
+`cloudflare/test/gateway-tool-calls.test.ts`):
 
 | Message | Shape |
 |---|---|
@@ -864,7 +872,7 @@ harness knows to read — what it has is an OpenAI-compatible endpoint under
 endpoint is OpenAI-*compatible*, not OpenAI: it takes `messages[].content` as a
 string, while omp sends OpenAI content parts. The factory's gateway Worker
 normalises the two on the `workers-ai` route
-(`stringifyContentParts`, `cloud/factory/src/gateway.ts`) and refuses any part
+(`stringifyContentParts`, `cloudflare/src/gateway.ts`) and refuses any part
 with no string form rather than dropping it, so nothing in this container has
 to know about the difference — but a `400` naming `/messages/N/content` on the
 first real call means the deployed factory predates that translation. The
@@ -875,7 +883,7 @@ provider's model is exit 7 rather than a run that cannot make one call.
 through the gateway with the run's own credential before the harness starts —
 the same content gate `tk herd spawn` applies to workers, for the same reason.
 A refusal is quoted verbatim with its status: the factory's own gateway errors
-name `tk factory setup` themselves, and collapsing them into one message would
+name the setup command that fixes them, and collapsing them into one message would
 throw the fix away. This runs before toolchain provisioning, setup and the
 pre-flight, because a run that cannot make a model call is over whether or not
 its toolchain installed.
@@ -932,10 +940,10 @@ nonzero with each failing check named.
 
 ## Build and run
 
-`tk factory deploy` is what builds and pushes this image in the normal case: it
+`ticfac factory deploy` is what builds and pushes this image in the normal case: it
 stages this directory next to the factory bundle (`~/.tick/factory/sandbox`),
 and wrangler builds it from the `[[containers]]` declaration in
-`cloud/factory/wrangler.toml` and pushes it to the operator's own managed
+`cloudflare/wrangler.toml` and pushes it to the operator's own managed
 registry before the Worker is uploaded. A deploy with no working Docker is a
 stop with that message — a Worker bound to an image that was never built is a
 factory that refuses every run.

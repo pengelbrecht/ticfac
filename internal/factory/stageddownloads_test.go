@@ -98,7 +98,7 @@ func TestADockerfileWithNoDownloadsIsARefusal(t *testing.T) {
 }
 
 // The real image is the fixture that matters: a rewrite that works on a
-// hand-written sample and not on the vendored Dockerfile is worth nothing.
+// hand-written sample and not on the committed Dockerfile is worth nothing.
 func TestTheRealImageIsRewritten(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -106,7 +106,7 @@ func TestTheRealImageIsRewritten(t *testing.T) {
 	}
 	real, err := os.ReadFile(filepath.Join(root, "image", sandboxDockerfileName))
 	if err != nil {
-		t.Skipf("no vendored image to check: %v", err)
+		t.Skipf("no image/Dockerfile to check: %v", err)
 	}
 
 	dir := stagedWith(t, string(real))

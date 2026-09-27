@@ -27,8 +27,8 @@ import (
 // attempt record cites them — so they must not be able to disagree with the
 // ticfac that resolves them. Staging from the copy embedded in the deploying
 // binary gives that by construction: same commit, same bytes, and the
-// vendored image/ tree is still never edited (the block below is inserted
-// into the STAGED Dockerfile, like the binaries' install block).
+// committed image/ tree is not edited (the block below is inserted into the
+// STAGED Dockerfile, like the binaries' install block).
 
 // The payload seam: wired from the module-root embed in payload.go, so the
 // tests can stage a fake set through the same code path the deploy runs.
@@ -57,7 +57,7 @@ const cloudProfilesMarker = "# >>> cloud profile set (tick gbs)"
 //
 // Same contract as the staged rewrites around it (SetSandboxTkPins,
 // SetSandboxTicfacPins, SetSandboxOrchestratorEntrypoint): the staged copy is
-// edited, the vendored image/ tree is not, and this must run AFTER
+// edited, the committed image/ tree is not, and this must run AFTER
 // MaterializeSandbox — which rewrites the staged Dockerfile and prunes
 // everything under the context the embedded tree does not own, so staging
 // before it would stage into a directory about to be swept.
@@ -113,13 +113,12 @@ func StageCloudProfiles(dir string) error {
 // cloudProfilesInstallBlock is appended to the staged Dockerfile, after the
 // ticfac install block, so the deploy's image edits read in the order the
 // deploy makes them. Last on purpose, for the same reason the ticfac block
-// is: everything above it is identical across deploys of the same vendored
+// is: everything above it is identical across deploys of the same image/
 // tree, and this layer changes only when the profile set does.
 //
-// Not `go install`able from a module path and not upstreamable into ticks'
-// own Dockerfile, for the same reasons the ticfac binaries are not
-// (ticfacbin.go): ticks' build context holds no cloud profiles — the cloud
-// set is ticfac's — and the vendored tree may not be edited here.
+// Not `go install`able from a module path, for the same reasons the ticfac
+// binaries are not (ticfacbin.go), and staged rather than committed because
+// the profiles are the deploying binary's embedded copy.
 const cloudProfilesInstallBlock = cloudProfilesMarker + `
 #
 # The CLOUD PROFILE SET (tick gbs): profiles-cloudflare-sandbox/, staged into

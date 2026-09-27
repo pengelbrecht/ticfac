@@ -8,7 +8,7 @@
  *
  *   The contracts are consumed as a VENDORED, VERSION-PINNED, DIGEST-VERIFIED
  *   copy of a published `ticks` module version — the same shape as
- *   cloud/sandbox/Dockerfile's `go install ...@${TK_SOURCE_REF}`, which
+ *   image/Dockerfile's `go install ...@${TK_SOURCE_REF}`, which
  *   already consumes ticks as a published artifact resolved through the public
  *   module proxy.
  *

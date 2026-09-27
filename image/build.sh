@@ -4,13 +4,13 @@
 #
 # The tag is the tk version the Dockerfile pins, because that is what the image
 # is: one image per tk version, serving every enrolled repository. Enrolling a
-# repository costs no image work at all; this script runs at `tk factory
+# repository costs no image work at all; this script runs at `ticfac factory
 # deploy` cadence, and only when a pin in the Dockerfile changes.
 #
 # tk itself is built from source inside the image, at the ref TK_SOURCE_REF
 # pins. --tk-ref overrides that ref for a manual build — pass the commit you
 # want the container's tk to be, and push it first, because the image resolves
-# it through the Go module proxy. `tk factory deploy` does this for you, to the
+# it through the Go module proxy. `ticfac factory deploy` does this for you, to the
 # source of the binary running the deploy.
 #
 # Usage: build.sh [--registry <host/namespace>] [--push] [--platform <p>]

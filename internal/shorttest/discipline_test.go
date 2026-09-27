@@ -61,6 +61,13 @@ var endToEndPackages = map[string][]string{
 	filepath.Join("internal", "reconcile"):     {"newFixture", "newRepo", "cloneRepo"},
 	filepath.Join("internal", "exec", "herdr"): {"newHarness", "newRepo"},
 	filepath.Join("internal", "runstate"):      {"newOrigin"},
+	// The sandbox image's scripts, run for real against stub binaries and
+	// real git (tick r6w moved the suite here from ticks with image/). ~200s
+	// serial: CI's `make test` pays for it, the per-tick gate does not.
+	filepath.Join("internal", "sandboximage"): {
+		"newFixture", "newFixtureWithFiles", "newWorkerFixture",
+		"newDoorFixture", "newQuestionsFixture", "reviewFixture",
+	},
 }
 
 func TestEveryEndToEndTestSkipsItselfOrSaysWhyItIsShort(t *testing.T) {
