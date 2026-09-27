@@ -100,6 +100,12 @@ var transientMarkers = []string{
 	"rpc failed",
 	"the requested url returned error: 5",
 	"could not read from remote repository",
+	// The HTTPS transport's words for a TCP connect that never completed
+	// (curl, under git's https remote): seen on 2026-09-24 when this host's
+	// IPv4 flapped, "Failed to connect to github.com port 443 after 62 ms:
+	// Couldn't connect to server". Nothing was asked, so nothing was refused.
+	"failed to connect to",
+	"couldn't connect to server",
 }
 
 // ClassifyRemote reads a failed git command's error — which carries the
