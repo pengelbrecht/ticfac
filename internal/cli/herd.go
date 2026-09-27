@@ -279,7 +279,10 @@ func herdPaint(ctx context.Context, args []string, scope *herdScope, ttlMs *int6
 	}
 	if len(scope.Runs) == 0 {
 		if scope.AsJSON {
-			return writeJSON(stdout, map[string]any{"badges": []paint.Badge{}, "runs": []string{}})
+			return writeJSON(stdout, herdPaintJSON{
+				agentDoc: agentDoc{Schema: agentSchemaID("herd-paint"), State: agentStateDone},
+				Result:   paint.Result{Badges: []paint.Badge{}, Source: client.SourceHerdPaint},
+			})
 		}
 		fmt.Fprintln(stdout, "no herdr attempts recorded — nothing to paint")
 		return nil
@@ -321,10 +324,22 @@ func herdPaint(ctx context.Context, args []string, scope *herdScope, ttlMs *int6
 	}
 
 	if scope.AsJSON {
-		return writeJSON(stdout, combined)
+		return writeJSON(stdout, herdPaintJSON{
+			agentDoc: agentDoc{Schema: agentSchemaID("herd-paint"), State: agentStateDone},
+			Result:   combined,
+		})
 	}
 	herdPaintPrint(stdout, combined)
 	return nil
+}
+
+// herdPaintJSON is `herd paint --json`'s answer, ticfac.herd-paint.v1: the
+// paint result as the wire knows it, stamped with the envelope every --json
+// surface carries (tick 8v3) so a reader can refuse a shape it does not
+// know. The old bare result was a pre-tick shape; nothing pinned it.
+type herdPaintJSON struct {
+	agentDoc
+	paint.Result
 }
 
 // attemptsToPaint converts the executor's attempt facts into paint's worker
@@ -399,7 +414,10 @@ func herdNotify(ctx context.Context, args []string, scope *herdScope, stdout, st
 	}
 	if len(scope.Runs) == 0 {
 		if scope.AsJSON {
-			return writeJSON(stdout, []notify.Result{})
+			return writeJSON(stdout, herdNotifyJSON{
+				agentDoc:      agentDoc{Schema: agentSchemaID("herd-notify"), State: agentStateDone},
+				Notifications: []notify.Result{},
+			})
 		}
 		fmt.Fprintln(stdout, "no herdr attempts recorded — nothing to notify about")
 		return nil
@@ -435,7 +453,10 @@ func herdNotify(ctx context.Context, args []string, scope *herdScope, stdout, st
 		if results == nil {
 			results = []notify.Result{}
 		}
-		return writeJSON(stdout, results)
+		return writeJSON(stdout, herdNotifyJSON{
+			agentDoc:      agentDoc{Schema: agentSchemaID("herd-notify"), State: agentStateDone},
+			Notifications: results,
+		})
 	}
 	herdNotifyPrint(stdout, results)
 	return nil
@@ -494,4 +515,13 @@ func writeJSON(out io.Writer, value any) error {
 	}
 	_, err = fmt.Fprintf(out, "%s\n", raw)
 	return err
+}
+
+// herdNotifyJSON is `herd notify --json`'s answer, ticfac.herd-notify.v1:
+// the per-run decisions as the envelope's `notifications` field, stamped with
+// the schema id every --json surface carries (tick 8v3). The old bare array
+// was a pre-tick shape; nothing pinned it.
+type herdNotifyJSON struct {
+	agentDoc
+	Notifications []notify.Result `json:"notifications"`
 }
