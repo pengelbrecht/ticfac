@@ -63,6 +63,7 @@ than maintained beside it:
 | `ticfac settle <epic-id> <tick-id> <attempt>` | release an attempt nobody can address |
 | `ticfac findings <epic-id>` | list the worker findings drafted for triage |
 | `ticfac finding <epic-id> <key>` | triage one drafted finding |
+| `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
 | `ticfac status <run-id>` | is the run alive, and when did it last say anything |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
 | `ticfac watch <run-id>` | follow a run and say, to a human, when it ends holding something for one |
