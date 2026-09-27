@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 408,
-  "state": "dispatching",
-  "reason": "dispatching rrl as attempt 54",
-  "updated_at": "2026-09-27T20:35:59Z",
+  "sequence": 409,
+  "state": "running",
+  "reason": "rrl is running as attempt 54",
+  "updated_at": "2026-09-27T20:36:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -69,7 +69,8 @@
     },
     {
       "tick_id": "rrl",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 54
     },
     {
       "tick_id": "152",
