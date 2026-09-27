@@ -446,6 +446,56 @@ func TestAHeldRunNamesTheCommandThatReleasesIt(t *testing.T) {
 	}
 }
 
+// TestAHoldAResumeSettledIsHistory (tick 4mv): the feed is append-only per
+// RUN ID, so a resumed run still carries the previous incarnation's
+// run_held line — and a hold somebody already settled by resuming the run
+// is history, not a standing wait. The resume is the run's own durable word
+// that the lines before it belong to an incarnation that ended (the same
+// rule the watch's subscription start made for lines, tick usx); a hold the
+// CURRENT incarnation wrote still stands.
+func TestAHoldAResumeSettledIsHistory(t *testing.T) {
+	t.Parallel()
+
+	// The previous incarnation held, and somebody resumed the run.
+	src := runningEpicSources()
+	three := 3
+	src.Feed = append(src.Feed,
+		runfeed.NewEvent(testNow.Add(-40*time.Minute), "epic-2jn", "6dh", &three,
+			reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"),
+		runfeed.NewEvent(testNow.Add(-39*time.Minute), "epic-2jn", "", nil,
+			reconcile.StageResumed, "the run stopped at failed and is resumed under the same run id"),
+	)
+	model := Build(src)
+	for _, a := range model.Attention {
+		if a.Kind == WaitHeldForPerson {
+			t.Errorf("a hold a resume settled is still attention a person must answer: %+v", a)
+		}
+	}
+	if model.WaitsOn != nil && model.WaitsOn.Kind == WaitHeldForPerson {
+		t.Errorf("a hold a resume settled is still the run's wait: %+v", model.WaitsOn)
+	}
+
+	// The current incarnation's own hold still stands: a resume before it
+	// makes nothing history that came after it.
+	src = runningEpicSources()
+	src.Feed = append(src.Feed,
+		runfeed.NewEvent(testNow.Add(-40*time.Minute), "epic-2jn", "", nil,
+			reconcile.StageResumed, "the run stopped at failed and is resumed under the same run id"),
+		runfeed.NewEvent(testNow.Add(-30*time.Minute), "epic-2jn", "6dh", &three,
+			reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"),
+	)
+	model = Build(src)
+	found := false
+	for _, a := range model.Attention {
+		if a.Kind == WaitHeldForPerson {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the current incarnation's hold is not in the attention list: %+v", model.Attention)
+	}
+}
+
 // TestADeadRunIsAttentionWithTheResumeCommand: a run whose process is gone
 // without its own terminal word is the first thing a person must learn, with
 // the one command that resumes it.
