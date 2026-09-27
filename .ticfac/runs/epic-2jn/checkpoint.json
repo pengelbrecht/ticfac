@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 40,
-  "state": "running",
-  "reason": "sg5 is closed",
-  "updated_at": "2026-09-27T06:09:05Z",
+  "sequence": 41,
+  "state": "dispatching",
+  "reason": "dispatching 8yn as attempt 8",
+  "updated_at": "2026-09-27T06:09:12Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -77,6 +77,10 @@
       "tick_id": "vo4",
       "state": "dispatched",
       "attempt": 7
+    },
+    {
+      "tick_id": "8yn",
+      "state": "ready"
     }
   ],
   "provenance": {
