@@ -450,3 +450,48 @@ func TestTheVerdictCarriesConfidenceModelAndDistribution(t *testing.T) {
 		t.Errorf("the recorded distribution carries A2, which was never offered: the oracle owns it")
 	}
 }
+
+// With no classifier, the reporter's own claim decides (operator, 2026-09-27):
+// 'none' files the finding to the backlog, a named unverified item absorbs it
+// against that item, and no claim still absorbs. Every one is recorded as a
+// prediction whose Fallback says the claim stood in.
+func TestWithNoClassifierTheReportersClaimDecides(t *testing.T) {
+	t.Parallel()
+	done := doneOf(t, criteria, map[string]string{"A2": "go"})
+	var unverified string
+	for _, item := range done.Items {
+		if item.ID != "A2" {
+			unverified = item.ID
+			break
+		}
+	}
+	predictor := NewPredictor(nil)
+	for _, tc := range []struct {
+		name, claim string
+		gating      bool
+		item        string
+		claimUsed   bool
+	}{
+		{"a claim of none files to the backlog", "none", false, "", true},
+		{"a claim naming an unverified item absorbs against it", unverified, true, unverified, true},
+		{"no claim still absorbs", "", true, "", false},
+		{"a claim naming a runnable item is not the claim's to decide", "A2", true, "", false},
+		{"a claim naming an unknown item is ignored", "A99", true, "", false},
+	} {
+		finding := theFinding
+		finding.DoneItem = tc.claim
+		verdict, _, err := predictor.Predict(context.Background(), finding, done)
+		if err != nil || verdict == nil {
+			t.Fatalf("%s: %v %+v", tc.name, err, verdict)
+		}
+		if verdict.Gating != tc.gating || verdict.ItemID != tc.item {
+			t.Errorf("%s: gating=%v item=%q, want gating=%v item=%q", tc.name, verdict.Gating, verdict.ItemID, tc.gating, tc.item)
+		}
+		if verdict.Basis != BasisPredicted {
+			t.Errorf("%s: basis %q, want predicted", tc.name, verdict.Basis)
+		}
+		if got := strings.Contains(verdict.Fallback, "reporter's own claim"); got != tc.claimUsed {
+			t.Errorf("%s: fallback %q, claim used=%v want %v", tc.name, verdict.Fallback, got, tc.claimUsed)
+		}
+	}
+}
