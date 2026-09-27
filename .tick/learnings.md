@@ -130,21 +130,21 @@ evidence — add it to the gate, or name the gap in the acceptance.
 work and report in ONE commit. **Rule:** A fake demands the identity and reproduces the real shape;
 a more forgiving fake certifies the defect it hides — fix it in the same change.
 
-**Problem:** Two identical fixture commits in one second got one SHA. **Rule:** Make them differ.
-
-**Problem:** fake-runner keyed "first try" on TICFAC_ATTEMPT, the RUN's counter. **Rule:** "The
-tick's first try" keys on `$TICFAC_TRY`; attempt numbers are identity, never an ordinal.
-
-**Problem:** Verification workers left `RESULT-<id>.md` uncommitted; collect saw `no-commits`.
-**Rule:** Evidence output is committed even with no source change.
+**Problem:** Identical fixture commits shared a SHA; fake-runner keyed "first try" on TICFAC_ATTEMPT;
+verification workers left reports uncommitted. **Rule:** Make fixture commits differ; "the tick's
+first try" keys on `$TICFAC_TRY`; evidence output is committed even with no source change.
 
 ## Tracker hygiene
 
-**Problem:** `tk close` on a parked tick printed usage. **Rule:** Usage is a REFUSAL — re-run with
-`--reason done` to read it; a `tk ask`-parked tick needs `--from human`; `git commit .tick/`.
+**Problem:** `tk close` usage prints, promotions pointed at uncommitted ticks, a spawn blamed "the
+probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
-**Problem:** Promotions pointed at ticks that existed only as untracked files. **Rule:** A promotion
-is finished when the tick is COMMITTED where the next run reads it; re-read its text against what
-the epic deleted (u9h still names the deleted EpicReconcilerWorkflow).
+## Boundaries this repo pays to learn
 
-**Problem:** A spawn blamed "the probe" at 93% of its session limit. **Rule:** Test the pane by hand.
+**Problem:** A new `factory_*` key in ~/.ticfacrc contradicts the pinned credential-ownership
+contract (additionalProperties: false — "an unknown factory_ key is a typo"). **Rule:** The config FILE's key
+vocabulary is the bundle's — but the $TICFAC_* ENVIRONMENT is this repo's own operator-preference surface
+(TICFAC_RUNNER, TICFAC_JEV_API_KEY): set-once defaults live there, as i1r's --status-push reading $TICFAC_STATUS_PUSH does, no bundle re-cut needed.
+
+**Problem:** A login-route test read the login page's own 401 as the login's answer: `SELF.fetch`
+FOLLOWS a 303. **Rule:** A redirect-asserting route test passes `redirect: "manual"`.

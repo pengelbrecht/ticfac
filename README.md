@@ -185,3 +185,19 @@ tag, so releases upgrade the factory: configure `CLOUDFLARE_API_TOKEN`,
 skips the deploy with a warning naming what is missing — the factory is the
 operator's opt-in, not a service this repository runs.
 
+
+## Following the factory from a phone
+
+The deployed factory serves `/status` — a mobile-first, read-only page an
+operator signs into with the factory token (typed into a form, kept in an
+HttpOnly cookie, never in a URL) and installs to a phone home screen as a
+PWA. Every run the factory can see is listed attention first, the same view a
+bare `ticfac` prints: cloud runs live from the factory's own records, local
+runs from the status snapshots they push when opted in —
+`ticfac run-epic --status-push` per run, or once for the machine by setting
+`TICFAC_STATUS_PUSH=1` (the flag always wins; needs a configured factory;
+always best-effort). A local run pauses when its laptop sleeps, so the page
+marks an old local row PAUSED/STALE and says why rather than looking stuck.
+The same pushes drive the factory's Telegram alerts — a run needing a person (with the
+reason and the one command that clears it), an epic done, a run failed — one
+message per stop, deduplicated and rate-limited.
