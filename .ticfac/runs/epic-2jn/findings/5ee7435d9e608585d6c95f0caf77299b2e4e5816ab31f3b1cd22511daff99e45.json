@@ -12,8 +12,11 @@
   "attempt": 30,
   "done_item": "A4",
   "demonstrating_check": "make gate",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T12:21:10Z",
+  "triaged_at": "2026-09-27T12:21:23Z",
+  "triaged_by": "ticfac run epic-2jn absorbing ogv",
+  "promoted_as": "ogv",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "gwi",
