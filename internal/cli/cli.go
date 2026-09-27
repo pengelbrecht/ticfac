@@ -28,8 +28,14 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
+
+// tempSweepAge is how long a dead process's temp dir is left alone before
+// run-epic removes it (tick w9j): a day, well past any leg that could still
+// be reading one.
+const tempSweepAge = 24 * time.Hour
 
 // newTracker builds the tracker a command works through, as the tk client
 // against one checkout. It is a seam for exactly one proof — the SIGTERM
@@ -234,8 +240,91 @@ answers (tick 0iz).`,
 	return cmd
 }
 
+<<<<<<< HEAD
 func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code int) {
 	rest := args
+=======
+func runEpic(args []string, stdout, stderr io.Writer) (code int) {
+	fs := flag.NewFlagSet("run-epic", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var (
+		repo      = fs.String("repo", "", "the checkout attempts branch from")
+		remote    = fs.String("remote", "origin", "the remote holding the run's durable authority")
+		branch    = fs.String("branch", "", "the EpicRun integration branch")
+		base      = fs.String("base", "HEAD", "what the integration branch is cut from")
+		runID     = fs.String("run-id", "", "the run's id")
+		owner     = fs.String("owner", "ticfac", "who claims a tick in the tracker")
+		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
+		tier      = fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])")
+		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
+		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
+		gate      = fs.String("gate", "", "the runners.toml the integrated gate is read from")
+		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
+		ceiling   = fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to")
+		wall      = fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by")
+		// Supervision is ON by default (tick go6), and the default is the
+		// argument. The behaviour it replaces is not "the run stops" — it is
+		// "the run stops and a person retypes the identical command", which
+		// the operator did about fifteen times in one day. Defaulting to off
+		// would keep exactly that behaviour with worse latency (the person has
+		// to notice first: two of the day's stalls were multi-hour) and no
+		// record that the loop happened at all. Neither is safer. What IS
+		// safer is that the loop is now bounded, classified and counted: it
+		// continues only across the closed set of stops that need nobody, it
+		// halts on a repeat over an unchanged tree, and every continuation is
+		// recorded as the intervention it is.
+		supervise = fs.Bool("supervise", true,
+			"continue across stops that only need resuming — a rejected attempt that left nothing, a tracker "+
+				"width refusal, gate evidence that went stale, a transient remote failure — adopting the "+
+				"in-flight attempts by identity, with bounded backoff and a cap. Every continuation is RECORDED "+
+				"as an intervention. A stop that needs a person still stops. --supervise=false stops at the "+
+				"first refusal")
+		maxResumes = fs.Int("max-resumes", reconcile.DefaultAutoResumeCap,
+			"the most automatic continuations one supervised run makes before it stops with the refusal it "+
+				"stopped over; the cap is the safety against a run that resumes forever over the same stop")
+		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
+			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
+				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
+		// The eviction flush's bound (tick ppt). The platform sends SIGTERM,
+		// waits up to fifteen minutes, then SIGKILLs; the flush commits and
+		// pushes the in-flight work and writes the checkpoint inside THIS many
+		// seconds, so a hung push cannot spend the whole window and reach
+		// SIGKILL anyway. Zero and below disable the flush — the pre-ppt
+		// behaviour, an immediate exit that leaves the work to whatever the
+		// last timer push carried away.
+		evacuateSeconds = fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
+			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
+				"and writing the checkpoint before the process exits anyway (0 disables the flush)")
+		// The absorption recursion's bound (tick qjj). Depth rather than wall
+		// clock: depth counts how far the run has travelled from the epic
+		// anyone asked for, and only a person can judge that. The default's
+		// reasoning lives on the constant; here the operator reads what the
+		// number governs and where to raise it when the stop is wrong.
+		//
+		// The default here is 0 — NOT NAMED — rather than the constant,
+		// because the reconciler cannot tell an operator who wrote
+		// --absorption-depth 3 from one who wrote nothing (tick wz0, finding
+		// 95f5ee1a): a named bound is the person's raise over the recorded
+		// one, and an unnamed one adopts what the run branch records, so a
+		// cold restart honours the bound the warm run ran with. Zero and
+		// below still mean the DEFAULT inside the options' own normalising,
+		// never an unbounded recursion.
+		absorptionDepth = fs.Int("absorption-depth", 0,
+			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
+				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
+				"before the run stops for a person carrying the whole chain (0, the default, means not "+
+				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
+				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
+				"ground, a third is already far from home, and past that a person should judge the chain "+
+				"rather than let the run keep going)")
+	)
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac run-epic: exactly one epic id is required\n")
 		return 2
@@ -396,6 +485,7 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// exists to break.
 	fmt.Fprintf(stdout, "%s\n", classifierNote)
 
+<<<<<<< HEAD
 	// Which rung the forge's credential came from — or nothing at all, said
 	// by hio's gate itself: a repo that declares no close-out rule resolves
 	// no credential and needs no note. This is the "says so" half of the
@@ -404,6 +494,18 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// whose credential story starts with a question.
 	if forgeNote != "" {
 		fmt.Fprintf(stdout, "%s\n", forgeNote)
+=======
+	// What killed processes left in the temp directory (tick w9j): a SIGKILL
+	// runs no cleanup at all. Conservative — only ticfac-* names, never the
+	// gate's slot roots, only a directory whose owning pid is gone and whose
+	// contents nobody has touched for a day. A swept tree that was a worktree
+	// of this checkout leaves a registration with no directory, which the
+	// reconciler's own `git worktree prune` drops as the run starts.
+	if swept, err := tempdir.Sweep(os.TempDir(), tempSweepAge, time.Now()); err != nil {
+		life.Logf("could not sweep stale temp dirs: %v", err)
+	} else if len(swept) > 0 {
+		life.Logf("swept %d stale temp dir(s) a killed process left behind", len(swept))
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	}
 
 	// A death is a terminal feed line, never a feed that simply stops on an
@@ -435,6 +537,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// path the process leaves by, the pidfile is released and the log says how.
 	// Release is idempotent, so the specific outcomes below win.
 	defer life.Release("returned")
+	// Every temp tree still open when the run returns — a gate abandoned
+	// mid-command, a leg that errored past its own cleanup — goes with it.
+	defer tempdir.ReleaseAll()
 	defer func() {
 		if p := recover(); p != nil {
 			detail := fmt.Sprintf("panicked: %v", p)
@@ -483,6 +588,10 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 					detail += "; " + summary
 				}
 			}
+			// os.Exit runs no defer, and every temp tree the run had open —
+			// tracker, merge, gate — was waiting on one (tick w9j). After the
+			// flush, which may still need them.
+			tempdir.ReleaseAll()
 			died(detail)
 			life.Release(detail)
 			status := 130
@@ -760,6 +869,7 @@ func budgetLine(budget reconcile.Budget) string {
 
 // settle releases one attempt nobody can address, on a person's word. See
 // internal/reconcile/settle.go for why a person is the next actor at all.
+<<<<<<< HEAD
 // settleFlags is `settle`'s flag surface, declared once per invocation.
 type settleFlags struct {
 	repo, remote, branch, runID, runner, tier, profiles, stateRoot, gate, release *string
@@ -827,6 +937,30 @@ ref and commit (tick 0z0).`,
 // internal/reconcile/settle.go for why a person is the next actor at all.
 func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 	rest := args
+=======
+func settle(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var (
+		repo      = fs.String("repo", "", "the checkout the run works in")
+		remote    = fs.String("remote", "origin", "the remote holding the run's durable authority")
+		branch    = fs.String("branch", "", "the EpicRun integration branch")
+		runID     = fs.String("run-id", "", "the run's id")
+		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
+		tier      = fs.String("tier", "", "the tier the released attempt was dispatched at, as for run-epic")
+		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
+		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
+		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
+		release   = fs.String("release", "", "the person releasing the attempt")
+		carryWork = fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)")
+	)
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 3 {
 		fmt.Fprintf(stderr, "ticfac settle: exactly one epic id, tick id and attempt number are required\n")
 		return 2
@@ -842,6 +976,9 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 			"author is the clock release Appendix A #11 refuses\n")
 		return 2
 	}
+	if parseOnly {
+		return 0
+	}
 	if err := reconcile.CheckExecutor(); err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %s.\n%v\n", epicID, NoExecutorMessage, err)
 		return ExitNoExecutor
@@ -855,6 +992,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+<<<<<<< HEAD
 	// The same code-hosting surface the run is handed (tick 0iz): the
 	// reconciler this command builds shares the construction refusal, so a
 	// repo declaring the close-out rule is settled by a host that can back
@@ -874,6 +1012,12 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 			"configured.\n", epicID, pullsErr)
 	}
 
+=======
+	// A release never reaches the close-out: it writes one settlement record
+	// and asks nothing of the epic PR. So it is built release-only, without
+	// the code-hosting surface the PR + CI rule needs — a person releasing a
+	// stuck attempt is not refused for a GITHUB_TOKEN the release never uses.
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *fl.repo,
 		Remote:            *fl.remote,
@@ -884,11 +1028,19 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		Tracker:           tracker,
 		NewExecutor:       executorFactory(*fl.runner, *fl.gate),
 		Executors:         knownExecutors(),
+<<<<<<< HEAD
 		ExecStateRoot:     *fl.stateRoot,
 		GateConfig:        *fl.gate,
 		ProfileDir:        *fl.profiles,
 		Tier:              *fl.tier,
 		PullRequests:      pulls,
+=======
+		ExecStateRoot:     *stateRoot,
+		GateConfig:        *gate,
+		ProfileDir:        *profiles,
+		Tier:              *tier,
+		ReleaseOnly:       true,
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)

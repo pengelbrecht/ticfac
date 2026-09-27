@@ -653,6 +653,20 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 				"a resolution that did not happen is not a merge, whatever the commit says",
 			r.attemptName(marker.TickID, marker.Attempt), path)
 	}
+	// The job's tree is the union of the attempt and the epic head its
+	// worktree was cut over — NOT necessarily the head the branch has now. The
+	// merge is minted over the head the tree was resolved against, because
+	// that is the merge the tree is; naming a later head as its parent would
+	// state that head merged while the tree silently reverts everything that
+	// landed on the branch since the job was cut (another tick's merge, the
+	// base fold, the run's own records).
+	resolvedOver, err := r.resolvedOver(resolveHead, head)
+	if err != nil {
+		return "", r.refuse(RefusedMerge, marker.TickID,
+			"the resolve-conflict job for the conflict of %s left %s, which %v: nothing says which head of %s "+
+				"its tree was resolved against, and a merge minted over a guessed one can revert work",
+			r.attemptName(marker.TickID, marker.Attempt), short(resolveHead), err, r.branch)
+	}
 	tree, err := r.git.run("", "rev-parse", resolveHead+"^{tree}")
 	if err != nil {
 		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
@@ -660,11 +674,67 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
 		"attempt %d conflicted and was resolved by the resolve-conflict job",
 		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt)
-	merged, err := r.git.run("", "commit-tree", tree, "-p", epicHead, "-p", head, "-m", message)
+	merged, err := r.git.run("", "commit-tree", tree, "-p", resolvedOver, "-p", head, "-m", message)
 	if err != nil {
 		return "", fmt.Errorf("mint the merge of the resolve-conflict job's resolution: %w", err)
 	}
-	return merged, nil
+	if resolvedOver == epicHead {
+		return merged, nil
+	}
+	return r.mergeResolutionOnto(merged, resolvedOver, epicHead, marker, conflict)
+}
+
+// mergeResolutionOnto carries a resolution minted over an epic head the
+// branch has since moved past onto the head it has now, with a real
+// three-way merge: what landed in between is kept because git merges it, not
+// because anybody remembered it. A resolution that no longer merges is a
+// second conflict on the same tick, and a second conflict is the stop — the
+// resolve job's work stays on its branch.
+func (r *Reconciler) mergeResolutionOnto(resolution, resolvedOver, epicHead string, marker attemptHandle,
+	conflict *mergeConflict) (string, error) {
+
+	dir, remove, err := r.git.tempWorktree("ticfac-merge-", epicHead)
+	if err != nil {
+		return "", fmt.Errorf("prepare the merge worktree at %s: %w", short(epicHead), err)
+	}
+	defer remove()
+
+	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
+		"attempt %d was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
+		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt, short(resolvedOver), r.branch,
+		short(epicHead))
+	if stdout, stderr, err := r.git.try(dir, "merge", "--no-ff", "--no-edit", "-m", message, resolution); err != nil {
+		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
+		_, _, _ = r.git.try(dir, "merge", "--abort")
+		return "", r.refuse(RefusedMerge, marker.TickID,
+			"the resolve-conflict job resolved the conflict of %s (%s) against %s at %s, and %s has moved to %s "+
+				"since with work that does not merge with the resolution: %s. A second conflict on the same tick "+
+				"is the stop; the resolution is kept on %s",
+			r.attemptName(marker.TickID, marker.Attempt), strings.Join(conflict.Files, ", "), r.branch,
+			short(resolvedOver), r.branch, short(epicHead), describeMergeFailure(stdout, stderr, unmerged, err),
+			branchOf(marker.WriteRef))
+	}
+	return r.git.run(dir, "rev-parse", "HEAD")
+}
+
+// resolvedOver answers the head a resolve-conflict job's tree was resolved
+// against: the first parent of the conflicted merge its branch starts from —
+// the commit on the job's first-parent chain whose second parent is `other`,
+// the side that was merged in (the attempt's head, or the base head a fold
+// merged). conflictedMerge commits exactly that merge, and the job's own
+// commits sit on top of it.
+func (r *Reconciler) resolvedOver(resolveHead, other string) (string, error) {
+	lines, err := r.git.run("", "rev-list", "--first-parent", "--parents", resolveHead)
+	if err != nil {
+		return "", fmt.Errorf("cannot be read: %w", err)
+	}
+	for _, line := range strings.Split(lines, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[2] == other {
+			return fields[1], nil
+		}
+	}
+	return "", fmt.Errorf("does not start from a conflicted merge of %s", short(other))
 }
 
 // markersLeftAt is the mechanical half of "did the job resolve it": the first

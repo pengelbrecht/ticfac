@@ -55,6 +55,7 @@ on the integration branch; a subscriber that reads run_finished goes and looks.`
 		"events of earlier incarnations of this run id")
 	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
 		"(a local feed is read at file-follow cadence)")
+<<<<<<< HEAD
 	asJSON := fs.Bool("json", false, "print the standing feed as one versioned document (ticfac.events.v1); with --follow it refuses — a live stream is JSONL lines, not one document")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
@@ -65,6 +66,14 @@ on the integration branch; a subscriber that reads run_finished goes and looks.`
 
 func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
+=======
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac events: exactly one run id is required\n")
 		return 2
@@ -80,6 +89,9 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 		return 2
 	}
 	runID := rest[0]
+	if parseOnly {
+		return 0
+	}
 	if *repo == "" {
 		var err error
 		*repo, err = os.Getwd()

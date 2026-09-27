@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // git is the store's whole dependency on git: a runner in one repository, with
@@ -205,11 +206,11 @@ func (g *git) writeBlob(content []byte) (string, error) {
 // a working tree or the repository's index: the tree is assembled in a
 // throwaway index so the store can run in a repository a human is also using.
 func (g *git) commitWithFile(base, path, blob, message string) (string, error) {
-	indexDir, err := os.MkdirTemp("", "ticfac-index-")
+	indexDir, removeIndex, err := tempdir.Make("ticfac-index-")
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(indexDir)
+	defer removeIndex()
 	env := []string{"GIT_INDEX_FILE=" + filepath.Join(indexDir, "index")}
 
 	if base != "" {

@@ -233,6 +233,7 @@ alike; the exit code stays liveness's answer alone.`,
 	asJSON := fs.Bool("json", false, "print the versioned status model (ticfac.status.v1): lifecycle, waves, ticks, workers, waits, CI and cost")
 	follow := fs.Bool("follow", false, "keep the status table updated in place, one line per tick, until the run ends or Ctrl-C")
 	interval := fs.Duration("interval", defaultStatusFollowInterval, "with --follow, how often the table refreshes")
+<<<<<<< HEAD
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		return codeToErr(statusCommand(c.Context(), args, repo, asJSON, follow, interval, stdout, stderr))
@@ -242,6 +243,14 @@ alike; the exit code stays liveness's answer alone.`,
 
 func statusCommand(ctx context.Context, args []string, repo *string, asJSON, follow *bool, interval *time.Duration, stdout, stderr io.Writer) int {
 	rest := args
+=======
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac status: exactly one run id is required\n")
 		return 2
@@ -249,6 +258,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 	if *asJSON && *follow {
 		fmt.Fprintf(stderr, "ticfac status: --json prints one answer; a table that refreshes is not a JSON stream — pipe one frame or follow the other\n")
 		return 2
+	}
+	if parseOnly {
+		return 0
 	}
 	if *repo == "" {
 		wd, err := os.Getwd()

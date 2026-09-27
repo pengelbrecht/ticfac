@@ -140,8 +140,10 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 			}
 			if first, _ := r.git.run("", "rev-parse", resolved+"^1"); first != epicHead {
 				// Resolved against an epic head the branch has moved past (a
-				// job an earlier incarnation left on its branch): the next
-				// pass folds the resolution onto the head the branch has now.
+				// job an earlier incarnation cut, adopted live or finished from
+				// its branch): the next pass folds the resolution onto the head
+				// the branch has now with a real merge — the mint's first
+				// parent is the head the job resolved, never this one.
 				continue
 			}
 			merged = resolved

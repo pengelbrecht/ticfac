@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -343,11 +344,11 @@ func parseRawDiff(raw string) ([]change, error) {
 // tempIndex is a git index file outside every repository, and the one function
 // that removes it.
 func tempIndex() (path string, done func(), err error) {
-	dir, err := os.MkdirTemp("", "ticfac-tracker-index-")
+	dir, remove, err := tempdir.Make("ticfac-tracker-index-")
 	if err != nil {
 		return "", nil, err
 	}
-	return filepath.Join(dir, "index"), func() { _ = os.RemoveAll(dir) }, nil
+	return filepath.Join(dir, "index"), remove, nil
 }
 
 // leaseRefused reports whether a failed push was the REMOTE refusing the update

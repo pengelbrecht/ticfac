@@ -137,13 +137,29 @@ func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.St
 	return store, nil
 }
 
+<<<<<<< HEAD
 func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
+=======
+func findingsCommand(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo, remote, branch, runID := findingRunOptions(fs)
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac findings: exactly one epic id is required\n")
 		return 2
 	}
 	epicID := rest[0]
+	if parseOnly {
+		return 0
+	}
 
 	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
 	if err != nil {
@@ -274,8 +290,25 @@ func findingTarget(target string) string {
 	return target
 }
 
+<<<<<<< HEAD
 func findingCommand(args []string, repo, remote, branch, runID, promoteAs *string, discard *bool, fixedAs, by *string, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
+=======
+func findingCommand(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("finding", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo, remote, branch, runID := findingRunOptions(fs)
+	promoteAs := fs.String("promote-as", "", "the tick the promotion created: a bare tick id, or <owner/name>:<tick-id> for a routed finding")
+	discard := fs.Bool("discard", false, "record that a person looked and said no")
+	fixedAs := fs.String("fixed-as", "", "record that the finding was repaired inside this epic, naming the commit that repaired it")
+	by := fs.String("by", "", "the person triaging this draft")
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
+		return 2
+	}
+>>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 2 || rest[0] == "" || rest[1] == "" {
 		fmt.Fprintf(stderr, "ticfac finding: exactly one epic id and one finding key are required\n")
 		return 2
@@ -300,6 +333,9 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		fmt.Fprintf(stderr, "ticfac finding %s %s: say exactly one of --promote-as <tick>, --discard or --fixed-as <commit>\n",
 			epicID, key)
 		return 2
+	}
+	if parseOnly {
+		return 0
 	}
 
 	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
