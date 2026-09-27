@@ -16,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // The integrated gate, its evidence, and the close.
@@ -1011,6 +1012,7 @@ const gateWaitDelay = 5 * time.Second
 type gateShell struct {
 	cmd      *exec.Cmd
 	scratch  string
+	rm       func() // removes scratch (tempdir: an os.Exit still does)
 	outPath  string
 	errPath  string
 	donePath string
@@ -1070,12 +1072,13 @@ var errGateKilled = errors.New("the gate command was killed before it reported a
 // anything this gate started is alive — including a shell that outlived the
 // reconciler. Nothing reads fd 3; being open is the whole job. See gatedir.go.
 func startShell(dir, command string, timeout time.Duration, now time.Time, hold *os.File) (*gateShell, error) {
-	scratch, err := os.MkdirTemp("", "ticfac-gate-io-")
+	scratch, removeScratch, err := tempdir.Make("ticfac-gate-io-")
 	if err != nil {
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
 	s := &gateShell{
 		scratch:   scratch,
+		rm:        removeScratch,
 		outPath:   filepath.Join(scratch, "stdout"),
 		errPath:   filepath.Join(scratch, "stderr"),
 		donePath:  filepath.Join(scratch, "exit"),
@@ -1084,13 +1087,13 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	}
 	out, err := os.Create(s.outPath)
 	if err != nil {
-		_ = os.RemoveAll(scratch)
+		removeScratch()
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
 	defer out.Close()
 	errOut, err := os.Create(s.errPath)
 	if err != nil {
-		_ = os.RemoveAll(scratch)
+		removeScratch()
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
 	defer errOut.Close()
@@ -1106,7 +1109,7 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	}
 	cmd.WaitDelay = gateWaitDelay
 	if err := cmd.Start(); err != nil {
-		_ = os.RemoveAll(scratch)
+		removeScratch()
 		return nil, err
 	}
 	s.cmd = cmd
@@ -1127,7 +1130,7 @@ func (s *gateShell) settled() bool {
 // it (gate_unix.go) — because wait is only ever reached when the caller is done
 // waiting: the bound fired, or the run was cancelled under it.
 func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
-	defer func() { _ = os.RemoveAll(s.scratch) }()
+	defer s.rm()
 
 	_, sentinel := os.Stat(s.donePath)
 	if sentinel != nil && s.cmd.Process != nil {

@@ -26,8 +26,14 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
+
+// tempSweepAge is how long a dead process's temp dir is left alone before
+// run-epic removes it (tick w9j): a day, well past any leg that could still
+// be reading one.
+const tempSweepAge = 24 * time.Hour
 
 // newTracker builds the tracker a command works through, as the tk client
 // against one checkout. It is a seam for exactly one proof — the SIGTERM
@@ -522,6 +528,18 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// exists to break.
 	fmt.Fprintf(stdout, "%s\n", classifierNote)
 
+	// What killed processes left in the temp directory (tick w9j): a SIGKILL
+	// runs no cleanup at all. Conservative — only ticfac-* names, never the
+	// gate's slot roots, only a directory whose owning pid is gone and whose
+	// contents nobody has touched for a day. A swept tree that was a worktree
+	// of this checkout leaves a registration with no directory, which the
+	// reconciler's own `git worktree prune` drops as the run starts.
+	if swept, err := tempdir.Sweep(os.TempDir(), tempSweepAge, time.Now()); err != nil {
+		life.Logf("could not sweep stale temp dirs: %v", err)
+	} else if len(swept) > 0 {
+		life.Logf("swept %d stale temp dir(s) a killed process left behind", len(swept))
+	}
+
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
 	// without an error, so this is the only terminal line on the paths below.
@@ -536,6 +554,9 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// the pidfile is released and the log says how. Release is idempotent, so
 	// the specific outcomes below win.
 	defer life.Release("returned")
+	// Every temp tree still open when the run returns — a gate abandoned
+	// mid-command, a leg that errored past its own cleanup — goes with it.
+	defer tempdir.ReleaseAll()
 	defer func() {
 		if p := recover(); p != nil {
 			detail := fmt.Sprintf("panicked: %v", p)
@@ -584,6 +605,10 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 					detail += "; " + summary
 				}
 			}
+			// os.Exit runs no defer, and every temp tree the run had open —
+			// tracker, merge, gate — was waiting on one (tick w9j). After the
+			// flush, which may still need them.
+			tempdir.ReleaseAll()
 			died(detail)
 			life.Release(detail)
 			status := 130
