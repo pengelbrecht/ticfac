@@ -80,7 +80,11 @@ func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
 // no PR is not an error — it is the honest "no forge answer", and the model
 // carries null. An error a configured forge raises IS reported, because a
 // forge that cannot be asked when it should be is a fact a person reads.
-func statusCI(ctx context.Context, repo, epicID string) (*statusmodel.CIInput, error) {
+//
+// A seam like epicGraph's, for the same reason: the forge is the
+// environment's, and a test that needs the model to see a PR answers it
+// with a controlled value.
+var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIInput, error) {
 	if epicID == "" {
 		return nil, nil
 	}

@@ -201,8 +201,12 @@ func TestRunEpicJSONResultAgreesWithTheExitCode(t *testing.T) {
 		Failure: &reconcile.Refusal{Reason: reconcile.RefusedFindingUntriaged, Message: "a finding is untriaged"},
 	}
 	doc, _, code = runEpicResultJSONForTest(t, held)
-	if code != exitGeneric || doc["state"] != agentStateFailed {
-		t.Errorf("a refused run's document is %v with exit %d, want failed/1", doc["state"], code)
+	// The held class (tick 4mv): a run that stopped holding something only a
+	// person can move is the same verdict run-epic exits as the watch over
+	// the same run — 3, with the state word the code agrees with.
+	if code != ExitHeld || doc["state"] != agentStateHeld {
+		t.Errorf("a refused run's document is %v with exit %d, want %q/%d — the same verdict the watch over this run ends by",
+			doc["state"], code, agentStateHeld, ExitHeld)
 	}
 	failure, ok := doc["failure"].(map[string]any)
 	if !ok || failure["reason"] != reconcile.RefusedFindingUntriaged {

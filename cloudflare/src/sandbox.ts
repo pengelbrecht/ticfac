@@ -152,21 +152,28 @@ export const ORCHESTRATOR_COMMAND = "/usr/local/bin/ticks-orchestrator";
  * the identical answer: the SHA still will not check out, `tk` is still the
  * wrong version, the pre-flight still fails. They end the run.
  *
- * Code 4 carries a second meaning, from the other side of the exec: the
- * orchestrator entrypoint hands the container to `ticfac run-epic`, which
- * exits with the CLI's shared tk vocabulary — and there code 4 is NOT-FOUND,
- * the honest empty lookup (internal/cli/exit.go). The lookup that matters is
- * the epic: a run submitted from a commit that does not carry the epic exits
- * 4, and the tracker's tree is cut from that commit, so the epic is missing
- * on every boot — the first per-tick Cloudflare smoke run re-booted into the
- * identical failure until a person stopped it by hand (ticfac tick rf3). The
- * collision is benign and deliberate: both readings of exit 4 are
- * deterministic configuration verdicts, and no caller branches on the
- * difference — the container's flushed log names which one it was.
+ * Codes 3 and 4 each carry a second meaning, from the other side of the exec:
+ * the orchestrator entrypoint hands the container to `ticfac run-epic`, which
+ * exits with the CLI's own documented table (internal/cli/exit.go) — and
+ * there code 3 is HELD, a run that stopped holding something only a person
+ * can move, and code 4 is NOT-FOUND, the honest empty lookup. Both are
+ * terminal here for the same reason the entrypoint's own are: a reboot
+ * reaches the identical answer, because nothing a replacement container can
+ * do moves a person's decision or restores an epic the submitted tree lacks.
+ * The lookup that matters is the epic: a run submitted from a commit that
+ * does not carry the epic exits 4, and the tracker's tree is cut from that
+ * commit, so the epic is missing on every boot — the first per-tick
+ * Cloudflare smoke run re-booted into the identical failure until a person
+ * stopped it by hand (ticfac tick rf3), and a run held for a triage or a
+ * settle rebooted into the same hold (ticfac tick 4mv). The collision is
+ * benign and deliberate: both readings of each code are deterministic
+ * verdicts, and no caller branches on the difference — the container's
+ * flushed log names which one it was.
  */
 export const TERMINAL_EXIT_CODES: readonly number[] = [
   2, // a required input is missing or malformed (including no gateway)
-  3, // clone or checkout of the submitted SHA failed
+  3, // clone or checkout of the submitted SHA failed — or the reconciler's
+  // held: the run stopped holding something only a person can move
   4, // tk is absent or is not the version the image pins — or the reconciler's
   // not-found: the epic does not exist on the submitted tree
   5, // an Environment pre-flight check failed
@@ -191,7 +198,10 @@ export function terminalExitReason(code: number): string {
     case 2:
       return "a required input is missing or malformed";
     case 3:
-      return "the clone or checkout of the submitted SHA failed";
+      return (
+        "the clone or checkout of the submitted SHA failed, or the reconciler held — " +
+        "the run stopped holding something only a person can move"
+      );
     case 4:
       return (
         "tk is absent or is not the version the image pins, or the reconciler answered not-found — " +
