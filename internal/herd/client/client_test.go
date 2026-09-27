@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 )
 
 func TestNewPerformsHandshake(t *testing.T) {
@@ -357,21 +358,17 @@ func TestServerCapabilitiesHasNilAndUnknown(t *testing.T) {
 // shapes — no socket file, leftover socket file with nothing listening —
 // classify as NotRunningError; a protocol refusal does not.
 //
-// Paths use a short os.MkdirTemp("", ...) prefix rather than t.TempDir():
+// Paths live under herdtest.SocketDir rather than t.TempDir() or TMPDIR:
 // darwin caps unix socket paths around 104 bytes.
 func TestDialTellsNotRunningFromWrongVersion(t *testing.T) {
-	dir, err := os.MkdirTemp("", "hd-not-running")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	dir := herdtest.SocketDir(t, "hd-not-running")
 
 	// Herdr was never started: no socket file at the endpoint.
 	absent := filepath.Join(dir, "absent.sock")
 	if _, err := NewUnixTransport(absent).Dial(t.Context()); !IsNotRunning(err) {
 		t.Fatalf("dial on an absent socket: err = %v, want IsNotRunning", err)
 	}
-	_, err = New(t.Context(), Options{SocketPath: absent})
+	_, err := New(t.Context(), Options{SocketPath: absent})
 	if !IsNotRunning(err) {
 		t.Fatalf("New on an absent socket: err = %v, want IsNotRunning", err)
 	}
