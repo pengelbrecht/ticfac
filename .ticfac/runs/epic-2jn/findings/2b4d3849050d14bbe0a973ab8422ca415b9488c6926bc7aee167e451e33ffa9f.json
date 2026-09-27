@@ -12,8 +12,10 @@
   "attempt": 31,
   "done_item": "A4",
   "demonstrating_check": "grep -n \"tk factory\" image/common.sh image/Dockerfile",
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-27T13:54:58Z",
+  "triaged_at": "2026-09-27T20:53:17Z",
+  "triaged_by": "claude (operator-delegated triage)",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "ogv",
