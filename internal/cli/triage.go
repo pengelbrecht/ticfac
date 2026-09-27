@@ -34,7 +34,10 @@ import (
 //     body and the discovering tick, and reads the verdict one word at a
 //     time;
 //   - the actor defaults from git config (user.name, then user.email), the
-//     identity the checkout already attributes the person's commits with;
+//     identity the checkout already attributes the person's commits with —
+//     and a READ needs no author (decided 2026-09-27): only a decision that
+//     records one resolves an actor, so a listing answers on a checkout that
+//     names nobody, and a settling action on one is still refused naming --by;
 //   - ABSORB and FILE create the tick themselves — the same durable
 //     promotion writes the run's own absorption makes (npq), on the branch
 //     the run owns — so the promotion's mechanism is no longer the
@@ -106,7 +109,9 @@ the epic — the commit must exist in this repository, so the claim is checked,
 not asserted), d34=discard. A prefix that matches more than one draft is refused
 naming them.
 
-The actor defaults from git config (user.name, then user.email). A finding
+The actor defaults from git config (user.name, then user.email), and only a
+decision that records one needs it — the listings record nothing and need no
+actor. A finding
 routed to another repository keeps its routing: discard it here, or promote
 it there with ticfac finding.
 
@@ -219,15 +224,6 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		return exitGeneric
 	}
 
-	// The actor, before anything is read: a decision nobody can attribute is
-	// one nobody can audit, and the refusal belongs ahead of a listing, not
-	// between a finding's text and its verdict.
-	actor, err := triageActor(*by, repoDir)
-	if err != nil {
-		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
-		return exitUsage
-	}
-
 	store, _, err := openFindingsStore(epicID, repoDir, remoteName, branchName, runName)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
@@ -245,9 +241,15 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		}
 	}
 
-	// No decisions: the listing half. --json answers for an agent — one
+	// No decisions: the listing half. A READ needs no author (decided
+	// 2026-09-27): a listing records nothing, so it resolves no actor — a
+	// checkout that names nobody still gets its drafts, on a CI runner with
+	// no git identity as much as this Mac. --json answers for an agent — one
 	// VERSIONED document (tick 8v3), the schema id first so a reader can
-	// refuse an unknown shape; otherwise the person walks the drafts.
+	// refuse an unknown shape; otherwise the person walks the drafts, and
+	// the walk RECORDS verdicts — its actor is resolved before the first
+	// finding is shown, so the refusal still belongs ahead of a finding's
+	// text, not between it and its verdict.
 	if len(decisions) == 0 {
 		if *asJSON {
 			listed := make([]triageFindingJSON, 0, len(waiting))
@@ -270,12 +272,26 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 			fmt.Fprintf(stdout, "run %s has no findings waiting for triage.\n", store.RunID())
 			return exitSuccess
 		}
+		actor, err := triageActor(*by, repoDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
+			return exitUsage
+		}
 		return triageWalk(store, epicID, actor, waiting, repoDir, remoteName, branchName, runName,
 			triageStdin, stdout, stderr)
 	}
 
 	// Decisions: settled in the order they were passed, each against the
-	// draft its prefix addresses. The promoter is opened lazily, on the
+	// draft its prefix addresses. A decision nobody can attribute is one
+	// nobody can audit, so the actor is resolved before the first one is
+	// settled.
+	actor, err := triageActor(*by, repoDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
+		return exitUsage
+	}
+
+	// The promoter is opened lazily, on the
 	// first absorb or file — a verdict (fixed, discard) never builds a
 	// worktree.
 	promo := &lazyPromotions{opts: reconcile.PromotionOptions{

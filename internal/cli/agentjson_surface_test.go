@@ -130,10 +130,11 @@ func TestInitJSONAnswersWhatItWrote(t *testing.T) {
 }
 
 // findings --json: the drafts as one document, the same shape triage lists
-// and decides by.
+// and decides by. Serial, not parallel: newFindingsRepo pins the test's git
+// config environment (GIT_CONFIG_GLOBAL/GIT_SYSTEM at os.DevNull) so the
+// fixture is the same on every host, and a test that does that cannot be
+// parallel.
 func TestFindingsJSONListsTheDrafts(t *testing.T) {
-	t.Parallel()
-
 	repo := newFindingsRepo(t)
 	seedFinding(t, repo, testDraftFinding(triageKey("d34db33f"), ""))
 
