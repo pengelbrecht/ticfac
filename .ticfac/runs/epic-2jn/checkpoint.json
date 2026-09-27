@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 313,
-  "state": "gating",
-  "reason": "running the integrated gate for gtk on 990b92f8bfea",
-  "updated_at": "2026-09-27T16:57:57Z",
+  "sequence": 314,
+  "state": "publishing",
+  "reason": "closing gtk behind the integrated gate on 990b92f8bfea",
+  "updated_at": "2026-09-27T17:00:23Z",
   "ticks": [
     {
       "tick_id": "nwj",
