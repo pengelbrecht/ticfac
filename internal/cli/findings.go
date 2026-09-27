@@ -172,17 +172,57 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, stdout,
 		case runstate.FindingFixed:
 			fmt.Fprintf(stdout, "    fixed as %s by %s at %s\n", finding.FixedAs, finding.TriagedBy, finding.TriagedAt)
 		default:
-			fmt.Fprintf(stdout, "    triage: ticfac finding %s %s --promote-as <tick> --by \"<who>\" | --discard --by \"<who>\" | --fixed-as <commit> --by \"<who>\"\n",
-				epicID, finding.Key)
+			// The pointer teaches the everyday path (tick 8yn): the draft
+			// addressed by the SHORTEST key prefix that names it alone among
+			// the drafts this listing shows — never the old `ticfac finding
+			// <epic> <64-hex> --promote-as ...` shape, which is the friction
+			// the triage surface exists to remove. A finding routed to another
+			// repository keeps the old command for its promotion: the tick it
+			// becomes lives in the repository it targets, and the triage
+			// surface refuses to create it here — its own refusal names the full
+			// command at the moment of need.
+			prefix := triageKeyPrefix(findings, finding.Key)
+			if finding.Target == "" {
+				fmt.Fprintf(stdout, "    triage: ticfac triage %s %s=absorb|file|fixed:<commit>|discard\n",
+					epicID, prefix)
+			} else {
+				fmt.Fprintf(stdout, "    triage: ticfac triage %s %s=discard — or promote it into %s with ticfac finding\n",
+					epicID, prefix, finding.Target)
+			}
 		}
 	}
 	if untriaged == 0 {
 		fmt.Fprintf(stdout, "%d finding(s), none waiting for a person; the triage gate is down.\n", len(findings))
 	} else {
-		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; the epic's close-out does not hand over while a finding is untriaged.\n",
-			len(findings), untriaged)
+		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; ticfac triage %s settles each by short key "+
+			"prefix, and the epic's close-out does not hand over while a finding is untriaged.\n",
+			len(findings), untriaged, epicID)
 	}
 	return 0
+}
+
+// triageKeyPrefix is the prefix the listing hands the person: the shortest
+// that names this draft alone among the drafts the listing shows — the
+// triage surface's own rule, short and unambiguous — floored at a few
+// characters so it reads as a prefix, with the whole key when nothing
+// shorter is unambiguous. A person who copies the prefix into `ticfac triage`
+// must land on the draft they read, not on an ambiguity the walk refuses.
+func triageKeyPrefix(findings []runstate.Finding, key string) string {
+	const floor = 3
+	for n := floor; n < len(key); n++ {
+		prefix := key[:n]
+		ambiguous := false
+		for _, f := range findings {
+			if f.Key != key && strings.HasPrefix(f.Key, prefix) {
+				ambiguous = true
+				break
+			}
+		}
+		if !ambiguous {
+			return prefix
+		}
+	}
+	return key
 }
 
 func findingTarget(target string) string {
