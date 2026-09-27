@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "attempt": 21,
+  "tick_id": "i1r",
+  "dispatched_at": "2026-09-27T09:15:07Z",
+  "job_handle": {
+    "attempt": 21,
+    "base_sha": "7a1da9efc3100ad88422c298ffd94728d34e7d83",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-2jn/tick-i1r/attempt-21",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:7655b9a47c1bc911e6f37e1cfbd5debd6d52872c4a0f1601ba5aa2f91191631e",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "i1r",
+      "attempt": 13,
+      "write_ref": "refs/heads/ticfac/run-epic-2jn/tick-i1r/attempt-13",
+      "sha": "7a1da9efc3100ad88422c298ffd94728d34e7d83",
+      "released_by": "person-be9a47e6d5ce7532fd30bc6f7f4303a0eb657a652d5b12b18c3c5d7d1c68a4d5"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "i1r",
+    "tier": "strong",
+    "touch": null,
+    "try": 2,
+    "write_ref": "refs/heads/ticfac/run-epic-2jn/tick-i1r/attempt-21"
+  },
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "i1r",
+    "attempt": 21,
+    "source_ref": "refs/heads/ticfac/run-epic-2jn/tick-i1r/attempt-13",
+    "source_sha": "7a1da9efc3100ad88422c298ffd94728d34e7d83",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
