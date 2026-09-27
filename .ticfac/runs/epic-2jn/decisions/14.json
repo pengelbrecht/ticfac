@@ -1,0 +1,59 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt_head": "3ee69edf425c32224ce298d6d467fc478393382a",
+    "conflict_files": [
+      "internal/cli/overview_test.go",
+      "internal/cli/watch.go"
+    ],
+    "conflicting_ticks": [
+      "gtk",
+      "9ss",
+      "bot"
+    ],
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-gtk/resolve-40",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "resolve_branch": "ticfac/run-epic-2jn/tick-gtk/resolve-40",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "gtk"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in internal/cli/overview_test.go; content in internal/cli/watch.go",
+    "conflict_files": [
+      "internal/cli/overview_test.go",
+      "internal/cli/watch.go"
+    ],
+    "job_id": "run-epic-2jn/tick-gtk/resolve-40",
+    "merge": "990b92f8bfea29e52294e3bcbbe1c48a0eaf2284",
+    "resolve_head": "6446f60fa4b6764d1b2218273184670b4b97615d",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T16:57:55Z",
+  "answered_at": "2026-09-27T16:57:55Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "gtk",
+    "attempt": 40,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "a9f085cd124a5d460802e0ca26603c29b00f0c09",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
