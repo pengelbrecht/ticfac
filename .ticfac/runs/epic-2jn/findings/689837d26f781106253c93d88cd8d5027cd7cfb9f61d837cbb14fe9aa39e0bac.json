@@ -12,8 +12,11 @@
   "attempt": 14,
   "done_item": "none",
   "demonstrating_check": "make test",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T08:36:35Z",
+  "triaged_at": "2026-09-27T08:36:48Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 35l",
+  "promoted_as": "35l",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "fc2",
