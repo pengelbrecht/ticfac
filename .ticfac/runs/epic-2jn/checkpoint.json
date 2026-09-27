@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 363,
-  "state": "integrating",
-  "reason": "integrating 4nq attempt 48 into epic/2jn",
-  "updated_at": "2026-09-27T18:03:15Z",
+  "sequence": 364,
+  "state": "gating",
+  "reason": "running the integrated gate for 4nq on 96a305929292",
+  "updated_at": "2026-09-27T18:21:10Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -218,7 +218,7 @@
     },
     {
       "tick_id": "4nq",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 48
     },
     {
