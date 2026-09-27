@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 381,
+  "sequence": 382,
   "state": "failed",
-  "reason": "vqc try 2 (run dispatch #51) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and a resolve-conflict job already ran for this tick — its recorded outcome is \"failed\" and its work is on ticfac/run-epic-2jn/tick-vqc/resolve-50. A second conflict on the same tick is the stop, as it always was: read the recorded resolve, take its merge or settle the tick, and run the epic again",
-  "updated_at": "2026-09-27T19:51:36Z",
+  "reason": "vqc did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: vqc try 2 (run dispatch #51) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and a resolve-conflict job already ran for this tick — its recorded outcome is \"failed\" and its work is on ticfac/run-epic-2jn/tick-vqc/resolve-50. A second conflict on the same tick is the stop, as it always was: read the recorded resolve, take its merge or settle the tick, and run the epic again",
+  "updated_at": "2026-09-27T19:51:38Z",
   "ticks": [
     {
       "tick_id": "nwj",
