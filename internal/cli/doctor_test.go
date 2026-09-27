@@ -23,10 +23,13 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/forge"
 )
 
 // doctorSeams is every probe doctor asks, saved for restore.
@@ -228,4 +231,59 @@ func TestDoctorProbesTheRealHerdrSocket(t *testing.T) {
 	if !strings.Contains(stdout, "degrade to a plain harness") {
 		t.Errorf("the missing herdr does not say what a run does without it:\n%s", stdout)
 	}
+}
+
+// TestDoctorGitHubNamesTheRungItFound (tick vo4): the github check resolves
+// its credential through the SAME ladder the run's own surface resolves
+// from, and the detail names the rung that answered. Both halves matter: a
+// doctor that accepted gh while the run read the environment only was an ok
+// the run refused at startup, and an ok without its source is the
+// half-answer that hid which credential a run would actually speak with.
+func TestDoctorGitHubNamesTheRungItFound(t *testing.T) {
+	saved := doctorGitHub
+	t.Cleanup(func() { doctorGitHub = saved })
+
+	for _, tc := range []struct {
+		name   string
+		ladder func() (string, forge.TokenSource, error)
+		want   string
+	}{
+		{name: "env", ladder: func() (string, forge.TokenSource, error) {
+			return "a-token", forge.TokenSourceEnv, nil
+		}, want: forge.TokenEnv + " is set"},
+		{name: "gh", ladder: func() (string, forge.TokenSource, error) {
+			return "a-token", forge.TokenSourceGH, nil
+		}, want: "gh auth token answers"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			savedLadder := resolveForgeToken
+			resolveForgeToken = tc.ladder
+			t.Cleanup(func() { resolveForgeToken = savedLadder })
+
+			detail, err := doctorGitHub()
+			if err != nil {
+				t.Fatalf("the probe failed where its rung answered: %v", err)
+			}
+			if detail != tc.want {
+				t.Errorf("the probe's detail is %q, want it to name the rung: %q", detail, tc.want)
+			}
+		})
+	}
+
+	// A ladder that answers with nothing is a missing line, not an ok one.
+	t.Run("neither rung", func(t *testing.T) {
+		savedLadder := resolveForgeToken
+		resolveForgeToken = func() (string, forge.TokenSource, error) {
+			return "", "", fmt.Errorf("no %s is set, and gh auth token did not answer", forge.TokenEnv)
+		}
+		t.Cleanup(func() { resolveForgeToken = savedLadder })
+
+		detail, err := doctorGitHub()
+		if err == nil {
+			t.Fatalf("the probe answered ok with no credential: %q", detail)
+		}
+		if !strings.Contains(err.Error(), forge.TokenEnv) {
+			t.Errorf("the missing credential does not name the rung it read: %v", err)
+		}
+	})
 }

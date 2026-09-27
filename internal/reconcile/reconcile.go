@@ -1193,9 +1193,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if rule.Declared && opts.PullRequests == nil {
 		return nil, fmt.Errorf("reconcile: %s declares the PR + CI close-out rule — %q — and this build has no "+
-			"code-hosting surface configured to open or read the epic PR: set %s (the GitHub surface reads it), or "+
-			"run against a host that provides one",
-			opts.RepoConfig, rule.Stated, forge.TokenEnv)
+			"code-hosting surface configured to open or read the epic PR: set %s, or `gh auth login` on this host "+
+			"(the GitHub surface resolves %s first, then gh's own auth), or run against a host that provides one",
+			opts.RepoConfig, rule.Stated, forge.TokenEnv, forge.TokenEnv)
 	}
 
 	// The substrate this run executes on (tick 84z), resolved BEFORE any

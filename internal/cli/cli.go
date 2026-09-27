@@ -200,9 +200,10 @@ A target repository may declare, in .tick/config.md's Rules section, that an
 epic integrates through a PR + CI gate: the run opens the epic PR itself,
 holds the close-out until CI is green on it, and refuses typed — naming the
 failing job — when CI is red. That rule needs a code-hosting surface: the
-GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
-and a repo declaring the rule is refused at startup until the token is set
-(tick 0iz).`,
+GitHub one is built from the remote and a credential resolved from one
+ladder — GITHUB_TOKEN in the environment, or gh's own auth (tick vo4) —
+and a repo declaring the rule is refused at startup until one of them
+answers (tick 0iz).`,
 	}
 	fs := flag.NewFlagSet("run-epic", flag.ContinueOnError)
 	fl := defineRunEpicFlags(fs)

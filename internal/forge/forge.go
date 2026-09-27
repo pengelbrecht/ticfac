@@ -18,9 +18,14 @@
 // to.
 //
 // The GitHub implementation is stdlib-only: net/http, encoding/json, and a
-// bearer token the operator's environment holds. Third-party tooling (a `gh`
-// CLI, an App installation) is an optional rung a host may build on, never a
-// dependency of this one.
+// bearer token resolved from ONE ladder (ResolveTokenFrom): GITHUB_TOKEN
+// first, then gh's own `auth token`. The gh rung ships INSIDE the ladder
+// rather than being left to each caller, because two surfaces that each
+// answered for a credential were the gap this tick closes — doctor accepted
+// gh while the run's surface read the environment only. Third-party tooling
+// (a `gh` CLI, an App installation) remains an optional rung, never a
+// dependency of this one: the environment answers first, and a host with no
+// gh at all loses nothing it ever had.
 package forge
 
 import (
@@ -31,6 +36,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,19 +46,67 @@ import (
 // DefaultAPI is GitHub's REST API, the forge this implementation speaks.
 const DefaultAPI = "https://api.github.com"
 
-// TokenEnv is the one environment variable the GitHub surface reads its
-// credential from. It is the name the factory's credential ladder already
-// uses (internal/factory's SecretGitHubToken), so an operator who has
-// provisioned a token for ticfac provisions ONE name, not one per subsystem.
+// TokenEnv is the first rung of the credential ladder: the environment
+// variable the GitHub surface reads its credential from. It is the name
+// the factory's credential ladder already uses (internal/factory's
+// SecretGitHubToken), so an operator who has provisioned a token for ticfac
+// provisions ONE name, not one per subsystem.
 const TokenEnv = "GITHUB_TOKEN"
 
-// ResolveToken is the optional rung this package ships: the token the
-// environment holds, empty when it holds none. An empty token is a
-// supported state — the reconciler refuses a run whose target repository
-// declares the close-out rule with no surface behind it, and that refusal
-// is where an operator learns to provision one, not a startup crash.
-func ResolveToken() string {
-	return strings.TrimSpace(os.Getenv(TokenEnv))
+// TokenSource names which rung of the credential ladder answered — the
+// detail doctor reports and the caller's record carries, because a
+// credential answered for is only half the answer until it says where it
+// came from (tick vo4).
+type TokenSource string
+
+const (
+	// TokenSourceEnv is the GITHUB_TOKEN rung, the one an operator
+	// provisions deliberately, and the one that answers first.
+	TokenSourceEnv TokenSource = TokenEnv
+	// TokenSourceGH is gh's own `auth token` — the credential a person who
+	// logged in through gh already holds, and the rung that made doctor's ok
+	// optimistic while the run's surface read the environment only (tick
+	// vo4).
+	TokenSourceGH TokenSource = "gh auth token"
+)
+
+// ghAuthToken is the gh rung of the ladder, a seam for the same reason
+// doctor's probes are: the answer is the environment's, and a test that
+// consulted the host's real gh would report it present once and absent
+// another time — not a test. The production value runs `gh auth token`;
+// the LADDER, not this seam, decides what its answer means.
+var ghAuthToken = func() ([]byte, error) {
+	return exec.Command("gh", "auth", "token").Output()
+}
+
+// ResolveTokenFrom answers the credential the GitHub surface speaks with:
+// the token, and which rung of the ladder it came from — GITHUB_TOKEN
+// first, then gh's own auth (tick vo4). ONE ladder, because two surfaces
+// that each answered for a credential were the gap: doctor accepted `gh
+// auth token` while run-epic's surface read the environment only, so a
+// machine with gh authed and no GITHUB_TOKEN passed doctor and was refused
+// by the run it had been checked for. Both ask this ladder now, so one
+// answer is one answer.
+//
+// The gh rung is still the optional rung this package always shipped:
+// GITHUB_TOKEN answers first, gh is consulted only when the environment
+// holds nothing, and a gh that does not answer is a refusal naming BOTH
+// rungs — the two fixes there are. An empty token remains a supported state
+// — the reconciler refuses a run whose target repository declares the
+// close-out rule with no surface behind it, and that refusal is where an
+// operator learns to provision one, not a startup crash.
+func ResolveTokenFrom() (token string, source TokenSource, err error) {
+	if token := strings.TrimSpace(os.Getenv(TokenEnv)); token != "" {
+		return token, TokenSourceEnv, nil
+	}
+	out, err := ghAuthToken()
+	if err != nil {
+		return "", "", fmt.Errorf("no %s is set, and gh auth token did not answer: %v", TokenEnv, err)
+	}
+	if token := strings.TrimSpace(string(out)); token != "" {
+		return token, TokenSourceGH, nil
+	}
+	return "", "", fmt.Errorf("no %s is set, and gh auth token printed no token", TokenEnv)
 }
 
 // PullRequest is the epic integration PR: the head ref this run integrates
@@ -206,7 +260,7 @@ func (g GitHub) api() string {
 // refusal a typed close-out refusal carries forward names its cause.
 func (g GitHub) call(ctx context.Context, method, path string, body any, out any) error {
 	if g.Token == "" {
-		return fmt.Errorf("the GitHub surface has no token: set %s", TokenEnv)
+		return fmt.Errorf("the GitHub surface has no token: set %s, or gh auth login", TokenEnv)
 	}
 	if g.Repo == "" {
 		return fmt.Errorf("the GitHub surface addresses no repository: owner/name is empty")
