@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "A6",
   "demonstrating_check": "curl -fsSL https://raw.githubusercontent.com/pengelbrecht/ticfac/main/install.sh | sh",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:09:55Z",
+  "triaged_at": "2026-09-27T14:10:06Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 5o5",
+  "promoted_as": "5o5",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "xbp",
