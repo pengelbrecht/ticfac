@@ -24,11 +24,21 @@ import (
 
 // newFindingsRepo seeds a repository whose integration branch already exists,
 // the way a run's does, and returns the checkout to point --repo at.
+//
+// The fixture is isolated from the HOST's git config — GIT_CONFIG_GLOBAL and
+// GIT_CONFIG_SYSTEM point at os.DevNull for the whole test — and names
+// somebody in the fixture checkout itself, so a test's git reads are about
+// THIS checkout, whatever machine runs it: a CI runner with no git identity
+// sees the same fixture this Mac does, and a test that wants a checkout
+// naming nobody unsets the name itself (the walk's own
+// TestTheTriageActorDefaultsFromGitConfig does exactly that).
 func newFindingsRepo(t *testing.T) (repo string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not on the path")
 	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	root := t.TempDir()
 	bare := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")
@@ -53,6 +63,8 @@ func newFindingsRepo(t *testing.T) (repo string) {
 	run(seed, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--quiet", "-m", "seed")
 	run(seed, "push", "--quiet", bare, "epic/qeu")
 	run(root, "clone", "--quiet", bare, repo)
+	run(repo, "config", "user.name", "t")
+	run(repo, "config", "user.email", "t@example.com")
 	return repo
 }
 

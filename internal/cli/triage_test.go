@@ -357,6 +357,54 @@ func TestTheTriageActorDefaultsFromGitConfig(t *testing.T) {
 	}
 }
 
+// A READ needs no author (decided 2026-09-27): the --json listing records
+// nothing, so a checkout that names nobody still gets its drafts — the CI
+// runner has no git identity, and the listing is the half an agent's loop
+// starts from — while a decision that records a verdict on the same
+// checkout is still refused naming --by, and settles nothing.
+func TestTheTriageListingNeedsNoActor(t *testing.T) {
+	repo := newFindingsRepo(t)
+	gitIn(t, repo, "config", "--unset", "user.name")
+	gitIn(t, repo, "config", "--unset", "user.email")
+	key := triageKey("d34db33f")
+	seedFinding(t, repo, testDraftFinding(key, ""))
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"triage", "--json", "--repo", repo, "qeu"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("the identity-free listing exits %d: %s", code, stderr.String())
+	}
+	var doc struct {
+		Schema   string           `json:"schema"`
+		Findings []map[string]any `json:"findings"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("the identity-free listing does not round-trip: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "ticfac.triage.v1" {
+		t.Errorf("the listing's schema is %q, want ticfac.triage.v1", doc.Schema)
+	}
+	if len(doc.Findings) != 1 || doc.Findings[0]["key"] != key {
+		t.Errorf("the identity-free listing carries %v, want the one draft %s\n%s",
+			doc.Findings, key, stdout.String())
+	}
+
+	// The settling half, on the same checkout: still a refusal naming --by,
+	// and one that settles nothing.
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"triage", "--repo", repo, "qeu", "d34=discard"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("identity-free decision exits %d, want %d: %s", code, exitUsage, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--by") {
+		t.Errorf("stderr %q does not name --by", stderr.String())
+	}
+	if finding, ok, err := readBack(t, repo).Finding(key); err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	} else if finding.Status != runstate.FindingProposed {
+		t.Errorf("the refused decision settled the draft anyway: status %q", finding.Status)
+	}
+}
+
 // scriptTheWalk points the walk's input and its terminal check at a scripted
 // person: the walk is for a person at a terminal, and the tests that script
 // one flip both seams — the stream the decisions are read from, and the
