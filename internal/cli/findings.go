@@ -88,10 +88,11 @@ surface will not make for you.`,
 	return cmd
 }
 
-// openFindingsStore opens the run's draft store the way the reconciler opened
-// it: the same repository, remote, integration branch and run id — the drafts
-// live on the branch the run owns.
-func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.Store, error) {
+// resolveFindingsRun fills the run-addressing defaults the findings commands
+// and the triage surface share: the same derivation `run-epic` performs, so
+// every surface that addresses a run's drafts names the same branch for the
+// same epic.
+func resolveFindingsRun(epicID, repo, remote, branch, runID string) (string, string, string, string, error) {
 	if branch == "" {
 		branch = "epic/" + epicID
 	}
@@ -102,8 +103,19 @@ func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.St
 		var err error
 		repo, err = os.Getwd()
 		if err != nil {
-			return nil, err
+			return "", "", "", "", err
 		}
+	}
+	return repo, remote, branch, runID, nil
+}
+
+// openFindingsStore opens the run's draft store the way the reconciler opened
+// it: the same repository, remote, integration branch and run id — the drafts
+// live on the branch the run owns.
+func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.Store, error) {
+	repo, remote, branch, runID, err := resolveFindingsRun(epicID, repo, remote, branch, runID)
+	if err != nil {
+		return nil, err
 	}
 	store, err := runstate.Open(runstate.Options{Repo: repo, Remote: remote, Branch: branch, RunID: runID})
 	if err != nil {
