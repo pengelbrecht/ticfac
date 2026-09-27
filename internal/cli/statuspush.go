@@ -196,7 +196,7 @@ var runlifeProbeOf = runlife.Probe
 // `ticfac status --json` gathers, plus the label map. Separated from the push
 // so a test pins the envelope's shape without a socket.
 func statusSnapshotFor(ctx context.Context, repo, runID string) statusSnapshotEnvelope {
-	model := localStatusModel(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()))
+	model := localStatusModel(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI})
 	return statusSnapshotEnvelope{
 		SchemaVersion: statusPushEnvelopeVersion,
 		RunID:         model.RunID,
