@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 153,
-  "state": "running",
-  "reason": "i1r is closed",
-  "updated_at": "2026-09-27T09:57:59Z",
+  "sequence": 154,
+  "state": "collecting",
+  "reason": "collecting 9sz attempt 16",
+  "updated_at": "2026-09-27T09:58:40Z",
   "ticks": [
     {
       "tick_id": "nwj",
