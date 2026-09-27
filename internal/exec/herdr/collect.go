@@ -105,7 +105,9 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	// record, which are durable evidence. The wall-clock stop marker (gwc)
 	// is this executor's own durable record that IT settled the attempt,
 	// never herdr's silence.)
-	if !hasReport && !cancelled && !agentGone && !wallExceeded {
+	// The spent nudges are a settlement of this executor's own too
+	// (nudge.go): the agent ended its turn again with no report.
+	if !hasReport && !cancelled && !agentGone && !wallExceeded && !st.idleSettled() {
 		return nil, refuse(subprocess.RefusedUnknown,
 			"attempt %d of %s has no report at %s and no settlement this executor recorded: nobody can say "+
 				"whether it is still running, which is not the same as nothing running — it is held for a person, "+

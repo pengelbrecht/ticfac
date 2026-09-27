@@ -100,6 +100,32 @@ type spawnExtra struct {
 	render func(env SpawnContext) ([]string, error)
 }
 
+// ClaudeHeadlessSettings is the settings JSON every claude worker is launched
+// with (`--settings`): Claude Code's documented switch that takes background
+// tasks away — CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 "disable[s] all
+// background task functionality, including the run_in_background parameter
+// on Bash and subagent tools, auto-backgrounding, and the Ctrl+B shortcut"
+// (code.claude.com/docs/en/env-vars).
+//
+// epic-2jn vqc (2026-09-27): a claude worker started the gate as a background
+// task and ended its turn to wait for the notification. Nobody delivers that
+// notification to a turn that has ended, so the worker sat finished with no
+// report. Settings `env` rather than a process environment because herdr's
+// agent.start takes an argv and no environment. Verified live on claude
+// 2.1.283 through `herdr agent start … -- --settings '<this>'`: herdr quotes
+// the JSON into the pane's command line intact, and the launched claude's
+// Bash tool no longer offers run_in_background.
+const ClaudeHeadlessSettings = `{"env":{"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS":"1"}}`
+
+// claudeNoBackgroundTasks is the fragment that carries it. It depends on
+// nothing in the spawn context — it is an extra rather than part of the
+// full-auto template because it is not about approvals: a worker launched
+// with approvals on must not background its work either.
+var claudeNoBackgroundTasks = spawnExtra{
+	name:   "headless settings (`--settings` without background tasks)",
+	render: func(SpawnContext) ([]string, error) { return []string{"--settings", ClaudeHeadlessSettings}, nil },
+}
+
 // gitMetadataAddDir grants a codex worker write access to the repository's git
 // common directory.
 //
@@ -161,6 +187,7 @@ var kindSpecs = map[string]*kindSpec{
 		reservedArgs: []string{
 			"--model", "-m", "--effort",
 		},
+		extras: []spawnExtra{claudeNoBackgroundTasks},
 	},
 	"codex": {
 		name: "codex",

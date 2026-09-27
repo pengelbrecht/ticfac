@@ -37,7 +37,7 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	// epic-2jn vqc: a resolve job started the gate in the background and
 	// ended its turn to wait for it, which in print mode ends the process.
 	// The model cannot see that it runs in print mode, so it is told.
-	fmt.Fprintf(&b, "%s\n\n", headlessLine)
+	fmt.Fprintf(&b, "%s\n\n", HeadlessLine)
 
 	fmt.Fprintf(&b, "## The job\n\n")
 	fmt.Fprintf(&b, "- role: %s\n", spec.Role)

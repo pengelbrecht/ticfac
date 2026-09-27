@@ -86,6 +86,38 @@ if [ "$mode" = "ignore" ]; then
 	done
 fi
 
+if [ "$mode" = "stop_early" ] || [ "$mode" = "never_report" ]; then
+	# epic-2jn vqc (2026-09-27): the worker commits, starts the gate "in the
+	# background" and ends its turn to wait for the notification — idle, no
+	# report. stop_early finishes when re-prompted (the nudge: a new prompt
+	# saying the report is missing); never_report ends every turn the same
+	# way. Each nudge it received is counted in <prompt-file>.nudges.
+	wait_for_prompt
+	report_working
+	printf 'partial work\n' > "$worktree/partial.txt"
+	git -C "$worktree" add partial.txt
+	git -C "$worktree" commit --quiet -m "partial work, then the turn ended"
+	out=$(report_path)
+	report_done
+	nudges=0
+	while :; do
+		if grep -q "ended your turn without writing your report" "$prompt_file" 2>/dev/null; then
+			nudges=$((nudges + 1))
+			printf '%s\n' "$nudges" > "$prompt_file.nudges"
+			rm -f "$prompt_file"
+			report_working
+			if [ "$mode" = "stop_early" ]; then
+				mkdir -p "$(dirname "$out")"
+				printf '## Report\n\nFinished after nudge %s.\n\nSTATUS: DONE\n' "$nudges" > "$out"
+				report_done
+				exit 0
+			fi
+			report_done
+		fi
+		sleep 0.05
+	done
+fi
+
 wait_for_prompt
 report_working
 

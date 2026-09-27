@@ -189,6 +189,14 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 	//
 	// herdr answers liveness. This is the ONE question it is asked in a
 	// state decision, and its failures are the observer's, not the job's.
+	// The nudges were spent and the agent ended its turn again with no
+	// report (nudge.go): this executor's own durable settlement, read before
+	// herdr is asked anything, because the agent is still there — idle in its
+	// pane — and liveness is not the question any more.
+	if st.idleSettled() {
+		return subprocess.StateFailed, idleSettledDetail(record)
+	}
+
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
 	case err == nil && !record.LaunchConfirmed:
@@ -246,6 +254,12 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 						"the stop is re-delivered at every poll",
 					record.WallSeconds, record.AgentName)
 			}
+		}
+		// Inside the bound, an agent whose turn has ended with no report is
+		// not working on anything: it is re-prompted, and after the last
+		// nudge settled (nudge.go, epic-2jn vqc).
+		if state, detail, handled := e.nudgeIdle(st, record, agent); handled {
+			return state, detail
 		}
 		return subprocess.StateRunning, fmt.Sprintf(
 			"the agent %s is live in pane %s (herdr reports %s)",
