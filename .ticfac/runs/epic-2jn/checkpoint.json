@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 268,
-  "state": "dispatching",
-  "reason": "dispatching bot as attempt 39",
-  "updated_at": "2026-09-27T14:43:21Z",
+  "sequence": 269,
+  "state": "running",
+  "reason": "bot is running as attempt 39",
+  "updated_at": "2026-09-27T14:43:31Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -178,7 +178,8 @@
     },
     {
       "tick_id": "bot",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 39
     },
     {
       "tick_id": "gtk",
