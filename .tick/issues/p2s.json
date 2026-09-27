@@ -1,0 +1,13 @@
+{
+  "id": "p2s",
+  "title": "A run accepts an epic whose [A\u003cn\u003e] items bind no command, then absorbs on predictions it can never score",
+  "description": "2jn made 20 item-naming absorption predictions and scored 0: scorePredictions only scores an item that has become runnable, and none of A1-A6 binds a command, so the run produced no calibration evidence for the absorb threshold while tripling the epic's size on the reporter's claim alone. The run (or doctor) should say at start that the epic's predictions will be unscoreable, and the close-out's data should count them as unchecked explicitly rather than by the predictions/ directory's absence.\n\nticfac run epic-2jn filed this backlog tick from the finding 487ddd7e6b57d0df0147aa9bcdb6760d799a5b63d50da7f4cf1cc9ca3c03b5ca (reported by run-epic-2jn/tick-rrl/attempt-54): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/487ddd7e6b57d0df0147aa9bcdb6760d799a5b63d50da7f4cf1cc9ca3c03b5ca.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-rrl/attempt-54",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T20:47:44Z",
+  "updated_at": "2026-09-27T20:47:44Z"
+}
