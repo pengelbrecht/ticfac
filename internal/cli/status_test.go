@@ -342,3 +342,110 @@ func TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
 		t.Errorf("stderr does not name the resolution from epic id to the factory's run:\n%s", stderr.String())
 	}
 }
+
+// The resumed-run case, on the surface that missed it (tick 4nq): the feed
+// is append-only per RUN ID, so a resumed local run appends to a file a
+// previous, failed incarnation already ended with a terminal line. A frame
+// that scans the whole standing feed for ANY terminal line marks the run
+// `ended` and `status --follow` stops following at the first frame, exit 0,
+// while the run is alive and dispatching — the same defect `ticfac watch`
+// carried until tick usx gave it cursor protection. A LIVE run claims the
+// follow: the previous incarnation's ending is history, and only a terminal
+// line the CURRENT incarnation writes ends it.
+func TestStatusFollowOnAResumedRunDoesNotEndOnThePreviousIncarnationsTerminalLine(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 1
+	// The previous incarnation: it dispatched tick a1 and failed on it —
+	// the exact line the old frame scanned as if it were happening now.
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-time.Hour), "r-1", "a1", &attempt, "dispatched", "attempt 1 started as run-x/tick-a1/attempt-1"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-30*time.Minute), "r-1", "", nil, reconcile.StageRunFinished, "failed: a1 did not pass"))
+
+	// The resumed run is in flight: this process claims it, the way the
+	// real second incarnation's own process does at startup.
+	life, err := runlife.Claim(repo, "r-1")
+	if err != nil {
+		t.Fatalf("claim the resumed run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr bytes.Buffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"status", "--repo", repo, "--follow", "--interval", "10ms", "r-1"}, &stdout, &stderr)
+	}()
+
+	// The follow joined the CURRENT incarnation: the resumed run writes a
+	// marker and the table renders it — a follow that ended on the previous
+	// incarnation's run_finished at the first frame can never render a line
+	// the current incarnation writes. Waits on that condition, never on a
+	// guessed interval.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+			time.Now(), "r-1", "a1", &attempt, "dispatched", "resumed incarnation dispatch marker"))
+		if strings.Contains(stdout.String(), "resumed incarnation dispatch marker") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(stdout.String(), "resumed incarnation dispatch marker") {
+		select {
+		case got := <-code:
+			t.Fatalf("the follow ended %d at the first frame on the previous incarnation's terminal line, while the run is alive and dispatching; stderr %q", got, stderr.String())
+		default:
+			t.Fatalf("the follow never rendered the current incarnation's line: %q", stdout.String())
+		}
+	}
+	select {
+	case got := <-code:
+		t.Fatalf("the follow returned %d while the run is still alive and dispatching; stderr %q", got, stderr.String())
+	default:
+	}
+
+	// The resumed run ends its own way, and the follow ends on THAT line.
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now(), "r-1", "", nil, reconcile.StageRunFinished, "completed: every tick closed behind the gate"))
+	select {
+	case got := <-code:
+		if got != 0 {
+			t.Fatalf("exit code %d, want 0 for a resumed run that ended clean while followed; stderr %q", got, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the follow never ended on the current incarnation's own terminal line")
+	}
+}
+
+// The other side of the cursor (tick 4nq): a run no live process claims is
+// answered by its standing feed — that IS the run's own last word, and the
+// follow ends on it at the first frame rather than following an open-ended
+// silence. A run about to be resumed has not claimed yet; its previous
+// ending was the truth until the resume.
+func TestStatusFollowOnAnUnclaimedRunEndsOnItsOwnTerminalLine(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 1
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-time.Hour), "r-1", "a1", &attempt, "dispatched", "attempt 1 started as run-x/tick-a1/attempt-1"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-30*time.Minute), "r-1", "", nil, reconcile.StageRunFinished, "failed: a1 did not pass"))
+
+	var stdout, stderr bytes.Buffer
+	var code int
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		code = Run([]string{"status", "--repo", repo, "--follow", "--interval", "10ms", "r-1"}, &stdout, &stderr)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the follow never ended on an unclaimed run's own terminal line")
+	}
+	if code != 0 {
+		t.Fatalf("exit code %d, want 0 — ended is the surface's answer, never a verdict about the work; stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "failed: a1 did not pass") {
+		t.Errorf("the frame does not carry the run's own last word: %q", stdout.String())
+	}
+}
