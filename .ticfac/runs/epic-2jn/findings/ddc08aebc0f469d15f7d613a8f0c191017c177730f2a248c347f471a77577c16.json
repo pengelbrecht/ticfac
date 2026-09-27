@@ -12,8 +12,11 @@
   "attempt": 24,
   "done_item": "A4",
   "demonstrating_check": "none",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T12:08:31Z",
+  "triaged_at": "2026-09-27T12:08:44Z",
+  "triaged_by": "ticfac run epic-2jn absorbing gwi",
+  "promoted_as": "gwi",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "8v3",
