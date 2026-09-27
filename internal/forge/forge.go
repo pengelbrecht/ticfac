@@ -394,53 +394,67 @@ func (g GitHub) UpdateBody(ctx context.Context, pr PullRequest, body string) err
 		map[string]string{"body": body}, nil)
 }
 
-// CI answers what CI says on the PR's head, from the check runs the forge
-// recorded for its SHA. The classification is closed and conservative:
-// a check that has not concluded leaves the whole report `pending` (a green
-// report beside a running one is not a verdict), and a concluded check fails
-// the report when its conclusion names a failure — `failure` and `timed_out`
-// — while `neutral` and `skipped` checks neither pass nor fail it, the way
-// GitHub itself treats them.
-func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
+// checkRun is one check run as the GitHub API answers it.
+type checkRun struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	StartedAt  string `json:"started_at"`
+	DetailsURL string `json:"details_url"`
+}
+
+// CheckRun is one check's latest run on a head — the per-check facts a
+// status surface carries beside the classification [GitHub.CI] derives
+// from the same reduction: the check's name, whether it has finished, and
+// what it concluded.
+type CheckRun struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	StartedAt  string `json:"started_at"`
+}
+
+// fetchCheckRuns asks the forge for every check run it recorded for the
+// PR's head sha.
+func (g GitHub) fetchCheckRuns(ctx context.Context, pr PullRequest) ([]checkRun, error) {
 	if pr.HeadSHA == "" {
-		return CIReport{}, fmt.Errorf("the PR #%d names no head sha to read CI from", pr.Number)
-	}
-	type checkRun struct {
-		Name       string `json:"name"`
-		Status     string `json:"status"`
-		Conclusion string `json:"conclusion"`
-		StartedAt  string `json:"started_at"`
-		DetailsURL string `json:"details_url"`
+		return nil, fmt.Errorf("the PR #%d names no head sha to read CI from", pr.Number)
 	}
 	var answer struct {
 		TotalCount int        `json:"total_count"`
 		CheckRuns  []checkRun `json:"check_runs"`
 	}
 	if err := g.call(ctx, http.MethodGet, "/repos/"+g.Repo+"/commits/"+pr.HeadSHA+"/check-runs", nil, &answer); err != nil {
-		return CIReport{}, err
+		return nil, err
 	}
-	if len(answer.CheckRuns) == 0 {
-		return CIReport{State: CINone}, nil
-	}
-	// The LATEST run of each check decides, not every run ever made. One head
-	// carries several runs of the same job: CI triggers on both push and
-	// pull_request for an epic branch, and a re-run adds another. Counting
-	// all of them let one old failure veto a green re-run forever - an epic
-	// close-out held red on 'go failed' while the same job had passed on the
-	// same head (wne, 2026-09-23). started_at is RFC 3339, so it orders as a
-	// string; a run not yet started sorts first and so only wins alone.
-	latest := map[string]checkRun{}
-	var order []string
-	for _, run := range answer.CheckRuns {
+	return answer.CheckRuns, nil
+}
+
+// reduceCheckRuns keeps the LATEST run of each check, in first-seen order —
+// the reduction both [GitHub.CI] and [GitHub.Checks] read, so the
+// classification and the per-check facts it classifies can never disagree
+// about which run won.
+//
+// The LATEST run of each check decides, not every run ever made. One head
+// carries several runs of the same job: CI triggers on both push and
+// pull_request for an epic branch, and a re-run adds another. Counting
+// all of them let one old failure veto a green re-run forever - an epic
+// close-out held red on 'go failed' while the same job had passed on the
+// same head (wne, 2026-09-23). started_at is RFC 3339, so it orders as a
+// string; a run not yet started sorts first and so only wins alone.
+//
+// A SKIPPED run never supersedes one that actually ran. CI skips its
+// pull_request run for an epic branch (the push run on the same head
+// already carries the checks), and a later-started skip would otherwise
+// shadow a red push run and read as not-failing: a false green. A run that
+// executed replaces a skip whatever the order.
+func reduceCheckRuns(runs []checkRun) (latest map[string]checkRun, order []string) {
+	latest = map[string]checkRun{}
+	for _, run := range runs {
 		prev, seen := latest[run.Name]
 		if !seen {
 			order = append(order, run.Name)
 		}
-		// A SKIPPED run never supersedes one that actually ran. CI skips its
-		// pull_request run for an epic branch (the push run on the same head
-		// already carries the checks), and a later-started skip would
-		// otherwise shadow a red push run and read as not-failing: a false
-		// green. A run that executed replaces a skip whatever the order.
 		switch {
 		case !seen:
 			latest[run.Name] = run
@@ -451,6 +465,47 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 			latest[run.Name] = run
 		}
 	}
+	return latest, order
+}
+
+// Checks answers the latest run of every check the forge recorded for the
+// PR's head, per check. Empty when the forge recorded none — the same
+// `none` the classification names, as the fact it is.
+func (g GitHub) Checks(ctx context.Context, pr PullRequest) ([]CheckRun, error) {
+	runs, err := g.fetchCheckRuns(ctx, pr)
+	if err != nil {
+		return nil, err
+	}
+	latest, order := reduceCheckRuns(runs)
+	out := make([]CheckRun, 0, len(order))
+	for _, name := range order {
+		run := latest[name]
+		out = append(out, CheckRun{
+			Name:       run.Name,
+			Status:     run.Status,
+			Conclusion: run.Conclusion,
+			StartedAt:  run.StartedAt,
+		})
+	}
+	return out, nil
+}
+
+// CI answers what CI says on the PR's head, from the check runs the forge
+// recorded for its SHA. The classification is closed and conservative:
+// a check that has not concluded leaves the whole report `pending` (a green
+// report beside a running one is not a verdict), and a concluded check fails
+// the report when its conclusion names a failure — `failure` and `timed_out`
+// — while `neutral` and `skipped` checks neither pass nor fail it, the way
+// GitHub itself treats them.
+func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
+	runs, err := g.fetchCheckRuns(ctx, pr)
+	if err != nil {
+		return CIReport{}, err
+	}
+	if len(runs) == 0 {
+		return CIReport{State: CINone}, nil
+	}
+	latest, order := reduceCheckRuns(runs)
 	report := CIReport{State: CIGreen}
 	seenRun := map[int64]bool{}
 	for _, name := range order {
