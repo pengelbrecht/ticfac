@@ -60,7 +60,8 @@ than maintained beside it:
 | command | what it does |
 |---|---|
 | `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`) |
-| `ticfac run-epic <epic-id>` | run one epic through the reconciler |
+| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`) |
+| `ticfac run-epic <epic-id>` | run one epic through the reconciler — the foreground form scripts drive; `ticfac run` is this command, started detached with the defaults decided |
 | `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the close-out rule (refuses to overwrite) |
 | `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
 | `ticfac settle <epic-id> <tick-id> <attempt>` | release an attempt nobody can address |

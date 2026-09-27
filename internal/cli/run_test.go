@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -337,6 +338,55 @@ func TestRunInjectsNoWallClockWhenNoneIsNamed(t *testing.T) {
 		if strings.HasPrefix(arg, "--wall") {
 			t.Errorf("an unnamed wall clock reached the run: %v", rec.argvs[0])
 		}
+	}
+}
+
+// The production herdr probe itself, against the one canonical fake
+// server: a live socket is DETECTED through the same resolution the run
+// dials ($HERDR_SOCKET_PATH when the repo pins no orchestration.socket),
+// answers with the server's own version, and the run it starts is given the
+// embedded herdr profile set — the acceptance's "in a repo with herdr
+// running" with a live socket under it, everything above the probe real
+// too. A closed socket is the same probe's honest negative.
+func TestRunDetectsALiveHerdrThroughTheRealSocket(t *testing.T) {
+	saveRunSeams(t)
+	repo := t.TempDir()
+	srv := herdtest.New(t, herdtest.Config{Version: "9.9.9"})
+	t.Setenv("HERDR_SOCKET_PATH", srv.Path())
+	rec := &spawnRecorder{}
+	runStartDetached = claimingSpawn(t, rec)
+	runAttach = (&attachRecorder{}).seam
+
+	var stdout, stderr bytes.Buffer
+	if code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "herdr 9.9.9 answers") {
+		t.Errorf("the live herdr was not reported with its version: %q", stdout.String())
+	}
+	if !equalArgv(rec.argvs[0],
+		[]string{"run-epic", "foo", "--repo", filepath.Join(repo), "--profiles", profile.EmbeddedHerdr}) {
+		t.Errorf("a run with a live herdr socket did not get the embedded herdr set: %v", rec.argvs[0])
+	}
+
+	// The server gone is "no live herdr": the run dispatches with the
+	// binary's default set and says which socket stayed silent.
+	srv.Close()
+	// A second epic: the first fake claim still stands (it is released at
+	// the test's end), and a live run attaches rather than starting one.
+	rec2 := &spawnRecorder{}
+	runStartDetached = claimingSpawn(t, rec2)
+	stdout.Reset()
+	if code := runBody(context.Background(), t, []string{"--repo", repo, "bar"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	for _, arg := range rec2.argvs[0] {
+		if strings.HasPrefix(arg, "--profiles") {
+			t.Errorf("a dead socket still reached for the herdr set: %v", rec2.argvs[0])
+		}
+	}
+	if !strings.Contains(stdout.String(), "no live herdr") {
+		t.Errorf("the dead socket is not said: %q", stdout.String())
 	}
 }
 
