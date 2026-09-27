@@ -31,7 +31,15 @@ import (
 // head the next attempt will be cut from.
 func releaseCarryingA1(t *testing.T, f *fixture) (releasedRef, releasedHead string) {
 	t.Helper()
-	_, _, err := f.run(f.Repo, fixtureOptions{mode: "hang", stopAfter: stopAt("a1", StageDispatched)})
+	return releaseCarrying(t, f, "hang")
+}
+
+// releaseCarrying is releaseCarryingA1 with the held attempt's runner mode
+// named: the mode decides WHAT the released attempt committed.
+func releaseCarrying(t *testing.T, f *fixture, mode string) (releasedRef, releasedHead string) {
+	t.Helper()
+	f.Runner = fakeRunnerArgv(t, mode)
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: mode, stopAfter: stopAt("a1", StageDispatched)})
 	killedAfter(t, err, "a1", StageDispatched)
 	releasedRef, _, releasedHead = waitHeldWork(t, f, "a1")
 	f.stopEverything()

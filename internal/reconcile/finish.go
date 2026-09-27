@@ -159,6 +159,21 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 		return nil
 	}
 
+	// An attempt the resume took as already INTEGRATED joins the window with
+	// no executor: nothing addresses it, because its work was on the
+	// integration branch. If the finish no longer finds it there — the branch
+	// was rewritten under the run, or the two reads disagreed — there is no
+	// executor to collect it through, and a collect through nil panicked. It
+	// is refused by name, pointing at the branch its work is on.
+	if fl.handle == nil || fl.executor == nil {
+		return r.refuse(RefusedIntegratedHeadMissing, tick,
+			"%s was taken as already integrated into %s, but its head is not on %s now: there is no executor "+
+				"to collect it through and nothing merged to gate. Its work is on %s. Put it back on %s, or "+
+				"release the attempt with `ticfac settle %s %s %d --release \"<who>\"`, and run the epic again",
+			r.attemptName(tick, marker.Attempt), r.branch, r.branch, branchOf(marker.WriteRef), r.branch,
+			r.opts.EpicID, tick, marker.Attempt)
+	}
+
 	collected, err := r.collect(ctx, fl.handle, fl.executor, marker, f.status)
 	if err != nil {
 		// The collect's own refusals tear their attempt down where they are
