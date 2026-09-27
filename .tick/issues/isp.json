@@ -1,0 +1,14 @@
+{
+  "id": "isp",
+  "title": "A carried-work attempt that adds nothing collects the carried commits, not 'no commits'",
+  "gloss": "carried work with no new commits",
+  "description": "epic-2jn, 2026-09-27: eih's first attempt was held (depth bound) with real commits; a person released it with --carry-work. eih try 3 started FROM those commits, found the work done, and correctly added nothing. The collect measured commits beyond the attempt's own base, which is the carried head, found none, and rejected it as no-commits. The carried work was never merged; a person merged 48f7ea97 into epic/2jn by hand. With carry-work, 'beyond the base' must mean beyond the base the ORIGINAL attempt was cut from: a carried attempt that adds nothing still delivers the carried commits.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A carry-work attempt that makes no further commits is collected as ready-to-merge with the carried commits, merged, and gated; one whose carried work is already on the integration branch is 'already contained'; a test drives release --carry-work then an empty attempt through to a closed tick",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-27T09:19:27.141122Z",
+  "updated_at": "2026-09-27T09:19:27.141122Z"
+}
