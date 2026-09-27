@@ -176,11 +176,7 @@ var ExitTable = []ExitTableEntry{
 	{exitSuccess, "done",
 		"the command did its work"},
 	{exitGeneric, "failed",
-<<<<<<< HEAD
-		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass)"},
-=======
-		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class)"},
->>>>>>> 335d2a944e17b6029e077aacfa8ae14c2f3560eb
+		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass)"},
 	{exitUsage, "usage",
 		"a malformed invocation: wrong flags, wrong argument count, a refusal to guess"},
 	{ExitHeld, "held",
