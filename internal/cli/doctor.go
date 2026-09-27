@@ -144,18 +144,22 @@ var (
 		return fmt.Sprintf("herdr %s answers at %s", info.Version, client.SocketPath()), nil
 	}
 
-	// doctorGitHub answers for a forge credential: GITHUB_TOKEN, or gh's own
-	// auth. The run's surface reads the first; gh is how a person gets one.
+	// doctorGitHub answers for a forge credential through the SAME ladder
+	// the run's own surface resolves its token from (tick vo4): GITHUB_TOKEN
+	// first, then gh's own auth — so this check's ok is the answer the run
+	// gets, not an optimism the run then refuses at startup. The detail names
+	// the rung that answered, because a "github ok" without its source is
+	// the half-answer that hid which credential a run would speak with.
 	doctorGitHub = func() (string, error) {
-		if token := forge.ResolveToken(); token != "" {
-			return "GITHUB_TOKEN is set", nil
-		}
-		out, err := exec.Command("gh", "auth", "token").Output()
+		token, source, err := resolveForgeToken()
 		if err != nil {
-			return "", fmt.Errorf("gh auth token does not answer: %v", err)
+			return "", err
 		}
-		if strings.TrimSpace(string(out)) == "" {
-			return "", fmt.Errorf("gh auth token printed no token")
+		if token == "" {
+			return "", fmt.Errorf("no %s is set, and gh auth token did not answer", forge.TokenEnv)
+		}
+		if source == forge.TokenSourceEnv {
+			return "GITHUB_TOKEN is set", nil
 		}
 		return "gh auth token answers", nil
 	}
