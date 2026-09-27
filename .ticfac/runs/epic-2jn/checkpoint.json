@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 161,
-  "state": "gating",
-  "reason": "running the integrated gate for 9sz on ea4e00240b42",
-  "updated_at": "2026-09-27T10:04:15Z",
+  "sequence": 162,
+  "state": "failed",
+  "reason": "the gate's evidence for 9sz is no longer about what would be published (attempt_head: ad4efa77c22c was gated,  is the target now): publishing it would state a verdict about something else",
+  "updated_at": "2026-09-27T10:08:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "9sz",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 16
     },
     {
