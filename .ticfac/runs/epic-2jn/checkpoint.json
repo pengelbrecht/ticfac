@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 15,
-  "state": "dispatching",
-  "reason": "dispatching 152 as attempt 5",
-  "updated_at": "2026-09-27T04:08:44Z",
+  "sequence": 16,
+  "state": "running",
+  "reason": "152 is running as attempt 5",
+  "updated_at": "2026-09-27T04:08:52Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -65,7 +65,8 @@
     },
     {
       "tick_id": "152",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "fi3",
