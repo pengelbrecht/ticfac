@@ -3,7 +3,7 @@
   "title": "The runstate git-maintenance fixture fails on this host at base, blocking a clean full-suite run",
   "description": "TestTheStoresFetchStartsNoMaintenanceInTheRepositoryItWritesTo (internal/runstate/maintenance_test.go) fails on this host because a plain `git fetch` starts no auto-maintenance, so the armed fixture proves nothing; I reproduced it at the base commit ce5e873e on a clean clone, and the learnings already record this fixture failing at base across yoh and being filed four times in gvc. It makes every full `make test` one test red, which trains workers to skip reading full-suite output.\n\nticfac run epic-2jn created this tick by absorbing the finding beea29bbb146b1b0f33e27ff3f9c78979581e5522be903a3969156ff7e9487aa (reported by run-epic-2jn/tick-8yn/attempt-8): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/beea29bbb146b1b0f33e27ff3f9c78979581e5522be903a3969156ff7e9487aa.json on the run branch.",
   "notes": "2026-09-27 09:51 - ticfac run epic-2jn: created by absorbing finding beea29bbb146b1b0f33e27ff3f9c78979581e5522be903a3969156ff7e9487aa — placed before the final review, which is blocked-by fc2. The decision record is .ticfac/runs/epic-2jn/absorptions/beea29bbb146b1b0f33e27ff3f9c78979581e5522be903a3969156ff7e9487aa.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-epic-2jn/tick-8yn/attempt-8",
   "created_by": "ticfac run epic-2jn",
   "created_at": "2026-09-27T07:50:45Z",
-  "updated_at": "2026-09-27T07:51:00.979348Z"
+  "updated_at": "2026-09-27T07:55:11.036345Z",
+  "started_at": "2026-09-27T07:55:11.036345Z"
 }
