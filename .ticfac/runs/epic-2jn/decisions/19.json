@@ -1,0 +1,44 @@
+{
+  "schema_version": 3,
+  "decision": 19,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 45,
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-rix/attempt-45",
+    "op": "settle_attempt",
+    "run_id": "epic-2jn",
+    "state": "succeeded",
+    "tick_id": "rix"
+  },
+  "response": {
+    "carry_ref": "refs/heads/ticfac/run-epic-2jn/tick-rix/attempt-45",
+    "carry_sha": "72ee73aa952581ce659282d55398af28715aa8e1",
+    "disposition": "carry-work",
+    "released_by": "person-b095e1bb5422ae182775de04873adc0706ec2d8990c29cbc916c633522bc2e00",
+    "settled": true,
+    "state": "succeeded"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T17:51:01Z",
+  "answered_at": "2026-09-27T17:51:01Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "rix",
+    "attempt": 45,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "d7a96facdc2eb8d620b70930be4961713bcb1552",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
