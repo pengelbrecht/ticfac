@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 106,
-  "state": "running",
-  "reason": "fc2 is closed",
-  "updated_at": "2026-09-27T08:38:32Z",
+  "sequence": 107,
+  "state": "dispatching",
+  "reason": "dispatching 35l as attempt 18",
+  "updated_at": "2026-09-27T08:38:39Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -111,6 +111,10 @@
       "tick_id": "eih",
       "state": "dispatched",
       "attempt": 17
+    },
+    {
+      "tick_id": "35l",
+      "state": "ready"
     }
   ],
   "provenance": {
