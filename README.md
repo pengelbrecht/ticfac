@@ -58,6 +58,8 @@ than maintained beside it:
 | command | what it does |
 |---|---|
 | `ticfac run-epic <epic-id>` | run one epic through the reconciler |
+| `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the close-out rule (refuses to overwrite) |
+| `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
 | `ticfac settle <epic-id> <tick-id> <attempt>` | release an attempt nobody can address |
 | `ticfac findings <epic-id>` | list the worker findings drafted for triage |
 | `ticfac finding <epic-id> <key>` | triage one drafted finding |
