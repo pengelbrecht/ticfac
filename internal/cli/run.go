@@ -361,6 +361,11 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"queue flags\n")
 			return 2
 		}
+	}
+	if parseOnly {
+		return 0
+	}
+	if *fl.cloud {
 		return runCloudCommand(ctx, epicID, repo, fl, stdout, stderr)
 	}
 

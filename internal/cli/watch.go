@@ -73,7 +73,6 @@ const ExitHeld = 3
 //     never an end the watch reports.
 //
 //   - No live process claims the run — it ended and released, or nobody has
-<<<<<<< HEAD
 //     claimed it here: the standing feed IS the run's last word, so the
 //     watch reports that ending rather than an open-ended silence. A run
 //     about to be resumed has not claimed yet; its previous ending was the
@@ -180,23 +179,6 @@ content.`,
 
 func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
-=======
-//     claimed it here: the standing feed IS the run's last word, so the watch
-//     replays it whole and ends on its terminal line the way it always did.
-//     A run about to be resumed has not claimed yet; its previous ending was
-//     the truth until the resume, and a watch started in that gap reports
-//     that ending rather than an open-ended silence.
-func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
-	// Flags may follow the positionals: the remedies the run prints are written
-	// that way, and remedy_test.go holds every one of them to this parser.
-	rest, parseErr := parseCollectingPositionals(fs, args)
-	if parseErr != nil {
-		return 2
-	}
->>>>>>> e280a50060d20d4b5056949ecfce93ece16f8df9
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac watch: exactly one run id is required\n")
 		return 2

@@ -180,6 +180,9 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		}
 		decisions = append(decisions, decision)
 	}
+	if parseOnly {
+		return exitSuccess
+	}
 
 	// The run's address, resolved once for the drafts and the promotions: the
 	// same defaults `run-epic` derives, so the two surfaces name the same
