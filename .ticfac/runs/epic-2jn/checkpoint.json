@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 117,
-  "state": "dispatching",
-  "reason": "dispatching eih as attempt 19",
-  "updated_at": "2026-09-27T08:49:00Z",
+  "sequence": 118,
+  "state": "running",
+  "reason": "eih is running as attempt 19",
+  "updated_at": "2026-09-27T08:49:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -109,8 +109,8 @@
     },
     {
       "tick_id": "eih",
-      "state": "ready",
-      "attempt": 17
+      "state": "dispatched",
+      "attempt": 19
     },
     {
       "tick_id": "35l",
