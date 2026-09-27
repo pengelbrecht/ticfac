@@ -101,10 +101,19 @@ func reportCommand(name string, err error, stderr io.Writer) int {
 // cloudflare/src/sandbox.ts) and answers by refusing to reboot the container:
 // the tracker's tree is cut from the submitted commit, so the epic is missing
 // on every boot, and the first per-tick Cloudflare smoke run re-booted into
-// that identical failure until a person stopped it by hand. Any other stop
-// stays generic: a merge conflict, a gate that did not pass and a worker that
-// answered BLOCKED are all repairs a person makes that a reboot may then
-// adopt.
+// that identical failure until a person stopped it by hand.
+//
+// A run that stopped HOLDING something only a person can move exits the
+// table's held class (3) — the same verdict `ticfac watch` and `ticfac run`
+// end the same run by, and the same one the SKILL teaches (tick 4mv: before
+// it, run-epic answered 1 for a finding_untriaged hold while the watch over
+// the same run answered 3). Which refusals are holds is the reconciler's own
+// closed set — reconcile.HoldsForAPerson — so the feed's run_held line and
+// the exit code cannot disagree about whether a stop was a hold.
+//
+// Any other stop stays generic: a merge conflict, a gate that did not pass
+// and a worker that answered BLOCKED without holding the run are all repairs
+// a person makes that a reboot may then adopt.
 func resultExitCode(result *reconcile.Result) int {
 	if result == nil {
 		return exitGeneric
@@ -112,10 +121,33 @@ func resultExitCode(result *reconcile.Result) int {
 	if result.State == "completed" {
 		return exitSuccess
 	}
-	if result.Failure != nil && result.Failure.Reason == reconcile.RefusedEpicAbsent {
-		return exitNotFound
+	if result.Failure != nil {
+		switch {
+		case result.Failure.Reason == reconcile.RefusedEpicAbsent:
+			return exitNotFound
+		case reconcile.HoldsForAPerson(result.Failure.Reason):
+			return ExitHeld
+		}
 	}
 	return exitGeneric
+}
+
+// runEpicStateWord is the state word `run-epic --json`'s document carries —
+// one authority with resultExitCode for the agreement the --json contract
+// rests on (the exit code is the word's class), with the table's one
+// documented exception: the epic-absent refusal's code is the missing
+// class's 4, while its state word stays failed, because "a lookup that
+// honestly came back empty" is not an outcome of the work.
+func runEpicStateWord(result *reconcile.Result) string {
+	switch {
+	case result == nil:
+		return agentStateFailed
+	case result.State == "completed":
+		return agentStateDone
+	case result.Failure != nil && reconcile.HoldsForAPerson(result.Failure.Reason):
+		return agentStateHeld
+	}
+	return agentStateFailed
 }
 
 // ExitTable is the documented exit code set (tick 8v3): the codes every
@@ -144,11 +176,15 @@ var ExitTable = []ExitTableEntry{
 	{exitSuccess, "done",
 		"the command did its work"},
 	{exitGeneric, "failed",
+<<<<<<< HEAD
 		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass)"},
+=======
+		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class)"},
+>>>>>>> 335d2a944e17b6029e077aacfa8ae14c2f3560eb
 	{exitUsage, "usage",
 		"a malformed invocation: wrong flags, wrong argument count, a refusal to guess"},
 	{ExitHeld, "held",
-		"the run ended holding something only a person can move (watch, run): the reason class is the wait kind in the line and the --json document; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository"},
+		"the run ended holding something only a person can move (run-epic, run, watch): the reason class is the refusal's reason or the wait kind in the line and the --json document — e.g. finding_untriaged, merge; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository"},
 	{exitNotFound, "missing",
 		"a lookup that honestly came back empty: a missing epic, a missing tick"},
 	{exitRunning, "running",

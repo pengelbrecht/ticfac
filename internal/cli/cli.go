@@ -605,8 +605,9 @@ type runEpicTickJSON struct {
 // stopped it with its REASON CLASS, the supervisor's halt, the automatic
 // continuations (each an intervention a caller reporting "unattended" must
 // count), and the never-silent notes about the feed and liveness records.
-// The state word is the table's — done when the run completed, failed
-// otherwise — so the exit code and the document cannot disagree; the run's
+// The state word is the table's — done when the run completed, held when the
+// run stopped holding something only a person can move, failed otherwise
+// (tick 4mv) — so the exit code and the document cannot disagree; the run's
 // own terminal word travels as run_state.
 type runEpicResultJSON struct {
 	agentDoc
@@ -632,9 +633,7 @@ func emitRunEpicResultJSON(result *reconcile.Result, stdout io.Writer) {
 		Halt:     result.Halt,
 		Ticks:    make([]runEpicTickJSON, 0, len(result.Ticks)),
 	}
-	if result.State == "completed" {
-		doc.State = agentStateDone
-	}
+	doc.State = runEpicStateWord(result)
 	if result.Failure != nil {
 		doc.Failure = &runEpicRefusalJSON{
 			Reason:  result.Failure.Reason,

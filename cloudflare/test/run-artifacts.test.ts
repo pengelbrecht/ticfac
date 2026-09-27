@@ -477,10 +477,14 @@ describe("the image contract", () => {
     // failed. Code 4 is the load-bearing one (ticfac tick rf3): the
     // reconciler's not-found — an epic absent from the submitted tree — has to
     // be distinguishable in run.json from a wrong tk version without going to
-    // read the container's flushed log first.
+    // read the container's flushed log first. Code 3 carries the same second
+    // reading (ticfac tick 4mv): the reconciler's HELD — a run that stopped
+    // holding something only a person can move — must not read as a checkout
+    // failure alone.
     for (const [code, want] of [
       [2, "a required input is missing or malformed"],
       [3, "the clone or checkout of the submitted SHA failed"],
+      [3, "holding something only a person can move"],
       [4, "the epic does not exist on the submitted tree"],
       [5, "an Environment pre-flight check failed"],
       [6, "the repository's own [sandbox] setup failed"],
