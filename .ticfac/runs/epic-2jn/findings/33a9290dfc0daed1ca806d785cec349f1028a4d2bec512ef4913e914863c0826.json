@@ -12,8 +12,11 @@
   "attempt": 23,
   "done_item": "A1",
   "demonstrating_check": "go build ./...",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T10:20:10Z",
+  "triaged_at": "2026-09-27T10:20:40Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 5bd",
+  "promoted_as": "5bd",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "7ag",
