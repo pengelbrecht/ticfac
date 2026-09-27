@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 418,
-  "state": "running",
-  "reason": "stopped by terminated: the container was evicted mid-run; the run is resumable",
-  "updated_at": "2026-09-27T20:54:24Z",
+  "sequence": 419,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-27T20:55:20Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -239,7 +239,7 @@
     },
     {
       "tick_id": "tm5",
-      "state": "dispatched",
+      "state": "closed",
       "attempt": 55
     }
   ],
@@ -248,7 +248,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "c63b3399ba1f40844045b62c8ecad6a3b3f7847d",
+    "source_sha": "91580227ffac94b27e25ed618f0d34d9db15716f",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
