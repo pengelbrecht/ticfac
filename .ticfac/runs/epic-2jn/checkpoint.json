@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 398,
-  "state": "integrating",
-  "reason": "integrating c2g attempt 53 into epic/2jn",
-  "updated_at": "2026-09-27T20:30:37Z",
+  "sequence": 399,
+  "state": "gating",
+  "reason": "running the integrated gate for c2g on 8d6e168acc35",
+  "updated_at": "2026-09-27T20:30:50Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -233,7 +233,7 @@
     },
     {
       "tick_id": "c2g",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 53
     }
   ],
