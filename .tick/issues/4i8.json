@@ -3,7 +3,7 @@
   "title": "ticfac authors the contracts that describe its own formats",
   "gloss": "ticfac owns its contracts",
   "description": "ticks bundle 7.0.0 keeps only tk-json-manifest and tracker-layout. The rest (job-protocol, ticfac-run-state, lifecycle-invariants, collect-vocabulary, run-event-feed, runners-config-contract, worker-boot-contract, message-context, sweep-selection-contract, sweep-policy-cases, signal-source-cases, sandbox-image-cases, credential-ownership) become ticfac-authored at their 6.3.0 bytes with a ticfac-side version and changelog; contracts.pin.json pins only ticks' two files at 7.0.0. Update CONTRACTS.md and cloudflare/CONTRACTS.md ownership statements.",
-  "notes": "2026-09-27 22:53 - 2jn findings 10b18c6a and 3261ed02: the 6dh status model fixture now has a second reader (i1r); move it into the contract bundle ticfac owns.",
+  "notes": "2026-09-27 22:53 - 2jn findings 10b18c6a and 3261ed02: the 6dh status model fixture now has a second reader (i1r); move it into the contract bundle ticfac owns.\n2026-09-27 23:41 - From #85 (2026-09-27): contracts/runners-config-contract.json is still vendored from a pinned ticks commit, though current ticks no longer ships it; the new [findings.route.\"owner/name\"] table (#85) is therefore missing from it and covered only by ticfac's own config tests. When ticfac authors its contracts, add [findings] to the runners-config contract and drop the upstream check for it. Also: runconfig/compile_test.go comments cite ticks' runners-config.md, which ticks no longer has — that doc is ticfac's to own.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -12,5 +12,5 @@
   "acceptance_criteria": "[A1] contracts.pin.json pins ticks 7.0.0 (two files) and passes check + verify-upstream. [A2] The ticfac-owned contracts have a ticfac version, a changelog, and every existing Go/TS reader still passes. [V] Verified by: make vet \u0026\u0026 make gate, and in cloudflare/: pnpm typecheck \u0026\u0026 pnpm exec vitest run.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T14:04:43.581092492Z",
-  "updated_at": "2026-09-27T20:53:27.654203Z"
+  "updated_at": "2026-09-27T21:41:06.877192Z"
 }
