@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 232,
-  "state": "integrating",
-  "reason": "integrating ogv attempt 31 into epic/2jn",
-  "updated_at": "2026-09-27T13:55:45Z",
+  "sequence": 233,
+  "state": "gating",
+  "reason": "running the integrated gate for ogv on 1ba8103886d2",
+  "updated_at": "2026-09-27T13:55:58Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -142,7 +142,7 @@
     },
     {
       "tick_id": "ogv",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 31
     }
   ],
