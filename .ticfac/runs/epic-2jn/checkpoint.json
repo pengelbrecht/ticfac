@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 348,
-  "state": "dispatching",
-  "reason": "dispatching rix as attempt 49",
-  "updated_at": "2026-09-27T17:51:25Z",
+  "sequence": 349,
+  "state": "running",
+  "reason": "rix is running as attempt 49",
+  "updated_at": "2026-09-27T17:51:34Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -203,8 +203,8 @@
     },
     {
       "tick_id": "rix",
-      "state": "ready",
-      "attempt": 45
+      "state": "dispatched",
+      "attempt": 49
     },
     {
       "tick_id": "bkg",
