@@ -1076,6 +1076,18 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	if err != nil {
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
 	}
+	// The command's own TMPDIR, emptied now and again when the gate is
+	// collected (gate_tmpdir.go).
+	tmp, err := freshGateTempDir(dir)
+	if err != nil {
+		removeScratch()
+		return nil, fmt.Errorf("prepare the gate's temp directory: %w", err)
+	}
+	dropScratch := removeScratch
+	removeScratch = func() {
+		dropScratch()
+		_ = removeWritable(tmp)
+	}
 	s := &gateShell{
 		scratch:   scratch,
 		rm:        removeScratch,
@@ -1101,7 +1113,7 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	cmd := exec.Command("sh", "-c", gateSentinelScript)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
-		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath)
+		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath, "TMPDIR="+tmp)
 	cmd.SysProcAttr = gateProcessGroup()
 	cmd.Stdout, cmd.Stderr = out, errOut
 	if hold != nil {
