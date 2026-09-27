@@ -132,7 +132,7 @@ code is one of this table, the same words in `ticfac --help` and in every
 | `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
 | `5` | running | the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong |
 | `6` | io | an unreadable local file the command needs |
-| `7` | cancelled | a run that was stopped deliberately before it finished (watch, run): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person |
+| `7` | cancelled | a run that was stopped deliberately before it finished (run-epic, run, watch): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person |
 
 Two documented exceptions: `ticfac status` exits the run's liveness answer
 (0 alive, 1 not) rather than the command's own success — the question it

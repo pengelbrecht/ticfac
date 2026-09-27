@@ -131,15 +131,6 @@ func resultExitCode(result *reconcile.Result) int {
 	if result.State == "completed" {
 		return exitSuccess
 	}
-<<<<<<< HEAD
-	if result.Failure != nil {
-		switch {
-		case result.Failure.Reason == reconcile.RefusedEpicAbsent:
-			return exitNotFound
-		case reconcile.HoldsForAPerson(result.Failure.Reason):
-			return ExitHeld
-		}
-=======
 	// A cancelled result is the cancelled class (tick rix): the resume path
 	// replays an already-terminal checkpoint as a Result, so a cancelled
 	// run's replay must answer the same word and code the watch answers —
@@ -147,9 +138,13 @@ func resultExitCode(result *reconcile.Result) int {
 	if result.State == runstate.StateCancelled {
 		return exitCancelled
 	}
-	if result.Failure != nil && result.Failure.Reason == reconcile.RefusedEpicAbsent {
-		return exitNotFound
->>>>>>> 72ee73aa952581ce659282d55398af28715aa8e1
+	if result.Failure != nil {
+		switch {
+		case result.Failure.Reason == reconcile.RefusedEpicAbsent:
+			return exitNotFound
+		case reconcile.HoldsForAPerson(result.Failure.Reason):
+			return ExitHeld
+		}
 	}
 	return exitGeneric
 }
@@ -166,6 +161,8 @@ func runEpicStateWord(result *reconcile.Result) string {
 		return agentStateFailed
 	case result.State == "completed":
 		return agentStateDone
+	case result.State == runstate.StateCancelled:
+		return agentStateCancelled
 	case result.Failure != nil && reconcile.HoldsForAPerson(result.Failure.Reason):
 		return agentStateHeld
 	}
@@ -211,7 +208,7 @@ var ExitTable = []ExitTableEntry{
 	{exitIO, "io",
 		"an unreadable local file the command needs"},
 	{exitCancelled, "cancelled",
-		"a run that was stopped deliberately before it finished (watch, run): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person"},
+		"a run that was stopped deliberately before it finished (run-epic, run, watch): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person"},
 }
 
 // The two documented exceptions to "the exit code is the command's":

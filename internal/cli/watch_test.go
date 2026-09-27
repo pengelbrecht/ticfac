@@ -469,7 +469,6 @@ func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory: `ticfac watch
 // <epic-id>` follows the run the factory holds for this checkout's project
 // when nothing runs here (tick nyi) — the same one command the operator
@@ -561,7 +560,9 @@ func TestWatchByEpicIDNamesTheResumeByTheEpicNotTheFactoryRunID(t *testing.T) {
 	}
 	if bad := statusmodel.ResumeCommand(statusmodel.HostCloud, cloudRun); strings.Contains(stderr.String(), bad) {
 		t.Errorf("the failed end names the resume by the factory's run id %q:\n%s", bad, stderr.String())
-=======
+	}
+}
+
 // A run whose own terminal line says CANCELLED (tick rix): runstate's
 // cancelled word was vocabulary only, but the resume path's already-terminal
 // branch writes run_finished for it and the failed classifier deliberately
@@ -638,6 +639,5 @@ func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
 		if code != exitSuccess {
 			t.Errorf("a completed run's ending %q exited %d, want %d (done)", detail, code, exitSuccess)
 		}
->>>>>>> 72ee73aa952581ce659282d55398af28715aa8e1
 	}
 }
