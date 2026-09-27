@@ -465,7 +465,7 @@ func (r *Reconciler) baseFoldBrief(base, baseHead, epicHead string, conflict *me
 		}
 		return strings.Split(strings.TrimSpace(out), "\n")
 	}
-	ticks := r.conflictingTickIDs(epicHead, "", conflict.Files)
+	ticks := r.conflictingTickIDs(epicHead, baseHead, "", conflict.Files)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## This conflict: folding %s into the epic\n\n", base)
