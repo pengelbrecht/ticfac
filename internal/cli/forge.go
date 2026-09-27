@@ -62,7 +62,8 @@ var resolveForgeToken = forge.ResolveTokenFrom
 // every other flag resolves — and the same one the reconciler's own
 // RepoConfigPath resolves); an empty remote means origin.
 func pullRequestsForRun(repo, remote string) (forge.PullRequests, string, error) {
-	rule, err := reconcile.ReadCloseoutRule(reconcile.RepoConfigPath(repo))
+	configPath := reconcile.RepoConfigPath(repo)
+	rule, err := reconcile.ReadCloseoutRule(configPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("the close-out rule could not be read: %w", err)
 	}
@@ -75,13 +76,20 @@ func pullRequestsForRun(repo, remote string) (forge.PullRequests, string, error)
 	if remote == "" {
 		remote = "origin"
 	}
+	// A rule that holds on a pull request but no remote to open one on is a
+	// run that refuses to START (tick 6vp), and the refusal owes the
+	// operator both ways out — point the remote at GitHub, or remove the
+	// rule — named beside the config the rule lives in, rather than a bare
+	// read error nothing outside the source can act on.
 	url, err := exec.Command("git", "-C", repo, "remote", "get-url", remote).Output()
 	if err != nil {
-		return nil, "", fmt.Errorf("read the %s remote: %w", remote, err)
+		return nil, "", fmt.Errorf("the %s remote could not be read: %w — the close-out rule in %s holds on "+
+			"a pull request; point origin at GitHub, or remove the rule", remote, err, configPath)
 	}
 	slug, err := forge.ParseRepo(string(url))
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("the %s remote is not a GitHub repository: %v — the close-out rule in %s "+
+			"holds on a pull request; point origin at GitHub, or remove the rule", remote, err, configPath)
 	}
 	token, source, err := resolveForgeToken()
 	if err != nil {

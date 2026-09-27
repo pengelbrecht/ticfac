@@ -107,6 +107,12 @@ func TestInitJSONAnswersWhatItWrote(t *testing.T) {
 	if doc["substrate"] != "local" || doc["runner"] != "claude" || doc["model"] != "sonnet" {
 		t.Errorf("the resolved answers are wrong: %v", doc)
 	}
+	// The close-out answer is in the document too (tick 6vp): the guess —
+	// here no origin, so none — so an agent reads what the repository was
+	// left holding on.
+	if doc["closeout"] != "none" {
+		t.Errorf("the document's close-out answer is %v, want none (no origin to guess pr from)", doc["closeout"])
+	}
 	files, ok := doc["files"].([]any)
 	if !ok || len(files) != 2 {
 		t.Fatalf("the document does not name the files it wrote:\n%v", doc)
