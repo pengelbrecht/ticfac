@@ -12,8 +12,10 @@
   "attempt": 2,
   "done_item": "none",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-27T06:29:26Z",
+  "triaged_at": "2026-09-27T20:53:25Z",
+  "triaged_by": "claude (operator-delegated triage)",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "6dh",
