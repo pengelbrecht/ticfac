@@ -2391,6 +2391,12 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	// (tick isp) — decided BEFORE the collected line, so the line a person
 	// reads states the verdict the run acts on.
 	collected = r.deliverCarriedWork(marker, collected)
+	// And the carried commits are held to the same boundary as the attempt's
+	// own: the executor's check read only the diff above the carried head.
+	collected, err = r.checkCarriedWork(marker, collected)
+	if err != nil {
+		return nil, err
+	}
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
@@ -2593,6 +2599,89 @@ func (r *Reconciler) deliverCarriedWork(marker attemptHandle, collected *subproc
 		r.attemptName(marker.TickID, marker.Attempt), commits, short(base), short(carried),
 		r.attemptName(marker.ResumedFrom.TickID, marker.ResumedFrom.Attempt))
 	return &delivered
+}
+
+// checkCarriedWork holds a CARRIED attempt's whole delivery to the boundary
+// the executor enforces. The executor diffs from the base it dispatched, which
+// for a carried attempt is the carried head, so the RELEASED attempt's own
+// commits were never read by the boundary check or the artifact backstop —
+// a carried attempt could merge a record forged under the tracker's
+// authority whether or not it added commits of its own. Here the diff is read
+// from the ORIGINAL base (carriedBase) to the collected head, and what it
+// finds is added to the collection exactly as the executor reports it: a
+// tracker-record write as a boundary violation (refused below under the same
+// guard), a write under the attempt's own artifact prefix as the
+// boundary-violation verdict. Only a ready-to-merge collect is read — every
+// other verdict is already refused — and a diff that cannot be read stops the
+// run rather than merging unchecked commits.
+func (r *Reconciler) checkCarriedWork(marker attemptHandle, collected *subprocess.Collection) (*subprocess.Collection, error) {
+	if collected == nil || collected.Result == nil || collected.Verdict != subprocess.VerdictReadyToMerge ||
+		marker.ResumedFrom == nil || collected.Result.Source.HeadSHA == nil {
+		return collected, nil
+	}
+	head := *collected.Result.Source.HeadSHA
+	base, err := r.carriedBase(marker)
+	if err != nil {
+		return nil, fmt.Errorf("read the base %s was carried from, to check the carried commits: %w",
+			r.attemptName(marker.TickID, marker.Attempt), err)
+	}
+	out, err := r.git.run("", "diff", "--name-only", "--no-renames", base, head)
+	if err != nil {
+		return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
+			r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
+	}
+	var changed []string
+	for _, path := range strings.Split(strings.TrimSpace(out), "\n") {
+		if path != "" {
+			changed = append(changed, path)
+		}
+	}
+	violations := newPaths(collected.BoundaryViolations, subprocess.BoundaryViolations(changed))
+	artifacts := newPaths(collected.ArtifactViolations,
+		subprocess.ArtifactPrefixViolations(changed, "runs/"+r.runID+"/"+marker.TickID+"/"))
+	if len(violations) == 0 && len(artifacts) == 0 {
+		return collected, nil
+	}
+	checked := *collected
+	checked.BoundaryViolations = append(append([]string{}, collected.BoundaryViolations...), violations...)
+	checked.ArtifactViolations = append(append([]string{}, collected.ArtifactViolations...), artifacts...)
+	if len(artifacts) > 0 {
+		checked.Verdict = subprocess.VerdictBoundaryViolation
+		checked.Message = fmt.Sprintf("the carried work committed its own report or artifact into the branch, "+
+			"under the prefix this executor owns: %s", strings.Join(artifacts, ", "))
+	}
+	r.record(marker.TickID, StageCarried,
+		"the work %s carries from %s writes outside its authority: %s",
+		r.attemptName(marker.TickID, marker.Attempt), short(base),
+		strings.Join(append(append([]string{}, violations...), artifacts...), ", "))
+	return &checked, nil
+}
+
+// newPaths is found without the paths already in known, in order.
+func newPaths(known, found []string) []string {
+	seen := map[string]bool{}
+	for _, path := range known {
+		seen[path] = true
+	}
+	var out []string
+	for _, path := range found {
+		if !seen[path] {
+			seen[path] = true
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// workBase is the base an attempt's WORK is measured from: the base it was
+// dispatched at, or — for an attempt carried from a released one — the base
+// the original released attempt was cut from, so the carried commits are
+// part of what is checked.
+func (r *Reconciler) workBase(marker attemptHandle) (string, error) {
+	if marker.ResumedFrom == nil {
+		return marker.BaseSHA, nil
+	}
+	return r.carriedBase(marker)
 }
 
 // carriedBase is the base the work a carried attempt delivers is measured

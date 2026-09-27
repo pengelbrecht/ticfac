@@ -323,7 +323,7 @@ func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 		RefusedHeld, RefusedUnaddressed, RefusedRejectedWork, RefusedNeedsHuman, RefusedRoleAnswer,
 		RefusedFindingUntriaged, RefusedFindingInvalid, RefusedGate, RefusedBoundary, RefusedMerge,
 		RefusedBaseRefresh, RefusedEpicAbsent, RefusedWaveOverlap, RefusedUndeclaredTouch, RefusedTierLabel,
-		RefusedWiped, RefusedAbsorptionDepth,
+		RefusedWiped, RefusedAbsorptionDepth, RefusedIntegratedHeadMissing,
 		RefusedCloseoutCI, RefusedCloseoutCIOnClose, StoppedRemoteAuthRefused, "",
 		"something this build has never heard of",
 	} {

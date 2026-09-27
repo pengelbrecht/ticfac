@@ -200,14 +200,22 @@ func (r *Reconciler) undeclaredTouch(marker attemptHandle, head string) ([]strin
 	if len(marker.Touch) == 0 || marker.BaseSHA == "" {
 		return nil, nil
 	}
-	out, _, err := r.git.try("", "diff", "--name-only", marker.BaseSHA, head)
+	// A carried attempt is held to its declaration over the commits it
+	// CARRIES too: the diff is read from the base the released attempt was
+	// cut from, not from the carried head the attempt was dispatched at.
+	base, err := r.workBase(marker)
+	if err != nil {
+		return nil, fmt.Errorf("read the base %s was carried from, to check its touch: declaration: %w",
+			r.attemptName(marker.TickID, marker.Attempt), err)
+	}
+	out, _, err := r.git.try("", "diff", "--name-only", base, head)
 	if err != nil {
 		// An operational failure, not a verdict: the same reads the merge
 		// needs are the ones this check needs, and a diff that cannot be
 		// read stops the run rather than merging an unchecked one.
 		return nil, fmt.Errorf(
 			"read the files %s touched between %s and %s to check its touch: declaration: %w",
-			r.attemptName(marker.TickID, marker.Attempt), short(marker.BaseSHA), short(head), err)
+			r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
 	}
 	var undeclared []string
 	for _, file := range strings.Split(strings.TrimSpace(out), "\n") {

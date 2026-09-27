@@ -673,6 +673,25 @@ durable-hang)
 		report
 	fi
 	;;
+hang-boundary)
+	# The held attempt a person releases with --carry-work, carrying a record
+	# under the tracker's authority (the boundary mode's forged write) among
+	# its commits: a carried attempt must not smuggle it past the boundary
+	# check into a merge. Then it hangs, as `hang` does.
+	mkdir -p "$TICFAC_WORKTREE/.tick/issues"
+	printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
+	commit
+	exec sleep 86400
+	;;
+hang-undeclared)
+	# The held attempt a person releases with --carry-work, carrying a file
+	# its tick's touch: declaration does not name (the touch-undeclared
+	# mode's write), in ONE commit so the head a test waits for already
+	# holds it. Then it hangs, as `hang` does.
+	printf 'a file nobody declared\n' > "$TICFAC_WORKTREE/sneaky-${TICFAC_TICK}.txt"
+	commit
+	exec sleep 86400
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process
