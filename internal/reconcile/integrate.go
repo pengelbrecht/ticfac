@@ -43,7 +43,7 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 	// The merge that happened is proven here rather than remembered, and if it
 	// cannot be proven nothing is integrated.
 	if collected == nil {
-		return r.integratedAlready(tick, branch)
+		return r.integratedAlready(marker, branch)
 	}
 
 	head, err := r.durableAttemptHead(branch, collected)
@@ -150,10 +150,19 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 // contained is refused — there is then no merge to stand on and no collect to
 // make one from, and integrating on the strength of a head nobody collected is
 // the false completion durableAttemptHead exists to refuse.
-func (r *Reconciler) integratedAlready(tick, branch string) (merge, error) {
+//
+// An attempt whose branch origin no longer has (epic-2jn: a repair's finish
+// retired the attempt's branch rather than its own) is read from the head
+// this checkout's branch carries or the run's records state — and held to
+// the same containment: the integration branch carrying it is the proof.
+func (r *Reconciler) integratedAlready(marker attemptHandle, branch string) (merge, error) {
+	tick := marker.TickID
 	head, err := r.git.remoteHead(branch)
 	if err != nil {
 		return merge{}, err
+	}
+	if head == "" {
+		head = r.offOriginAttemptHead(marker)
 	}
 	epicHead, err := r.git.remoteHead(r.branch)
 	if err != nil {

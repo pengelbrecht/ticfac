@@ -618,6 +618,18 @@ func (r *Reconciler) currentTarget(marker attemptHandle, merged merge) (Fingerpr
 	if !r.git.contains(gated, epicHead) {
 		gated = epicHead
 	}
+	// The attempt's branch is ABSENT on origin — retired, or never pushed
+	// under this name — while the head the gate recorded is carried by the
+	// integration branch. Nothing moved: the work the evidence is about is
+	// exactly what is being published, and the target's attempt head is the
+	// recorded one. Reading the absence as "" refused a passing gate as stale
+	// (epic-2jn, after a repair's finish retired the attempt's branch). A
+	// branch that is PRESENT at another head is still a move, and still
+	// caught; an absent branch whose recorded head the integration branch
+	// does not carry stays "" and is refused.
+	if head == "" && merged.AttemptHead != "" && r.git.contains(merged.AttemptHead, epicHead) {
+		head = merged.AttemptHead
+	}
 	gate, err := ReadGateCommands(r.opts.GateConfig)
 	if err != nil {
 		return nil, err
