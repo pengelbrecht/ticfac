@@ -12,8 +12,11 @@
   "attempt": 12,
   "done_item": "none",
   "demonstrating_check": "go test -run TestASecondCheckoutClaimIsRefusedWhileTheFirstDrives ./internal/runlife/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T07:55:27Z",
+  "triaged_at": "2026-09-27T07:55:46Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 9oo",
+  "promoted_as": "9oo",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "aj9",
