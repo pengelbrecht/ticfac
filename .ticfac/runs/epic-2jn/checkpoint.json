@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 380,
-  "state": "integrating",
-  "reason": "integrating vqc attempt 51 into epic/2jn",
-  "updated_at": "2026-09-27T19:51:31Z",
+  "sequence": 381,
+  "state": "failed",
+  "reason": "vqc try 2 (run dispatch #51) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and a resolve-conflict job already ran for this tick — its recorded outcome is \"failed\" and its work is on ticfac/run-epic-2jn/tick-vqc/resolve-50. A second conflict on the same tick is the stop, as it always was: read the recorded resolve, take its merge or settle the tick, and run the epic again",
+  "updated_at": "2026-09-27T19:51:36Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -223,7 +223,7 @@
     },
     {
       "tick_id": "vqc",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 51
     }
   ],
