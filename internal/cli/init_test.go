@@ -105,6 +105,10 @@ func initRunnersPath(repo string) string {
 // construction path.
 func TestInitOnAFreshGoRepositoryWritesFilesARunConstructsFrom(t *testing.T) {
 	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n\ngo 1.24\n"})
+	// A GitHub origin (tick 6vp): init guesses the close-out rule from it,
+	// and this clause's repository is one whose epics integrate through a
+	// PR. The no-origin mirror is 6vp's own test below.
+	mustGit(t, repo, "remote", "add", "origin", "git@github.com:example/example.git")
 	code, stdout, stderr := runInitOn(t, repo, "", "--yes")
 	if code != exitSuccess {
 		t.Fatalf("init exits %d: %s%s", code, stderr, stdout)
@@ -150,6 +154,92 @@ func TestInitOnAFreshGoRepositoryWritesFilesARunConstructsFrom(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("reconcile.New refuses the initialised repository: %v", err)
 	}
+}
+
+// TestInitOnARepositoryWithNoGitHubOriginNeedsNoForge is tick 6vp's own
+// acceptance: before it, init wrote the forge-requiring close-out rule
+// unconditionally, and a repository whose origin was not a GitHub remote
+// was one `ticfac run` refused to start on — the reconciler demands a forge
+// surface for a rule the repository could never satisfy, and nothing the
+// operator could pass would fix it. The guess keys on the one fact the
+// repository holds — origin — so init writes no rule there, and the
+// initialised repository constructs with NO forge surface at all.
+func TestInitOnARepositoryWithNoGitHubOriginNeedsNoForge(t *testing.T) {
+	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+	code, stdout, stderr := runInitOn(t, repo, "", "--yes")
+	if code != exitSuccess {
+		t.Fatalf("init exits %d: %s%s", code, stderr, stdout)
+	}
+	// config.md is still written — a run's workers read the standing
+	// orders — but it declares no close-out rule.
+	rule, err := reconcile.ReadCloseoutRule(filepath.Join(repo, filepath.FromSlash(initConfigMDName)))
+	if err != nil {
+		t.Fatalf("the written config.md does not read: %v", err)
+	}
+	if rule.Declared {
+		t.Fatal("init wrote the close-out rule for a repository with no GitHub origin — " +
+			"the run would refuse to start on it")
+	}
+	// And the production entry point's construction path, with no forge
+	// surface handed to it: nothing about the rule demands one.
+	if _, err := reconcile.New(reconcile.Options{
+		Repo: repo, EpicID: "e1", Tracker: &initFakeTracker{},
+		NewExecutor: executorFactory("claude", initRunnersPath(repo)),
+		Executors:   knownExecutors(), // no PullRequests: no forge to build one from
+	}); err != nil {
+		t.Fatalf("reconcile.New refuses a repository with no GitHub origin: %v", err)
+	}
+}
+
+// TestInitTakesTheCloseoutAnswerFromTheFlagOrTheQuestion (tick 6vp): the
+// close-out rule is an answer like the others — a flag for a script, a
+// question for a person, a guess from the repository for the default —
+// never a rule written unconditionally.
+func TestInitTakesTheCloseoutAnswerFromTheFlagOrTheQuestion(t *testing.T) {
+	t.Run("the flag overrides the guess", func(t *testing.T) {
+		// A GitHub origin guesses pr; --closeout none overrides the guess.
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		mustGit(t, repo, "remote", "add", "origin", "git@github.com:example/example.git")
+		if code, _, stderr := runInitOn(t, repo, "", "--yes", "--closeout", "none"); code != exitSuccess {
+			t.Fatalf("init --closeout none exits %d: %s", code, stderr)
+		}
+		rule, err := reconcile.ReadCloseoutRule(filepath.Join(repo, filepath.FromSlash(initConfigMDName)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rule.Declared {
+			t.Error("--closeout none still wrote the rule")
+		}
+	})
+	t.Run("the question is asked with the guessed default shown", func(t *testing.T) {
+		// No origin: the guess is none, shown as the default, and an
+		// explicit pr answer is honoured — a repository CAN want the rule
+		// before its remote exists.
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		code, stdout, _ := runInitOn(t, repo, "\n\n\npr\n")
+		if code != exitSuccess {
+			t.Fatalf("init exits %d: %s", code, stdout)
+		}
+		if !strings.Contains(stdout, "pull request with CI on GitHub") {
+			t.Errorf("the close-out question was never asked:\n%s", stdout)
+		}
+		if !strings.Contains(stdout, "[none]") {
+			t.Errorf("the question does not show the guessed default:\n%s", stdout)
+		}
+		rule, err := reconcile.ReadCloseoutRule(filepath.Join(repo, filepath.FromSlash(initConfigMDName)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !rule.Declared {
+			t.Error("the explicit pr answer wrote no rule")
+		}
+	})
+	t.Run("a value naming no choice is refused", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, _, stderr := runInitOn(t, repo, "", "--yes", "--closeout", "lunar"); code != exitUsage {
+			t.Fatalf("closeout=lunar exits %d, want the usage refusal: %s", code, stderr)
+		}
+	})
 }
 
 // initFakeTracker answers the four questions the reconciler asks a tracker.
@@ -279,8 +369,9 @@ func TestInitGuessesTheGateFromTheRepositoriesShape(t *testing.T) {
 func TestInitAnswersTheQuestionsOnStdin(t *testing.T) {
 	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
 	// substrate: both; runner: the default (claude); model: the default
-	// (sonnet) — empty lines, one per question.
-	code, stdout, _ := runInitOn(t, repo, "both\n\n\n")
+	// (sonnet); close-out: the default (the guess) — empty lines, one per
+	// question.
+	code, stdout, _ := runInitOn(t, repo, "both\n\n\n\n")
 	if code != exitSuccess {
 		t.Fatalf("init exits %d: %s", code, stdout)
 	}
@@ -288,6 +379,7 @@ func TestInitAnswersTheQuestionsOnStdin(t *testing.T) {
 		"where do runs of this repository execute",
 		"which harness dispatches local work",
 		"which model does claude run",
+		"pull request with CI on GitHub",
 	} {
 		if !strings.Contains(stdout, prompt) {
 			t.Errorf("the question %q was never asked:\n%s", prompt, stdout)
@@ -345,7 +437,7 @@ func TestInitRefusesACloudModelThatIsNotWorkersAI(t *testing.T) {
 // declares it.
 func TestInitOnACloudRepositoryWritesTheCloudsOwnRouting(t *testing.T) {
 	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
-	code, stdout, _ := runInitOn(t, repo, "cloud\n\n")
+	code, stdout, _ := runInitOn(t, repo, "cloud\n\n\n")
 	if code != exitSuccess {
 		t.Fatalf("init exits %d: %s", code, stdout)
 	}

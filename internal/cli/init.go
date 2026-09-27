@@ -17,12 +17,16 @@ package cli
 //	.tick/config.md           the PR + CI close-out rule the close-out holds
 //	                          on, read as prose by an anchor phrase
 //
-// init writes those, guessing the one thing the repository can answer for
-// itself — the testing gate, from the tree it stands in — and asking the
-// three things only a person can answer: where runs execute (local, cloud or
-// both), which harness dispatches the work, and which model. Every question
-// has a flag, because the same surface serves an agent; --yes takes every
-// default and the guess without asking.
+// init writes those, guessing the two things the repository can answer for
+// itself — the testing gate, from the tree it stands in, and the close-out
+// rule, from the origin remote it pushes through (tick 6vp: a rule written
+// for a repository with no GitHub origin is one `ticfac run` refuses to
+// start on) — and asking the four things only a person can answer: where
+// runs execute (local, cloud or both), which harness dispatches the work,
+// which model, and whether the close-out holds on a GitHub pull request
+// when the guess is wrong. Every question has a flag, because the same
+// surface serves an agent; --yes takes every default and the guesses
+// without asking.
 //
 // It refuses to overwrite: a repository that already carries any file init
 // would write is a repository whose routing somebody chose, and a silent
@@ -38,9 +42,10 @@ package cli
 //   - no [tier_policy]. Without one every dispatch runs at the role's base
 //     values — a policy that escalates on failure is a tuning decision a
 //     repository should make from measurements it has, not inherit a guess.
-//   - no .github/workflows/ci.yml. The close-out rule init writes names CI
-//     as the gate's second half; whether that workflow exists and what it
-//     runs is the repository's CI, not ticfac's to invent.
+//   - no .github/workflows/ci.yml. The close-out rule init writes when the
+//     answer names it names CI as the gate's second half; whether that
+//     workflow exists and what it runs is the repository's CI, not ticfac's
+//     to invent.
 
 import (
 	"bufio"
@@ -49,12 +54,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
@@ -73,6 +80,16 @@ const (
 const (
 	initRunnerClaude = "claude"
 	initRunnerPi     = "pi"
+)
+
+// The close-out answers init accepts (tick 6vp). `pr` writes the PR + CI
+// close-out rule; `none` writes a config.md that declares no rule — the
+// answer a repository whose origin is not a GitHub remote needs, because
+// the rule holds on a GitHub pull request a run would refuse to start
+// without, and nothing the operator could pass would fix it.
+const (
+	initCloseoutPR   = "pr"
+	initCloseoutNone = "none"
 )
 
 // The model each harness runs when the answer names none. The claude alias
@@ -94,9 +111,9 @@ const (
 // initFlags is `init`'s flag surface: the same answers the questions ask,
 // so a script (or an agent) never has to drive a prompt.
 type initFlags struct {
-	repo, substrate, runner, model, gate *string
-	yes                                  *bool
-	asJSON                               *bool
+	repo, substrate, runner, model, gate, closeout *string
+	yes                                            *bool
+	asJSON                                         *bool
 }
 
 func defineInitFlags(fs *flag.FlagSet) *initFlags {
@@ -106,6 +123,7 @@ func defineInitFlags(fs *flag.FlagSet) *initFlags {
 		runner:    fs.String("runner", "", "claude | pi, the harness local dispatches run on (default: claude)"),
 		model:     fs.String("model", "", "the model every role routes to (default: per runner)"),
 		gate:      fs.String("gate", "", "the testing gate, when it cannot be guessed from the repository"),
+		closeout:  fs.String("closeout", "", "pr | none — whether the close-out holds on a GitHub pull request with CI (default: guessed from the origin remote)"),
 		yes:       fs.Bool("yes", false, "take every default and the guessed gate without asking"),
 		asJSON:    fs.Bool("json", false, "print one versioned document (ticfac.init.v1) naming the answers and the files written; any question goes to stderr"),
 	}
@@ -119,7 +137,9 @@ func newInitCommand(stdout, stderr io.Writer) *cobra.Command {
 		Long: `Make this repository ready to run an epic, in one step.
 
 Asks where runs execute (local, cloud or both), which harness dispatches
-local work (claude or pi) and which model, then writes:
+local work (claude or pi), which model, and whether the close-out holds
+on a GitHub pull request with CI — the one question, like the gate, the
+repository can guess for itself, from its origin remote — then writes:
 
   .tick/runners.toml        the dispatch routing and the [testing.commands]
                             the integrated gate runs — guessed from the
@@ -127,7 +147,9 @@ local work (claude or pi) and which model, then writes:
                             and shown for confirmation
   .tick/runners.cloud.toml  the cloud's role cells, when the answer names
                             the cloud — the cloud runs Workers AI models only
-  .tick/config.md           the PR + CI close-out rule the close-out holds on
+  .tick/config.md           the close-out rule the close-out holds on — the
+                            PR + CI one when the answer names it, no rule
+                            when it does not
 
 Every question has a flag, so a script never has to drive a prompt; --yes
 takes every default and the guess. It refuses to overwrite: a repository
@@ -274,6 +296,7 @@ type initAnswers struct {
 	runner    string
 	model     string
 	gate      string
+	closeout  string
 }
 
 // resolveInitAnswers asks the questions the flags left blank, and refuses the
@@ -307,6 +330,7 @@ func resolveInitAnswers(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer
 		runner:    *fl.runner,
 		model:     *fl.model,
 		gate:      *fl.gate,
+		closeout:  *fl.closeout,
 	}
 
 	if answers.substrate == "" {
@@ -376,7 +400,51 @@ func resolveInitAnswers(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer
 			answers.model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
 		return answers, exitUsage
 	}
+
+	// The close-out answer (tick 6vp): the one question besides the gate
+	// the repository can guess for itself, from its origin — a remote that
+	// names a GitHub repository is one whose epics can integrate through a
+	// PR, and no origin is one whose runs must integrate locally, because
+	// the rule written anyway is a rule the run refuses to start on. A flag
+	// carries the answer past the guess; the guess is the question's default.
+	if answers.closeout == "" {
+		answer, err := questions(fmt.Sprintf(
+			"does the close-out of an epic here hold on a pull request with CI on GitHub: %s or %s?",
+			initCloseoutPR, initCloseoutNone), initCloseoutDefault(repo))
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac init: %v\n", err)
+			return answers, exitUsage
+		}
+		answers.closeout = answer
+	}
+	switch answers.closeout {
+	case initCloseoutPR, initCloseoutNone:
+	default:
+		fmt.Fprintf(stderr, "ticfac init: %q is not a close-out init can write — %s (the close-out "+
+			"holds on a GitHub pull request with CI) or %s (it holds on nothing, and a run "+
+			"integrates locally)\n",
+			answers.closeout, initCloseoutPR, initCloseoutNone)
+		return answers, exitUsage
+	}
 	return answers, exitSuccess
+}
+
+// initCloseoutDefault guesses the close-out answer from the repository's
+// own origin (tick 6vp): a remote forge.ParseRepo resolves — the SAME
+// reader the run's own surface resolves the remote through (tick vo4's
+// discipline, so init's guess, doctor's check and the run's demand cannot
+// disagree) — is a repository whose epics can integrate through a PR; no
+// origin, or one that does not resolve, is a repository whose runs must
+// integrate locally.
+func initCloseoutDefault(repo string) string {
+	url, err := exec.Command("git", "-C", repo, "remote", "get-url", "origin").Output()
+	if err != nil {
+		return initCloseoutNone
+	}
+	if _, err := forge.ParseRepo(string(url)); err != nil {
+		return initCloseoutNone
+	}
+	return initCloseoutPR
 }
 
 // initGateCommands is the testing gate: the answer's own command when it named
@@ -500,10 +568,19 @@ func initWrites(repo string, answers initAnswers, gates []guessedGate) []initWri
 	}
 	writes = append(writes, initWrite{
 		name: initConfigMDName,
-		body: initConfigMD(),
-		note: "the PR + CI close-out rule the close-out holds on",
+		body: initConfigMD(answers.closeout == initCloseoutPR),
+		note: initConfigNote(answers.closeout == initCloseoutPR),
 	})
 	return writes
+}
+
+// initConfigNote is the one-line note beside the config write: the rule when
+// the answer named it, its absence when it did not.
+func initConfigNote(closeout bool) string {
+	if closeout {
+		return "the PR + CI close-out rule the close-out holds on"
+	}
+	return "no close-out rule declared — a run integrates this repository locally"
 }
 
 // runnersTOML is the base routing. The shape is the one this repository's own
@@ -577,12 +654,35 @@ version = 2
 	return b.String()
 }
 
-// initConfigMD is the repository config init writes. The Rules section's
-// first bullet is the PR + CI close-out rule, written with the anchor phrase
-// (`PR + CI gate`) the close-out's reader recognises — the rule's own stable
-// vocabulary, present verbatim, because a paraphrase the reader fuzzy-matched
-// would fail open on every repo that reworded it.
-func initConfigMD() string {
+// initConfigMD is the repository config init writes. When the answer names
+// the rule, the Rules section's first bullet is the PR + CI close-out rule,
+// written with the anchor phrase (`PR + CI gate`) the close-out's reader
+// recognises — the rule's own stable vocabulary, present verbatim, because
+// a paraphrase the reader fuzzy-matched would fail open on every repo that
+// reworded it. When it does not (tick 6vp), the config declares NO rule —
+// and the anchor phrase must not appear in that variant at all, not even as
+// an instruction for adding it, because the reader anchors on the phrase
+// and nothing else — so the section says the rule is absent, neutrally, and
+// a run reads a repository that integrates locally and needs no forge.
+func initConfigMD(closeout bool) string {
+	if !closeout {
+		return `# Tick Run Configuration
+
+## Rules
+
+- No close-out rule is declared: a run integrates this repository locally
+  and needs no GitHub credential. To make the close-out of an epic hold on
+  a GitHub pull request with CI instead, give this repository a GitHub
+  origin and state that rule here in the repository's own words.
+
+## Standing orders
+
+This section is the repository's own practice, as a run's workers read it.
+Edit it as the work settles: library choice within the stack, naming,
+internal API shape, file layout, test strategy, wave partitioning, and
+discovered bugs — create a tick rather than fixing beside the point.
+`
+	}
 	return `# Tick Run Configuration
 
 ## Rules
@@ -634,6 +734,7 @@ type initJSON struct {
 	Substrate string         `json:"substrate"`
 	Runner    string         `json:"runner"`
 	Model     string         `json:"model"`
+	Closeout  string         `json:"closeout"`
 	Gate      []initGateJSON `json:"gate"`
 	Files     []initFileJSON `json:"files"`
 }
@@ -647,6 +748,7 @@ func emitInitJSON(answers initAnswers, gates []guessedGate, writes []initWrite, 
 		Substrate: answers.substrate,
 		Runner:    answers.runner,
 		Model:     answers.model,
+		Closeout:  answers.closeout,
 		Gate:      make([]initGateJSON, 0, len(gates)),
 		Files:     make([]initFileJSON, 0, len(writes)),
 	}

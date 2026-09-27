@@ -7,9 +7,12 @@ package cli
 // machine a run starts on. A run needs tk (the tracker binary the run reads
 // and writes through), a git identity (commits made by nobody are commits
 // nobody can attribute), a herdr server when the substrate would dispatch
-// through panes, and a GitHub credential when the close-out rule init writes
-// holds on a PR. A cloud run needs more: docker (the sandbox image builds
-// from one), wrangler, and a configured factory.
+// through panes, and — when the repository declares the PR + CI close-out
+// rule — BOTH halves of a forge: a GitHub remote to open the epic PR on and
+// a credential to speak with (tick 6vp: a rule over a non-GitHub origin was
+// an ok here that the run then refused to start on). A cloud run needs
+// more: docker (the sandbox image builds from one), wrangler, and a
+// configured factory.
 //
 // Each check is one line, ok or missing, and a missing line carries its fix —
 // the command that clears it — because a doctor that names a problem without
@@ -73,7 +76,8 @@ the command that clears it:
   .tick/runners.toml  the routing and the gate a run reads — init's to write
   tk                  the tracker binary the run reads and writes through
   herdr               a herdr server, when the substrate would dispatch through panes
-  github              the credential the PR + CI close-out rule holds on
+  github              the GitHub remote and credential the PR + CI close-out
+                      rule needs — checked when the repository declares the rule
   git identity        the user.email and user.name a run's commits are attributed to
   docker              cloud only: the sandbox image builds from one
   wrangler            cloud only: the factory is driven through it
@@ -168,6 +172,20 @@ var (
 		return "gh auth token answers", nil
 	}
 
+	// doctorForgeRemote answers for the half of the forge the credential is
+	// not (tick 6vp): the remote the rule's epic PR opens on, resolved
+	// through the SAME reader the run's own surface resolves it through
+	// (forge.ParseRepo) — so this check's ok is the repository the run will
+	// actually address, and a declared rule over a non-GitHub origin is a
+	// missing line here, not an ok the run refuses to start on.
+	doctorForgeRemote = func(repo string) (string, error) {
+		url, err := exec.Command("git", "-C", repo, "remote", "get-url", "origin").Output()
+		if err != nil {
+			return "", fmt.Errorf("no origin remote to open the epic PR on — read the origin remote: %v", err)
+		}
+		return forge.ParseRepo(string(url))
+	}
+
 	// doctorGitIdentity answers for the git identity a run's commits carry.
 	doctorGitIdentity = func(repo string) (string, error) {
 		email, err := exec.Command("git", "-C", repo, "config", "user.email").Output()
@@ -229,13 +247,14 @@ var (
 // The fix each missing check names. Kept beside the checks that use them, so
 // the remedy travels with its diagnosis.
 const (
-	doctorFixTK       = "install tk (github.com/pengelbrecht/ticks) and make sure `tk version` answers"
-	doctorFixHerdr    = "start herdr in this checkout (`herdr`)"
-	doctorFixGitHub   = "gh auth login, or export GITHUB_TOKEN"
-	doctorFixGit      = `git config --global user.email "you@example.com" && git config --global user.name "Your Name"`
-	doctorFixDocker   = "install Docker and start it (https://docs.docker.com/get-docker/)"
-	doctorFixWrangler = "pnpm add -g wrangler"
-	doctorFixFactory  = "ticfac factory setup"
+	doctorFixTK          = "install tk (github.com/pengelbrecht/ticks) and make sure `tk version` answers"
+	doctorFixHerdr       = "start herdr in this checkout (`herdr`)"
+	doctorFixGitHub      = "gh auth login, or export GITHUB_TOKEN"
+	doctorFixForgeRemote = "point origin at GitHub (`git remote add origin git@github.com:owner/name.git`), or remove the close-out rule from .tick/config.md"
+	doctorFixGit         = `git config --global user.email "you@example.com" && git config --global user.name "Your Name"`
+	doctorFixDocker      = "install Docker and start it (https://docs.docker.com/get-docker/)"
+	doctorFixWrangler    = "pnpm add -g wrangler"
+	doctorFixFactory     = "ticfac factory setup"
 )
 
 // runDoctor is `doctor`'s body.
@@ -272,6 +291,18 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 		cloudish = true
 	}
 
+	// The close-out rule decides the forge check (ticks hio and 6vp): the
+	// run resolves a GitHub surface when and only when the rule is declared,
+	// so doctor checks exactly that. A repository that declares no rule is
+	// not told its credential is missing — a fix for a problem no run would
+	// have — and one that declares it is checked for BOTH halves the rule
+	// needs: the remote the epic PR opens on, then the credential.
+	rule, err := reconcile.ReadCloseoutRule(reconcile.RepoConfigPath(repo))
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac doctor: the repository's close-out rule could not be read: %v\n", err)
+		return exitGeneric
+	}
+
 	// check runs one probe and turns its answer into a report line.
 	check := func(name, fix string, probe func() (string, error)) doctorCheck {
 		detail, err := probe()
@@ -304,9 +335,25 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 		runnersCheck(),
 		check("tk", doctorFixTK, func() (string, error) { return doctorTK(ctx, repo) }),
 		check("herdr", doctorFixHerdr, func() (string, error) { return doctorHerdr(ctx) }),
-		check("github", doctorFixGitHub, doctorGitHub),
-		check("git identity", doctorFixGit, func() (string, error) { return doctorGitIdentity(repo) }),
 	}
+	// The github line carries both halves the rule needs, each with its own
+	// fix: a missing remote is not cleared by `gh auth login`, and a missing
+	// credential is not cleared by a new origin.
+	if rule.Declared {
+		checks = append(checks, func() doctorCheck {
+			slug, err := doctorForgeRemote(repo)
+			if err != nil {
+				return doctorCheck{Name: "github", Problem: err.Error(), Fix: doctorFixForgeRemote}
+			}
+			detail, err := doctorGitHub()
+			if err != nil {
+				return doctorCheck{Name: "github", Problem: err.Error(), Fix: doctorFixGitHub}
+			}
+			return doctorCheck{Name: "github", OK: true,
+				Detail: fmt.Sprintf("origin is %s; %s", slug, detail)}
+		}())
+	}
+	checks = append(checks, check("git identity", doctorFixGit, func() (string, error) { return doctorGitIdentity(repo) }))
 	// The herdr line is honest about what a missing herdr means: the
 	// substrate degrades to a plain harness, it does not stop the run — the
 	// fix is still on the line, because panes are where an operator watches

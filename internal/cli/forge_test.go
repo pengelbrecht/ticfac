@@ -208,6 +208,46 @@ func TestPullRequestsForRunSkipsTheCredentialWhenNoRuleIsDeclared(t *testing.T) 
 	}
 }
 
+// TestPullRequestsForRunNamesTheFixWhenTheRuleHasNoForgeRemote (tick 6vp):
+// a repository that declares the rule but has no GitHub remote is a run
+// that refuses to START, and before this tick the refusal named neither
+// remedy — an operator could clear it only by reading source. The refusal
+// now names the config the rule lives in and both ways out: point the
+// remote at GitHub, or remove the rule.
+func TestPullRequestsForRunNamesTheFixWhenTheRuleHasNoForgeRemote(t *testing.T) {
+	dir := closeoutRuleDir(t, "Epic integration goes through a PR + CI gate.")
+	mustGit(t, dir, "remote", "remove", "origin")
+	t.Setenv(forge.TokenEnv, "")
+	ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
+	saveForgeTokenLadder(t, ladder)
+
+	_, _, err := pullRequestsForRun(dir, "origin")
+	if err == nil {
+		t.Fatal("a surface was built for a checkout with no remote")
+	}
+	if !strings.Contains(err.Error(), "point origin at GitHub") {
+		t.Errorf("the refusal does not name the remote remedy:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), "remove the rule") {
+		t.Errorf("the refusal does not name the rule remedy:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), reconcile.RepoConfigPath(dir)) {
+		t.Errorf("the refusal does not name the config the rule lives in:\n%v", err)
+	}
+	if *ran {
+		t.Error("the credential ladder ran although the remote could not resolve")
+	}
+
+	// A remote that is there but does not resolve as a GitHub repository is
+	// the same refusal, the same remedies.
+	mustGit(t, dir, "remote", "add", "origin", "https://example.com/not-aforge")
+	if _, _, err := pullRequestsForRun(dir, "origin"); err == nil {
+		t.Fatal("a surface was built over a remote that resolves to no repository")
+	} else if !strings.Contains(err.Error(), "remove the rule") {
+		t.Errorf("the refusal does not name the remedies:\n%v", err)
+	}
+}
+
 // The rule the builder reads is the reconciler's own, from the same path —
 // so a config the reconciler cannot read is a config the builder refuses
 // rather than guessing at, and the refusal names the file: the reconciler

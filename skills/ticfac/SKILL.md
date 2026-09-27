@@ -18,9 +18,11 @@ one command as the ticks skill's `tk skills install ticks`.
 ## The loop
 
 1. `ticfac init` — make the repository runnable (writes `.tick/runners.toml`,
-   guesses the testing gate). Flags answer every question:
-   `--substrate local|cloud|both --runner claude|pi --model <m> --gate '<cmd>'`;
-   `--yes` takes every default.
+   guesses the testing gate, and guesses the close-out rule from origin:
+   `pr` when it names a GitHub repository, `none` otherwise). Flags answer
+   every question:
+   `--substrate local|cloud|both --runner claude|pi --model <m> --gate '<cmd>'
+   --closeout pr|none`; `--yes` takes every default.
 2. `ticfac doctor` — is the machine ready? Exit 0 yes; 1 names each missing
    thing with the one command that fixes it.
 3. `ticfac run <epic>` — start the epic in the background and attach to the

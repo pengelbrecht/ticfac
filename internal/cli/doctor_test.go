@@ -34,13 +34,14 @@ import (
 
 // doctorSeams is every probe doctor asks, saved for restore.
 type doctorSeams struct {
-	tk       func(context.Context, string) (string, error)
-	herdr    func(context.Context) (string, error)
-	github   func() (string, error)
-	gitID    func(string) (string, error)
-	docker   func(context.Context) (string, error)
-	wrangler func() (string, error)
-	factory  func(context.Context) (string, error)
+	tk          func(context.Context, string) (string, error)
+	herdr       func(context.Context) (string, error)
+	github      func() (string, error)
+	forgeRemote func(string) (string, error)
+	gitID       func(string) (string, error)
+	docker      func(context.Context) (string, error)
+	wrangler    func() (string, error)
+	factory     func(context.Context) (string, error)
 }
 
 // saveDoctorSeams overrides every probe with ok (or with the one missing
@@ -51,16 +52,18 @@ type doctorSeams struct {
 func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 	t.Helper()
 	saved := doctorSeams{
-		tk:       doctorTK,
-		herdr:    doctorHerdr,
-		github:   doctorGitHub,
-		gitID:    doctorGitIdentity,
-		docker:   doctorDocker,
-		wrangler: doctorWrangler,
-		factory:  doctorFactory,
+		tk:          doctorTK,
+		herdr:       doctorHerdr,
+		github:      doctorGitHub,
+		forgeRemote: doctorForgeRemote,
+		gitID:       doctorGitIdentity,
+		docker:      doctorDocker,
+		wrangler:    doctorWrangler,
+		factory:     doctorFactory,
 	}
 	t.Cleanup(func() {
-		doctorTK, doctorHerdr, doctorGitHub, doctorGitIdentity = saved.tk, saved.herdr, saved.github, saved.gitID
+		doctorTK, doctorHerdr, doctorGitHub, doctorForgeRemote, doctorGitIdentity =
+			saved.tk, saved.herdr, saved.github, saved.forgeRemote, saved.gitID
 		doctorDocker, doctorWrangler, doctorFactory = saved.docker, saved.wrangler, saved.factory
 	})
 	ok := func(name string) func() (string, error) {
@@ -74,6 +77,12 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 		doctorHerdr = func(context.Context) (string, error) { return ok("herdr")() }
 	}
 	doctorGitHub = ok("github")
+	doctorForgeRemote = func(string) (string, error) {
+		if missing == "forge remote" {
+			return "", errDoctorProbe("forge remote")
+		}
+		return "example/example", nil
+	}
 	doctorGitIdentity = func(string) (string, error) { return ok("git identity")() }
 	doctorDocker = func(context.Context) (string, error) { return ok("docker")() }
 	doctorWrangler = ok("wrangler")
@@ -108,6 +117,10 @@ func runDoctorOn(t *testing.T, repo string, cloud bool) (int, string, string) {
 func doctorFixture(t *testing.T, cloud bool) string {
 	t.Helper()
 	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+	// A GitHub origin (tick 6vp): init guesses the close-out rule from it,
+	// so the fixture declares the rule and doctor's forge check — the
+	// remote and the credential, both halves — runs for it.
+	mustGit(t, repo, "remote", "add", "origin", "git@github.com:example/example.git")
 	args := []string{"--yes", "--substrate", "local"}
 	if cloud {
 		args = []string{"--yes", "--substrate", "both"}
@@ -209,6 +222,59 @@ func TestDoctorReportsAMissingRunnersTomlWithInitAsTheFix(t *testing.T) {
 // runconfigFileName is the check's display name, isolated so the test reads
 // the same constant the report prints.
 func runconfigFileName() string { return ".tick/runners.toml" }
+
+// TestDoctorChecksTheForgeRemoteTheRuleNeeds (tick 6vp): a repository that
+// declares the rule needs BOTH halves of the forge — a GitHub remote to open
+// the epic PR on and the credential to speak with — and before this tick
+// doctor checked only the credential, so a declared rule over a non-GitHub
+// origin was an ok the run then refused to start on. The check names the
+// half it is missing, and each half carries its own fix.
+func TestDoctorChecksTheForgeRemoteTheRuleNeeds(t *testing.T) {
+	saveDoctorSeams(t, "forge remote", false)
+	repo := doctorFixture(t, false) // declares the rule: init guessed pr from origin
+	code, stdout, _ := runDoctorOn(t, repo, false)
+	if code != exitGeneric {
+		t.Fatalf("doctor with a rule and no GitHub remote exits %d, want %d:\n%s", code, exitGeneric, stdout)
+	}
+	if !strings.Contains(stdout, "missing  github") {
+		t.Errorf("the report has no missing github line:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "fix: "+doctorFixForgeRemote) {
+		t.Errorf("the missing remote does not name its fix (%s):\n%s", doctorFixForgeRemote, stdout)
+	}
+
+	// The ok mirror names the remote the epic PR opens on: an ok without
+	// the repository it addresses is the half-answer the missing half hid.
+	saveDoctorSeams(t, "", false)
+	code, stdout, _ = runDoctorOn(t, repo, false)
+	if code != exitSuccess {
+		t.Fatalf("doctor with both halves exits %d, want 0:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, "example/example") {
+		t.Errorf("the ok line does not name the remote the epic PR opens on:\n%s", stdout)
+	}
+}
+
+// TestDoctorSkipsTheForgeCheckWhenNoRuleIsDeclared: the run resolves a
+// forge when and only when the rule is declared (tick hio), so a repository
+// init left without the rule — one with no GitHub origin — is not told its
+// GitHub credential is missing: a fix for a problem no run would have is
+// the friction this tick exists to remove, pointed at doctor.
+func TestDoctorSkipsTheForgeCheckWhenNoRuleIsDeclared(t *testing.T) {
+	saveDoctorSeams(t, "", false)
+	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+	// init guesses no rule: the fixture has no origin.
+	if code, _, stderr := runInitOn(t, repo, "", "--yes"); code != exitSuccess {
+		t.Fatalf("the fixture's init exits %d: %s", code, stderr)
+	}
+	code, stdout, _ := runDoctorOn(t, repo, false)
+	if code != exitSuccess {
+		t.Fatalf("doctor over a repository that needs no forge exits %d, want 0:\n%s", code, stdout)
+	}
+	if strings.Contains(stdout, "github") {
+		t.Errorf("the forge check ran for a repository that declares no rule:\n%s", stdout)
+	}
+}
 
 // TestDoctorProbesTheRealHerdrSocket: herdr's probe is the real client —
 // the same resolution order and handshake a dispatch uses — so a missing
