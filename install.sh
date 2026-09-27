@@ -62,7 +62,12 @@ mkdir -p "$INSTALL_DIR"
 
 # Download and extract
 TMP=$(mktemp -d)
-trap "rm -rf $TMP" EXIT
+# Single quotes: $TMP is expanded when the trap FIRES, not when it is set,
+# and the inner double quotes keep that expansion one word — mktemp's answer
+# can carry a space (GNU mktemp honors TMPDIR, and a TMPDIR with a space in
+# it is a legal one), and an unquoted expansion here silently removes two
+# wrong paths instead of the temp dir.
+trap 'rm -rf "$TMP"' EXIT
 
 curl -fsSL "$URL" | tar -xz -C "$TMP"
 

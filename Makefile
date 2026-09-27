@@ -28,7 +28,7 @@ GOTEST_PARALLEL ?= 12
 # `test` below has no -short and CI runs BOTH targets on every push and pull
 # request, so everything the gate skips is still refused before main.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test gate
+.PHONY: build vet test-short test gate release
 
 build:
 	go build ./...
@@ -89,3 +89,23 @@ ts-gate:
 # The gate, with the cache refused. Slower and unconditional.
 suite:
 	go test -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+
+# Cutting a release (tick 5o5): the v* tag IS the release. Pushing one runs
+# .github/workflows/release.yml, which builds both binaries for every
+# platform through .goreleaser.yaml and publishes the archives install.sh
+# downloads. Nothing in this repository can push that tag for you — it goes
+# to the real forge, and it belongs on a merged main — but the cut must not
+# be a remembered procedure either: until the FIRST tag exists there is
+# nothing at releases/latest to resolve and the stable install URL answers
+# nothing. So it is one command, run from a merged main:
+#
+#     make release VERSION=vX.Y.Z
+#
+# The refusals are the workflow's contract: it only listens for v* tags, so
+# a VERSION that is missing or without the v prefix is a tag that triggers
+# nothing — a release nobody can install — and the target fails before
+# tagging rather than pushing one.
+release:
+	@test -n "$(VERSION)" || { echo 'usage: make release VERSION=vX.Y.Z — cut the tag the release workflow builds from, from a merged main'; exit 2; }
+	@case "$(VERSION)" in v*) ;; *) echo "the release workflow only listens for v* tags: VERSION=$(VERSION)"; exit 2;; esac
+	git tag -a "$(VERSION)" -m "ticfac $(VERSION)" && git push origin "$(VERSION)"

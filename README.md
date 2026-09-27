@@ -57,6 +57,16 @@ platform matrix, the archive naming and the repository the release publishes
 to are pinned there, and the installer runs end to end against a fake forge
 in the per-tick gate.
 
+Cutting one is one command:
+
+    make release VERSION=vX.Y.Z
+
+run from a merged `main` — the target cuts an annotated tag and pushes it,
+and the workflow does the rest. The FIRST release is part of the first merge
+to `main`, not an afterthought: until a `v*` tag exists, `releases/latest`
+has nothing to resolve to and the stable install URL above answers nothing,
+so the one-command install is unreachable.
+
 ## Command surface
 
 Every command runs on one cobra tree, styled by [fang](https://github.com/charmbracelet/fang)
