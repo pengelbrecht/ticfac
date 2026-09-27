@@ -12,8 +12,11 @@
   "attempt": 43,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/reconcile/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T17:35:51Z",
+  "triaged_at": "2026-09-27T17:36:03Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 7o5",
+  "promoted_as": "7o5",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "4mv",
