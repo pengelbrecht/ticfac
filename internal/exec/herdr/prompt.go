@@ -85,7 +85,9 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 		strings.Join(subprocess.ExemptFromBoundary(), ", "))
 	fmt.Fprintf(&b, "- Work only inside this worktree. Do not touch sibling workspaces, worktrees or\n")
 	fmt.Fprintf(&b, "  other branches.\n")
-	fmt.Fprintf(&b, "- Commit source and tests only, never build output or caches.\n\n")
+	fmt.Fprintf(&b, "- Commit source and tests only, never build output or caches.\n")
+	fmt.Fprintf(&b, "- Do not amend, rebase or reset commits you have already made: they may already be\n")
+	fmt.Fprintf(&b, "  pushed. To change something, add a new commit on top.\n\n")
 
 	if spec.OutputSchema != "" {
 		fmt.Fprintf(&b, "The structured result this job was asked for is %s.\n", spec.OutputSchema)

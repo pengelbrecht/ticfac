@@ -795,6 +795,29 @@ evac-live)
 	commit
 	report
 	;;
+amend-pushed)
+	# epic-2jn, rix attempt 45: a1's worker commits, waits until its
+	# supervisor's timer has put that commit on origin, and then amends it —
+	# a worker rewriting its own already-pushed history, which is ordinary
+	# agent behaviour. Every other tick behaves like the report mode.
+	commit
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_ATTEMPT" = "1" ]; then
+		head="$(git -C "$TICFAC_WORKTREE" rev-parse HEAD)"
+		waited=0
+		until git -C "$TICFAC_WORKTREE" ls-remote origin "refs/heads/$TICFAC_BRANCH" | grep -q "^$head"; do
+			if [ "$waited" -ge 600 ]; then
+				echo "fake runner: the supervisor never pushed $head; nothing to amend over" >&2
+				exit 1
+			fi
+			sleep 0.1
+			waited=$((waited + 1))
+		done
+		printf 'amended by %s after it was pushed\n' "$TICFAC_TICK" >> "$TICFAC_WORKTREE/$file"
+		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" commit -q --amend --no-edit >/dev/null 2>&1
+	fi
+	report
+	;;
 wallwip)
 	# pbb's shape: attempt 1 of a1 does real work in the tree, commits
 	# nothing and stays alive past the bound, so the wall clock stops it

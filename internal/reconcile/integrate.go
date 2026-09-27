@@ -374,7 +374,7 @@ func (r *Reconciler) durableAttemptHead(branch string, collected *subprocess.Col
 	// Push it: a fast-forward makes origin agree with what was collected, and
 	// anything else is origin holding commits this attempt did not produce.
 	if _, stderr, err := r.git.try("", "push", r.opts.Remote, local+":"+refFor(branch)); err != nil {
-		if r.supersedeEvacuationSnapshot(branch, remote, local) {
+		if r.supersedeEvacuationSnapshot(branch, remote, local) || r.replaceOwnEarlierHead(branch, local) {
 			return local, nil
 		}
 		return "", fmt.Errorf(
@@ -384,6 +384,25 @@ func (r *Reconciler) durableAttemptHead(branch string, collected *subprocess.Col
 			short(local), branch, r.opts.Remote, short(remote), firstLine(stderr))
 	}
 	return local, nil
+}
+
+// replaceOwnEarlierHead replaces origin's head of an attempt branch with the
+// collected head when origin's head is a state the attempt's own branch held
+// and the worker has since rewritten (epic-2jn, rix attempt 45), and reports
+// whether origin holds the collected head afterwards.
+//
+// A worker that amends, rebases or resets commits its supervisor already
+// pushed leaves origin on a commit its branch moved off, and the collected
+// head can never fast-forward it. That is the attempt's own history, not
+// somebody else's write — and the branch's reflog, in this repository whose
+// worktree the worker committed in, is the proof: both origin's head and the
+// collected head must be states the local branch pointed at. The replacement
+// leases on origin's head (subprocess.ReplaceOwnEarlierHead). Origin holding
+// anything the branch never held is still the refusal.
+func (r *Reconciler) replaceOwnEarlierHead(branch, head string) bool {
+	run := func(args ...string) (string, error) { return r.git.run("", args...) }
+	replaced, _ := subprocess.ReplaceOwnEarlierHead(run, r.opts.Remote, branch, head)
+	return replaced
 }
 
 // evacuationSnapshotSubject is the subject prefix every SIGTERM flush's

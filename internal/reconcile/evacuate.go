@@ -238,7 +238,12 @@ func (r *Reconciler) evacuateAttempt(attempt evacuationAttempt, stopAt time.Time
 		// The supervisor's timer pushes the same HEAD to the same ref, and
 		// two pushes racing to create or move one ref fail one of them on
 		// the ref's lock. Origin holding exactly this HEAD is the push done.
-		if !r.evacRemoteHolds(work, stopAt) {
+		// Origin holding a commit the worker itself has since amended,
+		// rebased or reset away is its own history, and the branch replaces
+		// it under a lease (epic-2jn, rix attempt 45).
+		run := func(args ...string) (string, error) { return r.evacGit(work.Worktree, stopAt, args...) }
+		if replaced, _ := subprocess.ReplaceOwnEarlierHead(run, work.Remote, work.Branch, ""); !replaced &&
+			!r.evacRemoteHolds(work, stopAt) {
 			say("%s: could not push %s (%s)", name, work.Branch, firstLine(err.Error()))
 			return
 		}
