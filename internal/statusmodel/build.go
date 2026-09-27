@@ -707,17 +707,26 @@ func latestStage(feed []runfeed.Event, tickID, stage string) *runfeed.Event {
 }
 
 // runCompleted says whether the run's own records say it finished: the
-// checkpoint's terminal completion, or its own run_finished line.
+// checkpoint's terminal completion, or its own run_finished line. The
+// feed's own LAST run_finished line is the run's word, and only its word
+// (tick bkg): a failed run is resumable under the same run id, so a resumed
+// run's feed still carries the failed incarnation's run_finished, and ANY
+// line would read a run that stopped failed and just began again as
+// finished — surfacing a person's merge wait for work that is still going.
+// The reconciler writes the line's detail LED by the runstate word it
+// checkpointed ("failed: the integrated gate refused ...", "completed:
+// every tick closed ..."), the same authority `ticfac watch`'s own
+// ended-failed question reads, so a line that names a failure is an ending
+// that is not a completion.
 func runCompleted(src Sources, recs Records) bool {
 	if recs.Checkpoint != nil && recs.Checkpoint.State == "completed" {
 		return true
 	}
-	for _, e := range src.Feed {
-		if e.Stage == reconcile.StageRunFinished {
-			return true
-		}
+	last := latestStage(src.Feed, "", reconcile.StageRunFinished)
+	if last == nil {
+		return false
 	}
-	return false
+	return !strings.HasPrefix(last.Detail, string(runstate.StateFailed)+":")
 }
 
 // buildWaits states what the run is blocked on, and everything a person must
