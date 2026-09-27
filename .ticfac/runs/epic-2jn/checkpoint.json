@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 376,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-27T19:27:53Z",
+  "sequence": 377,
+  "state": "dispatching",
+  "reason": "dispatching vqc as attempt 51",
+  "updated_at": "2026-09-27T19:27:59Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -223,7 +223,7 @@
     },
     {
       "tick_id": "vqc",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 50
     }
   ],
