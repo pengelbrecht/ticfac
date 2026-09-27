@@ -53,9 +53,14 @@ func newExitError(code int, format string, args ...any) error {
 // exitCodeOf reports the process code an error from a command maps to. A nil
 // error is success; an error nobody gave a code is generic, because silently
 // exiting 0 on an error is the failure class this exists to prevent.
+// printedExit is a body that said its own refusal and carries only its code.
 func exitCodeOf(err error) int {
 	if err == nil {
 		return exitSuccess
+	}
+	var printed *printedExit
+	if errors.As(err, &printed) {
+		return printed.code
 	}
 	if exitErr, ok := err.(*exitError); ok {
 		return exitErr.code

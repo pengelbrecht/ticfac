@@ -30,6 +30,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -206,17 +208,30 @@ func ageOf(stamp string, now time.Time) string {
 // --follow, the live table above). For a run the Workflow hosts it answers
 // from the Workflow's own state, never from "is there a process here" — the
 // question status could not answer off-host until tick k7p.
-func statusCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+// newStatusCommand builds the cobra command for `status`.
+func newStatusCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status <run-id>",
+		Short: "is the run alive, and when did it last say anything",
+		Long: `The one-shot liveness answer (and, with --follow, the live table): is the
+run alive — a pidfile plus process start time for a local run, the Workflow's
+own state for one the cloud hosts — when did it last say anything, and what is
+each in-flight attempt doing.`,
+	}
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	asJSON := fs.Bool("json", false, "print the full status as JSON")
 	follow := fs.Bool("follow", false, "keep the status table updated in place, one line per tick, until the run ends or Ctrl-C")
 	interval := fs.Duration("interval", defaultStatusFollowInterval, "with --follow, how often the table refreshes")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(statusCommand(c.Context(), args, repo, asJSON, follow, interval, stdout, stderr))
 	}
-	rest := fs.Args()
+	return cmd
+}
+
+func statusCommand(ctx context.Context, args []string, repo *string, asJSON, follow *bool, interval *time.Duration, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac status: exactly one run id is required\n")
 		return 2

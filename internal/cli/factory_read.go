@@ -12,8 +12,6 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,44 +23,102 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/factory/dashboard"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
 )
 
-// factoryCommand is the `factory` group's dispatcher: args[0] names the
-// subcommand, the rest are its flags and operands.
-func factoryCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, factoryUsage)
-		return exitUsage
+// newFactoryCommand builds the `factory` group: the cobra command whose Long
+// is the group's usage (the deployable's posture and the closed command
+// vocabulary), with the bare and unknown-subcommand refusals kept
+// byte-for-byte from the dispatcher it replaces — a script failing on exit 2
+// still reads the vocabulary it failed on.
+func newFactoryCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "factory",
+		Short: "put and run the ticks cloud factory in your own Cloudflare account",
+		Long:  factoryUsage,
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				fmt.Fprint(stderr, factoryUsage)
+				return &printedExit{code: exitUsage}
+			}
+			if args[0] == "help" {
+				fmt.Fprint(stdout, factoryUsage)
+				return nil
+			}
+			fmt.Fprintf(stderr, "ticfac factory: unknown subcommand %q\n\n%s", args[0], factoryUsage)
+			return &printedExit{code: exitUsage}
+		},
 	}
-	name, rest := args[0], args[1:]
-	if len(rest) > 0 && (rest[0] == "--help" || rest[0] == "-h") {
-		fmt.Fprint(stdout, factoryUsage)
-		return exitSuccess
+	cmd.AddCommand(
+		newFactoryStatusCommand(stdout, stderr),
+		newFactoryDashboardCommand(stdout, stderr),
+		newFactoryWebhookCommand(stdout, stderr),
+		newFactoryDeployCommand(stdout, stderr),
+		newFactorySetupCommand(stdout, stderr),
+	)
+	return cmd
+}
+
+// newFactoryStatusCommand builds `factory status`'s cobra command.
+func newFactoryStatusCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "what the factory has configured, and whether it works",
+		Long:  "What the factory has configured — deployment, GitHub credential, gateway —\nand, live, whether each one still works. --offline skips the live checks.",
 	}
-	switch name {
-	case "status":
-		return runFactoryStatus(ctx, rest, stdout, stderr)
-	case "dashboard":
-		return runFactoryDashboard(ctx, rest, stdout, stderr)
-	case "webhook":
-		// Signal-aware for consistency with the rest of the group's
-		// context-taking commands.
-		return factoryWebhook(ctx, rest, stdout, stderr)
-	case "deploy":
-		return factoryDeploy(rest, stdout, stderr)
-	case "setup":
-		return factorySetup(rest, stdout, stderr)
-	case "help", "-h", "--help":
-		fmt.Fprint(stdout, factoryUsage)
-		return exitSuccess
-	default:
-		fmt.Fprintf(stderr, "ticfac factory: unknown subcommand %q\n\n%s", name, factoryUsage)
-		return exitUsage
+	fs := newFlagSet("factory status", nil)
+	offline := fs.Bool("offline", false, "skip the live credential checks")
+	check := fs.Bool("check", false, "exit nonzero when a configured credential is rejected")
+	githubAPI := fs.String("github-api-base", "", "override the GitHub API root (testing)")
+	cfAPIBase := fs.String("cloudflare-api-base", "", "override the Cloudflare API root (testing)")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runFactoryStatus(c.Context(), args, offline, check, githubAPI, cfAPIBase, stdout, stderr))
 	}
+	return cmd
+}
+
+// newFactoryDashboardCommand builds `factory dashboard`'s cobra command. Its
+// Long is the dashboard's own section of the group usage — the read-only
+// posture and the keys — because `factory dashboard --help` is where an
+// operator looks for them.
+func newFactoryDashboardCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dashboard",
+		Short: "watch it run, read-only",
+		Long: `dashboard is the live read-only board of a deployed factory: the runs it is
+executing, the phase and boot each one is on, what its container is printing
+right now, the gates waiting for an answer, and the submissions it refused and
+why. Read-only, and observability rather than authority: it takes no actions,
+and every request it makes is a GET. It works when the factory does not — a
+read that fails keeps the last frame and labels it STALE with its age and what
+went wrong.
+
+'ticfac factory dashboard' is observation, like 'ticfac cloud status/logs/trace':
+it watches a deployed factory from a local terminal and cannot steer one, so
+the operator-to-orchestrator command vocabulary stays run/stop/status/answer.
+
+dashboard keys
+  j / k   move selection / scroll output   g / G   first / last
+  enter   open run detail, or fold a row   esc     close detail, or quit
+  r       reload now                       q       quit`,
+	}
+	fs := newFlagSet("factory dashboard", nil)
+	project := fs.String("project", "", "project to watch as owner/repo (default: every project with runs)")
+	interval := fs.Int64("interval", defaultFactoryDashboardIntervalMs, "how often to re-read the factory, in milliseconds")
+	costInterval := fs.Int64("cost-interval", defaultFactoryDashboardCostMs, "how often to re-total AI Gateway spend, in milliseconds")
+	tailBytes := fs.Int("tail-bytes", defaultFactoryDashboardTailBytes, "how much of the harness output tail each frame reads")
+	noCost := fs.Bool("no-cost", false, "skip gateway cost telemetry entirely")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runFactoryDashboard(c.Context(), args, project, interval, costInterval, tailBytes, noCost, stdout, stderr))
+	}
+	return cmd
 }
 
 // factoryUsage is the group's help: the four commands the finished factory
@@ -108,24 +164,13 @@ dashboard flags:
   --no-cost                 skip gateway cost telemetry entirely
 `
 
-func runFactoryStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := factoryStatus(ctx, args, stdout)
+func runFactoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, stdout, stderr io.Writer) int {
+	err := factoryStatus(ctx, args, offline, check, githubAPI, cfAPIBase, stdout)
 	return reportCommand("factory status", err, stderr)
 }
 
-func factoryStatus(ctx context.Context, args []string, stdout io.Writer) error {
-	fs := newFlagSet("factory status", nil)
-	offline := fs.Bool("offline", false, "skip the live credential checks")
-	check := fs.Bool("check", false, "exit nonzero when a configured credential is rejected")
-	githubAPI := fs.String("github-api-base", "", "override the GitHub API root (testing)")
-	cfAPIBase := fs.String("cloudflare-api-base", "", "override the Cloudflare API root (testing)")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
-	if len(fs.Args()) != 0 {
+func factoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, stdout io.Writer) error {
+	if len(args) != 0 {
 		return newExitError(exitUsage, "factory status takes no positional arguments")
 	}
 
@@ -177,25 +222,13 @@ const defaultFactoryDashboardCostMs = int64(30 * 1000)
 // of what a Loader does when a programmatic caller leaves HarnessBytes zero.
 const defaultFactoryDashboardTailBytes = 64 << 10
 
-func runFactoryDashboard(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := factoryDashboard(ctx, args, stdout, stderr)
+func runFactoryDashboard(ctx context.Context, args []string, project *string, interval, costInterval *int64, tailBytes *int, noCost *bool, stdout, stderr io.Writer) int {
+	err := factoryDashboard(ctx, args, project, interval, costInterval, tailBytes, noCost, stdout, stderr)
 	return reportCommand("factory dashboard", err, stderr)
 }
 
-func factoryDashboard(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("factory dashboard", stderr)
-	project := fs.String("project", "", "project to watch as owner/repo (default: every project with runs)")
-	interval := fs.Int64("interval", defaultFactoryDashboardIntervalMs, "how often to re-read the factory, in milliseconds")
-	costInterval := fs.Int64("cost-interval", defaultFactoryDashboardCostMs, "how often to re-total AI Gateway spend, in milliseconds")
-	tailBytes := fs.Int("tail-bytes", defaultFactoryDashboardTailBytes, "how much of the harness output tail each frame reads")
-	noCost := fs.Bool("no-cost", false, "skip gateway cost telemetry entirely")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
-	if len(fs.Args()) != 0 {
+func factoryDashboard(ctx context.Context, args []string, project *string, interval, costInterval *int64, tailBytes *int, noCost *bool, stdout, stderr io.Writer) error {
+	if len(args) != 0 {
 		return newExitError(exitUsage, "factory dashboard takes no positional arguments")
 	}
 

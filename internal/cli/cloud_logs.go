@@ -5,14 +5,14 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 )
@@ -22,32 +22,41 @@ import (
 // something between two polls has still printed it.
 const defaultCloudLogsInterval = 5 * time.Second
 
-func runCloudLogs(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudLogs(ctx, args, stdout, stderr)
-	return reportCommand("cloud logs", err, stderr)
-}
-
-func cloudLogs(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("cloud logs", stderr)
+// newCloudLogsCommand builds `cloud logs`'s cobra command.
+func newCloudLogsCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "logs <run-id>",
+		Short: "what the container printed",
+	}
+	fs := newFlagSet("cloud logs", nil)
 	tail := fs.Int("tail", 0, "print only the last N lines")
 	tick := fs.String("tick", "", "print one worker container's own output instead of the orchestrator's")
 	follow := fs.Bool("follow", false, "keep reading as the run prints, until it ends or its supervisor dies")
 	followShort := fs.Bool("f", false, "shorthand for --follow")
 	interval := fs.Duration("interval", defaultCloudLogsInterval, "how often --follow asks again")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		changed := func(name string) bool { return c.Flags().Changed(name) }
+		return codeToErr(runCloudLogs(c.Context(), args, tail, tick, follow, followShort, interval, changed, stdout, stderr))
 	}
+	return cmd
+}
+
+func runCloudLogs(ctx context.Context, args []string, tail *int, tick *string, follow, followShort *bool,
+	interval *time.Duration, changed func(string) bool, stdout, stderr io.Writer) int {
+	err := cloudLogs(ctx, args, tail, tick, follow, followShort, interval, changed, stdout, stderr)
+	return reportCommand("cloud logs", err, stderr)
+}
+
+func cloudLogs(ctx context.Context, args []string, tail *int, tick *string, follow, followShort *bool,
+	interval *time.Duration, changed func(string) bool, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
 	}
 	if *followShort {
 		*follow = true
 	}
-	set := setFlagsOf(fs)
 
 	if *tail < 0 {
 		return newExitError(exitGeneric, "--tail takes a line count, got %d", *tail)
@@ -71,7 +80,7 @@ func cloudLogs(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	// An operator who asked for a tick and silently got the orchestrator's log
 	// would read one container's output as another's.
 	tickID := strings.TrimSpace(*tick)
-	if set["tick"] && tickID == "" {
+	if changed("tick") && tickID == "" {
 		return newExitError(exitGeneric, "--tick takes a tick id")
 	}
 	path := "/api/runs/" + url.PathEscape(runID) + "/logs"

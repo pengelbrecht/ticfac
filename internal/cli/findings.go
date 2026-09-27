@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -38,6 +40,54 @@ func findingRunOptions(fs *flag.FlagSet) (repo, remote, branch, runID *string) {
 	return repo, remote, branch, runID
 }
 
+// newFindingsCommand builds the cobra command for `findings`.
+func newFindingsCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "findings <epic-id>",
+		Short: "list the worker findings drafted for triage",
+		Long: `List the findings a run's workers drafted for triage: the key, the triage
+state, the target and the attempt that discovered each.`,
+	}
+	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
+	repo, remote, branch, runID := findingRunOptions(fs)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(findingsCommand(args, repo, remote, branch, runID, stdout, stderr))
+	}
+	return cmd
+}
+
+// newFindingCommand builds the cobra command for `finding`.
+func newFindingCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "finding <epic-id> <key>",
+		Short: "triage one drafted finding",
+		Long: `Record ONE decision on a drafted finding: promote (naming the tick that
+was created, and the repository it was routed to when the finding targeted
+another one), discard, or FIXED — repaired inside the epic, naming the commit
+that repaired it (tick her), which is the verdict a repaired finding needs:
+there is no tick to promote it to, and a discard would mean the opposite of
+what happened. The reconciler's close gate reads the same records, so a tick
+whose findings are untriaged stays open until somebody runs one of these.
+
+Nothing here writes the tracker. The promotion records the tick the OPERATOR
+created — with the draft's discovered_from printed for it to be filed under —
+because a draft is not a tick, and making it one is the one decision this
+surface will not make for you.`,
+	}
+	fs := flag.NewFlagSet("finding", flag.ContinueOnError)
+	repo, remote, branch, runID := findingRunOptions(fs)
+	promoteAs := fs.String("promote-as", "", "the tick the promotion created: a bare tick id, or <owner/name>:<tick-id> for a routed finding")
+	discard := fs.Bool("discard", false, "record that a person looked and said no")
+	fixedAs := fs.String("fixed-as", "", "record that the finding was repaired inside this epic, naming the commit that repaired it")
+	by := fs.String("by", "", "the person triaging this draft")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(findingCommand(args, repo, remote, branch, runID, promoteAs, discard, fixedAs, by, stdout, stderr))
+	}
+	return cmd
+}
+
 // openFindingsStore opens the run's draft store the way the reconciler opened
 // it: the same repository, remote, integration branch and run id — the drafts
 // live on the branch the run owns.
@@ -65,14 +115,8 @@ func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.St
 	return store, nil
 }
 
-func findingsCommand(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	repo, remote, branch, runID := findingRunOptions(fs)
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	rest := fs.Args()
+func findingsCommand(args []string, repo, remote, branch, runID *string, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac findings: exactly one epic id is required\n")
 		return 2
@@ -136,18 +180,8 @@ func findingTarget(target string) string {
 	return target
 }
 
-func findingCommand(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("finding", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	repo, remote, branch, runID := findingRunOptions(fs)
-	promoteAs := fs.String("promote-as", "", "the tick the promotion created: a bare tick id, or <owner/name>:<tick-id> for a routed finding")
-	discard := fs.Bool("discard", false, "record that a person looked and said no")
-	fixedAs := fs.String("fixed-as", "", "record that the finding was repaired inside this epic, naming the commit that repaired it")
-	by := fs.String("by", "", "the person triaging this draft")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	rest := fs.Args()
+func findingCommand(args []string, repo, remote, branch, runID, promoteAs *string, discard *bool, fixedAs, by *string, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 2 || rest[0] == "" || rest[1] == "" {
 		fmt.Fprintf(stderr, "ticfac finding: exactly one epic id and one finding key are required\n")
 		return 2
