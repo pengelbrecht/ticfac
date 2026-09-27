@@ -66,6 +66,29 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 			want:   RemoteTransient,
 		},
 		{
+			// The remote's storage failing mid-push: what halted epic-2jn's
+			// checkpoint on 2026-09-27, verbatim but for the paths.
+			name: "the remote failing to write the pack it received",
+			stderr: "remote: error: unable to write file /data/repositories/x.git/objects/q/pack/pack-683c.pack: No such file or directory        \n" +
+				"remote: fatal: unable to rename temporary '*.pack' file to '/data/repositories/x.git/objects/q/pack/pack-683c.pack'        \n" +
+				"remote: fatal error in commit_refs        \n" +
+				"To https://github.com/o/r.git\n" +
+				" ! [remote rejected]   a9a8a08c -> epic/2jn (failure)",
+			want: RemoteTransient,
+		},
+		{
+			// This machine's own disk failing is not the remote's: no prefix.
+			name:   "this machine failing to write a file",
+			stderr: "error: unable to write file .git/objects/ab/cdef: No space left on device",
+			want:   RemoteUnclassified,
+		},
+		{
+			// A hook's refusal is an answer, and stays one.
+			name:   "a push a server hook declined",
+			stderr: " ! [remote rejected] a9a8a08c -> main (protected branch hook declined)",
+			want:   RemoteUnclassified,
+		},
+		{
 			// The same tail line as the reset above. Everything rests on the
 			// refusal markers being read first: never a reset. Its own class
 			// since tick jsz, because the observed one was a blip.

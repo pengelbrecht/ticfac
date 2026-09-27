@@ -171,6 +171,20 @@ var transientMarkers = []string{
 	// Couldn't connect to server". Nothing was asked, so nothing was refused.
 	"failed to connect to",
 	"couldn't connect to server",
+	// The remote's own storage failing mid-push: the request reached it and
+	// was never answered with a no — the server could not write the pack it
+	// had just received. Seen on 2026-09-27, when epic-2jn's checkpoint push
+	// halted the run over GitHub saying "remote: error: unable to write file
+	// .../objects/.../pack-<sha>.pack: No such file or directory", "remote:
+	// fatal error in commit_refs", "! [remote rejected] <sha> -> epic/2jn
+	// (failure)". The ref did not move, and the same push minutes later went
+	// through. Each marker carries its "remote: " prefix, so this machine's
+	// own disk failing ("error: unable to write file" with no prefix) is not
+	// read as the remote's.
+	"remote: fatal error in commit_refs",
+	"remote: error: unable to write file",
+	"remote: fatal: unable to rename temporary",
+	"remote: internal server error",
 }
 
 // ClassifyRemote reads a failed git command's error — which carries the
