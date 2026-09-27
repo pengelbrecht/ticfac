@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 9,
-  "state": "dispatching",
-  "reason": "dispatching 6dh as attempt 2",
-  "updated_at": "2026-09-27T04:08:00Z",
+  "sequence": 10,
+  "state": "running",
+  "reason": "6dh is running as attempt 2",
+  "updated_at": "2026-09-27T04:08:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -14,7 +14,8 @@
     },
     {
       "tick_id": "6dh",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 2
     },
     {
       "tick_id": "o0d",
