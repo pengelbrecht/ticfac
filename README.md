@@ -31,6 +31,53 @@ implicitly missing:
 The same table lives in `ticfac herd --help`, where the consumer (the
 plugin, or a person) looks.
 
+## Command surface
+
+Every command runs on one cobra tree, styled by [fang](https://github.com/charmbracelet/fang)
+(tick nwj) — and every operator-facing text is DERIVED from that tree rather
+than maintained beside it:
+
+- `ticfac --help`, and `ticfac help <command>`, render the styled help from
+  the tree; a command's flags live on the same declarations its body parses,
+  so `ticfac <command> --help` lists exactly what the command accepts.
+- An unknown command or flag is a styled refusal with exit 2, not a usage
+  dump repeated on every error. The styling is stripped for anything that is
+  not a terminal — a pipe, a test buffer, CI — so scripts and tests see
+  exactly the words.
+- `--version` reports this build (the same value `ticfac version` carries
+  beside the contract bundle).
+- `ticfac completion bash|zsh|fish` writes the shell completion, generated
+  from the tree.
+- The hidden `ticfac man` renders the whole tree as man pages (mango),
+  writing roff to stdout — the same surface a terminal reads, in the format
+  `man` presents.
+- A bare `ticfac` refuses with exit 2, printing that same help to stderr —
+  a program with no default action says what it does and points at the
+  one flag that shows more.
+
+| command | what it does |
+|---|---|
+| `ticfac run-epic <epic-id>` | run one epic through the reconciler |
+| `ticfac settle <epic-id> <tick-id> <attempt>` | release an attempt nobody can address |
+| `ticfac findings <epic-id>` | list the worker findings drafted for triage |
+| `ticfac finding <epic-id> <key>` | triage one drafted finding |
+| `ticfac status <run-id>` | is the run alive, and when did it last say anything |
+| `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
+| `ticfac watch <run-id>` | follow a run and say, to a human, when it ends holding something for one |
+| `ticfac version` | report this build and the contract bundle it serves |
+| `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
+| `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
+| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | run and inspect epics in your cloud factory |
+
+Exit codes are the contract a script branches on: 0 the command did its
+work, 1 a failure that is not a usage mistake, 2 a malformed invocation,
+4 a lookup that honestly came back empty — and `ticfac watch` adds 3: the
+run ended holding something only a person can move.
+
+The section is pinned by a test (`internal/cli/readme_test.go`): a command
+added to the tree fails the suite until this table names it, so the README
+cannot lag the tree the way it once did.
+
 ## Contracts
 
 `contracts/` is a **vendored, pinned copy** of the ticks contract bundle —

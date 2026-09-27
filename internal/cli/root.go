@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -86,9 +85,17 @@ for any subcommand's. The exit codes are the contract a script branches on:
 0 the command did its work, 1 a failure that is not a usage mistake,
 2 a malformed invocation, 4 a lookup that honestly came back empty.`,
 		// A bare invocation is a usage refusal, exactly as it was before the
-		// tree: the usage text on stderr and exit 2. The Args validator below
-		// types the unknown-command refusal for everything the dispatcher's
-		// default arm used to catch.
+		// tree: usage on stderr and exit 2 — but the text is DERIVED, not
+		// maintained (tick fi3). The hand-rolled usage const cli.go carried
+		// beside the tree said the same things a second time — every command,
+		// every flag, twice — and was the one surface that could drift while
+		// the help, the completions and the man pages stayed derived. Now the
+		// refusal IS the tree's own help, fang-styled like `ticfac --help`,
+		// printed to stderr: a person who ran the wrong thing reads the same
+		// page --help would have shown, and a pipe or a test buffer sees the
+		// same words fang's colorprofile writer always strips down to. The
+		// Args validator below types the unknown-command refusal for everything
+		// the dispatcher's default arm used to catch.
 		Args: func(c *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return newExitError(exitUsage,
@@ -98,7 +105,8 @@ for any subcommand's. The exit codes are the contract a script branches on:
 			return nil
 		},
 		RunE: func(c *cobra.Command, args []string) error {
-			fmt.Fprint(stderr, usage)
+			c.SetOut(stderr)
+			_ = c.Help()
 			return &printedExit{code: exitUsage}
 		},
 	}
