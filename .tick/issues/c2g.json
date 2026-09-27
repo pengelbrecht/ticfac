@@ -4,7 +4,7 @@
   "gloss": "triage needs no git identity",
   "description": "epic/2jn CI fails deterministically on TestTriageJSONListsTheUntriagedForAnAgent (triage_test.go:86) and TestTheEpicPrefixIsAcceptedEverywhere (:386): 'ticfac triage qeu: --by names who is triaging, and this checkout's git config names nobody'. The CI runner has no git identity; this Mac does, so it passes locally (reproduce with GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1). Cause: internal/cli/triage.go:225 calls triageActor for every invocation, including the read-only --json listing. Fix both: (1) a listing (--json with no settling action) does not resolve an actor at all — only an action that records a decision needs --by or a git identity (decided 2026-09-27: a read needs no author); (2) newFindingsRepo (findings_test.go:27) isolates the test from host git config (GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM=os.DevNull) and sets user.name in the fixture checkout, as triage_test.go:317-319 already does.",
   "notes": "2026-09-27 22:30 - ticfac run epic-2jn: c2g try 1 (run dispatch #53) reported a finding the run itself decided — defect \"TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote fails at base: the SIGTERM exit leaves a ticfac-registry-guard temp tree behind\" (key 0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d, severity medium, for this repository) is promoted to a backlog tick with an owner, bsn; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d.json, and the draft is triaged as promoted.\n2026-09-27 22:32 - ticfac run epic-2jn: c2g try 1 (run dispatch #53) merged into epic/2jn as 8d6e168acc35; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "go test ./internal/cli/ -run 'Triage|EpicPrefix' passes with GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1; a test asserts ticfac triage \u003cepic\u003e --json succeeds with no identity and a settling action without one is still refused",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T19:47:16.688302Z",
-  "updated_at": "2026-09-27T20:32:50.610157Z",
-  "started_at": "2026-09-27T19:53:49.817829Z"
+  "updated_at": "2026-09-27T20:32:54.309655Z",
+  "closed_at": "2026-09-27T20:32:54.309655Z"
 }
