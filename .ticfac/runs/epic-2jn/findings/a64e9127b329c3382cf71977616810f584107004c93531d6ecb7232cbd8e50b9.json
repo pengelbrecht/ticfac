@@ -12,8 +12,11 @@
   "attempt": 31,
   "done_item": "none",
   "demonstrating_check": "grep -n \"tk cloud\" contracts/tracker-layout.json",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T13:55:21Z",
+  "triaged_at": "2026-09-27T13:55:32Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 8xh",
+  "promoted_as": "8xh",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "ogv",
