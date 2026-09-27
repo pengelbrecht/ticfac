@@ -158,10 +158,10 @@ type Predictor struct {
 }
 
 // NewPredictor builds a Predictor on the given classifier. A nil classifier is
-// the same no-answer as an unreachable one: every prediction falls back to
-// absorbing, which is the documented degradation — never a stop, and never a
-// defer, because deferring would stop an unattended run on the one actor only a
-// person can play.
+// the same no-answer as an unreachable one: the reporter's own claim decides
+// where there is one ([noPrediction]), and an unlinked finding still falls
+// back to absorbing — never a stop, and never a defer, because deferring would
+// stop an unattended run on the one actor only a person can play.
 func NewPredictor(classifier Classifier) *Predictor {
 	return &Predictor{classifier: classifier}
 }
@@ -219,7 +219,7 @@ func (p *Predictor) Predict(ctx context.Context, finding Finding, done acceptanc
 		// A predictor built with no classifier is the same no-prediction as
 		// an unreachable one, and the same decision stands in for it: absorb,
 		// recorded as a guess, never as a stop.
-		return absorbFallback(finding, unverified,
+		return noPrediction(finding, unverified,
 			"no classifier is configured for gating predictions"), "", nil
 	}
 	result, err := p.classifier.Ask(ctx, state, []jev.Question{question})
@@ -230,17 +230,17 @@ func (p *Predictor) Predict(ctx context.Context, finding Finding, done acceptanc
 		return nil, "", err
 	}
 	if result.Unavailable != "" {
-		return absorbFallback(finding, unverified, result.Unavailable), "", nil
+		return noPrediction(finding, unverified, result.Unavailable), "", nil
 	}
 	if reason, gap := result.Unanswered[finding.ID]; gap {
-		return absorbFallback(finding, unverified, reason), "", nil
+		return noPrediction(finding, unverified, reason), "", nil
 	}
 	answer, ok := result.Answers[finding.ID]
 	if !ok {
 		// The core answers every asked question or names its gap, so this is
 		// a violated seam rather than a judgement — the same epistemic state
 		// as an unavailable classifier: no prediction exists.
-		return absorbFallback(finding, unverified,
+		return noPrediction(finding, unverified,
 			"the classifier answered neither an answer nor a named gap for the question"), "", nil
 	}
 	return predict(finding, unverified, answer, result), "", nil
@@ -383,6 +383,59 @@ func predict(finding Finding, items []acceptance.Resolved, answer jev.Answer, re
 // made it and the reason naming every unverified item at risk, because the
 // absorption has to name which item was unreachable and with no answer all of
 // them were.
+// noPrediction is the decision when no classifier answered (operator,
+// 2026-09-27): the REPORTER'S OWN CLAIM (tick nfo) decides, recorded as a
+// prediction whose Fallback names both why no classifier answered and that
+// the claim stood in, so the scoring (jlv) later measures how far reporters'
+// claims can be trusted.
+//
+//   - a claim of 'none' (the finding breaks no done item) files it to the
+//     backlog instead of absorbing it;
+//   - a claim naming one of the unverified items absorbs it against THAT item;
+//   - no claim, or a claim naming an item that is not an unverified one of
+//     this done (a runnable item is the oracle's, an unknown id is nobody's),
+//     falls back to absorbing, as before.
+//
+// Before this, every finding absorbed whenever no classifier was configured,
+// and epic-2jn absorbed ten findings in a morning - a README that predated
+// the new command tree among them - until the depth bound (qjj) stopped the
+// run for a person, which is the stop absorption exists to remove.
+func noPrediction(finding Finding, items []acceptance.Resolved, why string) *Verdict {
+	claim := strings.TrimSpace(finding.DoneItem)
+	switch {
+	case strings.EqualFold(claim, "none"):
+		return &Verdict{
+			FindingID: finding.ID,
+			Gating:    false,
+			Basis:     BasisPredicted,
+			Fallback:  strings.TrimSpace(why) + "; the reporter's own claim decided",
+			Reason: fmt.Sprintf(
+				"no classifier prediction could be made — %s — so the reporter's own claim decides: it breaks "+
+					"no done item, and the finding is filed to the backlog rather than absorbed. The claim is "+
+					"a prediction, scored later against what the done actually did",
+				strings.TrimSpace(why)),
+		}
+	case claim != "":
+		for _, item := range items {
+			if item.ID == claim {
+				return &Verdict{
+					FindingID: finding.ID,
+					Gating:    true,
+					ItemID:    item.ID,
+					Basis:     BasisPredicted,
+					Fallback:  strings.TrimSpace(why) + "; the reporter's own claim decided",
+					Reason: fmt.Sprintf(
+						"no classifier prediction could be made — %s — so the reporter's own claim decides: it "+
+							"breaks %s, and the finding is absorbed against that item. The claim is a "+
+							"prediction, scored later against what the done actually did",
+						strings.TrimSpace(why), item.ID),
+				}
+			}
+		}
+	}
+	return absorbFallback(finding, items, why)
+}
+
 func absorbFallback(finding Finding, items []acceptance.Resolved, why string) *Verdict {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {
