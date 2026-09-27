@@ -261,29 +261,106 @@ func TestTheEmbeddedSkillTeachesTheLoopAndStatesItsBoundary(t *testing.T) {
 	// Every `ticfac <command>` the skill names exists in the tree: a skill
 	// that teaches a command the binary does not carry is a contradiction
 	// between the two skills' shared world, caught here.
+	if unknown := skillUnknownCommands(skill, knownCommands()); len(unknown) != 0 {
+		for _, sub := range unknown {
+			t.Errorf("the skill teaches `ticfac %s`, which the tree does not carry", sub)
+		}
+	}
+}
+
+// knownCommands is the set of subcommand names the tree carries — what a
+// skill's teachings are checked against, built from the root so a command
+// added to the tree is known here without an edit.
+func knownCommands() map[string]bool {
 	root := newRootCommand(discardWriter{}, discardWriter{})
 	known := map[string]bool{}
 	for _, cmd := range root.Commands() {
 		known[cmd.Name()] = true
 	}
-	for _, field := range strings.Fields(skill) {
-		field = strings.Trim(field, "`|,.;:()")
-		if !strings.HasPrefix(field, "ticfac") {
+	return known
+}
+
+// skillUnknownCommands returns every `ticfac <command>` the skill text
+// names that the tree does not carry. Commands are read off the BACKTICK
+// SPANS — the markdown convention this skill writes commands in — because
+// the skill also uses the name in prose ("the ticfac skill owns
+// EXECUTION"), and prose is not a teaching. Splitting on whitespace
+// instead reads `ticfac init` as the two fields `ticfac and init`, checks
+// neither, and no subcommand is ever looked up — the vacuous loop of tick
+// 7ht.
+func skillUnknownCommands(skill string, known map[string]bool) []string {
+	var unknown []string
+	for _, span := range backtickSpans(skill) {
+		fields := strings.Fields(span)
+		if len(fields) == 0 || fields[0] != "ticfac" {
 			continue
 		}
-		rest := strings.TrimPrefix(field, "ticfac")
-		if rest == "" {
+		if len(fields) == 1 {
 			continue // the bare overview, real
 		}
-		if strings.HasPrefix(rest, "-") {
-			continue // a flag, not a command
-		}
-		sub := strings.SplitN(strings.TrimPrefix(rest, "-"), " ", 2)[0]
-		if sub == "" {
-			continue
+		sub := strings.Trim(fields[1], "|,.;:()")
+		if sub == "" || strings.HasPrefix(sub, "-") || strings.HasPrefix(sub, "<") {
+			continue // a flag or a placeholder like <epic>, not a command name
 		}
 		if !known[sub] {
-			t.Errorf("the skill teaches `ticfac %s`, which the tree does not carry", sub)
+			unknown = append(unknown, sub)
 		}
+	}
+	return unknown
+}
+
+// backtickSpans returns the text between each pair of backticks — the spans
+// markdown marks code with.
+func backtickSpans(text string) []string {
+	var spans []string
+	for {
+		open := strings.IndexByte(text, '`')
+		if open < 0 {
+			return spans
+		}
+		rest := text[open+1:]
+		close := strings.IndexByte(rest, '`')
+		if close < 0 {
+			return spans
+		}
+		spans = append(spans, rest[:close])
+		text = rest[close+1:]
+	}
+}
+
+// The command check must CHECK (tick 7ht): it used to split the skill on
+// whitespace, so `ticfac init` read as the two fields `ticfac and init` —
+// the first trimmed to the bare overview and skipped, the second without
+// the prefix — and no subcommand was ever looked up, so a skill teaching a
+// command the tree does not carry passed. A skill that names a nonexistent
+// command must be caught, and a skill that names real ones must not be.
+func TestSkillCommandCheckCatchesACommandTheTreeDoesNotCarry(t *testing.T) {
+	t.Parallel()
+
+	known := knownCommands()
+	for _, skill := range []string{
+		"run it with `ticfac init`, then `ticfac frobnicate <run-id>`",
+		"resume with `ticfac unwatch` and see", // a nonexistent command with no argument
+	} {
+		if unknown := skillUnknownCommands(skill, known); len(unknown) == 0 {
+			t.Errorf("a skill teaching %q was not caught", skill)
+		}
+	}
+
+	// The commands the real skill teaches, all real in the tree — the
+	// check's own negative control.
+	real := "1. `ticfac init` — make it runnable.\n" +
+		"2. `ticfac doctor` — ready?\n" +
+		"3. `ticfac run <epic>`, `ticfac status <run-id>`, `ticfac events <run-id> --follow`,\n" +
+		"4. `ticfac` with no arguments, `ticfac skills install ticfac`\n"
+	if unknown := skillUnknownCommands(real, known); len(unknown) != 0 {
+		t.Errorf("real commands were flagged: %v", unknown)
+	}
+
+	// Prose around the name is not a teaching: the skill's boundary section
+	// says “the ticfac skill owns EXECUTION”, and that must stay legal.
+	prose := "the ticfac skill owns EXECUTION; plan with `tk`, run with `ticfac`."
+	if unknown := skillUnknownCommands(prose, known); len(unknown) != 0 {
+		t.Errorf("prose was read as command teachings: %v", unknown)
 	}
 }
