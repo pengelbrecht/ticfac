@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 252,
-  "state": "publishing",
-  "reason": "closing 53k behind the integrated gate on bb824bebe380",
-  "updated_at": "2026-09-27T14:22:59Z",
+  "sequence": 253,
+  "state": "running",
+  "reason": "53k is closed",
+  "updated_at": "2026-09-27T14:23:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -153,7 +153,7 @@
     },
     {
       "tick_id": "53k",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 34
     },
     {
