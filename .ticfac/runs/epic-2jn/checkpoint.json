@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 213,
-  "state": "publishing",
-  "reason": "closing 8v3 behind the integrated gate on 5fa8af921f77",
-  "updated_at": "2026-09-27T12:14:10Z",
+  "sequence": 214,
+  "state": "running",
+  "reason": "8v3 is closed",
+  "updated_at": "2026-09-27T12:14:19Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -49,7 +49,7 @@
     },
     {
       "tick_id": "8v3",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 24
     },
     {
