@@ -442,15 +442,20 @@ func (r *Reconciler) announceGate(g *gateCommand, marker attemptHandle, merged m
 	}
 	g.beat = now
 
-	elapsed := g.shell.age(now).Round(time.Second)
+	// The raw durations are what the stall threshold is compared against;
+	// the rounded ones are only the words. Comparing rounded ones made any
+	// silence of 500ms or more count as a whole second.
+	rawElapsed := g.shell.age(now)
+	elapsed := rawElapsed.Round(time.Second)
 	left := g.shell.remaining().Round(time.Second)
 	bytes, at := g.shell.written()
 	produced := fmt.Sprintf("%d bytes of output", bytes)
-	idle := elapsed
+	rawIdle := rawElapsed
 	if bytes > 0 && !at.IsZero() {
-		idle = now.Sub(at).Round(time.Second)
-		produced = fmt.Sprintf("%d bytes of output, last %s ago", bytes, idle)
+		rawIdle = now.Sub(at)
+		produced = fmt.Sprintf("%d bytes of output, last %s ago", bytes, rawIdle.Round(time.Second))
 	}
+	idle := rawIdle.Round(time.Second)
 	r.record(marker.TickID, StageGateRunning,
 		"the %s gate has been running for %s on %s and has written %s; %s of its bound is left",
 		g.command.Name, elapsed, short(merged.GateSHA), produced, left)
@@ -460,7 +465,7 @@ func (r *Reconciler) announceGate(g *gateCommand, marker attemptHandle, merged m
 	// anywhere. Said once, and only about a gate that has BOTH outlived the
 	// threshold and produced nothing in that time — a long check that is
 	// printing as it goes is working, however long it takes.
-	if g.stalled || r.opts.StallWarnAfter <= 0 || elapsed < r.opts.StallWarnAfter || idle < r.opts.StallWarnAfter {
+	if g.stalled || r.opts.StallWarnAfter <= 0 || rawElapsed < r.opts.StallWarnAfter || rawIdle < r.opts.StallWarnAfter {
 		return
 	}
 	g.stalled = true
