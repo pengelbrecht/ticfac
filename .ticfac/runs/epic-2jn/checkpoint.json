@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 305,
-  "state": "integrating",
-  "reason": "integrating 4zo attempt 42 into epic/2jn",
-  "updated_at": "2026-09-27T16:43:04Z",
+  "sequence": 306,
+  "state": "gating",
+  "reason": "running the integrated gate for 4zo on c8b2c40babb8",
+  "updated_at": "2026-09-27T16:43:15Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -197,7 +197,7 @@
     },
     {
       "tick_id": "4zo",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 42
     },
     {
