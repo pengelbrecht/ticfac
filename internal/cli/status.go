@@ -64,9 +64,36 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 	// only costs its label (it shows as its bare id), never its line.
 	labels := tickLabels(ctx, repo)
 
+	// Where the follow's ended-answer starts (tick 4nq, the cursor
+	// protection `ticfac watch` got in usx, for the surface that missed
+	// it): the feed is append-only per RUN ID, so a resumed local run
+	// appends to a file a previous, failed incarnation already ended with a
+	// terminal line — and a frame that scans the whole standing feed for ANY
+	// terminal line ends the follow at the first frame, exit 0, while the
+	// run is alive and dispatching. A LIVE process claims the follow: the
+	// cursor moves just past the last terminal line already standing, so
+	// only a terminal line the CURRENT incarnation writes can end it. No
+	// live claim keeps the cursor at zero: the standing feed is the run's
+	// own last word, and the follow reports that ending rather than an
+	// open-ended silence — a run about to be resumed has not claimed yet,
+	// and its previous ending was the truth until the resume.
+	cursor := int64(0)
+	if kind != "cloud" && runlife.Probe(repo, runID, time.Now()).State == runlife.Alive {
+		located, _, err := feedStanding(ctx, source)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 1
+		}
+		for _, line := range located {
+			if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
+				cursor = line.End
+			}
+		}
+	}
+
 	previous := 0
 	for {
-		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, stdout)
+		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, cursor, stdout)
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
@@ -97,8 +124,11 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 // renderStatusFrame builds one frame of the live table: the run's own
 // liveness first, then one line per tick — its stage, its attempt, and how
 // long it has been where it is. The first return says the run reached its own
-// end, which ends the follow.
-func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, labels map[string]string, out io.Writer) (ended bool, lines []string, err error) {
+// end — for a local run, a terminal line the CURRENT incarnation wrote past
+// the cursor (tick 4nq): an earlier incarnation's ending is history while a
+// live process claims the run, and the run's own last word when nothing
+// does — which ends the follow.
+func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, labels map[string]string, cursor int64, out io.Writer) (ended bool, lines []string, err error) {
 	located, _, err := feedStanding(ctx, source)
 	if err != nil {
 		return false, nil, err
@@ -121,10 +151,19 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 		probe := runlife.Probe(repo, runID, time.Now())
 		alive = probe.State == runlife.Alive
 		liveness = fmt.Sprintf("%s — %s", probe.State, probe.Reason)
+		// The ended-answer carries the cursor's protection (tick 4nq): a
+		// terminal line the CURRENT incarnation wrote — one standing past the
+		// cursor — ends the follow; a terminal line an earlier incarnation
+		// wrote is history while a live process claims the run, and the run's
+		// own last word when nothing does.
 		for _, line := range located {
-			if line.Stage == reconcile.StageRunFinished || line.Stage == reconcile.StageRunDied {
-				ended = true
+			if line.Stage != reconcile.StageRunFinished && line.Stage != reconcile.StageRunDied {
+				continue
 			}
+			if probe.State == runlife.Alive && line.End <= cursor {
+				continue
+			}
+			ended = true
 		}
 	}
 
