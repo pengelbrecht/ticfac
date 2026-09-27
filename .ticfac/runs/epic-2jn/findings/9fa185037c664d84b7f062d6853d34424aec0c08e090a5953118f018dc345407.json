@@ -12,8 +12,11 @@
   "attempt": 33,
   "done_item": "A4",
   "demonstrating_check": "go test ./internal/statusmodel/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T15:22:00Z",
+  "triaged_at": "2026-09-27T15:22:09Z",
+  "triaged_by": "ticfac run epic-2jn absorbing bkg",
+  "promoted_as": "bkg",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "4mv",
