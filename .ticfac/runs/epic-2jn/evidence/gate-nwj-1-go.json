@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-nwj-1-go",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "nwj",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-27T04:06:38Z",
+  "finished_at": "2026-09-27T04:07:23Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/sandbox\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/acceptance\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t22.505s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.273s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.797s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t7.723s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t0.871s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t39.886s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t18.464s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t1.590s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.042s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t1.823s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gating\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t2.223s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t2.274s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t1.858s\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t1.695s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.705s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t19.302s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t1.187s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t1.235s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t1.466s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t1.639s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboxpin\t1.189s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.939s\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t1.113s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t(cached)\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:c0bc39761a71c8e95e22bc16360b2fed7a774ea541ed2f85a7b5d6828287489b",
+  "persistence_uri": "git:refs/heads/epic/2jn:.ticfac/runs/epic-2jn/evidence/gate-nwj-1-go.json"
+}
