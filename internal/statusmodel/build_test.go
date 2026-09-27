@@ -475,6 +475,50 @@ func TestADeadRunIsAttentionWithTheResumeCommand(t *testing.T) {
 	}
 }
 
+// TestAFinishedCloudRunIsNotADeadRun: a cloud run's own record state is
+// its durable terminal word, and a checkout that cannot read that run's
+// other records — another project's run, whose run state will never be in
+// this checkout — must not read it as dead. Dead means gone WITHOUT a
+// terminal word; the surface that aggregates every run (tick 2qz) is the
+// one that showed the factory's finished runs all claiming dead-run.
+func TestAFinishedCloudRunIsNotADeadRun(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"completed", "stopped", "failed"} {
+		src := runningEpicSources()
+		src.Host = HostCloud
+		src.Records = &Records{} // nothing this checkout can read: another project's run
+		src.Graph = nil
+		src.Standing = nil
+		src.Session = nil
+		src.Liveness.Alive = false
+		src.Liveness.State = state
+		src.Liveness.Source = "workflow-record"
+		src.Liveness.Reason = "the Workflow's own record says " + state
+		model := Build(src)
+		if model.WaitsOn != nil && model.WaitsOn.Kind == WaitDeadRun {
+			t.Errorf("a cloud run whose record says %s waits on dead-run: %+v", state, model.WaitsOn)
+		}
+		for _, a := range model.Attention {
+			if a.Kind == WaitDeadRun {
+				t.Errorf("a cloud run whose record says %s is attention as dead-run", state)
+			}
+		}
+	}
+	// A local run's gone-without-a-word is still dead: the local probe's
+	// states never name an end, and the claim is the model's own for it.
+	src := runningEpicSources()
+	src.Records = &Records{}
+	src.Graph = nil
+	src.Standing = nil
+	src.Session = nil
+	src.Liveness.Alive = false
+	src.Liveness.State = "not_running"
+	src.Liveness.Reason = "no process holds this run: the last one released it, or none has claimed it here"
+	if model := Build(src); model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun {
+		t.Errorf("a local run gone without a terminal record waits on %+v, want dead-run", model.WaitsOn)
+	}
+}
+
 // TestACompletedRunWithAnOpenPRWaitsOnTheMerge: the merge is a person's,
 // always — the model says it as the wait, with the PR named in the what.
 func TestACompletedRunWithAnOpenPRWaitsOnTheMerge(t *testing.T) {

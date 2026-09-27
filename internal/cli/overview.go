@@ -1,0 +1,383 @@
+package cli
+
+// The bare-invocation overview (tick 2qz): `ticfac` with no arguments is
+// the one screen an unattended factory is glanced at with — every run this
+// machine knows, the local runs the checkout holds and the factory's cloud
+// runs, attention first.
+//
+// It is BUILT ON the status model (tick 6dh), not beside it: every run's
+// entry carries the same versioned model `ticfac status --json <run>` emits,
+// built by the same gathering, and the overview adds only the listing's own
+// half — which runs exist (enumeration, a question the per-run model cannot
+// answer), the attention-first order, and the one line a person reads: the
+// state word, the reason, and the single command that clears a stop. What a
+// run is held or failed BY is the model's own wait: the reason and the
+// unblocking command come from [statusmodel], never from a second opinion
+// the overview would have to keep in agreement with the first.
+//
+// The exit code is the listing's own: 0 it answered — attention is data the
+// screen orders by, not a failure of the command that reports it; a source
+// that cannot be read (an unconfigured factory, an unreadable runs
+// directory) is named in the overview's own degraded list and in a closing
+// prose note, never a refusal: the questions an unattended factory is glanced
+// at with are ordered precisely so that "does anything need me" survives a
+// factory that cannot be asked.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
+)
+
+// The overview document's own version, `ticfac.overview.v1`'s schema
+// version. The per-run entries carry the status model's own version
+// independently: this number moves only with the OVERVIEW's shape (the
+// wrapper and its entry fields), never with the model it wraps.
+const overviewSchemaVersion = 1
+
+// The overview's closed state vocabulary — the four answers the acceptance
+// names, plus the run's own terminal word for a stop that was deliberate:
+//
+//   - held: the run is stopped holding something only a person can move —
+//     a held attempt, an untriaged finding beside a dead run, a run whose
+//     process is gone without its own terminal record, or a completed run's
+//     open PR (the merge, which is a person's by design);
+//   - failed: the run ended in its own failure and nothing holds for a
+//     person — the clearing command is the resume after a fix;
+//   - running: a live incarnation is working;
+//   - done: the run's own work is finished;
+//   - cancelled: the run was stopped deliberately — terminal like done, and
+//     named as its own word so it never reads as a success it was not.
+const (
+	overviewStateHeld      = "held"
+	overviewStateFailed    = "failed"
+	overviewStateRunning   = "running"
+	overviewStateDone      = "done"
+	overviewStateCancelled = "cancelled"
+)
+
+// overviewModel is the --json surface's answer: one versioned document, one
+// entry per run, attention first — the same order the prose renders.
+type overviewModel struct {
+	SchemaVersion int           `json:"schema_version"`
+	GeneratedAt   string        `json:"generated_at"`
+	Degraded      []string      `json:"degraded"`
+	Runs          []overviewRun `json:"runs"`
+}
+
+// overviewRun is one run's row: the listing's own half (run id, host, epic,
+// the state word, the reason, the one clearing command) beside the FULL
+// status model the row renders from — the same object `ticfac status --json
+// <run>` emits, so the prose line and the JSON entry cannot drift.
+type overviewRun struct {
+	RunID     string            `json:"run_id"`
+	Host      string            `json:"host"`
+	EpicID    string            `json:"epic_id"`
+	State     string            `json:"state"`
+	Reason    string            `json:"reason"`
+	ClearWith *string           `json:"clear_with"`
+	Model     statusmodel.Model `json:"model"`
+}
+
+// overviewCommand is the bare `ticfac`: list every run this machine knows,
+// attention first. Local runs are the ones the checkout's own durable
+// records name (`.ticfac/runs/` — durable means pushed, so a checkout's
+// directory is the machine's honest memory of its runs); cloud runs are the
+// factory's run index. Every run's answer is the 6dh model, gathered by the
+// same code `status --json` gathers with, so the two surfaces cannot
+// disagree about one run.
+func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stderr io.Writer) int {
+	if repo == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac: %v\n", err)
+			return exitGeneric
+		}
+		repo = wd
+	}
+	now := time.Now()
+	degraded := []string{}
+	runs := []overviewRun{}
+
+	// The local runs, in the checkout's own order (alphabetical), each
+	// answered by the same probe and gathering one-shot status uses.
+	ids, err := localRunIDs(repo)
+	if err != nil {
+		// An unreadable runs directory costs the listing its local half and
+		// is named — never a refusal over the cloud half it can still answer.
+		degraded = append(degraded, "runs")
+	}
+	for _, runID := range ids {
+		probe := runlife.Probe(repo, runID, now)
+		runs = append(runs, overviewEntryOf(localStatusModel(ctx, repo, runID, probe)))
+	}
+
+	// The cloud runs: the factory's run index, the same window a truncated
+	// run id resolves against. A factory that cannot be asked is a fact the
+	// reader needs, not a failure of the local half that already answered.
+	cloudNote := ""
+	if client, err := newCloudClient(); err != nil {
+		degraded = append(degraded, "cloud")
+		cloudNote = err.Error()
+	} else if data, err := client.request(ctx, http.MethodGet,
+		fmt.Sprintf("/api/runs?limit=%d", cloudRunIndexLimit), nil); err != nil {
+		degraded = append(degraded, "cloud")
+		cloudNote = err.Error()
+	} else {
+		var response cloudStatusResponse
+		if err := decodeCloudJSON(data, &response); err != nil {
+			degraded = append(degraded, "cloud")
+			cloudNote = err.Error()
+		} else {
+			for _, record := range response.Runs {
+				liveness := cloudRunLiveness(ctx, record.RunID, record.State)
+				model := cloudStatusModel(ctx, client, repo, record.RunID, record, liveness, stderr)
+				runs = append(runs, overviewEntryOf(model))
+			}
+		}
+	}
+
+	// Attention first: a stable sort over the state ranks, so the runs keep
+	// their enumeration order within each band (local before cloud, the
+	// checkout's own order before the factory's).
+	sort.SliceStable(runs, func(i, j int) bool {
+		return overviewRank(runs[i].State) < overviewRank(runs[j].State)
+	})
+
+	doc := overviewModel{
+		SchemaVersion: overviewSchemaVersion,
+		GeneratedAt:   now.UTC().Format(time.RFC3339),
+		Degraded:      degraded,
+		Runs:          runs,
+	}
+	if asJSON {
+		raw, err := json.MarshalIndent(doc, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac: %v\n", err)
+			return exitGeneric
+		}
+		fmt.Fprintf(stdout, "%s\n", raw)
+	} else {
+		renderOverview(stdout, doc, cloudNote)
+	}
+	return exitSuccess
+}
+
+// localRunIDs names every local run the checkout knows: the run directories
+// under `.ticfac/runs/`, which is the durable record the run itself commits.
+// A checkout that holds none answers none — the honest empty, not an error.
+func localRunIDs(repo string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(repo, runstate.Root, "runs"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	ids := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			ids = append(ids, entry.Name())
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// overviewEntryOf classifies one run's model into the listing's row. The
+// classification is a read of the model, nothing else: the waits and
+// attention it holds, its liveness, its lifecycle phase — never a second
+// gathering of the model's own facts.
+func overviewEntryOf(model statusmodel.Model) overviewRun {
+	entry := overviewRun{RunID: model.RunID, Host: model.Host, EpicID: model.EpicID, Model: model}
+
+	// Held: anything the model says needs a person. The primary is the
+	// hardest stop first — the run's own hold line before a finding, a
+	// finding before a dead run, a dead run before the merge — because the
+	// one command a line may carry is the one that moves the FIRST thing.
+	if primary := primaryAttention(model.Attention); primary != nil {
+		entry.State = overviewStateHeld
+		entry.Reason = primary.What
+		entry.ClearWith = primary.UnblockCommand
+		return entry
+	}
+	// A live incarnation is working, whatever its records last said: the
+	// resume a person has not seen the end of yet.
+	if model.Liveness.Alive {
+		entry.State = overviewStateRunning
+		entry.Reason = runningReasonOf(model)
+		return entry
+	}
+	switch model.Lifecycle.Phase {
+	case statusmodel.PhaseFailed:
+		// The run ended in its own failure, holding nothing: the reason is
+		// its own last word, and the clearing command is the resume after a
+		// fix — the sentence the operator's own tick spells.
+		entry.State = overviewStateFailed
+		entry.Reason = lastWordOf(model)
+		clear := fmt.Sprintf("ticfac run-epic %s", model.EpicID)
+		entry.ClearWith = &clear
+	case statusmodel.PhaseCancelled:
+		entry.State = overviewStateCancelled
+		entry.Reason = lastWordOf(model)
+	default:
+		entry.State = overviewStateDone
+		entry.Reason = lastWordOf(model)
+	}
+	// A cloud run's own record state rides as the liveness answer's state,
+	// and it is the run's own durable terminal word — the one this checkout
+	// may hold NOTHING else of, because the factory hosts other projects'
+	// runs whose records never land here. The row says that word, never a
+	// phase the missing records cannot state: a finished cloud run is done,
+	// a stopped one is cancelled, a failed one failed with the resume.
+	switch model.Liveness.State {
+	case "failed":
+		entry.State = overviewStateFailed
+		entry.Reason = cloudEndReasonOf(model)
+		clear := fmt.Sprintf("ticfac run-epic %s", model.EpicID)
+		entry.ClearWith = &clear
+	case "stopped":
+		entry.State = overviewStateCancelled
+		entry.Reason = cloudEndReasonOf(model)
+	case "completed":
+		entry.State = overviewStateDone
+		entry.Reason = cloudEndReasonOf(model)
+	}
+	return entry
+}
+
+// primaryAttention picks the attention entry a held run's line answers
+// with, by the hardness of what it stops: the run's own hold first, then an
+// untriaged finding, then a dead run, then the merge. An unknown kind — a
+// vocabulary the model grows later — is honest last, never dropped.
+func primaryAttention(entries []statusmodel.Attention) *statusmodel.Attention {
+	if len(entries) == 0 {
+		return nil
+	}
+	best := &entries[0]
+	for i := range entries {
+		if attentionRank(entries[i].Kind) < attentionRank(best.Kind) {
+			best = &entries[i]
+		}
+	}
+	return best
+}
+
+// attentionRank orders the person-needing waits by what a glance should
+// clear first.
+func attentionRank(kind string) int {
+	switch kind {
+	case statusmodel.WaitHeldForPerson:
+		return 0
+	case statusmodel.WaitFinding:
+		return 1
+	case statusmodel.WaitDeadRun:
+		return 2
+	case statusmodel.WaitMerge:
+		return 3
+	}
+	return 4
+}
+
+// runningReasonOf says what a live run is doing, from the model's own
+// answers in their order: what it waits on when that is its own work (the
+// in-flight attempts, the close-out's CI), the wave it is in, the phase it
+// is past those.
+func runningReasonOf(model statusmodel.Model) string {
+	if model.WaitsOn != nil && !model.WaitsOn.NeedsPerson && model.WaitsOn.What != "" {
+		return model.WaitsOn.What
+	}
+	if model.Lifecycle.Wave != nil {
+		return fmt.Sprintf("wave %d of %d", model.Lifecycle.Wave.Active, model.Lifecycle.Wave.Total)
+	}
+	if model.Lifecycle.Phase != "" {
+		return "in phase " + model.Lifecycle.Phase
+	}
+	return ""
+}
+
+// lastWordOf is a stopped run's reason: its own last word from the feed —
+// the line the reconciler writes on every ending it reaches — rendered
+// verbatim, its detail the run's sentence, never a shape the overview
+// parses. A checkout that did not host the run holds no feed (the logs are
+// exhaust, never pushed), and there the line names no reason rather than
+// echoing the state word it already said: the run's DURABLE reason (the
+// checkpoint's own) is a field the model does not carry, and a number a
+// record does not state is stated not at all.
+func lastWordOf(model statusmodel.Model) string {
+	if model.Liveness.LastEvent != nil {
+		return model.Liveness.LastEvent.Detail
+	}
+	return ""
+}
+
+// cloudEndReasonOf is a stopped CLOUD run's reason: its own last word from
+// the factory's feed, and — where the factory served none — the liveness
+// answer's own sentence, which for a cloud run is the record's terminal
+// word said in full ("the Workflow's own record says completed"), never the
+// local probe's process talk.
+func cloudEndReasonOf(model statusmodel.Model) string {
+	if model.Liveness.LastEvent != nil {
+		return model.Liveness.LastEvent.Detail
+	}
+	return model.Liveness.Reason
+}
+
+// overviewRank orders the listing's bands: held first, failed next, running
+// after, the terminal rest last.
+func overviewRank(state string) int {
+	switch state {
+	case overviewStateHeld:
+		return 0
+	case overviewStateFailed:
+		return 1
+	case overviewStateRunning:
+		return 2
+	}
+	return 3
+}
+
+// overviewStateWord is the state word a person reads — the one place the
+// closed vocabulary meets prose.
+func overviewStateWord(state string) string {
+	switch state {
+	case overviewStateHeld:
+		return "held for a person"
+	}
+	return state
+}
+
+// renderOverview draws the prose listing the JSON answers with: one line per
+// run, the state word, the reason, and — for a stop a person clears — the
+// one command that clears it. A stop with no command (the merge, which is a
+// person's by design and has no ticfac verb) is named by its reason, which
+// already says what is wanted. Nothing scrolls, nothing is hidden: the
+// glance is the whole point.
+func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string) {
+	if len(doc.Runs) == 0 {
+		fmt.Fprintln(stdout, "No runs.")
+	}
+	for _, run := range doc.Runs {
+		line := fmt.Sprintf("%s: %s", run.RunID, overviewStateWord(run.State))
+		if run.Reason != "" {
+			line += fmt.Sprintf(" — %s", run.Reason)
+		}
+		if run.ClearWith != nil {
+			line += fmt.Sprintf(" — clear with: %s", *run.ClearWith)
+		}
+		fmt.Fprintln(stdout, line)
+	}
+	if cloudNote != "" {
+		fmt.Fprintf(stdout, "cloud runs are not listed: %s\n", cloudNote)
+	}
+}
