@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 254,
-  "state": "dispatching",
-  "reason": "dispatching 7ht as attempt 37",
-  "updated_at": "2026-09-27T14:23:15Z",
+  "sequence": 255,
+  "state": "running",
+  "reason": "7ht is running as attempt 37",
+  "updated_at": "2026-09-27T14:23:24Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -168,7 +168,8 @@
     },
     {
       "tick_id": "7ht",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 37
     },
     {
       "tick_id": "9ss",
