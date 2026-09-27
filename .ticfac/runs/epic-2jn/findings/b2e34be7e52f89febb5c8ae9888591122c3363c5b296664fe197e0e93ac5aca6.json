@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "A4",
   "demonstrating_check": "TestWatchExitsFailedForARunWhoseLastWordIsFailed (new)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:07:39Z",
+  "triaged_at": "2026-09-27T14:07:50Z",
+  "triaged_by": "ticfac run epic-2jn absorbing bot",
+  "promoted_as": "bot",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "xbp",
