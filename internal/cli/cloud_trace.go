@@ -389,7 +389,13 @@ func cloudTraceJSONRows(out io.Writer, runID string, calls []gatewaytrace.Call) 
 	})
 }
 
-func writeCloudTraceJSON(out io.Writer, payload any) error {
+// writeCloudTraceJSON stamps the versioned schema id and writes exactly
+// one document: the agent surface's rule is that a --json document names
+// the schema a reader refuses to guess at, so the stamp is at the seam
+// rather than at each call site — a new --json path cannot forget it
+// (tick 7ht).
+func writeCloudTraceJSON(out io.Writer, payload map[string]any) error {
+	payload["schema"] = agentSchemaID("cloud-trace")
 	encoded, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return newExitError(exitGeneric, "encode trace: %v", err)

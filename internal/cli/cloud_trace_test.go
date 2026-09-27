@@ -306,6 +306,7 @@ func TestCloudTraceJSONEmitsTheRawGatewayRows(t *testing.T) {
 		t.Fatalf("cloud trace --json: %s\n%s", stderr.String(), out.String())
 	}
 	var payload struct {
+		Schema string `json:"schema"`
 		RunID  string `json:"run_id"`
 		Totals struct {
 			Calls        int     `json:"calls"`
@@ -317,6 +318,12 @@ func TestCloudTraceJSONEmitsTheRawGatewayRows(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatalf("--json did not emit JSON: %v\n%s", err, out.String())
+	}
+	// The versioned schema id the agent surface's rule names: a reader that
+	// meets a schema it does not know refuses rather than guessing, so the
+	// document must name its own (tick 7ht — it used to emit none).
+	if payload.Schema != "ticfac.cloud-trace.v1" {
+		t.Errorf("the --json document's schema is %q, want ticfac.cloud-trace.v1", payload.Schema)
 	}
 	if payload.RunID != "run_62c289d1e57942cea5fef6c1a508a0fd" || payload.Totals.Calls != 2 {
 		t.Fatalf("payload = %+v", payload)
@@ -330,6 +337,49 @@ func TestCloudTraceJSONEmitsTheRawGatewayRows(t *testing.T) {
 	}
 	if payload.Calls[0]["id"] != "call1" {
 		t.Errorf("--json rows are not oldest-first: %+v", payload.Calls[0])
+	}
+}
+
+// Every --json path this command has names its versioned schema: the
+// rows view, the no-calls view, and one exchange via --call — all stamped
+// at the seam, checked here so a new path cannot forget it (tick 7ht).
+func TestCloudTraceJSONNamesItsSchemaOnEveryPath(t *testing.T) {
+	configureTraceGateway(t)
+
+	schemaOf := func(t *testing.T, args []string) string {
+		t.Helper()
+		code, out, stderr := runCloudArgs(t, args)
+		if code != exitSuccess {
+			t.Fatalf("%v: %s\n%s", args, stderr.String(), out.String())
+		}
+		var doc struct {
+			Schema string `json:"schema"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+			t.Fatalf("%v: stdout with --json is not one document: %v\n%s", args, err, out.String())
+		}
+		return doc.Schema
+	}
+
+	run := "run_62c289d1e57942cea5fef6c1a508a0fd"
+
+	// The no-calls answer is a document too — the earliest exit still names
+	// its schema.
+	newTraceGateway(t, func(traceGatewayRequest) (int, any) {
+		return http.StatusOK, map[string]any{"success": true, "result": []any{}}
+	})
+	if got := schemaOf(t, []string{"cloud", "trace", "run_unknown", "--json"}); got != "ticfac.cloud-trace.v1" {
+		t.Errorf("the no-calls document's schema is %q, want ticfac.cloud-trace.v1", got)
+	}
+
+	traceRunGateway(t)
+	for _, args := range [][]string{
+		{"cloud", "trace", run, "--json"},
+		{"cloud", "trace", run, "--call", "1", "--json"},
+	} {
+		if got := schemaOf(t, args); got != "ticfac.cloud-trace.v1" {
+			t.Errorf("%v: schema is %q, want ticfac.cloud-trace.v1", args, got)
+		}
 	}
 }
 
