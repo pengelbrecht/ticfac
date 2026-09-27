@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 195,
-  "state": "running",
-  "reason": "ejw is closed",
-  "updated_at": "2026-09-27T11:23:36Z",
+  "sequence": 196,
+  "state": "dispatching",
+  "reason": "dispatching tem as attempt 28",
+  "updated_at": "2026-09-27T11:23:46Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -128,6 +128,10 @@
       "tick_id": "5bd",
       "state": "closed",
       "attempt": 26
+    },
+    {
+      "tick_id": "tem",
+      "state": "ready"
     }
   ],
   "provenance": {
