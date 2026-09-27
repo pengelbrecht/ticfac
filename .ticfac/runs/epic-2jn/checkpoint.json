@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 194,
-  "state": "publishing",
-  "reason": "closing ejw behind the integrated gate on 943d950d5c99",
-  "updated_at": "2026-09-27T11:23:25Z",
+  "sequence": 195,
+  "state": "running",
+  "reason": "ejw is closed",
+  "updated_at": "2026-09-27T11:23:36Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "ejw",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 25
     },
     {
