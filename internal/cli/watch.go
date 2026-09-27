@@ -440,11 +440,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			}
 			return finish(agentStateHeld, attention)
 		}
-		return finish(agentStateDone, nil)
-	}
-	if held {
+	} else if held {
 		return finish(agentStateHeld, nil)
 	}
+	// No hold stands: the run's own terminal line decides failed from done
+	// (tick bot), on every path the model was or was not gathered on.
 	if watchLineEndedFailed(terminal, terminalDetail) {
 		// The run ended in its own failure, holding nothing for a person
 		// (tick bot, epic 2jn's A4): that is the exit table's failed class,

@@ -126,11 +126,7 @@ code is one of this table, the same words in `ticfac --help` and in every
 | code | name | meaning |
 |---|---|---|
 | `0` | done | the command did its work |
-<<<<<<< HEAD
-| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass) |
-=======
-| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class) |
->>>>>>> 8abd62ae412a2e1375de86bd5c5989e8d3d1b4e4
+| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass) |
 | `2` | usage | a malformed invocation: wrong flags, wrong argument count, a refusal to guess |
 | `3` | held | the run ended holding something only a person can move (run-epic, run, watch): the reason class is the refusal's reason or the wait kind in the line and the --json document — e.g. finding_untriaged, merge; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
 | `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
