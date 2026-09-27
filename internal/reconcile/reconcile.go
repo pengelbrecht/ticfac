@@ -467,6 +467,12 @@ type Options struct {
 	// cannot complete only at the end.
 	PullRequests forge.PullRequests
 
+	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
+	// settle`): it never reaches the close-out, so the close-out rule's
+	// surface is not required to build it — and Run refuses, so the
+	// exemption can never become a run whose close-out nothing can check.
+	ReleaseOnly bool
+
 	// GateTimeout bounds one gate command.
 	GateTimeout time.Duration
 
@@ -1191,7 +1197,7 @@ func New(opts Options) (*Reconciler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
-	if rule.Declared && opts.PullRequests == nil {
+	if rule.Declared && opts.PullRequests == nil && !opts.ReleaseOnly {
 		return nil, fmt.Errorf("reconcile: %s declares the PR + CI close-out rule — %q — and this build has no "+
 			"code-hosting surface configured to open or read the epic PR: set %s (the GitHub surface reads it), or "+
 			"run against a host that provides one",
@@ -1529,6 +1535,10 @@ type Result struct {
 // every effect is preceded by the compare-and-swap that proves it has not
 // already happened.
 func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
+	if r.opts.ReleaseOnly {
+		return nil, fmt.Errorf("reconcile: this reconciler was built to release attempts only (ticfac settle), " +
+			"without the close-out's code-hosting surface; it does not run an epic")
+	}
 	// What the last incarnation was killed in the middle of. Every worktree
 	// this package makes is removed by a defer, and a killed process runs no
 	// defer: the directories are gone with the temp filesystem, and only the

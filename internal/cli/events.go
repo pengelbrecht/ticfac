@@ -41,15 +41,20 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		"events of earlier incarnations of this run id")
 	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
 		"(a local feed is read at file-follow cadence)")
-	if err := fs.Parse(args); err != nil {
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
 		return 2
 	}
-	rest := fs.Args()
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac events: exactly one run id is required\n")
 		return 2
 	}
 	runID := rest[0]
+	if parseOnly {
+		return 0
+	}
 	if *repo == "" {
 		var err error
 		*repo, err = os.Getwd()

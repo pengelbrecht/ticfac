@@ -385,10 +385,12 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 				"ground, a third is already far from home, and past that a person should judge the chain "+
 				"rather than let the run keep going)")
 	)
-	if err := fs.Parse(args); err != nil {
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
 		return 2
 	}
-	rest := fs.Args()
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac run-epic: exactly one epic id is required\n")
 		return 2
@@ -795,10 +797,12 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		release   = fs.String("release", "", "the person releasing the attempt")
 		carryWork = fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)")
 	)
-	if err := fs.Parse(args); err != nil {
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
 		return 2
 	}
-	rest := fs.Args()
 	if len(rest) != 3 {
 		fmt.Fprintf(stderr, "ticfac settle: exactly one epic id, tick id and attempt number are required\n")
 		return 2
@@ -814,6 +818,9 @@ func settle(args []string, stdout, stderr io.Writer) int {
 			"author is the clock release Appendix A #11 refuses\n")
 		return 2
 	}
+	if parseOnly {
+		return 0
+	}
 	if err := reconcile.CheckExecutor(); err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %s.\n%v\n", epicID, NoExecutorMessage, err)
 		return ExitNoExecutor
@@ -827,23 +834,10 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// The same code-hosting surface the run is handed (tick 0iz): the
-	// reconciler this command builds shares the construction refusal, so a
-	// repo declaring the close-out rule is settled by a host that can back
-	// it — and the credential is read from the same one place.
-	repoDir := *repo
-	if repoDir == "" {
-		if wd, wdErr := os.Getwd(); wdErr == nil {
-			repoDir = wd
-		}
-	}
-	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
-	if pullsErr != nil {
-		fmt.Fprintf(stderr, "ticfac settle %s: no code-hosting surface: %v. "+
-			"A repository that declares the PR + CI close-out rule in .tick/config.md is refused until one is "+
-			"configured.\n", epicID, pullsErr)
-	}
-
+	// A release never reaches the close-out: it writes one settlement record
+	// and asks nothing of the epic PR. So it is built release-only, without
+	// the code-hosting surface the PR + CI rule needs — a person releasing a
+	// stuck attempt is not refused for a GITHUB_TOKEN the release never uses.
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *repo,
 		Remote:            *remote,
@@ -858,7 +852,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		GateConfig:        *gate,
 		ProfileDir:        *profiles,
 		Tier:              *tier,
-		PullRequests:      pulls,
+		ReleaseOnly:       true,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)
