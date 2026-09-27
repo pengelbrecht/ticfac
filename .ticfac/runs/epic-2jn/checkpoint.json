@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 412,
-  "state": "gating",
-  "reason": "running the integrated gate for rrl on cc8656510df7",
-  "updated_at": "2026-09-27T20:48:03Z",
+  "sequence": 413,
+  "state": "failed",
+  "reason": "5 finding(s) this run drafted are still waiting for a person — \"The 6dh status model fixture now has a second reader: move it into the pinned contract bundle\" (contract, severity low, tick i1r, for pengelbrecht/ticks, claims to break no done item); \"The pinned sandbox image's die messages still tell operators to run 'tk factory setup'\" (upstream-tick, severity medium, tick ogv, for pengelbrecht/ticks, breaks done item A4 (demonstrated by \"grep -n \\\"tk factory\\\" image/common.sh image/Dockerfile\")); \"Move the status model fixture into the pinned contract bundle when a second reader exists\" (contract, severity low, tick 6dh, for pengelbrecht/ticks, claims to break no done item); \"image/README.md should point at the new go.mod-floor guard in ticfac\" (upstream-tick, severity low, tick 152, for pengelbrecht/ticks, claims to break no done item); \"ticks skill says 'Start a run with ticfac run-epic <epic>'; the ticfac skill teaches 'ticfac run <epic>'\" (upstream-tick, severity low, tick xbp, for pengelbrecht/ticks, breaks done item A6 (demonstrated by \"none\")) — and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode here, and this is the one decision point. Triage each with `ticfac finding 2jn 10b18c6ad5bb1fdd2a3b5bc3d7accdc2cd4c8af5b29513db87691fdb88513a3c|2b4d3849050d14bbe0a973ab8422ca415b9488c6926bc7aee167e451e33ffa9f|3261ed0267e576d07ee5c2eca45a46daf48ce7853de1932674e40bf73b8f8436|700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695|a009316aa008722d8838f522b5ff70007c2b03e903fdbf22f146b16de3f7f589 --promote-as <tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding 2jn 10b18c6ad5bb1fdd2a3b5bc3d7accdc2cd4c8af5b29513db87691fdb88513a3c|2b4d3849050d14bbe0a973ab8422ca415b9488c6926bc7aee167e451e33ffa9f|3261ed0267e576d07ee5c2eca45a46daf48ce7853de1932674e40bf73b8f8436|700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695|a009316aa008722d8838f522b5ff70007c2b03e903fdbf22f146b16de3f7f589 --discard --by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding 2jn 10b18c6ad5bb1fdd2a3b5bc3d7accdc2cd4c8af5b29513db87691fdb88513a3c|2b4d3849050d14bbe0a973ab8422ca415b9488c6926bc7aee167e451e33ffa9f|3261ed0267e576d07ee5c2eca45a46daf48ce7853de1932674e40bf73b8f8436|700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695|a009316aa008722d8838f522b5ff70007c2b03e903fdbf22f146b16de3f7f589 --fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already passed, so the close-out's close is the only step left — and the resume closes each role tick behind its recorded decision, it does not dispatch the job again (tick 80x). The drafts are keys 10b18c6ad5bb1fdd2a3b5bc3d7accdc2cd4c8af5b29513db87691fdb88513a3c, 2b4d3849050d14bbe0a973ab8422ca415b9488c6926bc7aee167e451e33ffa9f, 3261ed0267e576d07ee5c2eca45a46daf48ce7853de1932674e40bf73b8f8436, 700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695, a009316aa008722d8838f522b5ff70007c2b03e903fdbf22f146b16de3f7f589 under .ticfac/runs/epic-2jn/findings/ on origin, listed by `ticfac findings 2jn` and the epic PR #80 carries each one's full text",
+  "updated_at": "2026-09-27T20:49:52Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -69,7 +69,7 @@
     },
     {
       "tick_id": "rrl",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 54
     },
     {
