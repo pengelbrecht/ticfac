@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 374,
+  "sequence": 375,
   "state": "failed",
-  "reason": "vqc try 1 (run dispatch #50) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): there is no report at the path this executor owns, so the attempt never said what it did. The tick is neither resolved nor re-dispatched",
-  "updated_at": "2026-09-27T19:27:06Z",
+  "reason": "vqc did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: vqc try 1 (run dispatch #50) does not merge onto epic/2jn (3 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): there is no report at the path this executor owns, so the attempt never said what it did. The tick is neither resolved nor re-dispatched",
+  "updated_at": "2026-09-27T19:27:08Z",
   "ticks": [
     {
       "tick_id": "nwj",
