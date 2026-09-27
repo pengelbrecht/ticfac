@@ -12,8 +12,11 @@
   "attempt": 45,
   "done_item": "A4",
   "demonstrating_check": "go test ./internal/cli/ -run TestWatchExitsFailedWhenTheRunDied",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T17:49:39Z",
+  "triaged_at": "2026-09-27T17:49:50Z",
+  "triaged_by": "ticfac run epic-2jn absorbing vqc",
+  "promoted_as": "vqc",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "rix",
