@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 41,
-  "state": "dispatching",
-  "reason": "dispatching 8yn as attempt 8",
-  "updated_at": "2026-09-27T06:09:12Z",
+  "sequence": 42,
+  "state": "running",
+  "reason": "8yn is running as attempt 8",
+  "updated_at": "2026-09-27T06:09:20Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -80,7 +80,8 @@
     },
     {
       "tick_id": "8yn",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     }
   ],
   "provenance": {
