@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "A3",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:09:36Z",
+  "triaged_at": "2026-09-27T14:09:47Z",
+  "triaged_by": "ticfac run epic-2jn absorbing wcl",
+  "promoted_as": "wcl",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "xbp",
