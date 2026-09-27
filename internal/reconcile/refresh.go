@@ -38,10 +38,13 @@ import (
 //     `--force-with-lease` on the head it merged onto, and a lost lease
 //     rebuilds the merge rather than forcing over what arrived.
 //
-//   - A CONFLICT IS A TYPED REFUSAL. Resolving one is a role-job with its own
-//     contract (resolve-conflict, Phase 2). A reconciler that skipped the fold
-//     on a conflict would be back to planning from a tracker that is missing
-//     ticks — silently, which is the failure this whole file exists to remove.
+//   - A CONFLICT IS A RESOLVE-CONFLICT JOB, THEN A TYPED REFUSAL. A content
+//     or add/add conflict is handed to the resolve-conflict job the attempt
+//     merge already uses (refresh_resolve.go), bounded to one resolve per
+//     fold; every other kind, and a resolve that fails, is the typed refusal
+//     it always was. A reconciler that skipped the fold on a conflict would
+//     be back to planning from a tracker that is missing ticks — silently,
+//     which is the failure this whole file exists to remove.
 
 // refreshFromBase folds the epic's base branch into the integration branch as
 // origin has both, and answers with a typed refusal when they do not merge.
@@ -70,6 +73,14 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 		return err
 	}
 
+	// A resolved fold, once a resolve-conflict job has made one: the merge
+	// commit whose parents are the epic head it was resolved against and the
+	// base head. Held across the loop so a lost lease folds THAT onto the
+	// moved branch rather than paying for a second resolve; finalize is the
+	// resolve's own records, landed once the fold is on the branch.
+	var resolved string
+	var finalize func() error
+
 	for try := 0; try < maxMergePushes; try++ {
 		epicHead, err := r.git.remoteHead(r.branch)
 		if err != nil {
@@ -82,19 +93,71 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 			// The branch already carries the base — an earlier incarnation of
 			// this run folded it, or the branch was cut a moment ago. Nothing
 			// is merged twice.
+			if finalize != nil {
+				if err := finalize(); err != nil {
+					return err
+				}
+			}
 			r.base = epicHead
 			r.record("", StageRefreshed, "%s already carries %s at %s", r.branch, base, short(baseHead))
 			return nil
 		}
 
-		merged, err := r.foldBase(base, baseHead, epicHead, drivers)
+		target := baseHead
+		if resolved != "" {
+			target = resolved
+		}
+		merged, conflict, err := r.foldBase(base, target, epicHead, drivers)
 		if err != nil {
 			return err
+		}
+		if conflict != nil {
+			if resolved != "" {
+				// The resolved fold was made against an epic head the branch
+				// has since moved past, and what moved it conflicts with the
+				// resolution. A second resolve is not what the bound allows.
+				return r.refuse(RefusedBaseRefresh, "",
+					"the resolve-conflict job's fold of %s at %s into %s (%s) no longer merges onto %s at %s: %s. "+
+						"A second resolve of one fold is not this run's to pay for; merge %s into %s by hand and run "+
+						"the epic again",
+					base, short(baseHead), r.branch, short(resolved), r.branch, short(epicHead),
+					strings.Join(conflict.Files, ", "), short(resolved), r.branch)
+			}
+			if !conflict.resolvable() {
+				return r.refuse(RefusedBaseRefresh, "",
+					"%s of %s does not fold into %s: %s (%s). Every tick filed on %s since this branch forked is "+
+						"invisible to this run until somebody resolves that — and a conflict of this kind is one "+
+						"side's change making the other's meaningless, which is a person's decision, not a "+
+						"resolve-conflict job's",
+					short(baseHead), base, r.branch, strings.Join(conflict.Files, ", "), conflict.Detail, base)
+			}
+			// A content or add/add conflict between the base and the epic is
+			// two intents a worker holding both can union (refresh_resolve.go):
+			// the run dispatches a resolve-conflict job instead of stopping.
+			resolved, finalize, err = r.resolveBaseFold(ctx, base, baseHead, epicHead, conflict, drivers)
+			if err != nil {
+				return err
+			}
+			if first, _ := r.git.run("", "rev-parse", resolved+"^1"); first != epicHead {
+				// Resolved against an epic head the branch has moved past (a
+				// job an earlier incarnation left on its branch): the next
+				// pass folds the resolution onto the head the branch has now.
+				continue
+			}
+			merged = resolved
 		}
 		_, stderr, pushErr := r.git.try("", "push",
 			"--force-with-lease="+refFor(r.branch)+":"+epicHead,
 			r.opts.Remote, merged+":"+refFor(r.branch))
 		if pushErr == nil {
+			if finalize != nil {
+				// The fold is on the branch: land the resolve's decision record
+				// and retire its branch — after the push, because both write
+				// the run branch and a write before it is a lease it loses.
+				if err := finalize(); err != nil {
+					return err
+				}
+			}
 			r.base = merged
 			r.record("", StageRefreshed, "%s of %s is folded into %s as %s",
 				short(baseHead), base, r.branch, short(merged))
@@ -118,34 +181,36 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 // foldBase performs the merge itself, in a DETACHED worktree of its own — for
 // integrate.go's reason: the integration branch must not be checked out
 // anywhere the run-state store might move it.
-func (r *Reconciler) foldBase(base, baseHead, epicHead string, drivers map[string]string) (string, error) {
+//
+// `target` is the base head, or — once a resolve-conflict job has resolved
+// the fold — the resolved merge, folded onto a branch that moved under it. A
+// merge that did not merge answers the conflict it was, for the caller to
+// resolve or refuse; nothing here decides which.
+func (r *Reconciler) foldBase(base, target, epicHead string, drivers map[string]string) (string, *mergeConflict, error) {
 	dir, remove, err := r.git.tempWorktree("ticfac-refresh-", epicHead)
 	if err != nil {
-		return "", fmt.Errorf("prepare the refresh worktree at %s: %w", short(epicHead), err)
+		return "", nil, fmt.Errorf("prepare the refresh worktree at %s: %w", short(epicHead), err)
 	}
 	defer remove()
 
 	args := driverConfig(drivers)
 	message := fmt.Sprintf("Merge branch '%s' into %s\n\nticfac run %s: refresh the integration branch "+
 		"from the epic's base branch", base, r.branch, r.runID)
-	args = append(args, "merge", "--no-ff", "--no-edit", "-m", message, baseHead)
+	args = append(args, "merge", "--no-ff", "--no-edit", "-m", message, target)
 
-	if _, stderr, err := r.git.try(dir, args...); err != nil {
-		conflicts, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
+	if stdout, stderr, err := r.git.try(dir, args...); err != nil {
+		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
 		_, _, _ = r.git.try(dir, "merge", "--abort")
-		if conflicts == "" {
+		if strings.TrimSpace(unmerged) == "" {
 			// Not a conflict: git could not run the merge at all. That is an
 			// operational problem, and calling it a conflict would send the
 			// next repair at a file nobody touched.
-			return "", fmt.Errorf("merge %s into %s: %w: %s", base, r.branch, err, firstLine(stderr))
+			return "", nil, fmt.Errorf("merge %s into %s: %w: %s", base, r.branch, err, firstLine(stderr))
 		}
-		return "", r.refuse(RefusedBaseRefresh, "",
-			"%s of %s does not fold into %s: %s. Every tick filed on %s since this branch forked is invisible to "+
-				"this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, "+
-				"and not a merge this reconciler may perform",
-			short(baseHead), base, r.branch, strings.Join(strings.Fields(conflicts), ", "), base)
+		return "", classifyMergeFailure(stdout, stderr, unmerged, err), nil
 	}
-	return r.git.run(dir, "rev-parse", "HEAD")
+	merged, err := r.git.run(dir, "rev-parse", "HEAD")
+	return merged, nil, err
 }
 
 // driverConfig is the `-c merge.<name>.driver=...` git needs to resolve the

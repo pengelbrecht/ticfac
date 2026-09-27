@@ -366,6 +366,17 @@ func (r *Reconciler) collectResolve(ctx context.Context, handle *subprocess.JobH
 		return r.refuse(RefusedMerge, tick, "%s does not merge onto %s (%s) and its resolve-conflict job failed: %s",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, fmt.Sprintf(format, args...))
 	}
+	return r.collectResolveJob(ctx, handle, executor, marker, failed)
+}
+
+// collectResolveJob is collectResolve's rules with the refusal left to the
+// caller: an attempt's conflict and the base fold's (refresh_resolve.go) stop
+// under different reasons and name different sides, and the rules a
+// resolve-conflict job's collect is held to are the same for both.
+func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.JobHandle, executor Executor,
+	marker attemptHandle, failed func(format string, args ...any) error) (*subprocess.Collection, error) {
+
+	tick := marker.TickID
 	if _, err := r.awaitResolve(ctx, handle, executor, marker); err != nil {
 		return nil, failed("it did not settle: %v", err)
 	}
@@ -441,15 +452,25 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 // progress state is handed over as the one fact that survives a worktree:
 // its content.
 func (r *Reconciler) conflictedTree(epicHead, head string, marker attemptHandle) (string, error) {
+	message := fmt.Sprintf("ticfac run %s: the conflicted merge of %s into %s for the resolve-conflict job",
+		r.runID, branchOf(marker.WriteRef), r.branch)
+	return r.conflictedMerge(epicHead, head, message, nil)
+}
+
+// conflictedMerge is conflictedTree's mechanics for any two heads: `head`
+// merged into `epicHead` and left unresolved, committed with its markers.
+// `config` is what goes in front of git's merge — the tracker's merge drivers
+// for the base fold, so the records resolve exactly as the fold resolves them
+// and only the files the fold could not merge carry markers.
+func (r *Reconciler) conflictedMerge(epicHead, head, message string, config []string) (string, error) {
 	dir, remove, err := r.git.tempWorktree("ticfac-resolve-", epicHead)
 	if err != nil {
 		return "", fmt.Errorf("prepare the conflicted tree at %s: %w", short(epicHead), err)
 	}
 	defer remove()
 
-	message := fmt.Sprintf("ticfac run %s: the conflicted merge of %s into %s for the resolve-conflict job",
-		r.runID, branchOf(marker.WriteRef), r.branch)
-	_, _, mergeErr := r.git.try(dir, "merge", "--no-ff", "--no-commit", "-m", message, head)
+	args := append(append([]string{}, config...), "merge", "--no-ff", "--no-commit", "-m", message, head)
+	_, _, mergeErr := r.git.try(dir, args...)
 	if mergeErr != nil {
 		// The markers and the unmerged index ARE the state this function
 		// exists to hand over; but a merge that failed leaving NO conflicted
@@ -580,18 +601,11 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 		return "", fmt.Errorf("the resolve-conflict job's head %s is not a commit this checkout has: %w",
 			short(resolveHead), err)
 	}
-	for _, path := range conflict.Files {
-		blob, _, err := r.git.try("", "cat-file", "blob", resolveHead+":"+path)
-		if err != nil {
-			// The resolution removed the file: the conflict is gone with it.
-			continue
-		}
-		if conflictMarkersIn(blob) {
-			return "", r.refuse(RefusedMerge, marker.TickID,
-				"the resolve-conflict job for the conflict of %s committed %s still carrying its conflict markers: "+
-					"a resolution that did not happen is not a merge, whatever the commit says",
-				r.attemptName(marker.TickID, marker.Attempt), path)
-		}
+	if path, left := r.markersLeftAt(resolveHead, conflict.Files); left {
+		return "", r.refuse(RefusedMerge, marker.TickID,
+			"the resolve-conflict job for the conflict of %s committed %s still carrying its conflict markers: "+
+				"a resolution that did not happen is not a merge, whatever the commit says",
+			r.attemptName(marker.TickID, marker.Attempt), path)
 	}
 	tree, err := r.git.run("", "rev-parse", resolveHead+"^{tree}")
 	if err != nil {
@@ -605,6 +619,22 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 		return "", fmt.Errorf("mint the merge of the resolve-conflict job's resolution: %w", err)
 	}
 	return merged, nil
+}
+
+// markersLeftAt is the mechanical half of "did the job resolve it": the first
+// path that conflicted and still carries a conflict marker at `head`. A path
+// the resolution removed carries none — the conflict is gone with the file.
+func (r *Reconciler) markersLeftAt(head string, files []string) (string, bool) {
+	for _, path := range files {
+		blob, _, err := r.git.try("", "cat-file", "blob", head+":"+path)
+		if err != nil {
+			continue
+		}
+		if conflictMarkersIn(blob) {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 // conflictMarkersIn reports whether resolved content still carries git's
