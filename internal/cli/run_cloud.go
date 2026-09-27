@@ -21,11 +21,14 @@ package cli
 //     view; two is the drift every earlier surface had to settle.
 //
 //   - RESUME is a second invocation against a run the factory says has
-//     finished: a new submission, which the cloud orchestrator resumes from
-//     the integration branch exactly the way a local reconciler does. The
-//     liveness that decides attach from resume is the run record's own
-//     state — the Workflow's durable claim, never "is anything running
-//     here", which is a question no cloud run can be asked from a laptop.
+//     finished — or a run whose record is FROZEN at a state its dead
+//     Workflow instance no longer holds, which is the same thing: nothing
+//     is advancing it. Either way the resume is a new submission, which the
+//     cloud orchestrator resumes from the integration branch exactly the way
+//     a local reconciler does. The liveness that decides attach from resume
+//     is the same answer `ticfac status` gives — the record's state checked
+//     against the Workflow instance — never the record state alone, which is
+//     the one claim a dead run can still make.
 //
 //   - TRIAGE is untouched by this file on purpose: the findings channel is
 //     the integration branch, the same branch on both hosts, so
@@ -50,6 +53,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -78,14 +82,21 @@ var runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdou
 		// local attach grants. The record is asked on a context that does not
 		// carry the cancellation (the invocation's context is already gone),
 		// because "still alive?" is the factory's fact, and the answer decides
-		// whether the operator detached from a live run or lost one.
+		// whether the operator detached from a live run or lost one. The
+		// answer is the same liveness the attach decision uses — never the
+		// record state alone, because a record frozen at `running` by a
+		// supervisor that never wrote its last word is a run nothing is
+		// advancing, and "the run keeps going" would be the one lie this
+		// command must not tell.
 		if client, err := newCloudClient(); err == nil {
-			if record, err := readCloudRunRecord(context.WithoutCancel(ctx), client, runID); err == nil &&
-				cloudRunClaimsLife(record.State) {
-				fmt.Fprintf(stdout, "detached from cloud run %s — the run keeps going in the factory; "+
-					"`ticfac run %s --cloud` attaches again, `ticfac status %s` asks whether it is alive\n",
-					runID, epicID, runID)
-				return exitRunning
+			askCtx := context.WithoutCancel(ctx)
+			if record, err := readCloudRunRecord(askCtx, client, runID); err == nil {
+				if answer := cloudRunLiveness(askCtx, runID, record.State); answer.Alive {
+					fmt.Fprintf(stdout, "detached from cloud run %s — the run keeps going in the factory; "+
+						"`ticfac run %s --cloud` attaches again, `ticfac status %s` asks whether it is alive\n",
+						runID, epicID, runID)
+					return exitRunning
+				}
 			}
 		}
 	}
@@ -117,32 +128,53 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 		return finish("starting", agentStateFailed, "", err.Error())
 	}
 
-	// The run the epic already has in the factory, from the run index — the
-	// same widest window every prefix resolution reads (its N most recent).
-	// A run it names is the newest the factory has for the epic (the index
-	// serves started_at DESC), and that run decides attach from resume.
-	existing, err := cloudRunsForEpic(ctx, client, epicID)
+	// The project this checkout's submission carries (tick nyi): the GitHub
+	// project of the checkout the run works in, read the same way the
+	// submission boundary reads it, BEFORE the factory is asked anything —
+	// because the run the command may attach to is THIS project's run, never
+	// another project's run for the same epic id, and a checkout that names no
+	// project cannot submit one either.
+	project, err := cloudProjectOf(repo)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
 		return finish("starting", agentStateFailed, "", err.Error())
 	}
-	if existing != nil && cloudRunClaimsLife(existing.State) {
-		fmt.Fprintf(prose, "cloud run %s is alive (the factory's record says %s) — attaching; "+
-			"Ctrl-C detaches without stopping it\n", existing.RunID, stateOrUnknown(existing.State))
-		code := runCloudAttach(ctx, repo, epicID, existing.RunID, prose, stderr)
-		return finish("attached", runAttachState(repo, existing.RunID, code), existing.RunID, "")
-	}
 
-	// Not alive in the factory — never started, or finished. All three are
-	// one action: a new submission, which the cloud orchestrator resumes from
-	// the integration branch the way a local reconciler does. The wording
-	// keeps the local command's own: "resuming" is the word a second
-	// invocation of `run` owes an operator who has run this epic before.
+	// The run the epic already has in the factory — this project's, from the
+	// run index's own ?project= window — and the newest of them is what
+	// decides attach from resume.
+	existing, err := cloudRunsForEpic(ctx, client, project, epicID)
+	if err != nil {
+		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
+		return finish("starting", agentStateFailed, "", err.Error())
+	}
+	// The wording keeps the local command's own: "starting" is what a first
+	// invocation owes, and a run the epic already has there owes "resuming" —
+	// the word a second invocation of `run` owes an operator who has run this
+	// epic before. It is set below, where the factory's answer decided.
 	action := "starting"
 	if existing != nil {
-		fmt.Fprintf(prose, "cloud run %s is not running (the factory's record says %s) — resuming the epic as a new submission\n",
-			existing.RunID, stateOrUnknown(existing.State))
+		// The liveness that decides attach from resume is the same answer
+		// `ticfac status` gives (tick nyi): the record's own state checked
+		// against the Workflow instance when the operator's Cloudflare
+		// credentials allow it. A record frozen at `running` by a supervisor
+		// that never got to write its last word is a run nothing is advancing —
+		// attaching to it forever is the one outcome this decision refuses.
+		liveness := cloudRunLiveness(ctx, existing.RunID, existing.State)
+		if liveness.Alive {
+			fmt.Fprintf(prose, "cloud run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
+				existing.RunID, liveness.Reason)
+			code := runCloudAttach(ctx, repo, epicID, existing.RunID, prose, stderr)
+			return finish("attached", runAttachState(repo, existing.RunID, code), existing.RunID, "")
+		}
+		// Not alive — never started, finished, or a record frozen at a state
+		// its dead instance no longer holds. All three are one action: a new
+		// submission, which the cloud orchestrator resumes from the integration
+		// branch the way a local reconciler does, and the reason names which of
+		// the three it was, in the liveness answer's own words.
 		action = "resuming"
+		fmt.Fprintf(prose, "cloud run %s is not running — %s — resuming the epic as a new submission\n",
+			existing.RunID, liveness.Reason)
 	} else {
 		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
 	}
@@ -168,24 +200,21 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 	return finish(action, runAttachState(repo, runID, code), runID, "")
 }
 
-// cloudRunClaimsLife is whether a run record's own state is one a live cloud
-// run holds — the factory's own vocabulary (ACTIVE_RUN_STATES in
-// cloudflare/src/runs.ts: starting, running, stopping). A record with no
-// state claims nothing: "unknown" must never read as alive, the same rule
-// cloudRunLiveness holds.
-func cloudRunClaimsLife(state string) bool {
-	state = strings.TrimSpace(state)
-	return state != "" && cloudRunStillGoing(state)
-}
-
-// cloudRunsForEpic answers, from the factory's run index, what the epic
-// already has there: its NEWEST run, or none. The index serves started_at
-// DESC (db.ts listRuns), so the first run it names for the epic is the
-// newest — a fact of the index, not an assumption about it — and the newest
-// run is the one that decides attach from resume.
-func cloudRunsForEpic(ctx context.Context, client *cloudClient, epicID string) (*cloudRunRecord, error) {
+// cloudRunsForEpic answers, from the factory's run index filtered to one
+// project, what the epic already has there: its NEWEST run, or none. The
+// index serves started_at DESC (db.ts listRuns), so the first run it names
+// for the epic is the newest — a fact of the index, not an assumption about
+// it — and the newest run is the one that decides attach from resume.
+//
+// The project is the caller's own word, the one its submission carries: the
+// index is asked through its ?project= filter (the factory's own, index.ts's
+// listRoute), so the window the epic is searched in holds this project's
+// runs and nobody else's — and a record the index still named that is not
+// this project's is skipped too, because a run another project started for
+// the same epic id is never this checkout's run (tick nyi).
+func cloudRunsForEpic(ctx context.Context, client *cloudClient, project, epicID string) (*cloudRunRecord, error) {
 	data, err := client.request(ctx, http.MethodGet,
-		fmt.Sprintf("/api/runs?limit=%d", cloudRunIndexLimit), nil)
+		fmt.Sprintf("/api/runs?limit=%d&project=%s", cloudRunIndexLimit, url.QueryEscape(project)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +226,9 @@ func cloudRunsForEpic(ctx context.Context, client *cloudClient, epicID string) (
 	for i := range response.Runs {
 		run := &response.Runs[i]
 		if strings.TrimSpace(run.Epic) != epicID {
+			continue
+		}
+		if strings.TrimSpace(run.Project) != project {
 			continue
 		}
 		newest = run

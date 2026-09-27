@@ -909,7 +909,7 @@ func prepareCloudSubmission(ctx context.Context, root, epicID string) (baseSHA, 
 		}
 	}
 
-	project, err = cloudDetectProject()
+	project, err = cloudProjectOf(root)
 	if err != nil {
 		return "", "", "", fmt.Errorf("cannot determine the GitHub project for epic %q: %w", epicID, err)
 	}

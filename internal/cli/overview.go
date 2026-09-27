@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -43,8 +44,12 @@ import (
 // The overview document's own version, `ticfac.overview.v1`'s schema
 // version. The per-run entries carry the status model's own version
 // independently: this number moves only with the OVERVIEW's shape (the
-// wrapper and its entry fields), never with the model it wraps.
-const overviewSchemaVersion = 1
+// wrapper and its entry fields), never with the model it wraps. v2 added
+// the row's `project` (tick nyi): an agent reading the listing must be able
+// to see which of the factory's runs are this checkout's and which are
+// another project's — the rows the entry-level commands can act on and the
+// rows they cannot.
+const overviewSchemaVersion = 2
 
 // The overview's closed state vocabulary — the four answers the acceptance
 // names, plus the run's own terminal word for a stop that was deliberate:
@@ -77,13 +82,15 @@ type overviewModel struct {
 }
 
 // overviewRun is one run's row: the listing's own half (run id, host, epic,
-// the state word, the reason, the one clearing command) beside the FULL
+// the state word, the reason, the one clearing command, and — for a cloud
+// run — the GitHub project the factory holds it under) beside the FULL
 // status model the row renders from — the same object `ticfac status --json
 // <run>` emits, so the prose line and the JSON entry cannot drift.
 type overviewRun struct {
 	RunID     string            `json:"run_id"`
 	Host      string            `json:"host"`
 	EpicID    string            `json:"epic_id"`
+	Project   string            `json:"project,omitempty"`
 	State     string            `json:"state"`
 	Reason    string            `json:"reason"`
 	ClearWith *string           `json:"clear_with"`
@@ -155,7 +162,9 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 		// works in, and its records are read from that repo's origin view.
 		workingRepo, _ := runregistry.WorkingRepo(runID, repo)
 		probe := runlife.Probe(workingRepo, runID, now)
-		runs = append(runs, overviewEntryOf(localStatusModel(ctx, workingRepo, runID, probe, modelGatherers{graph: epicGraph, ci: statusCI})))
+		model := localStatusModel(ctx, workingRepo, runID, probe, modelGatherers{graph: epicGraph, ci: statusCI})
+		// A local run is this checkout's own by construction.
+		runs = append(runs, overviewEntryOf(model, true))
 	}
 
 	// The cloud runs: the factory's run index, the same window a truncated
@@ -175,10 +184,22 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 			degraded = append(degraded, "cloud")
 			cloudNote = err.Error()
 		} else {
+			// The project this checkout mirrors (tick nyi): the factory may
+			// host several projects' runs, and every row below is listed — the
+			// glance is the factory's — but this repo's records, tracker and PR
+			// are read ONLY for a run this project can claim. Another project's
+			// run holds none of this repo's attention: its rows say what its
+			// own record and feed say, and name no command this checkout could
+			// not run for it.
+			repoProject, _ := cloudProjectOf(repo)
 			for _, record := range response.Runs {
+				ours := cloudRecordBelongsToRepo(repoProject, record.Project)
 				liveness := cloudRunLiveness(ctx, record.RunID, record.State)
-				model := cloudStatusModel(ctx, client, repo, record.RunID, record, liveness, stderr, modelGatherers{graph: epicGraph, ci: statusCI})
-				runs = append(runs, overviewEntryOf(model))
+				model := cloudStatusModel(ctx, client, repo, record.RunID, record, liveness, stderr,
+					modelGatherers{graph: epicGraph, ci: statusCI}, ours)
+				entry := overviewEntryOf(model, ours)
+				entry.Project = strings.TrimSpace(record.Project)
+				runs = append(runs, entry)
 			}
 		}
 	}
@@ -239,7 +260,14 @@ func localRunIDs(repo string) ([]string, error) {
 // classification is a read of the model, nothing else: the waits and
 // attention it holds, its liveness, its lifecycle phase — never a second
 // gathering of the model's own facts.
-func overviewEntryOf(model statusmodel.Model) overviewRun {
+//
+// A run this checkout cannot claim (ours=false, another project's cloud
+// run) names no clearing command (tick nyi): "ticfac run-epic <epic>" and
+// "ticfac triage <epic>" are commands THIS repo would run against ITS OWN
+// records for the epic id — the one thing a row for another project's run
+// must never suggest. The reason stands, the state word stands; the command
+// is the one field that lies.
+func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 	entry := overviewRun{RunID: model.RunID, Host: model.Host, EpicID: model.EpicID, Model: model}
 
 	// Held: anything the model says needs a person. The primary is the
@@ -250,6 +278,12 @@ func overviewEntryOf(model statusmodel.Model) overviewRun {
 		entry.State = overviewStateHeld
 		entry.Reason = primary.What
 		entry.ClearWith = primary.UnblockCommand
+		if !ours {
+			// Another project's run: whatever the attention says, the command
+			// that moves it runs against THIS repo's records — not the
+			// command to suggest.
+			entry.ClearWith = nil
+		}
 		return entry
 	}
 	// A live incarnation is working, whatever its records last said: the
@@ -293,6 +327,9 @@ func overviewEntryOf(model statusmodel.Model) overviewRun {
 	case "completed":
 		entry.State = overviewStateDone
 		entry.Reason = cloudEndReasonOf(model)
+	}
+	if !ours {
+		entry.ClearWith = nil
 	}
 	return entry
 }

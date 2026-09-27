@@ -94,11 +94,14 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 	// it knows the run. Either way the SAME loop follows it, and either way
 	// the lines are the same versioned schema — a cloud run's feed is
 	// indistinguishable from a local one's, by contract and by test.
-	source, kind, err := feedSource(ctx, *repo, runID, stderr)
+	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 		return 1
 	}
+	// The events answer for the run the id names, resolved: an epic id that
+	// named a factory run answers for that run's own id (tick nyi).
+	runID = resolved
 
 	print := func(event runfeed.Event) {
 		line, err := json.Marshal(event)

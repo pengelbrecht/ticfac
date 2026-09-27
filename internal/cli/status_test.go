@@ -295,3 +295,50 @@ func TestTickLabelsOnAnUnreadableTrackerIsEmpty(t *testing.T) {
 		t.Errorf("tickRef with no labels = %q", got)
 	}
 }
+
+// TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory: `ticfac status
+// <epic-id>` — the id the operator has, after `ticfac run <epic> --cloud`
+// started the run there — answers the run the factory holds for this
+// checkout's project when nothing runs here (tick nyi). Before the fix the
+// epic id never looked in the factory at all: the command answered the
+// local pidfile probe's "not running here" and stopped.
+func TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("f888")
+
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "t1", nil,
+		reconcile.StageRunFinished, "completed: every tick of epic1 is closed behind the integrated gate"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case request.Path == "/api/runs/"+cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+cloudRun+"/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"status", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d for a finished cloud run, want 1 (not alive):\n%s\n%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "run "+cloudRun+": not alive") {
+		t.Errorf("stdout does not answer for the factory's run:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), cloudRun) || !strings.Contains(stderr.String(), "epic-epic1") {
+		t.Errorf("stderr does not name the resolution from epic id to the factory's run:\n%s", stderr.String())
+	}
+}

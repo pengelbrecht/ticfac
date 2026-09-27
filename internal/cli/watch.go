@@ -192,11 +192,16 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// checkout when it holds the feed, else the factory when it knows the
 	// run. The watch then reads through the same one loop `events --follow`
 	// reads through, whichever host the run is on.
-	source, kind, err := feedSource(ctx, *repo, runID, stderr)
+	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 		return 1
 	}
+	// The watch answers for the run the id names, resolved: an epic id that
+	// named a factory run answers for that run's own id (tick nyi), so the
+	// hold alert, the document and the detach lines all name the run an
+	// operator can pass back to every other command.
+	runID = resolved
 
 	// The standing feed is read once up front: it decides whether there is
 	// anything to watch at all and, below, where the subscription starts. The
@@ -426,7 +431,11 @@ func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, ru
 			return statusmodel.Model{}, err
 		}
 		liveness := cloudRunLiveness(ctx, cloudSource.runID, record.State)
-		return cloudStatusModel(ctx, cloudSource.client, repo, cloudSource.runID, record, liveness, io.Discard, gather), nil
+		// Another project's run keeps this repo's records, tracker and PR
+		// unread for it (tick nyi).
+		repoProject, _ := cloudProjectOf(repo)
+		return cloudStatusModel(ctx, cloudSource.client, repo, cloudSource.runID, record, liveness, io.Discard, gather,
+			cloudRecordBelongsToRepo(repoProject, record.Project)), nil
 	}
 	probe := runlife.Probe(repo, runID, time.Now())
 	return localStatusModel(ctx, repo, runID, probe, gather), nil
@@ -504,6 +513,11 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	if kind == "cloud" {
 		cloudSource, _ = source.(*cloudFeedSource)
 	}
+	// The checkout's project, read once per watch (tick nyi): a frame every
+	// two seconds must not spawn a git subprocess any more than a tracker
+	// one — and whether a run's records are this repo's to read does not
+	// change while the watch stands.
+	repoProject, _ := cloudProjectOf(repo)
 	var lastGood *statusmodel.Model
 	build := func() (statusmodel.Model, error) {
 		if cloudSource == nil {
@@ -515,7 +529,8 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			return statusmodel.Model{}, err
 		}
 		liveness := cloudRunLiveness(ctx, cloudSource.runID, record.State)
-		return cloudStatusModel(ctx, cloudSource.client, repo, cloudSource.runID, record, liveness, stderr, gather), nil
+		return cloudStatusModel(ctx, cloudSource.client, repo, cloudSource.runID, record, liveness, stderr, gather,
+			cloudRecordBelongsToRepo(repoProject, record.Project)), nil
 	}
 
 	// Where the standing feed ends TODAY: history is not replayed as keep
