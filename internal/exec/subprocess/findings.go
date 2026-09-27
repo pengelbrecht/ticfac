@@ -304,6 +304,7 @@ func ParseFindings(body string) (findings []Finding, problem string, folded []st
 			finding.Body = foldIntoBody(finding.Body, name, fields[name])
 			folded = append(folded, fmt.Sprintf("findings[%d] %q", i, name))
 		}
+		folded = append(folded, normalizeFinding(&finding, i)...)
 		if err := finding.Validate(); err != nil {
 			return nil, err.Error(), nil
 		}
@@ -313,6 +314,57 @@ func ParseFindings(body string) (findings []Finding, problem string, folded []st
 		return nil, "", nil
 	}
 	return out, "", folded
+}
+
+// targetPrefixPattern finds an owner/name repository at the START of a
+// target a worker decorated ("pengelbrecht/ticks (contracts bundle)").
+var targetPrefixPattern = regexp.MustCompile(`^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(\s.*)?$`)
+
+// normalizeFinding repairs a finding whose closed-vocabulary values a worker
+// got slightly wrong, instead of refusing the whole report (and with it the
+// tick's work): epic-2jn stopped on 'finding.target "pengelbrecht/ticks
+// (contracts bundle)" is not an owner/name repository', a report whose work
+// was fine. The original value always rides in the body as a folded line, so
+// nothing is lost and a triager sees what the worker wrote:
+//   - a target carrying an owner/name prefix keeps the prefix; a target with
+//     none becomes this repository (empty);
+//   - a kind or severity outside its vocabulary becomes "defect" / "medium".
+//
+// An empty title is still a refusal: a finding nobody can name is one nobody
+// can triage, and no default names it.
+func normalizeFinding(f *Finding, index int) []string {
+	var folded []string
+	fold := func(key, value string) {
+		raw, _ := json.Marshal(value)
+		f.Body = foldIntoBody(f.Body, key, raw)
+		folded = append(folded, fmt.Sprintf("findings[%d] %q normalised from %q", index, key, value))
+	}
+	if f.Target != "" && !targetRepositoryPattern.MatchString(f.Target) {
+		original := f.Target
+		if m := targetPrefixPattern.FindStringSubmatch(strings.TrimSpace(original)); m != nil {
+			f.Target = m[1]
+		} else {
+			f.Target = ""
+			// An upstream tick names ANOTHER repository by definition; with
+			// none recoverable it is a proposal for this one, and says so.
+			if f.Kind == "upstream-tick" {
+				f.Kind = "proposed-tick"
+				fold("kind", "upstream-tick")
+			}
+		}
+		fold("target", original)
+	}
+	if !oneOf(FindingKinds, f.Kind) {
+		original := f.Kind
+		f.Kind = "defect"
+		fold("kind", original)
+	}
+	if !oneOf(FindingSeverities, f.Severity) {
+		original := f.Severity
+		f.Severity = "medium"
+		fold("severity", original)
+	}
+	return folded
 }
 
 // foldIntoBody appends one unknown key and its value to the finding's body
