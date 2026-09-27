@@ -177,6 +177,11 @@ func TestTheBuiltBinaryRendersManPagesAndReportsItsVersion(t *testing.T) {
 // tests pin the full one.
 func TestABareInvocationIsTheOverview(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	// The overview enumerates the machine's run registry (tick 9ss), and
+	// this package's tests claim runs into ONE registry shared by the whole
+	// package run — a claim an earlier test leaves there would surface here
+	// as a phantom run. This test pins the EMPTY world, so it holds its own.
+	ownRegistry(t)
 	t.Chdir(t.TempDir())
 	var stdout, stderr bytes.Buffer
 	if code := Run(nil, &stdout, &stderr); code != exitSuccess {
