@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 369,
-  "state": "gating",
-  "reason": "running the integrated gate for wcl on 7e23bf1a0691",
-  "updated_at": "2026-09-27T18:40:10Z",
+  "sequence": 370,
+  "state": "publishing",
+  "reason": "closing wcl behind the integrated gate on 7e23bf1a0691",
+  "updated_at": "2026-09-27T18:41:20Z",
   "ticks": [
     {
       "tick_id": "nwj",
