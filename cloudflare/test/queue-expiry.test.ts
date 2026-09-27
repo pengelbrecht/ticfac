@@ -46,7 +46,7 @@ import { MIN_QUEUE_TTL_MS } from "../src/runs";
  *     `expired_at` set with `expiry_comment_id` NULL is "expired and NOBODY
  *     was told", which the digest reports in those words.
  *  4. **An expired review is not a stalled one.** The digest must not offer
- *     `tk cloud supervisor <run-id>` for a run that never booted.
+ *     `ticfac cloud supervisor <run-id>` for a run that never booted.
  *  5. **A review that actually commented is never called expired**, and a
  *     queued run that is not a review comments nowhere.
  *
@@ -318,7 +318,7 @@ describe("the digest tells an expired review from a stalled one", () => {
 
     expect(findings).toHaveLength(1);
     expect(findings[0]!.loop).toBe("pr_review_expired");
-    expect(findings[0]!.command).not.toContain("tk cloud supervisor");
+    expect(findings[0]!.command).not.toContain("ticfac cloud supervisor");
     expect(findings[0]!.measure).toContain("expired on the dispatch queue");
     expect(findings[0]!.measure).toContain("the author was told");
   });

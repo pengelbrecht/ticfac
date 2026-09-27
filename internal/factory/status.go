@@ -156,7 +156,7 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 		// one place that says so — status is the pre-flight an operator
 		// already runs to see what's configured.
 		if opts.CurrentVersion != "" && version != "" && version != opts.CurrentVersion {
-			report.Deployment.Detail += fmt.Sprintf("; a version behind (you have tk %s) — run `tk factory deploy` to redeploy it from this build", opts.CurrentVersion)
+			report.Deployment.Detail += fmt.Sprintf("; a version behind (you have ticfac %s) — run `ticfac factory deploy` to redeploy it from this build", opts.CurrentVersion)
 		}
 	}
 
@@ -178,7 +178,7 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 			// credential the operator has to renew before the next run, which
 			// is the state this rung exists to surface.
 			report.GitHub.Checked = true
-			report.GitHub.Detail = fmt.Sprintf("rejected: %s — run `tk factory setup` to renew it%s",
+			report.GitHub.Detail = fmt.Sprintf("rejected: %s — run `ticfac factory setup` to renew it%s",
 				lifetime, renewalCost(stored))
 		default:
 			report.GitHub.Checked = true
@@ -324,7 +324,7 @@ func describeBillingExpectation(expected, stored string) string {
 func (r *StatusReport) Write(w io.Writer) {
 	if !r.Configured() {
 		fmt.Fprintln(w, "No factory is configured.")
-		fmt.Fprintln(w, "Run 'tk factory setup' to deploy one and walk the credential ladder.")
+		fmt.Fprintln(w, "Run 'ticfac factory setup' to deploy one and walk the credential ladder.")
 		return
 	}
 
@@ -332,12 +332,12 @@ func (r *StatusReport) Write(w io.Writer) {
 	for _, state := range r.rungs() {
 		fmt.Fprintf(w, "\n%s\n", state.Name)
 		if !state.Configured {
-			hint := "run 'tk factory setup'"
+			hint := "run 'ticfac factory setup'"
 			if state.Name == "cost telemetry" {
 				// The one rung a factory runs without. Say what it costs, and
 				// say the flag: a budget with nothing to act on is a fact the
 				// operator should choose, not discover after a run.
-				hint = "run cost is unknown and the cost budget cannot act — add one with 'tk factory setup --cloudflare-api-token <token>'"
+				hint = "run cost is unknown and the cost budget cannot act — add one with 'ticfac factory setup --cloudflare-api-token <token>'"
 			}
 			fmt.Fprintf(w, "  state         not configured — %s\n", hint)
 			continue

@@ -371,7 +371,7 @@ func (w *cloudSupervisorWatch) look(ctx context.Context, warn io.Writer) string 
 	if step := supervisor.CurrentStep(); step != nil {
 		report += fmt.Sprintf("# it stopped on step %s\n", step.Name)
 	}
-	report += fmt.Sprintf("# nothing will be added to this stream — see 'tk cloud supervisor %s'\n", w.runID)
+	report += fmt.Sprintf("# nothing will be added to this stream — see 'ticfac cloud supervisor %s'\n", w.runID)
 	return report
 }
 
@@ -441,7 +441,7 @@ func cloudWorkerStreamNote(runID string, streams []cloudLogStream) string {
 	for _, stream := range streams {
 		named = append(named, fmt.Sprintf("%s (%d bytes)", stream.TickID, stream.Bytes))
 	}
-	return fmt.Sprintf("# worker streams: %s\n# read one with: tk cloud logs %s --tick <id>",
+	return fmt.Sprintf("# worker streams: %s\n# read one with: ticfac cloud logs %s --tick <id>",
 		strings.Join(named, ", "), runID)
 }
 

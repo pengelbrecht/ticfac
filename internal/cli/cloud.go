@@ -114,11 +114,11 @@ func newCloudClient() (*cloudClient, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(config.Get(credentials.KeyURL)), "/")
 	token := strings.TrimSpace(config.Get(credentials.KeyToken))
 	if baseURL == "" || token == "" {
-		return nil, fmt.Errorf("no factory is configured; run 'tk factory setup' first")
+		return nil, fmt.Errorf("no factory is configured; run 'ticfac factory setup' first")
 	}
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, fmt.Errorf("factory endpoint is invalid; run 'tk factory setup' to configure it")
+		return nil, fmt.Errorf("factory endpoint is invalid; run 'ticfac factory setup' to configure it")
 	}
 	if cloudHTTPClient == nil {
 		cloudHTTPClient = &http.Client{Timeout: 15 * time.Second}
@@ -872,14 +872,14 @@ func prepareCloudSubmission(ctx context.Context, root, epicID string) (baseSHA, 
 	}
 	if strings.TrimSpace(statusOutput) != "" {
 		return "", "", "", fmt.Errorf(
-			"epic %q is not pushed: its tick files have local changes; git add and commit them, then run 'tk cloud run %s' again",
+			"epic %q is not pushed: its tick files have local changes; git add and commit them, then run 'ticfac cloud run %s' again",
 			epicID, epicID,
 		)
 	}
 	for _, path := range paths {
 		if _, err := cloudGit(ctx, root, "ls-files", "--error-unmatch", "--", path); err != nil {
 			return "", "", "", fmt.Errorf(
-				"epic %q is not pushed: tick file %s is not committed; git add and commit it, then run 'tk cloud run %s' again",
+				"epic %q is not pushed: tick file %s is not committed; git add and commit it, then run 'ticfac cloud run %s' again",
 				epicID, path, epicID,
 			)
 		}

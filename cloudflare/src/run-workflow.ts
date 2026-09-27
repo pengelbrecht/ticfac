@@ -803,7 +803,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
       ok: false,
       detail:
         "the SANDBOXES binding is not configured on this deployment, so no orchestrator " +
-        "sandbox can be booted; re-run `tk factory deploy`",
+        "sandbox can be booted; re-run `ticfac factory deploy`",
     };
   }
 

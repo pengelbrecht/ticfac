@@ -184,7 +184,7 @@ describe("a run cannot start without a configured gateway", () => {
         queue: false,
       });
       expect(result.outcome).toBe("unavailable");
-      expect(result.outcome === "unavailable" && result.detail).toContain("tk factory setup");
+      expect(result.outcome === "unavailable" && result.detail).toContain("ticfac factory setup");
       expect(result.outcome === "unavailable" && result.detail).toContain("AI_GATEWAY_BASE_URL");
     } finally {
       delete env.RUN_WORKFLOW;
@@ -195,12 +195,12 @@ describe("a run cannot start without a configured gateway", () => {
     set("AI_GATEWAY_BASE_URL", "https://api.anthropic.com");
     const complaint = modelRoutingComplaint(env);
     expect(complaint).toContain("api.anthropic.com");
-    expect(complaint).toContain("tk factory setup");
+    expect(complaint).toContain("ticfac factory setup");
   });
 
   it("refuses when the deployment does not know its own URL to route traffic to", () => {
     set("FACTORY_BASE_URL", undefined);
-    expect(modelRoutingComplaint(env)).toContain("tk factory deploy");
+    expect(modelRoutingComplaint(env)).toContain("ticfac factory deploy");
   });
 
   it("parses the account and gateway out of a Cloudflare gateway base URL", () => {
@@ -1396,7 +1396,7 @@ describe("the runs row cost is gateway telemetry, not a self-report", () => {
     expect(spend.ok === false && spend.kind).toBe("truncated");
     expect(spend.ok === false && spend.detail).toMatch(/floor/i);
     expect(spendFailureRemedy("truncated")).toMatch(/floor/i);
-    expect(spendFailureRemedy("truncated")).not.toMatch(/tk factory setup/);
+    expect(spendFailureRemedy("truncated")).not.toMatch(/ticfac factory setup/);
   });
 
   it("records the floor a truncated read does know, so a budget still trips on it", async () => {
@@ -1569,7 +1569,7 @@ describe("a bug in our own query is not an outage", () => {
     expect(spend.ok === false && spend.detail).toContain("400");
     expect(spend.ok === false && spend.detail).toContain("Number must be less than or equal to 50");
     expect(spendFailureRemedy("request_rejected")).toMatch(/report/i);
-    expect(spendFailureRemedy("request_rejected")).not.toMatch(/tk factory setup/);
+    expect(spendFailureRemedy("request_rejected")).not.toMatch(/ticfac factory setup/);
   });
 
   it("names a 5xx as an outage", async () => {
@@ -1605,7 +1605,7 @@ describe("a bug in our own query is not an outage", () => {
 
     expect(spend.ok).toBe(false);
     expect(spend.ok === false && spend.kind).toBe("not_configured");
-    expect(spendFailureRemedy("not_configured")).toContain("tk factory setup");
+    expect(spendFailureRemedy("not_configured")).toContain("ticfac factory setup");
   });
 
   it("gives a rejected credential the credential's remedy, not the bug report", async () => {

@@ -474,7 +474,7 @@ func TestCloudWithoutFactoryConfigurationNamesSetup(t *testing.T) {
 	if code == exitSuccess {
 		t.Fatal("cloud status succeeded without a factory")
 	}
-	if !strings.Contains(stderr.String(), "tk factory setup") {
+	if !strings.Contains(stderr.String(), "ticfac factory setup") {
 		t.Fatalf("missing-factory error does not name setup: %s", stderr.String())
 	}
 }
