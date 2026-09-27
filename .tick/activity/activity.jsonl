@@ -1790,3 +1790,4 @@
 {"ts":"2026-09-27T14:11:38.339002Z","tick":"4mv","action":"start","actor":"ticfac","epic":"2jn","data":{"title":"Exit codes disagree across commands: run-epic exits 1 for a held run, run/watch exit 3; completed+PR exits 3 on a TTY"}}
 {"ts":"2026-09-27T14:11:54.973112Z","tick":"53k","action":"start","actor":"ticfac","epic":"2jn","data":{"title":"ticfac run's herdr panes drop runners.toml effort, args and socket: run-epic builds executorFactory with an empty gate path"}}
 {"ts":"2026-09-27T14:12:10.481287Z","tick":"5o5","action":"start","actor":"ticfac","epic":"2jn","data":{"title":"Cut the first ticfac release: install.sh's stable URL answers nothing until main carries it and a v* tag exists"}}
+{"ts":"2026-09-27T14:12:26.277534Z","tick":"6vp","action":"start","actor":"ticfac","epic":"2jn","data":{"title":"ticfac init always writes the PR + CI close-out rule; a repo without a GitHub origin then cannot run"}}
