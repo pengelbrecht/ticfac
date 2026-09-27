@@ -3,11 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -355,6 +357,230 @@ func TestTheTriageActorDefaultsFromGitConfig(t *testing.T) {
 	}
 }
 
+// scriptTheWalk points the walk's input and its terminal check at a scripted
+// person: the walk is for a person at a terminal, and the tests that script
+// one flip both seams — the stream the decisions are read from, and the
+// terminal the prompts are asked on.
+func scriptTheWalk(t *testing.T, decisions string) {
+	t.Helper()
+	oldIn, oldTTY := triageStdin, triageStdinIsTerminal
+	triageStdin = strings.NewReader(decisions)
+	triageStdinIsTerminal = func(io.Reader) bool { return true }
+	t.Cleanup(func() {
+		triageStdin, triageStdinIsTerminal = oldIn, oldTTY
+	})
+}
+
+// The epic id is accepted with its own `epic-` prefix everywhere — the skill
+// promises it, and `ticfac run` already strips it — so the operator who
+// types what every run's own output says (`epic-<id>`) addresses the same
+// drafts: branch epic/<id>, run epic-<id>, never the doubled epic/epic-<id>.
+// And the tick an absorb files names the CANONICAL epic as its parent — the
+// tracker's parent is the epic id, not the spelling that was typed.
+func TestTheEpicPrefixIsAcceptedEverywhere(t *testing.T) {
+	repo := newFindingsRepo(t)
+	key := triageKey("d34db33f")
+	seedFinding(t, repo, testDraftFinding(key, ""))
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"triage", "--json", "--repo", repo, "epic-qeu"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("the prefixed listing exits %d: %s", code, stderr.String())
+	}
+	var doc struct {
+		RunID    string           `json:"run_id"`
+		Findings []map[string]any `json:"findings"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("the prefixed listing does not round-trip: %v\n%s", err, stdout.String())
+	}
+	if doc.RunID != "epic-qeu" {
+		t.Errorf("the prefixed listing addresses run %q, want epic-qeu — the prefix is stripped, never doubled", doc.RunID)
+	}
+	if len(doc.Findings) != 1 || doc.Findings[0]["key"] != key {
+		t.Errorf("the prefixed listing carries %v, want the one draft %s\n%s", doc.Findings, key, stdout.String())
+	}
+
+	// The absorb under the prefixed id files the tick under the canonical epic.
+	stdout.Reset()
+	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "epic-qeu", "d34=absorb"},
+		&stdout, &stderr); code != 0 {
+		t.Fatalf("the prefixed absorb exits %d: %s", code, stderr.String())
+	}
+	finding, ok, err := readBack(t, repo).Finding(key)
+	if err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	}
+	if finding.PromotedAs == "" {
+		t.Fatal("the prefixed absorb promoted nothing")
+	}
+	raw := showOnOrigin(t, repo, filepath.Join(".tick", "issues", finding.PromotedAs+".json"))
+	if !strings.Contains(raw, `"parent": "qeu"`) {
+		t.Errorf("the tick a prefixed absorb files does not name the canonical epic as its parent:\n%s", raw)
+	}
+
+	// The findings listing shares the derivation, so it accepts the prefix too.
+	stdout.Reset()
+	if code := Run([]string{"findings", "--repo", repo, "epic-qeu"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("the prefixed findings listing exits %d: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), key) {
+		t.Errorf("the prefixed findings listing does not carry the draft:\n%s", stdout.String())
+	}
+
+	// The prefix with nothing behind it names no epic — a usage refusal.
+	stderr.Reset()
+	if code := Run([]string{"triage", "--repo", repo, "--by", "who", "epic-"}, &stdout, &stderr); code != exitUsage {
+		t.Errorf("the empty spelling exits %d, want the usage refusal %d: %s", code, exitUsage, stderr.String())
+	}
+}
+
+// The walk is for a person at a terminal. A stream that is not one can only
+// lie two ways: /dev/null read EOF instantly and the walk exited 0 with every
+// draft untriaged, looking finished; an open pipe blocked forever on a prompt
+// nobody can answer. Both are refusals naming the two halves that work
+// without a terminal — the scripted decisions and --json — and neither
+// settles anything.
+func TestTheWalkRefusesAStreamThatIsNotATerminal(t *testing.T) {
+	repo := newFindingsRepo(t)
+	key := triageKey("d34db33f")
+	seedFinding(t, repo, testDraftFinding(key, ""))
+
+	old := triageStdin
+	t.Cleanup(func() { triageStdin = old })
+
+	// /dev/null: the real terminal check, on a real non-terminal file.
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { devNull.Close() })
+	triageStdin = devNull
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu"}, &stdout, &stderr); code != exitUsage {
+		t.Errorf("the /dev/null walk exits %d, want the usage refusal %d", code, exitUsage)
+	}
+	for _, want := range []string{"terminal", "<key-prefix>=absorb", "--json"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Errorf("stderr %q does not name %q — the refusal teaches the halves that work without a terminal",
+				stderr.String(), want)
+		}
+	}
+
+	// An open pipe: the old walk blocked forever on the first prompt.
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { read.Close(); write.Close() })
+	triageStdin = read
+	stdout.Reset()
+	stderr.Reset()
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu"}, &stdout, &stderr)
+	}()
+	select {
+	case c := <-code:
+		if c != exitUsage {
+			t.Errorf("the piped walk exits %d, want the usage refusal %d", c, exitUsage)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the piped walk never returned: without a terminal check it blocks on a prompt nobody can answer")
+	}
+
+	// The refusal settles nothing: the draft still gates the close-out.
+	if finding, ok, err := readBack(t, repo).Finding(key); err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	} else if finding.Status != runstate.FindingProposed {
+		t.Errorf("the draft is %s after the refusal, want still proposed", finding.Status)
+	}
+}
+
+// A settle error in the walk settles nothing — a walk that exits 0 after one
+// reports the gate clear while the draft still holds the close-out, which is
+// exactly the lie the triage gate exists to prevent.
+func TestTheWalkExitsNonzeroAfterASettleError(t *testing.T) {
+	repo := newFindingsRepo(t)
+	routedKey, localKey := triageKey("c0ffee00"), triageKey("d34db33f")
+	seedFinding(t, repo, testDraftFinding(routedKey, "pengelbrecht/ticks"))
+	seedFinding(t, repo, testDraftFinding(localKey, ""))
+
+	// The routed draft walks first (key order); the scripted person offers the
+	// absorb the routing refuses, then discards the local one.
+	scriptTheWalk(t, "absorb\ndiscard\n")
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu"}, &stdout, &stderr); code != exitGeneric {
+		t.Fatalf("walk exit %d, want %d after the settle error", code, exitGeneric)
+	}
+	if !strings.Contains(stderr.String(), "routed to pengelbrecht/ticks") {
+		t.Errorf("stderr does not carry the settle error:\n%s", stderr.String())
+	}
+	store := readBack(t, repo)
+	routed, ok, err := store.Finding(routedKey)
+	if err != nil || !ok {
+		t.Fatalf("read the routed draft back: %v %v", ok, err)
+	}
+	if routed.Status != runstate.FindingProposed {
+		t.Errorf("the refused absorb settled the routed draft anyway: %s", routed.Status)
+	}
+	local, ok, err := store.Finding(localKey)
+	if err != nil || !ok {
+		t.Fatalf("read the local draft back: %v %v", ok, err)
+	}
+	if local.Status != runstate.FindingDiscarded {
+		t.Errorf("the local draft is %s, want the discard that came after the error to stand", local.Status)
+	}
+}
+
+// The fixed verdict's whole value is that the claim is checkable: the commit
+// it names must exist in the repository the run works in, or the verdict is
+// an assertion wearing checkability's clothes. A finding routed to another
+// repository keeps the shape check — its commit lives where this surface
+// cannot read.
+func TestTheFixedVerdictNamesACommitThatExists(t *testing.T) {
+	repo := newFindingsRepo(t)
+	key := triageKey("d34db33f")
+	seedFinding(t, repo, testDraftFinding(key, ""))
+
+	// A commit the checkout really holds.
+	if err := os.WriteFile(filepath.Join(repo, "repaired.txt"), []byte("the repair\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--quiet", "-m", "repair")
+	sha := strings.TrimSpace(gitIn(t, repo, "rev-parse", "HEAD"))
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu",
+		"d34=fixed:338bbf8b"}, &stdout, &stderr); code != exitGeneric {
+		t.Fatalf("the invented commit exits %d, want %d", code, exitGeneric)
+	}
+	if !strings.Contains(stderr.String(), "names no commit") {
+		t.Errorf("stderr does not refuse the invented commit:\n%s", stderr.String())
+	}
+	if finding, ok, err := readBack(t, repo).Finding(key); err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	} else if finding.Status != runstate.FindingProposed {
+		t.Errorf("the draft is %s after the invented commit, want still proposed", finding.Status)
+	}
+
+	// The commit that exists settles it — recorded as typed, abbreviated id
+	// included, because rev-parse resolves what the checkout holds.
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu",
+		"d34=fixed:" + sha[:8]}, &stdout, &stderr); code != 0 {
+		t.Fatalf("the real commit exits %d: %s", code, stderr.String())
+	}
+	finding, ok, err := readBack(t, repo).Finding(key)
+	if err != nil || !ok {
+		t.Fatalf("read the draft back: %v %v", ok, err)
+	}
+	if finding.Status != runstate.FindingFixed || finding.FixedAs != sha[:8] {
+		t.Errorf("the draft is %s as %q, want fixed as %s", finding.Status, finding.FixedAs, sha[:8])
+	}
+}
+
 // The interactive walk: the person reads each finding — kind, severity,
 // title, body, the discovering tick, the linkage — and decides in one word,
 // never typing a key of any length.
@@ -372,9 +598,7 @@ func TestTriageWalksEachFindingInteractively(t *testing.T) {
 	// second. The scripted person discards the routed finding — absorb and
 	// file are not offered on a routing they would drop — and absorbs the
 	// local one.
-	old := triageStdin
-	triageStdin = strings.NewReader("d\nabsorb\n")
-	t.Cleanup(func() { triageStdin = old })
+	scriptTheWalk(t, "d\nabsorb\n")
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("walk exit %d: %s", code, stderr.String())
@@ -426,9 +650,7 @@ func TestTriageSkipsAndStopsHonestly(t *testing.T) {
 	seedFinding(t, repo, testDraftFinding(triageKey("d34db33f"), ""))
 	seedFinding(t, repo, testDraftFinding(triageKey("c0ffee00"), ""))
 
-	old := triageStdin
-	triageStdin = strings.NewReader("skip\n")
-	t.Cleanup(func() { triageStdin = old })
+	scriptTheWalk(t, "skip\n")
 	var stdout, stderr bytes.Buffer
 	if code := Run([]string{"triage", "--repo", repo, "--by", "the operator", "qeu"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("skip exit %d: %s", code, stderr.String())

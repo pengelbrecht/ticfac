@@ -101,8 +101,14 @@ surface will not make for you.`,
 // resolveFindingsRun fills the run-addressing defaults the findings commands
 // and the triage surface share: the same derivation `run-epic` performs, so
 // every surface that addresses a run's drafts names the same branch for the
-// same epic.
-func resolveFindingsRun(epicID, repo, remote, branch, runID string) (string, string, string, string, error) {
+// same epic. The epic id is accepted with its own `epic-` prefix everywhere
+// `ticfac run` accepts it — an operator who types what every run's own
+// output says (`epic-<id>`) is right — so the prefix is stripped here, never
+// doubled into epic/epic-<id>, and the canonical id is the first value
+// returned: the tick an absorb files names the epic the tracker knows, not
+// the spelling that was typed.
+func resolveFindingsRun(epicID, repo, remote, branch, runID string) (string, string, string, string, string, error) {
+	epicID = strings.TrimPrefix(epicID, "epic-")
 	if branch == "" {
 		branch = "epic/" + epicID
 	}
@@ -113,28 +119,30 @@ func resolveFindingsRun(epicID, repo, remote, branch, runID string) (string, str
 		var err error
 		repo, err = os.Getwd()
 		if err != nil {
-			return "", "", "", "", err
+			return "", "", "", "", "", err
 		}
 	}
-	return repo, remote, branch, runID, nil
+	return epicID, repo, remote, branch, runID, nil
 }
 
 // openFindingsStore opens the run's draft store the way the reconciler opened
 // it: the same repository, remote, integration branch and run id — the drafts
-// live on the branch the run owns.
-func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.Store, error) {
-	repo, remote, branch, runID, err := resolveFindingsRun(epicID, repo, remote, branch, runID)
+// live on the branch the run owns. The canonical epic id comes back with it,
+// so the commands that address a run by its prefixed spelling still name the
+// epic the tracker knows in what they print and create.
+func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.Store, string, error) {
+	epicID, repo, remote, branch, runID, err := resolveFindingsRun(epicID, repo, remote, branch, runID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	store, err := runstate.Open(runstate.Options{Repo: repo, Remote: remote, Branch: branch, RunID: runID})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if _, err := store.Fetch(); err != nil {
-		return nil, fmt.Errorf("read the findings of run %s: %w", runID, err)
+		return nil, "", fmt.Errorf("read the findings of run %s: %w", runID, err)
 	}
-	return store, nil
+	return store, epicID, nil
 }
 
 func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON *bool, stdout, stderr io.Writer) int {
@@ -144,11 +152,17 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 		return 2
 	}
 	epicID := rest[0]
+	// The epic id is accepted with its own `epic-` prefix everywhere; a
+	// prefix with nothing behind it names no epic.
+	if strings.TrimPrefix(epicID, "epic-") == "" {
+		fmt.Fprintf(stderr, "ticfac findings: %q names no epic\n", epicID)
+		return exitUsage
+	}
 	if parseOnly {
 		return 0
 	}
 
-	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
+	store, epicID, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac findings %s: %v\n", epicID, err)
 		return 1
@@ -304,11 +318,17 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 			epicID, key)
 		return 2
 	}
+	// The epic id is accepted with its own `epic-` prefix everywhere; a
+	// prefix with nothing behind it names no epic.
+	if strings.TrimPrefix(epicID, "epic-") == "" {
+		fmt.Fprintf(stderr, "ticfac finding: %q names no epic\n", epicID)
+		return exitUsage
+	}
 	if parseOnly {
 		return 0
 	}
 
-	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
+	store, epicID, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)
 		return 1
