@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 24,
-  "state": "collecting",
-  "reason": "collecting fi3 attempt 6",
-  "updated_at": "2026-09-27T04:33:31Z",
+  "sequence": 25,
+  "state": "integrating",
+  "reason": "integrating fi3 attempt 6 into epic/2jn",
+  "updated_at": "2026-09-27T04:33:39Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -70,7 +70,7 @@
     },
     {
       "tick_id": "fi3",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     }
   ],
