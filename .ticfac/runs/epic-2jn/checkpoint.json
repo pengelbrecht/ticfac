@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 242,
-  "state": "running",
-  "reason": "4mv is running as attempt 33",
-  "updated_at": "2026-09-27T14:11:42Z",
+  "sequence": 243,
+  "state": "dispatching",
+  "reason": "dispatching 53k as attempt 34",
+  "updated_at": "2026-09-27T14:11:49Z",
   "ticks": [
     {
       "tick_id": "nwj",
