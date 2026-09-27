@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The exit codes the cloud and factory commands share with ticks' tk, so a
@@ -44,6 +45,15 @@ const (
 	exitRunning = 5
 	// exitIO is an unreadable local file the command needs: tk's code 6.
 	exitIO = 6
+	// exitCancelled is a run that was stopped deliberately before it
+	// finished (tick rix, the cancelled sibling of the failed class tick
+	// bot gave epic 2jn's A4): its own terminal line names the stop and
+	// why, and a watcher that read it as done/0 answered "finished epic"
+	// for a run a person stopped. Nothing is held and nothing needs a fix —
+	// the work is simply neither done nor failed, and an agent must be able
+	// to branch on that without parsing the line. tk has no code 7, so
+	// nothing tk-shaped reads it by accident.
+	exitCancelled = 7
 )
 
 // exitError carries the code a refusal exits with, the way tk's NewExitError
@@ -121,6 +131,7 @@ func resultExitCode(result *reconcile.Result) int {
 	if result.State == "completed" {
 		return exitSuccess
 	}
+<<<<<<< HEAD
 	if result.Failure != nil {
 		switch {
 		case result.Failure.Reason == reconcile.RefusedEpicAbsent:
@@ -128,6 +139,17 @@ func resultExitCode(result *reconcile.Result) int {
 		case reconcile.HoldsForAPerson(result.Failure.Reason):
 			return ExitHeld
 		}
+=======
+	// A cancelled result is the cancelled class (tick rix): the resume path
+	// replays an already-terminal checkpoint as a Result, so a cancelled
+	// run's replay must answer the same word and code the watch answers —
+	// never the generic 1, which names a fix for a run nobody needs to fix.
+	if result.State == runstate.StateCancelled {
+		return exitCancelled
+	}
+	if result.Failure != nil && result.Failure.Reason == reconcile.RefusedEpicAbsent {
+		return exitNotFound
+>>>>>>> 72ee73aa952581ce659282d55398af28715aa8e1
 	}
 	return exitGeneric
 }
@@ -156,11 +178,12 @@ func runEpicStateWord(result *reconcile.Result) string {
 // than kept in step by hand. A command may exit only a code this table
 // names; a code nobody documents is a contract nobody can branch on.
 //
-// The classes the tick names — done, running, held-for-a-person, failed and
-// usage — each have their own code, so an agent distinguishes them without
-// parsing prose; the held class carries its REASON CLASS in the refusal
-// line and in every --json document (the refusal or wait kind, e.g.
-// finding_untriaged, closeout_ci_failed, merge — never prose).
+// The classes the tick names — done, running, held-for-a-person, failed
+// and usage — each have their own code, so an agent distinguishes them
+// without parsing prose; cancelled (tick rix) is the sixth class, for the
+// same reason on the same terms. The held class carries its REASON CLASS in
+// the refusal line and in every --json document (the refusal or wait kind,
+// e.g. finding_untriaged, closeout_ci_failed, merge — never prose).
 type ExitTableEntry struct {
 	Code    int
 	Name    string
@@ -187,6 +210,8 @@ var ExitTable = []ExitTableEntry{
 		"the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong"},
 	{exitIO, "io",
 		"an unreadable local file the command needs"},
+	{exitCancelled, "cancelled",
+		"a run that was stopped deliberately before it finished (watch, run): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person"},
 }
 
 // The two documented exceptions to "the exit code is the command's":

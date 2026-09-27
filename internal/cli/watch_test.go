@@ -469,6 +469,7 @@ func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 // TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory: `ticfac watch
 // <epic-id>` follows the run the factory holds for this checkout's project
 // when nothing runs here (tick nyi) — the same one command the operator
@@ -560,5 +561,83 @@ func TestWatchByEpicIDNamesTheResumeByTheEpicNotTheFactoryRunID(t *testing.T) {
 	}
 	if bad := statusmodel.ResumeCommand(statusmodel.HostCloud, cloudRun); strings.Contains(stderr.String(), bad) {
 		t.Errorf("the failed end names the resume by the factory's run id %q:\n%s", bad, stderr.String())
+=======
+// A run whose own terminal line says CANCELLED (tick rix): runstate's
+// cancelled word was vocabulary only, but the resume path's already-terminal
+// branch writes run_finished for it and the failed classifier deliberately
+// classifies only the failed word — so a cancelled end read as done/0 from
+// the watch, indistinguishable from a run that closed every tick behind the
+// gate. Cancelled is its own class now, with its own code: the run was
+// stopped deliberately, the work is neither done nor failed, and nothing is
+// held for a person.
+func TestWatchExitsCancelledWhenTheRunEndedCancelled(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 40, 0, 0, time.UTC), "r-1", "a1", nil, "dispatched", "attempt 1 started"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished,
+		"cancelled: the operator stopped the run: stop requested"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+	if code != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a run whose own last line says cancelled; stderr %q", code, exitCancelled, stderr.String())
+	}
+	// The cancelled end is said to the person reading the stream — and it is
+	// neither a failure to fix nor a hold to release.
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the stream: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "FAILED") {
+		t.Errorf("a cancelled run was spoken of as a failure to fix: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "HOLDING") {
+		t.Errorf("a cancelled run raised the hold alert: %q", stderr.String())
+	}
+	// The terminal line still prints — the last line says why the run was
+	// stopped, and the exit code says which class of ending it was.
+	if !strings.Contains(stdout.String(), "run_finished") {
+		t.Errorf("the terminal line never printed: %q", stdout.String())
+	}
+}
+
+// Every word the run's own terminal line can spell a deliberate stop with
+// is the cancelled class — or the decided answer is a word nothing
+// recognizes. The resume path's already-terminal branch replays a cancelled
+// checkpoint as "the run is already cancelled: …" (not the state-led word),
+// and the cloud's own vocabulary spells its deliberate stop "stopped" —
+// the word the overview already classifies one run's row by.
+func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
+	for detail, why := range map[string]string{
+		"cancelled: the operator stopped the run":          "the state-led word a cancelling reconciler writes",
+		"the run is already cancelled: operator cancelled": "the resume path's already-terminal replay",
+		"stopped: stop requested by the operator":          "the cloud factory's own word for a deliberate stop",
+	} {
+		repo := t.TempDir()
+		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+			time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished, detail))
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+		if code != exitCancelled {
+			t.Errorf("%s: exit code %d, want %d; stderr %q", why, code, exitCancelled, stderr.String())
+		}
+	}
+	// The control the classifier must not swallow: the resume path's
+	// already-terminal replay of a COMPLETED run is the done class, and so
+	// is the ordinary state-led "completed" word — an over-eager classifier
+	// would make every ended run cancelled.
+	for _, detail := range []string{
+		"completed: every tick closed behind the gate",
+		"the run is already completed: every tick closed behind the gate",
+	} {
+		repo := t.TempDir()
+		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+			time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished, detail))
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
+		if code != exitSuccess {
+			t.Errorf("a completed run's ending %q exited %d, want %d (done)", detail, code, exitSuccess)
+		}
+>>>>>>> 72ee73aa952581ce659282d55398af28715aa8e1
 	}
 }

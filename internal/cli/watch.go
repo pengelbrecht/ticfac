@@ -54,10 +54,12 @@ const ExitHeld = 3
 // one-line-per-event stream it has always been, because a stream is what a
 // machine or a log wants and a glance is what a person wants, and the same
 // command owes both. The hold alert and the exit codes are the same on both
-// paths: 0 the run ended without failing (the last line says how), 1 it
-// ended FAILED — its own terminal line names what did not pass — or the
-// feed could not be read, 3 it ended holding something only a person can
-// move, 5 the watch was interrupted while the run is still going, 2 usage.
+// paths: 0 the run ended done (the last line says how), 7 it ended
+// CANCELLED — stopped deliberately, its terminal line naming the stop —
+// 1 it ended FAILED — its own terminal line names what did not pass — or
+// the feed could not be read, 3 it ended holding something only a person
+// can move, 5 the watch was interrupted while the run is still going,
+// 2 usage.
 //
 // WHERE the subscription starts is decided from the run's own liveness claim
 // (tick usx). The feed is append-only per RUN ID, so a resumed run appends
@@ -154,7 +156,8 @@ lines, one per event, and says, to a human, when the run stops holding
 something for one: which tick, which attempt, why, and the command that moves
 it on.
 
-Exit codes: 0 the run ended (the last line says how — done or cancelled),
+Exit codes: 0 the run ended done (the last line says how), 7 it ended
+CANCELLED — stopped deliberately, its terminal line naming the stop —
 3 it ended holding something only a person can move, 5 the watch was
 interrupted while the run is still going (the run keeps going; come back
 with the same command), 1 the run ended FAILED — its own terminal line
@@ -465,6 +468,20 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		}
 		return finish(agentStateFailed, nil)
 	}
+	if watchLineEndedCancelled(terminal, terminalDetail) {
+		// The run was stopped deliberately, holding nothing and failing
+		// nothing (tick rix, the cancelled sibling of the failed branch
+		// above): its own class, with its own code — never done/0, which an
+		// agent branches on as "the epic finished", and never the failed
+		// class, which names a fix nobody needs to make.
+		if !*asJSON {
+			fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n"+
+				"The run was stopped deliberately: the work is neither done nor failed, and "+
+				"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n",
+				runID, terminalDetail)
+		}
+		return finish(agentStateCancelled, nil)
+	}
 	return finish(agentStateDone, nil)
 }
 
@@ -486,6 +503,34 @@ func watchLineEndedFailed(stage, detail string) bool {
 	return false
 }
 
+// watchLineEndedCancelled says whether the run's own terminal line says the
+// run was CANCELLED — stopped deliberately, never failed and never done
+// (tick rix, the cancelled sibling of the classifier above). Three words
+// spell that ending today, and the classifier must read every one of them,
+// or the class stays a word nothing recognizes:
+//
+//   - "cancelled: …" — the state-led word a reconciler that checkpoints
+//     runstate's cancelled word writes (vocabulary only today; the resume
+//     path and a future cancel both read it);
+//   - "the run is already cancelled: …" — the resume path's already-terminal
+//     replay of a cancelled checkpoint, the one shape a cancelled end takes
+//     in the feed today;
+//   - "stopped: …" — the cloud factory's own word for a deliberate stop,
+//     the word its finalize writes to the same run_finished stage — and the
+//     word the overview already classifies a run's row by as cancelled.
+//
+// A COMPLETED ending is the done class's answer — "the run is already
+// completed: …" is a resume replay that ended the work — so nothing broader
+// than these words is classified here.
+func watchLineEndedCancelled(stage, detail string) bool {
+	if stage != reconcile.StageRunFinished {
+		return false
+	}
+	return strings.HasPrefix(detail, string(runstate.StateCancelled)+":") ||
+		strings.HasPrefix(detail, "the run is already "+string(runstate.StateCancelled)+":") ||
+		strings.HasPrefix(detail, "stopped:")
+}
+
 // watchModelEndedFailed is the live view's form of the same question (tick
 // bot), asked of the model the frames render: the lifecycle's own phase —
 // the checkpoint the run wrote — with the feed's last word beside it for a
@@ -500,6 +545,20 @@ func watchModelEndedFailed(model statusmodel.Model) bool {
 		return false
 	}
 	return watchLineEndedFailed(model.Liveness.LastEvent.Stage, model.Liveness.LastEvent.Detail)
+}
+
+// watchModelEndedCancelled is the live view's form of the cancelled question
+// (tick rix), asked of the same two authorities as the failed one — the
+// lifecycle's own phase and the feed's last word — so the stream path and
+// the live view answer one deliberate stop with the same class.
+func watchModelEndedCancelled(model statusmodel.Model) bool {
+	if model.Lifecycle.Phase == statusmodel.PhaseCancelled {
+		return true
+	}
+	if model.Liveness.LastEvent == nil {
+		return false
+	}
+	return watchLineEndedCancelled(model.Liveness.LastEvent.Stage, model.Liveness.LastEvent.Detail)
 }
 
 // watchEpicID is the epic id the clearing commands are addressed by: read
@@ -885,7 +944,8 @@ func watchHoldAttention(m statusmodel.Model) *statusmodel.Attention {
 // for a person is said to stderr — where the stream path says it — with the
 // command that moves it on. The exit code is the contract a script waits on:
 // held (3) when a person can move the end, failed (1) when the run ended in
-// its own failure (tick bot), done (0) otherwise.
+// its own failure (tick bot), cancelled (7) when it was stopped deliberately
+// (tick rix), done (0) otherwise.
 func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) int {
 	attention := watchHoldAttention(model)
 	if attention == nil {
@@ -900,6 +960,16 @@ func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) in
 				"already passed. The evidence is on the integration branch, not in this line.\n\n",
 				statusmodel.ResumeCommand(model.Host, model.EpicID))
 			return exitGeneric
+		}
+		if watchModelEndedCancelled(model) {
+			detail := ""
+			if model.Liveness.LastEvent != nil {
+				detail = model.Liveness.LastEvent.Detail
+			}
+			fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n", runID, detail)
+			fmt.Fprintf(stderr, "The run was stopped deliberately: the work is neither done nor failed, and "+
+				"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n")
+			return exitCancelled
 		}
 		return 0
 	}

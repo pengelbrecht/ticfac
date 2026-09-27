@@ -281,3 +281,43 @@ func TestWatchJSONAnswersFailedWhenTheRunEndedFailed(t *testing.T) {
 		t.Errorf("the state word is %v, want %q — a failed run is not done", doc["state"], agentStateFailed)
 	}
 }
+
+// watch --json, the cancelled end (tick rix): the same watch that answers
+// done for a completed run answers CANCELLED for one stopped deliberately —
+// its own state word, with its own exit code, so an agent branching on
+// either half of the pair never reads a stopped run as a finished epic.
+func TestWatchJSONAnswersCancelledWhenTheRunEndedCancelled(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "r-stop", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 40, 0, 0, time.UTC), "r-stop", "a1", nil, "dispatched", "attempt 1 started"))
+	writeFeedEvent(t, repo, "r-stop", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "r-stop", "", nil, "run_finished",
+		"cancelled: the operator stopped the run"))
+
+	doc, stderr, code := jsonAnswer(t, []string{"watch", "--json", "--repo", repo, "r-stop"})
+	if code != exitCancelled {
+		t.Fatalf("a watch of a cancelled run exited %d, want %d: %s", code, exitCancelled, stderr)
+	}
+	mustSchema(t, doc, "ticfac.watch.v1")
+	if doc["state"] != agentStateCancelled {
+		t.Errorf("the state word is %v, want %q — a cancelled run is not done", doc["state"], agentStateCancelled)
+	}
+}
+
+// run-epic --json, the cancelled result: the resume path replays an
+// already-terminal checkpoint as a Result, so a cancelled checkpoint's
+// replay must answer the same word the watch answers — cancelled, with the
+// cancelled code — never failed/1, which would name a fix for a run nobody
+// needs to fix.
+func TestRunEpicJSONCancelledResultAnswersCancelled(t *testing.T) {
+	t.Parallel()
+
+	cancelled := &reconcile.Result{State: runstate.StateCancelled, RunID: "epic-qeu", EpicID: "qeu",
+		Reason: "the operator stopped the run"}
+	doc, _, code := runEpicResultJSONForTest(t, cancelled)
+	if code != exitCancelled || doc["state"] != agentStateCancelled {
+		t.Errorf("a cancelled run's document is %v with exit %d, want cancelled/%d", doc["state"], code, exitCancelled)
+	}
+}
