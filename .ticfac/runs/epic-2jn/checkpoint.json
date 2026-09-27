@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 332,
-  "state": "gating",
-  "reason": "running the integrated gate for bkg on fb596ea0f5eb",
-  "updated_at": "2026-09-27T17:45:34Z",
+  "sequence": 333,
+  "state": "publishing",
+  "reason": "closing bkg behind the integrated gate on fb596ea0f5eb",
+  "updated_at": "2026-09-27T17:47:10Z",
   "ticks": [
     {
       "tick_id": "nwj",
