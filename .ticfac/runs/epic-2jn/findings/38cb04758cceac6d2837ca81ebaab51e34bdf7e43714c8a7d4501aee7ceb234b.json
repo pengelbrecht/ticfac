@@ -12,8 +12,10 @@
   "attempt": 17,
   "done_item": "none",
   "demonstrating_check": "ls ~/.ticfac/registry/",
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-27T08:40:59Z",
+  "triaged_at": "2026-09-27T08:42:02Z",
+  "triaged_by": "claude (operator-delegated): cleaned up by hand - removed the 5 stale ~/.ticfac/registry entries pointing at deleted test temp dirs",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "eih",
