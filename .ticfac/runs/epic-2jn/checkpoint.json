@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 231,
-  "state": "collecting",
-  "reason": "collecting ogv attempt 31",
-  "updated_at": "2026-09-27T13:54:55Z",
+  "sequence": 232,
+  "state": "integrating",
+  "reason": "integrating ogv attempt 31 into epic/2jn",
+  "updated_at": "2026-09-27T13:55:45Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -142,7 +142,7 @@
     },
     {
       "tick_id": "ogv",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 31
     }
   ],
