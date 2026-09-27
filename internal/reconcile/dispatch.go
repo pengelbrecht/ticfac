@@ -1194,8 +1194,10 @@ func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
 	if _, stderr, err := r.git.try("", "push", r.opts.Remote, head+":"+refFor(branch)); err != nil {
 		// Origin holding only a SIGTERM flush's snapshot of this very
 		// worker's work is not origin holding somebody else's commits: the
-		// worker's result supersedes it (epic-2jn).
-		if r.supersedeEvacuationSnapshot(branch, remote, head) {
+		// worker's result supersedes it (epic-2jn). Nor is origin holding a
+		// commit the worker itself amended, rebased or reset away (epic-2jn,
+		// rix attempt 45): its branch's reflog proves it.
+		if r.supersedeEvacuationSnapshot(branch, remote, head) || r.replaceOwnEarlierHead(branch, head) {
 			return
 		}
 		r.record(marker.TickID, StageCollected,

@@ -329,12 +329,114 @@ func readRemotes(dir string) remoteSet {
 	return set
 }
 
-// pushBranch makes in-progress work durable. Plain, never forced: this
-// attempt is the only writer of its own ref, so a non-fast-forward is
-// something to fail loudly on rather than to overwrite.
+// pushBranch makes in-progress work durable. Plain first: a fast-forward is
+// the ordinary case and needs no argument.
+//
+// A non-fast-forward is not always somebody else's write. The attempt branch
+// has two writers, the worker and this supervisor, and a worker that amends,
+// rebases or resets commits the timer already pushed leaves origin holding a
+// state its own branch has since moved off (epic-2jn, rix attempt 45: every
+// timed push after the worker's `commit --amend` failed, origin kept the
+// rewritten-away commit, and the collect refused the worker's real head). So
+// the refusal is re-asked once, as ReplaceOwnEarlierHead: origin's head is
+// replaced by the branch's tip when the branch's own reflog proves it once
+// held both, under a lease on what origin held. Anything else stays the
+// refusal.
 func pushBranch(worktree, remote, branch string) error {
 	_, err := git(worktree, "push", remote, "HEAD:refs/heads/"+branch)
+	if err == nil {
+		return nil
+	}
+	// Only while HEAD is the branch's tip: a worker mid-rebase sits on a
+	// detached HEAD, and "pushed" then would be a heartbeat for a state
+	// origin does not have. The next tick asks again.
+	head, headErr := git(worktree, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	tip, tipErr := git(worktree, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
+	if headErr != nil || tipErr != nil || head == "" || head != tip {
+		return err
+	}
+	run := func(args ...string) (string, error) { return git(worktree, args...) }
+	if replaced, _ := ReplaceOwnEarlierHead(run, remote, branch, head); replaced {
+		return nil
+	}
 	return err
+}
+
+// GitRunner runs one git command in a directory of the caller's choosing and
+// answers its trimmed stdout. It lets the reconciler's bounded and retried
+// gits ask the same question this package's plain one does.
+type GitRunner func(args ...string) (string, error)
+
+// BranchHeld reports whether every one of shas is a commit the local branch
+// has itself pointed at, read from the branch's reflog.
+//
+// It is the proof that a state is an attempt's OWN: an attempt branch is
+// created for one attempt, written in this repository only by that attempt's
+// worker (a commit, an amend, a rebase, a reset) and read by everything else,
+// so a commit in its reflog is a state the attempt held. Origin's copy of the
+// branch is different: anybody who can push can move it, which is why this
+// reads the local reflog and never origin. A branch with no reflog (deleted
+// and recreated, or reflogs switched off) proves nothing and answers false.
+func BranchHeld(run GitRunner, branch string, shas ...string) bool {
+	if len(shas) == 0 {
+		return false
+	}
+	out, err := run("log", "-g", "--format=%H", "refs/heads/"+branch, "--")
+	if err != nil {
+		return false
+	}
+	held := map[string]bool{}
+	for _, sha := range strings.Fields(out) {
+		held[sha] = true
+	}
+	for _, sha := range shas {
+		if sha == "" || !held[sha] {
+			return false
+		}
+	}
+	return true
+}
+
+// ReplaceOwnEarlierHead puts head (the local branch's tip when head is empty)
+// on remote's copy of branch in place of whatever origin holds, when — and
+// only when — origin's head and head are both states the local branch itself
+// held (BranchHeld). That is a worker rewriting its own already-pushed
+// history, and the attempt's durable copy must follow it. The push leases on
+// the origin head it read, so a ref that moved again since is refused rather
+// than overwritten.
+//
+// replaced is true when origin holds head afterwards. False with a nil error
+// means the rule does not apply — origin holds a state this branch never
+// held, or holds nothing — and the caller's own refusal stands.
+func ReplaceOwnEarlierHead(run GitRunner, remote, branch, head string) (replaced bool, err error) {
+	ref := "refs/heads/" + branch
+	if head == "" {
+		if head, err = run("rev-parse", "--verify", "--quiet", ref+"^{commit}"); err != nil || head == "" {
+			return false, err
+		}
+	}
+	out, err := run("ls-remote", remote, ref)
+	if err != nil {
+		return false, err
+	}
+	origin := ""
+	for _, line := range strings.Split(out, "\n") {
+		if sha, name, ok := strings.Cut(line, "\t"); ok && strings.TrimSpace(name) == ref {
+			origin = sha
+		}
+	}
+	switch {
+	case origin == head:
+		return true, nil
+	case origin == "":
+		return false, nil
+	case !BranchHeld(run, branch, origin, head):
+		return false, nil
+	}
+	if _, err := run("push", "--force-with-lease="+ref+":"+origin, remote, head+":"+ref); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // pushedHead is this attempt's own branch on the remote, fetched into a ref

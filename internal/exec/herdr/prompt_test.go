@@ -82,3 +82,17 @@ func TestTheHerdrPromptPointsAtPreservedWorkToo(t *testing.T) {
 		t.Errorf("a first attempt's herdr prompt carries a preserved-work section:\n%s", first)
 	}
 }
+
+// TestTheHerdrPromptAsksForNewCommitsNotRewrites (epic-2jn, rix attempt 45):
+// a worker that amends a commit already pushed leaves origin on a commit its
+// branch moved off. The pushes follow such a rewrite now
+// (subprocess.ReplaceOwnEarlierHead); the prompt only makes it rarer.
+// short: prompt text assembled from values in memory
+func TestTheHerdrPromptAsksForNewCommitsNotRewrites(t *testing.T) {
+	t.Parallel()
+	prompt := renderWorkerPrompt(&attemptRecord{TickID: "abc", Branch: "b", BaseSHA: "0123"},
+		&subprocess.JobSpec{ArtifactPrefix: "runs/r/abc"})
+	if !strings.Contains(prompt, "Do not amend, rebase or reset commits you have already made") {
+		t.Errorf("the herdr prompt does not ask for new commits over rewrites:\n%s", prompt)
+	}
+}
