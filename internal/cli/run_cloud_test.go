@@ -322,13 +322,27 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	}
 
 	// The feed the factory serves the resumed run: it ends holding for a
-	// person, with the close-out hold's own words — the ones that name
-	// `ticfac triage` — and the run's own last word after them.
+	// person, with the close-out hold's own line — reason-first, the exact
+	// shape the reconciler writes (the `finding_untriaged: <message>` the
+	// close-out gate composes and window.go's reject records), never prose
+	// that merely mentions triage: the watch picks its alert's verb off that
+	// prefix, so a fake that spells the detail any other way rides the
+	// settle branch while claiming to test the triage one (tick il6). The
+	// message names the finding it holds by the key the triage below then
+	// settles by — the same words a person reads on the real run's feed.
 	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
-	feed := feedLine(t, runfeed.NewEvent(at, resumed, "epic1", nil, reconcile.StageRunHeld,
-		"the close-out does not hand over while a finding is untriaged: "+
-			"Triage with `ticfac triage epic1`: every untriaged finding of the run settles there, "+
-			"addressed by a short key prefix"))
+	heldDetail := reconcile.RefusedFindingUntriaged + ": 1 finding(s) this run drafted are still waiting for a person — " +
+		`"A finding the surface lists" (proposed-tick, severity high, tick a1, for this repository, unlinked: names no done item) — ` +
+		"and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings " +
+		"rode here, and this is the one decision point. Triage with `ticfac triage epic1`: every untriaged finding of the " +
+		"run settles there, addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file " +
+		"(a backlog tick with an owner), fixed <commit>, or discard — and a finding routed to another repository keeps its " +
+		"routing: discard it here, or promote it into the repository it targets with `ticfac finding`. Then run the epic " +
+		"again under this run id: the gate has already passed, so the close-out's close is the only step left — and the " +
+		"resume closes each role tick behind its recorded decision, it does not dispatch the job again (tick 80x). The " +
+		"drafts are keys " + triageKey("d34db33f") + " under .ticfac/runs/epic-epic1/findings/ on origin, listed by " +
+		"`ticfac findings epic1`"
+	feed := feedLine(t, runfeed.NewEvent(at, resumed, "epic1", nil, reconcile.StageRunHeld, heldDetail))
 	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Minute), resumed, "", nil, reconcile.StageRunFinished,
 		"holding: the close-out waits on untriaged findings"))
 
@@ -366,6 +380,18 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "HOLDING") || !strings.Contains(stderr.String(), "ticfac triage epic1") {
 		t.Fatalf("the hold does not name the triage command:\n%s", stderr.String())
+	}
+	// The triage branch's OWN words, never the settle branch's: the fake
+	// hold reproduces the reconciler's reason-first line, so the watch picks
+	// its verb off the `finding_untriaged:` prefix — and a fake that spells
+	// the detail any other way passes through the settle branch while its
+	// assertion is satisfied by the prose itself (tick il6). Settle here
+	// would point a person at a command that refuses this hold.
+	if !strings.Contains(stderr.String(), "Triage the finding(s) with `ticfac triage epic1`") {
+		t.Errorf("the cloud hold's alert does not say the triage branch's own words:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the cloud hold's alert names settle, a command that releases an attempt and refuses a findings hold:\n%s", stderr.String())
 	}
 	// A cloud run's id (run_ plus hex) spells no epic, so the alert reads
 	// the epic out of the factory's own run record — never a placeholder a
