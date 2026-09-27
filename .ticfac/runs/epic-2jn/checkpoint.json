@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 17,
-  "state": "collecting",
-  "reason": "collecting 152 attempt 5",
-  "updated_at": "2026-09-27T04:18:49Z",
+  "sequence": 18,
+  "state": "integrating",
+  "reason": "integrating 152 attempt 5 into epic/2jn",
+  "updated_at": "2026-09-27T04:19:04Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -65,7 +65,7 @@
     },
     {
       "tick_id": "152",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 5
     },
     {
