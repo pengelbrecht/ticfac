@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "A2",
   "demonstrating_check": "TestTheBareOverviewListsARunWhoseStateLivesOnlyOnItsEpicBranch (new)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:07:21Z",
+  "triaged_at": "2026-09-27T14:07:32Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 9ss",
+  "promoted_as": "9ss",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "xbp",
