@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 180,
-  "state": "integrating",
-  "reason": "integrating 35l attempt 18 into epic/2jn",
-  "updated_at": "2026-09-27T10:26:44Z",
+  "sequence": 181,
+  "state": "failed",
+  "reason": "the collected head a02749ee3b75 of ticfac/run-epic-2jn/tick-35l/attempt-18 could not be put on origin, which holds 854e8ef3606e instead: To https://github.com/pengelbrecht/ticfac.git. Nothing is merged: that head is not the commit this run collected, and merging it would close the tick over work the attempt did not produce while the commits it did produce stay behind",
+  "updated_at": "2026-09-27T10:26:49Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -116,7 +116,7 @@
     },
     {
       "tick_id": "35l",
-      "state": "reported",
+      "state": "rejected",
       "attempt": 18
     },
     {
