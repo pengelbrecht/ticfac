@@ -1,0 +1,59 @@
+{
+  "schema_version": 3,
+  "decision": 11,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt_head": "6d52efe915e0c3e8de6008208fbf4df679a4d3f5",
+    "conflict_files": [
+      "internal/cli/run.go"
+    ],
+    "conflicting_ticks": [
+      "8v3",
+      "35l",
+      "7ag",
+      "9sz",
+      "ejw"
+    ],
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-8v3/resolve-24",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "resolve_branch": "ticfac/run-epic-2jn/tick-8v3/resolve-24",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "8v3"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in internal/cli/run.go",
+    "conflict_files": [
+      "internal/cli/run.go"
+    ],
+    "job_id": "run-epic-2jn/tick-8v3/resolve-24",
+    "merge": "5fa8af921f770c72798448d93825ef3b346c97a1",
+    "resolve_head": "eb154409fcb0c6ba253da9ef013a7f0b95213e76",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T12:12:32Z",
+  "answered_at": "2026-09-27T12:12:32Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "8v3",
+    "attempt": 24,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "d11e7e577899223ec30efa0af90e2846ea523cfa",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
