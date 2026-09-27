@@ -14,7 +14,18 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
+
+// workersOf is nil's honest count: a null workers list and an empty one are
+// different claims, and a test that counted them the same would pass on the
+// one it means to refuse.
+func workersOf(model statusmodel.Model) int {
+	if model.Workers == nil {
+		return 0
+	}
+	return len(*model.Workers)
+}
 
 // `ticfac status` reports, for each in-flight attempt, how long since its
 // branch last moved and its worktree last changed (tick 7zs) — the Phase 3
@@ -99,22 +110,26 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	if code := Run([]string{"status", "--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
-	var status runlife.Status
-	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
-		t.Fatalf("the JSON status does not decode: %v\n%s", err, out.String())
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
 	}
-	if len(status.Attempts) != 1 {
-		t.Fatalf("the JSON reports %d in-flight attempts, want 1:\n%s", len(status.Attempts), out.String())
+	if model.SchemaVersion != statusmodel.SchemaVersion || model.RunID != "r-status" || model.Host != statusmodel.HostLocal {
+		t.Errorf("the model does not name itself: version %d, run %q, host %q",
+			model.SchemaVersion, model.RunID, model.Host)
 	}
-	a := status.Attempts[0]
-	if a.TickID != "a1" || a.Attempt != 1 {
-		t.Errorf("the attempt reads as %s#%d, want a1#1", a.TickID, a.Attempt)
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the JSON reports %d in-flight workers, want 1:\n%s", workersOf(model), out.String())
 	}
-	if a.BranchIdle == nil || !strings.Contains(a.BranchIdle.String(), "3h0m") {
-		t.Errorf("the JSON branch gap is %+v, want ~3h", a.BranchIdle)
+	w := (*model.Workers)[0]
+	if w.TickID != "a1" || w.Attempt != 1 {
+		t.Errorf("the worker reads as %s#%d, want a1#1", w.TickID, w.Attempt)
 	}
-	if a.WorktreeIdle == nil || !strings.Contains(a.WorktreeIdle.String(), "2h0m") {
-		t.Errorf("the JSON worktree gap is %+v, want ~2h", a.WorktreeIdle)
+	if w.BranchIdleSeconds == nil || *w.BranchIdleSeconds < 2*3600 || *w.BranchIdleSeconds > 4*3600 {
+		t.Errorf("the JSON branch gap is %+v, want ~3h", w.BranchIdleSeconds)
+	}
+	if w.WorktreeIdleSeconds == nil || *w.WorktreeIdleSeconds < 1*3600 || *w.WorktreeIdleSeconds > 3*3600 {
+		t.Errorf("the JSON worktree gap is %+v, want ~2h", w.WorktreeIdleSeconds)
 	}
 }
 
@@ -187,28 +202,28 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
-	var status runlife.Status
-	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
-		t.Fatalf("the JSON status does not decode: %v\n%s", err, out.String())
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
 	}
-	if len(status.Attempts) != 1 {
-		t.Fatalf("the JSON reports %d in-flight attempts, want 1", len(status.Attempts))
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the JSON reports %d in-flight workers, want 1", workersOf(model))
 	}
-	if len(status.WallClocks) != 1 {
+	w := (*model.Workers)[0]
+	if w.WallClock == nil {
 		t.Fatalf("the JSON reports no firing for an attempt whose wall clock fired:\n%s", out.String())
 	}
-	w := status.WallClocks[0]
 	if w.TickID != "a1" || w.Attempt != 1 {
-		t.Errorf("the JSON's firing reads as %s#%d, want a1#1", w.TickID, w.Attempt)
+		t.Errorf("the JSON's worker reads as %s#%d, want a1#1", w.TickID, w.Attempt)
 	}
-	if w.FiredAt == nil || !w.FiredAt.Equal(firedAt) {
-		t.Errorf("the JSON's firing reads %s, want %s", w.FiredAt, firedAt)
+	if fired, err := time.Parse(time.RFC3339, w.WallClock.FiredAt); err != nil || !fired.Equal(firedAt) {
+		t.Errorf("the JSON's firing reads %s, want %s", w.WallClock.FiredAt, firedAt)
 	}
-	if w.FiredAgo == nil || !strings.Contains(w.FiredAgo.String(), "4m") {
-		t.Errorf("the JSON's firing age is %+v, want ~4m", w.FiredAgo)
+	if w.WallClock.Detail != detail {
+		t.Errorf("the JSON's firing detail does not carry the run's own line:\n got %q", w.WallClock.Detail)
 	}
-	if w.Detail != detail {
-		t.Errorf("the JSON's firing detail does not carry the run's own line:\n got %q", w.Detail)
+	if model.Health.WallClocksFired != 1 {
+		t.Errorf("the JSON's health counts %d firings, want 1", model.Health.WallClocksFired)
 	}
 }
 

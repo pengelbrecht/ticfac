@@ -20,7 +20,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -216,11 +215,19 @@ func newStatusCommand(stdout, stderr io.Writer) *cobra.Command {
 		Long: `The one-shot liveness answer (and, with --follow, the live table): is the
 run alive — a pidfile plus process start time for a local run, the Workflow's
 own state for one the cloud hosts — when did it last say anything, and what is
-each in-flight attempt doing.`,
+each in-flight attempt doing.
+
+With --json, the answer is the versioned status model (ticfac.status.v1, tick
+6dh): the one object every surface renders — the epic's lifecycle and waves,
+every tick's durable state with its try history, tier, model and executor, the
+live workers' silence and last turns, what the run waits on with the command
+that unblocks it, retries and interventions, gate evidence per check per
+head, CI on the epic PR, and the cost the records state. Local and cloud runs
+alike; the exit code stays liveness's answer alone.`,
 	}
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
-	asJSON := fs.Bool("json", false, "print the full status as JSON")
+	asJSON := fs.Bool("json", false, "print the versioned status model (ticfac.status.v1): lifecycle, waves, ticks, workers, waits, CI and cost")
 	follow := fs.Bool("follow", false, "keep the status table updated in place, one line per tick, until the run ends or Ctrl-C")
 	interval := fs.Duration("interval", defaultStatusFollowInterval, "with --follow, how often the table refreshes")
 	commandFlags(cmd, fs)
@@ -259,16 +266,20 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 	// which host that is: `run_` plus hex names a cloud run, and no local
 	// pidfile was ever its claim to life.
 	if status.State != runlife.Alive && looksLikeCloudRunID(runID) {
-		return cloudRunStatus(ctx, runID, *asJSON, stdout, stderr)
+		return cloudRunStatus(ctx, *repo, runID, *asJSON, stdout, stderr)
 	}
 
 	if *asJSON {
-		raw, err := json.MarshalIndent(status, "", "  ")
-		if err != nil {
+		// The versioned model (tick 6dh): the one answer every surface
+		// renders — lifecycle, waves, ticks, workers, waits, health, CI and
+		// cost — with liveness at the top so the questions an unattended
+		// factory is glanced at with keep their order. The exit code stays
+		// liveness's alone.
+		model := localStatusModel(ctx, *repo, runID, status)
+		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 2
 		}
-		fmt.Fprintf(stdout, "%s\n", raw)
 	} else {
 		fmt.Fprintf(stdout, "run %s: %s — %s\n", status.RunID, status.State, status.Reason)
 		// Labels only when a line will name a tick: a run with nothing in
@@ -327,11 +338,17 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 // itself — checked against the Workflow instance when the operator's own
 // Cloudflare credentials allow it, and said plainly when they do not.
 //
+// With --json it emits the same versioned model a local run does, host
+// "cloud": the run's records live on origin like any run's, its feed is
+// the factory's own stream, and its workers are not on this machine — the
+// census is not taken and the model says null, which is a different claim
+// from "none stand".
+//
 // The feed is read best effort for the last event, exactly the way one-shot
 // status reports it for a local run: a feed that cannot be served costs the
 // table its last-event line, never the liveness answer — the feed is exhaust
 // and may never gate anything.
-func cloudRunStatus(ctx context.Context, runID string, asJSON bool, stdout, stderr io.Writer) int {
+func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout, stderr io.Writer) int {
 	resolved, note, err := resolveCloudRunID(ctx, runID)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac status: %v\n", err)
@@ -348,6 +365,28 @@ func cloudRunStatus(ctx context.Context, runID string, asJSON bool, stdout, stde
 		return 1
 	}
 	answer := cloudRunLiveness(ctx, runID, state)
+
+	if asJSON {
+		client, err := newCloudClient()
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 1
+		}
+		record, err := readCloudRunRecord(ctx, client, runID)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 1
+		}
+		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr)
+		if err := printStatusModel(stdout, stderr, model); err != nil {
+			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
+			return 2
+		}
+		if answer.Alive {
+			return 0
+		}
+		return 1
+	}
 
 	status := struct {
 		RunID          string         `json:"run_id"`
@@ -379,32 +418,37 @@ func cloudRunStatus(ctx context.Context, runID string, asJSON bool, stdout, stde
 		}
 	}
 
-	if asJSON {
-		raw, err := json.MarshalIndent(status, "", "  ")
-		if err != nil {
-			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
-			return 2
+	stateWord := "alive"
+	if !answer.Alive {
+		stateWord = "not alive"
+	}
+	fmt.Fprintf(stdout, "run %s: %s — %s\n", runID, stateWord, answer.Reason)
+	if status.LastEvent != nil {
+		tick := "-"
+		if status.LastEvent.TickID != nil {
+			tick = *status.LastEvent.TickID
 		}
-		fmt.Fprintf(stdout, "%s\n", raw)
-	} else {
-		stateWord := "alive"
-		if !answer.Alive {
-			stateWord = "not alive"
-		}
-		fmt.Fprintf(stdout, "run %s: %s — %s\n", runID, stateWord, answer.Reason)
-		if status.LastEvent != nil {
-			tick := "-"
-			if status.LastEvent.TickID != nil {
-				tick = *status.LastEvent.TickID
-			}
-			fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n",
-				status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
-		}
+		fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n",
+			status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
 	}
 	if answer.Alive {
 		return 0
 	}
 	return 1
+}
+
+// readCloudRunRecord reads the run record the factory holds — the Workflow's
+// own durable claim about the run, plus the epic it runs.
+func readCloudRunRecord(ctx context.Context, client *cloudClient, runID string) (cloudRunRecord, error) {
+	data, err := client.request(ctx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	if err != nil {
+		return cloudRunRecord{}, err
+	}
+	var response cloudStatusResponse
+	if err := decodeCloudJSON(data, &response); err != nil {
+		return cloudRunRecord{}, err
+	}
+	return response.Run, nil
 }
 
 // readCloudRunState reads the run record's own state from the factory — the
@@ -416,15 +460,11 @@ func readCloudRunState(ctx context.Context, runID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := client.request(ctx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	record, err := readCloudRunRecord(ctx, client, runID)
 	if err != nil {
 		return "", err
 	}
-	var response cloudStatusResponse
-	if err := decodeCloudJSON(data, &response); err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(response.Run.State), nil
+	return strings.TrimSpace(record.State), nil
 }
 
 // gapOf renders one measured gap for the status line, "?" when the fact
