@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 99,
-  "state": "running",
-  "reason": "9oo is closed",
-  "updated_at": "2026-09-27T08:34:43Z",
+  "sequence": 100,
+  "state": "dispatching",
+  "reason": "dispatching eih as attempt 17",
+  "updated_at": "2026-09-27T08:34:50Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -106,6 +106,10 @@
       "tick_id": "9oo",
       "state": "closed",
       "attempt": 15
+    },
+    {
+      "tick_id": "eih",
+      "state": "ready"
     }
   ],
   "provenance": {
