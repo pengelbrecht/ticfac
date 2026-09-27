@@ -114,7 +114,7 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 			"run the epic in your cloud factory: submit it to the configured factory and attach the same live view "+
 				"— the same verbs, view and triage as a local run (the expert `ticfac cloud ...` commands stay for the rest)"),
 		asJSON: fs.Bool("json", false,
-			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed). The run's own prose goes to stderr, so stdout is the document's alone"),
+			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed, cancelled). The run's own prose goes to stderr, so stdout is the document's alone"),
 	}
 }
 
@@ -506,7 +506,8 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 // runAttachState maps the attached watch's exit code to the state word the
 // document and the exit class share — the same mapping the table defines,
 // so `ticfac run` and `ticfac watch` cannot answer the same ending with
-// different words.
+// different words. A cancelled end (tick rix) keeps its own word and code:
+// the run was stopped deliberately, neither done nor failed.
 func runAttachState(repo, runID string, code int) string {
 	switch code {
 	case exitSuccess:
@@ -515,6 +516,8 @@ func runAttachState(repo, runID string, code int) string {
 		return agentStateHeld
 	case exitRunning:
 		return agentStateRunning
+	case exitCancelled:
+		return agentStateCancelled
 	}
 	return agentStateFailed
 }

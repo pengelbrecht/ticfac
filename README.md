@@ -112,7 +112,7 @@ than maintained beside it:
 | `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
 | `ticfac status <run-id>` | is the run alive, and when did it last say anything; an epic id with no run here answers the run the factory holds for this checkout's project |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
-| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person |
+| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person, 7 cancelled |
 | `ticfac version` | report this build and the contract bundle it serves |
 | `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
@@ -132,6 +132,7 @@ code is one of this table, the same words in `ticfac --help` and in every
 | `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
 | `5` | running | the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong |
 | `6` | io | an unreadable local file the command needs |
+| `7` | cancelled | a run that was stopped deliberately before it finished (watch, run): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person |
 
 Two documented exceptions: `ticfac status` exits the run's liveness answer
 (0 alive, 1 not) rather than the command's own success — the question it

@@ -631,9 +631,12 @@ type runEpicTickJSON struct {
 // continuations (each an intervention a caller reporting "unattended" must
 // count), and the never-silent notes about the feed and liveness records.
 // The state word is the table's — done when the run completed, held when the
-// run stopped holding something only a person can move, failed otherwise
-// (tick 4mv) — so the exit code and the document cannot disagree; the run's
-// own terminal word travels as run_state.
+// run stopped holding something only a person can move, cancelled when it
+// was stopped deliberately (tick rix: the resume path replays an
+// already-terminal checkpoint as a Result, and a cancelled replay must
+// answer the same word the watch answers), failed otherwise (tick 4mv) — so
+// the exit code and the document cannot disagree; the run's own terminal
+// word travels as run_state.
 type runEpicResultJSON struct {
 	agentDoc
 	RunID         string              `json:"run_id"`

@@ -75,10 +75,11 @@ func TestStateExitClassAgreesWithTheTable(t *testing.T) {
 	t.Parallel()
 
 	for state, want := range map[string]int{
-		agentStateDone:    exitSuccess,
-		agentStateFailed:  exitGeneric,
-		agentStateHeld:    ExitHeld,
-		agentStateRunning: exitRunning,
+		agentStateDone:      exitSuccess,
+		agentStateFailed:    exitGeneric,
+		agentStateHeld:      ExitHeld,
+		agentStateRunning:   exitRunning,
+		agentStateCancelled: exitCancelled,
 	} {
 		if got := stateExitClass(state); got != want {
 			t.Errorf("stateExitClass(%q) = %d, want %d", state, got, want)
