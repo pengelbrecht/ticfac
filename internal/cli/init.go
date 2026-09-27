@@ -96,6 +96,7 @@ const (
 type initFlags struct {
 	repo, substrate, runner, model, gate *string
 	yes                                  *bool
+	asJSON                               *bool
 }
 
 func defineInitFlags(fs *flag.FlagSet) *initFlags {
@@ -106,6 +107,7 @@ func defineInitFlags(fs *flag.FlagSet) *initFlags {
 		model:     fs.String("model", "", "the model every role routes to (default: per runner)"),
 		gate:      fs.String("gate", "", "the testing gate, when it cannot be guessed from the repository"),
 		yes:       fs.Bool("yes", false, "take every default and the guessed gate without asking"),
+		asJSON:    fs.Bool("json", false, "print one versioned document (ticfac.init.v1) naming the answers and the files written; any question goes to stderr"),
 	}
 }
 
@@ -150,7 +152,9 @@ says what the machine a run starts on still needs.`,
 
 // runInit is `init`'s body. stdin is where the questions are answered (the
 // caller passes the process's own stdin; tests pass a buffer) — every answer
-// a flag carried is never asked.
+// a flag carried is never asked. With --json the questions, if any remain,
+// go to stderr — a prompt on stdout would corrupt the one document the flag
+// promises — and the answers still read from stdin.
 func runInit(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer) int {
 	repo := *fl.repo
 	if repo == "" {
@@ -182,8 +186,13 @@ func runInit(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	// The answers. A flag's value is final; anything a flag left empty is a
 	// question, answered on stdin (empty line = the default) — unless --yes
-	// takes the default without asking.
-	answers, code := resolveInitAnswers(fl, stdin, stdout, stderr, repo)
+	// takes the default without asking. Under --json the prompts are
+	// stderr's, so stdout stays the document's alone.
+	promptOut := stdout
+	if *fl.asJSON {
+		promptOut = stderr
+	}
+	answers, code := resolveInitAnswers(fl, stdin, promptOut, stderr, repo)
 	if code != exitSuccess {
 		return code
 	}
@@ -218,7 +227,16 @@ func runInit(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "ticfac init: %v\n", err)
 			return exitGeneric
 		}
-		fmt.Fprintf(stdout, "wrote %s — %s\n", w.name, w.note)
+		// The per-file line is prose: under --json it goes to stderr, so the
+		// one document is stdout's only content.
+		fmt.Fprintf(promptOut, "wrote %s — %s\n", w.name, w.note)
+	}
+	if *fl.asJSON {
+		if err := emitInitJSON(answers, gates, writes, stdout); err != nil {
+			fmt.Fprintf(stderr, "ticfac init: %v\n", err)
+			return exitGeneric
+		}
+		return exitSuccess
 	}
 	fmt.Fprintf(stdout, "testing gate: %s\n", gateLine(gates))
 	fmt.Fprintf(stdout, "%s is ready to run an epic — `ticfac doctor` says what this machine still needs\n", repo)
@@ -592,4 +610,51 @@ func gateLine(gates []guessedGate) string {
 		parts = append(parts, gate.Command)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// initGateJSON is one [testing.commands] entry the --json document carries.
+type initGateJSON struct {
+	ID          string `json:"id"`
+	Command     string `json:"command"`
+	Description string `json:"description"`
+}
+
+// initFileJSON is one file the --json document says was written, with the
+// one-line note the prose surface says beside it.
+type initFileJSON struct {
+	Name string `json:"name"`
+	Note string `json:"note"`
+}
+
+// initJSON is `init --json`'s answer, ticfac.init.v1: the resolved answers —
+// the flags, the prompts and the defaults folded into one place to read what
+// the repository was configured with — and the files written.
+type initJSON struct {
+	agentDoc
+	Substrate string         `json:"substrate"`
+	Runner    string         `json:"runner"`
+	Model     string         `json:"model"`
+	Gate      []initGateJSON `json:"gate"`
+	Files     []initFileJSON `json:"files"`
+}
+
+// emitInitJSON prints the one document. The answers are the resolved ones,
+// so a caller reading the document knows exactly what the repository was
+// left configured with — not what was asked.
+func emitInitJSON(answers initAnswers, gates []guessedGate, writes []initWrite, stdout io.Writer) error {
+	doc := initJSON{
+		agentDoc:  agentDoc{Schema: agentSchemaID("init"), State: agentStateDone},
+		Substrate: answers.substrate,
+		Runner:    answers.runner,
+		Model:     answers.model,
+		Gate:      make([]initGateJSON, 0, len(gates)),
+		Files:     make([]initFileJSON, 0, len(writes)),
+	}
+	for _, gate := range gates {
+		doc.Gate = append(doc.Gate, initGateJSON{ID: gate.ID, Command: gate.Command, Description: gate.Description})
+	}
+	for _, w := range writes {
+		doc.Files = append(doc.Files, initFileJSON{Name: w.name, Note: w.note})
+	}
+	return emitAgentJSON(stdout, doc)
 }

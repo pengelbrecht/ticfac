@@ -34,20 +34,21 @@ func newFactoryWebhookCommand(stdout, stderr io.Writer) *cobra.Command {
 	var (
 		delete = fs.Bool("delete", false, "withdraw the registration and hand the bot's updates back to polling")
 		status = fs.Bool("status", false, "report what Telegram believes the webhook is, changing nothing")
+		asJSON = fs.Bool("json", false, "print one versioned document (ticfac.factory-webhook.v1): the action and what Telegram believes the webhook is")
 	)
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(factoryWebhook(c.Context(), args, delete, status, stdout, stderr))
+		return codeToErr(factoryWebhook(c.Context(), args, delete, status, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func factoryWebhook(ctx context.Context, args []string, delete, status *bool, stdout, stderr io.Writer) int {
-	err := runFactoryWebhook(ctx, args, delete, status, stdout, stderr)
+func factoryWebhook(ctx context.Context, args []string, delete, status *bool, asJSON *bool, stdout, stderr io.Writer) int {
+	err := runFactoryWebhook(ctx, args, delete, status, asJSON, stdout, stderr)
 	return reportCommand("factory webhook", err, stderr)
 }
 
-func runFactoryWebhook(ctx context.Context, args []string, delete, status *bool, stdout, stderr io.Writer) error {
+func runFactoryWebhook(ctx context.Context, args []string, delete, status *bool, asJSON *bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 0 {
 		return newExitError(exitUsage, "factory webhook takes no positional arguments")
@@ -83,6 +84,35 @@ func runFactoryWebhook(ctx context.Context, args []string, delete, status *bool,
 	}
 	if err := json.Unmarshal(data, &report); err != nil {
 		return newExitError(exitGeneric, "the factory's answer could not be read: %v", err)
+	}
+
+	if *asJSON {
+		action := "registered"
+		if *delete {
+			action = "withdrawn"
+		} else if *status {
+			action = "status"
+		}
+		doc := struct {
+			agentDoc
+			Action             string   `json:"action"`
+			URL                string   `json:"url"`
+			AllowedUpdates     []string `json:"allowed_updates"`
+			PrivacyMode        bool     `json:"privacy_mode"`
+			Secret             bool     `json:"secret"`
+			PendingUpdateCount int      `json:"pending_update_count"`
+			LastErrorMessage   string   `json:"last_error_message"`
+		}{
+			agentDoc:           agentDoc{Schema: agentSchemaID("factory-webhook"), State: agentStateDone},
+			Action:             action,
+			URL:                report.URL,
+			AllowedUpdates:     report.AllowedUpdates,
+			PrivacyMode:        report.PrivacyMode,
+			Secret:             report.Secret,
+			PendingUpdateCount: report.PendingUpdateCount,
+			LastErrorMessage:   report.LastErrorMessage,
+		}
+		return emitAgentJSON(stdout, doc)
 	}
 
 	switch {

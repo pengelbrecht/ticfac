@@ -51,6 +51,12 @@ than maintained beside it:
 - The hidden `ticfac man` renders the whole tree as man pages (mango),
   writing roff to stdout — the same surface a terminal reads, in the format
   `man` presents.
+- Every command takes `--json` (tick 8v3): ONE versioned document on stdout —
+  the schema named inside it (`ticfac.<command>.v1`, beside the older
+  `ticfac.status.v1` and `ticfac.job-status.v1`), the command's prose on
+  stderr, and — where the answer is an outcome of the work — a `state` word
+  the exit code agrees with. A live stream (`--follow`, the dashboard) is
+  not one document and says so.
 - A bare `ticfac` is the overview (2qz): every run this checkout and the
   factory know, attention first — every run held or failed names its reason
   and the one command that clears it; `--json` emits the versioned overview
@@ -72,14 +78,29 @@ than maintained beside it:
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
 | `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one |
 | `ticfac version` | report this build and the contract bundle it serves |
+| `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
 | `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
 | `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface) |
 
-Exit codes are the contract a script branches on: 0 the command did its
-work, 1 a failure that is not a usage mistake, 2 a malformed invocation,
-4 a lookup that honestly came back empty — and `ticfac watch` adds 3: the
-run ended holding something only a person can move.
+Exit codes are the contract a script branches on — every command's process
+code is one of this table, the same words in `ticfac --help` and in every
+`--json` document's `state` field:
+
+| code | name | meaning |
+|---|---|---|
+| `0` | done | the command did its work |
+| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class) |
+| `2` | usage | a malformed invocation: wrong flags, wrong argument count, a refusal to guess |
+| `3` | held | the run ended holding something only a person can move (watch, run): the reason class is the wait kind in the line and the --json document; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
+| `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
+| `5` | running | the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong |
+| `6` | io | an unreadable local file the command needs |
+
+Two documented exceptions: `ticfac status` exits the run's liveness answer
+(0 alive, 1 not) rather than the command's own success — the question it
+exists to answer — and a run-epic killed by a signal exits the shell's
+convention (130/143), not the table.
 
 The section is pinned by a test (`internal/cli/readme_test.go`): a command
 added to the tree fails the suite until this table names it, so the README

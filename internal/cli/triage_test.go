@@ -84,10 +84,17 @@ func TestTriageJSONListsTheUntriagedForAnAgent(t *testing.T) {
 	if code := Run([]string{"triage", "--json", "--repo", repo, "qeu"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	var listed []map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &listed); err != nil {
+	var doc struct {
+		Schema   string           `json:"schema"`
+		Findings []map[string]any `json:"findings"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
 		t.Fatalf("the --json listing does not round-trip: %v\n%s", err, stdout.String())
 	}
+	if doc.Schema != "ticfac.triage.v1" {
+		t.Errorf("the listing's schema is %q, want ticfac.triage.v1 — a reader must be able to refuse an unknown shape", doc.Schema)
+	}
+	listed := doc.Findings
 	if len(listed) != 2 {
 		t.Fatalf("listed %d drafts, want the 2 untriaged:\n%s", len(listed), stdout.String())
 	}
@@ -263,10 +270,21 @@ func TestTriageJSONReportsWhatEachDecisionDid(t *testing.T) {
 		"d34=absorb"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	var results []map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
+	var doc struct {
+		Schema    string           `json:"schema"`
+		State     string           `json:"state"`
+		Decisions []map[string]any `json:"decisions"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
 		t.Fatalf("the --json report does not round-trip: %v\n%s", err, stdout.String())
 	}
+	if doc.Schema != "ticfac.triage.v1" {
+		t.Errorf("the report's schema is %q, want ticfac.triage.v1", doc.Schema)
+	}
+	if doc.State != "done" {
+		t.Errorf("the report's state is %q, want done — the exit code agrees with it", doc.State)
+	}
+	results := doc.Decisions
 	if len(results) != 1 {
 		t.Fatalf("reported %d decisions, want 1:\n%s", len(results), stdout.String())
 	}

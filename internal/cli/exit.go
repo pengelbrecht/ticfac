@@ -28,10 +28,20 @@ const (
 	exitUsage = 2
 	// exitNoRepo is "not in a git repository" — tk's code 3, kept because an
 	// orchestrator branching on it must not retry it as a generic failure.
+	// Only the tk-ported family (cloud, factory, skills install) exits it;
+	// the run surfaces' 3 is ExitHeld below, and the collision is the
+	// documented one: no caller branches on 3 across the two families.
 	exitNoRepo = 3
 	// exitNotFound is a lookup that honestly came back empty: a missing epic,
 	// a missing tick. tk's code 4.
 	exitNotFound = 4
+	// exitRunning is the work's own answer: the command ended while the run
+	// is still in flight (tick 8v3). `ticfac run` detached with the run
+	// going exits it — an agent that branched on 0 would read "done" where
+	// the epic is still working, which is exactly the conflation the exit
+	// table exists to remove. tk has no code 5, so nothing tk-shaped reads
+	// it by accident.
+	exitRunning = 5
 	// exitIO is an unreadable local file the command needs: tk's code 6.
 	exitIO = 6
 )
@@ -107,3 +117,52 @@ func resultExitCode(result *reconcile.Result) int {
 	}
 	return exitGeneric
 }
+
+// ExitTable is the documented exit code set (tick 8v3): the codes every
+// ticfac command exits with, as data, so the README's table and the code's
+// codes are pinned to one authority by a test (exittable_test.go) rather
+// than kept in step by hand. A command may exit only a code this table
+// names; a code nobody documents is a contract nobody can branch on.
+//
+// The classes the tick names — done, running, held-for-a-person, failed and
+// usage — each have their own code, so an agent distinguishes them without
+// parsing prose; the held class carries its REASON CLASS in the refusal
+// line and in every --json document (the refusal or wait kind, e.g.
+// finding_untriaged, closeout_ci_failed, merge — never prose).
+type ExitTableEntry struct {
+	Code    int
+	Name    string
+	Meaning string
+}
+
+// ExitTable is ordered by code. Two meanings share one code deliberately,
+// each named where it is: 3 is held on the run surfaces and not-in-a-repo
+// in the tk-ported family — a collision inherited from tk (usage and
+// ExitNoExecutor were already both 2 there) and documented here rather
+// than papered over, because no caller branches on 3 across the families.
+var ExitTable = []ExitTableEntry{
+	{exitSuccess, "done",
+		"the command did its work"},
+	{exitGeneric, "failed",
+		"a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class)"},
+	{exitUsage, "usage",
+		"a malformed invocation: wrong flags, wrong argument count, a refusal to guess"},
+	{ExitHeld, "held",
+		"the run ended holding something only a person can move (watch, run): the reason class is the wait kind in the line and the --json document; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository"},
+	{exitNotFound, "missing",
+		"a lookup that honestly came back empty: a missing epic, a missing tick"},
+	{exitRunning, "running",
+		"the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong"},
+	{exitIO, "io",
+		"an unreadable local file the command needs"},
+}
+
+// The two documented exceptions to "the exit code is the command's":
+//
+//  - `ticfac status` exits the RUN's answer, not the command's: 0 the run is
+//    alive, 1 it is not. The command did its work either way; a script
+//    asking "is it alive" branches on the run, and that contract (tick
+//    6dh: "the exit code stays liveness's alone") predates the table and
+//    is pinned by its tests.
+//  - Signals: a run-epic killed by SIGINT/SIGTERM exits 130/143, the
+//    shell's convention, not the table's.

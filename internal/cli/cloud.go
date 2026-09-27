@@ -345,22 +345,23 @@ func newCloudRunCommand(stdout, stderr io.Writer) *cobra.Command {
 	queue := fs.Bool("queue", false, "park behind the current project lease instead of refusing")
 	maxCost := fs.Float64("max-cost", 0, "cost ceiling in USD for this run; may lower the deployment budget, never raise it")
 	maxWallClock := fs.Duration("max-wall-clock", 0, "wall-clock ceiling for this run (e.g. 45m); may lower the deployment budget, never raise it")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.cloud-run.v1): the run id the factory accepted, its state, and the budget that will govern")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		changed := func(name string) bool { return c.Flags().Changed(name) }
-		return codeToErr(runCloudRun(c.Context(), args, notify, queue, maxCost, maxWallClock, changed, stdout, stderr))
+		return codeToErr(runCloudRun(c.Context(), args, notify, queue, maxCost, maxWallClock, asJSON, changed, stdout, stderr))
 	}
 	return cmd
 }
 
 func runCloudRun(ctx context.Context, args []string, notify *string, queue *bool, maxCost *float64,
-	maxWallClock *time.Duration, changed func(string) bool, stdout, stderr io.Writer) int {
-	err := cloudRun(ctx, args, notify, queue, maxCost, maxWallClock, changed, stdout, stderr)
+	maxWallClock *time.Duration, asJSON *bool, changed func(string) bool, stdout, stderr io.Writer) int {
+	err := cloudRun(ctx, args, notify, queue, maxCost, maxWallClock, asJSON, changed, stdout, stderr)
 	return reportCommand("cloud run", err, stderr)
 }
 
 func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, maxCost *float64,
-	maxWallClock *time.Duration, changed func(string) bool, stdout, stderr io.Writer) error {
+	maxWallClock *time.Duration, asJSON *bool, changed func(string) bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one epic id is required")
@@ -412,12 +413,18 @@ func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, m
 
 	switch {
 	case response.Run.RunID != "":
+		if *asJSON {
+			return emitCloudRunJSON("started", response, stdout)
+		}
 		fmt.Fprintf(stdout, "Cloud run started: %s\n", response.Run.RunID)
 		if response.Run.State != "" {
 			fmt.Fprintf(stdout, "  state: %s\n", response.Run.State)
 		}
 		printCloudRunBudget(stdout, response.Budget)
 	case response.Queued.RunID != "":
+		if *asJSON {
+			return emitCloudRunJSON("queued", response, stdout)
+		}
 		fmt.Fprintf(stdout, "Cloud run queued: %s\n", response.Queued.RunID)
 		if response.Holder.RunID != "" {
 			fmt.Fprintf(stdout, "  waiting for: %s\n", response.Holder.RunID)
@@ -425,6 +432,9 @@ func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, m
 		printCloudRunBudget(stdout, response.Budget)
 	default:
 		if response.RunID != "" {
+			if *asJSON {
+				return emitCloudRunJSON("started", response, stdout)
+			}
 			fmt.Fprintf(stdout, "Cloud run started: %s\n", response.RunID)
 			printCloudRunBudget(stdout, response.Budget)
 			break
@@ -432,6 +442,33 @@ func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, m
 		return newExitError(exitGeneric, "factory accepted the submission but returned no run id")
 	}
 	return nil
+}
+
+// emitCloudRunJSON prints `cloud run --json`'s one document,
+// ticfac.cloud-run.v1: the outcome the factory gave — started or parked
+// behind a lease — with the run record and the budget that will govern.
+// The command's work is the submission; the run's own state travels in the
+// record's fields.
+func emitCloudRunJSON(outcome string, response cloudSubmissionResponse, stdout io.Writer) error {
+	doc := struct {
+		agentDoc
+		Outcome string                `json:"outcome"`
+		Run     cloudRunRecord        `json:"run"`
+		Queued  cloudQueued           `json:"queued,omitempty"`
+		Holder  cloudHolder           `json:"waiting_for,omitempty"`
+		Budget  *cloudEffectiveBudget `json:"budget,omitempty"`
+	}{
+		agentDoc: agentDoc{Schema: agentSchemaID("cloud-run"), State: agentStateDone},
+		Outcome:  outcome,
+		Run:      response.Run,
+		Queued:   response.Queued,
+		Holder:   response.Holder,
+		Budget:   response.Budget,
+	}
+	if response.Run.RunID == "" && response.RunID != "" {
+		doc.Run.RunID = response.RunID
+	}
+	return emitAgentJSON(stdout, doc)
 }
 
 // cloudRunBudgetOverride is what --max-cost and --max-wall-clock ask of one
@@ -491,8 +528,8 @@ func printCloudRunBudget(out io.Writer, budget *cloudEffectiveBudget) {
 	}
 }
 
-func runCloudStop(ctx context.Context, args []string, now *bool, stdout, stderr io.Writer) int {
-	err := cloudStop(ctx, args, now, stdout)
+func runCloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdout, stderr io.Writer) int {
+	err := cloudStop(ctx, args, now, asJSON, stdout)
 	return reportCommand("cloud stop", err, stderr)
 }
 
@@ -504,14 +541,15 @@ func newCloudStopCommand(stdout, stderr io.Writer) *cobra.Command {
 	}
 	fs := newFlagSet("cloud stop", nil)
 	now := fs.Bool("now", false, "hard stop: revoke the run's gateway credential immediately and skip closeout")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.cloud-stop.v1): which stop was performed, the run's state, and how many live credentials it killed")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runCloudStop(c.Context(), args, now, stdout, stderr))
+		return codeToErr(runCloudStop(c.Context(), args, now, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func cloudStop(ctx context.Context, args []string, now *bool, stdout io.Writer) error {
+func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdout io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
@@ -534,13 +572,9 @@ func cloudStop(ctx context.Context, args []string, now *bool, stdout io.Writer) 
 	if err != nil {
 		return newExitError(exitGeneric, "%v", err)
 	}
-	var response struct {
-		Run           cloudRunRecord `json:"run"`
-		Mode          string         `json:"mode"`
-		TokensRevoked int            `json:"tokens_revoked"`
-	}
-	if err := decodeCloudJSON(data, &response); err != nil {
-		return newExitError(exitGeneric, "%v", err)
+	var response cloudStopResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return newExitError(exitGeneric, "the factory's answer could not be read: %v", err)
 	}
 
 	state := response.Run.State
@@ -555,14 +589,51 @@ func cloudStop(ctx context.Context, args []string, now *bool, stdout io.Writer) 
 		performed = mode
 	}
 	if performed == "hard" {
+		if *asJSON {
+			return emitCloudStopJSON("hard", state, response, stdout)
+		}
 		fmt.Fprintf(stdout, "Cloud hard stop performed: %s (%s)\n", rest[0], state)
 		fmt.Fprintf(stdout, "  gateway credentials revoked: %d\n", response.TokensRevoked)
 		fmt.Fprintln(stdout, "  model traffic is refused from the next request; review and closeout will not run")
 		return nil
 	}
+	if *asJSON {
+		return emitCloudStopJSON("clean", state, response, stdout)
+	}
 	fmt.Fprintf(stdout, "Cloud clean stop requested: %s (%s)\n", rest[0], state)
 	fmt.Fprintln(stdout, "  in-flight work finishes, then review and closeout run; use --now to revoke the credential immediately")
 	return nil
+}
+
+// cloudStopResponse is the factory's answer to a stop: the run record, the
+// stop it performed, and how many live gateway credentials a hard one
+// revoked.
+type cloudStopResponse struct {
+	Run           cloudRunRecord `json:"run"`
+	Mode          string         `json:"mode"`
+	TokensRevoked int            `json:"tokens_revoked"`
+}
+
+// emitCloudStopJSON prints `cloud stop --json`'s one document,
+// ticfac.cloud-stop.v1: which stop the factory PERFORMED (not which was
+// asked for), the run's state, and the live credentials a hard stop revoked.
+func emitCloudStopJSON(performed, state string, response cloudStopResponse, stdout io.Writer) error {
+	doc := struct {
+		agentDoc
+		RunID         string         `json:"run_id"`
+		Performed     string         `json:"performed"`
+		State         string         `json:"state"`
+		TokensRevoked int            `json:"tokens_revoked"`
+		Run           cloudRunRecord `json:"run"`
+	}{
+		agentDoc:      agentDoc{Schema: agentSchemaID("cloud-stop"), State: agentStateDone},
+		RunID:         response.Run.RunID,
+		Performed:     performed,
+		State:         state,
+		TokensRevoked: response.TokensRevoked,
+		Run:           response.Run,
+	}
+	return emitAgentJSON(stdout, doc)
 }
 
 // newCloudStatusCommand builds `cloud status`'s cobra command.
@@ -571,18 +642,21 @@ func newCloudStatusCommand(stdout, stderr io.Writer) *cobra.Command {
 		Use:   "status [run-id]",
 		Short: "runs, leases and queue; or one run",
 	}
+	fs := newFlagSet("cloud status", nil)
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.cloud-status.v1): the factory's own answer — the run record, phase, lease, queue and progress — wrapped in ticfac's envelope")
+	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runCloudStatus(c.Context(), args, stdout, stderr))
+		return codeToErr(runCloudStatus(c.Context(), args, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func runCloudStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudStatus(ctx, args, stdout, stderr)
+func runCloudStatus(ctx context.Context, args []string, asJSON *bool, stdout, stderr io.Writer) int {
+	err := cloudStatus(ctx, args, asJSON, stdout, stderr)
 	return reportCommand("cloud status", err, stderr)
 }
 
-func cloudStatus(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+func cloudStatus(ctx context.Context, args []string, asJSON *bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) > 1 {
 		return newExitError(exitUsage, "at most one run id is allowed")
@@ -613,8 +687,36 @@ func cloudStatus(ctx context.Context, args []string, stdout, stderr io.Writer) e
 	}
 
 	if len(rest) == 1 {
+		if *asJSON {
+			doc := struct {
+				agentDoc
+				Run      cloudRunRecord    `json:"run"`
+				Phase    cloudPhase        `json:"phase"`
+				Lease    *cloudHolder      `json:"lease"`
+				Image    *cloudRunImage    `json:"image"`
+				Progress *cloudRunProgress `json:"progress"`
+			}{
+				agentDoc: agentDoc{Schema: agentSchemaID("cloud-status"), State: agentStateDone},
+				Run:      response.Run,
+				Phase:    response.Phase,
+				Lease:    response.Lease,
+				Image:    response.Image,
+				Progress: response.Progress,
+			}
+			return emitAgentJSON(stdout, doc)
+		}
 		printCloudRunStatus(stdout, response)
 		return nil
+	}
+	if *asJSON {
+		doc := struct {
+			agentDoc
+			cloudStatusResponse
+		}{
+			agentDoc:            agentDoc{Schema: agentSchemaID("cloud-status"), State: agentStateDone},
+			cloudStatusResponse: response,
+		}
+		return emitAgentJSON(stdout, doc)
 	}
 	printCloudRunList(stdout, response)
 	return nil

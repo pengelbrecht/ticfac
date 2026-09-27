@@ -31,19 +31,20 @@ func newCloudSupervisorCommand(stdout, stderr io.Writer) *cobra.Command {
 	}
 	fs := newFlagSet("cloud supervisor", nil)
 	steps := fs.Int("steps", 0, "also print the last N steps of the trail (0 prints the current step and every failed one)")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.supervisor.v1): the Workflow's status, its disagreement with the run record when there is one, and the step trail")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runCloudSupervisor(c.Context(), args, steps, stdout, stderr))
+		return codeToErr(runCloudSupervisor(c.Context(), args, steps, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func runCloudSupervisor(ctx context.Context, args []string, steps *int, stdout, stderr io.Writer) int {
-	err := cloudSupervisor(ctx, args, steps, stdout, stderr)
+func runCloudSupervisor(ctx context.Context, args []string, steps *int, asJSON *bool, stdout, stderr io.Writer) int {
+	err := cloudSupervisor(ctx, args, steps, asJSON, stdout, stderr)
 	return reportCommand("cloud supervisor", err, stderr)
 }
 
-func cloudSupervisor(ctx context.Context, args []string, steps *int, stdout, stderr io.Writer) error {
+func cloudSupervisor(ctx context.Context, args []string, steps *int, asJSON *bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
@@ -66,8 +67,52 @@ func cloudSupervisor(ctx context.Context, args []string, steps *int, stdout, std
 	if err != nil {
 		return newExitError(exitGeneric, "%v", err)
 	}
+	if *asJSON {
+		return emitCloudSupervisorJSON(supervisor, cloudRecordedRunState(ctx, runID), *steps, stdout)
+	}
 	printCloudSupervisor(stdout, supervisor, cloudRecordedRunState(ctx, runID), time.Now(), *steps)
 	return nil
+}
+
+// emitCloudSupervisorJSON prints `cloud supervisor --json`'s one document,
+// ticfac.cloud-supervisor.v1: the Workflow's own status read outside the
+// deployment, the run record's claim beside it (the disagreement is the
+// line worth the whole command, and it is a field here), and the step trail.
+func emitCloudSupervisorJSON(supervisor *factory.Supervisor, recorded string, steps int, stdout io.Writer) error {
+	current := supervisor.CurrentStep()
+	failed := supervisor.FailedSteps()
+	doc := struct {
+		agentDoc
+		RunID         string                   `json:"run_id"`
+		Status        string                   `json:"status"`
+		Alive         bool                     `json:"alive"`
+		Explanation   string                   `json:"explanation"`
+		Error         string                   `json:"error,omitempty"`
+		Start         string                   `json:"start,omitempty"`
+		End           string                   `json:"end,omitempty"`
+		RecordedState string                   `json:"recorded_run_state,omitempty"`
+		Disagreement  string                   `json:"disagreement,omitempty"`
+		StepCount     int                      `json:"step_count"`
+		CurrentStep   *factory.SupervisorStep  `json:"current_step,omitempty"`
+		FailedSteps   []factory.SupervisorStep `json:"failed_steps"`
+	}{
+		agentDoc:      agentDoc{Schema: agentSchemaID("cloud-supervisor"), State: agentStateDone},
+		RunID:         supervisor.RunID,
+		Status:        supervisor.Status,
+		Alive:         supervisor.Alive(),
+		Explanation:   supervisor.Explain(),
+		Error:         supervisor.Error.String(),
+		Start:         supervisor.Start,
+		End:           supervisor.End,
+		RecordedState: recorded,
+		Disagreement:  cloudSupervisorDisagreement(supervisor, recorded),
+		StepCount:     len(supervisor.Steps),
+		FailedSteps:   failed,
+	}
+	if current != nil {
+		doc.CurrentStep = current
+	}
+	return emitAgentJSON(stdout, doc)
 }
 
 // cloudSupervisorOptions reads the operator's own Cloudflare credentials.
