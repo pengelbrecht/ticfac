@@ -1,0 +1,13 @@
+{
+  "id": "s4p",
+  "title": "The absorber files the same defect again and again: one SIGTERM temp-tree failure became five backlog ticks",
+  "description": "zv1, mtq, 0wp, 1zw and bsn were filed by five workers over 2.5 hours for one failure of TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote; a promoted finding leaves the drafts workers see, and nothing checks open ticks the run itself promoted. 8d6 (4230b469) fixed it and the test passes 3/3 at the tip, so the five can close as fixed. Deduplicate a new finding against open ticks the run promoted (same demonstrating_check or test name) before filing.\n\nticfac run epic-2jn filed this backlog tick from the finding f9268a329bb551f30336c0c17b8be5fb118867af54565490d6764e6db5cb74d2 (reported by run-epic-2jn/tick-rrl/attempt-54): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/f9268a329bb551f30336c0c17b8be5fb118867af54565490d6764e6db5cb74d2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-rrl/attempt-54",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T20:47:25Z",
+  "updated_at": "2026-09-27T20:47:25Z"
+}
