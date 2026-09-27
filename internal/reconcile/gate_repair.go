@@ -101,14 +101,13 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 			r.attemptName(tick, marker.Attempt), earlier, failures, status, branch)
 	}
 
-	// A repair an earlier incarnation dispatched but never integrated: its
-	// branch is durable on the remote, and the work is finished from the
-	// evidence rather than paid for twice (the learnings' rule: settle
-	// in-flight state from durable evidence by whoever finds it).
+	// A repair an earlier incarnation dispatched but never integrated is NOT
+	// finished from its branch merely because the branch is on origin: a
+	// live job's supervisor pushes it, and so does a SIGTERM flush, before
+	// the job has repaired anything (epic-2jn, 4mv's resolve). The executor's
+	// Start below is what says whether it settled; role_resume.go has the
+	// whole argument.
 	branch := branchOf(repairWriteRef(r.runID, tick, marker.Attempt))
-	if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-		return r.finishRepairFromBranch(ctx, entry, marker, merged.AttemptHead, remote, g)
-	}
 
 	// The ceiling tier: the strongest worker the declared policy allows,
 	// resolved on demand through the same routing every other role resolves
@@ -136,26 +135,35 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 	// the gate failed on, together with the evidence records the failure wrote
 	// onto the same branch, so the job's worktree carries the gate's own
 	// output under `.ticfac/` exactly where its inputs name it.
-	if err := r.git.fetch(r.branch); err != nil {
-		return err
-	}
-	base, err := r.git.remoteHead(r.branch)
+	// A repair an earlier incarnation dispatched under this identity keeps the
+	// base it was cut from, or continues from what it pushed.
+	identity := r.repairMarkerOf(marker)
+	jobID, writeRef, stateDir := identity.JobID, identity.WriteRef, identity.StateRoot
+	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		if err := r.git.fetch(r.branch); err != nil {
+			return "", err
+		}
+		base, err := r.git.remoteHead(r.branch)
+		if err != nil {
+			return "", err
+		}
+		if base == "" {
+			return "", r.refuse(RefusedGate, tick,
+				"the integrated gate did not pass for %s (%s) and the integration branch %s could not be read to "+
+					"cut its repair job a worktree", tick, failures, r.branch)
+		}
+		return base, nil
+	})
 	if err != nil {
 		return err
 	}
-	if base == "" {
-		return r.refuse(RefusedGate, tick,
-			"the integrated gate did not pass for %s (%s) and the integration branch %s could not be read to cut "+
-				"its repair job a worktree", tick, failures, r.branch)
-	}
+	base := job.base
 
 	r.record(tick, StageRepairDispatched,
 		"the integrated gate did not pass over %s (%s); a repair job is dispatched to fix the tree the failing "+
 			"checks named — routed at tier %q (%s)",
 		short(merged.GateSHA), failures, tier, tierNote)
 
-	identity := r.repairMarkerOf(marker)
-	jobID, writeRef, stateDir := identity.JobID, identity.WriteRef, identity.StateRoot
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
 		Try: marker.Try, JobID: jobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote,
@@ -197,6 +205,9 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		return r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s (%s) and the repair job could not be started: %v",
 			short(merged.GateSHA), tick, failures, err)
+	}
+	if note := roleJobResumeNote(job, "the repair job for "+r.attemptName(tick, marker.Attempt)); note != "" {
+		r.record(tick, StageAdopted, "%s", note)
 	}
 
 	collected, rerr := r.collectRepair(ctx, handle, executor, repairMarker, g)

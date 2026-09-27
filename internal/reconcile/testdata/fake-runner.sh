@@ -255,6 +255,35 @@ conflict)
 		report
 	fi
 	;;
+conflict_resolve_hold)
+	# epic-2jn (4mv attempt 33): the same conflict, and a resolve-conflict
+	# worker that writes its resolution into its worktree WITHOUT committing
+	# it and then waits — through the orchestrator's SIGTERM, which a local
+	# worker is a separate process from and survives — until $EVAC_GO
+	# appears. Only then does it commit and settle. Every start is counted in
+	# $CONFLICT_SYNC/resolve.starts, and $CONFLICT_SYNC/resolve.holding says
+	# the uncommitted resolution is in the tree.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		printf '%s\n' "$$" >> "$CONFLICT_SYNC/resolve.starts"
+		for f in $(grep -rl '^<<<<<<<' "$TICFAC_WORKTREE" --exclude-dir=.git 2>/dev/null); do
+			printf 'resolved by the resolve-conflict job\n' > "$f"
+		done
+		: > "$CONFLICT_SYNC/resolve.holding"
+		waited=0
+		while [ ! -e "${EVAC_GO:-/nonexistent}" ] && [ "$waited" -lt 1200 ]; do
+			sleep 0.1
+			waited=$((waited + 1))
+		done
+		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" commit -q -m "resolve-conflict: $TICFAC_TICK" >/dev/null 2>&1
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
 conflict_unresolvable)
 	# The same conflict, and a resolve job that cannot resolve it: it
 	# answers BLOCKED over an empty branch — a resolve that asks for a

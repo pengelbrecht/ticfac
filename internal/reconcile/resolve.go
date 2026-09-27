@@ -180,19 +180,16 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, status, branch)
 	}
 
-	// A resolve job an earlier incarnation dispatched but never integrated:
-	// its branch is durable on the remote, and the work is finished from the
-	// evidence rather than paid for twice (the learnings' rule: settle
-	// in-flight state from durable evidence by whoever finds it). A branch
-	// that does not verify is the stop, naming the files and the branch.
-	branch := branchOf(resolveWriteRef(r.runID, tick, marker.Attempt))
-	if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-		merged, err := r.finishResolveFromBranch(marker, head, epicHead, conflict, remote)
-		if err != nil {
-			return "", nil, err
-		}
-		return merged, r.finalizeResolve(marker, head, branch, merged, remote, conflict), nil
-	}
+	// A resolve job an earlier incarnation dispatched but never integrated is
+	// NOT finished from its branch merely because the branch is on origin: a
+	// live job's supervisor pushes it, and so does a SIGTERM flush — at the
+	// conflicted commit the job was cut at, until the job commits (epic-2jn,
+	// 4mv attempt 33). The executor's Start below is what says whether it
+	// settled; role_resume.go has the whole argument.
+	jobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
+	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt)
+	branch := branchOf(writeRef)
+	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt))
 
 	// The ceiling tier: the strongest worker the declared policy allows. The
 	// profile is resolved on demand, through the same routing every other
@@ -220,11 +217,16 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 	// The conflicted tree the job starts from: the merge of the attempt's head
 	// into the integration branch, left unresolved, committed so the
 	// executor's ordinary worktree — cut at a commit — IS the conflicted
-	// merge, markers present.
-	wip, err := r.conflictedTree(epicHead, head, marker)
+	// merge, markers present. A job an earlier incarnation dispatched under
+	// this identity keeps the base it was cut from, or continues from what it
+	// pushed.
+	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		return r.conflictedTree(epicHead, head, marker)
+	})
 	if err != nil {
 		return "", nil, err
 	}
+	wip := job.base
 
 	// Both ticks' descriptions: the attempt's own tick, and the tick(s) whose
 	// merged work sits on the other side of the conflict, read out of the
@@ -237,9 +239,6 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail,
 		strings.Join(append([]string{tick}, others...), " and "), tier, tierNote)
 
-	jobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
-	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt)
-	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt))
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
 		Try: marker.Try, JobID: jobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote,
@@ -285,6 +284,9 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		return "", nil, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: %v",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
+	}
+	if note := roleJobResumeNote(job, "the resolve-conflict job for "+r.attemptName(tick, marker.Attempt)); note != "" {
+		r.record(tick, StageAdopted, "%s", note)
 	}
 
 	collected, rerr := r.collectResolve(ctx, handle, executor, resolveMarker, conflict)
