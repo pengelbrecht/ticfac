@@ -2,8 +2,8 @@ package cli
 
 // The bare-invocation overview (tick 2qz): `ticfac` with no arguments is
 // the one screen an unattended factory is glanced at with — every run this
-// machine knows, the local runs the checkout holds and the factory's cloud
-// runs, attention first.
+// machine knows, the local runs the machine's registry and the checkout
+// name and the factory's cloud runs, attention first.
 //
 // It is BUILT ON the status model (tick 6dh), not beside it: every run's
 // entry carries the same versioned model `ticfac status --json <run>` emits,
@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runregistry"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
@@ -90,12 +91,17 @@ type overviewRun struct {
 }
 
 // overviewCommand is the bare `ticfac`: list every run this machine knows,
-// attention first. Local runs are the ones the checkout's own durable
-// records name (`.ticfac/runs/` — durable means pushed, so a checkout's
-// directory is the machine's honest memory of its runs); cloud runs are the
-// factory's run index. Every run's answer is the 6dh model, gathered by the
-// same code `status --json` gathers with, so the two surfaces cannot
-// disagree about one run.
+// attention first. Local runs are named by the machine's run registry
+// (internal/runregistry, tick aj9) beside the checkout's own run directories
+// — a LIVE run commits its durable state by plumbing to epic/<id> and never
+// touches a working tree, so the checkout this listing runs in may hold
+// nothing of it and the registry is what names it — and each run is probed
+// and gathered IN THE REPO ITS REGISTRATION NAMES (tick 9ss): liveness is
+// per-checkout, so a run live in another checkout reads live here, never
+// dead from a probe taken in a checkout that was never the run's. Cloud
+// runs are the factory's run index. Every run's answer is the 6dh model,
+// gathered by the same code `status --json` gathers with, so the two
+// surfaces cannot disagree about one run.
 func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stderr io.Writer) int {
 	if repo == "" {
 		wd, err := os.Getwd()
@@ -109,17 +115,47 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 	degraded := []string{}
 	runs := []overviewRun{}
 
-	// The local runs, in the checkout's own order (alphabetical), each
-	// answered by the same probe and gathering one-shot status uses.
-	ids, err := localRunIDs(repo)
-	if err != nil {
-		// An unreadable runs directory costs the listing its local half and
-		// is named — never a refusal over the cloud half it can still answer.
+	// The local runs: every run this machine knows, each answered by the
+	// same probe and gathering one-shot status uses. The machine's run
+	// registry is the enumeration's first half — a live run's records never
+	// appear in any working tree, so without it the listing names only the
+	// merged epics whose run directories a checkout on main holds. The
+	// checkout's own run directories ride beside them, and every run is
+	// probed IN THE REPO ITS REGISTRATION NAMES.
+	regs, registryErr := runregistry.List()
+	treeIDs, err := localRunIDs(repo)
+	if registryErr != nil || err != nil {
+		// A source that cannot be read costs the listing its local half's
+		// answer from that source and is named — never a refusal over the
+		// other local source or the cloud half it can still answer.
 		degraded = append(degraded, "runs")
 	}
+	seen := map[string]bool{}
+	for _, reg := range regs {
+		if reg.RunID != "" && !seen[reg.RunID] {
+			seen[reg.RunID] = true
+		}
+	}
+	ids := make([]string, 0, len(seen)+len(treeIDs))
+	for runID := range seen {
+		ids = append(ids, runID)
+	}
+	for _, runID := range treeIDs {
+		if !seen[runID] {
+			seen[runID] = true
+			ids = append(ids, runID)
+		}
+	}
+	sort.Strings(ids)
 	for _, runID := range ids {
-		probe := runlife.Probe(repo, runID, now)
-		runs = append(runs, overviewEntryOf(localStatusModel(ctx, repo, runID, probe, modelGatherers{graph: epicGraph, ci: statusCI})))
+		// The probing convention (runregistry.WorkingRepo): the registered
+		// repo when the machine names one, else this checkout. The probe AND
+		// the gathering both go there — a run's pidfile, feed and standing
+		// worktrees are per-checkout facts that live in the repo the run
+		// works in, and its records are read from that repo's origin view.
+		workingRepo, _ := runregistry.WorkingRepo(runID, repo)
+		probe := runlife.Probe(workingRepo, runID, now)
+		runs = append(runs, overviewEntryOf(localStatusModel(ctx, workingRepo, runID, probe, modelGatherers{graph: epicGraph, ci: statusCI})))
 	}
 
 	// The cloud runs: the factory's run index, the same window a truncated
@@ -173,9 +209,14 @@ func overviewCommand(ctx context.Context, repo string, asJSON bool, stdout, stde
 	return exitSuccess
 }
 
-// localRunIDs names every local run the checkout knows: the run directories
-// under `.ticfac/runs/`, which is the durable record the run itself commits.
-// A checkout that holds none answers none — the honest empty, not an error.
+// localRunIDs names the runs whose directories THIS CHECKOUT holds: the
+// run directories under `.ticfac/runs/`, which is the durable record a run
+// commits to its integration branch — so a checkout on main holds the
+// merged epics' records. It is the listing's local half's SECOND source
+// (tick 9ss): a LIVE run's records live on epic/<id> and never in a working
+// tree, so the machine's run registry is what names it, and this enumeration
+// covers only what the checkout's own tree holds. A checkout that holds
+// none answers none — the honest empty, not an error.
 func localRunIDs(repo string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(repo, runstate.Root, "runs"))
 	if err != nil {

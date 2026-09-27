@@ -25,6 +25,8 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runregistry"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -38,6 +40,19 @@ const overviewCloudRunID = "run_62c289d1e6f4a2b3c4d5e6f708192a3b"
 // checkout will never read: the finished-run case the overview must not
 // read as held.
 const overviewCloudDoneID = "run_8f3d1a09c2e74b56d801f2a3b4c5d6e7"
+
+// ownRegistry points the machine's run registry at a directory this test
+// alone holds. The overview enumerates the registry (tick 9ss), and the
+// package's TestMain redirects every claim into ONE directory shared by the
+// whole package run — without a per-test redirect, the listing would read
+// the registrations every EARLIER test's claim left there (r-status,
+// epic-rmod, this file's own epic-run), rows pointing at temp checkouts no
+// assertion here can predict. Every test that runs the bare overview holds
+// its own registry, and its own claims register there.
+func ownRegistry(t *testing.T) {
+	t.Helper()
+	t.Setenv(runregistry.RegistryDirEnv, t.TempDir())
+}
 
 // overviewFixture writes one checkout that knows four local runs, with the
 // durable records and feed lines a real run of each kind leaves behind:
@@ -199,6 +214,7 @@ func fakeOverviewGraph(t *testing.T) {
 // command that clears it.
 func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 	now := time.Now()
+	ownRegistry(t)
 	repo, release := overviewFixture(t, now)
 	defer release()
 	overviewCloudFactory(t, now)
@@ -297,6 +313,7 @@ func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 // disagree.
 func TestTheBareOverviewJSONEmitsTheSameModel(t *testing.T) {
 	now := time.Now()
+	ownRegistry(t)
 	repo, release := overviewFixture(t, now)
 	defer release()
 	overviewCloudFactory(t, now)
@@ -394,6 +411,7 @@ func TestTheBareOverviewJSONEmitsTheSameModel(t *testing.T) {
 // cloud runs exist".
 func TestTheBareOverviewWithNoRuns(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	ownRegistry(t)
 	repo := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
@@ -440,4 +458,178 @@ func lineOf(out, runID string) string {
 		}
 	}
 	return ""
+}
+
+// overviewLiveRunFixture writes the shape the operator's machine actually
+// holds while a run is live (tick 9ss): TWO checkouts of one origin — the
+// one the run works in and the one the operator glances at — where the
+// run's durable state lives ONLY on the epic/<id> branch, committed by the
+// run-state store's plumbing exactly as a run commits it (no working tree
+// ever holds it), its feed and pidfile live only in the working checkout,
+// and the machine's run registry names the working checkout. The operator's
+// checkout — on main — holds nothing of the run at all.
+//
+// The fixture is the defect's own shape: `localRunIDs` of the operator's
+// checkout answers nothing (its working tree has no .ticfac/runs/epic-lve),
+// and a probe with repo=the-operator's-checkout answers not_running (its
+// tree has no pidfile either). Only the registry names the run, and only
+// the registered repo can read it live.
+func overviewLiveRunFixture(t *testing.T, now time.Time) (working, operator string, release func()) {
+	t.Helper()
+	root := t.TempDir()
+	bare := filepath.Join(root, "origin.git")
+	seed := filepath.Join(root, "seed")
+	working = filepath.Join(root, "working")
+	operator = filepath.Join(root, "operator")
+	git := func(dir string, args ...string) {
+		t.Helper()
+		execTestCmd(t, dir, "git", args...)
+	}
+	git(root, "init", "--quiet", "--bare", "-b", "main", bare)
+	git(root, "init", "--quiet", "-b", "epic/lve", seed)
+	if err := os.WriteFile(filepath.Join(seed, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git(seed, "add", "-A")
+	git(seed, "-c", "user.email=overview@example.com", "-c", "user.name=overview test",
+		"commit", "--quiet", "-m", "seed")
+	// main beside the integration branch, so both clones check something
+	// out and hold a working tree the run's state must never appear in.
+	git(seed, "branch", "main")
+	git(seed, "push", "--quiet", bare, "epic/lve", "main")
+	git(root, "clone", "--quiet", bare, working)
+	git(root, "clone", "--quiet", bare, operator)
+
+	// The run's durable state, as its own orchestrator commits it: through
+	// the run-state store, whose plumbing lands the checkpoint on
+	// refs/heads/epic/lve on origin and never touches a working tree.
+	store, err := runstate.Open(runstate.Options{
+		Repo: working, Remote: "origin", Branch: "epic/lve", RunID: "epic-lve",
+	})
+	if err != nil {
+		t.Fatalf("open the run's state store: %v", err)
+	}
+	one, executor := 1, "local-subprocess"
+	if outcome, err := store.PutCheckpoint(runstate.Checkpoint{
+		RunID: "epic-lve", EpicID: "lve",
+		State:  runstate.StateRunning,
+		Reason: "t1 is dispatched",
+		Ticks:  []runstate.TickState{{TickID: "t1", State: "dispatched", Attempt: one}},
+		Provenance: runstate.Provenance{
+			RunID:     "epic-lve",
+			SourceRef: "refs/heads/epic/lve",
+			SourceSHA: "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+			Phase:     runstate.PhaseWorker,
+			Executor:  &executor,
+		},
+	}); err != nil || !outcome.EffectPermitted() {
+		t.Fatalf("put the run's checkpoint on epic/lve: outcome %v, err %v", outcome, err)
+	}
+
+	// The feed, in the checkout the run works in — exhaust, never pushed.
+	feed := runfeed.Open(working, "epic-lve")
+	if err := feed.Append(runfeed.NewEvent(now.Add(-10*time.Minute), "epic-lve", "t1", &one,
+		reconcile.StageDispatched, "t1 try 1 dispatched")); err != nil {
+		t.Fatalf("append the run's dispatched line: %v", err)
+	}
+
+	// The live driver: this process claims the run IN THE WORKING CHECKOUT,
+	// which writes its pidfile there and registers that checkout on the
+	// machine — the one registration the overview must read the run
+	// through.
+	life, err := runlife.Claim(working, "epic-lve")
+	if err != nil {
+		t.Fatalf("claim the live run in its working checkout: %v", err)
+	}
+	release = func() { life.Release("overview test") }
+
+	// The fixture's own honesty: state only on epic/<id> — NEITHER checkout
+	// holds a run directory in its working tree.
+	for _, checkout := range []string{working, operator} {
+		if _, err := os.Stat(filepath.Join(checkout, runstate.Root, "runs")); err == nil {
+			t.Fatalf("%s holds a .ticfac/runs directory in its working tree: the fixture must hold the run's state only on epic/lve", checkout)
+		}
+	}
+	return working, operator, release
+}
+
+// TestTheBareOverviewListsALiveRunItsCheckoutHoldsNothingOf: the machine's
+// run registry, not the checkout's working tree, is what names a LIVE local
+// run (tick 9ss). A run commits its durable state by plumbing to
+// epic/<id> and never touches a working tree, so the checkout the bare
+// `ticfac` runs in — the operator's, on main — may hold nothing of it: no
+// run directory, no records, no pidfile. The listing must enumerate the
+// registry's runs, answer each one IN THE REPO ITS REGISTRATION NAMES, and
+// so read the run RUNNING — never missing, and never dead from a probe
+// taken in a checkout that was never the run's.
+func TestTheBareOverviewListsALiveRunItsCheckoutHoldsNothingOf(t *testing.T) {
+	now := time.Now()
+	// No factory on this machine's home: the half this test is about is
+	// the local one, and the operator's real factory must never be asked
+	// from a test.
+	t.Setenv("HOME", t.TempDir())
+	ownRegistry(t)
+	working, operator, release := overviewLiveRunFixture(t, now)
+	defer release()
+	fakeOverviewGraph(t)
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", operator}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+
+	// The live run IS listed — from the operator's checkout that holds
+	// nothing of it. Before the fix this was the defect's first half: the
+	// listing read only <cwd>/.ticfac/runs, which the run never writes.
+	line := lineOf(out, "epic-lve")
+	if line == "" {
+		t.Fatalf("the live run is not listed from the operator's checkout:\n%s", out)
+	}
+
+	// And it reads RUNNING — the registered checkout's own probe, the
+	// defect's second half: before the fix, a probe with repo=cwd answered
+	// not_running in a checkout that was never the run's.
+	if !strings.Contains(line, "running") {
+		t.Errorf("the live run's line reads %q, want running", line)
+	}
+	if strings.Contains(line, "held") || strings.Contains(line, "clear with:") {
+		t.Errorf("a live run in another checkout claims a person's attention: %q", line)
+	}
+
+	// --json says the same: the entry's model is the REGISTERED checkout's
+	// — alive there, its records read from the epic/<id> branch the run
+	// plumbs to, never degraded to the empty checkout the command ran in.
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run([]string{"--repo", operator, "--json"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview --json exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	var doc overviewModel
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("the overview JSON does not decode: %v\n%s", err, stdout.String())
+	}
+	var live *overviewRun
+	for i := range doc.Runs {
+		if doc.Runs[i].RunID == "epic-lve" {
+			live = &doc.Runs[i]
+		}
+	}
+	if live == nil {
+		t.Fatalf("the live run is not in the overview JSON:\n%s", stdout.String())
+	}
+	if live.State != overviewStateRunning || !live.Model.Liveness.Alive {
+		t.Errorf("the live run's entry reads state %q alive %v: the probe must be taken in the registered repo %s",
+			live.State, live.Model.Liveness.Alive, working)
+	}
+	if live.EpicID != "lve" || live.Host != statusmodel.HostLocal {
+		t.Errorf("the live run's entry reads epic %q host %q", live.EpicID, live.Host)
+	}
+	for _, name := range live.Model.Degraded {
+		if name == "run-state" {
+			t.Errorf("the live run's model could not read the run's records: its state is on epic/lve, and the model must read it from there — degraded %v", live.Model.Degraded)
+		}
+	}
 }
