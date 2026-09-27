@@ -337,7 +337,7 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 		// already have SETTLED — its work is on the branch above, and the
 		// finish from the branch is the honest answer to that, not a restart.
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
-			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
+			if remote := r.settledJobHead(branch); remote != "" {
 				merged, ferr := r.finishResolveFromBranch(resolveMarker, head, epicHead, conflict, remote)
 				if ferr != nil {
 					return "", nil, false, ferr
@@ -483,6 +483,9 @@ func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.J
 	r.preserveAttemptWork(marker)
 
 	handed := carried != "" && collected.Verdict == subprocess.VerdictNoCommits
+	if handed {
+		r.preserveHandedWork(marker, carried)
+	}
 	switch {
 	case collected.Verdict != subprocess.VerdictReadyToMerge && !handed:
 		return collected, failed("it answered %s and the run's verdict is %s (%s): %s. The tick is neither "+
@@ -727,10 +730,11 @@ func (r *Reconciler) resolveJobSpec(d Dispatch, marker attemptHandle, others []s
 func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker attemptHandle,
 	conflict *mergeConflict) (string, error) {
 
-	// The resolve's head must be durable on the remote before the mint: a
-	// crash between here and the push of the merge must find the resolution
-	// on the branch, where the finish-from-the-branch path reads it.
-	if err := r.git.fetch(marker.WriteRef); err != nil {
+	// The resolve's head is durable on the remote before the mint (collect
+	// preserved it): a crash between here and the push of the merge finds the
+	// resolution on a branch, where the finish-from-the-branch path reads it.
+	// The branch is fetched only for a head this checkout does not have.
+	if err := r.haveCommit(resolveHead, marker.WriteRef); err != nil {
 		return "", fmt.Errorf("fetch the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
 	}
 	if _, err := r.git.resolve(resolveHead); err != nil {
