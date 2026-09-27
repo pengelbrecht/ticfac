@@ -119,24 +119,26 @@ func TestTheEvacuationFlushesInFlightWorkAndWritesTheCheckpoint(t *testing.T) {
 	lines := r.Evacuate("terminated", 30*time.Second)
 	account := strings.Join(lines, "\n")
 
-	// The work: uncommitted when the flush found it, committed by the
-	// snapshot and pushed to origin. The ref is the attempt's write ref, and
-	// the wait is for the flush's OWN commit on it — the supervisor's timer
-	// may have pushed the ref at the attempt's base, and only the snapshot
-	// says the work itself survived.
-	ref := "refs/heads/ticfac/run-r-fixture/tick-a1/attempt-1"
-	var sha string
-	waitUntil(t, 10*time.Second, "the flush's snapshot on origin", func() bool {
-		sha = originRefSHA(t, f.Repo.Origin, ref)
-		if sha == "" {
-			return false
-		}
-		msg := mustRun(t, f.Repo.Origin, "git", "log", "--format=%s", "-n", "1", sha)
-		return strings.Contains(msg, "evacuation snapshot")
-	})
+	// The work: uncommitted when the flush found it, snapshotted and pushed
+	// to origin on the attempt's WIP ref — never on its branch, which only
+	// the worker writes (epic-2jn): a worker that outlived the flush must not
+	// find a commit it never made under it.
+	ref := "refs/ticfac/wip/run-r-fixture/tick-a1/attempt-1"
+	sha := originRefSHA(t, f.Repo.Origin, ref)
+	if sha == "" {
+		t.Fatalf("origin does not hold %s: the flush never pushed the uncommitted work\n%s", ref, account)
+	}
 	wip := mustRun(t, f.Repo.Origin, "git", "show", sha+":wip-a1.txt")
 	if !strings.Contains(wip, "uncommitted work of a1") {
 		t.Errorf("the pushed snapshot does not carry the uncommitted work: %q", wip)
+	}
+	branch := "refs/heads/ticfac/run-r-fixture/tick-a1/attempt-1"
+	if head := originRefSHA(t, f.Repo.Origin, branch); head != "" {
+		msg := mustRun(t, f.Repo.Origin, "git", "log", "--format=%s", "-n", "1", head)
+		if strings.Contains(msg, "evacuation snapshot") {
+			t.Errorf("the flush committed its snapshot on the attempt branch (%q): a live worker's result "+
+				"can no longer fast-forward it", strings.TrimSpace(msg))
+		}
 	}
 
 	// The checkpoint: the run stopped, on this signal, resumable — with the

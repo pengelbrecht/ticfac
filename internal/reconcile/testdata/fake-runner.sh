@@ -744,6 +744,28 @@ wedged-a2)
 		report
 	fi
 	;;
+evac-live)
+	# epic-2jn's shape: a1's worker writes real work, commits nothing, and
+	# waits — through the orchestrator's SIGTERM, which a local worker is a
+	# separate process from and survives — until $EVAC_GO appears. Then it
+	# finishes the way the agent on 2jn did: a commit it finds under it that
+	# it never made (a flush's snapshot) is not its own, so it takes the
+	# commit back into its index (reset --soft) and commits its result itself,
+	# on the head it knew. Every other tick behaves like the report mode.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_ATTEMPT" = "1" ]; then
+		printf 'uncommitted work of %s\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/wip-${TICFAC_TICK}.txt"
+		waited=0
+		while [ ! -e "${EVAC_GO:-/nonexistent}" ] && [ "$waited" -lt 1200 ]; do
+			sleep 0.1
+			waited=$((waited + 1))
+		done
+		if git -C "$TICFAC_WORKTREE" log -1 --format=%s | grep -q 'evacuation snapshot'; then
+			git -C "$TICFAC_WORKTREE" reset -q --soft HEAD~1 >/dev/null 2>&1
+		fi
+	fi
+	commit
+	report
+	;;
 wallwip)
 	# pbb's shape: attempt 1 of a1 does real work in the tree, commits
 	# nothing and stays alive past the bound, so the wall clock stops it

@@ -225,6 +225,15 @@ func (e *Executor) PurgeState(h *JobHandle) error {
 				return fmt.Errorf("delete the preserved-work ref %s: %w", snap.Ref, derr)
 			}
 		}
+		// The SIGTERM flush's snapshot names the same kind of ref, recorded
+		// under a name of its own; it retires with the record for the same
+		// reason.
+		var evac WIPSnapshot
+		if st.readJSON(FileEvacuationSnapshot, &evac) == nil && evac.Ref != "" {
+			if _, derr := git(record.Repo, "update-ref", "-d", evac.Ref); derr != nil {
+				return fmt.Errorf("delete the evacuation-snapshot ref %s: %w", evac.Ref, derr)
+			}
+		}
 	}
 	return os.RemoveAll(local.State)
 }
