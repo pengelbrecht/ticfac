@@ -1,6 +1,7 @@
 package runconfig
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -48,48 +49,48 @@ func TestDocExamplesResolveAndCompile(t *testing.T) {
 			toml: docExample1, role: "implement", tier: TierStrong,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "claude", wantModel: "opus", wantEffort: EffortHigh,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "high"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "high"},
 		},
 		{
 			name: "ex1 implement/balanced — tier sets only effort, inherits model sonnet",
 			toml: docExample1, role: "implement", tier: TierBalanced,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "claude", wantModel: "sonnet", wantEffort: EffortMedium,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "sonnet", "--effort", "medium"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet", "--effort", "medium"},
 		},
 		{
 			name: "ex1 implement/economy",
 			toml: docExample1, role: "implement", tier: TierEconomy,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "claude", wantModel: "haiku", wantEffort: EffortLow,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "haiku", "--effort", "low"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "haiku", "--effort", "low"},
 		},
 		{
 			name: "ex1 implement/frontier — role has no frontier tier, role values stand",
 			toml: docExample1, role: "implement", tier: TierFrontier,
 			wantResolvedRole: "implement", wantTierApplied: false,
 			wantKind: "claude", wantModel: "sonnet", wantEffort: EffortMedium,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "sonnet", "--effort", "medium"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet", "--effort", "medium"},
 		},
 		{
 			name: "ex1 review/frontier — same model, more effort",
 			toml: docExample1, role: "review", tier: TierFrontier,
 			wantResolvedRole: "review", wantTierApplied: true,
 			wantKind: "claude", wantModel: "opus", wantEffort: EffortMax,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "max"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "max"},
 		},
 		{
 			name: "ex1 closeout — no effort means the kind's own default, so no flag",
 			toml: docExample1, role: "closeout", tier: "",
 			wantResolvedRole: "closeout", wantKind: "claude", wantModel: "sonnet",
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "sonnet"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet"},
 		},
 		{
 			name: "ex1 unlisted role falls back to implement",
 			toml: docExample1, role: "docs", tier: TierStrong,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "claude", wantModel: "opus", wantEffort: EffortHigh,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "high"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "high"},
 		},
 
 		// --- Example 2: cross-vendor ---------------------------------------
@@ -112,7 +113,7 @@ func TestDocExamplesResolveAndCompile(t *testing.T) {
 			toml: docExample2, role: "review", tier: TierFrontier,
 			wantResolvedRole: "review", wantTierApplied: true,
 			wantKind: "claude", wantModel: "opus", wantEffort: EffortMax,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "max"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "max"},
 		},
 
 		// --- Example 3: forced harness, no model ---------------------------
@@ -176,7 +177,7 @@ func TestDocExamplesResolveAndCompile(t *testing.T) {
 			name: "ex5 review — crosses back to claude, which does have effort",
 			toml: docExample5, role: "review", tier: "",
 			wantResolvedRole: "review", wantKind: "claude", wantModel: "opus", wantEffort: EffortHigh,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "high"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "high"},
 		},
 
 		// --- The tier-overrides-kind snippet -------------------------------
@@ -185,7 +186,7 @@ func TestDocExamplesResolveAndCompile(t *testing.T) {
 			toml: docTierKindOverride, role: "implement", tier: TierEconomy,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "claude", wantModel: "haiku", wantEffort: EffortMedium,
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "haiku", "--effort", "medium"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "haiku", "--effort", "medium"},
 		},
 	}
 
@@ -266,15 +267,15 @@ args = []
 			tier: TierStrong, wantArgs: []string{"--add-dir", "/tier"},
 			// Order is fixed: full-auto template → compiled model/effort →
 			// args verbatim. The tier's args supersede the role's wholesale.
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "medium", "--add-dir", "/tier"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "medium", "--add-dir", "/tier"},
 		},
 		{
 			tier: TierBalanced, wantArgs: []string{"--add-dir", "/role"},
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "sonnet", "--effort", "high", "--add-dir", "/role"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet", "--effort", "high", "--add-dir", "/role"},
 		},
 		{
 			tier: TierEconomy, wantArgs: []string{},
-			wantArgv: []string{"--permission-mode", "bypassPermissions", "--model", "sonnet", "--effort", "medium"},
+			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet", "--effort", "medium"},
 		},
 	}
 	for _, tc := range tests {
@@ -306,8 +307,41 @@ func TestFullAutoFalseOmitsTheTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SpawnFor: %v", err)
 	}
-	if !equalArgs(sp.Argv, []string{"--model", "sonnet"}) {
-		t.Errorf("Argv = %q, want just the model flag", sp.Argv)
+	// The headless settings are not an approval flag, so they stay (epic-2jn vqc).
+	if !equalArgs(sp.Argv, []string{"--settings", ClaudeHeadlessSettings, "--model", "sonnet"}) {
+		t.Errorf("Argv = %q, want the headless settings and the model flag only", sp.Argv)
+	}
+}
+
+// epic-2jn vqc (2026-09-27): a claude worker backgrounded the gate and ended
+// its turn to wait for it. Every claude spawn carries the settings that take
+// background tasks away, and the JSON is the switch Claude Code documents.
+func TestEveryClaudeSpawnRunsWithoutBackgroundTasks(t *testing.T) {
+	cfg, err := Parse([]byte("[roles.implement]\nkind = \"claude\"\nmodel = \"opus\"\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	sp, err := cfg.SpawnFor(RoleImplement, "", SpawnContext{})
+	if err != nil {
+		t.Fatalf("SpawnFor: %v", err)
+	}
+	at := -1
+	for i, arg := range sp.Argv {
+		if arg == "--settings" {
+			at = i
+		}
+	}
+	if at < 0 || at+1 >= len(sp.Argv) {
+		t.Fatalf("the claude argv carries no --settings: %q", sp.Argv)
+	}
+	var settings struct {
+		Env map[string]string `json:"env"`
+	}
+	if err := json.Unmarshal([]byte(sp.Argv[at+1]), &settings); err != nil {
+		t.Fatalf("the --settings value is not JSON: %v", err)
+	}
+	if settings.Env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] != "1" {
+		t.Errorf("the settings do not disable background tasks: %s", sp.Argv[at+1])
 	}
 }
 
@@ -409,7 +443,7 @@ func TestKindsWithoutExtrasIgnoreTheSpawnContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	want := []string{"--permission-mode", "bypassPermissions", "--model", "sonnet", "--effort", "high"}
+	want := []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "sonnet", "--effort", "high"}
 
 	// With a context…
 	sp, err := cfg.SpawnFor(RoleImplement, "", testEnv)

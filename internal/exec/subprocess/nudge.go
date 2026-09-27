@@ -47,19 +47,34 @@ func IsNudge(o Observation) bool {
 	return o.Kind == ObsStarted && strings.HasPrefix(o.Detail, nudgeDetailPrefix)
 }
 
-// headlessLine is what every prompt says about the turn ending, because the
+// HeadlessLine is what every prompt says about the turn ending, because the
 // model cannot see that it runs in print mode and every interactive habit it
 // has says a background task will call back.
-const headlessLine = "You run headless: ending your turn ends the job. Run commands in the foreground and wait " +
+const HeadlessLine = "You run headless: ending your turn ends the job. Run commands in the foreground and wait " +
 	"for them; never end your turn while waiting on a background task."
 
 // nudgePrompt is what a runner that resumes its own session is told. It is
 // short on purpose: the session still holds the whole job.
 func nudgePrompt(record *attemptRecord) string {
+	return NudgePrompt(record.Branch, record.ResultPath)
+}
+
+// NudgePrompt is the re-prompt every executor sends a worker that ended its
+// turn without its report — the herdr executor types it into the agent's own
+// pane (herdr/nudge.go).
+func NudgePrompt(branch, resultPath string) string {
 	return fmt.Sprintf("You ended your turn without writing your report. %s\n\n"+
 		"Finish the work you were doing: if you were waiting on a command, run it again in the foreground and "+
 		"wait for it. Commit on %s, then write your report to this exact absolute path, ending with its STATUS "+
-		"line:\n\n    %s\n", headlessLine, record.Branch, record.ResultPath)
+		"line:\n\n    %s\n", HeadlessLine, branch, resultPath)
+}
+
+// NudgeDetail is the observation a nudge is recorded as, the same sentence on
+// every executor so the feed reads one shape: nudge n of MaxNudges, what was
+// missing, and how the worker was re-prompted.
+func NudgeDetail(n int, what, resultPath, how string) string {
+	return fmt.Sprintf("%snudge %d of %d: %s without writing its report at %s, and a headless worker that ends "+
+		"its turn early ends the job; %s", nudgeDetailPrefix, n, MaxNudges, what, resultPath, how)
 }
 
 // freshNudgeSection is appended to the full prompt for a runner with no
