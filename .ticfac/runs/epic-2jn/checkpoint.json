@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 126,
-  "state": "collecting",
-  "reason": "collecting i1r attempt 13",
-  "updated_at": "2026-09-27T09:03:40Z",
+  "sequence": 127,
+  "state": "failed",
+  "reason": "i1r try 1 (run dispatch #13) reported a findings block this reconciler cannot read: finding.target \"pengelbrecht/ticks (contracts bundle)\" is not an owner/name repository. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
+  "updated_at": "2026-09-27T09:03:44Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "i1r",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 13
     },
     {
