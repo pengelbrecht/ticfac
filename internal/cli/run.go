@@ -149,11 +149,11 @@ this command starts is that command, in the background.
 
 With --cloud, the same command drives the factory instead of this machine:
 it submits the epic to the configured factory and attaches the same live
-view to the cloud run, and running it again attaches to a live cloud run or
-resumes a finished one with a new submission. The herdr detection, the
-profile set and the wall clock drive LOCAL jobs, so they do not apply; the
-expert ` + "`ticfac cloud ...`" + ` commands keep the rest (a queued submission, a
-budget ceiling, a hard stop).`,
+view to the cloud run, and running it again attaches to this project's live
+cloud run or resumes a finished or frozen one with a new submission. The
+herdr detection, the profile set and the wall clock drive LOCAL jobs, so
+they do not apply; the expert ` + "`ticfac cloud ...`" + ` commands keep the rest (a
+queued submission, a budget ceiling, a hard stop).`,
 	}
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fl := defineRunFlags(fs)

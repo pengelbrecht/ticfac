@@ -671,3 +671,121 @@ func TestTheBareOverviewListsALiveRunItsCheckoutHoldsNothingOf(t *testing.T) {
 		}
 	}
 }
+
+// TestTheBareOverviewDoesNotReadThisRepoRecordsForAnotherProjectsRun: a
+// factory run of ANOTHER project is listed — the glance is the factory's —
+// but this checkout's records, tracker and PR are never read for it (tick
+// nyi). Before the fix the row for another project's run for an epic id
+// this repo also holds read THIS repo's records: a foreign run rendered
+// "held for a person" by this repo's own untriaged finding, with a settle
+// command addressed at an epic the foreign project's run never touched.
+func TestTheBareOverviewDoesNotReadThisRepoRecordsForAnotherProjectsRun(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	foreign := cloudRunIDOf("e777")
+	now := time.Now()
+
+	// This repo's own epic1 records — the exact shape the misattribution
+	// reads: a failed checkpoint and an untriaged finding beside it. A
+	// checkout of THIS project would (and should) render its own run held;
+	// the foreign factory run for the same epic id must not borrow that.
+	runDir := filepath.Join(repo, ".ticfac", "runs", "epic-epic1")
+	if err := os.MkdirAll(filepath.Join(runDir, "findings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := json.MarshalIndent(map[string]any{
+		"schema_version": 3, "run_id": "epic-epic1", "epic_id": "epic1",
+		"sequence": 1, "state": "failed", "reason": "attempt 1 of t1 was struck out",
+		"updated_at": now.Add(-time.Hour).UTC().Format(time.RFC3339),
+		"ticks":      []any{map[string]any{"tick_id": "t1", "state": "dispatched", "attempt": 1}},
+		"provenance": map[string]any{
+			"run_id": "epic-epic1", "tick_id": "", "attempt": 0,
+			"source_ref": "refs/heads/epic/epic1", "source_sha": "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+			"integration_ref": nil, "phase": "worker", "executor": "local-subprocess",
+			"workspace_id": nil, "backend": nil, "substrate_protocol": nil, "substrate_server_version": nil,
+			"role": "implement-tick", "tier": "strong", "profile_digest": nil,
+			"model": "@cf/zai-org/glm-5.3", "context_manifest_digest": nil,
+		},
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, "checkpoint.json"), checkpoint, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	finding, err := json.MarshalIndent(testDraftFinding("f00dc0de", ""), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the finding: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runDir, "findings", "f00dc0de.json"), finding, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The factory: another project's run for the same epic id, failed. Its
+	// feed carries nothing but its own terminal word, so the row has
+	// nothing to say but the record's — which is all it should say.
+	feedText := strings.Join([]string{
+		`{"schema_version":1,"at":"` + now.Add(-30*time.Minute).UTC().Format(time.RFC3339) +
+			`","run_id":"` + foreign + `","tick_id":null,"attempt":null,"stage":"run_finished","detail":"failed: the instance was stopped"}`,
+		"",
+	}, "\n")
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": foreign, "epic": "epic1", "project": "other/repo", "state": "failed",
+			}}}
+		case request.Path == "/api/runs/"+foreign:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": foreign, "epic": "epic1", "project": "other/repo", "state": "failed",
+			}}
+		case request.Path == "/api/runs/"+foreign+"/events":
+			return 200, map[string]any{
+				"run_id": foreign, "state": "failed",
+				"text": feedText, "bytes": len(feedText), "total_bytes": len(feedText),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	fakeOverviewGraph(t)
+	ownRegistry(t)
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo, "--json"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			exitSuccess, code, stdout.String(), stderr.String())
+	}
+	var doc overviewModel
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("the overview JSON does not decode: %v\n%s", err, stdout.String())
+	}
+	var row *overviewRun
+	for i := range doc.Runs {
+		if doc.Runs[i].RunID == foreign {
+			row = &doc.Runs[i]
+		}
+	}
+	if row == nil {
+		t.Fatalf("the foreign cloud run is not listed:\n%s", stdout.String())
+	}
+	if row.State != overviewStateFailed {
+		t.Errorf("the foreign run's entry reads state %q, want failed: it must never borrow this repo's records", row.State)
+	}
+	if row.Project != "other/repo" {
+		t.Errorf("the foreign run's entry carries project %q, want other/repo — a row a reader must be able to tell from this checkout's own", row.Project)
+	}
+	if row.ClearWith != nil {
+		t.Errorf("the foreign run's entry names the command %q — a command this checkout cannot run for another project's run", *row.ClearWith)
+	}
+	for _, kind := range []string{statusmodel.WaitFinding, statusmodel.WaitHeldForPerson} {
+		if row.Model.WaitsOn != nil && row.Model.WaitsOn.Kind == kind {
+			t.Errorf("the foreign run's model waits on %s — this repo's own attention, read for a run whose records live in another project: %+v", kind, row.Model.WaitsOn)
+		}
+	}
+	for _, a := range row.Model.Attention {
+		if a.NeedsPerson {
+			t.Errorf("the foreign run claims a person's attention from this repo's records: %+v", a)
+		}
+	}
+}

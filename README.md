@@ -101,8 +101,8 @@ than maintained beside it:
 
 | command | what it does |
 |---|---|
-| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`) |
-| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`); with `--cloud` the same verbs, view and triage drive your cloud factory: submit the epic, attach the same live view, run it again to attach or resume |
+| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`); another project's cloud runs are listed from their own record and feed alone — this repo's records, tracker and PR are never read for them, and their rows name no command |
+| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`); with `--cloud` the same verbs, view and triage drive your cloud factory: submit the epic, attach the same live view, run it again to attach to this project's run or resume a finished or frozen one |
 | `ticfac run-epic <epic-id>` | run one epic through the reconciler — the foreground form scripts drive; `ticfac run` is this command, started detached with the defaults decided |
 | `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the guessed close-out rule — `pr` when origin names a GitHub repository, `none` otherwise; `--closeout` overrides (refuses to overwrite) |
 | `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
@@ -110,7 +110,7 @@ than maintained beside it:
 | `ticfac findings <epic-id>` | list the worker findings drafted for triage |
 | `ticfac finding <epic-id> <key>` | triage one drafted finding |
 | `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
-| `ticfac status <run-id>` | is the run alive, and when did it last say anything |
+| `ticfac status <run-id>` | is the run alive, and when did it last say anything; an epic id with no run here answers the run the factory holds for this checkout's project |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
 | `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person |
 | `ticfac version` | report this build and the contract bundle it serves |

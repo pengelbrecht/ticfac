@@ -235,12 +235,41 @@ func epicHintOf(runID string) string {
 	return ""
 }
 
+// cloudRecordBelongsToRepo is whether a factory run record is one THIS
+// checkout's project can claim — the rule that decides whether this repo's
+// records, tracker and PR may be read for it (tick nyi). A record that names
+// a different project than the one this checkout mirrors is never this
+// repo's to read. Anything less — a checkout that names no project (no
+// origin to mirror), a record that carries none — attributes the run to
+// nobody else, and the local evidence this checkout holds is the best answer
+// there is, so the read stands: the defect is the misattribution, not the
+// attempt.
+func cloudRecordBelongsToRepo(repoProject, recordProject string) bool {
+	repoProject = strings.TrimSpace(repoProject)
+	recordProject = strings.TrimSpace(recordProject)
+	if repoProject == "" || recordProject == "" {
+		return true
+	}
+	return repoProject == recordProject
+}
+
 // cloudStatusModel gathers everything a CLOUD run's model reads and builds
 // it. A cloud run's workers are not on this machine: the census is not
 // taken, and the model's workers field states null — "cannot be counted
 // here", which is a different claim from "none stand". Its records live on
 // origin like any run's; its feed is the factory's own stream.
-func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID string, record cloudRunRecord, liveness cloudLiveness, warn io.Writer, gather modelGatherers) statusmodel.Model {
+//
+// The records, the tracker and the forge are read ONLY for a run this
+// checkout's project can claim (tick nyi): a factory run of ANOTHER project
+// — the same factory may host several — has its records on that project's
+// origin, its ticks in that project's tracker and its PR against that
+// project's base, none of which this checkout can read. Reading this repo's
+// for it answers questions about the wrong epic: this repo's own untriaged
+// findings would render a foreign run "held for a person". The model says
+// what it could not read, in `degraded`, and the entry-level surfaces hold
+// the one rule that matters there: no row for another project's run names a
+// command this checkout could run for it.
+func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID string, record cloudRunRecord, liveness cloudLiveness, warn io.Writer, gather modelGatherers, ours bool) statusmodel.Model {
 	now := time.Now()
 	degraded := []string{}
 
@@ -260,16 +289,27 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 	if epicID != "" {
 		recordsID = "epic-" + epicID
 	}
-	records, err := statusRecords(repo, recordsID, epicID)
-	if err != nil {
-		records = statusmodel.Records{}
-		degraded = append(degraded, "run-state")
+	var records statusmodel.Records
+	if ours {
+		if read, err := statusRecords(repo, recordsID, epicID); err == nil {
+			records = read
+		} else {
+			degraded = append(degraded, "run-state")
+		}
+	} else {
+		// Another project's run: its records live on that project's origin,
+		// which this checkout cannot read — named, never guessed at from this
+		// repo's own records for an epic id it happens to share.
+		degraded = append(degraded, "foreign-run")
 	}
 	if epicID == "" {
 		epicID = epicIDOf(runID, records)
 	}
 
-	graph := gather.graph(ctx, repo, epicID)
+	var graph *tk.Graph
+	if ours {
+		graph = gather.graph(ctx, repo, epicID)
+	}
 	if graph == nil {
 		degraded = append(degraded, "tracker")
 	}
@@ -284,9 +324,13 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		degraded = append(degraded, "feed")
 	}
 
-	ci, ciErr := gather.ci(ctx, repo, epicID)
-	if ciErr != nil {
-		degraded = append(degraded, "forge")
+	var ci *statusmodel.CIInput
+	if ours {
+		input, ciErr := gather.ci(ctx, repo, epicID)
+		if ciErr != nil {
+			degraded = append(degraded, "forge")
+		}
+		ci = input
 	}
 
 	return statusmodel.Build(statusmodel.Sources{

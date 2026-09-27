@@ -25,10 +25,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -160,7 +164,7 @@ func TestRunCloudAttachesALiveRunWithoutResubmitting(t *testing.T) {
 		switch {
 		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
 			return 200, map[string]any{"runs": []any{map[string]any{
-				"run_id": live, "epic": "epic1", "state": "running", "started_at": "2026-09-27T10:00:00Z",
+				"run_id": live, "epic": "epic1", "project": "acme/project", "state": "running", "started_at": "2026-09-27T10:00:00Z",
 			}}}
 		case request.Method == http.MethodPost:
 			t.Error("a live cloud run was submitted to again")
@@ -203,7 +207,7 @@ func TestRunCloudResumesAFinishedRunWithANewSubmission(t *testing.T) {
 		switch {
 		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
 			return 200, map[string]any{"runs": []any{map[string]any{
-				"run_id": finished, "epic": "epic1", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
+				"run_id": finished, "epic": "epic1", "project": "acme/project", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
 			}}}
 		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
 			return http.StatusCreated, map[string]any{
@@ -332,7 +336,7 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 		switch {
 		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
 			return 200, map[string]any{"runs": []any{map[string]any{
-				"run_id": finished, "epic": "epic1", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
+				"run_id": finished, "epic": "epic1", "project": "acme/project", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
 			}}}
 		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
 			return http.StatusCreated, map[string]any{
@@ -495,7 +499,7 @@ func TestRunCloudJSONAnswersWithTheRunDocument(t *testing.T) {
 	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 		if request.Method == http.MethodGet && request.Path == cloudIndexPath {
 			return 200, map[string]any{"runs": []any{map[string]any{
-				"run_id": live, "epic": "epic1", "state": "running", "started_at": "2026-09-27T10:00:00Z",
+				"run_id": live, "epic": "epic1", "project": "acme/project", "state": "running", "started_at": "2026-09-27T10:00:00Z",
 			}}}
 		}
 		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
@@ -529,5 +533,175 @@ func TestRunCloudJSONAnswersWithTheRunDocument(t *testing.T) {
 	if !strings.Contains(stderr.String(), "cloud run "+live+" is alive") ||
 		!strings.Contains(stderr.String(), "(attach seam) attached to cloud run "+live) {
 		t.Fatalf("the prose and the attached view did not go to stderr:\n%s", stderr.String())
+	}
+}
+
+// configureCloudflareWorkflows wires the operator's Cloudflare credentials
+// into the HOME configureCloudFactory already made, and answers the
+// Workflows API through the transport the supervisor tests use: the same
+// shape configureCloudflareAPI stands in cloud_supervisor_test.go, kept
+// separate because that helper also writes its own factory credentials,
+// which would clobber the endpoint this file's factories serve.
+func configureCloudflareWorkflows(t *testing.T, handler func(*http.Request) (int, string)) *[]string {
+	t.Helper()
+	config, err := credentials.LoadFrom(filepath.Join(os.Getenv("HOME"), credentials.FileName))
+	if err != nil {
+		t.Fatalf("load credentials: %v", err)
+	}
+	config.Set(credentials.KeyGatewayURL, "https://gateway.ai.cloudflare.com/v1/acct-test/ticks")
+	config.Set(credentials.KeyCloudflareAPIToken, "cfut_test")
+	if err := config.Save(); err != nil {
+		t.Fatalf("save credentials: %v", err)
+	}
+	var pathsMu sync.Mutex
+	paths := make([]string, 0, 2)
+	previous := cloudflareHTTPClient
+	cloudflareHTTPClient = &http.Client{Transport: cloudflareRoundTripper(func(r *http.Request) (*http.Response, error) {
+		pathsMu.Lock()
+		paths = append(paths, r.URL.Path)
+		pathsMu.Unlock()
+		status, body := handler(r)
+		return &http.Response{
+			StatusCode: status,
+			Status:     http.StatusText(status),
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    r,
+		}, nil
+	})}
+	t.Cleanup(func() { cloudflareHTTPClient = previous })
+	return &paths
+}
+
+// TestRunCloudAsksForThisProjectsRunOnly: the run the command attaches to is
+// THIS checkout's project's run, never another project's run for the same
+// epic id (tick nyi). The index is asked project-scoped — the factory's own
+// ?project= filter — and a record the index still named that is not this
+// project's is never attached to either: repo A's `run abc --cloud` must
+// start repo A's run even when repo B is running the same epic id.
+func TestRunCloudAsksForThisProjectsRunOnly(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	foreign, started := cloudRunIDOf("a111"), cloudRunIDOf("b222")
+
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			// The index answers the real factory's own shape: every
+			// project's runs when no project was named, only the named
+			// project's when one was. The foreign run answers the unfiltered
+			// ask so the assertion below can prove the ask was scoped.
+			if request.Query.Get("project") == "acme/project" {
+				return 200, map[string]any{"runs": []any{}}
+			}
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": foreign, "epic": "epic1", "project": "other/repo",
+				"state": "running", "started_at": "2026-09-27T10:00:00Z",
+			}}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{
+				"run": map[string]any{"run_id": started, "state": "starting"},
+			}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitSuccess {
+		t.Fatalf("exit %d starting this project's run: %s\n%s", code, stderr.String(), stdout.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
+		t.Fatalf("attached to %v, want the run the factory started (%s) — another project's run for the same epic id is never this checkout's run",
+			rec.runIDs, started)
+	}
+	if !strings.Contains(stdout.String(), "no cloud run for epic epic1") {
+		t.Fatalf("stdout does not say the epic is being started:\n%s", stdout.String())
+	}
+	// The ask itself was project-scoped: without the ?project= the fake
+	// serves the foreign run, so this assertion fails if the command ever
+	// stops naming the project the submission will carry.
+	var index *cloudFactoryRequest
+	for i := range *requests {
+		if (*requests)[i].Method == http.MethodGet && (*requests)[i].Path == cloudIndexPath {
+			index = &(*requests)[i]
+		}
+	}
+	if index == nil {
+		t.Fatal("the factory's run index was never read")
+	}
+	if got := index.Query.Get("project"); got != "acme/project" {
+		t.Errorf("the index was asked for project %q, want acme/project — the run the command attaches to must be this checkout's project's", got)
+	}
+}
+
+// TestRunCloudResumesARunWhoseRecordIsFrozenAtRunning: a record frozen at
+// `running` by a supervisor that never got to write its last word — its
+// Workflow instance errored — is not a live run, whatever the record claims,
+// and `run --cloud` must resume the epic with a new submission rather than
+// attaching to the dead one forever. The attach-from-resume decision consults
+// cloudRunLiveness, the same answer `ticfac status` gives, never the record
+// state alone.
+func TestRunCloudResumesARunWhoseRecordIsFrozenAtRunning(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	frozen, resumed := cloudRunIDOf("c333"), cloudRunIDOf("d444")
+
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": frozen, "epic": "epic1", "project": "acme/project",
+				"state": "running", "started_at": "2026-09-27T10:00:00Z",
+			}}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{
+				"run": map[string]any{"run_id": resumed, "state": "starting"},
+			}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	// The Workflow instance behind the frozen record, answered the way
+	// Cloudflare answered it the day the record froze (tick 2xm's own
+	// shape): errored, long dead, while the record still says running.
+	workflowPaths := configureCloudflareWorkflows(t, func(r *http.Request) (int, string) {
+		return 200, erroredInstance
+	})
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitSuccess {
+		t.Fatalf("exit %d resuming a frozen run: %s\n%s", code, stderr.String(), stdout.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != resumed {
+		t.Fatalf("attached to %v, want the new submission %s — a frozen `running` record must never be attached to",
+			rec.runIDs, resumed)
+	}
+	if !strings.Contains(stdout.String(), "cloud run "+frozen+" is not running") ||
+		!strings.Contains(stdout.String(), "resuming the epic as a new submission") {
+		t.Fatalf("stdout does not say the frozen run is being resumed:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "frozen at the last value") {
+		t.Fatalf("stdout does not name the record's disagreement with its dead instance:\n%s", stdout.String())
+	}
+	if len(*workflowPaths) != 1 || !strings.Contains((*workflowPaths)[0], frozen) {
+		t.Fatalf("the Workflow instance was asked %v, want the one read for %s", *workflowPaths, frozen)
+	}
+	var submissions int
+	for _, request := range *requests {
+		if request.Method == http.MethodPost {
+			submissions++
+			if request.Body["epic"] != "epic1" || request.Body["project"] != "acme/project" {
+				t.Errorf("the resubmission is epic %v project %v, want epic1 in acme/project",
+					request.Body["epic"], request.Body["project"])
+			}
+		}
+	}
+	if submissions != 1 {
+		t.Fatalf("%d submissions, want the one the resume is", submissions)
 	}
 }
