@@ -78,9 +78,10 @@ func newFactoryStatusCommand(stdout, stderr io.Writer) *cobra.Command {
 	check := fs.Bool("check", false, "exit nonzero when a configured credential is rejected")
 	githubAPI := fs.String("github-api-base", "", "override the GitHub API root (testing)")
 	cfAPIBase := fs.String("cloudflare-api-base", "", "override the Cloudflare API root (testing)")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.factory-status.v1): the whole credential ladder, each rung configured and live-checked")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runFactoryStatus(c.Context(), args, offline, check, githubAPI, cfAPIBase, stdout, stderr))
+		return codeToErr(runFactoryStatus(c.Context(), args, offline, check, githubAPI, cfAPIBase, asJSON, stdout, stderr))
 	}
 	return cmd
 }
@@ -116,9 +117,10 @@ dashboard keys
 	costInterval := fs.Int64("cost-interval", defaultFactoryDashboardCostMs, "how often to re-total AI Gateway spend, in milliseconds")
 	tailBytes := fs.Int("tail-bytes", defaultFactoryDashboardTailBytes, "how much of the harness output tail each frame reads")
 	noCost := fs.Bool("no-cost", false, "skip gateway cost telemetry entirely")
+	asJSON := fs.Bool("json", false, "refused: a live board redrawn in place is not a JSON document — `ticfac cloud status --json` is the one-shot answer")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runFactoryDashboard(c.Context(), args, project, interval, costInterval, tailBytes, noCost, stdout, stderr))
+		return codeToErr(runFactoryDashboard(c.Context(), args, project, interval, costInterval, tailBytes, noCost, asJSON, stdout, stderr))
 	}
 	return cmd
 }
@@ -166,12 +168,12 @@ dashboard flags:
   --no-cost                 skip gateway cost telemetry entirely
 `
 
-func runFactoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, stdout, stderr io.Writer) int {
-	err := factoryStatus(ctx, args, offline, check, githubAPI, cfAPIBase, stdout)
+func runFactoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, asJSON *bool, stdout, stderr io.Writer) int {
+	err := factoryStatus(ctx, args, offline, check, githubAPI, cfAPIBase, asJSON, stdout, stderr)
 	return reportCommand("factory status", err, stderr)
 }
 
-func factoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, stdout io.Writer) error {
+func factoryStatus(ctx context.Context, args []string, offline, check *bool, githubAPI, cfAPIBase *string, asJSON *bool, stdout, stderr io.Writer) error {
 	if len(args) != 0 {
 		return newExitError(exitUsage, "factory status takes no positional arguments")
 	}
@@ -185,12 +187,61 @@ func factoryStatus(ctx context.Context, args []string, offline, check *bool, git
 	if err != nil {
 		return newExitError(exitIO, "%v", err)
 	}
-	report.Write(stdout)
+	if *asJSON {
+		// The whole ladder as fields: each rung's name, whether anything is
+		// stored for it, and — when a live check ran — its verdict and detail.
+		// The summaries are the public descriptions, never credential values.
+		rung := func(name string, state factory.CredentialState) factoryRungJSON {
+			return factoryRungJSON{
+				Name: name, Configured: state.Configured, Summary: state.Summary,
+				Checked: state.Checked, OK: state.OK, Detail: state.Detail,
+			}
+		}
+		doc := factoryStatusJSON{
+			agentDoc:   agentDoc{Schema: agentSchemaID("factory-status"), State: agentStateDone},
+			ConfigPath: report.ConfigPath,
+			Rungs: []factoryRungJSON{
+				rung("deployment", report.Deployment),
+				rung("github", report.GitHub),
+				rung("gateway", report.Gateway),
+				rung("telemetry", report.Telemetry),
+				rung("billing", report.Billing),
+			},
+		}
+		if failures := report.Failures(); len(failures) > 0 {
+			doc.Failures = failures
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			return newExitError(exitGeneric, "%v", err)
+		}
+	} else {
+		report.Write(stdout)
+	}
 
 	if failures := report.Failures(); len(failures) > 0 && *check {
 		return newExitError(exitGeneric, "credential rejected for: %s", strings.Join(failures, ", "))
 	}
 	return nil
+}
+
+// factoryRungJSON is one rung of the credential ladder as the --json
+// document carries it.
+type factoryRungJSON struct {
+	Name       string `json:"name"`
+	Configured bool   `json:"configured"`
+	Summary    string `json:"summary,omitempty"`
+	Checked    bool   `json:"checked"`
+	OK         bool   `json:"ok"`
+	Detail     string `json:"detail,omitempty"`
+}
+
+// factoryStatusJSON is `factory status --json`'s answer,
+// ticfac.factory-status.v1.
+type factoryStatusJSON struct {
+	agentDoc
+	ConfigPath string            `json:"config_path"`
+	Rungs      []factoryRungJSON `json:"rungs"`
+	Failures   []string          `json:"failures,omitempty"`
 }
 
 // factoryPinColorProfile is a deliberate COPY of ticks' internal/tui
@@ -224,7 +275,15 @@ const defaultFactoryDashboardCostMs = int64(30 * 1000)
 // of what a Loader does when a programmatic caller leaves HarnessBytes zero.
 const defaultFactoryDashboardTailBytes = 64 << 10
 
-func runFactoryDashboard(ctx context.Context, args []string, project *string, interval, costInterval *int64, tailBytes *int, noCost *bool, stdout, stderr io.Writer) int {
+func runFactoryDashboard(ctx context.Context, args []string, project *string, interval, costInterval *int64, tailBytes *int, noCost *bool, asJSON *bool, stdout, stderr io.Writer) int {
+	if *asJSON {
+		// A board redrawn in place is a screen, not a document; the one-shot
+		// answer for an agent is `cloud status --json`, and the refusal says
+		// so rather than guessing a frame.
+		fmt.Fprintf(stderr, "ticfac factory dashboard: --json is not a live board — a board redrawn in place is not "+
+			"a JSON document. `ticfac cloud status --json` answers one run, `ticfac --json` answers every one\n")
+		return exitUsage
+	}
 	err := factoryDashboard(ctx, args, project, interval, costInterval, tailBytes, noCost, stdout, stderr)
 	return reportCommand("factory dashboard", err, stderr)
 }

@@ -47,14 +47,16 @@ import (
 
 // doctorFlags is `doctor`'s flag surface.
 type doctorFlags struct {
-	repo  *string
-	cloud *bool
+	repo   *string
+	cloud  *bool
+	asJSON *bool
 }
 
 func defineDoctorFlags(fs *flag.FlagSet) *doctorFlags {
 	return &doctorFlags{
-		repo:  fs.String("repo", "", "the repository a run is checked for (default: cwd)"),
-		cloud: fs.Bool("cloud", false, "check the cloud prerequisites too, whatever the repository declares"),
+		repo:   fs.String("repo", "", "the repository a run is checked for (default: cwd)"),
+		cloud:  fs.Bool("cloud", false, "check the cloud prerequisites too, whatever the repository declares"),
+		asJSON: fs.Bool("json", false, "print one versioned document (ticfac.doctor.v1): every check with its verdict and, when it fails, its fix"),
 	}
 }
 
@@ -80,7 +82,9 @@ the command that clears it:
 The cloud checks run when the repository declares the cloud (its
 .tick/runners.toml substrate, or a .tick/runners.cloud.toml) or --cloud is
 passed. Exit 0 when everything a run needs is present; exit 1 when any line
-is missing — a script can branch without parsing the words.`,
+is missing — a script can branch without parsing the words. --json answers
+the same checks as one versioned document (ticfac.doctor.v1), each missing
+thing still carrying its fix.`,
 	}
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fl := defineDoctorFlags(fs)
@@ -320,24 +324,79 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 		)
 	}
 
-	return doctorReport(checks, substrate, cloudish, stdout)
+	return doctorReport(checks, substrate, cloudish, *fl.asJSON, stdout, stderr)
+}
+
+// doctorCheckJSON is one check as the --json document carries it: the
+// verdict, the passing detail, and — when it fails — the problem and the
+// fix that clears it, the same fields the prose line prints.
+type doctorCheckJSON struct {
+	Name    string `json:"name"`
+	OK      bool   `json:"ok"`
+	Detail  string `json:"detail,omitempty"`
+	Problem string `json:"problem,omitempty"`
+	Fix     string `json:"fix,omitempty"`
+}
+
+// doctorJSON is `doctor --json`'s answer, ticfac.doctor.v1.
+type doctorJSON struct {
+	agentDoc
+	Substrate string            `json:"substrate"`
+	Cloud     bool              `json:"cloud_checks"`
+	Missing   int               `json:"missing"`
+	Checks    []doctorCheckJSON `json:"checks"`
 }
 
 // doctorReport prints the checks and answers the exit code: 0 everything a
 // run needs, 1 anything missing — a script branches on the code without
-// parsing the words.
-func doctorReport(checks []doctorCheck, substrate string, cloudish bool, stdout io.Writer) int {
+// parsing the words. With --json the same answer is one versioned document,
+// and the state word agrees with the code: done when everything is present,
+// failed when a line is missing — the command's work is the diagnosis, and
+// a missing prerequisite is the thing the caller must fix.
+func doctorReport(checks []doctorCheck, substrate string, cloudish bool, asJSON bool, stdout, stderr io.Writer) int {
+	missing := 0
+	for _, c := range checks {
+		if !c.OK {
+			missing++
+		}
+	}
+	if asJSON {
+		doc := doctorJSON{
+			agentDoc:  agentDoc{Schema: agentSchemaID("doctor")},
+			Substrate: substrate,
+			Cloud:     cloudish,
+			Missing:   missing,
+			Checks:    make([]doctorCheckJSON, 0, len(checks)),
+		}
+		if missing == 0 {
+			doc.State = agentStateDone
+		} else {
+			doc.State = agentStateFailed
+		}
+		for _, c := range checks {
+			doc.Checks = append(doc.Checks, doctorCheckJSON{
+				Name: c.Name, OK: c.OK, Detail: c.Detail, Problem: c.Problem, Fix: c.Fix,
+			})
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			fmt.Fprintf(stderr, "ticfac doctor: %v\n", err)
+			return exitGeneric
+		}
+		if missing == 0 {
+			return exitSuccess
+		}
+		return exitGeneric
+	}
+
 	fmt.Fprintf(stdout, "ticfac doctor — what a run of this repo needs (substrate: %s)\n", substrate)
 	if cloudish {
 		fmt.Fprintf(stdout, "cloud checks included\n")
 	}
-	missing := 0
 	for _, c := range checks {
 		if c.OK {
 			fmt.Fprintf(stdout, "  ok       %-15s %s\n", c.Name, c.Detail)
 			continue
 		}
-		missing++
 		fmt.Fprintf(stdout, "  missing  %-15s %s\n", c.Name, c.Problem)
 		fmt.Fprintf(stdout, "  %-8s %-15s fix: %s\n", "", "", c.Fix)
 	}

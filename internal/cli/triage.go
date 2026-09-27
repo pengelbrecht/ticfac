@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -217,17 +216,22 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		}
 	}
 
-	// No decisions: the listing half. --json answers for an agent; otherwise
-	// the person walks the drafts.
+	// No decisions: the listing half. --json answers for an agent — one
+	// VERSIONED document (tick 8v3), the schema id first so a reader can
+	// refuse an unknown shape; otherwise the person walks the drafts.
 	if len(decisions) == 0 {
 		if *asJSON {
 			listed := make([]triageFindingJSON, 0, len(waiting))
 			for _, finding := range waiting {
 				listed = append(listed, newTriageFindingJSON(finding))
 			}
-			enc := json.NewEncoder(stdout)
-			enc.SetIndent("", "  ")
-			if err := enc.Encode(listed); err != nil {
+			doc := triageListingJSON{
+				agentDoc: agentDoc{Schema: agentSchemaID("triage"), State: agentStateDone},
+				RunID:    store.RunID(),
+				EpicID:   epicID,
+				Findings: listed,
+			}
+			if err := emitAgentJSON(stdout, doc); err != nil {
 				fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
 				return exitGeneric
 			}
@@ -274,9 +278,17 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		}
 	}
 	if *asJSON {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(results); err != nil {
+		doc := triageDecisionsJSON{
+			agentDoc:  agentDoc{Schema: agentSchemaID("triage")},
+			EpicID:    epicID,
+			Decisions: results,
+		}
+		if failed {
+			doc.State = agentStateFailed
+		} else {
+			doc.State = agentStateDone
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
 			fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
 			return exitGeneric
 		}
@@ -285,6 +297,25 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		return exitGeneric
 	}
 	return exitSuccess
+}
+
+// triageListingJSON is `triage --json`'s listing half, ticfac.triage.v1:
+// the untriaged findings an agent decides from, one document with the
+// schema id first.
+type triageListingJSON struct {
+	agentDoc
+	RunID    string              `json:"run_id"`
+	EpicID   string              `json:"epic_id"`
+	Findings []triageFindingJSON `json:"findings"`
+}
+
+// triageDecisionsJSON is `triage --json`'s decision half: what each passed
+// decision did, attributed, with the error a refusal carried — and the
+// state word agreeing with the exit code (failed when any decision failed).
+type triageDecisionsJSON struct {
+	agentDoc
+	EpicID    string         `json:"epic_id"`
+	Decisions []triageResult `json:"decisions"`
 }
 
 // triageWalk settles the drafts a person reads one at a time: the finding's
