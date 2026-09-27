@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 119,
-  "state": "collecting",
-  "reason": "collecting eih attempt 19",
-  "updated_at": "2026-09-27T08:53:41Z",
+  "sequence": 120,
+  "state": "failed",
+  "reason": "absorbing the finding afe495fbe6dddd3075faa928c396e884e9cc98ec56966a3598f9a5eb5ba2dbeb (\"Four stray run registrations from pre-fix cli test runs remain in the operator's real ~/.ticfac/registry, pointing at deleted temp dirs\"), reported by eih try 2 (run dispatch #19), would be the 4th absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj): the run stops for a person rather than recurse past the bound, because unbounded the recursion is an epic that never closes and nothing announces it. The chain that produced the stop: tick 6dh reported finding 8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a (\"waits_on for a dead run and the per-checkout liveness answer: the listing surface needs one probing convention\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick aj9; tick aj9 reported finding 760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85 (\"Claim's live-driver refusal is per-checkout: a second run-epic from another checkout of the same repo is not refused\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick 9oo; tick 9oo reported finding ffcf041e457da2d27c37ee2a64907547eed5cc6aed94382a86e992ea6a0c2b2c (\"internal/cli tests claim runs without redirecting TICFAC_REGISTRY_DIR, writing test registrations into the operator's real ~/.ticfac/registry\"), gates the done, naming no single item (the fallback names every item at risk in its reason) and became tick eih. The finding stays a person's — triage it with `ticfac finding 2jn afe495fbe6dddd3075faa928c396e884e9cc98ec56966a3598f9a5eb5ba2dbeb --promote-as <tick> --by \"<who>\"` or `--discard --by \"<who>\"`, or raise the bound with --absorption-depth and run the epic again. If this bound trips often, the criterion is wrong and the bound is hiding it — the chain above is what a person judges it by",
+  "updated_at": "2026-09-27T08:53:54Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -109,7 +109,7 @@
     },
     {
       "tick_id": "eih",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 19
     },
     {
