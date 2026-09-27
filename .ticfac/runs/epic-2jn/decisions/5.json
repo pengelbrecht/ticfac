@@ -1,0 +1,44 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 17,
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-eih/attempt-17",
+    "op": "settle_attempt",
+    "run_id": "epic-2jn",
+    "state": "cancelled",
+    "tick_id": "eih"
+  },
+  "response": {
+    "carry_ref": "refs/heads/ticfac/run-epic-2jn/tick-eih/attempt-17",
+    "carry_sha": "48f7ea97f05996b5ddb6e3be6a45bb1ff0b6bd0e",
+    "disposition": "carry-work",
+    "released_by": "person-c7fc8d8f82bd33b192baed10fd08a7bca0df93088e1145279a73b6ef066a417c",
+    "settled": true,
+    "state": "cancelled"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T08:48:34Z",
+  "answered_at": "2026-09-27T08:48:34Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "eih",
+    "attempt": 17,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "3841c1b223ea12ebe1ad60b0a218a131d6ccdf52",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
