@@ -19,6 +19,9 @@
 import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
+// The REAL cloud implement-tick profile, as the dispatch renders it: the
+// prompt file's own text, em-dashes and all.
+import IMPLEMENT_TICK_PROFILE from "../../profiles-cloudflare-sandbox/implement-tick.md?raw";
 import { readWorkerLogTail } from "../src/artifacts";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken, revokeRunTokens } from "../src/gateway";
@@ -578,6 +581,98 @@ describe("start", () => {
         denial.detail.includes("harness") || denial.detail.includes("prompt"),
         `the refusal must name the missing field: ${denial.detail}`,
       ).toBe(true);
+    }
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("accepts the REAL cloud implement-tick profile as the prompt and an em-dash title — prose is UTF-8", async () => {
+    // Every cloud profile carries em-dashes and ellipses, and tick titles
+    // carry "—": a door that read only printable ASCII refused every cloud
+    // dispatch whose prompt came from profiles-cloudflare-sandbox/.
+    expect(/[—…]/.test(IMPLEMENT_TICK_PROFILE)).toBe(true);
+    const title = "Door prose is UTF-8 — em-dashes, ellipses… and all";
+    const response = await postStart(
+      runToken,
+      startBody({ prompt: IMPLEMENT_TICK_PROFILE, title }),
+    );
+    expect(response.status, await response.clone().text()).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    // Delivered exactly as given: no rune rewritten on its way to the worker.
+    expect(work?.env.TICKS_ROLE_PROMPT).toBe(IMPLEMENT_TICK_PROFILE);
+  });
+
+  it("bounds the prose fields in UTF-8 bytes, not UTF-16 code units", async () => {
+    // 170 em-dashes are 510 bytes and fit the title's 512; 171 are 513.
+    const fits = await postStart(runToken, startBody({ title: "—".repeat(170) }));
+    expect(fits.status, await fits.clone().text()).toBe(201);
+    const tooLong = await postStart(runToken, startBody({ attempt: 2, title: "—".repeat(171) }));
+    expect(tooLong.status).toBe(400);
+    expect((await denialOf(tooLong)).detail).toContain("title");
+    // 21846 em-dashes are 65538 bytes: over the prompt's 64 KiB, though only
+    // 21846 UTF-16 code units.
+    const bigPrompt = await postStart(
+      runToken,
+      startBody({ attempt: 3, prompt: "—".repeat(21846) }),
+    );
+    expect(bigPrompt.status).toBe(400);
+    expect((await denialOf(bigPrompt)).detail).toContain("prompt");
+  });
+
+  it("still refuses control characters and text that is not UTF-8 in the prose fields", async () => {
+    for (const [field, value] of [
+      ["title", "a\u0000b"],
+      ["title", "a\u0007b"],
+      ["title", "a\tb"],
+      ["title", "a\nb"],
+      ["title", "a\u007fb"],
+      ["title", "a\u0085b"],
+      ["title", "a lone \ud800 surrogate"],
+      ["prompt", `${ROLE_PROMPT}\u0000`],
+      ["prompt", `${ROLE_PROMPT}\u001b[31m`],
+      ["prompt", `${ROLE_PROMPT}\u009b`],
+      ["prompt", `${ROLE_PROMPT} a lone \udc00 surrogate`],
+    ] as const) {
+      const response = await postStart(runToken, startBody({ [field]: value }));
+      expect(response.status, `${field}: ${JSON.stringify(value)}`).toBe(400);
+      const denial = await denialOf(response);
+      expect(denial.error).toBe("invalid_request");
+      expect(denial.detail).toContain(field);
+    }
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("refuses a body whose bytes are not UTF-8 rather than reading them as U+FFFD", async () => {
+    const encoded = new TextEncoder().encode(JSON.stringify(startBody({ title: "café title" })));
+    // Cut the two-byte é down to its lead byte: the JSON is still well formed
+    // around it, the text is not.
+    const at = encoded.indexOf(0xc3);
+    const bytes = new Uint8Array([...encoded.slice(0, at + 1), ...encoded.slice(at + 2)]);
+    const response = await SELF.fetch(`${BASE}/api/sandbox/attempts`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${runToken}`, "content-type": "application/json" },
+      body: bytes,
+    });
+    expect(response.status).toBe(400);
+    const denial = await denialOf(response);
+    expect(denial.error).toBe("invalid_request");
+    expect(denial.detail).toContain("UTF-8");
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("keeps the identifier fields strict ASCII with no whitespace", async () => {
+    for (const [field, value] of [
+      ["role", "implement—tick"],
+      ["write_ref", `refs/heads/café`],
+      ["base_ref", "refs/heads/epic/x…"],
+      ["model", "glm—5.3"],
+      ["harness", "pï"],
+      ["harness", "p i"],
+    ] as const) {
+      const response = await postStart(runToken, startBody({ [field]: value }));
+      expect(response.status, `${field}: ${JSON.stringify(value)}`).toBe(400);
+      const denial = await denialOf(response);
+      expect(denial.error).toBe("invalid_request");
+      expect(denial.detail).toContain(field);
     }
     expect(binding.addressed).toEqual([]);
   });

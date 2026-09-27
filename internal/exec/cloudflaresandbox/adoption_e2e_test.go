@@ -18,6 +18,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	shorttest "github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
@@ -215,6 +216,47 @@ func TestARestartedOrchestratorAdoptsTheRunningSandboxThroughTheRealDoor(t *test
 	}
 }
 
+// The door's prose fields, proved against the REAL door: the prompt a cloud
+// dispatch actually carries is the text of a profile in
+// profiles-cloudflare-sandbox/, and every one of them carries em-dashes and
+// ellipses; tick titles carry "—". A door that read only printable ASCII
+// refused every such dispatch — a blocker nothing exercised until the first
+// real cloud run. Here the real Go executor sends the real implement-tick
+// profile with an em-dash title, the real door accepts it, and the worker's
+// own boot environment holds the prompt byte for byte.
+func TestTheRealDoorAcceptsTheRealCloudProfileAndAnEmDashTitle(t *testing.T) {
+	shorttest.EndToEnd(t)
+	door := newRealDoor(t)
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := profile.Resolve("implement-tick", profile.Options{Dir: filepath.Join(root, "profiles-cloudflare-sandbox")})
+	if err != nil {
+		t.Fatalf("resolve the real cloud implement-tick profile: %v", err)
+	}
+	if !strings.ContainsAny(resolved.Prompt, "—…") {
+		t.Fatal("the real implement-tick profile carries no em-dash or ellipsis: this test no longer proves what it names")
+	}
+	door.prompt = resolved.Prompt
+	door.title = "Door prose is UTF-8 — em-dashes, ellipses… and all"
+
+	ex := door.newExecutor(t.TempDir())
+	handle, err := ex.Start(door.newSpec("utf8"))
+	if err != nil {
+		t.Fatalf("the real door refused the real profile's prompt with an em-dash title: %v", err)
+	}
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatalf("decode the handle's payload: %v", err)
+	}
+	if payload.Title != door.title {
+		t.Errorf("the handle carries title %q, want %q: a rune was rewritten on the way", payload.Title, door.title)
+	}
+	// The prompt in the work process's own environment, byte for byte.
+	door.assertOneLiveWorkProcess(t, "after the UTF-8 dispatch")
+}
+
 // assertUnreachable states what avx's rule means at the call site: the error
 // is the client's transport failure naming the door it cannot reach — never
 // the door's own refusal (the door never answered), never anything a caller
@@ -275,6 +317,9 @@ type realDoor struct {
 	// work process must be booted on.
 	harness string
 	prompt  string
+	// title is the tick title the dispatch carries: prose, which the door
+	// reads as UTF-8 text rather than as ASCII.
+	title string
 
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -371,6 +416,7 @@ func newRealDoor(t *testing.T) *realDoor {
 			door.harness = "pi"
 			door.prompt = "# implement-tick\n\nYou are implementing ONE unit of work from the ticks tracker, headless, in\n" +
 				"an isolated git worktree that is yours alone. Nobody will answer a question.\n"
+			door.title = "Prove sandbox adoption end to end through the real Go executor and the real door"
 			return door
 		}
 		door.note(line)
@@ -397,7 +443,7 @@ func (d *realDoor) newExecutorModel(stateDir, model string) *Executor {
 		Token:      d.token,
 		EpicID:     d.epic,
 		BaseRef:    "refs/heads/epic/" + d.epic,
-		Title:      "Prove sandbox adoption end to end through the real Go executor and the real door",
+		Title:      d.title,
 		Model:      model,
 		Harness:    d.harness,
 		Prompt:     d.prompt,

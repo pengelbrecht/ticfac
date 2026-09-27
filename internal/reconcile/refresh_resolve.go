@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
@@ -158,7 +160,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: r.opts.EpicID, Attempt: attempt, Try: 1,
 		JobID: jobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: writeRef, BaseSHA: wip, StateDir: stateDir, BaseRef: r.opts.BaseRef,
-		Title:    asciiLine(fmt.Sprintf("Fold %s into %s: resolve the merge conflict", base, r.branch)),
+		Title:    doorLine(fmt.Sprintf("Fold %s into %s: resolve the merge conflict", base, r.branch)),
 		Profile:  &withBrief,
 		Tier:     tier,
 		Executor: withBrief.Executor,
@@ -501,7 +503,7 @@ func (r *Reconciler) baseFoldBrief(base, baseHead, epicHead string, conflict *me
 	fmt.Fprintf(&b, "versions, and make the lock file agree with the manifest. Remove every conflict marker and\n")
 	fmt.Fprintf(&b, "commit the resolution on your branch; the reconciler makes the merge commit itself, with\n")
 	fmt.Fprintf(&b, "the epic head and the %s head as its parents, and the integrated gate judges the tree.\n", base)
-	return asciiText(b.String())
+	return doorText(b.String())
 }
 
 func writeList(b *strings.Builder, lines []string) {
@@ -514,23 +516,30 @@ func writeList(b *strings.Builder, lines []string) {
 	}
 }
 
-// asciiText keeps text to what the sandbox door reads — printable ASCII and
-// line breaks: a commit subject can carry anything, and the brief must not be
-// the reason a dispatch is refused.
-func asciiText(s string) string {
+// doorText keeps text to what the sandbox door reads in a prose field — UTF-8
+// with no control character but tab and line feed: a commit subject can
+// carry anything, and the brief must not be the reason a dispatch is
+// refused. A control character, or a byte that is not UTF-8, becomes `?`;
+// every other rune (an em-dash in a subject, say) is kept as written.
+func doorText(s string) string {
 	var b strings.Builder
-	for _, c := range s {
+	for i, c := range s {
 		switch {
-		case c == '\n' || c == '\t' || (c >= 0x20 && c <= 0x7e):
+		case c == '\n' || c == '\t':
 			b.WriteRune(c)
-		default:
+		case unicode.IsControl(c):
 			b.WriteByte('?')
+		case c == utf8.RuneError && !strings.HasPrefix(s[i:], "�"):
+			b.WriteByte('?')
+		default:
+			b.WriteRune(c)
 		}
 	}
 	return b.String()
 }
 
-// asciiLine is asciiText for one line.
-func asciiLine(s string) string {
-	return strings.ReplaceAll(asciiText(s), "\n", " ")
+// doorLine is doorText for one line: the title, which carries no tab or
+// line break at all.
+func doorLine(s string) string {
+	return strings.NewReplacer("\n", " ", "\t", " ").Replace(doorText(s))
 }
