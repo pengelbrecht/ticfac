@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 387,
-  "state": "running",
-  "reason": "c2g is running as attempt 53",
-  "updated_at": "2026-09-27T19:53:52Z",
+  "sequence": 388,
+  "state": "integrating",
+  "reason": "integrating vqc attempt 51 into epic/2jn",
+  "updated_at": "2026-09-27T19:54:03Z",
   "ticks": [
     {
       "tick_id": "nwj",
