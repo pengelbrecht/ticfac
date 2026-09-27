@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 113,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-27T08:47:46Z",
+  "sequence": 114,
+  "state": "failed",
+  "reason": "eih try 1 (run dispatch #17) was rejected and the work it committed is still there — ticfac/run-epic-2jn/tick-eih/attempt-17 carries 48f7ea97f059 on origin, and epic/2jn does not have it — and nothing merged it. This run neither collects it again (the teardown that followed the refusal removed the attempt's worktree, so a second collect would report a missing report rather than the verdict the attempt really had) nor dispatches over it (that would orphan the only copy). Read the branch; then take the work, or release the attempt with `ticfac settle 2jn eih 17 --release \"<who>\"` and run the epic again for a fresh attempt",
+  "updated_at": "2026-09-27T08:48:03Z",
   "ticks": [
     {
       "tick_id": "nwj",
