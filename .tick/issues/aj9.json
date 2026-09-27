@@ -1,0 +1,14 @@
+{
+  "id": "aj9",
+  "title": "waits_on for a dead run and the per-checkout liveness answer: the listing surface needs one probing convention",
+  "description": "status's liveness (and therefore the model's dead-run wait) is per-checkout: a run whose pidfile lives in the repo it works in reads dead-run from anywhere else. Correct for `status \u003crun-id\u003e` (the model is a snapshot of what this checkout can read), but `ticfac` with no arguments (2qz) will list runs from multiple checkouts and needs one convention for where each run is probed — the run-state store's origin view or a per-run registration of the working repo. Worth deciding before 2qz builds its listing.\n\nticfac run epic-2jn created this tick by absorbing the finding 8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a (reported by run-epic-2jn/tick-6dh/attempt-2): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-6dh/attempt-2",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T06:29:48Z",
+  "updated_at": "2026-09-27T06:29:48Z"
+}
