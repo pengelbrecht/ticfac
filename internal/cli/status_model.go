@@ -152,6 +152,12 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 // localStatusModel gathers everything a LOCAL run's model reads and builds
 // it. The liveness answer is the probe's own, carried as data; every age the
 // model states is measured against the one `now` the gathering stamps.
+//
+// The probe is deliberately PER-CHECKOUT (tick aj9): status is a snapshot of
+// what this checkout can read, and --repo names another. A surface that reads
+// runs from MANY checkouts — the bare `ticfac` listing (2qz) — must instead
+// resolve each run's working repo through internal/runregistry first and
+// probe THERE; that package's doc comment is the convention.
 func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Status) statusmodel.Model {
 	now := time.Now()
 	degraded := []string{}
