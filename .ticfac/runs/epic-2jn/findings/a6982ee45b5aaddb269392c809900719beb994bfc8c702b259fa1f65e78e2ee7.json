@@ -12,8 +12,11 @@
   "attempt": 21,
   "done_item": "none",
   "demonstrating_check": "cloudflare vitest, test/status-alerts.test.ts",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T09:37:50Z",
+  "triaged_at": "2026-09-27T09:38:14Z",
+  "triaged_by": "ticfac run epic-2jn absorbing y39",
+  "promoted_as": "y39",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "i1r",
