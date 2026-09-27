@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 229,
-  "state": "publishing",
-  "reason": "closing 4yb behind the integrated gate on 80404cce3436",
-  "updated_at": "2026-09-27T12:43:44Z",
+  "sequence": 230,
+  "state": "running",
+  "reason": "4yb is closed",
+  "updated_at": "2026-09-27T12:43:53Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -59,7 +59,7 @@
     },
     {
       "tick_id": "4yb",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 29
     },
     {
