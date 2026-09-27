@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 406,
+  "sequence": 407,
   "state": "running",
-  "reason": "the epic PR #80 (epic/2jn → main) is open; close-out of 2jn waits on CI",
-  "updated_at": "2026-09-27T20:35:53Z",
+  "reason": "CI is green on the epic PR #80; the close-out of 2jn is admitted",
+  "updated_at": "2026-09-27T20:35:56Z",
   "ticks": [
     {
       "tick_id": "nwj",
