@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
@@ -40,21 +41,29 @@ var (
 	// tickIDPattern is TICK_ID_PATTERN: a tick id names the CONTAINER, so it
 	// gets a container name's conservatism rather than free text's tolerance.
 	tickIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
-	// plainFieldPattern is PLAIN_FIELD_PATTERN: role, write_ref and base_ref
-	// are printable ASCII with no whitespace, bounded.
+	// plainFieldPattern is PLAIN_FIELD_PATTERN: the IDENTIFIER fields —
+	// role, write_ref, base_ref, model, harness — are printable ASCII with
+	// no whitespace, bounded. They name things, and a name is not prose.
 	plainFieldPattern = regexp.MustCompile(`^[\x21-\x7e]{1,512}$`)
-	// titleFieldPattern is TITLE_FIELD_PATTERN: the title may carry the
-	// spaces prose needs, never control characters.
-	titleFieldPattern = regexp.MustCompile(`^[\x20-\x7e]{1,512}$`)
+	// titleFieldPattern is TITLE_FIELD_PATTERN's character half: the title
+	// is PROSE — any Unicode text except a control character (Cc: C0, DEL,
+	// C1; so no tab and no line break either). Its bound is titleFieldMax,
+	// in UTF-8 bytes, and validity as UTF-8 is checked beside it: RE2 reads
+	// an invalid byte as U+FFFD, which this class would otherwise admit.
+	titleFieldPattern = regexp.MustCompile(`^[^\p{Cc}]+$`)
+	// titleFieldMax is TITLE_FIELD_MAX_BYTES: the title's bound, in UTF-8
+	// bytes.
+	titleFieldMax = 512
 	// promptFieldPattern is PROMPT_FIELD_PATTERN's character half: the
-	// rendered role prompt is printable prose plus the line breaks markdown
-	// needs, never other control characters (tick 9iz) — it rides one
-	// environment variable into the container the worker boots in. The
-	// 64 KiB length half is promptFieldMax, spelled beside it: RE2 caps a
-	// repeat count at 1000, so the bound is a length check, not a
-	// quantifier.
-	promptFieldPattern = regexp.MustCompile(`^[\x09\x0a\x0d\x20-\x7e]+$`)
-	// promptFieldMax is the rendered prompt's bound, in bytes.
+	// rendered role prompt is PROSE plus the line breaks markdown needs —
+	// any Unicode text except a control character other than tab, line feed
+	// and carriage return (tick 9iz). It rides one environment variable into
+	// the container the worker boots in. The 64 KiB length half is
+	// promptFieldMax, spelled beside it: RE2 caps a repeat count at 1000, so
+	// the bound is a length check, not a quantifier.
+	promptFieldPattern = regexp.MustCompile(`^(?:[\t\n\r]|[^\p{Cc}])+$`)
+	// promptFieldMax is PROMPT_FIELD_MAX_BYTES: the rendered prompt's bound,
+	// in UTF-8 bytes.
 	promptFieldMax = 65536
 	// baseSHAPattern is runs.ts's BASE_SHA_PATTERN: the full 40-hex commit
 	// the container clones at, refused rather than parsed.
@@ -412,6 +421,15 @@ func tickOf(spec *subprocess.JobSpec) string {
 	return "job"
 }
 
+// proseField is the door's rule for a PROSE field: non-empty, valid UTF-8,
+// at most max BYTES, and every rune in the field's class. Validity is its own
+// check because RE2 reads an invalid byte as U+FFFD, and because
+// encoding/json would silently rewrite one into U+FFFD on the wire — the door
+// would then boot on text this side never held.
+func proseField(s string, class *regexp.Regexp, max int) bool {
+	return s != "" && len(s) <= max && utf8.ValidString(s) && class.MatchString(s)
+}
+
 // validateDoorFields refuses a spec this door would refuse anyway, naming the
 // field — a dispatch that dies on the far side of HTTP with a message about
 // shapes is a round trip spent to learn what the client could have said
@@ -437,9 +455,9 @@ func validateDoorFields(req *startRequest) error {
 	if !plainFieldPattern.MatchString(req.BaseRef) {
 		return fmt.Errorf("base_ref %q is not a non-empty printable ASCII string the door reads", req.BaseRef)
 	}
-	if !titleFieldPattern.MatchString(req.Title) {
-		return fmt.Errorf("title is not a non-empty printable ASCII string the door reads (spaces allowed, at " +
-			"most 512 characters)")
+	if !proseField(req.Title, titleFieldPattern, titleFieldMax) {
+		return fmt.Errorf("title is not a non-empty line of UTF-8 text the door reads (no control characters, " +
+			"at most 512 bytes)")
 	}
 	if !plainFieldPattern.MatchString(req.Model) {
 		return fmt.Errorf("model %q is not a non-empty printable ASCII string the door reads: the door boots the "+
@@ -451,10 +469,10 @@ func validateDoorFields(req *startRequest) error {
 			"worker to the harness the profile resolved, and a start that names none would run the factory's own "+
 			"standing choice under a record that names nothing", req.Harness)
 	}
-	if len(req.Prompt) > promptFieldMax || !promptFieldPattern.MatchString(req.Prompt) {
-		return fmt.Errorf("prompt is not the rendered role prompt the door reads (printable text with line " +
-			"breaks, at most 65536 characters): the worker's container runs on it, and a start with none would " +
-			"boot a worker on a prompt nobody chose")
+	if !proseField(req.Prompt, promptFieldPattern, promptFieldMax) {
+		return fmt.Errorf("prompt is not the rendered role prompt the door reads (UTF-8 text with line " +
+			"breaks, no other control characters, at most 65536 bytes): the worker's container runs on it, and " +
+			"a start with none would boot a worker on a prompt nobody chose")
 	}
 	if !baseSHAPattern.MatchString(req.BaseSHA) {
 		return fmt.Errorf("base_sha %q is not the full 40-character commit the attempt's container clones at", req.BaseSHA)

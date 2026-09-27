@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
 // The door's shapes, decoded: the strict halves refused loudly, the open half
@@ -133,8 +135,88 @@ func TestValidateDoorFieldsRefusesWhatTheDoorRefuses(t *testing.T) {
 		{"harness carries a space", func(r *startRequest) { r.Harness = "some harness" }, "harness"},
 		{"no prompt", func(r *startRequest) { r.Prompt = "" }, "prompt"},
 		{"prompt carries a control character", func(r *startRequest) { r.Prompt = "a\u0007b" }, "prompt"},
-		{"prompt is not text the door reads", func(r *startRequest) { r.Prompt = "non-ascii: \u00e9" }, "prompt"},
+		{"prompt is not valid UTF-8", func(r *startRequest) { r.Prompt = "half a rune: \xe2\x80" }, "prompt"},
 		{"prompt is too long", func(r *startRequest) { r.Prompt = strings.Repeat("a", 65537) }, "prompt"},
+	} {
+		r := *good
+		tc.mutat(&r)
+		err := validateDoorFields(&r)
+		if err == nil {
+			t.Errorf("%s: the request the door would refuse was accepted here", tc.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: the refusal does not name the field: %v", tc.name, err)
+		}
+	}
+}
+
+// The prose fields — the rendered prompt and the tick's title — are prose,
+// and prose is UTF-8: every cloud profile carries em-dashes and ellipses, and
+// tick titles carry "—". A door that read only printable ASCII refused EVERY
+// cloud dispatch whose prompt came from profiles-cloudflare-sandbox/. The
+// identifier fields stay strict ASCII with no whitespace: they name things.
+//
+// short: one profile read from this repository; no network.
+func TestDoorProseFieldsAreUTF8AndIdentifiersStayASCII(t *testing.T) {
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := profile.Resolve("implement-tick", profile.Options{Dir: filepath.Join(root, "profiles-cloudflare-sandbox")})
+	if err != nil {
+		t.Fatalf("resolve the real cloud implement-tick profile: %v", err)
+	}
+	if !strings.ContainsAny(resolved.Prompt, "—…") {
+		t.Fatal("the real implement-tick profile carries no em-dash or ellipsis: this test no longer proves what it names")
+	}
+	good := &startRequest{
+		Epic:     "xte",
+		TickID:   "keh",
+		Attempt:  1,
+		Role:     "implement-tick",
+		WriteRef: "refs/heads/ticfac/run-r1/tick-keh/attempt-1",
+		BaseRef:  "epic/xte",
+		Title:    "Door prose is UTF-8 — em-dashes, ellipses… and all",
+		BaseSHA:  "0123456789abcdef0123456789abcdef01234567",
+		Model:    testModel,
+		Harness:  testHarness,
+		Prompt:   resolved.Prompt,
+	}
+	if err := validateDoorFields(good); err != nil {
+		t.Fatalf("the real profile's prompt with an em-dash title was refused: %v", err)
+	}
+	// The bounds count UTF-8 bytes: 170 em-dashes are 510 bytes and fit the
+	// title's 512; 171 are 513 and do not.
+	fits := *good
+	fits.Title = strings.Repeat("—", 170)
+	if err := validateDoorFields(&fits); err != nil {
+		t.Errorf("a 510-byte title was refused: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		mutat func(r *startRequest)
+		want  string
+	}{
+		{"title carries NUL", func(r *startRequest) { r.Title = "a\x00b" }, "title"},
+		{"title carries BEL", func(r *startRequest) { r.Title = "a\x07b" }, "title"},
+		{"title carries a tab", func(r *startRequest) { r.Title = "a\tb" }, "title"},
+		{"title carries DEL", func(r *startRequest) { r.Title = "a\x7fb" }, "title"},
+		{"title carries a C1 control", func(r *startRequest) { r.Title = "a\u0085b" }, "title"},
+		{"title is not valid UTF-8", func(r *startRequest) { r.Title = "a\xffb" }, "title"},
+		{"title is over 512 bytes", func(r *startRequest) { r.Title = strings.Repeat("—", 171) }, "title"},
+		{"prompt carries NUL", func(r *startRequest) { r.Prompt += "\x00" }, "prompt"},
+		{"prompt carries ESC", func(r *startRequest) { r.Prompt += "\x1b[31m" }, "prompt"},
+		{"prompt carries a C1 control", func(r *startRequest) { r.Prompt += "\u009b" }, "prompt"},
+		{"prompt is not valid UTF-8", func(r *startRequest) { r.Prompt += "\xc3" }, "prompt"},
+		{"prompt is over 64 KiB of UTF-8", func(r *startRequest) { r.Prompt = strings.Repeat("—", 21846) }, "prompt"},
+		{"role carries a non-ASCII rune", func(r *startRequest) { r.Role = "implement—tick" }, "role"},
+		{"write ref carries a non-ASCII rune", func(r *startRequest) { r.WriteRef = "refs/heads/café" }, "write_ref"},
+		{"base ref carries a non-ASCII rune", func(r *startRequest) { r.BaseRef = "epic/x…" }, "base_ref"},
+		{"model carries a non-ASCII rune", func(r *startRequest) { r.Model = "glm—5.3" }, "model"},
+		{"harness carries a non-ASCII rune", func(r *startRequest) { r.Harness = "pï" }, "harness"},
+		{"harness carries a non-breaking space", func(r *startRequest) { r.Harness = "p i" }, "harness"},
 	} {
 		r := *good
 		tc.mutat(&r)

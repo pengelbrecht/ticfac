@@ -2114,6 +2114,16 @@ const (
 	// decides what happens to them.
 	RefusedRejectedWork = "rejected_attempt_carries_work"
 
+	// The other one a RESUME adds. The resume took an attempt as already
+	// INTEGRATED — its head on the integration branch — and finishes it from
+	// there without an executor; by the finish, the head is not on the
+	// branch (the branch was rewritten under the run, or the two reads
+	// disagree). There is nothing to collect it through and nothing merged to
+	// gate, so the run stops naming the attempt and its branch: a person
+	// decides whether the work goes back on the integration branch or the
+	// attempt is released.
+	RefusedIntegratedHeadMissing = "integrated_attempt_head_missing"
+
 	// The one a RUN adds, before any tick is planned: the epic's base branch
 	// does not fold into its integration branch. It is distinct from
 	// RefusedMerge because it is about a different pair of branches and sends
