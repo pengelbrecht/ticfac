@@ -3,9 +3,10 @@ package cli
 // The local run's pusher (tick i1r): the half of the phone page that lives on
 // the laptop. Three things are pinned here:
 //
-//   - the OPT-IN: nothing is pushed unless the operator asked (a truthy
-//     `factory_status_push` in ~/.ticfacrc) AND a factory is configured —
-//     read through the production seam, against a real credential file;
+//   - the OPT-IN: nothing is pushed unless the operator asked (the
+//     `--status-push` flag, whose default reads $TICFAC_STATUS_PUSH) AND a
+//     factory is configured — read through the production seam, against a
+//     real credential file;
 //   - the WIRE SHAPE: the envelope the factory's snapshot door pins in
 //     cloudflare/src/status.ts — envelope version, host "local", the model's
 //     own `ticfac.status.v1` version, the run identity matching its model —
@@ -17,6 +18,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +30,60 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
 )
+
+func TestStatusPushFlagDefaultsFromTheConfiguredEnvironment(t *testing.T) {
+	// The tick named the opt-in "a ticfac config flag": the flag's DEFAULT
+	// reads the operator's set-once preference from $TICFAC_STATUS_PUSH — the
+	// env vocabulary this repository already owns for operator preferences
+	// ($TICFAC_RUNNER defaults --runner the same way), chosen because
+	// ~/.ticfacrc's key vocabulary is the pinned credential-ownership bundle's
+	// and closed. The flag on the command line always wins, both ways.
+	define := func() *runEpicFlags {
+		t.Helper()
+		return defineRunEpicFlags(flag.NewFlagSet("run-epic", flag.ContinueOnError))
+	}
+
+	t.Setenv("TICFAC_STATUS_PUSH", "")
+	if *define().statusPush {
+		t.Error("an empty $TICFAC_STATUS_PUSH opted the run in")
+	}
+	t.Setenv("TICFAC_STATUS_PUSH", "1")
+	if !*define().statusPush {
+		t.Error("$TICFAC_STATUS_PUSH=1 did not opt the run in")
+	}
+	t.Setenv("TICFAC_STATUS_PUSH", "true")
+	if !*define().statusPush {
+		t.Error("$TICFAC_STATUS_PUSH=true did not opt the run in")
+	}
+	t.Setenv("TICFAC_STATUS_PUSH", "0")
+	if *define().statusPush {
+		t.Error("$TICFAC_STATUS_PUSH=0 opted the run in")
+	}
+	t.Setenv("TICFAC_STATUS_PUSH", "ture")
+	if *define().statusPush {
+		t.Error("a misspelled $TICFAC_STATUS_PUSH opted the run in: the value reads as a strict bool, a typo is off")
+	}
+
+	// The explicit flag overrides the config default, both ways.
+	t.Setenv("TICFAC_STATUS_PUSH", "1")
+	offFS := flag.NewFlagSet("run-epic", flag.ContinueOnError)
+	offFlags := defineRunEpicFlags(offFS)
+	if err := offFS.Parse([]string{"--status-push=false"}); err != nil {
+		t.Fatalf("parse --status-push=false: %v", err)
+	}
+	if *offFlags.statusPush {
+		t.Error("--status-push=false did not override a set $TICFAC_STATUS_PUSH")
+	}
+	t.Setenv("TICFAC_STATUS_PUSH", "0")
+	onFS := flag.NewFlagSet("run-epic", flag.ContinueOnError)
+	onFlags := defineRunEpicFlags(onFS)
+	if err := onFS.Parse([]string{"--status-push=true"}); err != nil {
+		t.Fatalf("parse --status-push=true: %v", err)
+	}
+	if !*onFlags.statusPush {
+		t.Error("--status-push=true did not override an unset or off $TICFAC_STATUS_PUSH")
+	}
+}
 
 // pushCapture is a factory's snapshot door as a test double: it records every
 // request it takes and lets a test wait for the next one.

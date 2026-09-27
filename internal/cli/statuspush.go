@@ -16,15 +16,18 @@ package cli
 // Three rules shape it:
 //
 //   - OPT-IN. A run pushes only when the operator asked — the
-//     `--status-push` flag on `run-epic` — and a factory is configured. No
-//     opt-in, or no factory to push to, and the pusher is nil and costs
-//     nothing. The flag is per-run on purpose: the snapshot door is
-//     authenticated by the operator's factory token, so the OPT-IN is the
-//     operator's own decision, never a repository's. Its natural eventual
-//     home is a `factory_status_push` key in ~/.ticfacrc — an operator
-//     preference set once — which needs the pinned credential-ownership
-//     bundle to name the key first, and that is an upstream change this
-//     tick does not make (it is drafted as a finding).
+//     `--status-push` flag on `run-epic`, whose DEFAULT reads the operator's
+//     set-once preference from $TICFAC_STATUS_PUSH — and a factory is
+//     configured. No opt-in, or no factory to push to, and the pusher is
+//     nil and costs nothing. The tick named the opt-in "a ticfac config
+//     flag": the flag is a flag, and its config is the $TICFAC_* environment
+//     — the vocabulary this repository already owns for operator preferences
+//     ($TICFAC_RUNNER defaults `--runner` the same way; $TICFAC_JEV_API_KEY
+//     is the classifier's) — because ~/.ticfacrc's key vocabulary is the
+//     pinned credential-ownership bundle's and closed ("an unknown
+//     factory_ key is a typo"), so a `factory_status_push` key there is a
+//     bundle re-cut away and is drafted as a finding. The flag on the command
+//     line always wins over the environment, both ways.
 //
 //   - BEST-EFFORT, ALWAYS. The pusher can never slow, stop or fail the run it
 //     reports: a push that fails is a line in run.log, and the next cadence
@@ -44,6 +47,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +70,23 @@ const statusSnapshotPath = "/api/status-snapshots"
 // statusPushEnvelopeVersion is the pushed-envelope shape's version. It moves
 // only with the envelope; the model inside carries its own.
 const statusPushEnvelopeVersion = 1
+
+// StatusPushEnv is the config spelling of the remote-view opt-in: set it once
+// on the machine runs start from and every `run-epic` follows, without the
+// operator retyping the flag. Read as a strict bool (strconv.ParseBool):
+// "1"/"true"/"t" opt in, "0"/"false"/"f" opt out, and anything that does not
+// parse — including a typo — is off. The `--status-push` flag on the command
+// line always overrides it, both ways.
+const StatusPushEnv = "TICFAC_STATUS_PUSH"
+
+// statusPushEnvDefault reads the `--status-push` flag's default: the
+// operator's $TICFAC_STATUS_PUSH preference when it parses as a bool, off
+// otherwise. Injected as a lookup so the tests read the production seam
+// without owning the environment.
+func statusPushEnvDefault(lookup func(string) string) bool {
+	v, err := strconv.ParseBool(strings.TrimSpace(lookup(StatusPushEnv)))
+	return err == nil && v
+}
 
 // statusSnapshotEnvelope is what one push carries: the model, plus the label
 // map the page and the Telegram alerts name ticks by. The map is a rendering

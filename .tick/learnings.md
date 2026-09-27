@@ -142,9 +142,9 @@ probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is C
 ## Boundaries this repo pays to learn
 
 **Problem:** A new `factory_*` key in ~/.ticfacrc contradicts the pinned credential-ownership
-contract (additionalProperties: false — "an unknown factory_ key is a typo"). **Rule:** The config
-file's key vocabulary is the bundle's: an operator preference needs the bundle re-cut first, and
-until then the opt-in is a per-run flag with the gap drafted as a finding.
+contract (additionalProperties: false — "an unknown factory_ key is a typo"). **Rule:** The config FILE's key
+vocabulary is the bundle's — but the $TICFAC_* ENVIRONMENT is this repo's own operator-preference surface
+(TICFAC_RUNNER, TICFAC_JEV_API_KEY): set-once defaults live there, as i1r's --status-push reading $TICFAC_STATUS_PUSH does, no bundle re-cut needed.
 
 **Problem:** A login-route test read the login page's own 401 as the login's answer: `SELF.fetch`
 FOLLOWS a 303. **Rule:** A redirect-asserting route test passes `redirect: "manual"`.

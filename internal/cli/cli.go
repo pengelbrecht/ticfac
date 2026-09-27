@@ -156,12 +156,16 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 		// page (/status) lists it beside the cloud runs it hosts - and a run
 		// needing a person pages the operator's Telegram through the same
 		// factory. Off by default: the factory's snapshot door is authenticated
-		// by the operator's own factory token, so the opt-in is the operator's.
-		statusPush: fs.Bool("status-push", false,
+		// by the operator's own factory token, so the opt-in is the operator's -
+		// asked per run with the flag, or once for the machine with
+		// $TICFAC_STATUS_PUSH (the flag always wins).
+		statusPush: fs.Bool("status-push", statusPushEnvDefault(os.Getenv),
 			"push this run's status model to the factory every 30s (and once more at each ending), so it is "+
 				"followable from the factory's /status phone page and its stops page the operator's "+
 				"Telegram. Needs a configured factory (ticfac factory setup); without one this is a no-op, "+
-				"and it is always best-effort: a push that fails is a line in run.log, never a failure of the run"),
+				"and it is always best-effort: a push that fails is a line in run.log, never a failure of the run "+
+				"(default: $TICFAC_STATUS_PUSH, read as a strict bool - set it once to follow every run; "+
+				"the flag always wins)"),
 	}
 }
 
