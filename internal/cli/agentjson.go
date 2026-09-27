@@ -32,14 +32,16 @@ import (
 )
 
 // The state words a --json document's `state` field carries: the exit
-// table's classes as an agent reads them. The same five outcomes the table
-// separates — done, failed, held-for-a-person, running — plus the words the
-// run surfaces inherit (completed, stopped) that map onto them.
+// table's classes as an agent reads them. The six outcomes the table
+// separates — done, failed, held-for-a-person, running, cancelled — plus
+// the words the run surfaces inherit (completed, stopped) that map onto
+// them: completed onto done, and a cloud run's "stopped" onto cancelled.
 const (
-	agentStateDone    = "done"    // the command did its work
-	agentStateFailed  = "failed"  // a failure that is not a usage mistake
-	agentStateHeld    = "held"    // the work ended holding something only a person can move
-	agentStateRunning = "running" // the command ended while the work is still in flight
+	agentStateDone      = "done"      // the command did its work
+	agentStateFailed    = "failed"    // a failure that is not a usage mistake
+	agentStateHeld      = "held"      // the work ended holding something only a person can move
+	agentStateRunning   = "running"   // the command ended while the work is still in flight
+	agentStateCancelled = "cancelled" // the work was stopped deliberately — neither done nor failed (tick rix)
 )
 
 // agentSchemaID names one command's versioned --json document:
@@ -75,6 +77,8 @@ func stateExitClass(state string) int {
 		return ExitHeld
 	case agentStateRunning:
 		return exitRunning
+	case agentStateCancelled:
+		return exitCancelled
 	case agentStateFailed, "":
 		return exitGeneric
 	}

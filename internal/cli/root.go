@@ -94,7 +94,8 @@ for a command's flags; 'ticfac help <command>' for any subcommand's. The
 exit codes are the contract a script branches on — 0 done, 1 failed,
 2 usage, 3 held for a person (or, in the tk-ported cloud and factory
 family, not inside a repository), 4 a lookup that came back empty, 5 the
-command ended while the run is still going, 6 an unreadable local file —
+command ended while the run is still going, 6 an unreadable local file,
+7 a run stopped deliberately (cancelled) —
 and every command takes --json: one versioned document, the schema named
 inside it, so an agent never parses prose.`,
 		// The bare invocation IS the overview (tick 2qz): every run this

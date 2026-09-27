@@ -799,3 +799,36 @@ func TestRunJSONAttachThatEndedFailedAnswersFailed(t *testing.T) {
 		t.Errorf("the document's state is %v, want %q — a failed run is not done", doc["state"], agentStateFailed)
 	}
 }
+
+// An attach that ends on a CANCELLED run answers cancelled/7, not done/0
+// (tick rix): `ticfac run` maps the watch's exit code through
+// runAttachState, so an agent waiting on the attach reads the run's own
+// deliberate stop in both the document's state word and the process code.
+func TestRunJSONAttachThatEndedCancelledAnswersCancelled(t *testing.T) {
+	saveRunSeams(t)
+	repo := t.TempDir()
+	life, err := runlife.Claim(repo, "epic-json")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+	attach := &attachRecorder{code: exitCancelled}
+	runAttach = attach.seam
+	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
+
+	var stdout, stderr bytes.Buffer
+	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
+	if code != exitCancelled {
+		t.Fatalf("exit %d, want %d (the cancelled class) for an attach that ended on a cancelled run: %s%s", code, exitCancelled, stdout.String(), stderr.String())
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("stdout with --json is not one document:\n%s\n--stderr--\n%s", stdout.String(), stderr.String())
+	}
+	if doc["schema"] != "ticfac.run.v1" || doc["action"] != "attached" {
+		t.Errorf("the document is %v, want the attached answer", doc)
+	}
+	if doc["state"] != agentStateCancelled {
+		t.Errorf("the document's state is %v, want %q — a cancelled run is not done", doc["state"], agentStateCancelled)
+	}
+}

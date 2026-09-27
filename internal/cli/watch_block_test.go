@@ -355,6 +355,61 @@ func TestWatchOnATerminalEndsFailed(t *testing.T) {
 	}
 }
 
+// The live view's cancelled end (tick rix): the same block a failed run
+// ends with must answer a deliberately stopped run with the cancelled class
+// (7), classified from the run's own durable words — the checkpoint's
+// cancelled state word and the terminal feed line — so the live path and
+// the pipe answer one deliberate stop with the same word and code.
+func TestWatchOnATerminalEndsCancelled(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The durable words a cancelled run leaves: the cancelled checkpoint —
+	// the word nothing writes today, which is why the class was latent —
+	// and the terminal feed line in the resume path's own shape.
+	setCheckpointState(t, repo, runID, "cancelled")
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "the run is already cancelled: operator cancelled"))
+
+	var stdout, stderr bytes.Buffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("ended cancelled")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a run that ended cancelled; stderr:\n%s", got, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "FAILED") || strings.Contains(stderr.String(), "HOLDING") {
+		t.Errorf("a cancelled run was spoken of as a failure or a hold:\n%s", stderr.String())
+	}
+	// The last word is still in the scrollback below the final frame.
+	if !strings.Contains(stdout.String(), "run_finished") {
+		t.Errorf("the run's own last word never printed:\n%s", stdout.String())
+	}
+}
+
 // setCheckpointState rewrites the run's durable checkpoint state: the word
 // the reconciler writes on its last state change, read by the model's
 // lifecycle the frames render from.
