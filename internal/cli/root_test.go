@@ -50,7 +50,7 @@ func TestHelpIsRenderedFromTheTree(t *testing.T) {
 			t.Fatalf("%v: help printed nothing", args)
 		}
 		for _, name := range []string{
-			"run-epic", "settle", "findings", "finding", "status", "events", "watch",
+			"run-epic", "init", "doctor", "settle", "findings", "finding", "status", "events", "watch",
 			"version", "factory", "herd", "cloud",
 		} {
 			if !strings.Contains(stdout.String(), name) {
@@ -96,7 +96,7 @@ func TestTheCompletionCommandDerivesFromTheTree(t *testing.T) {
 		t.Fatalf("__complete exits %d, want %d: %s", code, exitSuccess, stderr.String())
 	}
 	out := stdout.String()
-	for _, name := range []string{"run-epic", "settle", "findings", "finding", "status", "events", "watch",
+	for _, name := range []string{"run-epic", "init", "doctor", "settle", "findings", "finding", "status", "events", "watch",
 		"version", "factory", "herd", "cloud"} {
 		if !strings.Contains(out, name) {
 			t.Errorf("__complete does not offer %q:\n%s", name, out)

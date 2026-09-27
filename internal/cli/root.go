@@ -109,6 +109,8 @@ for any subcommand's. The exit codes are the contract a script branches on:
 	root.SetFlagErrorFunc(usageFlagError)
 	root.AddCommand(
 		newRunEpicCommand(stdout, stderr),
+		newInitCommand(stdout, stderr),
+		newDoctorCommand(stdout, stderr),
 		newSettleCommand(stdout, stderr),
 		newFindingsCommand(stdout, stderr),
 		newFindingCommand(stdout, stderr),

@@ -62,6 +62,8 @@ const usage = `ticfac — execution and orchestration for ticks
 
 usage:
   ticfac run-epic <epic-id>                     run one epic through the reconciler
+  ticfac init                                  make this repository ready to run an epic (asks a few questions)
+  ticfac doctor                                say what a run still needs, each missing thing with its fix
   ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
   ticfac findings <epic-id>                     list the worker findings drafted for triage
   ticfac finding <epic-id> <key>                triage one drafted finding
@@ -148,6 +150,32 @@ failing job — when CI is red. That rule needs a code-hosting surface: the
 GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
 and a repo declaring the rule is refused at startup until the token is set
 (tick 0iz).
+
+init flags:
+  --repo <dir>        the repository to make ready (default: cwd)
+  --substrate <s>     local | cloud | both — where runs of this repo execute (default: local)
+  --runner <name>     claude | pi, the harness local dispatches run on (default: claude)
+  --model <model>     the model every role routes to (default: per runner)
+  --gate <command>    the testing gate, when it cannot be guessed from the repository
+  --yes               take every default and the guessed gate without asking
+
+"init" writes .tick/runners.toml (the dispatch routing and the guessed
+[testing.commands] gate — go test ./..., pnpm test, make test — shown for
+confirmation), .tick/runners.cloud.toml when the answer names the cloud
+(the cloud runs Workers AI models only, through the factory's gateway), and
+a .tick/config.md declaring the PR + CI close-out rule. It refuses to
+overwrite: a repository that already carries a file init would write keeps
+it, and the refusal names the file.
+
+doctor flags:
+  --repo <dir>        the repository a run is checked for (default: cwd)
+  --cloud             check the cloud prerequisites too, whatever the repository declares
+
+"doctor" checks what a run of this repository needs on the machine it starts
+on — tk, a herdr server, a GitHub credential, a git identity, and for cloud
+docker, wrangler and a configured factory — each missing thing with the
+command that fixes it. Exit 0 when everything is present, 1 when any check
+is missing.
 
 settle flags:
   --release <who>     the person releasing the attempt (required); recorded as a stable
