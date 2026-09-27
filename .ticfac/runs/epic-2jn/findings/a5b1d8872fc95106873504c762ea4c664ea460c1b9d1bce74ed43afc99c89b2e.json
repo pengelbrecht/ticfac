@@ -12,8 +12,11 @@
   "attempt": 36,
   "done_item": "A1",
   "demonstrating_check": "go test ./internal/cli/ -run TestPullRequestsForRun",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:52:26Z",
+  "triaged_at": "2026-09-27T14:52:35Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 4zo",
+  "promoted_as": "4zo",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "6vp",
