@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 54,
-  "state": "publishing",
-  "reason": "closing 6dh behind the integrated gate on 37efa930f673",
-  "updated_at": "2026-09-27T06:38:41Z",
+  "sequence": 55,
+  "state": "running",
+  "reason": "6dh is closed",
+  "updated_at": "2026-09-27T06:38:54Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "6dh",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
