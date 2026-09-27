@@ -21,6 +21,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -49,12 +50,24 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "ticfac-reconcile-bin-")
+	dir, err := os.MkdirTemp("", tempdir.Pattern("ticfac-reconcile-bin-"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 	binDir = dir
+	// Everything this package puts in a temp directory — every t.TempDir,
+	// every tracker, merge and gate tree the reconcilers under test open, the
+	// processes they start — lands INSIDE this one directory (tick w9j). A
+	// suite a gate or a timeout kills runs no cleanup, and what it leaves is
+	// then one ticfac-*-p<pid>-* directory run-epic's sweep can remove, not a
+	// scatter of hundreds.
+	tmp := filepath.Join(dir, "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	_ = os.Setenv("TMPDIR", tmp)
 	// The suite's gate slots live here too, and go away with everything else
 	// below. Every fixture builds a repository of its own, and a slot root
 	// under the host's temp directory (gatedir.go's default) would leave one

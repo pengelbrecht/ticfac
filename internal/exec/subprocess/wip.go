@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // A stopped attempt's preserved work (tick pbb; the wall-clock close-path
@@ -212,11 +214,11 @@ func SnapshotWorktree(worktree, ref, artifactPrefix string) (commit string, err 
 }
 
 func snapshotWorktree(worktree, ref, artifactPrefix, message string) (commit string, err error) {
-	tmpDir, err := os.MkdirTemp("", "ticfac-wip")
+	tmpDir, removeTmp, err := tempdir.Make("ticfac-wip-")
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer removeTmp()
 	index := filepath.Join(tmpDir, "index")
 	indexEnv := []string{"GIT_INDEX_FILE=" + index}
 

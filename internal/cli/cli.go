@@ -28,8 +28,14 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
+
+// tempSweepAge is how long a dead process's temp dir is left alone before
+// run-epic removes it (tick w9j): a day, well past any leg that could still
+// be reading one.
+const tempSweepAge = 24 * time.Hour
 
 // newTracker builds the tracker a command works through, as the tk client
 // against one checkout. It is a seam for exactly one proof — the SIGTERM
@@ -406,6 +412,18 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		fmt.Fprintf(stdout, "%s\n", forgeNote)
 	}
 
+	// What killed processes left in the temp directory (tick w9j): a SIGKILL
+	// runs no cleanup at all. Conservative — only ticfac-* names, never the
+	// gate's slot roots, only a directory whose owning pid is gone and whose
+	// contents nobody has touched for a day. A swept tree that was a worktree
+	// of this checkout leaves a registration with no directory, which the
+	// reconciler's own `git worktree prune` drops as the run starts.
+	if swept, err := tempdir.Sweep(os.TempDir(), tempSweepAge, time.Now()); err != nil {
+		life.Logf("could not sweep stale temp dirs: %v", err)
+	} else if len(swept) > 0 {
+		life.Logf("swept %d stale temp dir(s) a killed process left behind", len(swept))
+	}
+
 	// A death is a terminal feed line, never a feed that simply stops on an
 	// ordinary success. Every path through Run that writes run_finished returns
 	// without an error, so this is the only terminal line on the paths below.
@@ -435,6 +453,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// path the process leaves by, the pidfile is released and the log says how.
 	// Release is idempotent, so the specific outcomes below win.
 	defer life.Release("returned")
+	// Every temp tree still open when the run returns — a gate abandoned
+	// mid-command, a leg that errored past its own cleanup — goes with it.
+	defer tempdir.ReleaseAll()
 	defer func() {
 		if p := recover(); p != nil {
 			detail := fmt.Sprintf("panicked: %v", p)
@@ -483,6 +504,10 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 					detail += "; " + summary
 				}
 			}
+			// os.Exit runs no defer, and every temp tree the run had open —
+			// tracker, merge, gate — was waiting on one (tick w9j). After the
+			// flush, which may still need them.
+			tempdir.ReleaseAll()
 			died(detail)
 			life.Release(detail)
 			status := 130
@@ -842,6 +867,9 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 			"author is the clock release Appendix A #11 refuses\n")
 		return 2
 	}
+	if parseOnly {
+		return 0
+	}
 	if err := reconcile.CheckExecutor(); err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %s.\n%v\n", epicID, NoExecutorMessage, err)
 		return ExitNoExecutor
@@ -855,25 +883,10 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// The same code-hosting surface the run is handed (tick 0iz): the
-	// reconciler this command builds shares the construction refusal, so a
-	// repo declaring the close-out rule is settled by a host that can back
-	// it — and the credential is read from the same one place, only when
-	// the rule needs a forge (tick hio): a repo that declares no rule
-	// resolves nothing.
-	repoDir := *fl.repo
-	if repoDir == "" {
-		if wd, wdErr := os.Getwd(); wdErr == nil {
-			repoDir = wd
-		}
-	}
-	pulls, _, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
-	if pullsErr != nil {
-		fmt.Fprintf(stderr, "ticfac settle %s: no code-hosting surface: %v. "+
-			"A repository that declares the PR + CI close-out rule in .tick/config.md is refused until one is "+
-			"configured.\n", epicID, pullsErr)
-	}
-
+	// A release never reaches the close-out: it writes one settlement record
+	// and asks nothing of the epic PR. So it is built release-only, without
+	// the code-hosting surface the PR + CI rule needs — a person releasing a
+	// stuck attempt is not refused for a GITHUB_TOKEN the release never uses.
 	reconciler, err := reconcile.New(reconcile.Options{
 		Repo:              *fl.repo,
 		Remote:            *fl.remote,
@@ -888,7 +901,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		GateConfig:        *fl.gate,
 		ProfileDir:        *fl.profiles,
 		Tier:              *fl.tier,
-		PullRequests:      pulls,
+		ReleaseOnly:       true,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: %v\n", epicID, err)

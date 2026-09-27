@@ -80,6 +80,9 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 		return 2
 	}
 	runID := rest[0]
+	if parseOnly {
+		return 0
+	}
 	if *repo == "" {
 		var err error
 		*repo, err = os.Getwd()

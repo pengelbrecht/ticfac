@@ -250,6 +250,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		fmt.Fprintf(stderr, "ticfac status: --json prints one answer; a table that refreshes is not a JSON stream — pipe one frame or follow the other\n")
 		return 2
 	}
+	if parseOnly {
+		return 0
+	}
 	if *repo == "" {
 		wd, err := os.Getwd()
 		if err != nil {

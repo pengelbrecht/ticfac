@@ -313,6 +313,28 @@ func TestARuleWithNoForgeRefusesConstruction(t *testing.T) {
 	}
 }
 
+// Releasing an attempt (`ticfac settle`) never reaches the close-out: it
+// writes one settlement record and asks nothing of the epic PR. A settle run
+// in a repo that declares the rule with no GITHUB_TOKEN was refused anyway
+// ("no code-hosting surface … set GITHUB_TOKEN"), so the person releasing a
+// stuck attempt needed a credential for a surface the release never touches.
+// A release-only reconciler is built without it — and refuses to Run, so the
+// exemption cannot become a run whose close-out nothing can check.
+func TestAReleaseOnlyReconcilerNeedsNoForgeAndRefusesToRun(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	declareCloseoutRule(t, f.Repo)
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.ReleaseOnly = true
+	settler, err := New(opts)
+	if err != nil {
+		t.Fatalf("a release-only reconciler was refused for a forge it never uses: %v", err)
+	}
+	if _, err := settler.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "release") {
+		t.Fatalf("a release-only reconciler was allowed to run an epic: %v", err)
+	}
+}
+
 // No rule, no forge needed: the surface is never asked anything, and the
 // close-out is admitted exactly as it was before the rule existed.
 func TestNoRuleMeansNoForgeAndNoQuestions(t *testing.T) {

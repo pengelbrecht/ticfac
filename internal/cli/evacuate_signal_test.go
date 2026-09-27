@@ -16,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -132,6 +133,12 @@ exec sleep 86400
 	// mode. Its PATH carries the supervisor binary, and its runner argv is
 	// the fake runner — the one substitution the executor's own escape hatch
 	// (subprocess.EnvRunnerArgv) exists for.
+	//
+	// The child's temp directory is its own, so what the run leaves there
+	// after the signal is a question this test can answer (tick w9j): the
+	// exit is an os.Exit, which runs none of the defers its temp trees were
+	// waiting on.
+	childTmp := t.TempDir()
 	var out bytes.Buffer
 	cmd := exec.Command(os.Args[0], "-test.run", "^TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote$", "-test.timeout=10m")
 	cmd.Env = append(os.Environ(),
@@ -141,6 +148,7 @@ exec sleep 86400
 		evacRunnerEnv+"="+runnerScript,
 		subprocess.EnvRunnerArgv+"="+strings.Join([]string{"/bin/sh", runnerScript, "{{prompt}}"}, "\n"),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"TMPDIR="+childTmp,
 	)
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Start(); err != nil {
@@ -162,6 +170,10 @@ exec sleep 86400
 			fail("the child never reached an in-flight attempt with work in its worktree")
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+
+	if ticfacTemp(t, childTmp) == nil {
+		fail("the live run holds no temp tree in %s, so its absence after the signal would prove nothing", childTmp)
 	}
 
 	// The eviction: SIGTERM to the main process, the way the platform sends
@@ -197,6 +209,9 @@ exec sleep 86400
 	// were orphans from the moment it exited, and a fixture that left them
 	// running would hand the next test a process holding its directories.
 	evacKillAttemptProcesses(t, stateRoot)
+	if left := ticfacTemp(t, childTmp); left != nil {
+		t.Errorf("the SIGTERM exit left its temp trees behind: %v", left)
+	}
 
 	// The work, as the remote holds it: the attempt's WIP ref carries the
 	// flush's snapshot — the commit no timer ever made — and the snapshot
@@ -358,4 +373,20 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
 	}
 	return string(out)
+}
+
+// ticfacTemp is every ticfac-* entry in dir.
+func ticfacTemp(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), tempdir.Prefix) {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }

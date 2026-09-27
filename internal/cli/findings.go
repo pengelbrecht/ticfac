@@ -144,6 +144,9 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 		return 2
 	}
 	epicID := rest[0]
+	if parseOnly {
+		return 0
+	}
 
 	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
 	if err != nil {
@@ -300,6 +303,9 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		fmt.Fprintf(stderr, "ticfac finding %s %s: say exactly one of --promote-as <tick>, --discard or --fixed-as <commit>\n",
 			epicID, key)
 		return 2
+	}
+	if parseOnly {
+		return 0
 	}
 
 	store, err := openFindingsStore(epicID, *repo, *remote, *branch, *runID)
