@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 250,
-  "state": "integrating",
-  "reason": "integrating 53k attempt 34 into epic/2jn",
-  "updated_at": "2026-09-27T14:21:21Z",
+  "sequence": 251,
+  "state": "gating",
+  "reason": "running the integrated gate for 53k on bb824bebe380",
+  "updated_at": "2026-09-27T14:21:32Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -153,7 +153,7 @@
     },
     {
       "tick_id": "53k",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 34
     },
     {
