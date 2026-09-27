@@ -380,6 +380,82 @@ func TestTheReadmeNamesTheOneCommandInstall(t *testing.T) {
 	}
 }
 
+// TestTheMakefileCutsTheTagTheReleaseWorkflowBuilds pins the one command
+// that turns a merge into an installable release. The tag IS the release:
+// nothing but a pushed v* tag triggers .github/workflows/release.yml (the
+// workflow test above pins that), and until the FIRST tag exists the stable
+// install URL answers nothing — releases/latest has no release to resolve
+// and install.sh aborts — so the first cut is part of the first merge to
+// main, not a remembered procedure performed by hand afterwards (tick 5o5).
+// The target is what makes it one command: it refuses a VERSION that is
+// missing or does not start with v — a tag the workflow does not listen
+// for is a release nobody can install — and it pushes the annotated tag
+// the workflow builds from.
+//
+// short: reads the Makefile and greps one target; no build, no subprocess
+func TestTheMakefileCutsTheTagTheReleaseWorkflowBuilds(t *testing.T) {
+	recipe := makefileRecipe(t, "release")
+	if recipe == "" {
+		t.Fatal("the Makefile has no `release` target — cutting a release is `make release VERSION=vX.Y.Z`, and without the target it is a remembered procedure again (tick 5o5)")
+	}
+	for _, want := range []string{
+		`test -n "$(VERSION)"`,
+		`case "$(VERSION)" in v*)`,
+		`git tag -a "$(VERSION)"`,
+		`git push origin "$(VERSION)"`,
+	} {
+		if !strings.Contains(recipe, want) {
+			t.Errorf("the Makefile's release target does not carry %q:\n%s", want, recipe)
+		}
+	}
+}
+
+// TestTheReadmeNamesHowTheFirstReleaseIsCut pins the other half of the
+// stable install URL's story: the URL answers nothing until main carries
+// install.sh AND a v* tag exists, and the README must say so — that cutting
+// a release is one command, and that the FIRST tag is what makes the
+// one-command install reachable at all. A README that documents the
+// install and not the cut leaves the first release to whoever notices the
+// 404 (tick 5o5).
+//
+// short: reads the README and greps one section; no build, no subprocess
+func TestTheReadmeNamesHowTheFirstReleaseIsCut(t *testing.T) {
+	section := readmeSection(readDistFile(t, "README.md"), "Install")
+	if section == "" {
+		t.Fatal("README.md has no \"## Install\" section")
+	}
+	for _, want := range []string{
+		"make release VERSION=vX.Y.Z",
+		"until a `v*` tag exists",
+	} {
+		if !strings.Contains(section, want) {
+			t.Errorf("the README's Install section does not mention %q:\n%s", want, section)
+		}
+	}
+}
+
+// makefileRecipe reads one target's recipe lines from the Makefile, the
+// leading tab stripped. An empty answer means the target is not there —
+// which is itself the finding, so the caller names what it wanted.
+func makefileRecipe(t *testing.T, target string) string {
+	t.Helper()
+	lines := strings.Split(readDistFile(t, "Makefile"), "\n")
+	for i, line := range lines {
+		if line != target+":" {
+			continue
+		}
+		var recipe []string
+		for _, next := range lines[i+1:] {
+			if !strings.HasPrefix(next, "\t") {
+				break
+			}
+			recipe = append(recipe, strings.TrimPrefix(next, "\t"))
+		}
+		return strings.Join(recipe, "\n")
+	}
+	return ""
+}
+
 // readmeSection extracts one `## <title>` section's body, up to the next
 // `## ` heading. An empty string means the section is not there at all.
 func readmeSection(readme, title string) string {

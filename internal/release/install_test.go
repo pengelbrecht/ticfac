@@ -255,10 +255,11 @@ func releaseArchiveName(t *testing.T, root, version, goos, goarch string) string
 	return rendered + ".tar.gz"
 }
 
-// gate: 3s — measured 2.1s warm (the gate's own condition: its cache
-// serves the builds); the tick's acceptance names a machine that never
-// built ticfac installing it and running doctor, this is the only proof of
-// that path, and its failure mode ships silently broken releases
+// gate: 4s — measured 4.0s/2.6s/2.3s warm over three runs after the tick-5o5
+// temp-dir subtest (the builds answer from the gate's cache); the tick's
+// acceptance names a machine that never built ticfac installing it and
+// running doctor, this is the only proof of that path, and its failure mode
+// ships silently broken releases
 func TestInstallScriptInstallsBothBinariesAndRunsDoctor(t *testing.T) {
 	shorttest.LoadBearing(t)
 	h := newInstallHarness(t)
@@ -356,6 +357,39 @@ func TestInstallScriptInstallsBothBinariesAndRunsDoctor(t *testing.T) {
 			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 				t.Errorf("install.sh left %d files in the install dir while refusing:\n%s", len(entries), out)
 			}
+		}
+	})
+
+	// The temp dir the download lands in is removed by the script's exit
+	// trap — QUOTED, because mktemp's answer can carry a space (GNU mktemp
+	// honors TMPDIR, and a TMPDIR with a space in it is a legal one), and the
+	// trap is the last line of the script to see that path. An unquoted trap
+	// does not fail the install — it fails only to clean up, so nothing but a
+	// path that makes the word-split matter can see it. The mktemp shim
+	// reproduces GNU mktemp -d against a spaced TMPDIR the way the script
+	// actually gets its temp dir — by calling mktemp — rather than a seam
+	// the script does not have.
+	t.Run("cleans its temp dir when the path carries a space", func(t *testing.T) {
+		shim := t.TempDir()
+		spaced := filepath.Join(shim, "sp ace")
+		if err := os.Mkdir(spaced, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		script := "#!/bin/sh\nd='" + spaced + "/tmp.down load.XXXX'\nmkdir \"$d\" && echo \"$d\"\n"
+		if err := os.WriteFile(filepath.Join(shim, "mktemp"), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		code, out := h.runScript(t, dir, h.baseURL, "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+		if code != 0 {
+			t.Fatalf("install.sh exited %d with a spaced temp dir:\n%s", code, out)
+		}
+		entries, err := os.ReadDir(spaced)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Errorf("install.sh left %d entries in its temp dir — the exit trap must remove the QUOTED temp path, and a path with a space is the one that exposes an unquoted expansion:\n%s", len(entries), out)
 		}
 	})
 
