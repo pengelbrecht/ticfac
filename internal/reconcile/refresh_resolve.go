@@ -200,7 +200,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		r.record("", StageAdopted, "%s", note)
 	}
 
-	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, failed)
+	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, "", failed)
 	var resolveHead string
 	if collected != nil && collected.Result != nil && collected.Result.Source.HeadSHA != nil {
 		resolveHead = *collected.Result.Source.HeadSHA
