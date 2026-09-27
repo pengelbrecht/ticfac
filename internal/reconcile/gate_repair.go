@@ -250,7 +250,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		// SETTLED — its work is on the branch above, and finishing from the
 		// branch is the honest answer to that, not a restart.
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
-			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
+			if remote := r.settledJobHead(branch); remote != "" {
 				return false, r.finishRepairFromBranch(ctx, entry, marker, identity, merged.AttemptHead, remote, g)
 			}
 		}
@@ -360,6 +360,9 @@ func (r *Reconciler) collectRepair(ctx context.Context, handle *subprocess.JobHa
 	r.preserveAttemptWork(marker)
 
 	handed := carried != "" && collected.Verdict == subprocess.VerdictNoCommits
+	if handed {
+		r.preserveHandedWork(marker, carried)
+	}
 	switch {
 	case collected.Verdict != subprocess.VerdictReadyToMerge && !handed:
 		return collected, failed("it answered %s and the run's verdict is %s (%s): %s. The tick is neither "+
@@ -383,7 +386,7 @@ func (r *Reconciler) collectRepair(ctx context.Context, handle *subprocess.JobHa
 func (r *Reconciler) mergeRepair(marker attemptHandle, head string, g *gateProgress) (string, error) {
 	tick := marker.TickID
 	failures := strings.Join(g.failures, ", ")
-	if err := r.git.fetch(marker.WriteRef); err != nil {
+	if err := r.haveCommit(head, marker.WriteRef); err != nil {
 		return "", fmt.Errorf("fetch the repair job's branch %s: %w", branchOf(marker.WriteRef), err)
 	}
 	if _, err := r.git.resolve(head); err != nil {

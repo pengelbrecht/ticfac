@@ -53,8 +53,8 @@ const bundleRoot = "cloudflare"
 // sandboxRoot is the prefix the embedded FS uses for the orchestrator image's
 // build context: image/, where SPEC §12 Phase 4 item 4 moved it from
 // cloud/sandbox (a move and nothing else — every path RELATIVE to this root is
-// unchanged, so the staged build context and the digests in sandbox.pin.json
-// are byte-identical across the move).
+// unchanged, so the staged build context was byte-identical across the move).
+// ticfac authors the tree since tick r6w.
 const sandboxRoot = "image"
 
 // sandboxHashDir is the directory name the bundle SHA records the image

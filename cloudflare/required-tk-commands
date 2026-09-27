@@ -22,7 +22,7 @@
 # TestFactoryListAllReachesTicksOwnedByAnyone asserts the flag's EFFECT, not
 # just that it is still accepted, so turning it into a no-op fails too.
 #
-# RELATION TO cloud/sandbox/required-tk-commands: deliberately a separate
+# RELATION TO image/required-tk-commands: deliberately a separate
 # file, not a merge and not a subset. That one is derived from the image's
 # shell scripts (entrypoint.sh, worker.sh, common.sh, preflight.sh) by
 # factory.EntrypointTkCommands, so it can only ever express "the container's

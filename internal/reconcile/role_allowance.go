@@ -179,3 +179,56 @@ func failureReason(err error) string {
 	}
 	return reason
 }
+
+// haveCommit makes `head` a commit this checkout has: it already does, or it
+// is fetched from `ref`. A job handed a committed resolution (or fix) that
+// found nothing left to change answers with that very commit — which this
+// checkout already has, and which is durable on the FAILED job's branch —
+// while its own branch reaches origin only if its supervisor's best-effort
+// final push landed. Fetching that branch unconditionally made a push that
+// failed under load a stop (#82's retry test, CI run 36349904786).
+func (r *Reconciler) haveCommit(head, ref string) error {
+	if head != "" {
+		if _, err := r.git.resolve(head); err == nil {
+			return nil
+		}
+	}
+	return r.git.fetch(ref)
+}
+
+// preserveHandedWork puts the commit a job was handed and answered with on
+// the job's own branch too, so a restart that finds the job settled finishes
+// it from its branch like any other. It is best-effort: the commit is already
+// durable on the branch of the job that committed it, and a push that fails
+// here is recorded, never a stop.
+func (r *Reconciler) preserveHandedWork(marker attemptHandle, handed string) {
+	branch := branchOf(marker.WriteRef)
+	if remote, err := r.git.remoteHead(branch); err == nil && remote == handed {
+		return
+	}
+	if _, stderr, err := r.git.try("", "push", r.opts.Remote, handed+":"+refFor(branch)); err != nil {
+		r.record(marker.TickID, StageCollected,
+			"%s answers with %s, the commit it was handed, which could not be put on its own branch %s (%s): "+
+				"it stays durable on the branch of the job that committed it",
+			marker.JobID, short(handed), branch, firstLine(stderr))
+	}
+}
+
+// settledJobHead is the head a settled run-dispatched job left on `branch`,
+// for the finish-from-the-branch path: origin's, when the branch reached it,
+// and otherwise the job's local branch in this checkout. A job's branch
+// reaches origin only through collect's preservation or its supervisor's
+// best-effort push, and a job that answered with the commit it was HANDED has
+// nothing for collect to preserve — so the incarnation (or the lease-lost
+// pass of the same one) that finds it settled reads it here rather than
+// refusing a job that finished.
+func (r *Reconciler) settledJobHead(branch string) string {
+	if remote, err := r.git.remoteHead(branch); err == nil && remote != "" {
+		return remote
+	}
+	local, err := r.git.resolve(refFor(branch))
+	if err != nil {
+		return ""
+	}
+	return local
+}

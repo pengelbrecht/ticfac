@@ -154,14 +154,14 @@ require_common_inputs() {
 # actionable stop at boot, never a silent fall back to a vendor default.
 require_gateway() {
 	if [[ -z $gateway ]]; then
-		die $EXIT_CONFIG "no AI_GATEWAY_BASE_URL — all cloud model traffic must go through the operator's AI Gateway; run 'tk factory setup' to configure one"
+		die $EXIT_CONFIG "no AI_GATEWAY_BASE_URL — all cloud model traffic must go through the operator's AI Gateway; run 'ticfac factory setup' to configure one"
 	fi
 	# The run's own credential. It is the ONLY model credential in this
 	# container: the vendor key stays in the control plane, which exchanges it
 	# per request and can revoke this token mid-run. A boot without one could
 	# not make a single model call, so it stops here rather than after a clone.
 	if [[ -z $gateway_token ]]; then
-		die $EXIT_CONFIG "no AI_GATEWAY_TOKEN — a run's model traffic carries a run-scoped gateway token the Run Workflow mints; if you are starting this image by hand, mint one or run 'tk factory setup'"
+		die $EXIT_CONFIG "no AI_GATEWAY_TOKEN — a run's model traffic carries a run-scoped gateway token the Run Workflow mints; if you are starting this image by hand, mint one or run 'ticfac factory setup'"
 	fi
 	gateway="${gateway%/}"
 	if [[ ! $gateway =~ ^https?://[^/]+ ]]; then
@@ -171,7 +171,7 @@ require_gateway() {
 	host="${host%%/*}"
 	case "$host" in
 	api.anthropic.com | api.openai.com | openrouter.ai | generativelanguage.googleapis.com)
-		die $EXIT_CONFIG "AI_GATEWAY_BASE_URL points straight at the vendor ($host) — that is a vendor default, not a gateway; run 'tk factory setup'"
+		die $EXIT_CONFIG "AI_GATEWAY_BASE_URL points straight at the vendor ($host) — that is a vendor default, not a gateway; run 'ticfac factory setup'"
 		;;
 	esac
 }
@@ -297,7 +297,7 @@ select_model_route() {
 	# Compatible, not identical: that endpoint takes messages[].content as a
 	# STRING and omp sends OpenAI content parts, so the factory's gateway Worker
 	# normalises the two on this route (stringifyContentParts in
-	# cloud/factory/src/gateway.ts). Nothing in the container does that work —
+	# cloudflare/src/gateway.ts). Nothing in the container does that work —
 	# but a deployment whose gateway predates that fix answers this route's
 	# first real call with a 400 naming /messages/N/content, which is what to
 	# look for here.
@@ -425,7 +425,7 @@ The harness would have started and hung on this same call, so the boot stops her
   model: $model_id (provider $model_provider, routed from '$model')
   status: $status
   body: ${body:-<empty>}
-This is a stop, not a warning: the harness would have started, reached the skill loop and hung on its first call. Configure the provider behind the gateway with 'tk factory setup', or route [orchestrator].model in .tick/runners.toml at a model that provider serves."
+This is a stop, not a warning: the harness would have started, reached the skill loop and hung on its first call. Configure the provider behind the gateway with 'ticfac factory setup', or route [orchestrator].model in .tick/runners.toml at a model that provider serves."
 }
 
 # ---------------------------------------------------------------------------
@@ -448,7 +448,7 @@ This is a stop, not a warning: the harness would have started, reached the skill
 #   error: No API key found for cloudflare-ai-gateway.
 #
 # So the wiring is a table, per kind, stated once here. A fifth kind is an edit
-# to this table plus a row in cloud/sandbox/README.md: say what the kind calls
+# to this table plus a row in image/README.md: say what the kind calls
 # each gateway route, which variable carries the credential, and what wire
 # shape it should speak. It is deliberately not a lookup done at start time
 # from something the kind prints — the point is that the knowledge is written
@@ -513,7 +513,7 @@ select_harness_route() {
 			harness_model_api="openai-completions"
 			;;
 		*)
-			die $EXIT_HARNESS "no omp provider is wired for the gateway route '$model_provider' — add it to the kind table in this script and to cloud/sandbox/README.md rather than letting omp pick a provider nothing authorised"
+			die $EXIT_HARNESS "no omp provider is wired for the gateway route '$model_provider' — add it to the kind table in this script and to image/README.md rather than letting omp pick a provider nothing authorised"
 			;;
 		esac
 		# Provider-qualified, always. Handed a bare id, omp fuzzy-matches its
@@ -556,7 +556,7 @@ select_harness_route() {
 			export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-routed-through-the-run-gateway}"
 			;;
 		*)
-			die $EXIT_HARNESS "no pi provider is wired for the gateway route '$model_provider' — add it to the kind table in this script and to cloud/sandbox/README.md rather than letting pi pick a provider nothing authorised"
+			die $EXIT_HARNESS "no pi provider is wired for the gateway route '$model_provider' — add it to the kind table in this script and to image/README.md rather than letting pi pick a provider nothing authorised"
 			;;
 		esac
 		# Provider-qualified for the same reason as omp's: pi resolves the
@@ -780,7 +780,7 @@ The gateway itself answered the model probe above, so this is the harness hangin
   model: $harness_model_selector
   credential variable: $harness_credential_env
   output: ${answer:-<none>}
-The model probe above was GREEN, so the gateway and the route are fine and this is the harness's own provider wiring. Its message is quoted verbatim above; the kind table in this script and in cloud/sandbox/README.md is what fixes it."
+The model probe above was GREEN, so the gateway and the route are fine and this is the harness's own provider wiring. Its message is quoted verbatim above; the kind table in this script and in image/README.md is what fixes it."
 	fi
 	# Case-insensitively, because "Ready." is a model complying and a gate that
 	# fails on it is a gate that cries wolf.
@@ -890,7 +890,7 @@ explain_git_refusal() {
 
 	if [[ $auth_status == 2* ]]; then
 		if [[ $challenge == no && $anon_status == 401 ]]; then
-			warn "the remote ACCEPTS this run's own credential ($auth_status when it is sent up front) but never ASKS for it: its 401 carries no WWW-Authenticate header, so git is told no auth scheme and sends nothing. The credential is fine; the door must challenge. See GIT_AUTH_CHALLENGE in cloud/factory/src/credentials.ts"
+			warn "the remote ACCEPTS this run's own credential ($auth_status when it is sent up front) but never ASKS for it: its 401 carries no WWW-Authenticate header, so git is told no auth scheme and sends nothing. The credential is fine; the door must challenge. See GIT_AUTH_CHALLENGE in cloudflare/src/credentials.ts"
 		else
 			warn "the remote answered $auth_status to a probe carrying this run's own credential, so the credential is accepted and the refusal is something else — re-read the fetch error above"
 		fi

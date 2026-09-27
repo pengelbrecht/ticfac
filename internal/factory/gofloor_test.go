@@ -305,8 +305,11 @@ func TestExplicitWorkflowGoPinsAreCheckedAgainstTheFloor(t *testing.T) {
 		want     string // "" for meets; a fragment of the refusal otherwise
 	}{
 		{"following the module", "      - uses: actions/setup-go@v6\n        with:\n          go-version-file: go.mod\n", ""},
-		{"pinning above the floor", "          go-version: 1.25.0\n", ""},
-		{"pinning at the floor", "          go-version: '1.24.2'\n", ""},
+		// Relative to go.mod's floor, not spelled out: the floor rises (the
+		// image's Go bump took it from 1.24.2 to 1.26.0), and a pin that was
+		// "above" it when this was written is below it now.
+		{"pinning above the floor", "          go-version: {ABOVE}\n", ""},
+		{"pinning at the floor", "          go-version: '{FLOOR}'\n", ""},
 		{"pinning below the floor", "          go-version: 1.22.0\n", "pins go 1.22.0"},
 		{"pinning an unreadable value", "          go-version: stable\n", "not a plain dotted go version"},
 		{"pinning an expression", "          go-version: ${{ vars.GO }}\n", "not a plain dotted go version"},
@@ -318,19 +321,24 @@ func TestExplicitWorkflowGoPinsAreCheckedAgainstTheFloor(t *testing.T) {
 			if err := os.MkdirAll(filepath.Join(root, ".github", "workflows"), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(root, ".github", "workflows", "ci.yml"), []byte(tc.workflow), 0o644); err != nil {
+			floor, err := moduleGoFloor(real.gomod)
+			if err != nil {
+				t.Fatal(err)
+			}
+			workflow := strings.NewReplacer("{FLOOR}", floor, "{ABOVE}", aboveGoFloor(t, floor)).Replace(tc.workflow)
+			if err := os.WriteFile(filepath.Join(root, ".github", "workflows", "ci.yml"), []byte(workflow), 0o644); err != nil {
 				t.Fatal(err)
 			}
 
-			err := checkGoToolchainFloor(root)
+			err = checkGoToolchainFloor(root)
 			if tc.want == "" {
 				if err != nil {
-					t.Errorf("a workflow with %q was refused: %v", strings.TrimSpace(strings.SplitN(tc.workflow, "go-version", 2)[1]), err)
+					t.Errorf("a workflow with %q was refused: %v", strings.TrimSpace(strings.SplitN(workflow, "go-version", 2)[1]), err)
 				}
 				return
 			}
 			if err == nil {
-				t.Fatalf("a workflow with %q passed a 1.24.2 floor", tc.workflow)
+				t.Fatalf("a workflow with %q passed a %s floor", workflow, floor)
 			}
 			if !strings.Contains(err.Error(), "ci.yml:") {
 				t.Errorf("the refusal does not name the workflow file and line: %v", err)
@@ -373,4 +381,18 @@ func writeFloorFixture(t *testing.T, root, gomod, dockerfile string) {
 	if err := os.WriteFile(filepath.Join(root, "image", sandboxDockerfileName), []byte(dockerfile), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// aboveGoFloor is a Go version one minor release above floor.
+func aboveGoFloor(t *testing.T, floor string) string {
+	t.Helper()
+	fields := strings.Split(floor, ".")
+	if len(fields) < 2 {
+		t.Fatalf("go.mod's floor %q has no minor version", floor)
+	}
+	minor, err := strconv.Atoi(fields[1])
+	if err != nil {
+		t.Fatalf("go.mod's floor %q: %v", floor, err)
+	}
+	return fields[0] + "." + strconv.Itoa(minor+1) + ".0"
 }
