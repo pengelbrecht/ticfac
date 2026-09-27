@@ -235,7 +235,7 @@ func (r *Reconciler) dispatchBaseFold(ctx context.Context, base, baseHead, epicH
 	handle, err := executor.Start(r.baseFoldJobSpec(dispatch))
 	if err != nil {
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
-			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
+			if remote := r.settledJobHead(branch); remote != "" {
 				merged, ferr := r.finishBaseFoldFromBranch(base, baseHead, remote, marker, conflict, sides)
 				if ferr != nil {
 					return "", nil, false, ferr
@@ -348,7 +348,7 @@ func (r *Reconciler) finalizeBaseFold(dispatch *Dispatch, job *jobInFlight, mark
 func (r *Reconciler) mintBaseFold(resolveHead, baseHead string, marker attemptHandle,
 	conflict *mergeConflict, failed func(format string, args ...any) error) (string, error) {
 
-	if err := r.git.fetch(marker.WriteRef); err != nil {
+	if err := r.haveCommit(resolveHead, marker.WriteRef); err != nil {
 		return "", fmt.Errorf("fetch the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
 	}
 	if _, err := r.git.resolve(resolveHead); err != nil {
