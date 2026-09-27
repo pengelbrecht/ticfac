@@ -210,7 +210,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 	}
 	var merged string
 	if rerr == nil {
-		merged, rerr = r.mintBaseFold(resolveHead, epicHead, baseHead, marker, conflict, failed)
+		merged, rerr = r.mintBaseFold(resolveHead, baseHead, marker, conflict, failed)
 	}
 	if rerr != nil {
 		if _, ok := AsRefusal(rerr); ok {
@@ -261,8 +261,17 @@ func (r *Reconciler) finalizeBaseFold(dispatch *Dispatch, job *jobInFlight, mark
 
 // mintBaseFold is the mechanical half: the conflicted files verified free of
 // markers at the job's head, and the merge commit — parents: the epic head the
-// fold was resolved against, the base head — built over the job's tree.
-func (r *Reconciler) mintBaseFold(resolveHead, epicHead, baseHead string, marker attemptHandle,
+// fold was RESOLVED AGAINST, the base head — built over the job's tree.
+//
+// The first parent is read off the conflicted fold the job's branch starts
+// from — the merge commit whose second parent is the base head — never taken
+// from the branch as it stands now: a job an earlier incarnation cut over an
+// older epic head (adopted while live, or finished from its branch) resolved
+// THAT head's tree, and a merge naming a later head as its parent over that
+// tree silently reverts whatever landed in between. The refresh loop folds a
+// resolution whose first parent is not the branch's head onto the head it has
+// now, with a real merge.
+func (r *Reconciler) mintBaseFold(resolveHead, baseHead string, marker attemptHandle,
 	conflict *mergeConflict, failed func(format string, args ...any) error) (string, error) {
 
 	if err := r.git.fetch(marker.WriteRef); err != nil {
@@ -271,6 +280,10 @@ func (r *Reconciler) mintBaseFold(resolveHead, epicHead, baseHead string, marker
 	if _, err := r.git.resolve(resolveHead); err != nil {
 		return "", fmt.Errorf("the resolve-conflict job's head %s is not a commit this checkout has: %w",
 			short(resolveHead), err)
+	}
+	epicHead, err := r.resolvedOver(resolveHead, baseHead)
+	if err != nil {
+		return "", failed("its branch %v", err)
 	}
 	if path, left := r.markersLeftAt(resolveHead, conflict.Files); left {
 		return "", failed("it committed %s still carrying its conflict markers — a resolution that did not happen "+
@@ -291,10 +304,10 @@ func (r *Reconciler) mintBaseFold(resolveHead, epicHead, baseHead string, marker
 }
 
 // finishBaseFoldFromBranch completes a fold from a resolve that is already
-// durable on its branch. The epic head it was resolved against is read off the
-// conflicted fold the branch starts from — the merge commit whose second
-// parent is the base head — so the minted merge's parents are the two heads
-// the job actually resolved, whatever the branch has done since.
+// durable on its branch. The mint reads the epic head it was resolved against
+// off the conflicted fold the branch starts from, so the minted merge's
+// parents are the two heads the job actually resolved, whatever the branch has
+// done since.
 func (r *Reconciler) finishBaseFoldFromBranch(base, baseHead, remote string, marker attemptHandle,
 	conflict *mergeConflict, sides string) (string, error) {
 
@@ -305,25 +318,7 @@ func (r *Reconciler) finishBaseFoldFromBranch(base, baseHead, remote string, mar
 				"and run the epic again",
 			sides, conflict.Detail, branchOf(marker.WriteRef), fmt.Sprintf(format, args...), base, r.branch)
 	}
-	if err := r.git.fetch(marker.WriteRef); err != nil {
-		return "", fmt.Errorf("fetch the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
-	}
-	lines, err := r.git.run("", "rev-list", "--first-parent", "--parents", remote)
-	if err != nil {
-		return "", fmt.Errorf("read the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
-	}
-	epicOld := ""
-	for _, line := range strings.Split(lines, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 3 && fields[2] == baseHead {
-			epicOld = fields[1]
-			break
-		}
-	}
-	if epicOld == "" {
-		return "", failed("the branch does not start from a fold of %s", short(baseHead))
-	}
-	merged, err := r.mintBaseFold(remote, epicOld, baseHead, marker, conflict, failed)
+	merged, err := r.mintBaseFold(remote, baseHead, marker, conflict, failed)
 	if err != nil {
 		return "", err
 	}
