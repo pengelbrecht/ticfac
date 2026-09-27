@@ -12,8 +12,11 @@
   "attempt": 16,
   "done_item": "none",
   "demonstrating_check": "go test -short ./internal/cli/ -run TestWatchOnATerminalEndsHoldingForAPerson -count=1 under load",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T09:58:44Z",
+  "triaged_at": "2026-09-27T09:58:58Z",
+  "triaged_by": "ticfac run epic-2jn absorbing xrn",
+  "promoted_as": "xrn",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "9sz",
