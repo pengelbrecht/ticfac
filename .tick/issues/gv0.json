@@ -1,0 +1,14 @@
+{
+  "id": "gv0",
+  "title": "Demonstrate 2jn's A1 and A5 live: ticfac init + ticfac run in herdr on claude, and one epic via ticfac run --cloud",
+  "gloss": "live demo of 2jn's run verbs",
+  "description": "Carried from 2jn's tm5 (finding 08a0146a, rrl attempt 54): 2jn's A1 (ticfac init then ticfac run \u003cepic\u003e in herdr panes on claude) and A5 (run --cloud) were tested with stand-ins, never live. A worker cannot do this (it means running a whole other epic and a cloud run from inside a tick), so the operator does it: run the next local epic (6in) with ticfac init + ticfac run in herdr on claude, and u9h's first real cloud run with ticfac run --cloud. Record the evidence (commands, run ids, outcome) here.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "One epic ran start to finish via 'ticfac run' in herdr on claude, and one via 'ticfac run --cloud', on a binary that includes 2jn; the run ids and outcomes are noted on this tick",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-27T20:54:57.911286Z",
+  "updated_at": "2026-09-27T20:54:57.911286Z"
+}
