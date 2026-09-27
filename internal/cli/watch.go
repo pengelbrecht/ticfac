@@ -273,7 +273,15 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// and terminal.
 	held := false
 	terminal := ""
+<<<<<<< HEAD
 	terminalDetail := ""
+=======
+	// The epic id the clearing commands are addressed by (tick gtk): read
+	// out of the run's own id for a local run, carried by the factory's run
+	// record for a cloud one — never a `<epic-id>` placeholder, which is a
+	// second thing to look up, not a command.
+	epicID := watchEpicID(runID, source)
+>>>>>>> 3ee69edf425c32224ce298d6d467fc478393382a
 	followCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// The '<tick>#<n>' prefix names the tick's own TRY (tick h58), not the
@@ -303,7 +311,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		if event.Stage == reconcile.StageRunHeld {
 			// The line the whole command exists for, said to a human: which
 			// tick, which attempt, why — all read off the line's own fields,
-			// never out of its prose — and the command that moves the hold on.
+			// never out of its prose — and the command that moves the hold on,
+			// named by WHAT the run holds (tick gtk): the close-out's
+			// untriaged-findings hold is cleared by triage, and settle there
+			// would point at a command that refuses it; every other hold is
+			// the settle command the run-wide dispatch number addresses.
 			held = true
 			tick, attempt, what := "-", "-", "-"
 			if event.TickID != nil {
@@ -318,12 +330,21 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				try, _ := tries.Of(tick, *event.Attempt)
 				what = reconcile.AttemptLabel(tick, try, *event.Attempt)
 			}
-			fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
-				"Nothing proceeds until somebody decides. Release it with `ticfac settle <epic-id> %s %s "+
-				"--release \"<who>\"` — add --carry-work to base the "+
-				"next try on the commits the released one left — or answer what the tick is waiting for. The "+
-				"evidence is on the integration branch, not in this line.\n\n",
-				runID, what, event.Detail, tick, attempt)
+			if strings.HasPrefix(event.Detail, reconcile.RefusedFindingUntriaged+":") {
+				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
+					"Nothing proceeds until somebody decides. Triage the finding(s) with `ticfac triage %s` — "+
+					"every untriaged finding of the run settles there, by short key prefix — "+
+					"or answer what the tick is waiting for. The "+
+					"evidence is on the integration branch, not in this line.\n\n",
+					runID, what, event.Detail, epicID)
+			} else {
+				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
+					"Nothing proceeds until somebody decides. Release it with `ticfac settle %s %s %s "+
+					"--release \"<who>\"` — add --carry-work to base the "+
+					"next try on the commits the released one left — or answer what the tick is waiting for. The "+
+					"evidence is on the integration branch, not in this line.\n\n",
+					runID, what, event.Detail, epicID, tick, attempt)
+			}
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {
 			// The run's own last word ends the watch: a watcher must not
@@ -427,6 +448,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	return finish(agentStateDone, nil)
 }
 
+<<<<<<< HEAD
 // watchLineEndedFailed says whether the run's own terminal line says the run
 // FAILED — never the watcher's guess about the work. The reconciler writes
 // run_finished's detail LED by the runstate word it checkpointed ("failed:
@@ -459,6 +481,23 @@ func watchModelEndedFailed(model statusmodel.Model) bool {
 		return false
 	}
 	return watchLineEndedFailed(model.Liveness.LastEvent.Stage, model.Liveness.LastEvent.Detail)
+=======
+// watchEpicID is the epic id the clearing commands are addressed by: read
+// out of the run's own id for a local run (`epic-<id>` is the run id's
+// shape, and a bare epic id is accepted everywhere too), carried by the
+// factory's run record for a cloud one, whose `run_` plus hex names the
+// Workflow instance and spells no epic at all. A placeholder is not an
+// id — a person copying the command the alert names must not have to
+// look the epic up to fill it in (tick gtk).
+func watchEpicID(runID string, source runfeed.Source) string {
+	if rest, ok := strings.CutPrefix(runID, "epic-"); ok && rest != "" {
+		return rest
+	}
+	if cloud, ok := source.(*cloudFeedSource); ok && cloud.epic != "" {
+		return cloud.epic
+	}
+	return runID
+>>>>>>> 3ee69edf425c32224ce298d6d467fc478393382a
 }
 
 // watchRunStillAlive answers whether the run's own claim says it is going,

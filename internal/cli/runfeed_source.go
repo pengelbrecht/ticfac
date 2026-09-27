@@ -60,6 +60,7 @@ const defaultCloudFeedInterval = defaultCloudLogsInterval
 type cloudFeedSource struct {
 	client *cloudClient
 	runID  string
+	epic   string // the run record's own epic id, as the route that resolved the feed served it
 	warn   io.Writer
 
 	mu    sync.Mutex
@@ -182,7 +183,10 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 	if err := decodeCloudJSON(data, &response); err != nil {
 		return nil, "", err
 	}
-	return &cloudFeedSource{client: client, runID: runID, warn: stderr}, "cloud", nil
+	// The record's own epic id rides the source: the clearing commands a
+	// hold names are addressed by it, and a cloud run's id (run_ plus hex)
+	// does not spell the epic the way a local run's does (tick gtk).
+	return &cloudFeedSource{client: client, runID: runID, epic: response.Run.Epic, warn: stderr}, "cloud", nil
 }
 
 // looksLikeCloudRunID reports whether an id can only name a cloud run:

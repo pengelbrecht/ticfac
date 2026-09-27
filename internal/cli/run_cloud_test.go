@@ -363,6 +363,12 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	if !strings.Contains(stderr.String(), "HOLDING") || !strings.Contains(stderr.String(), "ticfac triage epic1") {
 		t.Fatalf("the hold does not name the triage command:\n%s", stderr.String())
 	}
+	// A cloud run's id (run_ plus hex) spells no epic, so the alert reads
+	// the epic out of the factory's own run record — never a placeholder a
+	// person would have to fill in from another screen (tick gtk).
+	if strings.Contains(stderr.String(), "<epic-id>") {
+		t.Fatalf("the cloud hold's alert still prints an epic-id placeholder:\n%s", stderr.String())
+	}
 
 	// The one command that moves the hold on, settled the everyday way — a
 	// short key prefix, no 64-hex key — on the branch the cloud run owns.

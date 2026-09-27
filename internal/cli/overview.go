@@ -263,10 +263,12 @@ func overviewEntryOf(model statusmodel.Model) overviewRun {
 	case statusmodel.PhaseFailed:
 		// The run ended in its own failure, holding nothing: the reason is
 		// its own last word, and the clearing command is the resume after a
-		// fix — the sentence the operator's own tick spells.
+		// fix — named by the host the run lives on (tick gtk), so a cloud
+		// failure's resume is a new submission to its factory, never a
+		// local foreground restart.
 		entry.State = overviewStateFailed
 		entry.Reason = lastWordOf(model)
-		clear := fmt.Sprintf("ticfac run-epic %s", model.EpicID)
+		clear := statusmodel.ResumeCommand(model.Host, model.EpicID)
 		entry.ClearWith = &clear
 	case statusmodel.PhaseCancelled:
 		entry.State = overviewStateCancelled
@@ -285,7 +287,7 @@ func overviewEntryOf(model statusmodel.Model) overviewRun {
 	case "failed":
 		entry.State = overviewStateFailed
 		entry.Reason = cloudEndReasonOf(model)
-		clear := fmt.Sprintf("ticfac run-epic %s", model.EpicID)
+		clear := statusmodel.ResumeCommand(model.Host, model.EpicID)
 		entry.ClearWith = &clear
 	case "stopped":
 		entry.State = overviewStateCancelled

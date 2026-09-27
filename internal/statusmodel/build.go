@@ -752,7 +752,11 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 			What:        fmt.Sprintf("run %s is %s: %s", m.RunID, src.Liveness.State, src.Liveness.Reason),
 			NeedsPerson: true,
 		}
-		unblock := fmt.Sprintf("ticfac run-epic %s", m.EpicID)
+		// The resume is named by the host the run lives on (tick gtk): a
+		// cloud run's is a new submission to its factory — run --cloud —
+		// because run-epic here would restart the epic LOCALLY, in the
+		// foreground, on the machine that happens to be reading.
+		unblock := ResumeCommand(m.Host, m.EpicID)
 		w.UnblockCommand = &unblock
 		claim(w)
 	}
@@ -766,10 +770,16 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		}
 		since := held.At
 		w.Since = &since
-		if held.TickID != nil && held.Attempt != nil {
-			// The settle command is addressed by the run-wide dispatch
-			// number — the attempt's identity — the same sentence `ticfac
-			// watch` prints.
+		// The command is named by WHAT the run is holding, not by the line's
+		// own shape (tick gtk): the close-out's untriaged-findings hold is
+		// cleared by triage — settle releases an attempt, and this hold
+		// holds a person's decision about findings, not an attempt. Every
+		// other hold is the settle command the run-wide dispatch number
+		// addresses — the same sentence `ticfac watch` prints.
+		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
+			unblock := TriageCommand(m.EpicID)
+			w.UnblockCommand = &unblock
+		} else if held.TickID != nil && held.Attempt != nil {
 			unblock := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", m.EpicID, *held.TickID, *held.Attempt)
 			w.UnblockCommand = &unblock
 		}
@@ -831,7 +841,11 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 				since := earliest
 				w.Since = &since
 			}
-			unblock := fmt.Sprintf("ticfac findings %s", m.EpicID)
+			// The command that settles the findings, not the one that only
+			// lists them (tick gtk): `ticfac findings` walks away having
+			// changed nothing, and a person following it finds the close-out
+			// still held.
+			unblock := TriageCommand(m.EpicID)
 			w.UnblockCommand = &unblock
 			attention = append(attention, Attention(w))
 		}
