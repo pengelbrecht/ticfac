@@ -1,0 +1,15 @@
+{
+  "id": "tos",
+  "title": "The ticks skill teaches the ticfac verbs 2jn shipped (ticfac run, not ticfac run-epic)",
+  "gloss": "ticks skill names ticfac run",
+  "description": "Finding a009316a from epic-2jn (tick xbp): the ticks skill says 'Start a run with ticfac run-epic \u003cepic\u003e'; ticfac's own skill teaches 'ticfac run \u003cepic\u003e' since 2jn (9sz). Update the ticks skill (pengelbrecht/ticks skills/ticks) to point at ticfac's current verbs, or better, to say only that execution is ticfac's and link the ticfac skill, so the two cannot drift again.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "6in",
+  "acceptance_criteria": "grep -rn 'run-epic' in the ticks skill finds no instruction to start a run that way; it names ticfac run or defers to the ticfac skill",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-27T20:50:32.129281Z",
+  "updated_at": "2026-09-27T20:50:32.129281Z"
+}
