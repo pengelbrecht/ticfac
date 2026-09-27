@@ -1100,7 +1100,7 @@ func New(opts Options) (*Reconciler, error) {
 		opts.GateConfig = filepath.Join(opts.Repo, ".tick", "runners.toml")
 	}
 	if opts.RepoConfig == "" {
-		opts.RepoConfig = repoConfigPath(opts.Repo)
+		opts.RepoConfig = RepoConfigPath(opts.Repo)
 	}
 	if opts.GateTimeout <= 0 {
 		opts.GateTimeout = DefaultGateTimeout

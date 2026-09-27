@@ -265,10 +265,12 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	}
 
 	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz):
-	// built from the remote and the token, handed to the reconciler, and nil
-	// — with a note, not a crash — when neither resolves. A target repo that
-	// declares no rule in .tick/config.md needs no surface; one that does is
-	// refused by the reconciler at construction, naming the credential.
+	// built only when the target repo's own .tick/config.md declares the
+	// rule (tick hio), from the remote and the token, handed to the
+	// reconciler, and nil — with a note, not a crash — when neither resolves.
+	// A target repo that declares no rule needs no surface and no credential
+	// resolved at all; one that does is refused by the reconciler at
+	// construction, naming the credential.
 	repoDir := *fl.repo
 	if repoDir == "" {
 		if wd, wdErr := os.Getwd(); wdErr == nil {
@@ -683,7 +685,9 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 	// The same code-hosting surface the run is handed (tick 0iz): the
 	// reconciler this command builds shares the construction refusal, so a
 	// repo declaring the close-out rule is settled by a host that can back
-	// it — and the credential is read from the same one place.
+	// it — and the credential is read from the same one place, only when
+	// the rule needs a forge (tick hio): a repo that declares no rule
+	// resolves nothing.
 	repoDir := *fl.repo
 	if repoDir == "" {
 		if wd, wdErr := os.Getwd(); wdErr == nil {

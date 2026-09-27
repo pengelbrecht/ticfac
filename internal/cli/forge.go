@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
 
 // The code-hosting surface behind the PR + CI close-out rule (tick 0iz): the
@@ -21,6 +22,13 @@ import (
 // A repository that DOES declare the rule is refused by the reconciler at
 // construction — before anything is claimed — and the refusal names the
 // token, which is the one thing this builder cannot invent.
+//
+// Since tick hio the rule also gates the building: the credential is
+// resolved when, and only when, the rule is declared, so a machine with gh
+// installed and no GITHUB_TOKEN pays no `gh auth token` subprocess per run
+// for a surface the reconciler would discard. The rule is read from the
+// same path the reconciler reads it (reconcile.RepoConfigPath), so the
+// host's decision and the reconciler's demand cannot drift apart.
 
 // resolveForgeToken is the credential ladder the builder resolves its token
 // through, a seam so a test answers with a controlled rung instead of the
@@ -33,11 +41,34 @@ var resolveForgeToken = forge.ResolveTokenFrom
 // pullRequestsForRun builds the GitHub surface for one run: the remote the
 // run's durable authority lives on, resolved to the `owner/name` the REST
 // API addresses, and the bearer token the environment holds or gh answers
-// (the same ladder doctor reports from, tick vo4).
+// (the same ladder doctor reports from, tick vo4) — but only when the
+// target repository's own close-out rule needs a forge (tick hio).
+//
+// The rule is read first, from the same .tick/config.md the reconciler
+// reads at construction, so the surface exists exactly where the
+// reconciler will demand one:
+//
+//   - a repo that declares no rule gets no surface and no credential
+//     resolution at all — the ladder's gh rung is a subprocess, and running
+//     it for a surface the reconciler discards was the waste this gate
+//     exists to remove;
+//   - a repo that declares the rule gets the surface resolved as before,
+//     fail-closed, naming the missing credential or remote;
+//   - a config that cannot be read is a refusal, not a guess — the
+//     reconciler refuses construction on the same read, so the command
+//     still dies naming the file rather than a credential it never needed.
 //
 // An empty repo means the checkout the command runs in (the same default
-// every other flag resolves); an empty remote means origin.
+// every other flag resolves — and the same one the reconciler's own
+// RepoConfigPath resolves); an empty remote means origin.
 func pullRequestsForRun(repo, remote string) (forge.PullRequests, error) {
+	rule, err := reconcile.ReadCloseoutRule(reconcile.RepoConfigPath(repo))
+	if err != nil {
+		return nil, fmt.Errorf("the close-out rule could not be read: %w", err)
+	}
+	if !rule.Declared {
+		return nil, nil
+	}
 	if repo == "" {
 		return nil, fmt.Errorf("no checkout to resolve the remote from")
 	}

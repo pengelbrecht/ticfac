@@ -4,24 +4,83 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
 
-// The host's half of the close-out seam: how run-epic builds the surface the
-// reconciler is handed. The reconciler's own tests prove the behaviour ABOVE
-// the seam with a fake; these prove the builder resolves the two facts only
-// the host knows — the remote, the credential — and fails closed, naming the
-// missing one, rather than handing the run a surface that cannot answer.
+// The host's half of the close-out seam: how run-epic and settle build the
+// surface the reconciler is handed. The reconciler's own tests prove the
+// behaviour ABOVE the seam with a fake; these prove the builder resolves
+// the two facts only the host knows — the remote, the credential — and
+// fails closed, naming the missing one, rather than handing the run a
+// surface that cannot answer.
+//
+// Tick hio adds the gate in front of both: the credential is resolved only
+// when the target repository's own close-out rule needs a forge, read from
+// the same path the reconciler reads it, so a machine with gh and no
+// GITHUB_TOKEN pays no `gh auth token` subprocess for a surface the run
+// would discard.
 
-func TestPullRequestsForRun(t *testing.T) {
+// closeoutRuleDir makes a checkout that declares the PR + CI close-out rule
+// the way a real target repository does: in `.tick/config.md`'s Rules
+// section, anchored on the reader's own stable phrase.
+func closeoutRuleDir(t *testing.T, rule string) string {
+	t.Helper()
 	dir := t.TempDir()
 	mustGit(t, dir, "init", "--quiet", "-b", "main")
 	mustGit(t, dir, "remote", "add", "origin", "git@github.com:example/example.git")
+	writeCloseoutRule(t, dir, rule)
+	return dir
+}
 
+func writeCloseoutRule(t *testing.T, dir, rule string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, ".tick"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := "# Config\n\n## Rules\n\n" + rule + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ".tick", "config.md"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// saveForgeTokenLadder replaces the ladder the builder resolves its
+// credential through, restoring the production one on cleanup — the ladder's
+// own rungs are proven in internal/forge; here the seam exists so the builder
+// is tested against a controlled answer, never the host's real gh.
+func saveForgeTokenLadder(t *testing.T, ladder func() (string, forge.TokenSource, error)) {
+	t.Helper()
+	saved := resolveForgeToken
+	resolveForgeToken = ladder
+	t.Cleanup(func() { resolveForgeToken = saved })
+}
+
+// recordingLadder answers with a token and records that it ran, so a test
+// can prove the credential was NOT resolved — the question tick hio exists
+// to ask, since a ladder that runs and is discarded looks exactly like one
+// that never ran in every assertion but this one.
+func recordingLadder(t *testing.T, token string) (*bool, func() (string, forge.TokenSource, error)) {
+	t.Helper()
+	ran := false
+	ladder := func() (string, forge.TokenSource, error) {
+		ran = true
+		return token, forge.TokenSourceEnv, nil
+	}
+	return &ran, ladder
+}
+
+// A repository that declares the rule gets the surface it will be refused
+// without: the remote resolved to owner/name, the credential from the env.
+func TestPullRequestsForRunBuildsTheSurfaceADeclaredRuleNeeds(t *testing.T) {
+	dir := closeoutRuleDir(t, "Epic integration goes through a PR + CI gate: the orchestrator opens a PR, and CI must be green.")
 	t.Setenv(forge.TokenEnv, "a-token")
+	ran, ladder := recordingLadder(t, "a-token")
+	saveForgeTokenLadder(t, ladder)
+
 	pulls, err := pullRequestsForRun(dir, "origin")
 	if err != nil {
 		t.Fatal(err)
@@ -33,10 +92,13 @@ func TestPullRequestsForRun(t *testing.T) {
 	if github.Repo != "example/example" || github.Token != "a-token" {
 		t.Errorf("the surface addresses %q with token %q", github.Repo, github.Token)
 	}
+	if !*ran {
+		t.Error("the credential ladder did not run for a repo that declares the rule")
+	}
 
 	// No token: no surface, and the error names the one thing missing —
-	// the run is then refused by the reconciler only where the target
-	// repo's own rule demands a surface.
+	// the run is then refused by the reconciler, which this rule demands
+	// a surface of.
 	//
 	// The ladder behind the seam is forge's own (it is proven there, rung by
 	// rung); here it is answered with the failure shape its gh rung and the
@@ -55,7 +117,8 @@ func TestPullRequestsForRun(t *testing.T) {
 	}
 
 	// No remote to resolve a repository from: the same fail-closed answer.
-	if pulls, err := pullRequestsForRun(t.TempDir(), "origin"); err == nil || pulls != nil {
+	mustGit(t, dir, "remote", "remove", "origin")
+	if pulls, err := pullRequestsForRun(dir, "origin"); err == nil || pulls != nil {
 		t.Fatalf("a surface was built for a checkout with no remote: %v", err)
 	}
 }
@@ -65,9 +128,7 @@ func TestPullRequestsForRun(t *testing.T) {
 // ladder doctor reports from, so the ok doctor prints is the answer the run
 // gets — the gap this test pins was doctor accepting what the run refused.
 func TestPullRequestsForRunAcceptsGhsTokenWhenTheEnvHoldsNone(t *testing.T) {
-	dir := t.TempDir()
-	mustGit(t, dir, "init", "--quiet", "-b", "main")
-	mustGit(t, dir, "remote", "add", "origin", "git@github.com:example/example.git")
+	dir := closeoutRuleDir(t, "Epic integration goes through a PR + CI gate.")
 	t.Setenv(forge.TokenEnv, "")
 	saveForgeTokenLadder(t, func() (string, forge.TokenSource, error) {
 		return "from-gh", forge.TokenSourceGH, nil
@@ -87,15 +148,80 @@ func TestPullRequestsForRunAcceptsGhsTokenWhenTheEnvHoldsNone(t *testing.T) {
 	}
 }
 
-// saveForgeTokenLadder replaces the ladder the builder resolves its
-// credential through, restoring the production one on cleanup — the ladder's
-// own rungs are proven in internal/forge; here the seam exists so the builder
-// is tested against a controlled answer, never the host's real gh.
-func saveForgeTokenLadder(t *testing.T, ladder func() (string, forge.TokenSource, error)) {
-	t.Helper()
-	saved := resolveForgeToken
-	resolveForgeToken = ladder
-	t.Cleanup(func() { resolveForgeToken = saved })
+// The regression tick hio exists for: a target repository that declares no
+// close-out rule needs no surface, so the credential ladder — whose gh rung
+// is a subprocess — must not run at all. Before this tick the ladder ran
+// unconditionally and the surface it built was handed to a reconciler that
+// threw it away; on a machine with gh installed and no GITHUB_TOKEN that was
+// one `gh auth token` subprocess per run-epic, per settle, for nothing.
+func TestPullRequestsForRunSkipsTheCredentialWhenNoRuleIsDeclared(t *testing.T) {
+	// A checkout with no .tick/config.md at all — most target repositories.
+	dir := t.TempDir()
+	mustGit(t, dir, "init", "--quiet", "-b", "main")
+	mustGit(t, dir, "remote", "add", "origin", "git@github.com:example/example.git")
+	t.Setenv(forge.TokenEnv, "")
+	ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
+	saveForgeTokenLadder(t, ladder)
+
+	pulls, err := pullRequestsForRun(dir, "origin")
+	if err != nil {
+		t.Fatalf("a repo with no close-out rule is not an error: %v", err)
+	}
+	if pulls != nil {
+		t.Fatalf("a surface was built for a repo that declares no rule: %T", pulls)
+	}
+	if *ran {
+		t.Error("the credential ladder ran for a repo that declares no close-out rule")
+	}
+
+	// A config that IS there but declares no rule: the same skip — a Rules
+	// section saying other things is not this rule (the reader anchors on
+	// the phrase, and so does the builder's decision to resolve a forge).
+	writeCloseoutRule(t, dir, "Package management is pnpm only — never npm or yarn.")
+	if pulls, err := pullRequestsForRun(dir, "origin"); err != nil || pulls != nil {
+		t.Fatalf("a surface was built for a config that declares no rule: %v", err)
+	}
+	if *ran {
+		t.Error("the credential ladder ran for a config that declares no rule")
+	}
+
+	// And a repo with no remote needs no credential resolved either: the
+	// refusal the reconciler would make of a missing remote only exists
+	// where a rule demands the surface.
+	if pulls, err := pullRequestsForRun(t.TempDir(), "origin"); err != nil || pulls != nil {
+		t.Fatalf("a surface was built for a checkout with no remote and no rule: %v", err)
+	}
+}
+
+// The rule the builder reads is the reconciler's own, from the same path —
+// so a config the reconciler cannot read is a config the builder refuses
+// rather than guessing at, and the refusal names the file: the reconciler
+// will refuse construction on the same read, and the command dies naming
+// the config rather than a missing credential.
+func TestPullRequestsForRunRefusesAConfigItCannotRead(t *testing.T) {
+	dir := t.TempDir()
+	mustGit(t, dir, "init", "--quiet", "-b", "main")
+	mustGit(t, dir, "remote", "add", "origin", "git@github.com:example/example.git")
+	// A directory where the config should be: a read that fails on every
+	// host, root included, rather than a permission trick that depends on
+	// who is running the suite.
+	if err := os.MkdirAll(filepath.Join(dir, ".tick", "config.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(forge.TokenEnv, "")
+	ran, ladder := recordingLadder(t, "a-token-nobody-should-consult")
+	saveForgeTokenLadder(t, ladder)
+
+	pulls, err := pullRequestsForRun(dir, "origin")
+	if err == nil || pulls != nil {
+		t.Fatalf("a surface was built over an unreadable config: %v", err)
+	}
+	if !strings.Contains(err.Error(), reconcile.RepoConfigPath(dir)) {
+		t.Errorf("the refusal does not name the config it could not read: %v", err)
+	}
+	if *ran {
+		t.Error("the credential ladder ran although the rule could not be read")
+	}
 }
 
 func mustGit(t *testing.T, dir string, args ...string) {
