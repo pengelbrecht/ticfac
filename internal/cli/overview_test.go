@@ -39,6 +39,12 @@ const overviewCloudRunID = "run_62c289d1e6f4a2b3c4d5e6f708192a3b"
 // read as held.
 const overviewCloudDoneID = "run_8f3d1a09c2e74b56d801f2a3b4c5d6e7"
 
+// overviewCloudFailID is a cloud run the factory holds FAILED: the resume
+// after a fix is a NEW SUBMISSION to the same factory — `ticfac run <epic>
+// --cloud` — never `run-epic`, which would restart the epic LOCALLY, in the
+// foreground, on whatever machine happens to be reading the listing.
+const overviewCloudFailID = "run_4c7e0b52a9d1f83b6c05e7d2a9f8b1c4"
+
 // overviewFixture writes one checkout that knows four local runs, with the
 // durable records and feed lines a real run of each kind leaves behind:
 //
@@ -164,6 +170,9 @@ func overviewCloudFactory(t *testing.T, now time.Time) {
 				map[string]any{
 					"run_id": overviewCloudDoneID, "epic": "plw", "state": "completed",
 				},
+				map[string]any{
+					"run_id": overviewCloudFailID, "epic": "cfl", "state": "failed",
+				},
 			}}
 		case request.Path == "/api/runs/"+overviewCloudRunID+"/events":
 			return 200, map[string]any{
@@ -174,6 +183,10 @@ func overviewCloudFactory(t *testing.T, now time.Time) {
 			// A finished run that wrote no event this factory still serves:
 			// the row's reason falls to the record's own terminal word.
 			return 200, map[string]any{"run_id": overviewCloudDoneID, "state": "completed"}
+		case request.Path == "/api/runs/"+overviewCloudFailID+"/events":
+			// A failed run that wrote no event: its reason is the record's own
+			// terminal word, and its clearing command is the cloud resume.
+			return 200, map[string]any{"run_id": overviewCloudFailID, "state": "failed"}
 		}
 		return 404, map[string]any{"error": "not_found"}
 	})
@@ -211,12 +224,12 @@ func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 	}
 	out := stdout.String()
 
-	// Attention first: held, then failed, then the running runs (local before
-	// cloud, the order they were enumerated), then done — the finished cloud
-	// run last, after the done local one it was enumerated behind. The
-	// fixture's alphabetical order is the opposite, so this is the sort, not
-	// luck.
-	want := []string{"epic-hld", "epic-fld", "epic-run", overviewCloudRunID, "epic-dnz", overviewCloudDoneID}
+	// Attention first: held, then failed (local before cloud), then the
+	// running runs (local before cloud, the order they were enumerated),
+	// then done — the finished cloud run last, after the done local one it
+	// was enumerated behind. The fixture's alphabetical order is the
+	// opposite, so this is the sort, not luck.
+	want := []string{"epic-hld", "epic-fld", overviewCloudFailID, "epic-run", overviewCloudRunID, "epic-dnz", overviewCloudDoneID}
 	last := -1
 	for _, run := range want {
 		at := strings.Index(out, run)
@@ -266,6 +279,24 @@ func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 	}
 	if line := lineOf(out, overviewCloudRunID); !strings.Contains(line, "running") {
 		t.Errorf("the cloud run's line reads %q", line)
+	}
+
+	// The failed cloud run: its own terminal word is its reason, and the one
+	// command that clears it is the CLOUD resume — a new submission to its
+	// factory — never `run-epic`, which would restart the epic locally, in
+	// the foreground, on the machine that happens to be reading.
+	if cloudFail := lineOf(out, overviewCloudFailID); cloudFail != "" {
+		if !strings.Contains(cloudFail, "failed") {
+			t.Errorf("the failed cloud run's line does not say what it is: %q", cloudFail)
+		}
+		if !strings.Contains(cloudFail, "ticfac run cfl --cloud") {
+			t.Errorf("the failed cloud run's line does not name the cloud resume: %q", cloudFail)
+		}
+		if strings.Contains(cloudFail, "run-epic") {
+			t.Errorf("the failed cloud run's line names run-epic, which restarts the epic locally: %q", cloudFail)
+		}
+	} else {
+		t.Errorf("the failed cloud run has no line:\n%s", out)
 	}
 	if line := lineOf(out, "epic-dnz"); !strings.Contains(line, "done") {
 		t.Errorf("the done run's line reads %q", line)
@@ -317,8 +348,8 @@ func TestTheBareOverviewJSONEmitsTheSameModel(t *testing.T) {
 	if len(doc.Degraded) != 0 {
 		t.Errorf("every source answered and the overview still claims degraded %v", doc.Degraded)
 	}
-	if len(doc.Runs) != 6 {
-		t.Fatalf("the overview lists %d runs, want 6:\n%s", len(doc.Runs), stdout.String())
+	if len(doc.Runs) != 7 {
+		t.Fatalf("the overview lists %d runs, want 7:\n%s", len(doc.Runs), stdout.String())
 	}
 
 	byID := map[string]overviewRun{}
@@ -327,7 +358,7 @@ func TestTheBareOverviewJSONEmitsTheSameModel(t *testing.T) {
 		byID[run.RunID] = run
 		order = append(order, run.RunID)
 	}
-	want := []string{"epic-hld", "epic-fld", "epic-run", overviewCloudRunID, "epic-dnz", overviewCloudDoneID}
+	want := []string{"epic-hld", "epic-fld", overviewCloudFailID, "epic-run", overviewCloudRunID, "epic-dnz", overviewCloudDoneID}
 	for i := range want {
 		if order[i] != want[i] {
 			t.Errorf("run %d of the JSON is %s, want %s (the attention-first order)", i, order[i], want[i])
@@ -362,6 +393,13 @@ func TestTheBareOverviewJSONEmitsTheSameModel(t *testing.T) {
 	}
 	if failed.Model.Lifecycle.Phase != statusmodel.PhaseFailed {
 		t.Errorf("the failed run's model reads phase %q", failed.Model.Lifecycle.Phase)
+	}
+
+	cloudFailed := byID[overviewCloudFailID]
+	if cloudFailed.State != overviewStateFailed || cloudFailed.ClearWith == nil ||
+		*cloudFailed.ClearWith != "ticfac run cfl --cloud" {
+		t.Errorf("the failed cloud run's entry reads state %q clear %v, want the cloud resume",
+			cloudFailed.State, cloudFailed.ClearWith)
 	}
 
 	running := byID["epic-run"]

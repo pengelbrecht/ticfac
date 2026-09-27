@@ -594,7 +594,7 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 		t.Fatalf("the container's untriaged finding never surfaced: attention %+v", model.Attention)
 	}
 	if !finding.NeedsPerson || finding.UnblockCommand == nil ||
-		*finding.UnblockCommand != "ticfac findings "+epicID {
+		*finding.UnblockCommand != "ticfac triage "+epicID {
 		t.Errorf("the finding's triage pointer reads %+v", finding)
 	}
 	if len(*requests) == 0 {
