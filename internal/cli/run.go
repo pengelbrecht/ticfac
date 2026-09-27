@@ -88,12 +88,14 @@ const runClaimPoll = 250 * time.Millisecond
 // runFlags is `run`'s flag surface: the defaults ARE the design. --repo for
 // driving another checkout; --no-herdr to opt out of the detection; the two
 // expert overrides the description keeps (--profiles, --wall). Everything
-// else the old incantation named is decided, not asked.
+// else the old incantation named is decided, not asked. --cloud is the one
+// cloud parity flag (tick ejw): the same command against the factory.
 type runFlags struct {
 	repo     *string
 	noHerdr  *bool
 	profiles *string
 	wall     *int
+	cloud    *bool
 }
 
 func defineRunFlags(fs *flag.FlagSet) *runFlags {
@@ -107,6 +109,9 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 		wall: fs.Int("wall", 0,
 			"an opt-in backstop: the wall clock one job is bounded by. Unnamed, no bound is injected and the "+
 				"reconciler's own per-job bound applies"),
+		cloud: fs.Bool("cloud", false,
+			"run the epic in your cloud factory: submit it to the configured factory and attach the same live view "+
+				"— the same verbs, view and triage as a local run (the expert `ticfac cloud ...` commands stay for the rest)"),
 	}
 }
 
@@ -137,7 +142,15 @@ What the old incantation carried by hand, decided here:
     unnamed, the reconciler's own per-job bound applies.
 
 ` + "`ticfac run-epic`" + ` remains the foreground form scripts drive; everything
-this command starts is that command, in the background.`,
+this command starts is that command, in the background.
+
+With --cloud, the same command drives the factory instead of this machine:
+it submits the epic to the configured factory and attaches the same live
+view to the cloud run, and running it again attaches to a live cloud run or
+resumes a finished one with a new submission. The herdr detection, the
+profile set and the wall clock drive LOCAL jobs, so they do not apply; the
+expert ` + "`ticfac cloud ...`" + ` commands keep the rest (a queued submission, a
+budget ceiling, a hard stop).`,
 	}
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fl := defineRunFlags(fs)
@@ -309,6 +322,22 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 		// one, wherever the child was started from.
 		repo = abs
 	}
+
+	// Cloud parity (tick ejw): the same command, the same verbs, against the
+	// configured factory. The decision is made before any local fact is
+	// read — a cloud run has no local life to probe — and the local-only
+	// flags are refused rather than ignored, because a flag that silently
+	// does nothing is a lie an everyday command must not tell.
+	if *fl.cloud {
+		if *fl.noHerdr || *fl.profiles != "" || *fl.wall > 0 {
+			fmt.Fprintf(stderr, "ticfac run: --no-herdr, --profiles and --wall drive a local run's jobs "+
+				"and do not apply to a --cloud run; the expert `ticfac cloud run` keeps its own budget and "+
+				"queue flags\n")
+			return 2
+		}
+		return runCloudCommand(ctx, epicID, repo, stdout, stderr)
+	}
+
 	runID := "epic-" + epicID
 
 	// The liveness that decides attach from resume is the run's own claim,
