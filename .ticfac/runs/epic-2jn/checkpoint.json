@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 156,
-  "state": "gating",
-  "reason": "running the integrated gate for 9sz on 759576794efc",
-  "updated_at": "2026-09-27T09:59:33Z",
+  "sequence": 157,
+  "state": "running",
+  "reason": "stopped by terminated: the container was evicted mid-run; the run is resumable",
+  "updated_at": "2026-09-27T10:02:03Z",
   "ticks": [
     {
       "tick_id": "nwj",
