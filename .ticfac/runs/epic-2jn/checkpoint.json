@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 160,
+  "sequence": 161,
   "state": "gating",
-  "reason": "running the integrated gate for 9sz on c104a94350dc",
-  "updated_at": "2026-09-27T10:02:55Z",
+  "reason": "running the integrated gate for 9sz on ea4e00240b42",
+  "updated_at": "2026-09-27T10:04:15Z",
   "ticks": [
     {
       "tick_id": "nwj",
