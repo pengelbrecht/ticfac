@@ -1,0 +1,13 @@
+{
+  "id": "7o5",
+  "title": "Two same-wave attempts rewriting the same function's exit logic collide without git ever flagging it",
+  "description": "4mv and bot both rewrote how watch decides its exit code in the same wave; the merge machinery saw a conflict only where lines overlapped textually (exit.go, README), while watch.go merged cleanly-but-wrong, and only bot's tests at the integrated gate caught it. The cost was a resolve job, a person's settle (decision 13) and a re-dispatch. A claim-time touch check that flags two same-wave attempts editing the same function — not just the same lines — would have serialized them.\n\nticfac run epic-2jn filed this backlog tick from the finding 5acbce3dc16c85d852f5ac753701216b8fd7acca53d4c14d3c9836ae3fae6757 (reported by run-epic-2jn/tick-4mv/attempt-43): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/5acbce3dc16c85d852f5ac753701216b8fd7acca53d4c14d3c9836ae3fae6757.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-4mv/attempt-43",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T17:35:58Z",
+  "updated_at": "2026-09-27T17:35:58Z"
+}
