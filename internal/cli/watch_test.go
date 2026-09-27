@@ -10,6 +10,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
 // `ticfac watch` is the consumer the run event feed was built for (tick 0z0):
@@ -431,6 +432,15 @@ func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "HOLDING") {
 		t.Errorf("a run that failed holding nothing raised the hold alert: %q", stderr.String())
+	}
+	// The resume it names is a command a person can paste (tick gtk): the
+	// one statusmodel spells for the run's host, addressed by a real id —
+	// never a `<epic-id>` placeholder.
+	if strings.Contains(stderr.String(), "<epic-id>") {
+		t.Errorf("the failed end names a placeholder, not a command: %q", stderr.String())
+	}
+	if want := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); !strings.Contains(stderr.String(), want) {
+		t.Errorf("the failed end does not name the resume %q: %q", want, stderr.String())
 	}
 	// The terminal line still prints — the last line says why, and the exit
 	// code says which class of ending it was.

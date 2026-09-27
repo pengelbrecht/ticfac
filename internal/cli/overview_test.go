@@ -41,7 +41,6 @@ const overviewCloudRunID = "run_62c289d1e6f4a2b3c4d5e6f708192a3b"
 // read as held.
 const overviewCloudDoneID = "run_8f3d1a09c2e74b56d801f2a3b4c5d6e7"
 
-<<<<<<< HEAD
 // ownRegistry points the machine's run registry at a directory this test
 // alone holds. The overview enumerates the registry (tick 9ss), and the
 // package's TestMain redirects every claim into ONE directory shared by the
@@ -54,13 +53,12 @@ func ownRegistry(t *testing.T) {
 	t.Helper()
 	t.Setenv(runregistry.RegistryDirEnv, t.TempDir())
 }
-=======
+
 // overviewCloudFailID is a cloud run the factory holds FAILED: the resume
 // after a fix is a NEW SUBMISSION to the same factory — `ticfac run <epic>
 // --cloud` — never `run-epic`, which would restart the epic LOCALLY, in the
 // foreground, on whatever machine happens to be reading the listing.
 const overviewCloudFailID = "run_4c7e0b52a9d1f83b6c05e7d2a9f8b1c4"
->>>>>>> 3ee69edf425c32224ce298d6d467fc478393382a
 
 // overviewFixture writes one checkout that knows four local runs, with the
 // durable records and feed lines a real run of each kind leaves behind:
