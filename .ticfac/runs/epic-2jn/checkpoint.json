@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 341,
-  "state": "dispatching",
-  "reason": "dispatching 4nq as attempt 48",
-  "updated_at": "2026-09-27T17:49:21Z",
+  "sequence": 342,
+  "state": "running",
+  "reason": "4nq is running as attempt 48",
+  "updated_at": "2026-09-27T17:49:30Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -218,7 +218,8 @@
     },
     {
       "tick_id": "4nq",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 48
     }
   ],
   "provenance": {
