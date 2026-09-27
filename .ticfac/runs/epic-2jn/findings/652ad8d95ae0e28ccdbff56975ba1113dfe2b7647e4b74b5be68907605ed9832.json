@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "none",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T14:10:47Z",
+  "triaged_at": "2026-09-27T14:10:58Z",
+  "triaged_by": "ticfac run epic-2jn absorbing sw0",
+  "promoted_as": "sw0",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "xbp",
