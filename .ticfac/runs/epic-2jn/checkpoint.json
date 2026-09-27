@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 69,
-  "state": "gating",
-  "reason": "running the integrated gate for 2qz on 0f032673f2f6",
-  "updated_at": "2026-09-27T07:41:13Z",
+  "sequence": 70,
+  "state": "publishing",
+  "reason": "closing 2qz behind the integrated gate on 0f032673f2f6",
+  "updated_at": "2026-09-27T07:45:41Z",
   "ticks": [
     {
       "tick_id": "nwj",
