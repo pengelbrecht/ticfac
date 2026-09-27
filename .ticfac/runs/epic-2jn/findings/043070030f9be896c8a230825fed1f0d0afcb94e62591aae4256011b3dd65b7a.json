@@ -12,8 +12,11 @@
   "attempt": 44,
   "done_item": "A4",
   "demonstrating_check": "go test ./internal/cli/ -run TestStatusFollow",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T17:42:36Z",
+  "triaged_at": "2026-09-27T17:42:49Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 4nq",
+  "promoted_as": "4nq",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "bkg",
