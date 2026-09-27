@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 173,
-  "state": "integrating",
-  "reason": "integrating 7ag attempt 23 into epic/2jn",
-  "updated_at": "2026-09-27T10:21:04Z",
+  "sequence": 174,
+  "state": "gating",
+  "reason": "running the integrated gate for 7ag on 17ff5150ae02",
+  "updated_at": "2026-09-27T10:24:01Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -121,7 +121,7 @@
     },
     {
       "tick_id": "7ag",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 23
     }
   ],
