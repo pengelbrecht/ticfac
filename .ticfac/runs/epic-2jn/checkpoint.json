@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 423,
-  "state": "gating",
-  "reason": "running the integrated gate for rrl on 9630c80c15b8",
-  "updated_at": "2026-09-27T20:55:40Z",
+  "sequence": 424,
+  "state": "publishing",
+  "reason": "closing rrl behind the integrated gate on 9630c80c15b8",
+  "updated_at": "2026-09-27T20:57:01Z",
   "ticks": [
     {
       "tick_id": "nwj",
