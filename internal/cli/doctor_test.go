@@ -353,3 +353,31 @@ func TestDoctorGitHubNamesTheRungItFound(t *testing.T) {
 		}
 	})
 }
+
+// TestDoctorForgeRemoteRefusesAnotherForge (tick 4zo): the remote check
+// resolves through the SAME reader the run's own surface resolves through,
+// so its refusal must be the host check's, not the old slug-only
+// resolution: a GitLab origin resolved to owner/name, doctor read it as ok,
+// and the operator learned the truth only at close-out time, as 404s
+// against api.github.com. The production probe runs here, against a real
+// checkout — a seam test could not prove the host check reached the probe
+// doctor actually runs.
+func TestDoctorForgeRemoteRefusesAnotherForge(t *testing.T) {
+	dir := t.TempDir()
+	mustGit(t, dir, "init", "--quiet", "-b", "main")
+	mustGit(t, dir, "remote", "add", "origin", "git@gitlab.com:example/example.git")
+	if _, err := doctorForgeRemote(dir); err == nil {
+		t.Fatal("the forge remote check accepted a GitLab origin")
+	} else if !strings.Contains(err.Error(), "gitlab.com") || !strings.Contains(err.Error(), "github.com") {
+		t.Errorf("the refusal does not name the host against github.com: %v", err)
+	}
+
+	// The same checkout over a GitHub origin resolves, so the refusal is
+	// the host's, not the probe's.
+	mustGit(t, dir, "remote", "set-url", "origin", "git@github.com:example/example.git")
+	if slug, err := doctorForgeRemote(dir); err != nil {
+		t.Fatalf("the forge remote check refuses a GitHub origin: %v", err)
+	} else if slug != "example/example" {
+		t.Errorf("the forge remote check resolves to %q, want example/example", slug)
+	}
+}
