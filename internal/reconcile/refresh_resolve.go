@@ -1,0 +1,536 @@
+package reconcile
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
+)
+
+// The base fold's resolve-conflict job (stall class base_refresh_conflict).
+//
+// WHAT WAS WRONG. Every incarnation of a run folds the epic's base branch into
+// its integration branch before it plans (refresh.go), and a fold that
+// conflicted was a typed refusal and nothing more: "<sha> of main does not
+// fold into epic/<id>: go.mod, go.sum … which is a person's decision, or a
+// resolve-conflict job's". On 2026-09-27 epic-2jn stopped that way three
+// times (go.mod, go.sum, internal/forge/forge.go), and a person resolved each
+// one by hand. A step whose only actor is a person is a design defect
+// (factory-runs-unattended); the refusal itself already named the actor that
+// should have been dispatched.
+//
+// WHAT THIS DOES. It reuses tick 2p6's resolve-conflict job for the fold:
+//
+//   - The job's worktree is the CONFLICTED FOLD: the epic head with the base
+//     head merged in — through the tracker's own merge drivers, exactly as the
+//     fold merges — left unresolved and committed, markers present.
+//
+//   - Its prompt is the role's own, followed by a brief that says this is a
+//     fold of the base branch into the epic and names both INTENTS: the base
+//     branch's commits since the fork, and the epic's (its record, and the
+//     commits and ticks its branch merged), each narrowed to the files that
+//     conflict.
+//
+//   - Its RESULT is minted by the reconciler, as 2p6's is: a merge commit over
+//     the job's tree whose parents are the epic head and the base head. It is
+//     pushed to the integration branch under the same lease as a clean fold,
+//     and the run continues — the integrated gate runs on the next merge, as
+//     it does after every fold.
+//
+//   - It routes at the policy's CEILING tier through the same routing every
+//     role resolves through, so the cloud rule refuses claude there exactly
+//     as it does for 2p6.
+//
+// THE BOUND. One resolve per fold: the resolve is a decision record on the run
+// branch keyed by the BASE HEAD it folded, so an incarnation that meets the
+// same base head conflicting again — after a resolve that failed — stops
+// naming the recorded resolve instead of paying for a second one. A resolve
+// that fails (it did not settle, asked for a person, left conflict markers,
+// committed nothing) is the stop, and the stop names both sides and the files.
+// A base head that moved on is a new fold, and a new fold may be resolved.
+
+// baseFoldKind marks a resolve-conflict decision as the base fold's rather
+// than an attempt's: the request carries no tick, and a reader must be able to
+// tell the two apart without guessing from what is missing.
+const baseFoldKind = "base-fold"
+
+// baseFoldListLimit bounds each side's commit list in the brief: enough to
+// state the intents, never so many that the prompt is the log.
+const baseFoldListLimit = 30
+
+// resolveBaseFold takes one resolvable conflict of the base fold to the merge
+// commit a resolve-conflict job made of it — parents: the epic head it was
+// resolved against, the base head — with the finalize the caller runs once
+// that merge is on the branch. Every failure is a RefusedBaseRefresh refusal
+// naming both sides and the files.
+func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHead string,
+	conflict *mergeConflict, drivers map[string]string) (string, func() error, error) {
+
+	sides := r.baseFoldSides(base, baseHead, epicHead)
+
+	// THE BOUND: one resolve per fold, durably. A fold of this base head that
+	// a resolve already ran for is the stop, naming the recorded outcome.
+	prior, attempt, err := r.baseFoldDecisionOf(baseHead)
+	if err != nil {
+		return "", nil, err
+	}
+	if prior != nil {
+		branch, _ := prior.Request["resolve_branch"].(string)
+		status, _ := prior.Response["status"].(string)
+		return "", nil, r.refuse(RefusedBaseRefresh, "",
+			"%s do not fold together (%s) and a resolve-conflict job already ran for this fold — its recorded "+
+				"outcome is %q and its work is on %s. One resolve per fold is the bound: read the recorded resolve, "+
+				"merge %s into %s by hand, and run the epic again",
+			sides, conflict.Detail, status, branch, base, r.branch)
+	}
+
+	writeRef := baseFoldWriteRef(r.runID, attempt, baseHead)
+	branch := branchOf(writeRef)
+	jobID := fmt.Sprintf("run-%s/base-fold-%d", r.runID, attempt)
+	stateDir := filepath.Join(r.opts.ExecStateRoot, r.runID, baseFoldKind, strconv.Itoa(attempt))
+	marker := attemptHandle{
+		JobID: jobID, Attempt: attempt, TickID: r.opts.EpicID, Try: 1, Role: RoleResolveConflict,
+		Repo: r.opts.Repo, Remote: r.opts.Remote, WriteRef: writeRef, StateRoot: stateDir,
+	}
+
+	// A resolve an earlier incarnation dispatched and never folded in: its
+	// branch is durable on the remote, and the fold is finished from it
+	// rather than paid for twice.
+	if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
+		merged, err := r.finishBaseFoldFromBranch(base, baseHead, remote, marker, conflict, sides)
+		if err != nil {
+			return "", nil, err
+		}
+		return merged, r.finalizeBaseFold(nil, nil, marker, base, baseHead, epicHead, "merged", merged, remote, conflict, true), nil
+	}
+
+	// The ceiling tier, resolved on demand through the same routing every
+	// role resolves through (resolve.go says why).
+	tier := ""
+	tierNote := "no policy is declared, so the role's own values are the ceiling"
+	if r.tierPolicy != nil {
+		tier = string(r.tierPolicy.CeilingOrDefault())
+		tierNote = "the policy's ceiling"
+	}
+	resolved, err := profile.Resolve(RoleResolveConflict, profile.Options{
+		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
+	})
+	if err == nil {
+		err = usableProfile(r.executors, resolved)
+	}
+	if err != nil {
+		return "", nil, r.refuse(RefusedBaseRefresh, "",
+			"%s do not fold together (%s) and the resolve-conflict job could not be routed at the ceiling: %v. "+
+				"Fix the routing and run the epic again",
+			sides, conflict.Detail, err)
+	}
+
+	// The worktree the job starts from: the fold itself, unresolved, through
+	// the tracker's drivers so only what the fold could not merge has markers.
+	message := fmt.Sprintf("ticfac run %s: the conflicted fold of %s into %s for the resolve-conflict job",
+		r.runID, base, r.branch)
+	wip, err := r.conflictedMerge(epicHead, baseHead, message, driverConfig(drivers))
+	if err != nil {
+		return "", nil, err
+	}
+	marker.BaseSHA = wip
+
+	// The prompt: the role's own, and the brief that says what THIS conflict
+	// is. A copy — the profile is the role's, and the brief is this fold's.
+	withBrief := *resolved
+	withBrief.Prompt = strings.TrimRight(resolved.Prompt, "\n") + "\n\n" +
+		r.baseFoldBrief(base, baseHead, epicHead, conflict)
+	marker.Executor, marker.Model, marker.PromptDigest, marker.Tier =
+		withBrief.Executor, withBrief.Model, promptDigest(&withBrief), tier
+
+	r.record("", StageDispatched,
+		"%s do not fold together (%s); a resolve-conflict job is dispatched to fold %s into %s with both intents, "+
+			"routed at tier %q (%s)",
+		sides, conflict.Detail, base, r.branch, tier, tierNote)
+
+	dispatch := Dispatch{
+		RunID: r.runID, EpicID: r.opts.EpicID, TickID: r.opts.EpicID, Attempt: attempt, Try: 1,
+		JobID: jobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote,
+		WriteRef: writeRef, BaseSHA: wip, StateDir: stateDir, BaseRef: r.opts.BaseRef,
+		Title:    asciiLine(fmt.Sprintf("Fold %s into %s: resolve the merge conflict", base, r.branch)),
+		Profile:  &withBrief,
+		Tier:     tier,
+		Executor: withBrief.Executor,
+	}
+	if r.budget.Effective > 0 {
+		effective := r.budget.Effective
+		dispatch.BudgetUSD = &effective
+	}
+
+	failed := func(format string, args ...any) error {
+		return r.refuse(RefusedBaseRefresh, "",
+			"%s do not fold together (%s) and the resolve-conflict job dispatched for the fold failed: %s. "+
+				"Its branch %s is kept with whatever it left; merge %s into %s by hand and run the epic again",
+			sides, conflict.Detail, fmt.Sprintf(format, args...), branch, base, r.branch)
+	}
+
+	executor, _, err := r.opts.NewExecutor(dispatch)
+	if err != nil {
+		return "", nil, failed("its executor could not be built: %v", err)
+	}
+	handle, err := executor.Start(r.baseFoldJobSpec(dispatch))
+	if err != nil {
+		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
+			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
+				merged, ferr := r.finishBaseFoldFromBranch(base, baseHead, remote, marker, conflict, sides)
+				if ferr != nil {
+					return "", nil, ferr
+				}
+				return merged, r.finalizeBaseFold(&dispatch, nil, marker, base, baseHead, epicHead, "merged",
+					merged, remote, conflict, true), nil
+			}
+		}
+		return "", nil, failed("it could not be started: %v", err)
+	}
+
+	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, failed)
+	var resolveHead string
+	if collected != nil && collected.Result != nil && collected.Result.Source.HeadSHA != nil {
+		resolveHead = *collected.Result.Source.HeadSHA
+	}
+	if rerr == nil && (resolveHead == "" || resolveHead == wip) {
+		rerr = failed("it settled without a commit to fold: %s", collected.Message)
+	}
+	var merged string
+	if rerr == nil {
+		merged, rerr = r.mintBaseFold(resolveHead, epicHead, baseHead, marker, conflict, failed)
+	}
+	if rerr != nil {
+		if _, ok := AsRefusal(rerr); ok {
+			if derr := r.recordBaseFoldDecision(&dispatch, marker, base, baseHead, epicHead, "failed", "", resolveHead,
+				conflict); derr != nil {
+				r.record("", StageRejected, "the failed resolve of the fold could not be recorded: %v", derr)
+			}
+		}
+		r.tearDown(handle, executor, marker, fmt.Sprintf(
+			"the resolve-conflict job for the fold of %s into %s failed", base, r.branch), true)
+		return "", nil, rerr
+	}
+	r.record("", StageRefreshed,
+		"the resolve-conflict job resolved the fold of %s into %s (%s); the merge %s is minted from its tree with "+
+			"parents %s and %s",
+		base, r.branch, strings.Join(conflict.Files, ", "), short(merged), short(epicHead), short(baseHead))
+	return merged, r.finalizeBaseFold(&dispatch, &jobInFlight{handle, executor}, marker, base, baseHead, epicHead,
+		"merged", merged, resolveHead, conflict, false), nil
+}
+
+// jobInFlight is the dispatched job a finalize tears down.
+type jobInFlight struct {
+	handle   *subprocess.JobHandle
+	executor Executor
+}
+
+// finalizeBaseFold is what runs once the fold is on the branch: the decision
+// record, then the job's teardown — or, for a resolve finished from its
+// branch, the branch's retirement.
+func (r *Reconciler) finalizeBaseFold(dispatch *Dispatch, job *jobInFlight, marker attemptHandle,
+	base, baseHead, epicHead, status, merged, resolveHead string, conflict *mergeConflict, fromBranch bool) func() error {
+
+	return func() error {
+		if err := r.recordBaseFoldDecision(dispatch, marker, base, baseHead, epicHead, status, merged, resolveHead,
+			conflict); err != nil {
+			return err
+		}
+		if job != nil {
+			r.tearDown(job.handle, job.executor, marker,
+				fmt.Sprintf("the resolve-conflict job's fold of %s into %s is integrated", base, r.branch), false)
+		}
+		if fromBranch {
+			_, _, _ = r.git.try("", "push", r.opts.Remote, ":"+refFor(branchOf(marker.WriteRef)))
+		}
+		return nil
+	}
+}
+
+// mintBaseFold is the mechanical half: the conflicted files verified free of
+// markers at the job's head, and the merge commit — parents: the epic head the
+// fold was resolved against, the base head — built over the job's tree.
+func (r *Reconciler) mintBaseFold(resolveHead, epicHead, baseHead string, marker attemptHandle,
+	conflict *mergeConflict, failed func(format string, args ...any) error) (string, error) {
+
+	if err := r.git.fetch(marker.WriteRef); err != nil {
+		return "", fmt.Errorf("fetch the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
+	}
+	if _, err := r.git.resolve(resolveHead); err != nil {
+		return "", fmt.Errorf("the resolve-conflict job's head %s is not a commit this checkout has: %w",
+			short(resolveHead), err)
+	}
+	if path, left := r.markersLeftAt(resolveHead, conflict.Files); left {
+		return "", failed("it committed %s still carrying its conflict markers — a resolution that did not happen "+
+			"is not a fold, whatever the commit says", path)
+	}
+	tree, err := r.git.run("", "rev-parse", resolveHead+"^{tree}")
+	if err != nil {
+		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
+	}
+	message := fmt.Sprintf("Merge the base branch into %s through the resolve-conflict job\n\nticfac run %s: "+
+		"the fold of %s into %s conflicted (%s) and was resolved by the resolve-conflict job %s",
+		r.branch, r.runID, short(baseHead), r.branch, strings.Join(conflict.Files, ", "), marker.JobID)
+	merged, err := r.git.run("", "commit-tree", tree, "-p", epicHead, "-p", baseHead, "-m", message)
+	if err != nil {
+		return "", fmt.Errorf("mint the fold from the resolve-conflict job's resolution: %w", err)
+	}
+	return merged, nil
+}
+
+// finishBaseFoldFromBranch completes a fold from a resolve that is already
+// durable on its branch. The epic head it was resolved against is read off the
+// conflicted fold the branch starts from — the merge commit whose second
+// parent is the base head — so the minted merge's parents are the two heads
+// the job actually resolved, whatever the branch has done since.
+func (r *Reconciler) finishBaseFoldFromBranch(base, baseHead, remote string, marker attemptHandle,
+	conflict *mergeConflict, sides string) (string, error) {
+
+	failed := func(format string, args ...any) error {
+		return r.refuse(RefusedBaseRefresh, "",
+			"%s do not fold together (%s) and the resolve-conflict job an earlier incarnation dispatched left "+
+				"its work on %s, which does not finish the fold: %s. Read the branch, merge %s into %s by hand, "+
+				"and run the epic again",
+			sides, conflict.Detail, branchOf(marker.WriteRef), fmt.Sprintf(format, args...), base, r.branch)
+	}
+	if err := r.git.fetch(marker.WriteRef); err != nil {
+		return "", fmt.Errorf("fetch the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
+	}
+	lines, err := r.git.run("", "rev-list", "--first-parent", "--parents", remote)
+	if err != nil {
+		return "", fmt.Errorf("read the resolve-conflict job's branch %s: %w", branchOf(marker.WriteRef), err)
+	}
+	epicOld := ""
+	for _, line := range strings.Split(lines, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[2] == baseHead {
+			epicOld = fields[1]
+			break
+		}
+	}
+	if epicOld == "" {
+		return "", failed("the branch does not start from a fold of %s", short(baseHead))
+	}
+	merged, err := r.mintBaseFold(remote, epicOld, baseHead, marker, conflict, failed)
+	if err != nil {
+		return "", err
+	}
+	r.record("", StageRefreshed,
+		"the resolve-conflict job for the fold of %s into %s had already settled; its work on %s is finished into "+
+			"the merge %s", base, r.branch, branchOf(marker.WriteRef), short(merged))
+	return merged, nil
+}
+
+// baseFoldDecisionOf is the recorded resolve of the fold of one base head, and
+// the attempt number the NEXT fold resolve takes: one past every base-fold
+// resolve the run has recorded.
+func (r *Reconciler) baseFoldDecisionOf(baseHead string) (*runstate.Decision, int, error) {
+	if r.store == nil {
+		return nil, 1, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return nil, 0, err
+	}
+	decisions, err := r.store.Decisions()
+	if err != nil {
+		return nil, 0, err
+	}
+	folds := 0
+	for i := range decisions {
+		if decisions[i].Role != RoleResolveConflict || decisions[i].Request["kind"] != baseFoldKind {
+			continue
+		}
+		folds++
+		if head, _ := decisions[i].Request["base_head"].(string); head == baseHead {
+			return &decisions[i], folds, nil
+		}
+	}
+	return nil, folds + 1, nil
+}
+
+// recordBaseFoldDecision lands the fold's resolve on the run branch —
+// create-if-absent per base head, so a restart that finishes the same resolve
+// never records it twice.
+func (r *Reconciler) recordBaseFoldDecision(dispatch *Dispatch, marker attemptHandle, base, baseHead, epicHead,
+	status, merged, resolveHead string, conflict *mergeConflict) error {
+
+	if _, err := r.store.Fetch(); err != nil {
+		return err
+	}
+	decisions, err := r.store.Decisions()
+	if err != nil {
+		return err
+	}
+	number := len(decisions) + 1
+	for _, existing := range decisions {
+		if existing.Role == RoleResolveConflict && existing.Request["kind"] == baseFoldKind &&
+			existing.Request["base_head"] == baseHead {
+			return nil
+		}
+		if existing.Decision >= number {
+			number = existing.Decision + 1
+		}
+	}
+	d := Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: r.opts.EpicID, Attempt: marker.Attempt,
+		JobID: marker.JobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote,
+		BaseSHA: marker.BaseSHA}
+	if dispatch != nil {
+		d = *dispatch
+	}
+	request := map[string]any{
+		"kind":           baseFoldKind,
+		"epic_id":        r.opts.EpicID,
+		"job_id":         marker.JobID,
+		"role":           RoleResolveConflict,
+		"base_branch":    base,
+		"base_head":      baseHead,
+		"epic_head":      epicHead,
+		"resolve_branch": branchOf(marker.WriteRef),
+		"conflict_files": conflict.Files,
+		"source_grade":   "write",
+		"output_schema":  outputSchemaFor(RoleResolveConflict),
+	}
+	if d.Profile != nil {
+		request["profile"] = d.Profile.String()
+		request["profile_digest"] = d.Profile.Digest
+	}
+	response := map[string]any{
+		"status":          status,
+		"merge":           merged,
+		"resolve_head":    resolveHead,
+		"conflict_files":  conflict.Files,
+		"conflict_detail": conflict.Detail,
+		"job_id":          marker.JobID,
+	}
+	stamp := r.now().UTC().Format(time.RFC3339)
+	if _, err := r.store.PutDecision(runstate.Decision{
+		Decision: number, Role: RoleResolveConflict, Request: request, Response: response, Validated: true,
+		RequestedAt: stamp, AnsweredAt: stamp, Provenance: r.attemptProvenance(d),
+	}); err != nil {
+		return fmt.Errorf("record the resolve-conflict decision for the fold of %s: %w", short(baseHead), err)
+	}
+	return nil
+}
+
+// baseFoldJobSpec is the ordinary write job's spec with the fold's inputs —
+// the epic, whose record is the epic side's intent, and the run — and an
+// artifact prefix of its own so its report shadows nothing.
+func (r *Reconciler) baseFoldJobSpec(d Dispatch) *subprocess.JobSpec {
+	spec := r.jobSpec(d)
+	spec.Inputs = []subprocess.Input{{Kind: "epic", ID: d.EpicID}, {Kind: "run", ID: d.RunID}}
+	spec.ArtifactPrefix = "runs/" + d.RunID + "/" + baseFoldKind + "-" + strconv.Itoa(d.Attempt) + "/"
+	return spec
+}
+
+// baseFoldWriteRef is the ref one fold resolve may write: in the run's own
+// namespace, and naming the base head it folds, so a restart finishes a
+// resolve of THIS fold from its branch and never one of a base since moved.
+func baseFoldWriteRef(runID string, attempt int, baseHead string) string {
+	head := baseHead
+	if len(head) > 12 {
+		head = head[:12]
+	}
+	return attemptRefPrefix(runID) + baseFoldKind + "-" + strconv.Itoa(attempt) + "-" + head
+}
+
+// baseFoldSides names both sides of a fold, as every refusal about it must.
+func (r *Reconciler) baseFoldSides(base, baseHead, epicHead string) string {
+	return fmt.Sprintf("%s at %s and %s at %s", base, short(baseHead), r.branch, short(epicHead))
+}
+
+// baseFoldBrief is the part of the prompt that says what THIS conflict is: a
+// fold of the base branch into the epic, with both sides' intents — the
+// commits each side made since the fork, narrowed to the files that conflict,
+// and the epic's own record. Plain ASCII, because the prompt rides a door that
+// takes nothing else.
+func (r *Reconciler) baseFoldBrief(base, baseHead, epicHead string, conflict *mergeConflict) string {
+	forkPoint, _ := r.git.run("", "merge-base", epicHead, baseHead)
+	commits := func(from, to string) []string {
+		if from == "" {
+			return nil
+		}
+		args := []string{"log", "--no-merges", "-n", strconv.Itoa(baseFoldListLimit), "--format=%h %s",
+			from + ".." + to, "--"}
+		out, _, err := r.git.try("", append(args, conflict.Files...)...)
+		if err != nil || strings.TrimSpace(out) == "" {
+			return nil
+		}
+		return strings.Split(strings.TrimSpace(out), "\n")
+	}
+	ticks := r.conflictingTickIDs(epicHead, "", conflict.Files)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "## This conflict: folding %s into the epic\n\n", base)
+	fmt.Fprintf(&b, "The paragraphs above speak of an attempt and two ticks. THIS conflict is not between two\n")
+	fmt.Fprintf(&b, "ticks: it is the fold of the epic's BASE branch %s into its integration branch %s,\n", base, r.branch)
+	fmt.Fprintf(&b, "which the run makes at the start of every incarnation so the epic builds on what landed on\n")
+	fmt.Fprintf(&b, "%s since it forked. Your worktree is %s at %s with %s at %s merged in, left\n",
+		base, r.branch, short(epicHead), base, short(baseHead))
+	fmt.Fprintf(&b, "unresolved: the files that did not merge carry the markers. They are:\n\n")
+	for _, path := range conflict.Files {
+		fmt.Fprintf(&b, "- %s (%s)\n", path, conflict.Kind[path])
+	}
+	fmt.Fprintf(&b, "\nThe two intents:\n\n")
+	fmt.Fprintf(&b, "1. %s's: the commits that landed on %s since the epic forked from it", base, base)
+	if forkPoint != "" {
+		fmt.Fprintf(&b, " (git log %s..%s)", short(forkPoint), short(baseHead))
+	}
+	fmt.Fprintf(&b, ". Those that touched the conflicted files:\n")
+	writeList(&b, commits(forkPoint, baseHead))
+	fmt.Fprintf(&b, "2. The epic's: epic %s (its record is .tick/issues/%s.json) and the work its ticks merged\n",
+		r.opts.EpicID, r.opts.EpicID)
+	fmt.Fprintf(&b, "   onto %s", r.branch)
+	if forkPoint != "" {
+		fmt.Fprintf(&b, " (git log %s..%s)", short(forkPoint), short(epicHead))
+	}
+	fmt.Fprintf(&b, ". Those that touched the conflicted files:\n")
+	writeList(&b, commits(forkPoint, epicHead))
+	if len(ticks) > 0 {
+		fmt.Fprintf(&b, "   The ticks whose merged work is in them: %s. Read their records under .tick/issues/.\n",
+			strings.Join(ticks, ", "))
+	}
+	fmt.Fprintf(&b, "\nResolve each file so that BOTH hold: the epic keeps building on everything %s now has,\n", base)
+	fmt.Fprintf(&b, "and keeps every change its own ticks made. For dependency manifests and lock files (go.mod,\n")
+	fmt.Fprintf(&b, "go.sum and the like) keep every requirement either side added, at the higher of the two\n")
+	fmt.Fprintf(&b, "versions, and make the lock file agree with the manifest. Remove every conflict marker and\n")
+	fmt.Fprintf(&b, "commit the resolution on your branch; the reconciler makes the merge commit itself, with\n")
+	fmt.Fprintf(&b, "the epic head and the %s head as its parents, and the integrated gate judges the tree.\n", base)
+	return asciiText(b.String())
+}
+
+func writeList(b *strings.Builder, lines []string) {
+	if len(lines) == 0 {
+		fmt.Fprintf(b, "   (none that git can attribute to those files)\n")
+		return
+	}
+	for _, line := range lines {
+		fmt.Fprintf(b, "   - %s\n", line)
+	}
+}
+
+// asciiText keeps text to what the sandbox door reads — printable ASCII and
+// line breaks: a commit subject can carry anything, and the brief must not be
+// the reason a dispatch is refused.
+func asciiText(s string) string {
+	var b strings.Builder
+	for _, c := range s {
+		switch {
+		case c == '\n' || c == '\t' || (c >= 0x20 && c <= 0x7e):
+			b.WriteRune(c)
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return b.String()
+}
+
+// asciiLine is asciiText for one line.
+func asciiLine(s string) string {
+	return strings.ReplaceAll(asciiText(s), "\n", " ")
+}

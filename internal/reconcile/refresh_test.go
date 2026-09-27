@@ -391,11 +391,13 @@ func TestBothSidesOfTheActivityLogMergeThroughTheTrackersOwnDriver(t *testing.T)
 	}
 }
 
-// A source file both sides changed is a REFUSAL, with a reason of its own.
-// Skipping the fold would put the run back where the gate run found it —
-// planning from a tracker that is missing ticks — and resolving the conflict is
-// a role job's decision (resolve-conflict, Phase 2), not a merge this
-// reconciler may invent.
+// A source file both sides changed is handed to a resolve-conflict job
+// (refresh_resolve.go) — and a resolve that does not resolve it is a
+// REFUSAL, with a reason of its own. The fake worker here is the plain one: it
+// commits work of its own and leaves README.md's markers where they are, which
+// is a resolution that did not happen. Skipping the fold would put the run
+// back where the gate run found it — planning from a tracker that is missing
+// ticks — and folding markers in would be a merge nobody made.
 func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
@@ -427,14 +429,16 @@ func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 	if result.Failure == nil || result.Failure.Reason != RefusedBaseRefresh {
 		t.Fatalf("the run failed as %+v, not as %s", result.Failure, RefusedBaseRefresh)
 	}
-	if !strings.Contains(result.Failure.Message, "README.md") {
-		t.Errorf("the refusal does not say which file conflicts: %s", result.Failure.Message)
+	for _, want := range []string{"README.md", "conflict markers", "resolve-conflict job"} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the refusal does not say %q: %s", want, result.Failure.Message)
+		}
 	}
 
-	// Nothing was dispatched and nothing was pushed: a fold that did not
-	// happen must not look like one that did.
+	// The resolve job is the ONLY thing dispatched: no tick was planned over
+	// a base branch the run could not fold in.
 	for _, event := range r.Journal() {
-		if event.Stage == StageDispatched {
+		if event.Stage == StageDispatched && event.Tick != "" {
 			t.Errorf("the run dispatched %s over a base branch it could not fold in", event.Tick)
 		}
 	}
