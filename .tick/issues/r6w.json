@@ -1,0 +1,15 @@
+{
+  "id": "r6w",
+  "title": "ticfac authors image/: end the vendoring from ticks cloud/sandbox",
+  "gloss": "ticfac owns image/",
+  "description": "sandbox.pin.json says ticks authors the tree and ticfac never edits image/. Flip it: image/ is ticfac source; delete cmd/sandbox sync/verify-upstream and internal/sandboxpin (or reduce to a record of provenance), the CI sandbox verify job, and restate 5bp as superseded. Move the Go suite that runs the scripts (ticks internal/sandbox) or its essential cases into ticfac.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "6in",
+  "acceptance_criteria": "[A1] image/ is edited directly in ticfac and CI no longer fetches ticks cloud/sandbox. [A2] The scripts' behaviour tests run in ticfac CI. [V] Verified by: make vet \u0026\u0026 make gate, and in cloudflare/: pnpm typecheck \u0026\u0026 pnpm exec vitest run.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-26T14:04:43.552206914Z",
+  "updated_at": "2026-09-26T14:04:49.89583008Z"
+}

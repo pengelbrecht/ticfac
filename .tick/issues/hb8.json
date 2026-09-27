@@ -1,6 +1,7 @@
 {
   "id": "hb8",
   "title": "Close out Phase 5: retro, then flesh out the next feasible epic into ticks",
+  "gloss": "Phase 5 close-out and next epic",
   "description": "Run the epic retro against dha's definition of done item by item, then pick the next feasible epic (yvi, now Phase 6, or djo, Phase 5b) and plan it.",
   "status": "open",
   "priority": 2,
@@ -13,5 +14,5 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T17:37:44.46685Z",
-  "updated_at": "2026-09-19T17:37:44.521628Z"
+  "updated_at": "2026-09-27T06:30:26.536427Z"
 }

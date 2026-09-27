@@ -1,6 +1,7 @@
 {
   "id": "tc2",
   "title": "The run-state contract lists the record layouts gvc added (absorptions, predictions, scores)",
+  "gloss": "gvc record layouts in contract",
   "description": "From gvc finding 1b09e63d (wz0). contracts/ticfac-run-state.json (vendored from ticks, pinned) lists the run branch's record layouts, and predates the records gvc added under .ticfac/runs/\u003crun\u003e/ (absorption decisions, predictions, scores, the depth bound). Add them in ticks' contract, cut a bundle version, and re-pin ticfac, so both readers agree on what a run branch may carry.",
   "status": "open",
   "priority": 2,
@@ -9,5 +10,5 @@
   "acceptance_criteria": "The run-state contract names every record layout ticfac writes; ticks' bundle is re-cut and ticfac pinned to it; the contract readers pass in both repos",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T23:45:06.740268Z",
-  "updated_at": "2026-09-26T23:45:06.740268Z"
+  "updated_at": "2026-09-27T06:30:31.276432Z"
 }

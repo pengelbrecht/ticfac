@@ -506,19 +506,25 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 		return CIReport{State: CINone}, nil
 	}
 	latest, order := reduceCheckRuns(runs)
+	// The verdict is a function of the SET of latest runs, never of the order
+	// the API lists them in (tick 89g: a property test found a failure beside
+	// a cancelled run read red in one order and pending in the other). In
+	// precedence: any check still running makes the report pending (a green
+	// beside a running check is not a verdict); otherwise any failure makes it
+	// red; otherwise any cancelled/stale/action_required run makes it pending
+	// (re-runnable, and never a false green); otherwise green.
 	report := CIReport{State: CIGreen}
+	var running, failed, unsettled bool
 	seenRun := map[int64]bool{}
 	for _, name := range order {
 		run := latest[name]
 		if run.Status != "completed" {
-			report.State = CIPending
+			running = true
 			continue
 		}
 		switch run.Conclusion {
 		case "failure", "timed_out":
-			if report.State != CIPending {
-				report.State = CIRed
-			}
+			failed = true
 			report.Failing = append(report.Failing, run.Name)
 			if id := actionsRunID(run.DetailsURL); id != 0 && !seenRun[id] {
 				seenRun[id] = true
@@ -529,12 +535,17 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 		default:
 			// cancelled, action_required, stale: not green, and saying the
 			// report is green would be the false close this seam exists to
-			// prevent. They read as pending — a state a person can fix by
-			// re-running — unless something already failed outright.
-			if report.State == CIGreen {
-				report.State = CIPending
-			}
+			// prevent. A person can fix them by re-running.
+			unsettled = true
 		}
+	}
+	switch {
+	case running:
+		report.State = CIPending
+	case failed:
+		report.State = CIRed
+	case unsettled:
+		report.State = CIPending
 	}
 	return report, nil
 }
