@@ -167,6 +167,9 @@ type Config struct {
 	// which dispatch a description earns — evaluated, never chosen per dispatch.
 	// See tierpolicy.go for the derivation and the escalation ladder.
 	TierPolicy *TierPolicy `toml:"tier_policy"`
+	// Findings is the declared [findings] table: what a run does with a
+	// finding a worker routed to ANOTHER repository (see [Findings]).
+	Findings *Findings `toml:"findings"`
 
 	// OverrideFile is the override [LoadFor] merged over the common file
 	// (tick 5uo), or "" when the run read runners.toml alone. It is
@@ -445,6 +448,57 @@ type Sandbox struct {
 	// ordered array rather than a keyed table: order is the contract and
 	// nothing refers to a setup command by id.
 	Setup []*Command `toml:"setup"`
+}
+
+// Findings is the cross-repository half of the findings channel: the
+// repositories a run may FILE a finding into itself.
+//
+// A worker that discovers something on another repository's ground routes the
+// finding there (`target = "owner/name"`). This run cannot absorb it — the fix
+// lives in a tree the run does not build — and until this table a routed
+// finding had no mechanical path at all: it waited for a person, and the
+// close-out held on it (the epic-2jn stall, 2026-09-27). So every routed
+// finding now gets a disposition with nobody triaging:
+//
+//   - a target named here with `file = true` is filed by the run as a tick in
+//     that repository's own tracker, pushed to its default branch;
+//   - any other target — or a filing that fails terminally — becomes a
+//     backlog tick in THIS repository naming the target, so a person finds it
+//     in the tracker they already read.
+//
+// The allowlist is explicit and per repository on purpose: pushing to another
+// repository's default branch is a write outside the run's own tree, and the
+// tracked, PR-reviewed config is the only thing that may authorise it.
+type Findings struct {
+	// Route maps a target repository, "owner/name", to what the run may do
+	// with a finding routed there.
+	Route map[string]*FindingRoute `toml:"route"`
+}
+
+// FindingRoute is one target repository's entry in [Findings.Route].
+type FindingRoute struct {
+	// File, when true, lets the run file the finding as a tick in the
+	// target's own tracker. False (or absent) is the documented fallback: a
+	// local backlog tick naming the target.
+	File bool `toml:"file"`
+	// Remote is the git URL the target is fetched from and pushed to. Empty
+	// derives it from this repository's own remote, with the owner/name
+	// replaced — right for two repositories on one forge, which is the case
+	// the table exists for.
+	Remote string `toml:"remote"`
+}
+
+// FindingRoute reports the declared route for a target repository, and
+// whether one is declared. It is nil-safe.
+func (c *Config) FindingRoute(target string) (FindingRoute, bool) {
+	if c == nil || c.Findings == nil {
+		return FindingRoute{}, false
+	}
+	route, ok := c.Findings.Route[target]
+	if !ok || route == nil {
+		return FindingRoute{}, false
+	}
+	return *route, true
 }
 
 // The three tables above were followed, in ticks' copy of this package, by

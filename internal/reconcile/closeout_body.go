@@ -141,6 +141,33 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 		}
 	}
 
+	// FINDINGS ROUTED TO OTHER REPOSITORIES (the epic-2jn close-out stall): a
+	// cross-repository finding never gates this epic and never holds it, so
+	// the PR is where a person sees that it exists and where it went — filed
+	// in the target's tracker, or a backlog tick here naming the target.
+	var routed []runstate.Finding
+	for _, finding := range findings {
+		if finding.Target != "" {
+			routed = append(routed, finding)
+		}
+	}
+	if len(routed) > 0 {
+		body.WriteString("\n## Findings routed to other repositories\n\n")
+		body.WriteString("This run cannot fix another repository, so none of these gates this epic whatever it " +
+			"claims; each was filed in its target's tracker or backlogged here naming the target. Each one's " +
+			"full text is under the tick that reported it above.\n\n")
+		for _, finding := range routed {
+			// The key, not the title: the title is listed once, above, and
+			// the PR's read-back integrity check counts on that.
+			where := finding.Status
+			if finding.PromotedAs != "" {
+				where = "promoted as " + finding.PromotedAs
+			}
+			fmt.Fprintf(&body, "- finding %s (tick %s) → %s: %s\n", short(finding.Key), finding.TickID,
+				finding.Target, where)
+		}
+	}
+
 	// WHAT THIS EPIC ABSORBED (tick jlv): the close-out must be able to say,
 	// for this epic, what was absorbed, against which acceptance item,
 	// whether the verdict was observed or predicted, by WHICH MODEL it was
@@ -174,7 +201,9 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			"close-out checked against what the done actually did.\n")
 		for _, record := range absorptions {
 			fmt.Fprintf(&body, "\n- tick %s — ", record.TickID)
-			if record.Gating {
+			if record.Basis == runstate.AbsorptionRule {
+				fmt.Fprintf(&body, "%s; %s", verdictLine(record), placementLine(record))
+			} else if record.Gating {
 				fmt.Fprintf(&body, "absorbed into the running epic: %s, basis %s%s%s; %s",
 					verdictLine(record), record.Basis, confidenceLine(record), modelLine(record), placementLine(record))
 			} else {

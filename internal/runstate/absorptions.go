@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"fmt"
+	"strings"
 )
 
 // The absorption decision record (tick npq): what the run itself decided
@@ -47,6 +48,12 @@ const (
 	// or the fallback that stands in when none could be had. The predictor's
 	// verdict (tick bse), and the absorption's own fallback (tick npq).
 	AbsorptionPredicted = "predicted"
+	// AbsorptionRule: neither tier was asked, because the run's own rule
+	// decides — a finding routed to ANOTHER repository never gates this
+	// epic's done, whatever it claims, since this run cannot fix another
+	// repository. Not a guess and not a measurement, and recorded as neither,
+	// so the scoring (jlv) never grades a decision nobody predicted.
+	AbsorptionRule = "rule"
 )
 
 // The placement of the tick the promotion created, as the run arranged it.
@@ -71,11 +78,17 @@ const (
 	// reachable with it standing — and the promotion created a backlog tick
 	// with an owner rather than a child of the running epic.
 	AbsorptionBacklog = "backlog"
+	// AbsorptionRouted: the finding is routed to another repository that the
+	// repository's runners.toml lets the run file into ([findings.route]),
+	// and the run filed it there as a tick in that repository's own tracker.
+	// The record's TickID is "<owner/name>:<tick-id>", the promotion's
+	// spelling for a routed finding.
+	AbsorptionRouted = "routed"
 )
 
 // AbsorptionPlacements is the closed placement vocabulary.
 var AbsorptionPlacements = []string{
-	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog,
+	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog, AbsorptionRouted,
 }
 
 // Absorption is one decision, at `.ticfac/runs/<run-id>/absorptions/<key>.json`,
@@ -126,6 +139,12 @@ type Absorption struct {
 	// before the close-out, or the backlog. A stated fact, never an
 	// inference from a wave number.
 	Placement string `json:"placement"`
+	// Target is the repository the finding was routed to, owner/name, when
+	// it was routed to another one: the decision then rests on the run's
+	// rule (Basis rule), and the tick is either filed there (Placement
+	// routed) or a local backlog tick naming it (Placement backlog). Empty
+	// for a finding about this repository.
+	Target string `json:"target,omitempty"`
 	// DecidedAt is when the run decided, RFC3339.
 	DecidedAt string `json:"decided_at"`
 
@@ -149,9 +168,9 @@ func (a Absorption) Validate() error {
 		return fmt.Errorf("absorption of %s names no tick: the promotion is the tick the decision created, "+
 			"and the record must say which — an orphaned reasoning is the re-derivation hole the record exists to close", a.Key)
 	}
-	if !oneOf(a.Basis, []string{AbsorptionObserved, AbsorptionPredicted}) {
-		return fmt.Errorf("absorption basis %q is neither %s nor %s: a retro that cannot tell a guess from a "+
-			"measurement cannot report honestly", a.Basis, AbsorptionObserved, AbsorptionPredicted)
+	if !oneOf(a.Basis, []string{AbsorptionObserved, AbsorptionPredicted, AbsorptionRule}) {
+		return fmt.Errorf("absorption basis %q is not %s, %s or %s: a retro that cannot tell a guess from a "+
+			"measurement cannot report honestly", a.Basis, AbsorptionObserved, AbsorptionPredicted, AbsorptionRule)
 	}
 	if !oneOf(a.Placement, AbsorptionPlacements) {
 		return fmt.Errorf("absorption placement %q is not one of %v", a.Placement, AbsorptionPlacements)
@@ -168,9 +187,31 @@ func (a Absorption) Validate() error {
 			return fmt.Errorf("absorption of %s is not gating and names item %s: a verdict that says the done is "+
 				"reachable names no item it breaks", a.Key, a.ItemID)
 		}
-		if a.Placement != AbsorptionBacklog {
+		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted {
 			return fmt.Errorf("absorption of %s is not gating and placed %q: a finding the done is reachable "+
 				"without becomes a backlog tick, not a child of the running epic", a.Key, a.Placement)
+		}
+	}
+	if a.Basis == AbsorptionRule || a.Target != "" || a.Placement == AbsorptionRouted {
+		// The routed decision's own agreement with itself: a finding routed
+		// to another repository is decided by the run's rule, never gates
+		// this epic, and names where it went.
+		if a.Target == "" || a.Basis != AbsorptionRule || a.Gating {
+			return fmt.Errorf("absorption of %s mixes a routed decision with a local one (target %q, basis %q, "+
+				"gating %v): a finding routed to another repository is decided by the run's rule and never gates "+
+				"this epic", a.Key, a.Target, a.Basis, a.Gating)
+		}
+		if a.Confidence != 0 || a.Model != "" {
+			return fmt.Errorf("absorption of %s is decided by rule and carries a confidence or a model: no "+
+				"classifier answered it", a.Key)
+		}
+		if a.Placement == AbsorptionRouted && !strings.HasPrefix(a.TickID, a.Target+":") {
+			return fmt.Errorf("absorption of %s is filed in %s and names tick %q: a tick filed in another "+
+				"repository is spelled %s:<tick-id>", a.Key, a.Target, a.TickID, a.Target)
+		}
+		if a.Placement == AbsorptionBacklog && strings.Contains(a.TickID, ":") {
+			return fmt.Errorf("absorption of %s is a local backlog tick and names %q: a local tick is a bare id",
+				a.Key, a.TickID)
 		}
 	}
 	if a.Gating && a.Placement == AbsorptionBacklog {

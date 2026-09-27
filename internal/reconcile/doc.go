@@ -189,9 +189,12 @@
 // recorded bound rather than dropping back to the default over git state it
 // had already absorbed past, and only a person's explicit raise — the
 // escape hatch the depth refusal itself names — overrides it. What the run
-// cannot decide is still a person's, triaged with `ticfac finding`: a
-// finding routed to another repository, and an epic whose acceptance is
-// prose — the refusal the absorption refuses to guess past.
+// cannot decide is still a person's, triaged with `ticfac finding`: an epic
+// whose acceptance is prose — the refusal the absorption refuses to guess
+// past. A finding routed to ANOTHER repository is not among them (the
+// epic-2jn close-out stall): it never gates, and the run files it in the
+// target's tracker when .tick/runners.toml allows it, or backlogs it here
+// naming the target (routed.go).
 //
 // Four of the five are kept by the shipped binary. A11's read site is
 // (MayDispatch, before every dispatch) and its release is (`ticfac settle`,

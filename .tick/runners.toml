@@ -64,6 +64,17 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
+# Findings a worker routes to ANOTHER repository (a `target` other than this
+# one). This run cannot fix another repository, so such a finding never gates
+# this epic; the run disposes of it with nobody triaging. A target listed here
+# with `file = true` is filed by the run as a tick in that repository's own
+# tracker, pushed to its default branch; any other target — or a filing that
+# fails terminally — becomes a backlog tick HERE that names the target. The
+# epic-2jn close-out held on five findings for pengelbrecht/ticks (2026-09-27)
+# because neither path existed. The operator owns both repositories.
+[findings.route."pengelbrecht/ticks"]
+file = true
+
 # The cloud's routing lives in .tick/runners.cloud.toml and a laptop's
 # extras (the claude ladder) in .tick/runners.local.toml (tick 5uo): each
 # merges over this file for its own world, and its role cells apply LAST, so

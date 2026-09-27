@@ -882,6 +882,15 @@ const (
 	// owner. Still reported: unattended means nobody has to be there, not
 	// that nobody is ever told.
 	StageBacklogged = "finding_backlogged"
+	// StageFindingRouted: the finding is routed to ANOTHER repository the
+	// repository's runners.toml lets the run file into, and the run filed it
+	// there as a tick in that repository's own tracker (routed.go). It gates
+	// nothing here: this run cannot fix another repository.
+	StageFindingRouted = "finding_routed"
+	// StageFindingRouteDeferred: filing a routed finding into its target
+	// failed transiently past the retry bound at the attempt that reported
+	// it; the close-out files it before it gates, so it never holds the run.
+	StageFindingRouteDeferred = "finding_route_deferred"
 	// StageAbsorptionRefused is the refusal's line: the epic's acceptance
 	// carries no [A<n>] items, so its done is prose, nothing can be pointed
 	// at, and the run refuses to absorb rather than guessing — the finding

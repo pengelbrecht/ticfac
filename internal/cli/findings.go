@@ -1,13 +1,18 @@
 package cli
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
 // The findings triage surface (tick 7vn): the person's half of the channel a
@@ -134,6 +139,42 @@ func findingsCommand(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// localTickLookup reads a tick of this repository's tracker by id: from the
+// run's integration branch as the findings store fetched it — where a tick
+// the run filed lives until the epic merges — and else from the checkout.
+func localTickLookup(repo, head string) func(id string) (tk.Tick, bool) {
+	return func(id string) (tk.Tick, bool) {
+		if id == "" || strings.ContainsAny(id, "/\\:.") {
+			return tk.Tick{}, false
+		}
+		path := ".tick/issues/" + id + ".json"
+		var raw []byte
+		if head != "" {
+			cmd := exec.Command(gitbin.Path(), "show", head+":"+path)
+			cmd.Dir = repo
+			if out, err := cmd.Output(); err == nil {
+				raw = out
+			}
+		}
+		if raw == nil {
+			dir := repo
+			if dir == "" {
+				dir, _ = os.Getwd()
+			}
+			out, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(path)))
+			if err != nil {
+				return tk.Tick{}, false
+			}
+			raw = out
+		}
+		var tick tk.Tick
+		if err := json.Unmarshal(raw, &tick); err != nil || tick.ID != id {
+			return tk.Tick{}, false
+		}
+		return tick, true
+	}
+}
+
 func findingTarget(target string) string {
 	if target == "" {
 		return "this repository"
@@ -219,7 +260,7 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 		triage = runstate.Triage{Status: runstate.FindingDiscarded, By: *by}
 	} else if *fixedAs != "" {
 		triage = runstate.Triage{Status: runstate.FindingFixed, By: *by, FixedAs: *fixedAs}
-	} else if err := checkPromotedAs(finding, *promoteAs); err != nil {
+	} else if err := checkPromotedAs(finding, *promoteAs, localTickLookup(*repo, store.Head())); err != nil {
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)
 		return 1
 	}
@@ -261,7 +302,14 @@ func findingCommand(args []string, stdout, stderr io.Writer) int {
 // repository is promoted INTO that repository, and a finding that belongs here
 // is promoted here. A promotion that filed the wrong repository's tick would
 // be the routing the finding carried, silently undone.
-func checkPromotedAs(finding *runstate.Finding, promotedAs string) error {
+//
+// One local promotion of a routed finding is NOT elsewhere: a tracking tick
+// in this repository that NAMES the target — the tick the run itself files
+// when it may not file into the target (the epic-2jn fix) — keeps the routing
+// visible in the tracker a person reads, so it is accepted. lookup reads a
+// local tick by id; a tick it cannot find, or one that does not name the
+// target, is refused as before.
+func checkPromotedAs(finding *runstate.Finding, promotedAs string, lookup func(id string) (tk.Tick, bool)) error {
 	if finding.Target == "" {
 		if strings.Contains(promotedAs, ":") {
 			return fmt.Errorf("this finding belongs to this repository: promote it as a bare tick id, not %q", promotedAs)
@@ -269,9 +317,16 @@ func checkPromotedAs(finding *runstate.Finding, promotedAs string) error {
 		return nil
 	}
 	want := finding.Target + ":"
+	if !strings.Contains(promotedAs, ":") && lookup != nil {
+		if tick, ok := lookup(promotedAs); ok &&
+			strings.Contains(tick.Title+"\n"+tick.Description, finding.Target) {
+			return nil
+		}
+	}
 	if !strings.HasPrefix(promotedAs, want) {
-		return fmt.Errorf("this finding is routed to %s: promote it as \"%s:<tick-id>\", not %q — routing it "+
-			"elsewhere drops it where nobody will find it", finding.Target, finding.Target, promotedAs)
+		return fmt.Errorf("this finding is routed to %s: promote it as \"%s:<tick-id>\", or as a local tracking "+
+			"tick whose title or description names %s, not %q — routing it elsewhere drops it where nobody will "+
+			"find it", finding.Target, finding.Target, finding.Target, promotedAs)
 	}
 	if strings.TrimPrefix(promotedAs, want) == "" {
 		return fmt.Errorf("this finding is routed to %s: promote it as \"%s:<tick-id>\", naming the tick", finding.Target, finding.Target)

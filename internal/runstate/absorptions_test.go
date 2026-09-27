@@ -64,7 +64,7 @@ func TestAnAbsorptionRecordRefusesWhatItCannotSay(t *testing.T) {
 		want string
 	}{
 		{"no tick", func(a *Absorption) { a.TickID = "" }, "names no tick"},
-		{"basis outside the vocabulary", func(a *Absorption) { a.Basis = "felt" }, "neither observed nor predicted"},
+		{"basis outside the vocabulary", func(a *Absorption) { a.Basis = "felt" }, "is not observed, predicted or rule"},
 		{"placement outside the vocabulary", func(a *Absorption) { a.Placement = "appended" }, "not one of"},
 		{"no reason", func(a *Absorption) { a.Reason = "" }, "carries no reason"},
 		{"no decided_at", func(a *Absorption) { a.DecidedAt = "" }, "no decided_at"},

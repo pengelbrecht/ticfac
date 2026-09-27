@@ -296,6 +296,7 @@ func validate(cfg *Config, md toml.MetaData, foreign map[string]bool, partial bo
 	validateOrchestrator(cfg, md, add)
 	validateOrchestration(cfg, md, add)
 	validateRoles(cfg, md, add, partial)
+	validateFindings(cfg, md, add)
 	if !partial {
 		validateCommands(cfg, md, add)
 		validateTierPolicy(cfg, md, add)
@@ -306,6 +307,42 @@ func validate(cfg *Config, md toml.MetaData, foreign map[string]bool, partial bo
 }
 
 type addFunc func(path, msg string)
+
+// FindingTargetPattern is the shape of a [findings.route] key: owner/name, the
+// same spelling a worker's finding carries in its `target`.
+var FindingTargetPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$`)
+
+// validateFindings enforces the [findings] table: each route is keyed by an
+// owner/name target, and a declared remote is a URL git can be handed as an
+// argument — never one that begins with '-', which git would read as an
+// option, and never one carrying whitespace or a control character.
+func validateFindings(cfg *Config, md toml.MetaData, add addFunc) {
+	if cfg.Findings == nil {
+		return
+	}
+	for _, target := range sortedKeys(cfg.Findings.Route) {
+		path := fmt.Sprintf("findings.route.%q", target)
+		if !FindingTargetPattern.MatchString(target) {
+			add(path, fmt.Sprintf("%q is not a repository a finding can be routed to (owner/name, %s)",
+				target, FindingTargetPattern.String()))
+		}
+		route := cfg.Findings.Route[target]
+		if route == nil {
+			add(path, "must be a table")
+			continue
+		}
+		if md.IsDefined("findings", "route", target, "remote") {
+			switch {
+			case route.Remote == "":
+				add(path+".remote", "must not be empty — omit the key to derive it from this repository's remote")
+			case strings.HasPrefix(route.Remote, "-"):
+				add(path+".remote", "must not begin with '-': git would read it as an option")
+			case strings.IndexFunc(route.Remote, func(r rune) bool { return r <= ' ' || r == 0x7f }) >= 0:
+				add(path+".remote", "must not carry whitespace or control characters")
+			}
+		}
+	}
+}
 
 func validateOrchestrator(cfg *Config, md toml.MetaData, add addFunc) {
 	o := cfg.Orchestrator
