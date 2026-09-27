@@ -12,8 +12,11 @@
   "attempt": 2,
   "done_item": "A2",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T06:29:35Z",
+  "triaged_at": "2026-09-27T06:29:58Z",
+  "triaged_by": "ticfac run epic-2jn absorbing aj9",
+  "promoted_as": "aj9",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "6dh",
