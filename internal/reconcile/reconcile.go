@@ -2407,6 +2407,14 @@ func holdsForAPerson(reason string) bool {
 	return false
 }
 
+// HoldsForAPerson is holdsForAPerson exported for the surfaces that end a
+// run and must answer the same verdict about the same stop: `run-epic`'s
+// exit code and --json document (tick 4mv) branch on it, so the CLI's held
+// class is exactly this set and never a second opinion kept beside it —
+// the disagreement that set existed to remove was two commands answering
+// two different codes for one hold.
+func HoldsForAPerson(reason string) bool { return holdsForAPerson(reason) }
+
 func asRefusal(err error, into **Refusal) bool {
 	if refusal, ok := err.(*Refusal); ok {
 		*into = refusal

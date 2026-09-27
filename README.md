@@ -116,9 +116,9 @@ code is one of this table, the same words in `ticfac --help` and in every
 | code | name | meaning |
 |---|---|---|
 | `0` | done | the command did its work |
-| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped needing a person (the refusal names the reason class) |
+| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class) |
 | `2` | usage | a malformed invocation: wrong flags, wrong argument count, a refusal to guess |
-| `3` | held | the run ended holding something only a person can move (watch, run): the reason class is the wait kind in the line and the --json document; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
+| `3` | held | the run ended holding something only a person can move (run-epic, run, watch): the reason class is the refusal's reason or the wait kind in the line and the --json document — e.g. finding_untriaged, merge; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
 | `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
 | `5` | running | the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong |
 | `6` | io | an unreadable local file the command needs |

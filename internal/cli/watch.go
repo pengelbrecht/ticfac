@@ -390,16 +390,30 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		}
 		return 1
 	}
+	// The end holds the same authority on every path (tick 4mv): the exit
+	// code is watchHoldAttention's answer over the gathered model — the one
+	// the live view's last word ends by — so a completed run holding its PR
+	// for a person answers 3 on a pipe and in the document, not only on a
+	// terminal, and a hold the stream's own run_held line named ends 3 even
+	// when the model cannot be gathered (the feed's line is the durable
+	// half; the model is the richer one).
+	model, gatherErr := watchGatherModel(ctx, source, kind, *repo, runID)
+	if gatherErr == nil {
+		if attention := watchHoldAttention(model); attention != nil {
+			if !held {
+				// The holds the stream never alerted mid-run — the merge that
+				// is a person's by design, findings nobody triaged — still get
+				// the last word the live view says, so a person reading a log
+				// learns what the code means. A run_held line already said its
+				// hold once; this is the other kinds.
+				sayWatchHold(runID, attention, stderr)
+			}
+			return finish(agentStateHeld, attention)
+		}
+		return finish(agentStateDone, nil)
+	}
 	if held {
-		if !*asJSON {
-			return ExitHeld
-		}
-		model, err := watchGatherModel(ctx, source, kind, *repo, runID)
-		if err != nil {
-			emitWatchJSON(ctx, source, kind, *repo, runID, agentStateHeld, nil, stdout)
-			return ExitHeld
-		}
-		return finish(agentStateHeld, watchHoldAttention(model))
+		return finish(agentStateHeld, nil)
 	}
 	return finish(agentStateDone, nil)
 }
@@ -764,12 +778,21 @@ func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) in
 	if attention == nil {
 		return 0
 	}
+	sayWatchHold(runID, attention, stderr)
+	return ExitHeld
+}
+
+// sayWatchHold is the one wording both watch paths end a hold by — the live
+// view's last word and the stream's, the same sentence, so a person reading
+// a log and a person reading the block read one vocabulary (tick 4mv: the
+// pipe ended 3 for the merge hold while saying nothing; a stop that names
+// nothing is a stop an operator has to dig for).
+func sayWatchHold(runID string, attention *statusmodel.Attention, stderr io.Writer) {
 	fmt.Fprintf(stderr, "\nticfac watch: run %s ended holding something for a person:\n%s\n", runID, attention.What)
 	if attention.UnblockCommand != nil && *attention.UnblockCommand != "" {
 		fmt.Fprintf(stderr, "move it on: %s\n", *attention.UnblockCommand)
 	}
 	fmt.Fprintf(stderr, "The evidence is on the integration branch, not in this line.\n\n")
-	return ExitHeld
 }
 
 // watchGraphCache serves the tracker's graph at most once per TTL: a frame

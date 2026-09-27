@@ -40,10 +40,10 @@ one command as the ticks skill's `tk skills install ticks`.
 Every command takes `--json` — one versioned document, the schema named in
 it, nothing the document needs on stderr — and exits the documented table:
 0 done, 1 failed, 2 usage, 3 the run ended holding something only a person
-can move (the reason class is in the line), 4 a lookup that came back empty,
-5 the command ended while the run is still going (detached — nothing is
-wrong), 6 io. `ticfac status` is the one exception: it exits the run's
-liveness, 0 alive, 1 not.
+can move — run-epic, run and watch alike, the reason class in the line —
+4 a lookup that came back empty,
+5 the command ended while the run is still going (detached — nothing is wrong), 6 io.
+`ticfac status` is the one exception: it exits the run's liveness, 0 alive, 1 not.
 
 The epic finishes when its run completes: every tick gated and merged onto
 the epic branch, the PR opened, CI green on it. The MERGE is a person's.

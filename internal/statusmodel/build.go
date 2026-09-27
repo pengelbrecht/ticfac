@@ -757,8 +757,15 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		claim(w)
 	}
 
-	// The run's own line that it is holding an attempt for a person.
-	if held := latestStage(src.Feed, "", reconcile.StageRunHeld); held != nil {
+	// The run's own line that it is holding an attempt for a person — one the
+	// CURRENT incarnation wrote. A hold a later resume made history is
+	// history: the feed is append-only per RUN ID, so a resumed run still
+	// carries the previous incarnation's run_held line, and a hold somebody
+	// already settled by resuming the run must not read as standing — the
+	// same rule the watch's subscription start made for lines (tick usx),
+	// stated here once for every surface that renders the model.
+	if held := latestStage(src.Feed, "", reconcile.StageRunHeld); held != nil &&
+		!holdSettledByAResume(src.Feed) {
 		w := Wait{
 			Kind:        WaitHeldForPerson,
 			What:        held.Detail,
@@ -837,6 +844,26 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		}
 	}
 	return m.WaitsOn, attention
+}
+
+// holdSettledByAResume answers whether a resume made the newest run_held
+// line history: any StageResumed or StageResumedAutomatically line standing
+// AFTER the newest hold means a later incarnation adopted the run — the hold
+// it answered was the previous incarnation's, settled by whoever resumed it.
+// Position in the feed is the clock (the file is append-only), never the
+// line's own stamp: a resumed line and the hold it succeeds may carry any
+// clocks, but they cannot swap places in the file.
+func holdSettledByAResume(feed []runfeed.Event) bool {
+	lastHold, lastResume := -1, -1
+	for i := range feed {
+		switch feed[i].Stage {
+		case reconcile.StageRunHeld:
+			lastHold = i
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			lastResume = i
+		}
+	}
+	return lastHold >= 0 && lastResume > lastHold
 }
 
 // runTerminal says whether the run's own records say it ended by its own
