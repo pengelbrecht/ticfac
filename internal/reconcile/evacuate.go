@@ -180,37 +180,43 @@ func (r *Reconciler) evacuationAttempts() []evacuationAttempt {
 	return out
 }
 
-// evacuateAttempt commits what is in one attempt's worktree and pushes the
-// branch, bounded by stopAt.
+// evacuateAttempt preserves what is in one attempt's worktree and pushes it,
+// bounded by stopAt.
 //
-// The commit is a SNAPSHOT, not a verdict: the runner may still be writing
-// (it was never signalled), so what lands is whatever the worktree held at
-// the moment of the `git add`. A half-written state committed to a scratch
-// branch is worth more than a whole one that died on a disk nothing will read
-// again — the branch is never merged unproven, and the resumed run's gate
-// decides on it the way it decides on any attempt's work.
+// The attempt's BRANCH is never written with anything the worker did not
+// commit itself (epic-2jn). The flush cannot know whether the worker dies
+// with this process — a whole-container eviction — or outlives it, which is
+// the ordinary local case and the cloud's whenever only the orchestrator is
+// evicted. A snapshot committed on the branch is right only for the first;
+// for the second it is a commit the worker never made, under a worker that
+// keeps committing, and the branch it leaves on origin is one the worker's
+// own result can no longer fast-forward. So the two halves of the work go to
+// two places:
 //
-// The push is plain, never forced — the same contract the supervisor's own
-// timer pushes under: this attempt is the only writer of its ref, and a
-// non-fast-forward is something to fail on rather than overwrite.
+//   - the UNCOMMITTED half is snapshotted into a private index — the
+//     worktree's own index, HEAD and branch are left exactly as they were —
+//     onto the attempt's wip ref, and that ref is pushed. It is material a
+//     later incarnation points the attempt's prompt at, never evidence and
+//     never merged: the same contract as the wall-clock stop's snapshot.
+//   - the COMMITTED half is the worker's own, and pushing the branch's HEAD
+//     is only a fast-forward onto its own ref — the same plain push the
+//     supervisor's timer makes, never forced.
 func (r *Reconciler) evacuateAttempt(attempt evacuationAttempt, stopAt time.Time, say func(string, ...any)) {
 	name := fmt.Sprintf("%s attempt %d", attempt.tickID, attempt.attempt)
 	work := attempt.work
 
-	dirty, err := r.evacGit(work.Worktree, stopAt, "status", "--porcelain", "-uall")
-	if err != nil {
-		say("%s: could not read its worktree (%s); pushing whatever is committed", name, firstLine(err.Error()))
-	} else if dirty != "" {
-		_, _ = r.evacGit(work.Worktree, stopAt, "add", "-A")
-		_, commitErr := r.evacGit(work.Worktree, stopAt, "commit", "-q", "-m",
-			"ticfac: evacuation snapshot of uncommitted work — the container was stopped mid-attempt")
-		if commitErr != nil {
-			// The runner may hold the index, or be committing itself; the
-			// work it already committed is still worth pushing.
-			say("%s: could not snapshot its uncommitted work (%s); pushing whatever is committed",
-				name, firstLine(commitErr.Error()))
-		} else {
-			say("%s: snapshotted its uncommitted work", name)
+	wipRef := subprocess.WipRefFor(r.evacuationJobID(work))
+	commit, snapped, err := subprocess.EvacuationSnapshot(work.Worktree, wipRef, work.ArtifactPrefix)
+	switch {
+	case err != nil:
+		say("%s: could not snapshot its uncommitted work (%s); pushing whatever is committed",
+			name, firstLine(err.Error()))
+	case snapped:
+		say("%s: snapshotted its uncommitted work on %s, leaving its worktree and branch untouched", name, wipRef)
+		if recErr := subprocess.RecordEvacuationSnapshot(attempt.state, subprocess.WIPSnapshot{
+			Ref: wipRef, Commit: commit, TakenAt: time.Now().UTC().Format(time.RFC3339),
+		}); recErr != nil {
+			say("%s: %s", name, firstLine(recErr.Error()))
 		}
 	}
 
@@ -218,11 +224,51 @@ func (r *Reconciler) evacuateAttempt(attempt evacuationAttempt, stopAt time.Time
 		say("%s: its record names no remote to push to; the work stays on this disk", name)
 		return
 	}
+	if snapped {
+		// Forced, and only this ref: the wip ref is the flush's own, and each
+		// snapshot is a newer state of the same worktree cut from a HEAD that
+		// may have moved, so it need not fast-forward the last one.
+		if _, err := r.evacGit(work.Worktree, stopAt, "push", work.Remote, "+"+wipRef+":"+wipRef); err != nil {
+			say("%s: could not push %s (%s)", name, wipRef, firstLine(err.Error()))
+		} else {
+			say("%s: pushed %s to %s", name, wipRef, work.Remote)
+		}
+	}
 	if _, err := r.evacGit(work.Worktree, stopAt, "push", work.Remote, "HEAD:refs/heads/"+work.Branch); err != nil {
-		say("%s: could not push %s (%s)", name, work.Branch, firstLine(err.Error()))
-		return
+		// The supervisor's timer pushes the same HEAD to the same ref, and
+		// two pushes racing to create or move one ref fail one of them on
+		// the ref's lock. Origin holding exactly this HEAD is the push done.
+		if !r.evacRemoteHolds(work, stopAt) {
+			say("%s: could not push %s (%s)", name, work.Branch, firstLine(err.Error()))
+			return
+		}
 	}
 	say("%s: pushed %s to %s", name, work.Branch, work.Remote)
+}
+
+// evacRemoteHolds reports whether origin's copy of the attempt branch is the
+// worktree's HEAD, read bounded like every other flush step.
+func (r *Reconciler) evacRemoteHolds(work subprocess.AttemptWork, stopAt time.Time) bool {
+	head, err := r.evacGit(work.Worktree, stopAt, "rev-parse", "--verify", "HEAD")
+	if err != nil || head == "" {
+		return false
+	}
+	out, err := r.evacGit(work.Worktree, stopAt, "ls-remote", work.Remote, "refs/heads/"+work.Branch)
+	if err != nil {
+		return false
+	}
+	sha, _, _ := strings.Cut(out, "\t")
+	return strings.TrimSpace(sha) == head
+}
+
+// evacuationJobID is the attempt's job id as its record states it, or — for a
+// record too old to carry one — the id the run mints, so the wip ref is never
+// a name shared between attempts.
+func (r *Reconciler) evacuationJobID(work subprocess.AttemptWork) string {
+	if work.JobID != "" {
+		return work.JobID
+	}
+	return attemptJobID(r.runID, work.TickID, work.Attempt)
 }
 
 // evacCheckpointTries bounds the final checkpoint's re-derivation loop: the

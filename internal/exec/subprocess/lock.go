@@ -276,6 +276,10 @@ type AttemptWork struct {
 	Branch   string `json:"branch"`
 	Worktree string `json:"worktree"`
 	Remote   string `json:"remote"`
+
+	// ArtifactPrefix is the job's own artifact prefix, off the recorded
+	// spec: the flush's snapshot excludes it exactly as the teardown's does.
+	ArtifactPrefix string `json:"-"`
 }
 
 // ReadAttemptWork reads those fields out of one attempt's record. It is the
@@ -291,6 +295,7 @@ func ReadAttemptWork(stateDir string) (AttemptWork, error) {
 	if err := json.Unmarshal(raw, &work); err != nil {
 		return work, fmt.Errorf("the attempt record at %s: %w", stateDir, err)
 	}
+	work.ArtifactPrefix = artifactPrefixOf(raw)
 	if work.Worktree == "" || work.Branch == "" {
 		return work, fmt.Errorf("the attempt record at %s names no worktree or no branch", stateDir)
 	}
