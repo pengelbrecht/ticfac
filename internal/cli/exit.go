@@ -161,13 +161,10 @@ func runEpicStateWord(result *reconcile.Result) string {
 		return agentStateFailed
 	case result.State == "completed":
 		return agentStateDone
-<<<<<<< HEAD
-=======
 	// A cancelled result is the cancelled word (tick rix): the resume path
 	// replays an already-terminal checkpoint as a Result, and a cancelled
 	// replay answers the same word the watch answers — never failed, which
 	// names a fix nobody needs to make.
->>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 	case result.State == runstate.StateCancelled:
 		return agentStateCancelled
 	case result.Failure != nil && reconcile.HoldsForAPerson(result.Failure.Reason):

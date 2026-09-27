@@ -641,8 +641,6 @@ func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
 		if code != exitSuccess {
 			t.Errorf("a completed run's ending %q exited %d, want %d (done)", detail, code, exitSuccess)
 		}
-<<<<<<< HEAD
-=======
 	}
 }
 
@@ -718,6 +716,5 @@ func TestSignalStopDetailLeadsOnlyThePersonStopWithTheCancelledWord(t *testing.T
 	}
 	if !strings.Contains(signalStopDetail(syscall.SIGINT), "stopped by a signal") {
 		t.Errorf("the SIGINT death line lost the sentence that says what happened: %q", signalStopDetail(syscall.SIGINT))
->>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 	}
 }

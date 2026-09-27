@@ -28,10 +28,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
-<<<<<<< HEAD
-=======
 	"github.com/pengelbrecht/ticfac/internal/runstate"
->>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -640,21 +637,12 @@ type runEpicTickJSON struct {
 // continuations (each an intervention a caller reporting "unattended" must
 // count), and the never-silent notes about the feed and liveness records.
 // The state word is the table's — done when the run completed, held when the
-<<<<<<< HEAD
 // run stopped holding something only a person can move (tick 4mv), cancelled
 // when it was stopped deliberately (tick rix: the resume path replays an
 // already-terminal checkpoint as a Result, and a cancelled replay must
 // answer the same word the watch answers), failed otherwise — so the exit
 // code and the document cannot disagree; the run's own terminal word
 // travels as run_state.
-=======
-// run stopped holding something only a person can move, cancelled when it
-// was stopped deliberately (tick rix: the resume path replays an
-// already-terminal checkpoint as a Result, and a cancelled replay must
-// answer the same word the watch answers), failed otherwise (tick 4mv) — so
-// the exit code and the document cannot disagree; the run's own terminal
-// word travels as run_state.
->>>>>>> 48abbf7f3a719f75079478bd6bbc8da354d5e458
 type runEpicResultJSON struct {
 	agentDoc
 	RunID         string              `json:"run_id"`
