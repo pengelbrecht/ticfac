@@ -30,6 +30,12 @@
  * - POST /api/done          - a finished orchestrator waking its Run Workflow
  *                             through the Worker (tick 7eq); best effort — the
  *                             pushed branch, never the event, is the truth
+ * - POST /api/status-snapshots - a LOCAL run pushing its status model so the
+ *                             factory serves it on the phone page (tick i1r);
+ *                             the same push evaluates the Telegram alerts
+ * - GET  /status[/...]      - the phone page: every run, attention first,
+ *                             authenticated by a token cookie, never a token
+ *                             in a URL (tick i1r)
  * - GET/POST/DELETE /api/ci/branches - a person answering the same question,
  *                             on the operator's token; the only door that may
  *                             say a branch is a HUMAN's
@@ -60,6 +66,7 @@ import {
   isAuthConfigured,
   isAuthExempt,
   SANDBOX_DISPATCH_PREFIX,
+  STATUS_PAGE_PATH,
 } from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
@@ -84,7 +91,9 @@ import {
 import { proxyModelRequest } from "./gateway";
 import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
 import { runDailyDigest } from "./loop-digest";
+import { evaluateStatusAlerts } from "./notify";
 import { observeRoute } from "./observe";
+import { statusPageRoute } from "./phone";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
 import { signalRunDone } from "./run-done";
@@ -112,6 +121,7 @@ import {
 } from "./runs";
 import { sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
+import { parseSnapshotEnvelope, saveStatusSnapshot } from "./status";
 import { runDueSweeps } from "./sweep-dispatch";
 import {
   answerTelegramCallback,
@@ -1179,6 +1189,60 @@ async function acknowledgeTelegramCallback(
 }
 
 /**
+ * The snapshot door (tick i1r): `POST /api/status-snapshots`, what a LOCAL
+ * run's pusher in `ticfac run-epic` talks to. Authenticated by the operator's
+ * factory token (the pusher runs on the operator's machine); the envelope's
+ * contract — envelope version, the model's own `ticfac.status.v1` version, a
+ * local host, the run identity matching its model — is what `status.ts`
+ * pins, because that is the seam between the Go half and the TS half of one
+ * feature.
+ *
+ * The push is ANSWERED for the storage alone: the alert evaluation that rides
+ * it is best-effort by the same rule `run-done` is — a notifier that could fail
+ * a status push would make the remote view of a run the victim of the
+ * notification about it.
+ */
+async function statusSnapshotRoute(request: Request, env: Env): Promise<Response> {
+  const raw = await request.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return badRequest("the snapshot must be a JSON document");
+  }
+  const parsed = parseSnapshotEnvelope(body, raw.length);
+  if (!parsed.ok) {
+    return Response.json({ error: parsed.error, detail: parsed.detail }, { status: parsed.status });
+  }
+  const envelope = parsed.envelope;
+  await saveStatusSnapshot(env.DB, {
+    run_id: envelope.run_id,
+    host: envelope.host,
+    epic_id: envelope.model.epic_id,
+    pushed_at: envelope.pushed_at,
+    model: envelope.model,
+    tick_labels: envelope.tick_labels ?? null,
+  });
+
+  // The alert evaluation the push drives: per-stop, not per-push (see
+  // `notify.ts`). Never fails the push, and never throws out of the try.
+  const evaluation = await evaluateStatusAlerts(env, {
+    run_id: envelope.run_id,
+    doc: envelope.model,
+    tick_labels: envelope.tick_labels ?? null,
+  }).catch((error: unknown): { sent: number; pending: number; cleared: number } => {
+    console.error(
+      `factory status: run ${envelope.run_id}'s snapshot was stored but its alerts could not be evaluated: ${String(error)}`,
+    );
+    return { sent: 0, pending: 0, cleared: 0 };
+  });
+  return Response.json(
+    { stored: true, run_id: envelope.run_id, pushed_at: envelope.pushed_at, alerts: evaluation },
+    { status: 201 },
+  );
+}
+
+/**
  * One sweep's record (tick hye), which is the whole explanation of what it
  * selected and why — see migrations/0010_sweep_selection.sql.
  */
@@ -1347,6 +1411,13 @@ export default {
       return await telegramWebhookAdminRoute(request, env);
     }
 
+    // The phone page (tick i1r). Authenticated by a token cookie inside
+    // `phone.ts`, never by the bearer header a browser cannot send — and the
+    // credential never rides the URL: the login POSTs in the body.
+    if (url.pathname === STATUS_PAGE_PATH || url.pathname.startsWith(`${STATUS_PAGE_PATH}/`)) {
+      return await statusPageRoute(request, env, url);
+    }
+
     const segments = url.pathname.split("/").filter((segment) => segment !== "");
 
     // A run's model path. Authenticated by the run's own gateway token, not by
@@ -1424,6 +1495,16 @@ export default {
 
     if (segments[0] === "api" && segments[1] === "projects") {
       return await projectsRoute(request, env, segments.slice(2));
+    }
+
+    // A local run pushing its status snapshot (tick i1r), so the factory
+    // serves it on the phone page and evaluates its Telegram alerts. It is
+    // authenticated by the operator's factory token like every other /api
+    // route: the pusher is `ticfac run-epic` on the operator's own machine,
+    // which holds exactly this credential.
+    if (segments[0] === "api" && segments[1] === "status-snapshots" && segments.length === 2) {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
+      return await statusSnapshotRoute(request, env);
     }
 
     if (segments[0] === "api" && segments[1] === "runs") {

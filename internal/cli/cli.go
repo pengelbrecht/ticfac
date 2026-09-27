@@ -74,7 +74,7 @@ type runEpicFlags struct {
 	repo, remote, branch, base, runID, owner, runner, tier, profiles, stateRoot, gate *string
 	budget, ceiling                                                                   *float64
 	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth                     *int
-	supervise                                                                         *bool
+	supervise, statusPush                                                             *bool
 }
 
 // defineRunEpicFlags declares every run-epic flag on fs — defaults, usage
@@ -151,6 +151,17 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
 				"ground, a third is already far from home, and past that a person should judge the chain "+
 				"rather than let the run keep going)"),
+		// The remote view (tick i1r): opted in, the run pushes its status model
+		// to the configured factory on a short cadence, so the factory's phone
+		// page (/status) lists it beside the cloud runs it hosts - and a run
+		// needing a person pages the operator's Telegram through the same
+		// factory. Off by default: the factory's snapshot door is authenticated
+		// by the operator's own factory token, so the opt-in is the operator's.
+		statusPush: fs.Bool("status-push", false,
+			"push this run's status model to the factory every 30s (and once more at each ending), so it is "+
+				"followable from the factory's /status phone page and its stops page the operator's "+
+				"Telegram. Needs a configured factory (ticfac factory setup); without one this is a no-op, "+
+				"and it is always best-effort: a push that fails is a line in run.log, never a failure of the run"),
 	}
 }
 
@@ -367,9 +378,24 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		}
 	}
 
-	// Registered first so it runs last: whatever path the process leaves by,
-	// the pidfile is released and the log says how. Release is idempotent, so
-	// the specific outcomes below win.
+	// The remote view (tick i1r): opted in with --status-push and a factory
+	// configured, the run pushes its status model to the factory on a short
+	// cadence while it works, so the factory's phone page (/status) lists it
+	// beside the cloud runs it hosts. Nil — the default — is a run that pushes
+	// nothing and costs nothing. The Stop defer is registered BEFORE the
+	// pidfile release on purpose, so its ending push is written LAST — after
+	// the release — and carries the run's terminal answer (a probe that still
+	// saw the pidfile would make "done" read "running" forever on the page).
+	pusher := startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	defer func() {
+		if pusher != nil {
+			pusher.Stop()
+		}
+	}()
+
+	// Registered before everything below so the release runs after it: whatever
+	// path the process leaves by, the pidfile is released and the log says how.
+	// Release is idempotent, so the specific outcomes below win.
 	defer life.Release("returned")
 	defer func() {
 		if p := recover(); p != nil {
