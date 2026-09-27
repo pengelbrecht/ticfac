@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -254,15 +253,7 @@ func New(t *testing.T, cfg Config) *Server {
 	}
 	cfg.Worktree = withWorktreeDefaults(cfg.Worktree)
 
-	// Unix socket paths are length-limited (104 bytes on darwin), so keep the
-	// temp dir prefix short rather than using t.TempDir().
-	dir, err := os.MkdirTemp("", "hd")
-	if err != nil {
-		t.Fatalf("temp dir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
-	path := filepath.Join(dir, "h.sock")
+	path := filepath.Join(SocketDir(t, "hd"), "h.sock")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listen %s: %v", path, err)
