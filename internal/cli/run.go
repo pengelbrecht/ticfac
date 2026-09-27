@@ -95,11 +95,8 @@ type runFlags struct {
 	noHerdr  *bool
 	profiles *string
 	wall     *int
-<<<<<<< HEAD
 	cloud    *bool
-=======
 	asJSON   *bool
->>>>>>> 6d52efe915e0c3e8de6008208fbf4df679a4d3f5
 }
 
 func defineRunFlags(fs *flag.FlagSet) *runFlags {
@@ -113,14 +110,11 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 		wall: fs.Int("wall", 0,
 			"an opt-in backstop: the wall clock one job is bounded by. Unnamed, no bound is injected and the "+
 				"reconciler's own per-job bound applies"),
-<<<<<<< HEAD
 		cloud: fs.Bool("cloud", false,
 			"run the epic in your cloud factory: submit it to the configured factory and attach the same live view "+
 				"— the same verbs, view and triage as a local run (the expert `ticfac cloud ...` commands stay for the rest)"),
-=======
 		asJSON: fs.Bool("json", false,
 			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed). The run's own prose goes to stderr, so stdout is the document's alone"),
->>>>>>> 6d52efe915e0c3e8de6008208fbf4df679a4d3f5
 	}
 }
 
@@ -332,7 +326,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	// exit code cannot disagree.
 	finish := func(action, state, note string) int {
 		if *fl.asJSON {
-			if err := emitRunJSON(action, state, note, epicID, fl, stdout); err != nil {
+			if err := emitRunJSON(action, state, note, epicID, "epic-"+epicID, fl, stdout); err != nil {
 				fmt.Fprintf(stderr, "ticfac run %s: %v\n", epicID, err)
 				return 1
 			}
@@ -367,7 +361,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"queue flags\n")
 			return 2
 		}
-		return runCloudCommand(ctx, epicID, repo, stdout, stderr)
+		return runCloudCommand(ctx, epicID, repo, fl, stdout, stderr)
 	}
 
 	runID := "epic-" + epicID
@@ -478,7 +472,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 			if *fl.asJSON {
 				if err := emitRunJSON(action, agentStateFailed,
 					fmt.Sprintf("the background run exited %d without claiming the run; its words are on stderr and in %s", code, logPath),
-					epicID, fl, stdout); err != nil {
+					epicID, runID, fl, stdout); err != nil {
 					fmt.Fprintf(stderr, "ticfac run %s: %v\n", epicID, err)
 				}
 			}
@@ -533,11 +527,11 @@ type runJSON struct {
 	Note     string `json:"note,omitempty"`
 }
 
-func emitRunJSON(action, state, note, epicID string, fl *runFlags, stdout io.Writer) error {
+func emitRunJSON(action, state, note, epicID, runID string, fl *runFlags, stdout io.Writer) error {
 	return emitAgentJSON(stdout, runJSON{
 		agentDoc: agentDoc{Schema: agentSchemaID("run"), State: state},
 		EpicID:   epicID,
-		RunID:    "epic-" + epicID,
+		RunID:    runID,
 		Action:   action,
 		Profiles: *fl.profiles,
 		Note:     note,
