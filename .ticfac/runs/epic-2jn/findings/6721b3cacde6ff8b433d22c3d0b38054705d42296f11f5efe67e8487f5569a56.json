@@ -12,8 +12,11 @@
   "attempt": 1,
   "done_item": "none",
   "demonstrating_check": "go build ./...",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T04:05:29Z",
+  "triaged_at": "2026-09-27T04:05:44Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 152",
+  "promoted_as": "152",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "nwj",
