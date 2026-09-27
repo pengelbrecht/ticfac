@@ -598,7 +598,6 @@ func TestACompletedRunWithAnOpenPRWaitsOnTheMerge(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // TestAFindingHoldIsClearedByTriage: the close-out's untriaged-findings
 // hold is a person's decision about FINDINGS, not an attempt to release —
 // the run_held line is cleared by `ticfac triage`, and naming `settle`
@@ -674,7 +673,9 @@ func TestADeadCloudRunResumesThroughTheFactory(t *testing.T) {
 	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
 		t.Errorf("the dead cloud run's unblock command is %+v, want ticfac run 2jn --cloud",
 			model.WaitsOn.UnblockCommand)
-=======
+	}
+}
+
 // TestAResumedRunWhoseFirstIncarnationFailedIsNotCompleted: a failed run is
 // resumable under the same run id, so its feed carries the failed
 // incarnation's run_finished beside the resumed run's own lines. The model
@@ -770,7 +771,6 @@ func TestTheFeedLastRunFinishedLineIsTheRunsOwnWord(t *testing.T) {
 	}
 	if w := mergeWait([]runfeed.Event{failed}); w != nil {
 		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion", w)
->>>>>>> 8c8045433232b97cefdd0b3c7dc5361937338485
 	}
 }
 
