@@ -11,6 +11,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // The resolve a restart must wait for (epic-2jn, 2026-09-27, 4mv attempt 33).
@@ -64,6 +65,7 @@ func (e *resolveResumeExecutor) Start(spec *subprocess.JobSpec) (*subprocess.Job
 // CONFLICT_TICKS) for the fake runner's workers to synchronise through, and
 // t.Setenv forbids a parallel test.
 func TestARestartMidResolveWaitsForTheResolveJobInsteadOfJudgingItsStartingCommit(t *testing.T) {
+	shorttest.EndToEnd(t)
 	for _, diskLost := range []bool{false, true} {
 		name := "the worker outlives the orchestrator"
 		if diskLost {
