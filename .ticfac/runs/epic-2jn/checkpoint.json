@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 272,
-  "state": "gating",
-  "reason": "running the integrated gate for 6vp on da25d5d71f3f",
-  "updated_at": "2026-09-27T14:53:03Z",
+  "sequence": 273,
+  "state": "publishing",
+  "reason": "closing 6vp behind the integrated gate on da25d5d71f3f",
+  "updated_at": "2026-09-27T14:54:38Z",
   "ticks": [
     {
       "tick_id": "nwj",
