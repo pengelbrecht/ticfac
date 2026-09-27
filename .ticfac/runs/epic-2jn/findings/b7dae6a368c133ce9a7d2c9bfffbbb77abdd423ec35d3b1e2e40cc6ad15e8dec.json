@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/cli/ -run TestPullRequestsForRun -count=1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T06:09:28Z",
+  "triaged_at": "2026-09-27T06:09:40Z",
+  "triaged_by": "ticfac run epic-2jn absorbing hio",
+  "promoted_as": "hio",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "vo4",
