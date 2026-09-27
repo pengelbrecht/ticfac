@@ -135,17 +135,12 @@ func Supervise(stateDir string) error {
 	// between a boundary the issuer keeps and one the model is asked to.
 	box := sandboxFor(os.Environ(), record, readRemotes(record.Worktree))
 
-	runner := exec.Command(record.RunnerArgv[0], record.RunnerArgv[1:]...)
-	runner.Dir = record.Worktree
 	// Whatever the grade, the runner's git starts no maintenance: its worktree
 	// shares the object store the reconciler is writing records into, and a
 	// commit here that started a background repack there races those writes
 	// (tick mel, gitbin.NoAutoMaintenance). Last, so it is numbered after
 	// every pin the grade made.
-	runner.Env = gitbin.WithNoAutoMaintenance(append(box.Env, record.RunnerEnv...))
-	runner.Stdout = log
-	runner.Stderr = log
-	runner.SysProcAttr = newProcessGroup()
+	runnerEnv := gitbin.WithNoAutoMaintenance(append(box.Env, record.RunnerEnv...))
 
 	// observe is the inspect cursor: a lost observation is a fact a second
 	// process can never read back, so a failed append is written to the runner
@@ -155,46 +150,6 @@ func Supervise(stateDir string) error {
 			note("the %s observation could not be appended (%v); it is only here: %s", kind, err, detail)
 		}
 	}
-
-	// The runner holds a lock of its own, handed to it as its fd 3, and so
-	// does everything it starts that keeps that fd. That is deliberate: the
-	// runner is what spends and what writes the worktree, and a runner still
-	// running after its supervisor was killed is an attempt still running —
-	// releasing it would let the next attempt race it. The cost is that a
-	// descendant which outlives the runner keeps the attempt alive with it;
-	// that matters only for an attempt that never settled, since a settled one
-	// is not alive whatever holds its locks (alive reads settlement first).
-	runnerLock, err := st.newLock(lockRunner)
-	if err != nil {
-		note("the runner's liveness lock could not be taken (%v); a runner nobody could see is not started", err)
-		observe(ObsExited, "the runner's liveness lock could not be taken: "+err.Error())
-		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
-		return err
-	}
-	runner.ExtraFiles = []*os.File{runnerLock}
-
-	if err := runner.Start(); err != nil {
-		runnerLock.Close()
-		note("the runner could not be started: %v", err)
-		observe(ObsExited, "the runner could not be started: "+err.Error())
-		_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
-		return err
-	}
-	runnerPID := runner.Process.Pid
-	if err := stampLock(runnerLock, runnerPID); err != nil {
-		note("the runner's pid could not be written into its lock (%v); it is alive to an observer, "+
-			"but only its supervisor can stop it", err)
-	}
-	// The supervisor's own copy goes: the runner's copy is the same open file
-	// description, and it is the runner's life the lock now describes.
-	runnerLock.Close()
-	if err := atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644); err != nil {
-		note("the runner pid file could not be written (%v); cancel reaches this runner through its "+
-			"lock instead", err)
-	}
-	observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, runnerPID, record.Worktree))
-	observe(ObsCredentialIssued, box.note(record))
-	note("started %s (pid %d) on %s", record.Runner, runnerPID, record.Branch)
 
 	push := &pusher{
 		interval: time.Duration(record.PushInterval) * time.Second,
@@ -207,31 +162,11 @@ func Supervise(stateDir string) error {
 		push.interval = DefaultPushInterval
 	}
 
-	// reaped is the one liveness question about the runner no pid reuse can
-	// fake: until Wait has reaped it, its pid — and so its process group id —
-	// cannot be handed to anybody else, which is what makes stopTree's
-	// signals below this supervisor's own child's and nobody else's.
-	var reaped atomic.Bool
-	runnerAlive := func() bool { return !reaped.Load() }
-
-	waited := make(chan int, 1)
-	go func() {
-		err := runner.Wait()
-		reaped.Store(true)
-		code := 0
-		if err != nil {
-			code = 1
-			var exitErr *exec.ExitError
-			if ok := asExitError(err, &exitErr); ok {
-				code = exitErr.ExitCode()
-			}
-		}
-		waited <- code
-	}()
-
 	ticker := time.NewTicker(pushTick(push.interval))
 	defer ticker.Stop()
 
+	// The wall clock is the ATTEMPT's, not one runner process's: a nudged
+	// runner runs inside the bound its first run was issued, never a fresh one.
 	var wall <-chan time.Time
 	if record.WallSeconds > 0 {
 		timer := time.NewTimer(time.Duration(record.WallSeconds) * time.Second)
@@ -239,48 +174,155 @@ func Supervise(stateDir string) error {
 		wall = timer.C
 	}
 
-	code := 0
-	for done := false; !done; {
-		select {
-		case code = <-waited:
-			done = true
+	// runTurn starts one runner process and waits for it. settled is true
+	// when the attempt was settled on the way — the runner could not be
+	// started, or the supervisor itself was stopped — and runner.exit is
+	// already written.
+	runTurn := func(argv, env []string, started func(pid int)) (code int, settled bool, err error) {
+		runner := exec.Command(argv[0], argv[1:]...)
+		runner.Dir = record.Worktree
+		runner.Env = env
+		runner.Stdout = log
+		runner.Stderr = log
+		runner.SysProcAttr = newProcessGroup()
 
-		case <-ticker.C:
-			switch outcome := push.maybePush(st.credentialLive()); outcome {
-			case "pushed":
-				_ = atomicWrite(st.path(fileLastPush), []byte(now()+"\n"), 0o644)
-				observe(ObsHeartbeat, "pushed "+record.Branch+" to "+record.Remote)
-			case "refused_revoked":
-				note("the credential is revoked; nothing is pushed")
-			case "push_failed":
-				note("the timed push of %s failed; the next tick tries again", record.Branch)
-			}
-
-		case <-wall:
-			note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
-			_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
-			stopTree(runnerPID, runnerAlive)
-
-		case sig := <-stopping:
-			note("supervisor received %s; stopping the runner", sig)
-			stopTree(runnerPID, runnerAlive)
-			// A stop is not an exit — but an attempt nobody settles is an
-			// attempt nobody CAN settle. Returning here left no runner.exit
-			// and no live pid, which inspect reads as `lost`; the reconciler
-			// refuses a handle it cannot address, marks the tick rejected,
-			// and — because the branch may already carry timer-pushed commits
-			// — re-adopts and re-refuses the same attempt on every restart
-			// after that, forever. So the stop settles the attempt as FAILED,
-			// with the signal in the exit code the way a shell reports one.
-			// Which stop it was is still the cancel record's to say: a cancel
-			// writes that before it signals, and inspect reads it first.
-			code := stopExitCode(sig)
-			observe(ObsExited, fmt.Sprintf(
-				"the supervisor was stopped by %s and settled the attempt as failed with %d; "+
-					"a stop is not a completion, and an unsettled attempt is one nobody can ever settle", sig, code))
-			note("settled as failed (%d) after %s", code, sig)
-			return atomicWrite(st.path(fileRunnerExit), []byte(strconv.Itoa(code)+"\n"), 0o644)
+		// The runner holds a lock of its own, handed to it as its fd 3, and so
+		// does everything it starts that keeps that fd. That is deliberate: the
+		// runner is what spends and what writes the worktree, and a runner still
+		// running after its supervisor was killed is an attempt still running —
+		// releasing it would let the next attempt race it. The cost is that a
+		// descendant which outlives the runner keeps the attempt alive with it;
+		// that matters only for an attempt that never settled, since a settled one
+		// is not alive whatever holds its locks (alive reads settlement first).
+		// A nudged runner is a new process and takes a lock of its own.
+		runnerLock, err := st.newLock(lockRunner)
+		if err != nil {
+			note("the runner's liveness lock could not be taken (%v); a runner nobody could see is not started", err)
+			observe(ObsExited, "the runner's liveness lock could not be taken: "+err.Error())
+			_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
+			return 127, true, err
 		}
+		runner.ExtraFiles = []*os.File{runnerLock}
+
+		if err := runner.Start(); err != nil {
+			runnerLock.Close()
+			note("the runner could not be started: %v", err)
+			observe(ObsExited, "the runner could not be started: "+err.Error())
+			_ = atomicWrite(st.path(fileRunnerExit), []byte("127\n"), 0o644)
+			return 127, true, err
+		}
+		runnerPID := runner.Process.Pid
+		if err := stampLock(runnerLock, runnerPID); err != nil {
+			note("the runner's pid could not be written into its lock (%v); it is alive to an observer, "+
+				"but only its supervisor can stop it", err)
+		}
+		// The supervisor's own copy goes: the runner's copy is the same open file
+		// description, and it is the runner's life the lock now describes.
+		runnerLock.Close()
+		if err := atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644); err != nil {
+			note("the runner pid file could not be written (%v); cancel reaches this runner through its "+
+				"lock instead", err)
+		}
+		started(runnerPID)
+
+		// reaped is the one liveness question about the runner no pid reuse can
+		// fake: until Wait has reaped it, its pid — and so its process group id —
+		// cannot be handed to anybody else, which is what makes stopTree's
+		// signals below this supervisor's own child's and nobody else's.
+		var reaped atomic.Bool
+		runnerAlive := func() bool { return !reaped.Load() }
+
+		waited := make(chan int, 1)
+		go func() {
+			err := runner.Wait()
+			reaped.Store(true)
+			code := 0
+			if err != nil {
+				code = 1
+				var exitErr *exec.ExitError
+				if ok := asExitError(err, &exitErr); ok {
+					code = exitErr.ExitCode()
+				}
+			}
+			waited <- code
+		}()
+
+		for {
+			select {
+			case code := <-waited:
+				return code, false, nil
+
+			case <-ticker.C:
+				switch outcome := push.maybePush(st.credentialLive()); outcome {
+				case "pushed":
+					_ = atomicWrite(st.path(fileLastPush), []byte(now()+"\n"), 0o644)
+					observe(ObsHeartbeat, "pushed "+record.Branch+" to "+record.Remote)
+				case "refused_revoked":
+					note("the credential is revoked; nothing is pushed")
+				case "push_failed":
+					note("the timed push of %s failed; the next tick tries again", record.Branch)
+				}
+
+			case <-wall:
+				note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
+				_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
+				stopTree(runnerPID, runnerAlive)
+
+			case sig := <-stopping:
+				note("supervisor received %s; stopping the runner", sig)
+				stopTree(runnerPID, runnerAlive)
+				// A stop is not an exit — but an attempt nobody settles is an
+				// attempt nobody CAN settle. Returning here left no runner.exit
+				// and no live pid, which inspect reads as `lost`; the reconciler
+				// refuses a handle it cannot address, marks the tick rejected,
+				// and — because the branch may already carry timer-pushed commits
+				// — re-adopts and re-refuses the same attempt on every restart
+				// after that, forever. So the stop settles the attempt as FAILED,
+				// with the signal in the exit code the way a shell reports one.
+				// Which stop it was is still the cancel record's to say: a cancel
+				// writes that before it signals, and inspect reads it first.
+				code := stopExitCode(sig)
+				observe(ObsExited, fmt.Sprintf(
+					"the supervisor was stopped by %s and settled the attempt as failed with %d; "+
+						"a stop is not a completion, and an unsettled attempt is one nobody can ever settle", sig, code))
+				note("settled as failed (%d) after %s", code, sig)
+				return code, true, atomicWrite(st.path(fileRunnerExit), []byte(strconv.Itoa(code)+"\n"), 0o644)
+			}
+		}
+	}
+
+	code, settled, err := runTurn(record.RunnerArgv, runnerEnv, func(pid int) {
+		observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, pid, record.Worktree))
+		observe(ObsCredentialIssued, box.note(record))
+		note("started %s (pid %d) on %s", record.Runner, pid, record.Branch)
+	})
+	// The nudge (nudge.go): a runner that exited 0 with no report is prompted
+	// again, a bounded number of times, before the attempt settles.
+	for nudged := 0; !settled; {
+		due, why := nudgeDue(st, record, code, nudged)
+		if !due {
+			if nudged > 0 {
+				note("no further nudge: %s", why)
+			}
+			break
+		}
+		nudged++
+		how := "running it again on the same worktree: it has no session to resume"
+		if record.Session != "" {
+			how = "re-prompting its own session " + record.Session
+		}
+		code, settled, err = runTurn(record.NudgeArgv,
+			append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvNudge, nudged)),
+			func(pid int) {
+				observe(ObsStarted, fmt.Sprintf("%snudge %d of %d, pid %d: the %s runner exited 0 without "+
+					"writing its report at %s, and a headless runner that ends its turn early ends the job; %s",
+					nudgeDetailPrefix, nudged, MaxNudges, pid, record.Runner, record.ResultPath, how))
+				note("the runner exited 0 with no report; nudge %d of %d (pid %d), %s",
+					nudged, MaxNudges, pid, how)
+			})
+	}
+	if settled {
+		return err
 	}
 
 	// The final push happens BEFORE settlement is recorded, so that "settled"

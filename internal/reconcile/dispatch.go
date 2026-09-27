@@ -2117,6 +2117,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 	if status.Cursor != nil {
 		fl.cursor = *status.Cursor
 	}
+	r.announceNudges(marker.TickID, status)
 	if status.Terminal {
 		// How long it outlived its bound, if it had one and had passed it
 		// (tick dh1). Neither ncv attempt honoured the wall-clock interrupt:
@@ -2224,6 +2225,22 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 // window continues against what it read.
 func (r *Reconciler) restBetweenPolls(fl *inflightAttempt) error {
 	return r.restWindow([]*inflightAttempt{fl})
+}
+
+// announceNudges puts every nudge the executor recorded on the feed: a
+// runner that exited 0 without its report and was prompted again
+// (subprocess/nudge.go, epic-2jn vqc). A worker that keeps ending its turn
+// early is a pattern worth seeing while it runs, not only in the attempt's
+// own store after it settled.
+func (r *Reconciler) announceNudges(tick string, status *subprocess.JobStatus) {
+	if status == nil {
+		return
+	}
+	for _, o := range status.Observations {
+		if subprocess.IsNudge(o) {
+			r.record(tick, StageWaiting, "%s", o.Detail)
+		}
+	}
 }
 
 // lastObservation is the executor's own last word about an attempt, for a

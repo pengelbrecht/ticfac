@@ -234,6 +234,19 @@ in_conflict_ticks() {
 	case " ${CONFLICT_TICKS:-} " in *" $TICFAC_TICK "*) return 0 ;; esac
 	return 1
 }
+
+# A runner that exited 0 without its report is re-prompted by its supervisor
+# (subprocess/nudge.go), with TICFAC_NUDGE set. Every mode here that ends
+# without a report MEANT to — it is how the fixture makes a missing result —
+# so a nudged re-run says nothing more, and only the modes written for the
+# nudge answer it.
+if [ -n "${TICFAC_NUDGE:-}" ]; then
+	case "$mode" in
+	conflict_resolve_stops_early) ;;
+	*) exit 0 ;;
+	esac
+fi
+
 case "$mode" in
 report)
 	commit
@@ -276,6 +289,24 @@ conflict_resolve_hold)
 		done
 		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
 		git -C "$TICFAC_WORKTREE" commit -q -m "resolve-conflict: $TICFAC_TICK" >/dev/null 2>&1
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+conflict_resolve_stops_early)
+	# epic-2jn vqc (2026-09-27): the same conflict, and a resolve-conflict
+	# worker that commits its resolution, starts the gate "in the
+	# background" and ends its turn to wait for it — which in print mode
+	# exits 0 with no report. Re-prompted, it writes the report.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		if [ -z "${TICFAC_NUDGE:-}" ]; then
+			resolve_union
+			exit 0
+		fi
 		report
 	elif in_conflict_ticks; then
 		conflict_side

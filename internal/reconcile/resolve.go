@@ -435,6 +435,7 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 			return nil, fmt.Errorf(
 				"the %s job %s can no longer be addressed and has not settled", marker.Role, marker.JobID)
 		}
+		r.announceNudges(marker.TickID, status)
 		if status.Terminal {
 			return status, nil
 		}
