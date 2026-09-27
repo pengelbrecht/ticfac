@@ -2,6 +2,7 @@
   "id": "mtq",
   "title": "Full-suite evacuation test fails at base: the child test binary's registry-guard root is left in childTmp by the SIGTERM exit",
   "description": "go test ./internal/cli/ -run 'TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote' (no -short) fails at the base commit 4aa2400c80fd with \"the SIGTERM exit left its temp trees behind: [ticfac-registry-guard-\u003cn\u003e]\". The child is this test binary re-exec'd with TMPDIR=childTmp, so its TestMain's registrytest.GuardMain setup() creates its private temp root ticfac-registry-guard-* inside childTmp; the SIGTERM handler's os.Exit skips GuardMain's RemoveAll, and the parent's ticfacTemp leftover assertion then counts the guard's own root as a run temp tree. The per-tick gate never sees it because the test skips under -short.\n\nticfac run epic-2jn filed this backlog tick from the finding e0bbcf7ab0bfe770adb9830019fb86daf281350116290f2dde342e38baa9280d (reported by run-epic-2jn/tick-wcl/attempt-47): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/e0bbcf7ab0bfe770adb9830019fb86daf281350116290f2dde342e38baa9280d.json on the run branch.",
+  "notes": "2026-09-27 20:39 - ticfac run epic-2jn: created by absorbing finding e0bbcf7ab0bfe770adb9830019fb86daf281350116290f2dde342e38baa9280d — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-2jn/absorptions/e0bbcf7ab0bfe770adb9830019fb86daf281350116290f2dde342e38baa9280d.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-2jn/tick-wcl/attempt-47",
   "created_by": "ticfac run epic-2jn",
   "created_at": "2026-09-27T18:39:41Z",
-  "updated_at": "2026-09-27T18:39:41Z"
+  "updated_at": "2026-09-27T18:39:47.057269Z"
 }
