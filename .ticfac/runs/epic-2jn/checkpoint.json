@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 205,
-  "state": "gating",
-  "reason": "running the integrated gate for tem on 0260831ee1e7",
-  "updated_at": "2026-09-27T11:36:31Z",
+  "sequence": 206,
+  "state": "publishing",
+  "reason": "closing tem behind the integrated gate on 0260831ee1e7",
+  "updated_at": "2026-09-27T11:38:13Z",
   "ticks": [
     {
       "tick_id": "nwj",
