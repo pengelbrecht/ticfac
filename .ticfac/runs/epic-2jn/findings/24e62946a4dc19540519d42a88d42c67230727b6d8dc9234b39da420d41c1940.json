@@ -12,8 +12,11 @@
   "attempt": 50,
   "done_item": "none",
   "demonstrating_check": "go test -run TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote ./internal/cli/ (full, not -short)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T19:07:43Z",
+  "triaged_at": "2026-09-27T19:07:52Z",
+  "triaged_by": "ticfac run epic-2jn absorbing 0wp",
+  "promoted_as": "0wp",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "vqc",
