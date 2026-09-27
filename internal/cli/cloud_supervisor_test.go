@@ -179,6 +179,52 @@ func TestCloudSupervisorSaysHowToInstallTheCredential(t *testing.T) {
 	}
 }
 
+// gwi: the disagreement note ends with the one command that frees the
+// project lease, and that command has to be THIS binary's. The line was
+// ported verbatim from ticks and still said 'tk cloud stop', a binary this
+// repository does not ship — an operator who ran it freed nothing.
+func TestCloudSupervisorDisagreementPointsAtThisBinarysStop(t *testing.T) {
+	setupCloudRepo(t, false)
+	// The run record's claim: still running, hours after its supervisor died.
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		return http.StatusOK, map[string]any{
+			"run":   map[string]any{"run_id": "run_2xm", "state": "running", "project": "acme/project"},
+			"phase": map[string]any{"state": "running"},
+		}
+	})
+	configureCloudFactory(t, endpoint)
+	configureCloudflareAPI(t, func(*http.Request) (int, string) {
+		return http.StatusOK, erroredInstance
+	})
+
+	// The prose report, where the note is printed.
+	code, out, stderr := runCloudArgs(t, []string{"cloud", "supervisor", "run_2xm"})
+	if code != exitSuccess {
+		t.Fatalf("cloud supervisor: %s\n%s", stderr.String(), out.String())
+	}
+	report := out.String()
+	if !strings.Contains(report, "ticfac cloud stop run_2xm --now") {
+		t.Errorf("the disagreement note does not name this binary's stop command:\n%s", report)
+	}
+	if strings.Contains(report, "'tk ") {
+		t.Errorf("the disagreement note still points at the ticks CLI:\n%s", report)
+	}
+
+	// The same note rides the --json document's disagreement field, which is
+	// where an agent reads it — the pointer is repointed there or nowhere.
+	code, out, stderr = runCloudArgs(t, []string{"cloud", "supervisor", "run_2xm", "--json"})
+	if code != exitSuccess {
+		t.Fatalf("cloud supervisor --json: %s\n%s", stderr.String(), out.String())
+	}
+	document := out.String()
+	if !strings.Contains(document, "ticfac cloud stop run_2xm --now") {
+		t.Errorf("the --json disagreement does not name this binary's stop command:\n%s", document)
+	}
+	if strings.Contains(document, "'tk ") {
+		t.Errorf("the --json disagreement still points at the ticks CLI:\n%s", document)
+	}
+}
+
 // --steps prints the trail, which is what told 7n7 apart: fifteen dispatch legs
 // with no lease step between them.
 func TestCloudSupervisorPrintsTheStepTrail(t *testing.T) {
