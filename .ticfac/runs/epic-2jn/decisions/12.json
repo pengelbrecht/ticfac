@@ -1,0 +1,141 @@
+{
+  "schema_version": 3,
+  "decision": 12,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-xbp/attempt-32",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:250a9e01aa04ebae91c0f09ab00303bb35306018a40ce967f814c1b4ace148c7",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "86f040b9e3100ee04551311be4a83ece37feae42",
+    "tick_id": "xbp"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "overview.go localRunIDs enumerates working-tree run directories, but runstate commits run state by plumbing to epic/<id> and never touches a working tree, so a checkout on main lists only merged epics (the operator's main checkout omits the live epic-2jn). The runregistry built for this (aj9) is never read by the overview, and liveness is probed with repo=cwd so a run live in another checkout reads dead. Fix: enumerate from runregistry.List and probe each run in its registered repo; test with state only on epic/<id>.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "Bare 'ticfac' never lists a live local run: it reads <cwd>/.ticfac/runs, which a run never writes"
+      },
+      {
+        "body": "watch.go:386-403 finishes as done on any run_finished not preceded by run_held, and holdsForAPerson excludes gate failures, merge conflicts and CI failures; run.go:506 maps 0 to done. Reproduced: feed run_finished 'failed: the integrated gate refused ...' then watch --json exits 0 with schema ticfac.watch.v1 state=done; the TTY path also exits 0. Failed and done are not distinguishable by exit code, which A4 requires.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "A failed run exits 0 with state 'done' from ticfac watch / ticfac run / run --cloud"
+      },
+      {
+        "body": "resultExitCode (exit.go:105) knows only 0/4/1 and TestRunEpicJSONResultAgreesWithTheExitCode pins a finding_untriaged hold as 1, while run/watch exit ExitHeld=3 and SKILL.md says a held run exits 3. watchHoldAttention counts WaitMerge, so an interactive ticfac run of a completed epic with an open PR exits 3, while piped or --json it exits 0. Unify the table and test each path.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Exit codes disagree across commands: run-epic exits 1 for a held run, run/watch exit 3; completed+PR exits 3 on a TTY"
+      },
+      {
+        "body": "statusmodel/build.go:761-775 emits 'ticfac settle ... --release' for every run_held line whatever the reason (finding_untriaged is cleared by ticfac triage); build.go:834 names 'ticfac findings <epic>', which only lists; overview.go:228,247 and build.go:755 name 'ticfac run-epic <epic>', which for a cloud run restarts it locally in the foreground instead of 'ticfac run <epic> --cloud'. watch.go:317 prints a literal <epic-id> placeholder. Merge waits and cancelled runs name no command.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Clearing commands name the wrong verb: settle for finding holds, 'findings' (list) for the finding wait, run-epic for cloud failures"
+      },
+      {
+        "body": "run never forwards --gate, and cli.go:339 captures *fl.gate (\"\") in executorFactory before reconcile defaults GateConfig to .tick/runners.toml. spawnArgv reads \"\", treats ENOENT as 'routes nothing', and launches claude without effort, pi without the --approve init writes, and at the default socket even when orchestration.socket is where run detected herdr. Pre-existing in executor.go, but ticfac run makes it the default path.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "ticfac run's herdr panes drop runners.toml effort, args and socket: run-epic builds executorFactory with an empty gate path"
+      },
+      {
+        "body": "cloudRunsForEpic (run_cloud.go:171-178) matches on epic only, so 'ticfac run abc --cloud' in repo A attaches to repo B's run for epic abc; the overview lists every project's runs and reads this repo's records/PR for them. run --cloud decides attach vs resume from the record state alone and never consults cloudRunLiveness, so a dead instance behind a 'running' record is attached to forever. status/watch by epic id never look in the factory.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "run --cloud and the overview ignore the factory run's project; a frozen 'running' record is attached forever"
+      },
+      {
+        "body": "init.go:580-596 writes the forge-requiring close-out rule unconditionally, with no question or flag, and doctor never checks that origin parses as a GitHub remote. On a local-only or non-GitHub repo, pullRequestsForRun (forge.go:78-85) fails and the reconciler refuses to start, so init then run fails with nothing the operator can pass to fix it.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "ticfac init always writes the PR + CI close-out rule; a repo without a GitHub origin then cannot run"
+      },
+      {
+        "body": "resolveFindingsRun (findings.go:105-110) turns 'triage epic-2jn' into branch epic/epic-2jn although SKILL.md says epic-<id> is accepted everywhere. triageWalk (triage.go:244) on stdin /dev/null exits 0 with everything untriaged, blocks forever on an open pipe, and exits 0 after a settle error (triage.go:376). looksLikeCommit (triage.go:498) never checks that the commit exists.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "triage gaps: epic-<id> refused, the interactive walk has no TTY check, fixed:<commit> is shape-checked only"
+      },
+      {
+        "body": "raw.githubusercontent.com/.../main/install.sh is 404 until the epic merges, and there is no v* tag or release, so releases/latest resolves to /releases and install.sh:48-51 aborts. No tick cuts the first tag after the merge, so A6's one-command install is unreachable until someone does it by hand. Also: install.sh:65's trap expands $TMP unquoted.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Cut the first ticfac release: install.sh's stable URL answers nothing until main carries it and a v* tag exists"
+      },
+      {
+        "body": "skills/ticks/SKILL.md (line ~401 of the installed copy, same on ticks main) points agents at run-epic, the foreground script form, while ticfac's skill and README make 'ticfac run <epic>' the one command. The two skills send an agent to different commands for the same step; point ticks at 'ticfac run' or at the ticfac skill.",
+        "kind": "upstream-tick",
+        "severity": "low",
+        "target": "pengelbrecht/ticks",
+        "title": "ticks skill says 'Start a run with ticfac run-epic <epic>'; the ticfac skill teaches 'ticfac run <epic>'"
+      },
+      {
+        "body": "internal/cli/skills_test.go:269-288 splits SKILL.md on whitespace, so '`ticfac init`' becomes '`ticfac' (trimmed to bare ticfac, skipped) and 'init`' (no prefix); no subcommand is ever checked, and a SKILL.md naming a nonexistent command passes. Also, no --json test checks a schema field (cloud trace --json emits none, cloud_trace.go:392).",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "skills_test's 'every ticfac <command> the skill names exists' loop is vacuous"
+      },
+      {
+        "body": "Under this review launch's GIT_CONFIG_COUNT/KEY/VALUE pushInsteadOf pins, tests in cli (triage, run --cloud, cloud logs), reconcile, runstate, runsignal, exec/subprocess and exec/cloudflaresandbox fail pushing to their own temp bare origins; with GIT_CONFIG_COUNT=0 all pass. A reviewer ticfac launches cannot run ticfac's gate; fixture git helpers should scrub GIT_CONFIG_* (and GIT_CONFIG_GLOBAL) from their environment.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Fixture git inherits ambient GIT_CONFIG_* pins: the Go gate fails inside ticfac's own read-only review launch"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-2jn/tick-xbp/attempt-32",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-2jn/xbp/RESULT-xbp.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the Go gate fails in this launch only because its GIT_CONFIG_* push pins reach test fixtures; it passes with GIT_CONFIG_COUNT=0. Exit 3 for a completed run with an open PR on a TTY (A4 item 5) was traced in code, not executed."
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T14:11:10Z",
+  "answered_at": "2026-09-27T14:11:10Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "xbp",
+    "attempt": 32,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "86f040b9e3100ee04551311be4a83ece37feae42",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:250a9e01aa04ebae91c0f09ab00303bb35306018a40ce967f814c1b4ace148c7",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
