@@ -25,6 +25,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -425,6 +426,176 @@ func TestStatusJSONEmitsTheModelForACloudRun(t *testing.T) {
 	if model.WaitsOn.UnblockCommand == nil ||
 		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --release "<who>"` {
 		t.Errorf("the unblocking command is %+v, want the settle command", model.WaitsOn.UnblockCommand)
+	}
+	if len(*requests) == 0 {
+		t.Error("the factory was never asked")
+	}
+}
+
+// TestStatusCloudRunReadsTheContainersRecords: a cloud run's records are the
+// orchestrator CONTAINER's, not the factory's. The container runs
+// `ticfac run-epic <epic>` — the same command a local run is — so its
+// durable records land on the integration branch under the run id that
+// command constructs, epic-<epic-id>, while the factory's run_<hex> id
+// names the Workflow instance. A model that reads under the factory's id
+// answers from an empty directory and degrades to feed-and-graph only
+// (tick tem): no waves from the records, no cost, and a hold on untriaged
+// findings surfaces only through the feed's run_held line, never as the
+// model's WaitFinding attention with its triage pointer.
+func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
+	factoryRunID := "run_9d0f17aa4c2e5b81f0d3"
+	epicID := "cld"
+	containerRunID := "epic-" + epicID
+	repo := t.TempDir()
+	execTestCmd(t, repo, "git", "init", "--quiet", "-b", "main")
+	execTestCmd(t, repo, "git", "config", "user.email", "status@example.com")
+	execTestCmd(t, repo, "git", "config", "user.name", "status test")
+
+	// The container's durable records, as its own orchestrator commits them:
+	// under .ticfac/runs/epic-<epic-id>/, named by the run the container
+	// constructed. No directory under the factory's run id exists — that
+	// is the defect's whole shape. Written through the record types so the
+	// strict decoder the reader runs cannot be out-drifted by hand.
+	at := "2026-09-27T04:08:08Z"
+	one, tickID, executor := 1, "t1", "cloudflare-sandbox"
+	role, tier, modelID := "implement-tick", "strong", "@cf/zai-org/glm-5.3"
+	provenance := func(tick *string, attempt *int) runstate.Provenance {
+		return runstate.Provenance{
+			RunID:     containerRunID,
+			TickID:    tick,
+			Attempt:   attempt,
+			SourceRef: "refs/heads/epic/" + epicID,
+			SourceSHA: "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+			Phase:     runstate.PhaseWorker,
+			Executor:  &executor, Role: &role, Tier: &tier, Model: &modelID,
+		}
+	}
+	writeRecord := func(rel string, record any) {
+		t.Helper()
+		raw, err := json.MarshalIndent(record, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal %s: %v", rel, err)
+		}
+		path := filepath.Join(repo, runstate.Root, "runs", containerRunID, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeRecord("checkpoint.json", runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         containerRunID,
+		EpicID:        epicID,
+		Sequence:      2,
+		State:         runstate.StateRunning,
+		Reason:        "t1 is dispatched",
+		UpdatedAt:     at,
+		Ticks:         []runstate.TickState{{TickID: tickID, State: "dispatched", Attempt: one}},
+		Provenance:    provenance(nil, nil),
+	})
+	writeRecord("attempts/1.json", runstate.Attempt{
+		SchemaVersion: runstate.SchemaVersion,
+		Attempt:       one,
+		TickID:        tickID,
+		DispatchedAt:  at,
+		JobHandle:     map[string]any{"executor": executor},
+		Provenance:    provenance(&tickID, &one),
+	})
+	writeRecord("findings/f7c289d1.json", runstate.Finding{
+		SchemaVersion:  runstate.SchemaVersion,
+		Key:            "f7c289d1",
+		Source:         "worker",
+		DiscoveredFrom: "run-" + containerRunID + "/tick-" + tickID + "/attempt-1",
+		Kind:           "defect",
+		Title:          "a defect outside the reporting tick",
+		Body:           "what the worker found, in two sentences.",
+		Severity:       "low",
+		TickID:         tickID,
+		Attempt:        one,
+		DoneItem:       "none",
+		Status:         runstate.FindingProposed,
+		ProposedAt:     at,
+		Provenance:     provenance(&tickID, &one),
+	})
+
+	// The factory: a COMPLETED run, so the container's untriaged finding is
+	// the attention the model owes a person. The feed carries no run_held
+	// line — the finding must surface from the records, not the feed.
+	feedText := strings.Join([]string{
+		`{"schema_version":1,"at":"` + at + `","run_id":"` + factoryRunID + `","tick_id":"t1","attempt":1,"stage":"dispatched","detail":"t1 try 1 dispatched"}`,
+		"",
+	}, "\n")
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": factoryRunID, "epic": epicID, "state": "completed",
+			}}}
+		case request.Path == "/api/runs/"+factoryRunID:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": factoryRunID, "epic": epicID, "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+factoryRunID+"/events":
+			return 200, map[string]any{
+				"run_id": factoryRunID, "state": "completed",
+				"text": feedText, "bytes": len(feedText), "total_bytes": len(feedText),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	realGraph := epicGraph
+	t.Cleanup(func() { epicGraph = realGraph })
+	epicGraph = func(context.Context, string, string) *tk.Graph {
+		return &tk.Graph{Waves: []tk.GraphWave{{
+			Wave:  1,
+			Tasks: []tk.GraphTask{{ID: tickID, Title: "the one tick", Status: "open"}},
+		}}}
+	}
+
+	var out, errOut bytes.Buffer
+	code := Run([]string{"status", "--repo", repo, "--json", factoryRunID}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("a completed cloud run exited %d, want the not-alive exit 1: %s\n%s", code, out.String(), errOut.String())
+	}
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
+	}
+
+	// The model still NAMES the factory's run id — the id every surface
+	// addresses the run by — but it READS the container's records.
+	if model.RunID != factoryRunID || model.EpicID != epicID || model.Host != statusmodel.HostCloud {
+		t.Errorf("the cloud model does not name itself: %+v", model)
+	}
+	if model.Cost.Attempts != 1 {
+		t.Errorf("the container's dispatch marker did not ride: cost reads %+v, want 1 attempt", model.Cost)
+	}
+	if model.Waves == nil || len(*model.Waves) != 1 || len((*model.Waves)[0].Ticks) != 1 {
+		t.Fatalf("the fake tracker's wave did not ride: %+v", model.Waves)
+	}
+	state := (*model.Waves)[0].Ticks[0]
+	if state.State != "dispatched" || state.Try == nil || *state.Try != 1 {
+		t.Errorf("the wave's tick reads %+v, want the checkpoint's dispatched try 1", state)
+	}
+
+	// The untriaged finding the container filed is the model's attention,
+	// with the triage pointer the findings surface spells.
+	var finding *statusmodel.Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind == statusmodel.WaitFinding {
+			finding = &model.Attention[i]
+		}
+	}
+	if finding == nil {
+		t.Fatalf("the container's untriaged finding never surfaced: attention %+v", model.Attention)
+	}
+	if !finding.NeedsPerson || finding.UnblockCommand == nil ||
+		*finding.UnblockCommand != "ticfac findings "+epicID {
+		t.Errorf("the finding's triage pointer reads %+v", finding)
 	}
 	if len(*requests) == 0 {
 		t.Error("the factory was never asked")
