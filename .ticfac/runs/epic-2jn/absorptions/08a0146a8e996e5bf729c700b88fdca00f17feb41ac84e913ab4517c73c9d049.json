@@ -1,0 +1,31 @@
+{
+  "schema_version": 3,
+  "key": "08a0146a8e996e5bf729c700b88fdca00f17feb41ac84e913ab4517c73c9d049",
+  "tick_id": "tm5",
+  "gating": true,
+  "item_id": "A1",
+  "basis": "predicted",
+  "fallback": "no classifier is configured for gating predictions; the reporter's own claim decided",
+  "reason": "no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A1, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did",
+  "placement": "after-review-before-closeout",
+  "decided_at": "2026-09-27T20:47:06Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "rrl",
+    "attempt": 54,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "c235973d5d865d7a8f2e2a5b2c1a0bfd70d11ccf",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:262ce67cbc25a58c2187bb990b95679b6b54e56db8e2568f34a17f92de6b83f2",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
