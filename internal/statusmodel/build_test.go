@@ -548,6 +548,84 @@ func TestACompletedRunWithAnOpenPRWaitsOnTheMerge(t *testing.T) {
 	}
 }
 
+// TestAFindingHoldIsClearedByTriage: the close-out's untriaged-findings
+// hold is a person's decision about FINDINGS, not an attempt to release —
+// the run_held line is cleared by `ticfac triage`, and naming `settle`
+// there (as every other hold is) points a person at a command that refuses
+// it: settle releases an attempt, and the finding hold holds no attempt.
+func TestAFindingHoldIsClearedByTriage(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "rrl", &four,
+		reconcile.StageRunHeld, "finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	model := Build(src)
+
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("a run holding for triage waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac triage 2jn" {
+		t.Errorf("the finding hold's unblocking command is %+v, want ticfac triage 2jn",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestTheUntriagedFindingWaitIsClearedByTriage: the attention a dead run's
+// untriaged findings raise names the command that SETTLES them, not the one
+// that only lists them — `ticfac findings` walks away having changed
+// nothing, and a person following it finds the close-out still held.
+func TestTheUntriagedFindingWaitIsClearedByTriage(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Liveness.Alive = false
+	src.Liveness.State = "not_running"
+	src.Liveness.Reason = "no process holds this run: the last one released it, or none has claimed it here"
+	src.Session = nil
+	src.Standing = nil
+	model := Build(src)
+
+	for _, a := range model.Attention {
+		if a.Kind != WaitFinding {
+			continue
+		}
+		if a.UnblockCommand == nil || *a.UnblockCommand != "ticfac triage 2jn" {
+			t.Errorf("the untriaged finding's unblocking command is %+v, want ticfac triage 2jn",
+				a.UnblockCommand)
+		}
+		return
+	}
+	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
+}
+
+// TestADeadCloudRunResumesThroughTheFactory: the dead-run resume is named
+// by the host the run lives on. A cloud run's resume is a new submission to
+// its factory — `ticfac run <epic> --cloud` — because `run-epic` here would
+// restart the epic LOCALLY, in the foreground, on the machine that happens
+// to be reading it: the one command the overview and the watch point a
+// person at must be the command that clears the stop the run is actually
+// stopped in.
+func TestADeadCloudRunResumesThroughTheFactory(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_1a2b3c4d5e6f"
+	src.Liveness.Alive = false
+	src.Liveness.State = "unknown"
+	src.Liveness.Reason = "the factory's record carries no state for this run, so nothing claims it is alive"
+	src.Liveness.Source = "workflow-record"
+	src.Session = nil
+	src.Standing = nil
+	model := Build(src)
+
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun {
+		t.Fatalf("a cloud run gone without a terminal word waits on %+v, want dead-run", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
+		t.Errorf("the dead cloud run's unblock command is %+v, want ticfac run 2jn --cloud",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
 // TestTheCloseoutCIIHoldIsAWaitNobodyAlarms: the close-out's own typed line
 // is a wait the run watches itself — needs_person false, the state a
 // renderer shows, not an alarm it raises.

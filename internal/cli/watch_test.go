@@ -10,6 +10,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
 // `ticfac watch` is the consumer the run event feed was built for (tick 0z0):
@@ -38,8 +39,10 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 		t.Fatalf("exit code %d, want %d for a run that ended holding an attempt; stderr %q", code, ExitHeld, stderr.String())
 	}
 	// What surfaces names WHICH TICK and WHY — the acceptance criterion —
-	// and says what moves the hold on, carry and all.
-	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle <epic-id> nkf 3 ", "attempt_unaddressed", "--carry-work", "settle"} {
+	// and says what moves the hold on, carry and all. The settle command is
+	// addressed by the run's own epic id — a placeholder a person would
+	// still have to fill in is not a command.
+	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle r-1 nkf 3 ", "attempt_unaddressed", "--carry-work", "settle"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("the alert does not name %q: %q", want, stderr.String())
 		}
@@ -48,6 +51,62 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 	// whole run, and the hold is visible on stdout too.
 	if !strings.Contains(stdout.String(), reconcile.StageRunHeld) {
 		t.Errorf("the held line never printed on stdout: %q", stdout.String())
+	}
+}
+
+// The settle command the hold alert names is addressed by the run's OWN
+// epic id, never a `<epic-id>` placeholder: the alert exists so a person
+// can copy one command, and a placeholder is a second thing to look up.
+// The run's id spells the epic (`epic-<id>`), so the command reads the
+// epic out of it.
+func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 2
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC), "epic-2jn", "t1", &attempt, "dispatched", "t1 try 1 dispatched"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "t1", &attempt, reconcile.StageRunHeld,
+		"attempt_struck_out: the report names no status"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, "run_finished",
+		"failed: t1 did not pass"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac settle 2jn t1 2 --release") {
+		t.Errorf("the alert does not name the settle command addressed by the epic id: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "<epic-id>") {
+		t.Errorf("the alert still prints a placeholder instead of the epic id: %q", stderr.String())
+	}
+}
+
+// The close-out's untriaged-findings hold is cleared by triage, so the
+// alert names `ticfac triage <epic>` — never `settle`, which releases an
+// attempt and would refuse this one.
+func TestWatchHoldAlertNamesTriageForAFindingHold(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "rrl", nil, reconcile.StageRunHeld,
+		"finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, "run_finished",
+		"holding: the close-out waits on untriaged findings"))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac triage 2jn") {
+		t.Errorf("the finding hold's alert does not name the triage command: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the finding hold's alert names settle, a command that releases an attempt and refuses this hold: %q",
+			stderr.String())
 	}
 }
 
@@ -290,7 +349,7 @@ func TestWatchStartedWhileTheRunHoldsReportsTheHoldItJoined(t *testing.T) {
 	if !strings.Contains(stderr.String(), "HOLDING a2 try 1 (run dispatch #2)") {
 		t.Fatalf("the watch never reported the hold it joined: stderr %q stdout %q", stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "settle <epic-id> a2 2 ") || !strings.Contains(stderr.String(), "attempt_unaddressed") {
+	if !strings.Contains(stderr.String(), "settle r-1 a2 2 ") || !strings.Contains(stderr.String(), "attempt_unaddressed") {
 		t.Errorf("the alert does not name the held attempt and why: %q", stderr.String())
 	}
 
@@ -373,6 +432,15 @@ func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "HOLDING") {
 		t.Errorf("a run that failed holding nothing raised the hold alert: %q", stderr.String())
+	}
+	// The resume it names is a command a person can paste (tick gtk): the
+	// one statusmodel spells for the run's host, addressed by a real id —
+	// never a `<epic-id>` placeholder.
+	if strings.Contains(stderr.String(), "<epic-id>") {
+		t.Errorf("the failed end names a placeholder, not a command: %q", stderr.String())
+	}
+	if want := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); !strings.Contains(stderr.String(), want) {
+		t.Errorf("the failed end does not name the resume %q: %q", want, stderr.String())
 	}
 	// The terminal line still prints — the last line says why, and the exit
 	// code says which class of ending it was.
