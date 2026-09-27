@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 221,
-  "state": "gating",
-  "reason": "running the integrated gate for gwi on a05775c42a5c",
-  "updated_at": "2026-09-27T12:21:49Z",
+  "sequence": 222,
+  "state": "publishing",
+  "reason": "closing gwi behind the integrated gate on a05775c42a5c",
+  "updated_at": "2026-09-27T12:23:00Z",
   "ticks": [
     {
       "tick_id": "nwj",
