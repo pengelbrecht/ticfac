@@ -212,6 +212,13 @@ func (e *Executor) alive(st *store, record *attemptRecord) bool {
 // state root, and it rides into a durable decision record via
 // RoleResult.Result — a fact this repository's own public-repo guard forbids.
 func (e *Executor) readReport(record *attemptRecord) (Report, bool) {
+	return readAttemptReport(record)
+}
+
+// readAttemptReport is readReport without an executor, for the supervisor's
+// nudge (nudge.go), which must judge "is there a report" by the same reading
+// collect will.
+func readAttemptReport(record *attemptRecord) (Report, bool) {
 	if raw, err := os.ReadFile(record.ResultPath); err == nil {
 		report := ParseReport(string(raw))
 		report.Path = record.ResultRel

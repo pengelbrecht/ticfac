@@ -31,6 +31,7 @@ const EnvRunnerArgv = "TICFAC_RUNNER_ARGV"
 const (
 	promptPlaceholder       = "{{prompt}}"
 	gitCommonDirPlaceholder = "{{git_common_dir}}"
+	sessionPlaceholder      = "{{session}}"
 )
 
 // runnerDef is one runner's entry: how to launch it headless, and the flag
@@ -45,6 +46,19 @@ const (
 type runnerDef struct {
 	Argv      []string
 	ModelFlag string
+
+	// SessionStart and SessionResume are how this runner is given a session
+	// of the executor's choosing, and how that same session is prompted again
+	// after its process has exited (the nudge, nudge.go). Each is inserted in
+	// front of the prompt with sessionPlaceholder substituted. Empty means the
+	// runner has no session this executor can name, and a nudge is a fresh
+	// run on the same worktree instead.
+	SessionStart  []string
+	SessionResume []string
+
+	// Env is what this runner is launched with beyond the job's own
+	// variables: settings that belong to the CLI, not to the job.
+	Env []string
 }
 
 // runners is the headless, full-auto invocation of each runner. The prompt
@@ -54,9 +68,27 @@ var runners = map[string]runnerDef{
 	// `-p` is claude's headless print mode; the permission mode is what makes
 	// it non-interactive rather than blocked on a prompt nobody will answer.
 	// `--model <name>` takes an alias (sonnet, opus) or a full model name.
+	//
+	// Print mode ends the process when the model ends its turn, so a claude
+	// that starts the gate as a BACKGROUND task and ends its turn "to wait for
+	// the notification" exits 0 with nothing reported (epic-2jn vqc, the
+	// resolve job of 2026-09-27). CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 is
+	// Claude Code's documented switch for exactly that: it disables "all
+	// background task functionality, including the run_in_background
+	// parameter on Bash and subagent tools, auto-backgrounding, and the
+	// Ctrl+B shortcut" (code.claude.com/docs/en/env-vars). Verified locally on
+	// claude 2.1.283: with it set, the Bash tool no longer offers
+	// run_in_background at all.
+	//
+	// `--session-id <uuid>` names the session up front and `--resume <uuid>`
+	// prompts it again in print mode with its whole history, both verified on
+	// 2.1.283: that is what the nudge re-prompts through.
 	"claude": {
-		Argv:      []string{"claude", "-p", "--permission-mode", "bypassPermissions", promptPlaceholder},
-		ModelFlag: "--model",
+		Argv:          []string{"claude", "-p", "--permission-mode", "bypassPermissions", promptPlaceholder},
+		ModelFlag:     "--model",
+		SessionStart:  []string{"--session-id", sessionPlaceholder},
+		SessionResume: []string{"--resume", sessionPlaceholder},
+		Env:           []string{"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1"},
 	},
 
 	// `codex exec` is the non-interactive mode and `-s workspace-write` is its
@@ -85,9 +117,16 @@ var runners = map[string]runnerDef{
 	// hand it one.
 	// pi spells it `--model <pattern>`, which takes a pattern, a `provider/id`
 	// or a bare id.
+	//
+	// `--session-id <id>` is "use exact project session ID, creating it if
+	// missing" (pi 0.85.1 --help), so ONE flag both starts the session and
+	// prompts it again. Verified: a second `pi -p --session-id <id>` in the
+	// same directory answered from the first one's turn.
 	"pi": {
-		Argv:      []string{"pi", "-p", promptPlaceholder},
-		ModelFlag: "--model",
+		Argv:          []string{"pi", "-p", promptPlaceholder},
+		ModelFlag:     "--model",
+		SessionStart:  []string{"--session-id", sessionPlaceholder},
+		SessionResume: []string{"--session-id", sessionPlaceholder},
 	},
 }
 
@@ -126,6 +165,12 @@ type launch struct {
 	// given it explicitly, because a linked worktree's git state lives outside
 	// the worktree.
 	GitCommonDir string
+
+	// Session is the runner session this attempt runs in, empty for a runner
+	// with none this executor can name. Resume says the argv prompts that
+	// session again rather than starting it (the nudge, nudge.go).
+	Session string
+	Resume  bool
 }
 
 // resolveRunner turns a runner name and an optional override into the argv the
@@ -140,6 +185,15 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 		def, ok := runners[name]
 		if !ok {
 			return nil, fmt.Errorf("runner %q is not one of %s", name, strings.Join(KnownRunners(), ", "))
+		}
+		// The session flags go in front of the prompt for the same reason
+		// the model flag does, below.
+		if at.Session != "" {
+			flags := def.SessionStart
+			if at.Resume {
+				flags = def.SessionResume
+			}
+			def.Argv = insertBeforePrompt(def.Argv, flags)
 		}
 		// The model goes in before the prompt is substituted, because the
 		// prompt is a POSITIONAL argument to all three of these CLIs and a flag
@@ -168,6 +222,11 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 					"cannot commit", name, gitCommonDirPlaceholder)
 			}
 			out = append(out, at.GitCommonDir)
+		case sessionPlaceholder:
+			if at.Session == "" {
+				return nil, fmt.Errorf("the %s argv needs %s and this attempt named no session", name, sessionPlaceholder)
+			}
+			out = append(out, at.Session)
 		default:
 			out = append(out, arg)
 		}

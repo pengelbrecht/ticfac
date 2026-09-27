@@ -234,6 +234,19 @@ in_conflict_ticks() {
 	case " ${CONFLICT_TICKS:-} " in *" $TICFAC_TICK "*) return 0 ;; esac
 	return 1
 }
+
+# A runner that exited 0 without its report is re-prompted by its supervisor
+# (subprocess/nudge.go), with TICFAC_NUDGE set. Every mode here that ends
+# without a report MEANT to — it is how the fixture makes a missing result —
+# so a nudged re-run says nothing more, and only the modes written for the
+# nudge answer it.
+if [ -n "${TICFAC_NUDGE:-}" ]; then
+	case "$mode" in
+	conflict_resolve_stops_early) ;;
+	*) exit 0 ;;
+	esac
+fi
+
 case "$mode" in
 report)
 	commit
@@ -284,6 +297,24 @@ conflict_resolve_hold)
 		report
 	fi
 	;;
+conflict_resolve_stops_early)
+	# epic-2jn vqc (2026-09-27): the same conflict, and a resolve-conflict
+	# worker that commits its resolution, starts the gate "in the
+	# background" and ends its turn to wait for it — which in print mode
+	# exits 0 with no report. Re-prompted, it writes the report.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		if [ -z "${TICFAC_NUDGE:-}" ]; then
+			resolve_union
+			exit 0
+		fi
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
 conflict_unresolvable)
 	# The same conflict, and a resolve job that cannot resolve it: it
 	# answers BLOCKED over an empty branch — a resolve that asks for a
@@ -310,6 +341,58 @@ gate_break_repair)
 	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
 		repair_gate_failure
 		report
+	elif in_gate_break_tick; then
+		gate_break_side
+	else
+		commit
+		report
+	fi
+	;;
+conflict_resolve_noreport)
+	# epic-2jn (vqc attempt 50): the same conflict, and a resolve-conflict
+	# worker whose FIRST start commits a clean resolution and then exits 0
+	# without writing a report — the runner that ended its turn waiting on a
+	# background task. Every later start makes the union again (a worktree cut
+	# at the committed resolution has no markers left, so it commits nothing)
+	# and reports. Every start is counted in $CONFLICT_SYNC/resolve.starts.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		printf '%s\n' "$TICFAC_JOB_ID" >> "$CONFLICT_SYNC/resolve.starts"
+		resolve_union
+		if [ "$(grep -c . "$CONFLICT_SYNC/resolve.starts")" -gt 1 ]; then
+			report
+		fi
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+conflict_resolve_silent)
+	# The same conflict, and a resolve-conflict worker that NEVER reports:
+	# every start makes the union and exits 0 without a report. Starts are
+	# counted in $CONFLICT_SYNC/resolve.starts.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		printf '%s\n' "$TICFAC_JOB_ID" >> "$CONFLICT_SYNC/resolve.starts"
+		resolve_union
+	elif in_conflict_ticks; then
+		conflict_side
+	else
+		commit
+		report
+	fi
+	;;
+gate_break_repair_noreport)
+	# The wj6 gate failure, and a plan-repair worker whose FIRST start commits
+	# the fix and exits 0 without a report; every later start makes the fix
+	# again (nothing left to change when it is cut at the committed fix) and
+	# reports. Starts are counted in $REPAIR_SYNC/repair.starts.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		printf '%s\n' "$TICFAC_JOB_ID" >> "${REPAIR_SYNC:?}/repair.starts"
+		repair_gate_failure
+		if [ "$(grep -c . "$REPAIR_SYNC/repair.starts")" -gt 1 ]; then
+			report
+		fi
 	elif in_gate_break_tick; then
 		gate_break_side
 	else

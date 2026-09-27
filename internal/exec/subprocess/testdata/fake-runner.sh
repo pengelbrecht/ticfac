@@ -82,10 +82,34 @@ maintenance_seen)
 	report
 	;;
 silent)
-	# Settled and incomplete: work committed, nothing said.
+	# Settled and incomplete: work committed, nothing said, exit 0 — also
+	# when re-prompted (nudge.go), where the commit finds nothing new.
 	commit
+	exit 0
 	;;
 nocommit)
+	report
+	;;
+stop_early)
+	# epic-2jn vqc (2026-09-27): claude started the gate in the background,
+	# ended its turn to "wait for the notification", and print mode exited 0
+	# with one commit and no report. Re-prompted (TICFAC_NUDGE set), it
+	# finishes: a second commit carrying the prompt it was nudged with, then
+	# the report.
+	if [ -z "${TICFAC_NUDGE:-}" ]; then
+		commit
+		exit 0
+	fi
+	printf '%s' "$prompt" > "$TICFAC_WORKTREE/nudge-${TICFAC_NUDGE}.txt"
+	git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+	git -C "$TICFAC_WORKTREE" commit -q -m "fake runner: finished after nudge ${TICFAC_NUDGE}" >/dev/null 2>&1
+	report
+	;;
+background_env)
+	# What the runner's own environment says about background tasks: the
+	# setting runner.go gives claude.
+	commit
+	printf '%s' "${CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:-unset}" > "$TICFAC_WORKTREE/background-env.txt"
 	report
 	;;
 findings)
