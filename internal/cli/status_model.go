@@ -246,7 +246,21 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 
 	epicID := strings.TrimSpace(record.Epic)
 
-	records, err := statusRecords(repo, runID, epicID)
+	// The records a cloud run reads are the CONTAINER's, not the factory's:
+	// the orchestrator container runs `ticfac run-epic <epic>` — the same
+	// command a local run is — so its durable records land on the integration
+	// branch under the run id that command constructs, epic-<epic-id> (the
+	// same derivation resolveFindingsRun spells for the triage surfaces).
+	// The factory's run_<hex> names the Workflow instance, and reading under
+	// it answers from an empty directory, degrading the model to
+	// feed-and-graph only (tick tem). The model still NAMES the factory's
+	// run id — that is the id every surface addresses the run by; only the
+	// records are read under the container's.
+	recordsID := runID
+	if epicID != "" {
+		recordsID = "epic-" + epicID
+	}
+	records, err := statusRecords(repo, recordsID, epicID)
 	if err != nil {
 		records = statusmodel.Records{}
 		degraded = append(degraded, "run-state")
