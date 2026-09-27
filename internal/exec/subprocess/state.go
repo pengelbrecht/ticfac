@@ -91,6 +91,14 @@ type attemptRecord struct {
 	RunnerArgv []string `json:"runner_argv"`
 	RunnerEnv  []string `json:"runner_env"`
 
+	// Session is the runner session this attempt runs in (claude
+	// --session-id, pi --session-id), empty for a runner with none. NudgeArgv
+	// is what the supervisor re-prompts a runner with when it exits 0 without
+	// its report (nudge.go); an attempt recorded before nudges carries none
+	// and is never nudged.
+	Session   string   `json:"session,omitempty"`
+	NudgeArgv []string `json:"nudge_argv,omitempty"`
+
 	// Model and RolePrompt are what the caller's PROFILE resolved for this
 	// job. They are recorded because "which model ran this, under which role
 	// instruction" is a question an attempt has to be able to answer after the

@@ -386,7 +386,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 	record.ResultRel, record.ResultPath = rel, abs
-	record.RunnerEnv = runnerEnv(record, spec)
+	record.RunnerEnv = append(runnerEnv(record, spec), runnerDefEnv(e.opts.Runner)...)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -404,12 +404,25 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve the repository's git common directory: %w", err)
 	}
-	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv,
-		launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model})
+	session, err := sessionFor(e.opts.Runner, e.opts.RunnerArgv)
+	if err != nil {
+		return nil, fmt.Errorf("name the runner's session: %w", err)
+	}
+	at := launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model, Session: session}
+	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, at)
 	if err != nil {
 		return nil, err
 	}
 	record.RunnerArgv = argv
+	record.Session = session
+	// What a runner that exits 0 without its report is prompted again with
+	// (nudge.go), rendered now for the same reason the argv is: it is this
+	// attempt's, and the supervisor that uses it has no executor options.
+	nudge, err := nudgeArgv(e.opts.Runner, e.opts.RunnerArgv, at, record)
+	if err != nil {
+		return nil, err
+	}
+	record.NudgeArgv = nudge
 
 	if err := e.makeWorktree(record, start); err != nil {
 		return nil, err
