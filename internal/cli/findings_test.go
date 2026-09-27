@@ -14,9 +14,9 @@ import (
 // The findings triage surface (tick 7vn): the commands a person uses to decide
 // the drafts a run has filed. What has to hold:
 //
-//   - `findings` lists the drafts with their keys and states, and says how to
-//     triage each — the refusal message the close gate prints names these
-//     exact commands;
+//   - `findings` lists the drafts with their keys and states, and says how
+//     to triage each with `ticfac triage` (tick 8yn) — the same command the
+//     close gate's refusal names, each draft addressed by a short key prefix;
 //   - `finding` records ONE attributed decision, promoting into the repository
 //     the finding targets — a routed finding promoted elsewhere is refused,
 //     because that is the routing being dropped;
@@ -117,17 +117,61 @@ func TestFindingsListsTheDraftsAndHowToTriageThem(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
 	out := stdout.String()
+	// The pointer teaches the everyday path (tick 8yn): `ticfac triage`,
+	// each draft addressed by the shortest key prefix that names it alone —
+	// never the old `ticfac finding <epic> <64-hex> --promote-as ...` shape,
+	// which is the friction the triage surface exists to remove.
 	for _, want := range []string{
 		"d34db33f", "proposed", "proposed-tick", "high", "this repository", "A finding the surface lists",
 		"c0ffee00", "upstream-tick", "pengelbrecht/ticks",
 		"discovered by run-epic-qeu/tick-a1/attempt-1",
-		"ticfac finding qeu d34db33f --promote-as <tick>",
+		"ticfac triage qeu d34=absorb|file|fixed:<commit>|discard",
+		"ticfac triage qeu c0f=discard — or promote it into pengelbrecht/ticks with ticfac finding",
+		"ticfac triage qeu settles each by short key prefix",
 		"waiting for a person",
 		`breaks done item A2 (demonstrated by "go")`,
 		"unlinked: names no done item",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout does not carry %q:\n%s", want, out)
+		}
+	}
+	// The old shape is gone from the pointer: no command carrying the key in
+	// tow, no --promote-as, no --by on every call. A person following the
+	// listing must not be taught to type what the triage surface settled.
+	for _, old := range []string{
+		"ticfac finding qeu d34db33f",
+		"ticfac finding qeu c0ffee00",
+		"--promote-as",
+		`--by "<who>"`,
+	} {
+		if strings.Contains(out, old) {
+			t.Errorf("stdout still teaches the old 64-hex triage %q:\n%s", old, out)
+		}
+	}
+}
+
+// The prefix the pointer shows names ONE draft: two drafts sharing a prefix
+// get a longer one, because a person who copies the pointer's prefix into
+// `ticfac triage` must land on the draft they read, not on an ambiguity the
+// walk then refuses (tick 8yn).
+func TestTheFindingsPointerNamesOneDraft(t *testing.T) {
+	repo := newFindingsRepo(t)
+	seedFinding(t, repo, testDraftFinding("d34db33f", ""))
+	seedFinding(t, repo, testDraftFinding("d34dcafe", ""))
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"findings", "--repo", repo, "qeu"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"ticfac triage qeu d34db=absorb|file|fixed:<commit>|discard",
+		"ticfac triage qeu d34dc=absorb|file|fixed:<commit>|discard",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout does not carry the unambiguous pointer %q:\n%s", want, out)
 		}
 	}
 }
