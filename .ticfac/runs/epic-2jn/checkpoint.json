@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 143,
+  "sequence": 144,
   "state": "failed",
-  "reason": "eih try 4 (run dispatch #22) is no-commits: the attempt branch carries no commit beyond the base it was cut from (48f7ea97f059)",
-  "updated_at": "2026-09-27T09:24:54Z",
+  "reason": "eih did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: eih try 4 (run dispatch #22) is no-commits: the attempt branch carries no commit beyond the base it was cut from (48f7ea97f059)",
+  "updated_at": "2026-09-27T09:24:57Z",
   "ticks": [
     {
       "tick_id": "nwj",
