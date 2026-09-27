@@ -45,28 +45,93 @@ const (
 	// understood the request and refused it, or answered about something that
 	// is not there. Waiting cannot change any of these answers.
 	RemoteTerminal
+	// RemoteAuthRefused is the remote refusing this machine's credentials:
+	// "Permission denied (publickey)", an https "Authentication failed". It is
+	// its own class because it is the one refusal that is ALSO seen as a blip
+	// (tick jsz): on 2026-09-24, in a burst of DNS failures, one fetch of
+	// epic-yoh got "Permission denied (publickey)" and the identical fetch a
+	// minute later succeeded with nothing changed — an ssh-agent that did not
+	// answer in time, or a remote shedding its auth backend, reads exactly
+	// like a key it does not know. So it is retried a SMALL bound
+	// (AuthRefusalAttempts), and when it persists it is refused as
+	// remote_auth_refused, naming what to check — never as a stop nobody
+	// classified, and never retried forever.
+	RemoteAuthRefused
 )
 
-// terminalMarkers are the things a remote says when the ANSWER is no. A
-// credential that is wrong is wrong on the tenth attempt too, and a ref that
-// does not exist does not appear because it was asked for again; retrying any
-// of these is just a slower refusal, with the run's wall clock spent on it.
+// AuthRefusalAttempts bounds an auth refusal: the first attempt and two
+// retries, inside the transient bound's backoff. A real credential problem
+// costs the run a few seconds more than it used to; a blip in front of a
+// working key no longer costs it a person.
+const AuthRefusalAttempts = 3
+
+// RemoteAuthRefusedClass is the class's name as a run's stop reason and in
+// the refusal's own text, so a reader and a switch statement see one word.
+const RemoteAuthRefusedClass = "remote_auth_refused"
+
+// authMarkers are the remote refusing WHO is asking. They are checked after
+// the terminal markers, so a "repository not found" that arrives beside one
+// stays terminal: that is an answer about the repository, not the key.
+//
+// "permission denied (" is ssh's own spelling — "Permission denied
+// (publickey)." or "(publickey,password)." — and is deliberately narrower
+// than a bare "permission denied", which is also what a filesystem says and
+// stays terminal. "could not read username" and "terminal prompts disabled"
+// are an https remote with no credential the helper would hand over, which a
+// keychain that did not answer in time produces too.
+var authMarkers = []string{
+	"permission denied (",
+	"authentication failed",
+	"invalid username or password",
+	"could not read username",
+	"terminal prompts disabled",
+}
+
+// RemoteAuthRefusedError is an auth refusal that outlived its bound. Its text
+// starts with the class and the remedy, on one line, because a supervisor's
+// halt line quotes a stop's first line and that line must say what to do.
+type RemoteAuthRefusedError struct {
+	What     string
+	Attempts int
+	Err      error
+}
+
+func (e *RemoteAuthRefusedError) Error() string {
+	return fmt.Sprintf("%s: %s was refused authentication %d times running, so this is not a blip; check that "+
+		"ssh-agent is running and holds the key (ssh-add -l), that the key is one the remote knows "+
+		"(ssh -T git@github.com), that the key or deploy key has access to this repository, and for an https "+
+		"remote that `gh auth status` is logged in and the credential helper answers: %v",
+		RemoteAuthRefusedClass, e.What, e.Attempts, e.Err)
+}
+
+func (e *RemoteAuthRefusedError) Unwrap() error { return e.Err }
+
+// terminalMarkers are the things a remote says when the ANSWER is no. A ref
+// that does not exist does not appear because it was asked for again;
+// retrying any of these is just a slower refusal, with the run's wall clock
+// spent on it. (A refused credential is the exception that earned its own
+// class and a small bound: see RemoteAuthRefused.)
 //
 // "host key verification failed" is here rather than below on purpose: it
 // reads like a network error and is a configuration one — the host key this
 // machine holds disagrees with the one the remote presented, and no amount of
 // waiting reconciles them.
+//
+// They are read in two passes around authMarkers (see ClassifyRemote). The
+// answers about the REPOSITORY come first and win over an auth refusal in the
+// same text; the bare "permission denied" and "access denied" come after, so
+// that ssh's "Permission denied (publickey)" is read as the auth refusal it
+// is while any other "permission denied" stays terminal.
 var terminalMarkers = []string{
-	"permission denied",
-	"authentication failed",
-	"invalid username or password",
-	"access denied",
 	"repository not found",
 	"does not appear to be a git repository",
 	"couldn't find remote ref",
-	"could not read username",
-	"terminal prompts disabled",
 	"host key verification failed",
+}
+
+var deniedMarkers = []string{
+	"permission denied",
+	"access denied",
 }
 
 // transientMarkers are the things the transport says when nothing got an
@@ -124,22 +189,35 @@ var transientMarkers = []string{
 // repository" be a transient marker at all: it is the tail of a handshake
 // that succeeded and then died, unless something in the same text already
 // said the remote answered and the answer was no.
+//
+// A rejected key is its own class, RemoteAuthRefused, read in that same first
+// pass (tick jsz): it is still never mistaken for a reset, but it is no longer
+// a flat terminal either, because the observed rejected key was a blip.
 func ClassifyRemote(err error) RemoteClass {
 	if err == nil {
 		return RemoteUnclassified
 	}
 	text := strings.ToLower(err.Error())
-	for _, marker := range terminalMarkers {
-		if strings.Contains(text, marker) {
-			return RemoteTerminal
-		}
-	}
-	for _, marker := range transientMarkers {
-		if strings.Contains(text, marker) {
-			return RemoteTransient
-		}
+	switch {
+	case containsAny(text, terminalMarkers):
+		return RemoteTerminal
+	case containsAny(text, authMarkers):
+		return RemoteAuthRefused
+	case containsAny(text, deniedMarkers):
+		return RemoteTerminal
+	case containsAny(text, transientMarkers):
+		return RemoteTransient
 	}
 	return RemoteUnclassified
+}
+
+func containsAny(text string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // RemoteRetryNotice is one retry, handed to whoever is in a position to say
@@ -159,6 +237,11 @@ type RemoteRetryNotice struct {
 	Err error
 	// GaveUp is set on the last notice, the one that says the bound is spent.
 	GaveUp bool
+	// Class is what the failure was: RemoteTransient, or RemoteAuthRefused —
+	// whose Attempt and Of count against the auth bound, not the transient
+	// one. A feed line saying "failed transiently" about a refused key sends
+	// the person reading it to look at their network instead of their key.
+	Class RemoteClass
 }
 
 // RemoteRetry bounds how long a transient remote failure is waited through.
@@ -234,22 +317,39 @@ func (rr RemoteRetry) Do(what string, op func() error) error {
 	rr = rr.normalized()
 	var err error
 	var waited time.Duration
+	refused := 0
+	authBound := min(AuthRefusalAttempts, rr.Attempts)
 	for attempt := 1; ; attempt++ {
 		if err = op(); err == nil {
 			return nil
 		}
-		if ClassifyRemote(err) != RemoteTransient {
+		notice := RemoteRetryNotice{What: what, Attempt: attempt, Of: rr.Attempts, Err: err, Class: RemoteTransient}
+		switch ClassifyRemote(err) {
+		case RemoteTransient:
+		case RemoteAuthRefused:
+			// Waited through a SMALL bound of its own, inside the transient
+			// one: a blip gets its retries, and a key that is really wrong is
+			// refused seconds later under its own name with what to check.
+			refused++
+			notice.Class, notice.Attempt, notice.Of = RemoteAuthRefused, refused, authBound
+			if refused >= authBound || attempt >= rr.Attempts {
+				notice.GaveUp = true
+				rr.Report(notice)
+				return &RemoteAuthRefusedError{What: what, Attempts: refused, Err: err}
+			}
+		default:
 			return err
 		}
 		if attempt >= rr.Attempts {
 			break
 		}
-		wait := rr.Backoff << (attempt - 1)
-		rr.Report(RemoteRetryNotice{What: what, Attempt: attempt, Of: rr.Attempts, Wait: wait, Err: err})
-		rr.Sleep(wait)
-		waited += wait
+		notice.Wait = rr.Backoff << (attempt - 1)
+		rr.Report(notice)
+		rr.Sleep(notice.Wait)
+		waited += notice.Wait
 	}
-	rr.Report(RemoteRetryNotice{What: what, Attempt: rr.Attempts, Of: rr.Attempts, Err: err, GaveUp: true})
+	rr.Report(RemoteRetryNotice{What: what, Attempt: rr.Attempts, Of: rr.Attempts, Err: err, GaveUp: true,
+		Class: RemoteTransient})
 	return fmt.Errorf("%s failed %d times over %s, every one a transient remote failure, and the bound is spent: %w",
 		what, rr.Attempts, waited, err)
 }

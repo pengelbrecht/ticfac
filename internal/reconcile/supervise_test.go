@@ -2,8 +2,11 @@ package reconcile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -321,11 +324,52 @@ func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 		RefusedFindingUntriaged, RefusedFindingInvalid, RefusedGate, RefusedBoundary, RefusedMerge,
 		RefusedBaseRefresh, RefusedEpicAbsent, RefusedWaveOverlap, RefusedUndeclaredTouch, RefusedTierLabel,
 		RefusedWiped, RefusedAbsorptionDepth,
-		RefusedCloseoutCI, RefusedCloseoutCIOnClose, "", "something this build has never heard of",
+		RefusedCloseoutCI, RefusedCloseoutCIOnClose, StoppedRemoteAuthRefused, "",
+		"something this build has never heard of",
 	} {
 		if resumesWithoutAPerson(reason) {
 			t.Errorf("%s would be continued across automatically; it needs a person, and a supervisor that "+
 				"retypes past a decision is a shell loop with better manners", reason)
 		}
+	}
+}
+
+// Tick jsz: epic-yoh halted over "a stop this run has no classification for"
+// when the stop was a git auth refusal. A refusal that outlived runstate's
+// small bound is a NAMED stop, it halts (a key is a person's to fix), and the
+// halt line says what to check. An auth error the supervisor cannot name is
+// the regression.
+// short: the supervisor's rules over synthesised stops
+func TestAPersistentAuthRefusalIsANamedStopThatSaysWhatToCheck(t *testing.T) {
+	t.Parallel()
+	retry := runstate.RemoteRetry{Sleep: func(time.Duration) {}}
+	err := retry.Do("git fetch", func() error {
+		return errors.New("git fetch origin epic/yoh: exit status 128: " +
+			"git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.")
+	})
+	err = fmt.Errorf("reconcile: read attempt branch of dyo: %w", err)
+
+	reason := errorStopReason(err)
+	if reason != StoppedRemoteAuthRefused {
+		t.Fatalf("a persistent auth refusal is stop %q, want %q", reason, StoppedRemoteAuthRefused)
+	}
+	stop := supervisedStop{Reason: reason, Message: err.Error(), Tree: treeUnreadable}
+	halt := haltReason(stop, supervisedStop{}, 0, 3)
+	if halt == "" {
+		t.Fatal("an auth refusal past its bound was continued automatically; a key is a person's to fix")
+	}
+	line := reasonOf(stop) + detailOf(stop)
+	for _, want := range []string{StoppedRemoteAuthRefused, "ssh-agent", "deploy key", "gh auth status"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the halt line does not say %q: %s", want, line)
+		}
+	}
+	if strings.Contains(line, "no classification") {
+		t.Errorf("the halt line still calls a named stop unclassified: %s", line)
+	}
+
+	// And a transient failure is still the resumable one.
+	if got := errorStopReason(errors.New("git fetch: exit status 128: Connection reset by github.com port 22")); got != StoppedRemoteTransient {
+		t.Errorf("a reset is stop %q, want %q", got, StoppedRemoteTransient)
 	}
 }

@@ -1349,6 +1349,23 @@ func (r *Reconciler) FeedError() error { return r.feedErr }
 func (r *Reconciler) remoteRetry() runstate.RemoteRetry {
 	retry := r.opts.RemoteRetry
 	retry.Report = func(n runstate.RemoteRetryNotice) {
+		if n.Class == runstate.RemoteAuthRefused {
+			// Tick jsz: a refused key is retried a small bound because the
+			// one observed was a blip, and the feed says it was a KEY, so
+			// the person reading goes to their credentials, not their network.
+			if n.GaveUp {
+				r.record("", StageRemoteExhausted,
+					"%s was refused authentication %d time(s) running (%s); the run stops rather than "+
+						"retrying a credential: check ssh-agent (ssh-add -l), the key, the deploy key's access, "+
+						"and for https `gh auth status`: %v", n.What, n.Attempt, runstate.RemoteAuthRefusedClass, n.Err)
+				return
+			}
+			r.record("", StageRemoteRetried,
+				"%s was refused authentication (auth attempt %d of %d), which has been seen as a blip "+
+					"during a network flap; waiting %s and trying again: %v",
+				n.What, n.Attempt, n.Of, n.Wait, n.Err)
+			return
+		}
 		if n.GaveUp {
 			r.record("", StageRemoteExhausted,
 				"%s failed on all %d attempts, every one a transient remote failure; the run stops rather than "+

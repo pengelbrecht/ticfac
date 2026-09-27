@@ -189,26 +189,27 @@ func TestAStubbornlyResettingRemoteStopsTheRunNamingTheAttempts(t *testing.T) {
 	}
 }
 
-// TestAKeyTheRemoteRejectedIsNotRetried.
+// TestARepositoryTheRemoteDoesNotHaveIsNotRetried.
 //
 // The stderr here ENDS with the same line the reset above ends with, and it
-// must still be refused on the first attempt: a bounded wait on a credential
-// that will never be right is a slower refusal, and it spends the run's clock
-// doing it.
-func TestAKeyTheRemoteRejectedIsNotRetried(t *testing.T) {
+// must still be refused on the first attempt: a bounded wait on a repository
+// that is not there is a slower refusal, and it spends the run's clock doing
+// it. (A rejected KEY is retried a small bound since tick jsz, because the
+// one observed was a blip: auth_refusal_test.go.)
+func TestARepositoryTheRemoteDoesNotHaveIsNotRetried(t *testing.T) {
 	o := newOrigin(t)
 	transport := newFlap(t, 1000,
-		"git@remote.invalid: Permission denied (publickey).\nfatal: Could not read from remote repository.")
+		"ERROR: Repository not found.\nfatal: Could not read from remote repository.")
 
 	s := o.overSSH(t, RemoteRetry{
 		Attempts: 5,
 		Backoff:  time.Millisecond,
-		Sleep:    func(time.Duration) { t.Error("the run waited on a key the remote rejected") },
-		Report:   func(RemoteRetryNotice) { t.Error("a rejected key was reported as a transient failure") },
+		Sleep:    func(time.Duration) { t.Error("the run waited on a repository the remote does not have") },
+		Report:   func(RemoteRetryNotice) { t.Error("a missing repository was reported as a transient failure") },
 	})
 
 	if _, err := s.Fetch(); err == nil {
-		t.Fatal("a rejected key produced a fetch that succeeded")
+		t.Fatal("a missing repository produced a fetch that succeeded")
 	}
 	if got := transport.invocations(); got != 1 {
 		t.Errorf("the transport was reached for %d times, want exactly one", got)
