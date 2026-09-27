@@ -61,34 +61,43 @@ var resolveForgeToken = forge.ResolveTokenFrom
 // An empty repo means the checkout the command runs in (the same default
 // every other flag resolves — and the same one the reconciler's own
 // RepoConfigPath resolves); an empty remote means origin.
-func pullRequestsForRun(repo, remote string) (forge.PullRequests, error) {
+func pullRequestsForRun(repo, remote string) (forge.PullRequests, string, error) {
 	rule, err := reconcile.ReadCloseoutRule(reconcile.RepoConfigPath(repo))
 	if err != nil {
-		return nil, fmt.Errorf("the close-out rule could not be read: %w", err)
+		return nil, "", fmt.Errorf("the close-out rule could not be read: %w", err)
 	}
 	if !rule.Declared {
-		return nil, nil
+		return nil, "", nil
 	}
 	if repo == "" {
-		return nil, fmt.Errorf("no checkout to resolve the remote from")
+		return nil, "", fmt.Errorf("no checkout to resolve the remote from")
 	}
 	if remote == "" {
 		remote = "origin"
 	}
 	url, err := exec.Command("git", "-C", repo, "remote", "get-url", remote).Output()
 	if err != nil {
-		return nil, fmt.Errorf("read the %s remote: %w", remote, err)
+		return nil, "", fmt.Errorf("read the %s remote: %w", remote, err)
 	}
 	slug, err := forge.ParseRepo(string(url))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	token, _, err := resolveForgeToken()
+	token, source, err := resolveForgeToken()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if token == "" {
-		return nil, fmt.Errorf("no %s is set, so the GitHub surface has no credential", forge.TokenEnv)
+		return nil, "", fmt.Errorf("no %s is set, so the GitHub surface has no credential", forge.TokenEnv)
 	}
-	return forge.GitHub{Token: token, Repo: slug}, nil
+	// The run SAYS which rung answered (tick 9sz): a token that came from
+	// gh's own auth is a fact an operator otherwise cannot see — the
+	// subprocess that fetched it is the one thing hio's gate keeps out of
+	// repos that need no forge, and the one thing a repo that does needs
+	// named on the run's own stdout, into its run.log.
+	note := "the close-out rule needs a forge: the GitHub credential is " + forge.TokenEnv + ", from the environment"
+	if source == forge.TokenSourceGH {
+		note = "the close-out rule needs a forge: the GitHub token was fetched from `gh auth token`"
+	}
+	return forge.GitHub{Token: token, Repo: slug}, note, nil
 }
