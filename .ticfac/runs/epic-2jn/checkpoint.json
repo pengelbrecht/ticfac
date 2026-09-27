@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 70,
-  "state": "publishing",
-  "reason": "closing 2qz behind the integrated gate on 0f032673f2f6",
-  "updated_at": "2026-09-27T07:45:41Z",
+  "sequence": 71,
+  "state": "running",
+  "reason": "2qz is closed",
+  "updated_at": "2026-09-27T07:45:55Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "2qz",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 10
     },
     {
