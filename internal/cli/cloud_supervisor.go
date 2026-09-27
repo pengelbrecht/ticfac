@@ -217,7 +217,7 @@ func cloudSupervisorDisagreement(supervisor *factory.Supervisor, recorded string
 	return fmt.Sprintf(
 		"  DISAGREEMENT: the run record says %q, but its supervisor is %s.\n"+
 			"    The record is written BY the supervisor, so it is frozen at the last value one wrote —\n"+
-			"    nothing is advancing this run. Free the project lease with 'tk cloud stop %s --now'.",
+			"    nothing is advancing this run. Free the project lease with 'ticfac cloud stop %s --now'.",
 		recorded, stateOrUnknown(supervisor.Status), supervisor.RunID)
 }
 
