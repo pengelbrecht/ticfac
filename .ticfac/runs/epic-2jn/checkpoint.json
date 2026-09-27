@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching nwj as attempt 1",
-  "updated_at": "2026-09-27T03:18:57Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "nwj is running as attempt 1",
+  "updated_at": "2026-09-27T03:19:05Z",
   "ticks": [
     {
       "tick_id": "nwj",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "6dh",
