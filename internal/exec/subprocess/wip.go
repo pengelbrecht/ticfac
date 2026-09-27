@@ -104,9 +104,10 @@ func PriorSnapshotsSection(prior []PriorSnapshot) string {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Prior attempts' preserved work — material to read, never to merge\n\n")
-	fmt.Fprintf(&b, "This tick has earlier attempts whose work was stopped and preserved before their\n")
-	fmt.Fprintf(&b, "worktrees were torn down. A snapshot is NOT evidence of completion: it is the work\n")
-	fmt.Fprintf(&b, "as it stood when the attempt stopped — uncommitted, unreviewed, possibly wrong.\n")
+	fmt.Fprintf(&b, "This tick has earlier attempts (or an earlier incarnation of this one) whose work was\n")
+	fmt.Fprintf(&b, "stopped and preserved before their worktrees were lost.\n")
+	fmt.Fprintf(&b, "A snapshot is NOT evidence of completion: it is the work as it stood when the attempt\n")
+	fmt.Fprintf(&b, "stopped — uncommitted, unreviewed, possibly wrong.\n")
 	fmt.Fprintf(&b, "Never merge a snapshot, never push it, and never treat it as a verdict; read it as a\n")
 	fmt.Fprintf(&b, "head start you must verify against this repository as it stands. Newest first:\n\n")
 	for _, p := range ordered {
@@ -206,6 +207,11 @@ func WipRefFor(jobID string) string {
 // repository deliberately tracks is repository content, not a snapshot
 // exclusion.
 func SnapshotWorktree(worktree, ref, artifactPrefix string) (commit string, err error) {
+	return snapshotWorktree(worktree, ref, artifactPrefix,
+		"ticfac: work-in-progress snapshot at the wall-clock stop — not evidence, never merged")
+}
+
+func snapshotWorktree(worktree, ref, artifactPrefix, message string) (commit string, err error) {
 	tmpDir, err := os.MkdirTemp("", "ticfac-wip")
 	if err != nil {
 		return "", err
@@ -247,8 +253,7 @@ func SnapshotWorktree(worktree, ref, artifactPrefix string) (commit string, err 
 	if err != nil {
 		return "", fmt.Errorf("write the snapshot tree: %w", err)
 	}
-	commit, err = git(worktree, "commit-tree", tree, "-p", "HEAD",
-		"-m", "ticfac: work-in-progress snapshot at the wall-clock stop — not evidence, never merged")
+	commit, err = git(worktree, "commit-tree", tree, "-p", "HEAD", "-m", message)
 	if err != nil {
 		return "", fmt.Errorf("commit the snapshot: %w", err)
 	}

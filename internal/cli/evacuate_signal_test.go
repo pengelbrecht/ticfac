@@ -198,10 +198,17 @@ exec sleep 86400
 	// running would hand the next test a process holding its directories.
 	evacKillAttemptProcesses(t, stateRoot)
 
-	// The work, as the remote holds it: the attempt's write ref carries the
+	// The work, as the remote holds it: the attempt's WIP ref carries the
 	// flush's snapshot — the commit no timer ever made — and the snapshot
-	// carries the uncommitted work itself.
-	ref := "refs/heads/ticfac/run-" + evacRunID + "/tick-" + evacTickID + "/attempt-1"
+	// carries the uncommitted work itself. The attempt's branch does not: a
+	// worker that outlives the flush (epic-2jn) writes that branch alone.
+	ref := "refs/ticfac/wip/run-" + evacRunID + "/tick-" + evacTickID + "/attempt-1"
+	branchRef := "refs/heads/ticfac/run-" + evacRunID + "/tick-" + evacTickID + "/attempt-1"
+	if head := strings.TrimSpace(gitOut(t, origin, "for-each-ref", "--format=%(objectname)", branchRef)); head != "" {
+		if subject := gitOut(t, origin, "log", "--format=%s", "-n", "1", head); strings.Contains(subject, "evacuation snapshot") {
+			t.Errorf("the flush committed its snapshot on the attempt branch (%q)", strings.TrimSpace(subject))
+		}
+	}
 	sha := strings.TrimSpace(gitOut(t, origin, "rev-parse", "--verify", ref))
 	if sha == "" {
 		t.Fatalf("origin does not hold %s: the flush never pushed the in-flight work\n%s", ref, out.String())

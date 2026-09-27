@@ -43,7 +43,7 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 	// The merge that happened is proven here rather than remembered, and if it
 	// cannot be proven nothing is integrated.
 	if collected == nil {
-		return r.integratedAlready(tick, branch)
+		return r.integratedAlready(marker, branch)
 	}
 
 	head, err := r.durableAttemptHead(branch, collected)
@@ -150,10 +150,19 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 // contained is refused — there is then no merge to stand on and no collect to
 // make one from, and integrating on the strength of a head nobody collected is
 // the false completion durableAttemptHead exists to refuse.
-func (r *Reconciler) integratedAlready(tick, branch string) (merge, error) {
+//
+// An attempt whose branch origin no longer has (epic-2jn: a repair's finish
+// retired the attempt's branch rather than its own) is read from the head
+// this checkout's branch carries or the run's records state — and held to
+// the same containment: the integration branch carrying it is the proof.
+func (r *Reconciler) integratedAlready(marker attemptHandle, branch string) (merge, error) {
+	tick := marker.TickID
 	head, err := r.git.remoteHead(branch)
 	if err != nil {
 		return merge{}, err
+	}
+	if head == "" {
+		head = r.offOriginAttemptHead(marker)
 	}
 	epicHead, err := r.git.remoteHead(r.branch)
 	if err != nil {
@@ -365,6 +374,9 @@ func (r *Reconciler) durableAttemptHead(branch string, collected *subprocess.Col
 	// Push it: a fast-forward makes origin agree with what was collected, and
 	// anything else is origin holding commits this attempt did not produce.
 	if _, stderr, err := r.git.try("", "push", r.opts.Remote, local+":"+refFor(branch)); err != nil {
+		if r.supersedeEvacuationSnapshot(branch, remote, local) {
+			return local, nil
+		}
 		return "", fmt.Errorf(
 			"the collected head %s of %s could not be put on %s, which holds %s instead: %s. Nothing is merged: "+
 				"that head is not the commit this run collected, and merging it would close the tick over work "+
@@ -372,6 +384,56 @@ func (r *Reconciler) durableAttemptHead(branch string, collected *subprocess.Col
 			short(local), branch, r.opts.Remote, short(remote), firstLine(stderr))
 	}
 	return local, nil
+}
+
+// evacuationSnapshotSubject is the subject prefix every SIGTERM flush's
+// snapshot commit has carried, the older on-branch spelling and the wip-ref
+// one alike.
+const evacuationSnapshotSubject = "ticfac: evacuation snapshot of uncommitted work"
+
+// supersedeEvacuationSnapshot replaces origin's head of an attempt branch with
+// the collected head when origin's head is nothing but a SIGTERM flush's
+// snapshot the worker's own result supersedes (epic-2jn), and reports whether
+// it did.
+//
+// Older builds' flush committed the in-flight worktree ON the attempt branch
+// and pushed it. A worker that outlived the flush — the ordinary local case —
+// then committed its real result on the head it knew, and that result could
+// never fast-forward the snapshot: the run was held for a person over two
+// identical trees. The worker's final commit supersedes its own snapshot, so
+// the replacement is exact rather than a force:
+//
+//   - origin's head is a snapshot commit — the flush's subject, one parent;
+//   - the snapshot's parent is in the collected head's history, so the
+//     collected head carries everything origin had except the snapshot
+//     itself, which was never the worker's own commit;
+//   - the push is --force-with-lease on the snapshot's sha, so a ref that
+//     moved again since it was read is refused, not overwritten.
+//
+// Anything else stays the refusal it was: origin holding commits this
+// attempt did not produce is exactly what the non-fast-forward exists to say.
+func (r *Reconciler) supersedeEvacuationSnapshot(branch, remote, local string) bool {
+	if remote == "" || local == "" {
+		return false
+	}
+	if err := r.git.fetch(branch); err != nil {
+		return false
+	}
+	info, err := r.git.run("", "log", "-1", "--format=%P%x00%s", remote)
+	if err != nil {
+		return false
+	}
+	parents, subject, ok := strings.Cut(info, "\x00")
+	if !ok || !strings.HasPrefix(subject, evacuationSnapshotSubject) {
+		return false
+	}
+	parent := strings.Fields(parents)
+	if len(parent) != 1 || !r.git.contains(parent[0], local) {
+		return false
+	}
+	_, _, err = r.git.try("", "push", "--force-with-lease="+refFor(branch)+":"+remote,
+		r.opts.Remote, local+":"+refFor(branch))
+	return err == nil
 }
 
 func branchOf(writeRef string) string {

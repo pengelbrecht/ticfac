@@ -991,6 +991,15 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 			branch, short(remote), r.opts.Remote, r.branch)
 	}
 	if local := r.attemptWorkHead(marker); local != "" {
+		// Origin has no branch for the attempt, and this checkout carries its
+		// work. When the integration branch already carries that head, the
+		// work is merged — whatever retired the branch on origin (epic-2jn:
+		// the finish of a repair job retired the ATTEMPT's branch instead of
+		// its own) — and it is finished from the integration branch, never
+		// held as work nobody merged.
+		if r.integrated(local) {
+			return integratedAttempt, ""
+		}
 		return holdAttemptWork, fmt.Sprintf(
 			"%s carries %s in this checkout, and %s has no commit of this attempt at all",
 			branch, short(local), r.opts.Remote)
@@ -1003,7 +1012,51 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 	if carried := r.carriedDelivery(marker); carried != "" && r.integrated(carried) {
 		return integratedAttempt, ""
 	}
+	// Neither origin nor this checkout has a branch with the attempt's work
+	// (a fresh clone after the branch was retired): the head the run RECORDED
+	// as integrated is what says whether the work is merged, and a recorded
+	// head the integration branch carries is integrated, not spent.
+	if recorded := r.recordedAttemptHead(marker); recorded != "" && r.integrated(recorded) {
+		return integratedAttempt, ""
+	}
 	return redispatchAttempt, ""
+}
+
+// recordedAttemptHead is the attempt's head as the run's own durable records
+// state it, for an attempt whose branch origin no longer has: the head a
+// repair decision recorded for this attempt's failed gate — the gate that
+// was over this attempt's merge, so the head is one the run integrated. ""
+// when no record states one.
+func (r *Reconciler) recordedAttemptHead(marker attemptHandle) string {
+	decision, ok, err := r.repairDecisionOf(marker.TickID)
+	if err != nil || !ok {
+		return ""
+	}
+	// Read back from JSON the number is a float64; a record still in memory
+	// holds the int it was written with.
+	attempt := -1
+	switch n := decision.Request["attempt"].(type) {
+	case float64:
+		attempt = int(n)
+	case int:
+		attempt = n
+	}
+	if attempt != marker.Attempt {
+		return ""
+	}
+	head, _ := decision.Request["attempt_head"].(string)
+	return head
+}
+
+// offOriginAttemptHead is the attempt's head when origin has no branch for it:
+// the local branch's work head in this checkout, else the head the run's
+// records state. Neither is merged on the strength of existing — every caller
+// asks the integration branch whether it carries the head.
+func (r *Reconciler) offOriginAttemptHead(marker attemptHandle) string {
+	if local := r.attemptWorkHead(marker); local != "" {
+		return local
+	}
+	return r.recordedAttemptHead(marker)
 }
 
 // remoteWork is the attempt's head on ORIGIN when that head carries a commit
@@ -1085,6 +1138,12 @@ func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 		head = r.carriedDelivery(marker)
 	}
 	if head == "" {
+		// Origin has no branch carrying the attempt's work: its head is the
+		// local branch's, or the one the run recorded (epic-2jn's retired
+		// attempt branch). Whether it is merged is asked of origin below.
+		head = r.offOriginAttemptHead(marker)
+	}
+	if head == "" {
 		return "", nil
 	}
 	integrated, err := r.integratedOn(head)
@@ -1128,10 +1187,17 @@ func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
 		return
 	}
 	branch := branchOf(marker.WriteRef)
-	if remote, err := r.git.remoteHead(branch); err == nil && remote == head {
+	remote, err := r.git.remoteHead(branch)
+	if err == nil && remote == head {
 		return
 	}
 	if _, stderr, err := r.git.try("", "push", r.opts.Remote, head+":"+refFor(branch)); err != nil {
+		// Origin holding only a SIGTERM flush's snapshot of this very
+		// worker's work is not origin holding somebody else's commits: the
+		// worker's result supersedes it (epic-2jn).
+		if r.supersedeEvacuationSnapshot(branch, remote, head) {
+			return
+		}
 		r.record(marker.TickID, StageCollected,
 			"%s carries %s which could not be put on %s (%s): whatever this attempt left is only on the "+
 				"local branch in this checkout, which the teardown keeps — but origin does not have it",
@@ -1215,7 +1281,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 	r.record(entry.TickID, StageTierDerived, "%s runs at tier %q (%s)%s",
 		attemptLabel(entry.TickID, try, number), tier, reason, budgetNote)
 
-	jobID := fmt.Sprintf("run-%s/tick-%s/attempt-%d", r.runID, entry.TickID, number)
+	jobID := attemptJobID(r.runID, entry.TickID, number)
 	stateDir := r.execStateDir(entry.TickID, number)
 
 	// EVERY dispatch is made at the integration branch as origin has it NOW,
@@ -1303,6 +1369,12 @@ func attemptWriteRef(jobID string) string {
 	return "refs/heads/ticfac/" + jobID
 }
 
+// attemptJobID is the job id the run mints for one attempt of one tick: the
+// identity every ref of the attempt — its branch, its wip ref — derives from.
+func attemptJobID(runID, tickID string, attempt int) string {
+	return fmt.Sprintf("run-%s/tick-%s/attempt-%d", runID, tickID, attempt)
+}
+
 // attemptRefPrefix is the namespace ONE RUN's write grade may advance —
 // job-protocol.json's `write_ref_prefix`, bounded per run rather than per
 // installation so a credential issued for this run cannot advance another
@@ -1388,6 +1460,19 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	if err != nil {
 		return nil, nil, err
 	}
+	// An attempt whose state is gone with its disk may have left its
+	// uncommitted work on its own wip ref (a SIGTERM flush, epic-2jn). The
+	// executor renders the prompt from the dispatch it is built from, so the
+	// ref is looked for before it is built — and only for an attempt that
+	// will be STARTED from what it pushed: one whose state survives is
+	// inspected, never re-prompted.
+	var evacuated *subprocess.PriorSnapshot
+	if _, stateFound := findAttemptState(marker.StateRoot); !stateFound {
+		if snap, ok := r.evacuatedSnapshot(marker); ok {
+			dispatch.PriorSnapshots = append(dispatch.PriorSnapshots, snap)
+			evacuated = &snap
+		}
+	}
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
@@ -1429,6 +1514,16 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 				"attempt %d's disk is gone with its container, and origin carries %s of it beyond the base: it continues from its own pushed work, and what it never pushed is redone",
 				marker.Attempt, short(pushed))
 		}
+		// What it had NOT committed may survive too: a SIGTERM flush puts it
+		// on the attempt's wip ref, never on its branch (epic-2jn), because a
+		// worker that outlives the flush must not find a foreign commit
+		// under it. A worker that did NOT outlive it — this branch — is
+		// pointed at that ref as material, exactly as a successor is pointed
+		// at a stopped predecessor's preserved work.
+		if snap := evacuated; snap != nil {
+			note += fmt.Sprintf("; the uncommitted work its evacuation preserved on %s (commit %s) is named in its "+
+				"prompt as material, never merged", snap.Ref, short(snap.Commit))
+		}
 		// Nothing is running, so this one starts it. The resume note lands only
 		// if the start did: a start that failed is the failure the run records,
 		// and a resume that never happened is not a fact about the run.
@@ -1459,6 +1554,33 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	}
 	r.noteAlive(marker.JobID)
 	return handle, executor, nil
+}
+
+// evacuatedSnapshot is the attempt's OWN wip ref on origin, as a SIGTERM
+// flush left it, fetched into this checkout so the worker cut from it can
+// read it — or false when origin holds none, or cannot be asked (a snapshot
+// that cannot be read is material nobody can use, and the attempt still
+// starts from what it pushed).
+func (r *Reconciler) evacuatedSnapshot(marker attemptHandle) (subprocess.PriorSnapshot, bool) {
+	ref := subprocess.WipRefFor(marker.JobID)
+	out, err := r.git.run("", "ls-remote", r.opts.Remote, ref)
+	if err != nil {
+		return subprocess.PriorSnapshot{}, false
+	}
+	commit := ""
+	for _, line := range strings.Split(out, "\n") {
+		sha, name, ok := strings.Cut(line, "\t")
+		if ok && strings.TrimSpace(name) == ref {
+			commit = sha
+		}
+	}
+	if commit == "" {
+		return subprocess.PriorSnapshot{}, false
+	}
+	if _, err := r.git.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", r.opts.Remote, "+"+ref+":"+ref); err != nil {
+		return subprocess.PriorSnapshot{}, false
+	}
+	return subprocess.PriorSnapshot{Attempt: marker.Attempt, Ref: ref, Commit: commit}, true
 }
 
 // replayClaim makes the tracker say this tick is being worked, for an attempt
@@ -1811,6 +1933,12 @@ func (r *Reconciler) priorSnapshots(tickID string, attempt int) []subprocess.Pri
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(state, subprocess.FileWIPSnapshot))
+		if err != nil {
+			// No teardown snapshot. A SIGTERM flush may still have preserved
+			// the attempt's uncommitted work on its wip ref (epic-2jn) — the
+			// only record of it when the worker died with its container.
+			raw, err = os.ReadFile(filepath.Join(state, subprocess.FileEvacuationSnapshot))
+		}
 		if err != nil {
 			// Dispatched, but nothing was preserved — the attempt's worktree
 			// was clean or its teardown refused rather than destroyed.
