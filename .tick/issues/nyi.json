@@ -2,7 +2,7 @@
   "id": "nyi",
   "title": "run --cloud and the overview ignore the factory run's project; a frozen 'running' record is attached forever",
   "description": "cloudRunsForEpic (run_cloud.go:171-178) matches on epic only, so 'ticfac run abc --cloud' in repo A attaches to repo B's run for epic abc; the overview lists every project's runs and reads this repo's records/PR for them. run --cloud decides attach vs resume from the record state alone and never consults cloudRunLiveness, so a dead instance behind a 'running' record is attached to forever. status/watch by epic id never look in the factory.\n\nticfac run epic-2jn created this tick by absorbing the finding c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3.json on the run branch.",
-  "notes": "2026-09-27 16:09 - ticfac run epic-2jn: created by absorbing finding c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A5, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did",
+  "notes": "2026-09-27 16:09 - ticfac run epic-2jn: created by absorbing finding c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/c27650821772d08c0479dcc2f249ac309af148220fead1ebf1fea58cf008c4e3.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A5, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 19:49 - ticfac run epic-2jn: nyi try 1 (run dispatch #41) merged into epic/2jn as 1b671003c042; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
   "created_by": "ticfac run epic-2jn",
   "created_at": "2026-09-27T14:08:59Z",
-  "updated_at": "2026-09-27T15:02:54.102428Z",
+  "updated_at": "2026-09-27T17:49:09.93696Z",
   "started_at": "2026-09-27T15:02:54.102427Z"
 }
