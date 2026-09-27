@@ -12,8 +12,10 @@
   "attempt": 21,
   "done_item": "none",
   "demonstrating_check": "cloudflare vitest, test/status-snapshots.test.ts",
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-27T09:37:36Z",
+  "triaged_at": "2026-09-27T20:53:23Z",
+  "triaged_by": "claude (operator-delegated triage)",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "i1r",
