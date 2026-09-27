@@ -51,11 +51,16 @@ import (
 //
 // THE BOUND. One resolve per fold: the resolve is a decision record on the run
 // branch keyed by the BASE HEAD it folded, so an incarnation that meets the
-// same base head conflicting again — after a resolve that failed — stops
-// naming the recorded resolve instead of paying for a second one. A resolve
-// that fails (it did not settle, asked for a person, left conflict markers,
-// committed nothing) is the stop, and the stop names both sides and the files.
-// A base head that moved on is a new fold, and a new fold may be resolved.
+// same base head conflicting again — after a resolve that failed on its
+// merits — stops naming the recorded resolve instead of paying for a second
+// one. A resolve that fails on its merits (it asked for a person, left
+// conflict markers, committed nothing) is the stop, and the stop names both
+// sides and the files. A resolve that failed without answering at all (no
+// report, a runner that died, a job that was lost) does not spend the fold's
+// resolve: another is dispatched, from the resolution it committed when it
+// committed one, up to the bound role_allowance.go sets for every
+// run-dispatched job. A base head that moved on is a new fold, and a new fold
+// may be resolved.
 
 // baseFoldKind marks a resolve-conflict decision as the base fold's rather
 // than an attempt's: the request carries no tick, and a reader must be able to
@@ -75,22 +80,57 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 	conflict *mergeConflict, drivers map[string]string) (string, func() error, error) {
 
 	sides := r.baseFoldSides(base, baseHead, epicHead)
+	for {
+		// THE BOUND: one resolve per fold, durably. A fold of this base head
+		// that a resolve already ANSWERED for — merged, or failed on its
+		// merits — is the stop, naming the recorded outcome. A resolve that
+		// failed without answering does not spend it, up to the bound the
+		// tick's resolve has too (role_allowance.go).
+		ledger, err := r.baseFoldLedgerOf(baseHead)
+		if err != nil {
+			return "", nil, err
+		}
+		if len(ledger.spent) > 0 {
+			prior := ledger.spent[len(ledger.spent)-1]
+			branch, _ := prior.Request["resolve_branch"].(string)
+			status, _ := prior.Response["status"].(string)
+			return "", nil, r.refuse(RefusedBaseRefresh, "",
+				"%s do not fold together (%s) and a resolve-conflict job already ran for this fold — its recorded "+
+					"outcome is %q and its work is on %s (every resolve of this fold: %s). One resolve per fold is "+
+					"the bound: read the recorded resolve, merge %s into %s by hand, and run the epic again",
+				sides, conflict.Detail, status, branch,
+				describeJobs(append(append([]runstate.Decision{}, ledger.operational...), ledger.spent...),
+					"resolve_branch"), base, r.branch)
+		}
+		if ledger.exhausted() {
+			return "", nil, r.refuse(RefusedBaseRefresh, "",
+				"%s do not fold together (%s) and %d resolve-conflict jobs for this fold failed without delivering "+
+					"a resolution: %s. %d retries after the first is the bound: read why the jobs did not answer, "+
+					"merge %s into %s by hand, and run the epic again",
+				sides, conflict.Detail, len(ledger.operational), describeJobs(ledger.operational, "resolve_branch"),
+				maxOperationalRetries, base, r.branch)
+		}
+		merged, finalize, retry, err := r.dispatchBaseFold(ctx, base, baseHead, epicHead, conflict, drivers, sides,
+			ledger)
+		if retry {
+			r.record("", StageRedispatched,
+				"the resolve-conflict job for the fold of %s into %s failed without delivering a resolution (%s); "+
+					"it does not use up the fold's resolve, and another is dispatched (%d of at most %d)",
+				base, r.branch, failureReason(err), len(ledger.operational)+2, maxOperationalRetries+1)
+			continue
+		}
+		return merged, finalize, err
+	}
+}
 
-	// THE BOUND: one resolve per fold, durably. A fold of this base head that
-	// a resolve already ran for is the stop, naming the recorded outcome.
-	prior, attempt, err := r.baseFoldDecisionOf(baseHead)
-	if err != nil {
-		return "", nil, err
-	}
-	if prior != nil {
-		branch, _ := prior.Request["resolve_branch"].(string)
-		status, _ := prior.Response["status"].(string)
-		return "", nil, r.refuse(RefusedBaseRefresh, "",
-			"%s do not fold together (%s) and a resolve-conflict job already ran for this fold — its recorded "+
-				"outcome is %q and its work is on %s. One resolve per fold is the bound: read the recorded resolve, "+
-				"merge %s into %s by hand, and run the epic again",
-			sides, conflict.Detail, status, branch, base, r.branch)
-	}
+// dispatchBaseFold dispatches the next resolve-conflict job of the fold's
+// allowance and takes it to the fold it resolved to. `retry` reports a job
+// that failed OPERATIONALLY and whose failure is recorded, so the caller may
+// dispatch the next one.
+func (r *Reconciler) dispatchBaseFold(ctx context.Context, base, baseHead, epicHead string,
+	conflict *mergeConflict, drivers map[string]string, sides string, ledger roleJobLedger) (string, func() error, bool, error) {
+
+	attempt := ledger.ordinal
 
 	writeRef := baseFoldWriteRef(r.runID, attempt, baseHead)
 	branch := branchOf(writeRef)
@@ -123,7 +163,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		err = usableProfile(r.executors, resolved)
 	}
 	if err != nil {
-		return "", nil, r.refuse(RefusedBaseRefresh, "",
+		return "", nil, false, r.refuse(RefusedBaseRefresh, "",
 			"%s do not fold together (%s) and the resolve-conflict job could not be routed at the ceiling: %v. "+
 				"Fix the routing and run the epic again",
 			sides, conflict.Detail, err)
@@ -135,13 +175,23 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		r.runID, base, r.branch)
 	// A job an earlier incarnation dispatched under this identity keeps the
 	// base it was cut from, or continues from what it pushed.
+	// A job dispatched after one that failed without answering starts from
+	// the resolution that job COMMITTED, when it resolved this very fold over
+	// this very epic head.
+	carried := r.carriedResolution(ledger, baseHead, epicHead)
 	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		if carried != "" {
+			return carried, nil
+		}
 		return r.conflictedMerge(epicHead, baseHead, message, driverConfig(drivers))
 	})
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	wip := job.base
+	if wip != carried {
+		carried = ""
+	}
 	marker.BaseSHA = wip
 
 	// The prompt: the role's own, and the brief that says what THIS conflict
@@ -180,7 +230,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
-		return "", nil, failed("its executor could not be built: %v", err)
+		return "", nil, false, failed("its executor could not be built: %v", err)
 	}
 	handle, err := executor.Start(r.baseFoldJobSpec(dispatch))
 	if err != nil {
@@ -188,24 +238,48 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
 				merged, ferr := r.finishBaseFoldFromBranch(base, baseHead, remote, marker, conflict, sides)
 				if ferr != nil {
-					return "", nil, ferr
+					return "", nil, false, ferr
 				}
 				return merged, r.finalizeBaseFold(&dispatch, nil, marker, base, baseHead, epicHead, "merged",
-					merged, remote, conflict, true), nil
+					merged, remote, conflict, true), false, nil
 			}
 		}
-		return "", nil, failed("it could not be started: %v", err)
+		return "", nil, false, failed("it could not be started: %v", err)
 	}
 	if note := roleJobResumeNote(job, "the resolve-conflict job for the fold of "+base); note != "" {
 		r.record("", StageAdopted, "%s", note)
 	}
 
-	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, "", failed)
+	collected, rerr := r.collectResolveJob(ctx, handle, executor, marker, carried, failed)
 	var resolveHead string
 	if collected != nil && collected.Result != nil && collected.Result.Source.HeadSHA != nil {
 		resolveHead = *collected.Result.Source.HeadSHA
 	}
-	if rerr == nil && (resolveHead == "" || resolveHead == wip) {
+	if resolveHead == "" && carried != "" {
+		// A job cut at a committed resolution that found nothing left to
+		// change: the resolution it was handed is its answer.
+		resolveHead = carried
+	}
+	if operationalFailure(collected, rerr) {
+		// The job never answered. Whatever it committed is on its branch
+		// (collect preserved it) and is recorded, so the next job can start
+		// from it; the failure does not spend the fold's resolve.
+		if resolveHead == "" || resolveHead == carried {
+			if local := r.attemptWorkHead(marker); local != "" {
+				resolveHead = local
+			}
+		}
+		recorded := true
+		if derr := r.recordBaseFoldOutcome(&dispatch, marker, base, baseHead, epicHead, "failed", "", resolveHead,
+			conflict, failureOperational, failureReason(rerr)); derr != nil {
+			r.record("", StageRejected, "the failed resolve of the fold could not be recorded: %v", derr)
+			recorded = false
+		}
+		r.tearDown(handle, executor, marker, fmt.Sprintf(
+			"the resolve-conflict job for the fold of %s into %s failed", base, r.branch), true)
+		return "", nil, recorded && ctx.Err() == nil, rerr
+	}
+	if rerr == nil && (resolveHead == "" || (resolveHead == wip && carried == "")) {
 		rerr = failed("it settled without a commit to fold: %s", collected.Message)
 	}
 	var merged string
@@ -214,21 +288,21 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 	}
 	if rerr != nil {
 		if _, ok := AsRefusal(rerr); ok {
-			if derr := r.recordBaseFoldDecision(&dispatch, marker, base, baseHead, epicHead, "failed", "", resolveHead,
-				conflict); derr != nil {
+			if derr := r.recordBaseFoldOutcome(&dispatch, marker, base, baseHead, epicHead, "failed", "", resolveHead,
+				conflict, failureOnMerits, failureReason(rerr)); derr != nil {
 				r.record("", StageRejected, "the failed resolve of the fold could not be recorded: %v", derr)
 			}
 		}
 		r.tearDown(handle, executor, marker, fmt.Sprintf(
 			"the resolve-conflict job for the fold of %s into %s failed", base, r.branch), true)
-		return "", nil, rerr
+		return "", nil, false, rerr
 	}
 	r.record("", StageRefreshed,
 		"the resolve-conflict job resolved the fold of %s into %s (%s); the merge %s is minted from its tree with "+
 			"parents %s and %s",
 		base, r.branch, strings.Join(conflict.Files, ", "), short(merged), short(epicHead), short(baseHead))
 	return merged, r.finalizeBaseFold(&dispatch, &jobInFlight{handle, executor}, marker, base, baseHead, epicHead,
-		"merged", merged, resolveHead, conflict, false), nil
+		"merged", merged, resolveHead, conflict, false), false, nil
 }
 
 // jobInFlight is the dispatched job a finalize tears down.
@@ -328,38 +402,54 @@ func (r *Reconciler) finishBaseFoldFromBranch(base, baseHead, remote string, mar
 	return merged, nil
 }
 
-// baseFoldDecisionOf is the recorded resolve of the fold of one base head, and
-// the attempt number the NEXT fold resolve takes: one past every base-fold
-// resolve the run has recorded.
-func (r *Reconciler) baseFoldDecisionOf(baseHead string) (*runstate.Decision, int, error) {
+// baseFoldLedgerOf is the fold's resolve allowance (role_allowance.go): the
+// recorded resolves of the fold of one base head, split into those that
+// answered (spent) and those that failed without answering (operational),
+// and the attempt number the NEXT fold resolve takes — one past every
+// base-fold resolve the run has recorded, whichever base head it folded.
+func (r *Reconciler) baseFoldLedgerOf(baseHead string) (roleJobLedger, error) {
+	ledger := roleJobLedger{ordinal: 1}
 	if r.store == nil {
-		return nil, 1, nil
+		return ledger, nil
 	}
 	if _, err := r.store.Fetch(); err != nil {
-		return nil, 0, err
+		return ledger, err
 	}
 	decisions, err := r.store.Decisions()
 	if err != nil {
-		return nil, 0, err
+		return ledger, err
 	}
-	folds := 0
-	for i := range decisions {
-		if decisions[i].Role != RoleResolveConflict || decisions[i].Request["kind"] != baseFoldKind {
+	for _, decision := range decisions {
+		if decision.Role != RoleResolveConflict || decision.Request["kind"] != baseFoldKind {
 			continue
 		}
-		folds++
-		if head, _ := decisions[i].Request["base_head"].(string); head == baseHead {
-			return &decisions[i], folds, nil
+		ledger.ordinal++
+		if head, _ := decision.Request["base_head"].(string); head != baseHead {
+			continue
+		}
+		if kind, _ := decision.Response["failure"].(string); kind == failureOperational {
+			ledger.operational = append(ledger.operational, decision)
+		} else {
+			ledger.spent = append(ledger.spent, decision)
 		}
 	}
-	return nil, folds + 1, nil
+	return ledger, nil
 }
 
 // recordBaseFoldDecision lands the fold's resolve on the run branch —
-// create-if-absent per base head, so a restart that finishes the same resolve
-// never records it twice.
+// create-if-absent per job, so a restart that finishes the same resolve never
+// records it twice, and each job of the fold's allowance is a record of its
+// own.
 func (r *Reconciler) recordBaseFoldDecision(dispatch *Dispatch, marker attemptHandle, base, baseHead, epicHead,
 	status, merged, resolveHead string, conflict *mergeConflict) error {
+	return r.recordBaseFoldOutcome(dispatch, marker, base, baseHead, epicHead, status, merged, resolveHead, conflict,
+		"", "")
+}
+
+// recordBaseFoldOutcome is recordBaseFoldDecision with the failure's kind
+// (role_allowance.go) and its reason, for a resolve that failed.
+func (r *Reconciler) recordBaseFoldOutcome(dispatch *Dispatch, marker attemptHandle, base, baseHead, epicHead,
+	status, merged, resolveHead string, conflict *mergeConflict, failure, reason string) error {
 
 	if _, err := r.store.Fetch(); err != nil {
 		return err
@@ -371,7 +461,7 @@ func (r *Reconciler) recordBaseFoldDecision(dispatch *Dispatch, marker attemptHa
 	number := len(decisions) + 1
 	for _, existing := range decisions {
 		if existing.Role == RoleResolveConflict && existing.Request["kind"] == baseFoldKind &&
-			existing.Request["base_head"] == baseHead {
+			existing.Request["base_head"] == baseHead && existing.Request["job_id"] == marker.JobID {
 			return nil
 		}
 		if existing.Decision >= number {
@@ -408,6 +498,10 @@ func (r *Reconciler) recordBaseFoldDecision(dispatch *Dispatch, marker attemptHa
 		"conflict_files":  conflict.Files,
 		"conflict_detail": conflict.Detail,
 		"job_id":          marker.JobID,
+	}
+	if failure != "" {
+		response["failure"] = failure
+		response["reason"] = reason
 	}
 	stamp := r.now().UTC().Format(time.RFC3339)
 	if _, err := r.store.PutDecision(runstate.Decision{

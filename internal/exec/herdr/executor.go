@@ -97,6 +97,10 @@ type Options struct {
 	// an observation, never a failure. Zero is DefaultConfirmTimeout.
 	ConfirmTimeout time.Duration
 
+	// IdleGrace is how long an agent must sit with its turn ended and no
+	// report before it is re-prompted (nudge.go). Zero is DefaultIdleGrace.
+	IdleGrace time.Duration
+
 	Now func() time.Time
 
 	// ProtocolWarning, when set, receives the client's above-warn protocol
@@ -178,6 +182,9 @@ func New(opts Options) (*Executor, error) {
 	}
 	if opts.Attempt <= 0 {
 		opts.Attempt = 1
+	}
+	if opts.IdleGrace <= 0 {
+		opts.IdleGrace = DefaultIdleGrace
 	}
 	if opts.StartupTimeout <= 0 {
 		opts.StartupTimeout = DefaultStartupTimeout

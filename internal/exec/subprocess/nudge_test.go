@@ -132,7 +132,7 @@ func TestTheNudgeResumesTheRunnersOwnSession(t *testing.T) {
 		}
 		last := nudge[len(nudge)-1]
 		if strings.Contains(last, "PROMPT-BODY") || !strings.Contains(last, record.ResultPath) ||
-			!strings.Contains(last, headlessLine) {
+			!strings.Contains(last, HeadlessLine) {
 			t.Errorf("%s: the resumed session is not told what is missing and where: %q", name, last)
 		}
 		if indexOf(nudge, "--model") < 0 {
@@ -163,7 +163,7 @@ func TestThePromptSaysEndingTheTurnEndsTheJob(t *testing.T) {
 	for _, role := range []string{"", "# resolve-conflict\n\nResolve it."} {
 		prompt := renderPrompt(&attemptRecord{TickID: "abc", Branch: "b", BaseSHA: "0123", RolePrompt: role},
 			&JobSpec{ArtifactPrefix: "runs/r/abc"})
-		if !strings.Contains(prompt, headlessLine) {
+		if !strings.Contains(prompt, HeadlessLine) {
 			t.Errorf("the prompt (role %q) does not say ending the turn ends the job:\n%s", role, prompt)
 		}
 	}

@@ -33,6 +33,9 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 		fmt.Fprintf(&b, "worktree on branch %s, running in a herdr workspace. You are running unattended:\n", record.Branch)
 		fmt.Fprintf(&b, "nobody will answer a question.\n\n")
 	}
+	// epic-2jn vqc: a worker backgrounded the gate and ended its turn to
+	// wait for a notification nobody delivers to an ended turn.
+	fmt.Fprintf(&b, "%s\n\n", subprocess.HeadlessLine)
 
 	fmt.Fprintf(&b, "## The job\n\n")
 	fmt.Fprintf(&b, "- role: %s\n", spec.Role)
