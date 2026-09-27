@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 128,
-  "state": "failed",
-  "reason": "i1r did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: i1r try 1 (run dispatch #13) reported a findings block this reconciler cannot read: finding.target \"pengelbrecht/ticks (contracts bundle)\" is not an owner/name repository. The tick is NOT closed: dropping findings nobody could parse is the failure the channel exists to remove — fix the block and the run again dispatches the tick",
-  "updated_at": "2026-09-27T09:03:46Z",
+  "sequence": 129,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-27T09:14:41Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -123,7 +123,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "d4b61628eaf26fd6772f3287728bc6c111ce4b57",
+    "source_sha": "ffdb21f15749cde69b783fa5fb505965bb5fe84d",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
