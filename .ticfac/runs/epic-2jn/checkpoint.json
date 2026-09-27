@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 79,
-  "state": "dispatching",
-  "reason": "dispatching fc2 as attempt 14",
-  "updated_at": "2026-09-27T07:55:04Z",
+  "sequence": 80,
+  "state": "running",
+  "reason": "fc2 is running as attempt 14",
+  "updated_at": "2026-09-27T07:55:16Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -98,7 +98,8 @@
     },
     {
       "tick_id": "fc2",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 14
     }
   ],
   "provenance": {
