@@ -137,7 +137,10 @@ code is one of this table, the same words in `ticfac --help` and in every
 Two documented exceptions: `ticfac status` exits the run's liveness answer
 (0 alive, 1 not) rather than the command's own success — the question it
 exists to answer — and a run-epic killed by a signal exits the shell's
-convention (130/143), not the table.
+convention (130/143), not the table. The signal's RUN still classifies:
+a person's Ctrl-C (SIGINT) writes its run_died line led by the cancelled
+word, so a watch of that run answers the cancelled class (7), never the
+failed class — a SIGTERM eviction stays a death (1).
 
 The section is pinned by a test (`internal/cli/readme_test.go`): a command
 added to the tree fails the suite until this table names it, so the README

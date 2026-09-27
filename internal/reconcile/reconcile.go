@@ -820,7 +820,11 @@ const (
 	// run_finished: the process returned an operational error, panicked, or
 	// was stopped by a signal. It is written by run-epic around the
 	// reconciler, so a death is never a feed that simply stops on an ordinary
-	// success line (tick wdb; Phase 3 acceptance A4).
+	// success line (tick wdb; Phase 3 acceptance A4). One death is a
+	// deliberate stop, not a death to fix: a person's SIGINT, whose detail
+	// is LED by runstate's cancelled word (tick vqc), the same vocabulary
+	// run_finished's details are led by — the watch classifies that line
+	// cancelled, every other death failed.
 	StageRunDied = "run_died"
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
