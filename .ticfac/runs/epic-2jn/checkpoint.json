@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 371,
-  "state": "running",
-  "reason": "wcl is closed",
-  "updated_at": "2026-09-27T18:41:29Z",
+  "sequence": 372,
+  "state": "collecting",
+  "reason": "collecting vqc attempt 50",
+  "updated_at": "2026-09-27T19:07:41Z",
   "ticks": [
     {
       "tick_id": "nwj",
