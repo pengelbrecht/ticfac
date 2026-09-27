@@ -2,6 +2,7 @@ package runlife
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +12,25 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runregistry"
 )
+
+// Claim writes a machine-local registration beside the run's pidfile (tick
+// aj9), so this package's tests redirect the registry away from the
+// operator's home BEFORE any test runs: a test that claims a run must not
+// write on the machine that runs it, and parallel tests could not each hold
+// the one environment variable that names where registrations live.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "ticfac-runlife-registry-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Setenv(runregistry.RegistryDirEnv, dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
 
 // startSleeper starts a real process and records it as the run's driver, the
 // way Claim would have from inside it.
@@ -176,6 +195,106 @@ func TestLivenessDoesNotDependOnTheEnvironment(t *testing.T) {
 		t.Errorf("under TZ=UTC a second claim on a live run returned %v, want ErrAlreadyLive", err)
 	}
 	_ = cmd
+}
+
+// Acceptance for tick aj9: claiming a run registers the checkout it works in
+// on this machine, so a surface that reads runs from MANY checkouts probes
+// this one where its pidfile lives instead of reading it dead from a second
+// checkout of the repository. Release does NOT remove the registration — a
+// finished run stays enumerable, its own terminal records answering what
+// its absent pidfile cannot.
+func TestClaimRegistersTheWorkingRepoOnThisMachine(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	life, err := Claim(repo, "r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg, ok, err := runregistry.Lookup("r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("claiming a run did not register it on this machine")
+	}
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reg.Repo != abs {
+		t.Errorf("the registration names %q, want the checkout the run works in (%q)", reg.Repo, abs)
+	}
+
+	life.Release("completed")
+	reg, ok, err = runregistry.Lookup("r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("releasing the run removed its registration: a finished run must stay enumerable")
+	}
+	if reg.Repo != abs {
+		t.Errorf("the surviving registration names %q, want %q", reg.Repo, abs)
+	}
+}
+
+// The convention end to end (tick aj9): a run claimed in one checkout reads
+// ALIVE from a different one through the machine registration — the answer
+// the per-checkout pidfile alone cannot give, and the one a surface that
+// lists runs from many checkouts needs before it names a dead-run wait.
+func TestASecondCheckoutProbesTheRunWhereItWorks(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	life, err := Claim(working, "r-second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer life.Release("test")
+
+	// The premise, checked first: the per-checkout probe alone must NOT read
+	// a foreign run alive — elsewhere its pidfile never existed.
+	elsewhere := t.TempDir()
+	if got := Probe(elsewhere, "r-second", time.Now()); got.State == Alive {
+		t.Fatalf("a probe in another checkout reads %s: the premise of the convention does not hold", got.State)
+	}
+
+	repo, registered := runregistry.WorkingRepo("r-second", elsewhere)
+	if !registered {
+		t.Fatal("the claimed run has no machine registration")
+	}
+	if got := Probe(repo, "r-second", time.Now()); got.State != Alive {
+		t.Errorf("probing the registered working repo from another checkout reads %s (%s), want alive", got.State, got.Reason)
+	}
+}
+
+// A registration that cannot be written must not cost the run its life: the
+// registry is machine state, a machine that cannot hold it still runs epics,
+// and the listing falls back to the per-checkout answer. The run log says
+// what could not be done, because a silence here is a listing surface that
+// quietly degrades with nobody told.
+func TestAClaimSurvivesAnUnwritableRegistry(t *testing.T) {
+	// serial: t.Setenv cannot be used with t.Parallel.
+	file := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(file, []byte("a file, not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(runregistry.RegistryDirEnv, file)
+
+	repo := t.TempDir()
+	life, err := Claim(repo, "r-unwritable")
+	if err != nil {
+		t.Fatalf("a claim that cannot write the registry failed: %v", err)
+	}
+	defer life.Release("test")
+
+	log, err := os.ReadFile(filepath.Join(Dir(repo, "r-unwritable"), LogName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "could not register") {
+		t.Errorf("the run log should say the registration could not be written:\n%s", log)
+	}
 }
 
 // Probe answers the question liveness never did (tick 7zs): for every

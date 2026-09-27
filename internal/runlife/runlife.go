@@ -19,6 +19,11 @@
 // Both live beside the feed, under .ticfac/logs/<run-id>/, which ticfac's
 // gitignore fragment already marks as exhaust, and which `ticfac events`
 // already resolves. Tickets udp and ix9.
+//
+// Both are per-checkout by nature — a run's pidfile lives in the repo it
+// works in — so Claim also writes one registration of that repo on the
+// machine (internal/runregistry, tick aj9): the single probing convention a
+// surface that reads runs from MANY checkouts settles on.
 package runlife
 
 import (
@@ -38,6 +43,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
+	"github.com/pengelbrecht/ticfac/internal/runregistry"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -72,7 +78,8 @@ type Record struct {
 // ErrAlreadyLive refuses a second process for a run that has a live one.
 var ErrAlreadyLive = errors.New("a live process already drives this run")
 
-// Life is a claimed run: its pidfile is written and its log is open.
+// Life is a claimed run: its pidfile is written and its log is open, and the
+// machine knows where it works (the registration Claim writes, tick aj9).
 type Life struct {
 	dir    string
 	record Record
@@ -117,6 +124,19 @@ func Claim(repo, runID string) (*Life, error) {
 	}
 	l := &Life{dir: dir, record: record, log: log}
 	l.Logf("run %s started as pid %d on %s", runID, pid, host)
+
+	// The machine's own account of where this run works (tick aj9): one
+	// registration, written where the run claims its life, so a surface that
+	// reads runs from MANY checkouts probes this one where its pidfile lives
+	// instead of reading it dead from a second checkout of the repository.
+	// Best effort by design — a machine directory that cannot be written
+	// costs the listing its cross-checkout answer, never the run its life —
+	// and Release deliberately does not remove it: a finished run stays
+	// enumerable, its own terminal records answering what its absent pidfile
+	// cannot.
+	if err := runregistry.Register(runID, repo); err != nil {
+		l.Logf("could not register this run's working repo on this machine: %v", err)
+	}
 	return l, nil
 }
 
