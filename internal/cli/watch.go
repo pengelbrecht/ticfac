@@ -72,10 +72,12 @@ func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
-	if err := fs.Parse(args); err != nil {
+	// Flags may follow the positionals: the remedies the run prints are written
+	// that way, and remedy_test.go holds every one of them to this parser.
+	rest, parseErr := parseCollectingPositionals(fs, args)
+	if parseErr != nil {
 		return 2
 	}
-	rest := fs.Args()
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac watch: exactly one run id is required\n")
 		return 2
