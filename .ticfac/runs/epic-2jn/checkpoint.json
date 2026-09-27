@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 122,
-  "state": "failed",
-  "reason": "ec1a71e865c0 of main does not fold into epic/2jn: go.mod, go.sum. Every tick filed on main since this branch forked is invisible to this run until somebody resolves that — which is a person's decision, or a resolve-conflict job's, and not a merge this reconciler may perform",
-  "updated_at": "2026-09-27T09:01:19Z",
+  "sequence": 123,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-27T09:03:11Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -123,7 +123,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/2jn",
-    "source_sha": "5f8b76c4ad097003d2ddf70422e3395056be0811",
+    "source_sha": "d4b61628eaf26fd6772f3287728bc6c111ce4b57",
     "integration_ref": "refs/heads/epic/2jn",
     "phase": "worker",
     "executor": null,
