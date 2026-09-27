@@ -246,7 +246,7 @@ func pollForUserToken(ctx context.Context, opts DeviceFlowOptions, code *DeviceC
 		}
 		if !opts.clock().Before(deadline) {
 			return nil, fmt.Errorf("the device code expired before it was approved — "+
-				"run `tk factory setup` again and enter the new code at %s", code.VerificationURI)
+				"run `ticfac factory setup` again and enter the new code at %s", code.VerificationURI)
 		}
 
 		body, status, err := postForm(ctx, opts, opts.base()+accessTokenPath, form)
@@ -292,19 +292,19 @@ func deviceFlowRefusal(clientID, verificationURI string, reply tokenResponse) er
 	switch reply.Error {
 	case "expired_token":
 		return fmt.Errorf("the device code expired before it was approved — "+
-			"run `tk factory setup` again and enter the new code at %s", verificationURI)
+			"run `ticfac factory setup` again and enter the new code at %s", verificationURI)
 	case "access_denied":
 		return errors.New("the approval was declined at github.com — " +
-			"run `tk factory setup` again to retry, or pass --github-token to supply a credential directly")
+			"run `ticfac factory setup` again to retry, or pass --github-token to supply a credential directly")
 	case "device_flow_disabled":
 		return errors.New("this GitHub App does not have the device flow enabled — " +
 			"enable it in the App's settings, or pass --github-token to supply a credential directly")
 	case "incorrect_client_credentials", "unauthorized_client":
 		return fmt.Errorf("GitHub does not recognise the client id %s (%s) — "+
-			"this tk build names an App that does not exist or cannot use the device flow",
+			"this ticfac build names an App that does not exist or cannot use the device flow",
 			clientID, orUnknownReason(detail, reply.Error))
 	case "incorrect_device_code":
-		return errors.New("GitHub rejected the device code — run `tk factory setup` again")
+		return errors.New("GitHub rejected the device code — run `ticfac factory setup` again")
 	default:
 		return fmt.Errorf("GitHub refused the device flow: %s", orUnknownReason(detail, reply.Error))
 	}
@@ -349,7 +349,7 @@ func RefreshUserToken(ctx context.Context, opts DeviceFlowOptions, refreshToken 
 	}
 	if reply.Error != "" || reply.AccessToken == "" {
 		return nil, fmt.Errorf("GitHub refused to refresh the credential (%s) — "+
-			"run `tk factory setup` to approve it again, which is one confirmation for an App you have "+
+			"run `ticfac factory setup` to approve it again, which is one confirmation for an App you have "+
 			"already installed", orUnknownReason(strings.TrimSpace(reply.ErrorDescription), orUnknownReason(reply.Error, "no token returned")))
 	}
 	token := reply.token(opts.clock())

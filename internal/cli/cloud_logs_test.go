@@ -435,7 +435,7 @@ func TestCloudLogsFollowStopsWhenTheSupervisorIsDead(t *testing.T) {
 		"supervisor is errored",
 		"Execution timed out after 600000ms",
 		"cloud:dispatch:0-1",
-		"tk cloud supervisor run_2xm",
+		"ticfac cloud supervisor run_2xm",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("the follow did not report the dead supervisor (%q missing):\n%s", want, output)

@@ -312,7 +312,7 @@ func TestDeviceFlowTerminalErrorsAreDistinctAndActionable(t *testing.T) {
 		code  string
 		wants []string
 	}{
-		{"expired", "expired_token", []string{"expired", "tk factory setup"}},
+		{"expired", "expired_token", []string{"expired", "ticfac factory setup"}},
 		{"denied", "access_denied", []string{"declined"}},
 		{"disabled", "device_flow_disabled", []string{"device flow", "--github-token"}},
 		{"badclient", "incorrect_client_credentials", []string{testClientID}},
@@ -438,7 +438,7 @@ func TestRefreshUserTokenPointsAtTheDeviceFlowWhenGitHubRefuses(t *testing.T) {
 	if err == nil {
 		t.Fatal("RefreshUserToken accepted a refusal")
 	}
-	if !strings.Contains(err.Error(), "tk factory setup") {
+	if !strings.Contains(err.Error(), "ticfac factory setup") {
 		t.Errorf("error does not name the command that recovers it:\n%v", err)
 	}
 }

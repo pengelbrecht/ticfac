@@ -2328,7 +2328,7 @@ describe("the run's gateway credential is the kill switch", () => {
     const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
     expect(record.detail ?? "").toMatch(/AI Gateway.*cost telemetry/i);
     expect(record.detail ?? "").toContain("CLOUDFLARE_API_TOKEN");
-    expect(record.detail ?? "").toContain("tk factory setup");
+    expect(record.detail ?? "").toContain("ticfac factory setup");
   });
 
   it("boots the sandbox when a configured cost budget can read its gateway telemetry", async () => {
@@ -2423,7 +2423,7 @@ describe("the run's gateway credential is the kill switch", () => {
       expect(detail).toContain("Number must be less than or equal to 50");
       expect(detail).toMatch(/report/i);
       // The remedy for a missing credential is the wrong advice here.
-      expect(detail).not.toContain("tk factory setup --cloudflare-api-token");
+      expect(detail).not.toContain("ticfac factory setup --cloudflare-api-token");
     } finally {
       logs.restore();
     }
@@ -2483,7 +2483,7 @@ describe("an unprovisioned deployment fails closed", () => {
     const run = await settled(runID);
     expect(run.state).toBe("failed");
     const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord | null;
-    expect(record?.detail ?? "").toContain("tk factory setup");
+    expect(record?.detail ?? "").toContain("ticfac factory setup");
     expect(sandboxes.booted).toHaveLength(0);
   });
 });

@@ -241,7 +241,7 @@ describe("a loop that fails repeatedly reaches a person", () => {
     expect(text).toContain("30h in flight");
     // Tick acy's command, which answers exactly this question on demand. The
     // whole gap was that nothing asked it unprompted.
-    expect(text).toContain("tk cloud supervisor run_stalled");
+    expect(text).toContain("ticfac cloud supervisor run_stalled");
   });
 
   it("reports a claim that never reached a run, and says nothing will retry it", async () => {
@@ -260,7 +260,7 @@ describe("a loop that fails repeatedly reaches a person", () => {
     const text = messageText(sent()[0]!);
     expect(text).toContain("acme/mill#42");
     expect(text).toContain("answered as a duplicate");
-    expect(text).not.toContain("tk cloud supervisor");
+    expect(text).not.toContain("ticfac cloud supervisor");
   });
 
   it("says which loops are quiet by not mentioning them", async () => {
@@ -786,9 +786,9 @@ describe("every finding kind keeps its own words in one message", () => {
     );
 
     // The one that would actually have bitten: an expired review must never be
-    // offered `tk cloud supervisor` for a run that never booted, and a branch
+    // offered `ticfac cloud supervisor` for a run that never booted, and a branch
     // question must never be offered it either.
-    expect(text).not.toContain("tk cloud supervisor");
+    expect(text).not.toContain("ticfac cloud supervisor");
   });
 
   it("gives each kind a label of its own, with no two sharing", () => {

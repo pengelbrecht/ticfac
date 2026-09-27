@@ -97,20 +97,20 @@ func ConfigFrom(file *credentials.File) (Config, error) {
 	gatewayURL := strings.TrimSpace(file.Get(credentials.KeyGatewayURL))
 	if gatewayURL == "" {
 		return Config{}, fmt.Errorf(
-			"no AI Gateway is configured, so this run's model conversation cannot be read; run 'tk factory setup' first")
+			"no AI Gateway is configured, so this run's model conversation cannot be read; run 'ticfac factory setup' first")
 	}
 	account, gateway, ok := GatewayIDs(gatewayURL)
 	if !ok {
 		return Config{}, fmt.Errorf(
 			"the configured gateway does not name a Cloudflare account and gateway, so its logs cannot be read; "+
-				"point it at https://gateway.ai.cloudflare.com/v1/<account-id>/<gateway> with 'tk factory setup' (got %q)",
+				"point it at https://gateway.ai.cloudflare.com/v1/<account-id>/<gateway> with 'ticfac factory setup' (got %q)",
 			gatewayURL)
 	}
 	token := strings.TrimSpace(file.Get(credentials.KeyCloudflareAPIToken))
 	if token == "" {
 		return Config{}, fmt.Errorf(
 			"no Cloudflare API token is configured, so the AI Gateway logs this trace reads cannot be reached; " +
-				"run 'tk factory setup --cloudflare-api-token <token>'")
+				"run 'ticfac factory setup --cloudflare-api-token <token>'")
 	}
 	return Config{Account: account, Gateway: gateway, Token: token}, nil
 }
@@ -416,7 +416,7 @@ func (c *Client) get(ctx context.Context, endpoint string) ([]byte, error) {
 		case response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden:
 			return nil, fmt.Errorf(
 				"the AI Gateway logs API rejected this Cloudflare API token (%s); it needs AI Gateway read access — "+
-					"reconfigure it with 'tk factory setup --cloudflare-api-token <token>'", response.Status)
+					"reconfigure it with 'ticfac factory setup --cloudflare-api-token <token>'", response.Status)
 		case response.StatusCode == http.StatusNotFound:
 			return nil, fmt.Errorf("the AI Gateway logs API answered %s: no gateway %q in account %s",
 				response.Status, c.config.Gateway, c.config.Account)

@@ -378,7 +378,7 @@ export async function proxyGitRequest(
       error: "github_not_configured",
       detail:
         "this factory has no GITHUB_TOKEN behind its git door, so it cannot read the " +
-        "repository on a run's behalf; run `tk factory setup`",
+        "repository on a run's behalf; run `ticfac factory setup`",
     });
   }
 
@@ -491,7 +491,7 @@ export function planSandboxGit(input: {
       detail:
         "a read-only run reaches its repository through this factory's own git door, and this " +
         "deployment does not know its own base URL (FACTORY_BASE_URL); re-run " +
-        "`tk factory deploy` rather than booting the run with a credential that can push",
+        "`ticfac factory deploy` rather than booting the run with a credential that can push",
     };
   }
   return {

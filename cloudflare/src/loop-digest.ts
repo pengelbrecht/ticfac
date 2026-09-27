@@ -399,7 +399,7 @@ export function assessReviews(reviews: InFlightReview[], now: Date): LoopFinding
         review.run_id === null
           ? `nothing to inspect — there is no run; the stuck record is the pr_reviews row for ` +
             `${review.project}#${review.pr_number}`
-          : `tk cloud supervisor ${sanitizeUntrustedLine(review.run_id, 80)}`,
+          : `ticfac cloud supervisor ${sanitizeUntrustedLine(review.run_id, 80)}`,
     });
   }
   findings.sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : 0));

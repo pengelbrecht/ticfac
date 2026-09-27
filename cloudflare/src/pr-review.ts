@@ -1035,7 +1035,7 @@ export function githubReviewCommenter(env: Env): ReviewCommenter {
       if (token === "") {
         throw new Error(
           "this factory holds no GITHUB_TOKEN, so it cannot post a review comment; run " +
-            "`tk factory setup`",
+            "`ticfac factory setup`",
         );
       }
       const response = await fetch(`${base}/repos/${project}/issues/${number}/comments`, {

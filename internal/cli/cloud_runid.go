@@ -98,7 +98,7 @@ func resolveCloudRunID(ctx context.Context, id string) (string, string, error) {
 		return "", "", fmt.Errorf(
 			"%s is the head of a run id, and no run in the factory's index (its %d most recent) begins with it; "+
 				"that is a statement about the index, not about the run — pass the full run id, "+
-				"or list the runs with 'tk cloud status'",
+				"or list the runs with 'ticfac cloud status'",
 			id, cloudRunIndexLimit)
 	default:
 		return "", "", fmt.Errorf("%s is the head of %d run ids — %s; pass the full run id",

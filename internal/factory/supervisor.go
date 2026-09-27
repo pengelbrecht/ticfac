@@ -273,11 +273,11 @@ func ReadSupervisor(ctx context.Context, runID string, opts SupervisorOptions) (
 	}
 	account, _, ok := gatewayIDs(opts.GatewayURL)
 	if !ok {
-		return nil, errors.New("no Cloudflare account is configured (factory_gateway_url names none), so this run's supervisor cannot be read — run 'tk factory setup' to configure the gateway")
+		return nil, errors.New("no Cloudflare account is configured (factory_gateway_url names none), so this run's supervisor cannot be read — run 'ticfac factory setup' to configure the gateway")
 	}
 	token := strings.TrimSpace(opts.CloudflareAPIToken)
 	if token == "" {
-		return nil, errors.New("no Cloudflare API token is configured, so this run's supervisor cannot be read — add one with 'tk factory setup --cloudflare-api-token <token>'")
+		return nil, errors.New("no Cloudflare API token is configured, so this run's supervisor cannot be read — add one with 'ticfac factory setup --cloudflare-api-token <token>'")
 	}
 	workflow := strings.TrimSpace(opts.WorkflowName)
 	if workflow == "" {
