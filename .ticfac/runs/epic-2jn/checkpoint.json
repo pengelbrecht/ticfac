@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 140,
-  "state": "running",
-  "reason": "eih is running as attempt 22",
-  "updated_at": "2026-09-27T09:20:01Z",
+  "sequence": 141,
+  "state": "collecting",
+  "reason": "collecting eih attempt 22",
+  "updated_at": "2026-09-27T09:24:40Z",
   "ticks": [
     {
       "tick_id": "nwj",
