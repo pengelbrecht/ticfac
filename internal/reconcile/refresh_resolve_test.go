@@ -250,3 +250,21 @@ func TestAModifyDeleteFoldConflictIsStillTheStop(t *testing.T) {
 		t.Error("a resolve-conflict job was dispatched for a modify/delete fold conflict")
 	}
 }
+
+// The brief and the title keep what the sandbox door reads: prose is UTF-8,
+// so a commit subject's em-dash survives into the brief, while a control
+// character or a byte that is not UTF-8 — which the door refuses — does not.
+//
+// short: pure string handling; no I/O.
+func TestDoorTextKeepsUTF8ProseAndDropsWhatTheDoorRefuses(t *testing.T) {
+	t.Parallel()
+	if got, want := doorText("fix: fold — and…\n\tthen"), "fix: fold — and…\n\tthen"; got != want {
+		t.Errorf("doorText rewrote prose: got %q, want %q", got, want)
+	}
+	if got, want := doorText("a\x1b[31mb\x00c\u0085d\xffe\rf"), "a?[31mb?c?d?e?f"; got != want {
+		t.Errorf("doorText kept what the door refuses: got %q, want %q", got, want)
+	}
+	if got, want := doorLine("one —\ntwo"), "one — two"; got != want {
+		t.Errorf("doorLine is %q, want %q", got, want)
+	}
+}

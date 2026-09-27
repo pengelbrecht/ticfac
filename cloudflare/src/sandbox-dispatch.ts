@@ -50,7 +50,11 @@
  *
  * ### `POST /api/sandbox/attempts` — start one attempt's worker
  *
- * The request body, every field required:
+ * The request body — UTF-8 JSON, every field required. The IDENTIFIER fields
+ * (`role`, `write_ref`, `base_ref`, `model`, `harness`) are printable ASCII
+ * with no whitespace, at most 512 characters; the PROSE fields (`title`,
+ * `prompt`) are any valid UTF-8 without control characters, bounded in UTF-8
+ * bytes (the rules and the reasons: `PLAIN_FIELD_PATTERN` below):
  *
  * | field | what it is |
  * |---|---|
@@ -60,11 +64,11 @@
  * | `role` | the role this attempt runs (`implement-tick`, …), for a later cancel boot to re-derive. |
  * | `write_ref` | the attempt's own ref (`refs/heads/…`), the one the marker names and collect reads. |
  * | `base_ref` | the epic's base branch, for the same re-derivation. |
- * | `title` | the tick's title, carried for the same re-derivation. |
+ * | `title` | the tick's title, carried for the same re-derivation. PROSE: any UTF-8 text on one line with no control character, at most 512 UTF-8 bytes (em-dashes welcome). |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
  * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
  * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
- * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: printable prose with line breaks, at most 64 KiB — a start with no prompt would boot a worker on a prompt nobody chose. |
+ * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: PROSE — any UTF-8 text with no control character but tab, LF and CR, at most 64 KiB (65536 UTF-8 bytes) — a start with no prompt would boot a worker on a prompt nobody chose. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -214,34 +218,70 @@ function fromDenial(denial: GatewayDenial): SandboxDispatchResult {
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
- * An identifier or a reference (`role`, `write_ref`, `base_ref`, `model`,
- * `harness`): printable ASCII, NO whitespace, bounded — these name things (a
- * role, a git ref, a model, a harness) and ride environment variables into
- * the container, and a name that contains a space is a name nothing
- * downstream can use.
+ * The door's fields come in two kinds, and the kind decides the rule.
+ *
+ * IDENTIFIER fields (`role`, `write_ref`, `base_ref`, `model`, `harness`; and
+ * `tick_id`, stricter still, above): printable ASCII, NO whitespace, at most
+ * 512 characters (= bytes, being ASCII) — these name things (a role, a git
+ * ref, a model, a harness) and ride environment variables into the
+ * container, and a name that contains a space or a rune outside ASCII is a
+ * name nothing downstream can be trusted to spell the same way.
+ *
+ * PROSE fields (`title`, `prompt`): any valid Unicode text EXCEPT a control
+ * character (general category Cc — C0, DEL and C1), with the one exception
+ * that the prompt keeps tab, line feed and carriage return, the line breaks
+ * markdown needs. Prose is what people and profiles write, and they write
+ * em-dashes and ellipses: every profile in profiles-cloudflare-sandbox/
+ * carries them, and so do tick titles. A control character is still refused
+ * because both fields ride environment variables into the container, and an
+ * environment value is not a place to discover what the platform does with
+ * a NUL or a terminal escape. Text that is not UTF-8 is refused too: a body
+ * whose bytes are not UTF-8 at all (`jsonBody`), and a lone surrogate a JSON
+ * `\u` escape can smuggle in (general category Cs), which no UTF-8 encoding
+ * of the environment can carry.
+ *
+ * The prose bounds count UTF-8 BYTES, not characters or UTF-16 code units:
+ * the bound exists for the environment variable the field becomes, and that
+ * is measured in bytes. The Go client (`cloudflaresandbox/record.go`)
+ * counts the same bytes (`len` of a Go string).
  */
 const PLAIN_FIELD_PATTERN = /^[\x21-\x7e]{1,512}$/;
 
 /**
- * A rendered prompt (`prompt`, tick 9iz): printable prose plus the line breaks
- * markdown needs, never other control characters, bounded at 64 KiB — it
- * rides one environment variable into the container, where the worker's
- * harness reads it, and an environment value is not a place to discover what
- * the platform does with a terminal escape.
+ * A rendered prompt (`prompt`, tick 9iz): prose plus tab / LF / CR, at most
+ * {@link PROMPT_FIELD_MAX_BYTES} UTF-8 bytes (checked beside the pattern).
  */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the tab, line feed and carriage return in this class are the line breaks a rendered markdown prompt needs; every other control character is excluded on purpose, and naming them inside the class is how that stays true.
-const PROMPT_FIELD_PATTERN = /^[\x09\x0a\x0d\x20-\x7e]{1,65536}$/;
+const PROMPT_FIELD_PATTERN = /^(?:[\t\n\r]|[^\p{Cc}\p{Cs}])+$/u;
 
-/** The prompt bound, in characters, spelled once for the pattern and the refusal. */
-const PROMPT_FIELD_MAX = 65536;
+/** The prompt bound, in UTF-8 bytes, spelled once for the check and the refusal. */
+const PROMPT_FIELD_MAX_BYTES = 65536;
 
 /**
- * A free-text field (`title`): printable ASCII plus the spaces prose needs,
- * never control characters — it rides an environment variable into the
- * container for a later boot's re-derivation, and an environment value is
- * not a place to discover what the platform does with a newline.
+ * A free-text field (`title`): prose on one line — no control character at
+ * all, not even a tab or a line break — at most
+ * {@link TITLE_FIELD_MAX_BYTES} UTF-8 bytes (checked beside the pattern).
  */
-const TITLE_FIELD_PATTERN = /^[\x20-\x7e]{1,512}$/;
+const TITLE_FIELD_PATTERN = /^[^\p{Cc}\p{Cs}]+$/u;
+
+/** The title bound, in UTF-8 bytes. */
+const TITLE_FIELD_MAX_BYTES = 512;
+
+const utf8 = new TextEncoder();
+
+/** A prose field: a string, in its class, at most `maxBytes` of UTF-8. */
+function isProse(field: unknown, pattern: RegExp, maxBytes: number): field is string {
+  // The pattern first: it refuses a lone surrogate, which the encoder would
+  // otherwise quietly rewrite to U+FFFD before it was counted.
+  return (
+    typeof field === "string" &&
+    pattern.test(field) &&
+    // A UTF-16 code unit is at most 3 UTF-8 bytes, so a short string needs
+    // no encoding to know it fits.
+    (field.length * 3 <= maxBytes || utf8.encode(field).byteLength <= maxBytes)
+  );
+}
+
+const strictUTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 
 /** Reads the request body as a JSON object, or says why it cannot be. */
 async function jsonBody(
@@ -249,9 +289,21 @@ async function jsonBody(
 ): Promise<
   { ok: true; raw: Record<string, unknown> } | { ok: false; refusal: SandboxDispatchResult }
 > {
+  // Decoded strictly, not through `request.json()`: that decoder rewrites a
+  // byte that is not UTF-8 into U+FFFD, and the door would then boot a worker
+  // on text its caller never sent.
+  let text: string;
+  try {
+    text = strictUTF8.decode(await request.arrayBuffer());
+  } catch {
+    return {
+      ok: false,
+      refusal: refuse(400, "invalid_request", "the request body must be UTF-8 JSON"),
+    };
+  }
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     return { ok: false, refusal: refuse(400, "invalid_request", "the request body must be JSON") };
   }
@@ -315,47 +367,52 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     );
   }
 
-  const text = (name: string, field: unknown, pattern: RegExp): string | SandboxDispatchResult => {
-    if (typeof field !== "string" || !pattern.test(field)) {
+  const text = (name: string, field: unknown): string | SandboxDispatchResult => {
+    if (typeof field !== "string" || !PLAIN_FIELD_PATTERN.test(field)) {
       return refuse(
         400,
         "invalid_request",
-        `${name} must be a non-empty printable ASCII string (at most 512 characters${
-          pattern === TITLE_FIELD_PATTERN ? "; spaces allowed" : "; no spaces"
-        })`,
+        `${name} must be a non-empty printable ASCII string with no spaces (at most 512 characters)`,
       );
     }
     return field;
   };
-  const role = text("role", raw.role, PLAIN_FIELD_PATTERN);
+  const role = text("role", raw.role);
   if (typeof role !== "string") return role;
-  const writeRef = text("write_ref", raw.write_ref, PLAIN_FIELD_PATTERN);
+  const writeRef = text("write_ref", raw.write_ref);
   if (typeof writeRef !== "string") return writeRef;
-  const baseRef = text("base_ref", raw.base_ref, PLAIN_FIELD_PATTERN);
+  const baseRef = text("base_ref", raw.base_ref);
   if (typeof baseRef !== "string") return baseRef;
-  const title = text("title", raw.title, TITLE_FIELD_PATTERN);
-  if (typeof title !== "string") return title;
+  if (!isProse(raw.title, TITLE_FIELD_PATTERN, TITLE_FIELD_MAX_BYTES)) {
+    return refuse(
+      400,
+      "invalid_request",
+      "title must be a non-empty line of UTF-8 text with no control characters " +
+        `(at most ${TITLE_FIELD_MAX_BYTES} bytes)`,
+    );
+  }
+  const title = raw.title;
   // The model the caller resolved (tick a08). Required, and booted as given:
   // a door that fell back to the deployment's own model here would hand the
   // caller a handle for a worker running something its records do not name.
-  const model = text("model", raw.model, PLAIN_FIELD_PATTERN);
+  const model = text("model", raw.model);
   if (typeof model !== "string") return model;
   // The harness the caller resolved (tick 9iz). Required, and bound as given,
   // for the model's reason verbatim.
-  const harness = text("harness", raw.harness, PLAIN_FIELD_PATTERN);
+  const harness = text("harness", raw.harness);
   if (typeof harness !== "string") return harness;
   // The rendered role prompt the caller resolved (tick 9iz). Required: the
   // container's own entrypoint builds its worker prompt from the checkout's
   // tracker, so the profile's prompt reaches the worker through this field or
   // not at all — and a door that booted without it would be a door whose
   // caller's `prompt_digest` named a prompt that never ran.
-  if (typeof raw.prompt !== "string" || !PROMPT_FIELD_PATTERN.test(raw.prompt)) {
+  if (!isProse(raw.prompt, PROMPT_FIELD_PATTERN, PROMPT_FIELD_MAX_BYTES)) {
     return refuse(
       400,
       "invalid_request",
-      "prompt must be the rendered role prompt the dispatch resolved (printable text with line " +
-        `breaks, at most ${PROMPT_FIELD_MAX} characters) — the worker's container runs on it, and a start with ` +
-        "none would boot a worker on a prompt nobody chose",
+      "prompt must be the rendered role prompt the dispatch resolved (UTF-8 text with line " +
+        `breaks and no other control characters, at most ${PROMPT_FIELD_MAX_BYTES} bytes) — the worker's ` +
+        "container runs on it, and a start with none would boot a worker on a prompt nobody chose",
     );
   }
   const prompt = raw.prompt;
