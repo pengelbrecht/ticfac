@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 247,
-  "state": "dispatching",
-  "reason": "dispatching 6vp as attempt 36",
-  "updated_at": "2026-09-27T14:12:21Z",
+  "sequence": 248,
+  "state": "running",
+  "reason": "6vp is running as attempt 36",
+  "updated_at": "2026-09-27T14:12:31Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -163,7 +163,8 @@
     },
     {
       "tick_id": "6vp",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 36
     },
     {
       "tick_id": "7ht",
