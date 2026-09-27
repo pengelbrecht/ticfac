@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 8,
-  "state": "running",
-  "reason": "nwj is closed",
-  "updated_at": "2026-09-27T04:07:53Z",
+  "sequence": 9,
+  "state": "dispatching",
+  "reason": "dispatching 6dh as attempt 2",
+  "updated_at": "2026-09-27T04:08:00Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -58,6 +58,14 @@
     },
     {
       "tick_id": "rrl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "152",
+      "state": "ready"
+    },
+    {
+      "tick_id": "fi3",
       "state": "ready"
     }
   ],
