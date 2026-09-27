@@ -55,7 +55,9 @@ import (
 // WHAT STILL STOPS FOR A PERSON, as the tick's acceptance says. ONE repair
 // per tick — durably recorded as a decision on the run branch, so a second
 // gate failure over the same tick stops naming the recorded repair rather
-// than paying for another. And a repair whose gate ALSO fails is the stop,
+// than paying for another. A repair that failed without answering at all
+// does not spend it (role_allowance.go): another is dispatched, from the fix
+// it committed when it committed one, up to a bound. And a repair whose gate ALSO fails is the stop,
 // as today, naming BOTH failures: the one the repair was dispatched over
 // and the one the repaired tree produced.
 
@@ -77,29 +79,68 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 
 	tick := marker.TickID
 	failures := strings.Join(g.failures, ", ")
-
-	// ONE REPAIR PER TICK — the durable half of the bound. A recorded repair
-	// (merged, or failed) means a gate failure this tick already had its one
-	// job: a second failure over the same tick stops, naming both, exactly as
-	// a second conflict on the same tick does for the resolve job (2p6).
-	prior, ok, err := r.repairDecisionOf(tick)
-	if err != nil {
+	baseJobID := fmt.Sprintf("run-%s/tick-%s/repair-%d", r.runID, tick, marker.Attempt)
+	for {
+		// ONE REPAIR PER TICK — the durable half of the bound. A recorded
+		// repair that ANSWERED (merged, or failed on its merits) means a gate
+		// failure this tick already had its one job: a second failure over the
+		// same tick stops, naming both, exactly as a second conflict on the
+		// same tick does for the resolve job (2p6). A repair that failed
+		// without answering does not spend it, up to the bound, and a person's
+		// release of the tick starts it afresh (role_allowance.go).
+		ledger, err := r.roleJobLedgerOf(RoleRepairGate, tick, baseJobID)
+		if err != nil {
+			return err
+		}
+		if len(ledger.spent) > 0 {
+			prior := ledger.spent[len(ledger.spent)-1]
+			branch, _ := prior.Request["repair_branch"].(string)
+			status, _ := prior.Response["status"].(string)
+			earlier, _ := prior.Response["gate_failures"].(string)
+			if earlier == "" {
+				earlier = "the failures its decision records"
+			}
+			return r.refuse(RefusedGate, tick,
+				"the integrated gate did not pass for %s twice: first %s, and now %s over the tree its repair job "+
+					"left behind. One repair per tick is all a run dispatches: the recorded repair's outcome is %q and "+
+					"its work is on %s (every repair of this tick since it was last released: %s). The tick is NOT "+
+					"closed: read both failures, take the repair's tree or settle the tick by hand, and run the epic "+
+					"again under a new run id",
+				r.attemptName(tick, marker.Attempt), earlier, failures, status, branch,
+				describeJobs(append(append([]runstate.Decision{}, ledger.operational...), ledger.spent...),
+					"repair_branch"))
+		}
+		if ledger.exhausted() {
+			return r.refuse(RefusedGate, tick,
+				"the integrated gate did not pass for %s (%s) and %d repair jobs for this tick failed without "+
+					"delivering a repair: %s. %d retries after the first is the bound, so the tick is neither repaired "+
+					"nor closed: the merge is already on %s, so fix the check or the tree, push it to %s, and run the "+
+					"epic again under this run id",
+				tick, failures, len(ledger.operational), describeJobs(ledger.operational, "repair_branch"),
+				maxOperationalRetries, r.branch, r.branch)
+		}
+		retry, err := r.dispatchRepair(ctx, entry, marker, merged, g, ledger)
+		if retry {
+			r.record(tick, StageRedispatched,
+				"the repair job for %s failed without delivering a repair (%s); it does not use up the tick's "+
+					"repair, and another is dispatched (%d of at most %d)",
+				r.attemptName(tick, marker.Attempt), failureReason(err), len(ledger.operational)+2,
+				maxOperationalRetries+1)
+			continue
+		}
 		return err
 	}
-	if ok {
-		branch, _ := prior.Request["repair_branch"].(string)
-		status, _ := prior.Response["status"].(string)
-		earlier, _ := prior.Response["gate_failures"].(string)
-		if earlier == "" {
-			earlier = "the failures its decision records"
-		}
-		return r.refuse(RefusedGate, tick,
-			"the integrated gate did not pass for %s twice: first %s, and now %s over the tree its repair job "+
-				"left behind. One repair per tick is all a run dispatches: the recorded repair's outcome is %q and "+
-				"its work is on %s. The tick is NOT closed: read both failures, take the repair's tree or settle "+
-				"the tick by hand, and run the epic again under a new run id",
-			r.attemptName(tick, marker.Attempt), earlier, failures, status, branch)
-	}
+}
+
+// dispatchRepair dispatches the next repair job of the tick's allowance and
+// takes it through its merge to the re-gate. `retry` reports a job that failed
+// OPERATIONALLY and whose failure is recorded, so the caller may dispatch the
+// next one.
+func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker attemptHandle,
+	merged merge, g *gateProgress, ledger roleJobLedger) (bool, error) {
+
+	tick := marker.TickID
+	failures := strings.Join(g.failures, ", ")
 
 	// A repair an earlier incarnation dispatched but never integrated is NOT
 	// finished from its branch merely because the branch is on origin: a
@@ -107,7 +148,6 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 	// the job has repaired anything (epic-2jn, 4mv's resolve). The executor's
 	// Start below is what says whether it settled; role_resume.go has the
 	// whole argument.
-	branch := branchOf(repairWriteRef(r.runID, tick, marker.Attempt))
 
 	// The ceiling tier: the strongest worker the declared policy allows,
 	// resolved on demand through the same routing every other role resolves
@@ -125,7 +165,7 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		err = usableProfile(r.executors, resolved)
 	}
 	if err != nil {
-		return r.refuse(RefusedGate, tick,
+		return false, r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s (%s) and its repair job could not be routed at the "+
 				"ceiling: %v. The tick is neither repaired nor closed; fix the routing and run the epic again",
 			short(merged.GateSHA), tick, failures, err)
@@ -137,9 +177,18 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 	// output under `.ticfac/` exactly where its inputs name it.
 	// A repair an earlier incarnation dispatched under this identity keeps the
 	// base it was cut from, or continues from what it pushed.
-	identity := r.repairMarkerOf(marker)
+	// A job dispatched after one that failed without answering starts from
+	// the fix that job COMMITTED, when it left one: the next worker finishes
+	// that work rather than redoing it, and its merge is an ordinary merge
+	// onto the head the branch has by then.
+	identity := r.repairMarkerOf(marker, ledger.ordinal)
 	jobID, writeRef, stateDir := identity.JobID, identity.WriteRef, identity.StateRoot
+	branch := branchOf(writeRef)
+	carried := r.carriedRepair(ledger)
 	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		if carried != "" {
+			return carried, nil
+		}
 		if err := r.git.fetch(r.branch); err != nil {
 			return "", err
 		}
@@ -155,9 +204,12 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		return base, nil
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	base := job.base
+	if base != carried {
+		carried = ""
+	}
 
 	r.record(tick, StageRepairDispatched,
 		"the integrated gate did not pass over %s (%s); a repair job is dispatched to fix the tree the failing "+
@@ -188,7 +240,7 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
-		return r.refuse(RefusedGate, tick,
+		return false, r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s (%s) and the repair job could not be started: build its "+
 				"executor: %v", short(merged.GateSHA), tick, failures, err)
 	}
@@ -199,10 +251,10 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		// branch is the honest answer to that, not a restart.
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
 			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-				return r.finishRepairFromBranch(ctx, entry, marker, merged.AttemptHead, remote, g)
+				return false, r.finishRepairFromBranch(ctx, entry, marker, identity, merged.AttemptHead, remote, g)
 			}
 		}
-		return r.refuse(RefusedGate, tick,
+		return false, r.refuse(RefusedGate, tick,
 			"the integrated gate on %s did not pass for %s (%s) and the repair job could not be started: %v",
 			short(merged.GateSHA), tick, failures, err)
 	}
@@ -210,10 +262,27 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		r.record(tick, StageAdopted, "%s", note)
 	}
 
-	collected, rerr := r.collectRepair(ctx, handle, executor, repairMarker, g)
+	collected, rerr := r.collectRepair(ctx, handle, executor, repairMarker, g, carried)
 	var repairHead string
 	if collected != nil && collected.Result != nil && collected.Result.Source.HeadSHA != nil {
 		repairHead = *collected.Result.Source.HeadSHA
+	}
+	if repairHead == "" && carried != "" {
+		// A job cut at a committed fix that found nothing left to change: the
+		// fix it was handed is its answer.
+		repairHead = carried
+	}
+	if operationalFailure(collected, rerr) {
+		// The job never answered. Whatever it committed is on its branch
+		// (collect preserved it) and is recorded, so the next job can start
+		// from it; the failure does not spend the tick's repair.
+		if repairHead == "" || repairHead == carried {
+			if local := r.attemptWorkHead(repairMarker); local != "" {
+				repairHead = local
+			}
+		}
+		recorded := r.disposeRepair(handle, executor, repairMarker, g, rerr, failureOperational, repairHead)
+		return recorded && ctx.Err() == nil, rerr
 	}
 	if rerr == nil && repairHead == "" {
 		rerr = r.refuse(RefusedGate, tick,
@@ -226,8 +295,8 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 		repairMerge, rerr = r.mergeRepair(repairMarker, repairHead, g)
 	}
 	if rerr != nil {
-		r.disposeRepair(handle, executor, repairMarker, g, rerr)
-		return rerr
+		r.disposeRepair(handle, executor, repairMarker, g, rerr, failureOnMerits, repairHead)
+		return false, rerr
 	}
 	// The re-gate's fingerprint keeps the TICK'S attempt head as its
 	// attempt_head — the head the collect and the boundary check read — while
@@ -240,7 +309,7 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 	// re-runs, so a re-gate that fails again re-enters this function and
 	// meets the recorded repair: one repair per tick, named by both failures.
 	if err := r.recordRepairDecision(dispatch, repairMarker, "merged", repaired, repairHead, g); err != nil {
-		return err
+		return false, err
 	}
 	r.record(tick, StageIntegrated,
 		"the repair job fixed the tree behind the failed gate on %s; its merge is %s and the gate runs as usual",
@@ -248,7 +317,7 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 	r.tearDown(handle, executor, repairMarker,
 		fmt.Sprintf("the repair job's fix of %s is integrated", tick), false)
 
-	return r.gateAndClose(ctx, entry, marker, nil, repaired)
+	return false, r.gateAndClose(ctx, entry, marker, nil, repaired)
 }
 
 // collectRepair waits one repair job out and holds it to the same rules the
@@ -257,8 +326,12 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 // ask for a person, and it wrote under no authority but its own. Every
 // failure is the gate stop the repair replaced, naming the gate's failures
 // beside the repair's.
+//
+// `carried` is the committed fix the job was cut at, when it was cut at one:
+// such a job may find nothing left to change, and its empty branch is then an
+// answer — the fix it was handed — not an undelivered one.
 func (r *Reconciler) collectRepair(ctx context.Context, handle *subprocess.JobHandle, executor Executor,
-	marker attemptHandle, g *gateProgress) (*subprocess.Collection, error) {
+	marker attemptHandle, g *gateProgress, carried string) (*subprocess.Collection, error) {
 
 	// No checkpoint of its own here, for the resolve job's reason: every
 	// store write is a commit on the same branch the repair's merge is about
@@ -280,9 +353,15 @@ func (r *Reconciler) collectRepair(ctx context.Context, handle *subprocess.JobHa
 		return nil, failed("it could not be collected: %v", err)
 	}
 	r.record(tick, StageCollected, "%s", collectedLine("the repair job", collected))
+	// The repair's work is durable on the remote before anything is merged or
+	// dispatched from it — collect's own rule (tick 55i). It holds for a job
+	// that failed as much as for one that answered: a job that committed its
+	// fix and never reported is where the next job starts.
+	r.preserveAttemptWork(marker)
 
+	handed := carried != "" && collected.Verdict == subprocess.VerdictNoCommits
 	switch {
-	case collected.Verdict != subprocess.VerdictReadyToMerge:
+	case collected.Verdict != subprocess.VerdictReadyToMerge && !handed:
 		return collected, failed("it answered %s and the run's verdict is %s (%s): %s. The tick is neither "+
 			"repaired nor closed", roleAnswerOf(collected), collected.Verdict, collected.Result.Outcome, collected.Message)
 	case collected.Report.Status != "" && collected.Report.NeedsHuman():
@@ -292,9 +371,6 @@ func (r *Reconciler) collectRepair(ctx context.Context, handle *subprocess.JobHa
 		return collected, failed("it wrote under an authority that is not its own (%s)",
 			strings.Join(append(append([]string{}, collected.BoundaryViolations...), collected.ArtifactViolations...), ", "))
 	}
-	// The repair's work is durable on the remote before anything is merged
-	// from it — collect's own rule (tick 55i).
-	r.preserveAttemptWork(marker)
 	return collected, nil
 }
 
@@ -381,10 +457,9 @@ func (r *Reconciler) mergeRepair(marker attemptHandle, head string, g *gateProgr
 // the passing gate over the repaired tree as stale, and the next pass held
 // the tick as rejected work nobody had merged — while its head was on the
 // integration branch all along.
-func (r *Reconciler) finishRepairFromBranch(ctx context.Context, entry planEntry, marker attemptHandle,
+func (r *Reconciler) finishRepairFromBranch(ctx context.Context, entry planEntry, marker, repairMarker attemptHandle,
 	attemptHead, remote string, g *gateProgress) error {
 
-	repairMarker := r.repairMarkerOf(marker)
 	repairMerge, err := r.mergeRepair(repairMarker, remote, g)
 	if err != nil {
 		return err
@@ -411,13 +486,39 @@ func (r *Reconciler) finishRepairFromBranch(ctx context.Context, entry planEntry
 // the job id, write ref and state directory repairFailedGate dispatches it
 // under — derived from the attempt's marker, so an incarnation finishing a
 // repair it did not dispatch names the same job and the same branch.
-func (r *Reconciler) repairMarkerOf(marker attemptHandle) attemptHandle {
+//
+// `ordinal` is the job's place in the tick's repair allowance
+// (role_allowance.go): the first repair keeps the identity it always had.
+func (r *Reconciler) repairMarkerOf(marker attemptHandle, ordinal int) attemptHandle {
+	suffix := jobOrdinalSuffix(ordinal)
 	repair := marker
 	repair.Role = RoleRepairGate
-	repair.JobID = fmt.Sprintf("run-%s/tick-%s/repair-%d", r.runID, marker.TickID, marker.Attempt)
-	repair.WriteRef = repairWriteRef(r.runID, marker.TickID, marker.Attempt)
-	repair.StateRoot = repairStateDir(r.execStateDir(marker.TickID, marker.Attempt))
+	repair.JobID = fmt.Sprintf("run-%s/tick-%s/repair-%d", r.runID, marker.TickID, marker.Attempt) + suffix
+	repair.WriteRef = repairWriteRef(r.runID, marker.TickID, marker.Attempt) + suffix
+	repair.StateRoot = repairStateDir(r.execStateDir(marker.TickID, marker.Attempt)) + suffix
 	return repair
+}
+
+// carriedRepair is the fix the latest repair that failed without answering
+// committed, or "" when it left none this checkout can read (its branch is
+// fetched for it). A repair's merge is an ordinary merge onto whatever head
+// the branch has, so a committed fix is carried whatever has landed since.
+func (r *Reconciler) carriedRepair(ledger roleJobLedger) string {
+	if len(ledger.operational) == 0 {
+		return ""
+	}
+	decision := ledger.operational[len(ledger.operational)-1]
+	candidate, _ := decision.Response["repair_head"].(string)
+	if candidate == "" {
+		return ""
+	}
+	if branch, _ := decision.Request["repair_branch"].(string); branch != "" {
+		_ = r.git.fetch(branch)
+	}
+	if _, err := r.git.resolve(candidate); err != nil {
+		return ""
+	}
+	return candidate
 }
 
 // repairTitle is the dispatch title the sandbox door carries.
@@ -469,10 +570,18 @@ func (r *Reconciler) repairDecisionOf(tick string) (*runstate.Decision, bool, er
 // recordRepairDecision lands the repair as a decision record on the run
 // branch: the request that was made (which gate failed, which checks, which
 // branch the job writes) and the response that came back (the merge, or the
-// failure). One repair per tick is recordable; the second gate failure a run
-// ever meets over the same tick stops naming this record.
+// failure). Each job of the tick's repair allowance (role_allowance.go) is
+// one record; a gate failure met after the allowance is spent stops naming
+// them.
 func (r *Reconciler) recordRepairDecision(dispatch Dispatch, marker attemptHandle, status string,
 	repaired merge, repairHead string, g *gateProgress) error {
+	return r.recordRepairOutcome(dispatch, marker, status, repaired, repairHead, g, "", "")
+}
+
+// recordRepairOutcome is recordRepairDecision with the failure's kind
+// (role_allowance.go) and its reason, for a repair that failed.
+func (r *Reconciler) recordRepairOutcome(dispatch Dispatch, marker attemptHandle, status string,
+	repaired merge, repairHead string, g *gateProgress, failure, reason string) error {
 
 	if _, err := r.store.Fetch(); err != nil {
 		return err
@@ -483,9 +592,11 @@ func (r *Reconciler) recordRepairDecision(dispatch Dispatch, marker attemptHandl
 	}
 	number := len(decisions) + 1
 	for _, existing := range decisions {
-		if existing.Role == RoleRepairGate && existing.Request["tick_id"] == marker.TickID {
+		if existing.Role == RoleRepairGate && existing.Request["tick_id"] == marker.TickID &&
+			existing.Request["job_id"] == marker.JobID {
 			// Already recorded, by an earlier incarnation of this run, for
-			// this tick: the repair is create-if-absent, never rewritten.
+			// this job: a repair is create-if-absent, never rewritten. Each
+			// job of the tick's allowance is a record of its own.
 			return nil
 		}
 		if existing.Decision >= number {
@@ -504,6 +615,10 @@ func (r *Reconciler) recordRepairDecision(dispatch Dispatch, marker attemptHandl
 		"merge":         repaired.GateSHA,
 		"repair_head":   repairHead,
 		"job_id":        marker.JobID,
+	}
+	if failure != "" {
+		response["failure"] = failure
+		response["reason"] = reason
 	}
 	request := map[string]any{
 		"tick_id": marker.TickID,
@@ -549,21 +664,28 @@ func (r *Reconciler) recordRepairDecision(dispatch Dispatch, marker attemptHandl
 // half-made fix is. The failure is recorded durably too, so a later
 // incarnation that meets the same gate failure stops naming the recorded
 // repair instead of paying for a second one.
+//
+// The record carries the failure's KIND (role_allowance.go) and the head the
+// job left, and the return says whether it landed: a retry is dispatched only
+// over a recorded failure.
 func (r *Reconciler) disposeRepair(handle *subprocess.JobHandle, executor Executor, marker attemptHandle,
-	g *gateProgress, err error) {
+	g *gateProgress, err error, failure, repairHead string) bool {
 
 	var refusal *Refusal
 	if !asRefusal(err, &refusal) {
-		return
+		return false
 	}
-	if derr := r.recordRepairDecision(
+	recorded := true
+	if derr := r.recordRepairOutcome(
 		Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
 			JobID: marker.JobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote},
-		marker, "failed", merge{}, "", g); derr != nil {
+		marker, "failed", merge{}, repairHead, g, failure, failureReason(err)); derr != nil {
 		r.record(marker.TickID, StageRejected, "the failed repair could not be recorded: %v", derr)
+		recorded = false
 	}
 	r.tearDown(handle, executor, marker,
 		fmt.Sprintf("the repair job for the failed gate of %s failed", r.attemptName(marker.TickID, marker.Attempt)), true)
+	return recorded
 }
 
 // repairWriteRef is the ref one tick's repair job may write, in the same

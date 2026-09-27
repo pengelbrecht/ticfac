@@ -62,10 +62,14 @@ import (
 //     at start over a cell nobody was asked to declare.
 //
 // WHAT STILL STOPS FOR A PERSON, as the tick's acceptance says. A resolve job
-// that fails, and a SECOND conflict on the same tick, are the stop, as today
-// — and both refusals still name the files (tick ky5's whole point). A
-// resolve that landed nothing leaves its branch on the remote, and the
-// refusal says where it is.
+// that fails ON ITS MERITS, and a SECOND conflict on the same tick, are the
+// stop, as today — and both refusals still name the files (tick ky5's whole
+// point). A resolve that landed nothing leaves its branch on the remote, and
+// the refusal says where it is. A resolve job that failed without answering
+// at all (no report, a runner that died, a job that was lost) does not spend
+// the tick's resolve: another is dispatched, from the resolution it committed
+// when it committed one, up to a bound — role_allowance.go has the rule, and
+// how a person's release of the tick starts the allowance afresh.
 
 // RoleResolveConflict is the job-protocol role this file dispatches.
 const RoleResolveConflict = profile.RoleResolveConflict
@@ -161,24 +165,67 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 	conflict *mergeConflict) (string, func() error, error) {
 
 	tick := marker.TickID
+	baseJobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
+	for {
+		// The tick's resolve allowance (role_allowance.go): a resolve that
+		// ANSWERED — merged, or refused on its merits — is the tick's one, and a
+		// second conflict on the same tick is the stop, as it always was. The
+		// resolves are durably recorded as decisions on the run branch, so the
+		// stop survives a restart and names everything a person needs: the
+		// files, and where every resolve's work is. A resolve that failed
+		// without answering does not spend it, up to the bound; a person's
+		// release of the tick starts it afresh.
+		ledger, err := r.roleJobLedgerOf(RoleResolveConflict, tick, baseJobID)
+		if err != nil {
+			return "", nil, err
+		}
+		if len(ledger.spent) > 0 {
+			prior := ledger.spent[len(ledger.spent)-1]
+			branch, _ := prior.Request["resolve_branch"].(string)
+			status, _ := prior.Response["status"].(string)
+			return "", nil, r.refuse(RefusedMerge, tick,
+				"%s does not merge onto %s (%s) and a resolve-conflict job already ran for this tick — its "+
+					"recorded outcome is %q and its work is on %s (every resolve of this tick since it was last "+
+					"released: %s). A second conflict on the same tick is the stop, as it always was: read the "+
+					"recorded resolve and take its merge by hand, or release the attempt to try the tick again "+
+					"with a fresh resolve — `ticfac settle %s %s %d --release \"<who>\" --carry-work` — and run "+
+					"the epic again",
+				r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, status, branch,
+				describeJobs(append(append([]runstate.Decision{}, ledger.operational...), ledger.spent...),
+					"resolve_branch"),
+				r.opts.EpicID, tick, marker.Attempt)
+		}
+		if ledger.exhausted() {
+			return "", nil, r.refuse(RefusedMerge, tick,
+				"%s does not merge onto %s (%s) and %d resolve-conflict jobs for this tick failed without "+
+					"delivering a resolution: %s. %d retries after the first is the bound, so the tick is neither "+
+					"resolved nor re-dispatched: read why the jobs did not answer, then release the attempt — "+
+					"`ticfac settle %s %s %d --release \"<who>\" --carry-work` — and run the epic again",
+				r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, len(ledger.operational),
+				describeJobs(ledger.operational, "resolve_branch"), maxOperationalRetries,
+				r.opts.EpicID, tick, marker.Attempt)
+		}
+		merged, finalize, retry, err := r.dispatchResolve(ctx, marker, head, epicHead, conflict, baseJobID, ledger)
+		if retry {
+			r.record(tick, StageRedispatched,
+				"the resolve-conflict job for %s failed without delivering a resolution (%s); it does not use "+
+					"up the tick's resolve, and another is dispatched (%d of at most %d)",
+				r.attemptName(tick, marker.Attempt), failureReason(err), len(ledger.operational)+2,
+				maxOperationalRetries+1)
+			continue
+		}
+		return merged, finalize, err
+	}
+}
 
-	// A SECOND conflict on the same tick is the stop, as today — and the
-	// first resolve is durably recorded as a decision on the run branch, so
-	// the stop survives a restart and names everything a person needs: the
-	// files, and where the first resolve's work is.
-	prior, ok, err := r.resolveDecisionOf(tick)
-	if err != nil {
-		return "", nil, err
-	}
-	if ok {
-		branch, _ := prior.Request["resolve_branch"].(string)
-		status, _ := prior.Response["status"].(string)
-		return "", nil, r.refuse(RefusedMerge, tick,
-			"%s does not merge onto %s (%s) and a resolve-conflict job already ran for this tick — its "+
-				"recorded outcome is %q and its work is on %s. A second conflict on the same tick is the stop, "+
-				"as it always was: read the recorded resolve, take its merge or settle the tick, and run the epic again",
-			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, status, branch)
-	}
+// dispatchResolve dispatches the next resolve-conflict job of the tick's
+// allowance and takes it to the merge it resolved to. `retry` reports a job
+// that failed OPERATIONALLY and whose failure is recorded, so the caller may
+// dispatch the next one.
+func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, head, epicHead string,
+	conflict *mergeConflict, baseJobID string, ledger roleJobLedger) (string, func() error, bool, error) {
+
+	tick := marker.TickID
 
 	// A resolve job an earlier incarnation dispatched but never integrated is
 	// NOT finished from its branch merely because the branch is on origin: a
@@ -186,10 +233,11 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 	// conflicted commit the job was cut at, until the job commits (epic-2jn,
 	// 4mv attempt 33). The executor's Start below is what says whether it
 	// settled; role_resume.go has the whole argument.
-	jobID := fmt.Sprintf("run-%s/tick-%s/resolve-%d", r.runID, tick, marker.Attempt)
-	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt)
+	suffix := jobOrdinalSuffix(ledger.ordinal)
+	jobID := baseJobID + suffix
+	writeRef := resolveWriteRef(r.runID, tick, marker.Attempt) + suffix
 	branch := branchOf(writeRef)
-	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt))
+	stateDir := resolveStateDir(r.execStateDir(tick, marker.Attempt)) + suffix
 
 	// The ceiling tier: the strongest worker the declared policy allows. The
 	// profile is resolved on demand, through the same routing every other
@@ -208,7 +256,7 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		err = usableProfile(r.executors, resolved)
 	}
 	if err != nil {
-		return "", nil, r.refuse(RefusedMerge, tick,
+		return "", nil, false, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and its resolve-conflict job could not be routed at the ceiling: %v. "+
 				"The tick is neither resolved nor re-dispatched; fix the routing and run the epic again",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
@@ -219,14 +267,25 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 	// executor's ordinary worktree — cut at a commit — IS the conflicted
 	// merge, markers present. A job an earlier incarnation dispatched under
 	// this identity keeps the base it was cut from, or continues from what it
-	// pushed.
+	// pushed. A job dispatched after one that failed without answering starts
+	// from the resolution that job COMMITTED, when it resolved this very
+	// conflict (vqc attempt 50's resolve committed a clean resolution and
+	// only never reported): the next worker finishes that work rather than
+	// redoing it from the markers.
+	carried := r.carriedResolution(ledger, head, epicHead)
 	job, err := r.roleJobBase(stateDir, branch, func() (string, error) {
+		if carried != "" {
+			return carried, nil
+		}
 		return r.conflictedTree(epicHead, head, marker)
 	})
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	wip := job.base
+	if wip != carried {
+		carried = ""
+	}
 
 	// Both ticks' descriptions: the attempt's own tick, and the tick(s) whose
 	// merged work sits on the other side of the conflict, read out of the
@@ -238,6 +297,11 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 			"intents in conflict are %s, routed at tier %q (%s)",
 		r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail,
 		strings.Join(append([]string{tick}, others...), " and "), tier, tierNote)
+	if carried != "" {
+		r.record(tick, StageDispatched,
+			"the resolve-conflict job %s starts from %s, the resolution an earlier resolve of this conflict "+
+				"committed before it failed without answering", jobID, short(carried))
+	}
 
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
@@ -263,7 +327,7 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
-		return "", nil, r.refuse(RefusedMerge, tick,
+		return "", nil, false, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: build its executor: %v",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
 	}
@@ -274,14 +338,14 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		// finish from the branch is the honest answer to that, not a restart.
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
 			if remote, headErr := r.git.remoteHead(branch); headErr == nil && remote != "" {
-				merged, ferr := r.finishResolveFromBranch(marker, head, epicHead, conflict, remote)
+				merged, ferr := r.finishResolveFromBranch(resolveMarker, head, epicHead, conflict, remote)
 				if ferr != nil {
-					return "", nil, ferr
+					return "", nil, false, ferr
 				}
-				return merged, r.finalizeResolve(marker, head, branch, merged, remote, conflict), nil
+				return merged, r.finalizeResolve(resolveMarker, head, merged, remote, conflict), false, nil
 			}
 		}
-		return "", nil, r.refuse(RefusedMerge, tick,
+		return "", nil, false, r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: %v",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
 	}
@@ -289,10 +353,27 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		r.record(tick, StageAdopted, "%s", note)
 	}
 
-	collected, rerr := r.collectResolve(ctx, handle, executor, resolveMarker, conflict)
+	collected, rerr := r.collectResolve(ctx, handle, executor, resolveMarker, conflict, carried)
 	var resolveHead string
 	if collected != nil && collected.Result != nil && collected.Result.Source.HeadSHA != nil {
 		resolveHead = *collected.Result.Source.HeadSHA
+	}
+	if resolveHead == "" && carried != "" {
+		// A job cut at a committed resolution that found nothing left to
+		// change: the resolution it was handed is its answer.
+		resolveHead = carried
+	}
+	if operationalFailure(collected, rerr) {
+		// The job never answered. Whatever it committed is on its branch
+		// (collect preserved it) and is recorded, so the next job can start
+		// from it; the failure does not spend the tick's resolve.
+		if resolveHead == "" || resolveHead == carried {
+			if local := r.attemptWorkHead(resolveMarker); local != "" {
+				resolveHead = local
+			}
+		}
+		recorded := r.disposeResolve(handle, executor, resolveMarker, head, resolveHead, conflict, rerr, failureOperational)
+		return "", nil, recorded && ctx.Err() == nil, rerr
 	}
 	if rerr == nil && resolveHead == "" {
 		rerr = r.refuse(RefusedMerge, tick,
@@ -305,8 +386,8 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 		merged, rerr = r.mintResolveMerge(resolveHead, head, epicHead, resolveMarker, conflict)
 	}
 	if rerr != nil {
-		r.disposeResolve(handle, executor, resolveMarker, head, conflict, rerr)
-		return "", nil, rerr
+		r.disposeResolve(handle, executor, resolveMarker, head, resolveHead, conflict, rerr, failureOnMerits)
+		return "", nil, false, rerr
 	}
 	r.record(tick, StageIntegrated,
 		"the resolve-conflict job resolved the conflict of %s (%s); the merge of %s it stands behind is minted "+
@@ -326,16 +407,17 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 			fmt.Sprintf("the resolve-conflict job's resolution of %s is integrated", tick), false)
 		return nil
 	}
-	return merged, finalize, nil
+	return merged, finalize, false, nil
 }
 
 // finalizeResolve is the finish-from-the-branch twin of the closure the
 // dispatched path returns: the merge is minted from work that already sat on
 // the remote, so the decision record is the only thing left to land, and the
 // branch the work rode on is the one to retire once it has.
-func (r *Reconciler) finalizeResolve(marker attemptHandle, head, branch, merged, resolveHead string,
+func (r *Reconciler) finalizeResolve(marker attemptHandle, head, merged, resolveHead string,
 	conflict *mergeConflict) func() error {
 
+	branch := branchOf(marker.WriteRef)
 	return func() error {
 		if err := r.recordResolveDecision(
 			Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
@@ -355,7 +437,7 @@ func (r *Reconciler) finalizeResolve(marker attemptHandle, head, branch, merged,
 // committed, it wrote a report that does not ask for a person, and it wrote
 // under no authority but its own. Every failure is the stop, naming the files.
 func (r *Reconciler) collectResolve(ctx context.Context, handle *subprocess.JobHandle, executor Executor,
-	marker attemptHandle, conflict *mergeConflict) (*subprocess.Collection, error) {
+	marker attemptHandle, conflict *mergeConflict, carried string) (*subprocess.Collection, error) {
 
 	// No checkpoint of its own here: integrate has already stated the
 	// integrating state, and every store write is a commit on the same branch
@@ -370,15 +452,19 @@ func (r *Reconciler) collectResolve(ctx context.Context, handle *subprocess.JobH
 		return r.refuse(RefusedMerge, tick, "%s does not merge onto %s (%s) and its resolve-conflict job failed: %s",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, fmt.Sprintf(format, args...))
 	}
-	return r.collectResolveJob(ctx, handle, executor, marker, failed)
+	return r.collectResolveJob(ctx, handle, executor, marker, carried, failed)
 }
 
 // collectResolveJob is collectResolve's rules with the refusal left to the
 // caller: an attempt's conflict and the base fold's (refresh_resolve.go) stop
 // under different reasons and name different sides, and the rules a
 // resolve-conflict job's collect is held to are the same for both.
+//
+// `carried` is the committed resolution the job was cut at, when it was cut
+// at one: such a job may find nothing left to change, and its empty branch
+// is then an answer — the resolution it was handed — not an undelivered one.
 func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.JobHandle, executor Executor,
-	marker attemptHandle, failed func(format string, args ...any) error) (*subprocess.Collection, error) {
+	marker attemptHandle, carried string, failed func(format string, args ...any) error) (*subprocess.Collection, error) {
 
 	tick := marker.TickID
 	if _, err := r.awaitResolve(ctx, handle, executor, marker); err != nil {
@@ -389,9 +475,16 @@ func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.J
 		return nil, failed("it could not be collected: %v", err)
 	}
 	r.record(tick, StageCollected, "%s", collectedLine("the resolve-conflict job", collected))
+	// The resolve's work is durable on the remote before anything is torn
+	// down, minted or dispatched from it — collect's own rule (tick 55i), for
+	// the same reason it holds for any attempt. It holds for a job that
+	// failed as much as for one that answered: a job that committed its
+	// resolution and never reported is where the next job starts.
+	r.preserveAttemptWork(marker)
 
+	handed := carried != "" && collected.Verdict == subprocess.VerdictNoCommits
 	switch {
-	case collected.Verdict != subprocess.VerdictReadyToMerge:
+	case collected.Verdict != subprocess.VerdictReadyToMerge && !handed:
 		return collected, failed("it answered %s and the run's verdict is %s (%s): %s. The tick is neither "+
 			"resolved nor re-dispatched",
 			roleAnswerOf(collected), collected.Verdict, collected.Result.Outcome, collected.Message)
@@ -402,10 +495,6 @@ func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.J
 		return collected, failed("it wrote under an authority that is not its own (%s)",
 			strings.Join(append(append([]string{}, collected.BoundaryViolations...), collected.ArtifactViolations...), ", "))
 	}
-	// The resolve's work is durable on the remote before anything is torn
-	// down or minted from it — collect's own rule (tick 55i), for the same
-	// reason it holds for any attempt.
-	r.preserveAttemptWork(marker)
 	return collected, nil
 }
 
@@ -792,38 +881,21 @@ func (r *Reconciler) finishResolveFromBranch(marker attemptHandle, head, epicHea
 	return merged, nil
 }
 
-// resolveDecisionOf is the recorded resolve-conflict decision of one tick,
-// whichever attempt's conflict produced it — the durable half of "a second
-// conflict on the same tick is the stop".
-func (r *Reconciler) resolveDecisionOf(tick string) (*runstate.Decision, bool, error) {
-	if r.store == nil {
-		return nil, false, nil
-	}
-	if _, err := r.store.Fetch(); err != nil {
-		return nil, false, err
-	}
-	decisions, err := r.store.Decisions()
-	if err != nil {
-		return nil, false, err
-	}
-	for i := range decisions {
-		if decisions[i].Role != RoleResolveConflict {
-			continue
-		}
-		if id, _ := decisions[i].Request["tick_id"].(string); id == tick {
-			return &decisions[i], true, nil
-		}
-	}
-	return nil, false, nil
-}
-
 // recordResolveDecision lands the resolve as a decision record on the run
 // branch: the request that was made (which conflict, which files, which
 // branch the job writes, which ticks' intents are in it) and the response
-// that came back (the merge, or the failure). One resolve per tick is
-// recordable; the second conflict a run ever meets stops naming this record.
+// that came back (the merge, or the failure). Each job of the tick's resolve
+// allowance (role_allowance.go) is one record; a conflict met after the
+// allowance is spent stops naming them.
 func (r *Reconciler) recordResolveDecision(dispatch Dispatch, marker attemptHandle, head, status,
 	merged, resolveHead string, conflict *mergeConflict, others []string) error {
+	return r.recordResolveOutcome(dispatch, marker, head, status, merged, resolveHead, conflict, others, "", "")
+}
+
+// recordResolveOutcome is recordResolveDecision with the failure's kind
+// (role_allowance.go) and its reason, for a resolve that failed.
+func (r *Reconciler) recordResolveOutcome(dispatch Dispatch, marker attemptHandle, head, status,
+	merged, resolveHead string, conflict *mergeConflict, others []string, failure, reason string) error {
 
 	if _, err := r.store.Fetch(); err != nil {
 		return err
@@ -834,9 +906,11 @@ func (r *Reconciler) recordResolveDecision(dispatch Dispatch, marker attemptHand
 	}
 	number := len(decisions) + 1
 	for _, existing := range decisions {
-		if existing.Role == RoleResolveConflict && existing.Request["tick_id"] == marker.TickID {
+		if existing.Role == RoleResolveConflict && existing.Request["tick_id"] == marker.TickID &&
+			existing.Request["job_id"] == marker.JobID {
 			// Already recorded, by an earlier incarnation of this run, for
-			// this tick: the resolve is create-if-absent, never rewritten.
+			// this job: a resolve is create-if-absent, never rewritten. Each
+			// job of the tick's allowance is a record of its own.
 			return nil
 		}
 		if existing.Decision >= number {
@@ -851,8 +925,13 @@ func (r *Reconciler) recordResolveDecision(dispatch Dispatch, marker attemptHand
 		"conflict_detail": conflict.Detail,
 		"job_id":          marker.JobID,
 	}
+	if failure != "" {
+		response["failure"] = failure
+		response["reason"] = reason
+	}
 	request := map[string]any{
 		"tick_id":           marker.TickID,
+		"attempt":           marker.Attempt,
 		"epic_id":           r.opts.EpicID,
 		"job_id":            marker.JobID,
 		"role":              RoleResolveConflict,
@@ -890,21 +969,58 @@ func (r *Reconciler) recordResolveDecision(dispatch Dispatch, marker attemptHand
 // half-resolved merge is. The failure is recorded durably too, so a later
 // incarnation that meets the same conflict stops naming the recorded resolve
 // instead of paying for a second one.
+//
+// The record carries the failure's KIND (role_allowance.go): a job that
+// failed without answering does not spend the tick's resolve, and the head it
+// left is where the next one may start. It reports whether the failure is
+// recorded — a retry is dispatched only over a recorded one, so the bound
+// holds across restarts and the loop over it always ends.
 func (r *Reconciler) disposeResolve(handle *subprocess.JobHandle, executor Executor, marker attemptHandle,
-	head string, conflict *mergeConflict, err error) {
+	head, resolveHead string, conflict *mergeConflict, err error, failure string) bool {
 
 	var refusal *Refusal
 	if !asRefusal(err, &refusal) {
-		return
+		return false
 	}
-	if derr := r.recordResolveDecision(
+	recorded := true
+	if derr := r.recordResolveOutcome(
 		Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
 			JobID: marker.JobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote},
-		marker, head, "failed", "", "", conflict, nil); derr != nil {
+		marker, head, "failed", "", resolveHead, conflict, nil, failure, failureReason(err)); derr != nil {
 		r.record(marker.TickID, StageRejected, "the failed resolve could not be recorded: %v", derr)
+		recorded = false
 	}
 	r.tearDown(handle, executor, marker, fmt.Sprintf(
 		"the resolve-conflict job for the conflict of %s failed", r.attemptName(marker.TickID, marker.Attempt)), true)
+	return recorded
+}
+
+// carriedResolution is the committed resolution of THIS conflict that the
+// latest resolve which failed without answering left behind, or "" when there
+// is none: its head must be a commit this checkout can read (its branch is
+// fetched for it), and it must start from the conflicted merge of exactly
+// `head` over exactly `epicHead` — the same conflict, over the same base. A
+// resolution of another conflict, or of this one over a base that has moved,
+// is not carried: the next job starts from a fresh conflicted merge.
+func (r *Reconciler) carriedResolution(ledger roleJobLedger, head, epicHead string) string {
+	for i := len(ledger.operational) - 1; i >= 0; i-- {
+		decision := ledger.operational[i]
+		candidate, _ := decision.Response["resolve_head"].(string)
+		if candidate == "" {
+			continue
+		}
+		if branch, _ := decision.Request["resolve_branch"].(string); branch != "" {
+			_ = r.git.fetch(branch)
+		}
+		if _, err := r.git.resolve(candidate); err != nil {
+			continue
+		}
+		if over, err := r.resolvedOver(candidate, head); err == nil && over == epicHead {
+			return candidate
+		}
+		return ""
+	}
+	return ""
 }
 
 // resolveWriteRef is the ref one tick's resolve job may write, in the same
