@@ -12,8 +12,11 @@
   "attempt": 54,
   "done_item": "A1",
   "demonstrating_check": "ticfac init && ticfac run t8u",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T20:47:01Z",
+  "triaged_at": "2026-09-27T20:47:11Z",
+  "triaged_by": "ticfac run epic-2jn absorbing tm5",
+  "promoted_as": "tm5",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "rrl",
