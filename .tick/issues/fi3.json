@@ -1,0 +1,16 @@
+{
+  "id": "fi3",
+  "title": "README's command surface section predates the cobra+fang tree",
+  "description": "README.md's prose describes the CLI only through 'Development' targets; the operator-facing story (styled help, --version, completion, man pages) that nwj added is nowhere in the README, and the old hand-rolled usage text still exists in cli.go only as the bare-invocation message. A small docs tick could fold the command surface into the README and decide whether the cli.go usage const should be pruned or derived from the tree.\n\nticfac run epic-2jn created this tick by absorbing the finding 46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2 (reported by run-epic-2jn/tick-nwj/attempt-1): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2.json on the run branch.",
+  "notes": "2026-09-27 06:06 - ticfac run epic-2jn: created by absorbing finding 46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2 — placed before the final review, which is blocked-by fi3. The decision record is .ticfac/runs/epic-2jn/absorptions/46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 06:34 - ticfac run epic-2jn: fi3 try 1 (run dispatch #6) merged into epic/2jn as 3dc3ed0a2a1a; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-nwj/attempt-1",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T04:05:58Z",
+  "updated_at": "2026-09-27T04:34:42.764717Z",
+  "closed_at": "2026-09-27T04:34:42.764717Z"
+}

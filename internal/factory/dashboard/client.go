@@ -308,11 +308,11 @@ func NewClient(baseURL, token string, httpClient *http.Client) (*Client, error) 
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	token = strings.TrimSpace(token)
 	if baseURL == "" || token == "" {
-		return nil, fmt.Errorf("no factory is configured; run 'tk factory setup' first")
+		return nil, fmt.Errorf("no factory is configured; run 'ticfac factory setup' first")
 	}
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return nil, fmt.Errorf("factory endpoint is invalid; run 'tk factory setup' to configure it")
+		return nil, fmt.Errorf("factory endpoint is invalid; run 'ticfac factory setup' to configure it")
 	}
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}

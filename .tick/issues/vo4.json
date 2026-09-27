@@ -1,0 +1,16 @@
+{
+  "id": "vo4",
+  "title": "doctor accepts `gh auth token` as a GitHub credential, but run-epic's surface reads GITHUB_TOKEN only",
+  "description": "doctor's github check reports ok when `gh auth token` answers, but the PR + CI close-out surface run-epic builds (pullRequestsForRun -\u003e forge.ResolveToken) reads GITHUB_TOKEN only. On a repo whose close-out rule init declares, a machine with gh authed but no GITHUB_TOKEN passes doctor and is still refused by run-epic at startup. Tick 9sz's `ticfac run` is planned to fetch the token from gh, which closes the gap; until then doctor's ok is optimistic, and either doctor should name which source it found or run-epic should accept gh's answer.\n\nticfac run epic-2jn created this tick by absorbing the finding 8121b4f7c18b47c7dc2b2c6d045dc14eaf93ee37006371522340dd71175642c6 (reported by run-epic-2jn/tick-o0d/attempt-3): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/8121b4f7c18b47c7dc2b2c6d045dc14eaf93ee37006371522340dd71175642c6.json on the run branch.",
+  "notes": "2026-09-27 07:22 - ticfac run epic-2jn: created by absorbing finding 8121b4f7c18b47c7dc2b2c6d045dc14eaf93ee37006371522340dd71175642c6 — placed before the final review, which is blocked-by vo4. The decision record is .ticfac/runs/epic-2jn/absorptions/8121b4f7c18b47c7dc2b2c6d045dc14eaf93ee37006371522340dd71175642c6.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 08:09 - ticfac run epic-2jn: vo4 try 1 (run dispatch #7) reported a finding the run itself decided — proposed-tick \"run-epic/settle now exec `gh auth token` at startup even for repos that declare no close-out rule\" (key b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec, severity low, for this repository) is absorbed into the running epic as tick hio, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec.json, and the draft is triaged as promoted.\n2026-09-27 08:11 - ticfac run epic-2jn: vo4 try 1 (run dispatch #7) merged into epic/2jn as b5712e7018bb; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-o0d/attempt-3",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T05:22:29Z",
+  "updated_at": "2026-09-27T06:11:19.38195Z",
+  "closed_at": "2026-09-27T06:11:19.38195Z"
+}

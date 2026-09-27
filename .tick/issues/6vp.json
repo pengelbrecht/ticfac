@@ -1,0 +1,16 @@
+{
+  "id": "6vp",
+  "title": "ticfac init always writes the PR + CI close-out rule; a repo without a GitHub origin then cannot run",
+  "description": "init.go:580-596 writes the forge-requiring close-out rule unconditionally, with no question or flag, and doctor never checks that origin parses as a GitHub remote. On a local-only or non-GitHub repo, pullRequestsForRun (forge.go:78-85) fails and the reconciler refuses to start, so init then run fails with nothing the operator can pass to fix it.\n\nticfac run epic-2jn created this tick by absorbing the finding e64e116aaa5b4347ef8e110464cf2aa3f482d59bf6bb27f5b5f8bc37833f2970 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/e64e116aaa5b4347ef8e110464cf2aa3f482d59bf6bb27f5b5f8bc37833f2970.json on the run branch.",
+  "notes": "2026-09-27 16:09 - ticfac run epic-2jn: created by absorbing finding e64e116aaa5b4347ef8e110464cf2aa3f482d59bf6bb27f5b5f8bc37833f2970 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/e64e116aaa5b4347ef8e110464cf2aa3f482d59bf6bb27f5b5f8bc37833f2970.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A1, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 16:52 - ticfac run epic-2jn: 6vp try 1 (run dispatch #36) reported a finding the run itself decided — proposed-tick \"forge.ParseRepo accepts non-GitHub hosts, so a GitLab origin passes the close-out guess and fails only at REST time\" (key a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e, severity low, for this repository) is absorbed into the running epic as tick 4zo, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e.json, and the draft is triaged as promoted.\n2026-09-27 16:54 - ticfac run epic-2jn: 6vp try 1 (run dispatch #36) merged into epic/2jn as da25d5d71f3f; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:09:23Z",
+  "updated_at": "2026-09-27T14:54:45.854224Z",
+  "closed_at": "2026-09-27T14:54:45.854224Z"
+}

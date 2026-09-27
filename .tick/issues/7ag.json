@@ -1,0 +1,17 @@
+{
+  "id": "7ag",
+  "title": "No test writes the operator's real ~/.ticfac/registry",
+  "gloss": "tests stop writing real registry",
+  "description": "eih added a registry redirect for internal/cli, but the full -short gate on epic/2jn (2026-09-27 09:2x) still left seven entries in the real ~/.ticfac/registry, pointing at deleted temp dirs: TestRunStartsDetachedAttachesAndResumesForReal, TestRunAcceptsTheRunIDSpellingOfTheEpicID, TestTheBareOverviewJSONEmitsTheSameModel, TestStatusJSONNamesADegradedTracker, TestStatusReportsTheWallClockFiringOfAnInFlightAttempt, TestWatchStartedWhileTheRunHoldsReportsTheHoldItJoined, TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote. They show up in the bare 'ticfac' overview as phantom runs. Every package whose tests start or register a run must point the registry at a temp dir, and a guard should fail when a test run leaves the real registry changed.",
+  "notes": "2026-09-27 12:20 - ticfac run epic-2jn: 7ag try 1 (run dispatch #23) reported a finding the run itself decided — defect \"Merging tick 9sz will break the build: internal/cli gets a second TestMain\" (key 33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826, severity medium, for this repository) is absorbed into the running epic as tick 5bd, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826.json, and the draft is triaged as promoted.\n2026-09-27 12:25 - ticfac run epic-2jn: 7ag try 1 (run dispatch #23) merged into epic/2jn as 17ff5150ae02; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "acceptance_criteria": "After go test -short ./..., the real ~/.ticfac/registry is byte-for-byte unchanged (a guard asserts it); every registering test uses a temp registry",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-27T09:19:01.368941Z",
+  "updated_at": "2026-09-27T10:25:39.875532Z",
+  "closed_at": "2026-09-27T10:25:39.875532Z"
+}

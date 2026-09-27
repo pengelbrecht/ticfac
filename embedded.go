@@ -49,6 +49,24 @@ func CloudProfiles() embed.FS {
 	return cloudProfilesFS
 }
 
+// herdrProfilesFS is `profiles-herdr/`: the herdr dispatch set — the
+// profiles whose executor is herdr, so each worker of the run is dispatched
+// into a herdr pane. `ticfac run` (tick 9sz) resolves it through the
+// virtual directory name profile.EmbeddedHerdr when it detects a live
+// herdr, so an operator names no filesystem path and the set a herdr run
+// resolves cannot disagree with the binary that resolved it — the same
+// reason the local set is embedded, applied to the set the old
+// incantation reached for by hand (-profiles ~/…/profiles-herdr).
+//
+//go:embed profiles-herdr
+var herdrProfilesFS embed.FS
+
+// HerdrProfiles returns the embedded herdr profile set. Paths inside it are
+// rooted at "profiles-herdr".
+func HerdrProfiles() embed.FS {
+	return herdrProfilesFS
+}
+
 // JobProtocolJSON is contracts/job-protocol.json, the schemas the reconciler
 // validates a role-result envelope against before it acts on one. Embedded for
 // the same reason: a controller run outside this checkout has no contracts
@@ -140,4 +158,20 @@ var sandboxFS embed.FS
 // are rooted at "image", e.g. "image/Dockerfile".
 func SandboxFS() embed.FS {
 	return sandboxFS
+}
+
+// SkillsFS is `skills/`: the agent skills this binary can install, shipped
+// in the repo the way ticks ships its own — so `ticfac skills install ticfac`
+// works from the executable alone, no checkout, no network (tick 8v3). The
+// skill teaches the loop an agent runs an epic with; the embed means what
+// the binary installs and what the repository reviewed are the same commit
+// by construction.
+//
+//go:embed all:skills
+var skillsFS embed.FS
+
+// SkillsFS returns the embedded skills bundle. Paths inside it are rooted at
+// `skills/`, one directory per skill.
+func SkillsFS() embed.FS {
+	return skillsFS
 }

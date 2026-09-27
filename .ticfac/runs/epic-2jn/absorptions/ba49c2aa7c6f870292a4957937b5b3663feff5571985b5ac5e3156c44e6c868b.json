@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b",
+  "tick_id": "1cs",
+  "gating": false,
+  "basis": "predicted",
+  "fallback": "no classifier is configured for gating predictions; the reporter's own claim decided",
+  "reason": "no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
+  "placement": "backlog",
+  "decided_at": "2026-09-27T10:26:25Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "35l",
+    "attempt": 18,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "d8cd01431e2c878a1225ff59f561c5cdf72c8789",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

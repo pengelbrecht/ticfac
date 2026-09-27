@@ -102,6 +102,7 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 		"tick a1",
 		"close-out does not hand over",
 		"breaks done item A1", // the hold names each finding's claim against the done (tick nfo)
+		"ticfac triage qeu",   // and teaches the everyday path, never the old 64-hex command (tick 8yn)
 	} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",
@@ -114,6 +115,14 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	if strings.Contains(result.Failure.Message, "An upstream finding routed to another repository") {
 		t.Errorf("the hold names the finding routed to another repository, which never holds a run: %s",
 			result.Failure.Message)
+	}
+	// The old shape is gone from the hold (tick 8yn): a person the stop asks
+	// for must not be sent to type the 64-hex key and the tick by hand — the
+	// friction `ticfac triage` exists to remove. The bare `ticfac finding`
+	// named for a routed promotion is fine; the command with the key in tow
+	// is not.
+	if strings.Contains(result.Failure.Message, "ticfac finding qeu") {
+		t.Errorf("the hold still teaches the old 64-hex triage: %s", result.Failure.Message)
 	}
 
 	// THE RUN CONTINUED: the tick that reported the findings closed, and so did
@@ -218,6 +227,16 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	}
 	if !strings.Contains(state.Ticks["a1"].Notes, "drafted for triage") {
 		t.Errorf("a1's notes do not name the drafted finding: %q", state.Ticks["a1"].Notes)
+	}
+	// The note teaches the everyday path (tick 8yn): `ticfac triage`, never
+	// the old `ticfac finding <epic> <64-hex> --promote-as ...` shape — a
+	// worker or person reading the tracker must not be sent to type the
+	// friction the triage surface removed.
+	if !strings.Contains(state.Ticks["a1"].Notes, "ticfac triage qeu") {
+		t.Errorf("a1's notes do not teach the everyday triage: %q", state.Ticks["a1"].Notes)
+	}
+	if strings.Contains(state.Ticks["a1"].Notes, "ticfac finding qeu") {
+		t.Errorf("a1's notes still teach the old 64-hex triage: %q", state.Ticks["a1"].Notes)
 	}
 
 	// A person triages: the local finding is promoted as a tick carrying the

@@ -1,0 +1,16 @@
+{
+  "id": "7ht",
+  "title": "skills_test's 'every ticfac \u003ccommand\u003e the skill names exists' loop is vacuous",
+  "description": "internal/cli/skills_test.go:269-288 splits SKILL.md on whitespace, so '`ticfac init`' becomes '`ticfac' (trimmed to bare ticfac, skipped) and 'init`' (no prefix); no subcommand is ever checked, and a SKILL.md naming a nonexistent command passes. Also, no --json test checks a schema field (cloud trace --json emits none, cloud_trace.go:392).\n\nticfac run epic-2jn created this tick by absorbing the finding 75515f3dd22c919d9e87d262c6e4d6a924de8f65bc20b007f5bf543716761b1e (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/75515f3dd22c919d9e87d262c6e4d6a924de8f65bc20b007f5bf543716761b1e.json on the run branch.",
+  "notes": "2026-09-27 16:10 - ticfac run epic-2jn: created by absorbing finding 75515f3dd22c919d9e87d262c6e4d6a924de8f65bc20b007f5bf543716761b1e — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/75515f3dd22c919d9e87d262c6e4d6a924de8f65bc20b007f5bf543716761b1e.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A4, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 16:43 - ticfac run epic-2jn: 7ht try 1 (run dispatch #37) merged into epic/2jn as ebb01d6dd254; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:10:33Z",
+  "updated_at": "2026-09-27T14:43:10.046744Z",
+  "closed_at": "2026-09-27T14:43:10.046744Z"
+}

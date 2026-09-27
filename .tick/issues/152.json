@@ -1,0 +1,16 @@
+{
+  "id": "152",
+  "title": "go.mod's go directive is now 1.24.2, dragged by fang's requirement",
+  "description": "Pinning fang v1.0.0 (tick nwj) required raising the module's go directive from 1.24.0 to 1.24.2 and bumping several indirect charmbracelet dependencies (cellbuf v0.0.15 and friends) to resolve an ansi API conflict with bubbletea v1.3.5's older pin. Any toolchain older than 1.24.2 can no longer build the module; if CI or another environment pins a Go toolchain explicitly, it should be checked against this floor.\n\nticfac run epic-2jn created this tick by absorbing the finding 6721b3cacde6ff8b433d22c3d0b38054705d42296f11f5efe67e8487f5569a56 (reported by run-epic-2jn/tick-nwj/attempt-1): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/6721b3cacde6ff8b433d22c3d0b38054705d42296f11f5efe67e8487f5569a56.json on the run branch.",
+  "notes": "2026-09-27 06:05 - ticfac run epic-2jn: created by absorbing finding 6721b3cacde6ff8b433d22c3d0b38054705d42296f11f5efe67e8487f5569a56 — placed before the final review, which is blocked-by 152. The decision record is .ticfac/runs/epic-2jn/absorptions/6721b3cacde6ff8b433d22c3d0b38054705d42296f11f5efe67e8487f5569a56.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 06:18 - ticfac run epic-2jn: 152 try 1 (run dispatch #5) reported a finding drafted for triage — upstream-tick \"image/README.md should point at the new go.mod-floor guard in ticfac\" (key 700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695, severity low, for pengelbrecht/ticks). Triage with `ticfac finding 2jn 700eb908701cb70b9d3745d74269370841bb19e1b3d5fb048c29243be8525695 --promote-as \u003ctick\u003e --by \"\u003cwho\u003e\"`, `--discard --by \"\u003cwho\u003e\"`, or — when it was repaired inside this epic — `--fixed-as \u003ccommit\u003e --by \"\u003cwho\u003e\"`; the tick closes and the finding rides to the close-out, which does not hand over while it is untriaged.\n2026-09-27 06:20 - ticfac run epic-2jn: 152 try 1 (run dispatch #5) merged into epic/2jn as d2c0b7501802; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-nwj/attempt-1",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T04:05:37Z",
+  "updated_at": "2026-09-27T04:20:14.029172Z",
+  "closed_at": "2026-09-27T04:20:14.029172Z"
+}

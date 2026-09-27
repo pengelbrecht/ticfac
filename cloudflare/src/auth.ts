@@ -193,6 +193,21 @@ export const SANDBOX_DISPATCH_PREFIX = "/api/sandbox";
  */
 export const BRANCH_CLAIM_PREFIX = "/api/branches";
 
+/**
+ * The phone page (ticfac tick i1r): `/status` and its install assets.
+ *
+ * Exempt from the FACTORY bearer token, and not unauthenticated: the page
+ * authenticates with the operator's credential as a TOKEN COOKIE (typed
+ * into a form, POSTed in the body, set HttpOnly), verified by
+ * `phone.ts` against this module's own stored record — the same check the
+ * bearer middleware performs, on the same secret. It is exempt from the
+ * bearer check for the same structural reason the login exists at all: a
+ * browser cannot present an Authorization header on a navigation, and a
+ * credential in the URL is the thing this page is specifically built never
+ * to do (it lands in history, in shares, in proxy logs).
+ */
+export const STATUS_PAGE_PATH = "/status";
+
 /** The slice of the environment this module reads. */
 export interface FactoryAuthEnv {
   /** Worker secret: the derived hash of the current factory token. */
@@ -370,6 +385,7 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === GIT_PREFIX || pathname.startsWith(`${GIT_PREFIX}/`)) return true;
   if (pathname === REVIEW_PREFIX) return true;
   if (pathname === BRANCH_CLAIM_PREFIX) return true;
+  if (pathname === STATUS_PAGE_PATH || pathname.startsWith(`${STATUS_PAGE_PATH}/`)) return true;
   return pathname === WEBHOOK_PREFIX || pathname.startsWith(`${WEBHOOK_PREFIX}/`);
 }
 

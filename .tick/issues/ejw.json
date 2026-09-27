@@ -2,10 +2,11 @@
   "id": "ejw",
   "title": "Cloud parity: ticfac run \u003cepic\u003e --cloud uses the same verbs, view and triage",
   "description": "ticfac run \u003cepic\u003e --cloud submits to the configured factory and attaches the same live view; the overview, triage and exit codes behave identically for cloud runs. Replaces the separate 'ticfac cloud run/status/logs' surface for everyday use (those stay as expert commands).",
-  "status": "open",
+  "notes": "2026-09-27 13:20 - ticfac run epic-2jn: ejw try 1 (run dispatch #25) reported a finding the run itself decided — defect \"Cloud runs' status model reads their records under the factory run id, but the container writes them under epic-\u003cepic-id\u003e\" (key f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762, severity medium, for this repository) is absorbed into the running epic as tick tem, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762.json, and the draft is triaged as promoted.\n2026-09-27 13:23 - ticfac run epic-2jn: ejw try 1 (run dispatch #25) merged into epic/2jn as 943d950d5c99; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "9sz"
   ],
@@ -13,5 +14,6 @@
   "acceptance_criteria": "--cloud runs, attaches, resumes and triages exactly as a local run from the operator's point of view; a test against a fake factory covers each verb",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T09:28:28.284955Z",
-  "updated_at": "2026-09-26T09:28:59.479454Z"
+  "updated_at": "2026-09-27T11:23:34.151374Z",
+  "closed_at": "2026-09-27T11:23:34.151374Z"
 }

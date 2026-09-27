@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-6dh-2-go",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "6dh",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "7ee4daed885709ba42773caae49b8d1d67013a91",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "integrated",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-27T06:30:49Z",
+  "finished_at": "2026-09-27T06:30:55Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "",
+    "stderr": "# github.com/pengelbrecht/ticfac/internal/cli\ninternal/cli/status_model.go:87:17: undefined: forge.ResolveToken\n# github.com/pengelbrecht/ticfac/internal/cli\n# [github.com/pengelbrecht/ticfac/internal/cli]\nvet: internal/cli/status_model.go:87:17: undefined: forge.ResolveToken\n",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:5b56f567daa0ff676398b0dc84410e3248155e48eb4f6a7a1a5cd2d794df7375",
+  "persistence_uri": "git:refs/heads/epic/2jn:.ticfac/runs/epic-2jn/evidence/gate-6dh-2-go.json"
+}

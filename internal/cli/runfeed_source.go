@@ -60,6 +60,7 @@ const defaultCloudFeedInterval = defaultCloudLogsInterval
 type cloudFeedSource struct {
 	client *cloudClient
 	runID  string
+	epic   string // the run record's own epic id, as the route that resolved the feed served it
 	warn   io.Writer
 
 	mu    sync.Mutex
@@ -131,6 +132,61 @@ func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int
 	return []byte(text[cursor:]), size, nil
 }
 
+// epicRunIDPrefix is the local run id's own shape: `run-epic <id>` derives
+// "epic-<id>" from the epic id it is given, so every local run is named by
+// its epic. It is also the shape an operator has after `ticfac run <epic>
+// --cloud` — which is why feedSource treats it as the one id that may name a
+// run on either host (tick nyi).
+const epicRunIDPrefix = "epic-"
+
+// epicIDOfRunID is the epic id a local run id names, when it names one.
+func epicIDOfRunID(runID string) (string, bool) {
+	if rest, ok := strings.CutPrefix(runID, epicRunIDPrefix); ok && rest != "" {
+		return rest, true
+	}
+	return "", false
+}
+
+// cloudRunForEpic resolves the factory run THIS checkout's project holds for
+// the epic a run id names — the run `ticfac run <epic> --cloud` started or
+// resumed — when nothing local answers that id (tick nyi). The answers that
+// keep the local surface's own are the empty ones: a checkout that names no
+// GitHub project, no configured factory, or a factory that holds no run the
+// project can claim. A factory that cannot be READ is the one error worth
+// a line of its own: the run may well be there, and "nothing to watch here"
+// would answer a question nobody asked.
+//
+// The returned note is the resolution an operator or an agent reads on
+// stderr: the epic id they typed and the factory's run id it names.
+func cloudRunForEpic(ctx context.Context, repo, runID string) (resolved, note string, err error) {
+	epicID, ok := epicIDOfRunID(runID)
+	if !ok {
+		return "", "", nil
+	}
+	project, err := cloudProjectOf(repo)
+	if err != nil {
+		// No attribution is possible: this checkout cannot say which of the
+		// factory's runs is its, so the local answer stands, unnamed.
+		return "", "", nil
+	}
+	client, err := newCloudClient()
+	if err != nil {
+		// No factory on this machine: the local answer stands.
+		return "", "", nil
+	}
+	record, err := cloudRunsForEpic(ctx, client, project, epicID)
+	if err != nil {
+		return "", "", err
+	}
+	if record == nil {
+		return "", "", nil
+	}
+	return record.RunID,
+		fmt.Sprintf("# %s has no run here; the factory holds cloud run %s for it — answering for that run",
+			runID, record.RunID),
+		nil
+}
+
 // feedSource picks where run runID's feed is read from: this checkout when it
 // holds the run's feed, else the factory when the run's own id names a cloud
 // run. The run's ID names its host — a local run is named by its epic id, a
@@ -139,17 +195,45 @@ func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int
 // by a checkout it could not have run in. A local feed standing here is the
 // run's own; everything else is decided by the id's shape.
 //
+// The ONE exception to the shape rule is the local id that names no local
+// run at all (tick nyi): `ticfac run <epic> --cloud` starts a run whose id
+// the operator never sees — what they have is the epic id — so status, watch
+// and events resolve it against the factory's index for THIS checkout's
+// project before answering "nothing here". The resolution is returned as
+// the third value so the commands can name the run they answer for.
+//
 // When no factory is configured, or the factory does not know the run, the
 // LOCAL source is returned: the command then answers exactly as it did
 // before this tick.
-func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runfeed.Source, string, error) {
+func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runfeed.Source, string, string, error) {
 	path := runfeed.Path(repo, runID)
 	if _, err := os.Stat(path); err == nil {
-		return runfeed.FileSource(path), "local", nil
+		return runfeed.FileSource(path), "local", runID, nil
 	}
 	if !looksLikeCloudRunID(runID) {
-		// An id that cannot be a cloud run's can only be answered here.
-		return runfeed.FileSource(path), "local", nil
+		// An epic-shaped id with no feed HERE may still name a run the
+		// factory hosts for this checkout's project. Anything else — a bare
+		// word, a local id this checkout has no feed for — keeps the local
+		// answer it always had.
+		resolved, note, err := cloudRunForEpic(ctx, repo, runID)
+		switch {
+		case err != nil:
+			// A factory that cannot be read is a fact about the question, not
+			// a quiet fallthrough: the run may be there.
+			return nil, "", "", err
+		case resolved != "":
+			fmt.Fprintln(stderr, note)
+			client, err := newCloudClient()
+			if err != nil {
+				return nil, "", "", err
+			}
+			// The epic id the operator typed rides the source (tick gtk): the
+			// resolved run id is the factory's `run_` plus hex, which spells
+			// no epic for the clearing commands to be addressed by.
+			epicID, _ := epicIDOfRunID(runID)
+			return &cloudFeedSource{client: client, runID: resolved, epic: epicID, warn: stderr}, "cloud", resolved, nil
+		}
+		return runfeed.FileSource(path), "local", runID, nil
 	}
 
 	// A truncated cloud run id is resolved before any read is made, the
@@ -157,7 +241,7 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 	// true of the prefix reads as a verdict on the run).
 	resolved, note, err := resolveCloudRunID(ctx, runID)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if note != "" {
 		fmt.Fprintln(stderr, note)
@@ -169,20 +253,23 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 		// The id names a cloud run and no factory is configured: that is
 		// not a missing local feed, and saying so would be a confident
 		// negative about a run this checkout never held.
-		return nil, "", err
+		return nil, "", "", err
 	}
 	data, err := client.request(ctx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
 	if err != nil {
 		// The id names a cloud run: a factory that cannot be asked, or one
 		// that does not know the run, is a fact about THIS run's feed, not
 		// something a local misspelling should paper over.
-		return nil, "", err
+		return nil, "", "", err
 	}
 	var response cloudStatusResponse
 	if err := decodeCloudJSON(data, &response); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
-	return &cloudFeedSource{client: client, runID: runID, warn: stderr}, "cloud", nil
+	// The record's own epic id rides the source: the clearing commands a
+	// hold names are addressed by it, and a cloud run's id (run_ plus hex)
+	// does not spell the epic the way a local run's does (tick gtk).
+	return &cloudFeedSource{client: client, runID: runID, epic: response.Run.Epic, warn: stderr}, "cloud", runID, nil
 }
 
 // looksLikeCloudRunID reports whether an id can only name a cloud run:

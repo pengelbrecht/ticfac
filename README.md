@@ -31,6 +31,121 @@ implicitly missing:
 The same table lives in `ticfac herd --help`, where the consumer (the
 plugin, or a person) looks.
 
+## Install
+
+One command, no build:
+
+    curl -fsSL https://raw.githubusercontent.com/pengelbrecht/ticfac/main/install.sh | sh
+
+That URL is the stable install URL: it serves `install.sh` from this
+repository's `main`, and the script resolves the latest release, downloads
+the archive for your platform (darwin and linux, amd64 and arm64), and
+installs `ticfac` and `ticfac-exec-subprocess` side by side into
+`~/.local/bin` (override with `INSTALL_DIR`) — side by side because a run
+refuses to start unless the local executor sits beside the ticfac that
+dispatches it. Then:
+
+    ticfac doctor                    # what a run still needs on this machine
+    ticfac skills install ticfac     # the execution skill, the way tk's installs
+
+Releases are cut by pushing a `v*` tag: `.github/workflows/release.yml`
+runs goreleaser with `.goreleaser.yaml`, which builds both binaries for
+every platform, packs each platform's pair in one archive, and publishes
+the archives, `checksums.txt` and release notes generated from the commit
+log. The whole distribution is guarded by `internal/release`'s tests — the
+platform matrix, the archive naming and the repository the release publishes
+to are pinned there, and the installer runs end to end against a fake forge
+in the per-tick gate.
+
+Cutting one is one command:
+
+    make release VERSION=vX.Y.Z
+
+run from a merged `main` — the target cuts an annotated tag and pushes it,
+and the workflow does the rest. The FIRST release is part of the first merge
+to `main`, not an afterthought: until a `v*` tag exists, `releases/latest`
+has nothing to resolve to and the stable install URL above answers nothing,
+so the one-command install is unreachable.
+
+## Command surface
+
+Every command runs on one cobra tree, styled by [fang](https://github.com/charmbracelet/fang)
+(tick nwj) — and every operator-facing text is DERIVED from that tree rather
+than maintained beside it:
+
+- `ticfac --help`, and `ticfac help <command>`, render the styled help from
+  the tree; a command's flags live on the same declarations its body parses,
+  so `ticfac <command> --help` lists exactly what the command accepts.
+- An unknown command or flag is a styled refusal with exit 2, not a usage
+  dump repeated on every error. The styling is stripped for anything that is
+  not a terminal — a pipe, a test buffer, CI — so scripts and tests see
+  exactly the words.
+- `--version` reports this build (the same value `ticfac version` carries
+  beside the contract bundle).
+- `ticfac completion bash|zsh|fish` writes the shell completion, generated
+  from the tree.
+- The hidden `ticfac man` renders the whole tree as man pages (mango),
+  writing roff to stdout — the same surface a terminal reads, in the format
+  `man` presents.
+- Every command takes `--json` (tick 8v3): ONE versioned document on stdout —
+  the schema named inside it (`ticfac.<command>.v1`, beside the older
+  `ticfac.status.v1` and `ticfac.job-status.v1`), the command's prose on
+  stderr, and — where the answer is an outcome of the work — a `state` word
+  the exit code agrees with. A live stream (`--follow`, the dashboard) is
+  not one document and says so.
+- A bare `ticfac` is the overview (2qz): every run this checkout and the
+  factory know, attention first — every run held or failed names its reason
+  and the one command that clears it; `--json` emits the versioned overview
+  model, one status model per run. `ticfac --help` remains the place a
+  person reads the whole tree.
+
+| command | what it does |
+|---|---|
+| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`); another project's cloud runs are listed from their own record and feed alone — this repo's records, tracker and PR are never read for them, and their rows name no command |
+| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`); with `--cloud` the same verbs, view and triage drive your cloud factory: submit the epic, attach the same live view, run it again to attach to this project's run or resume a finished or frozen one |
+| `ticfac run-epic <epic-id>` | run one epic through the reconciler — the foreground form scripts drive; `ticfac run` is this command, started detached with the defaults decided |
+| `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the guessed close-out rule — `pr` when origin names a GitHub repository, `none` otherwise; `--closeout` overrides (refuses to overwrite) |
+| `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
+| `ticfac settle <epic-id> <tick-id> <attempt>` | release an attempt nobody can address |
+| `ticfac findings <epic-id>` | list the worker findings drafted for triage |
+| `ticfac finding <epic-id> <key>` | triage one drafted finding |
+| `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
+| `ticfac status <run-id>` | is the run alive, and when did it last say anything; an epic id with no run here answers the run the factory holds for this checkout's project |
+| `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
+| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person, 7 cancelled |
+| `ticfac version` | report this build and the contract bundle it serves |
+| `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
+| `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
+| `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
+| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface) |
+
+Exit codes are the contract a script branches on — every command's process
+code is one of this table, the same words in `ticfac --help` and in every
+`--json` document's `state` field:
+
+| code | name | meaning |
+|---|---|---|
+| `0` | done | the command did its work |
+| `1` | failed | a failure that is not a usage mistake — a refused action, an unreadable store, a run that stopped over a repair another run can make (the refusal names the reason class), a run whose own terminal line says it failed (watch, run: the line names what did not pass) |
+| `2` | usage | a malformed invocation: wrong flags, wrong argument count, a refusal to guess |
+| `3` | held | the run ended holding something only a person can move (run-epic, run, watch): the reason class is the refusal's reason or the wait kind in the line and the --json document — e.g. finding_untriaged, merge; in the cloud, factory and skills family this code keeps tk's meaning, not inside a git repository |
+| `4` | missing | a lookup that honestly came back empty: a missing epic, a missing tick |
+| `5` | running | the command ended while the run is still in flight: `ticfac run` detached with the run going, a watch interrupted on a live run — the work continues, nothing is wrong |
+| `6` | io | an unreadable local file the command needs |
+| `7` | cancelled | a run that was stopped deliberately before it finished (run-epic, run, watch): its own terminal line names the stop and why — the work is neither done nor failed, and nothing is held for a person |
+
+Two documented exceptions: `ticfac status` exits the run's liveness answer
+(0 alive, 1 not) rather than the command's own success — the question it
+exists to answer — and a run-epic killed by a signal exits the shell's
+convention (130/143), not the table. The signal's RUN still classifies:
+a person's Ctrl-C (SIGINT) writes its run_died line led by the cancelled
+word, so a watch of that run answers the cancelled class (7), never the
+failed class — a SIGTERM eviction stays a death (1).
+
+The section is pinned by a test (`internal/cli/readme_test.go`): a command
+added to the tree fails the suite until this table names it, so the README
+cannot lag the tree the way it once did.
+
 ## Contracts
 
 `contracts/` is a **vendored, pinned copy** of the ticks contract bundle —
@@ -96,9 +211,12 @@ four things, and the guard fails it otherwise:
 
 The last is the exception, and the bar is narrow: the test is the only proof
 that a path the run depends on works, and a regression in it would be
-expensive and silent. Today that is `internal/reconcile/supervise_test.go`'s
+expensive and silent. Today those are `internal/reconcile/supervise_test.go`'s
 three supervision tests (16.2s) — the continuation loop is what now keeps an
-autonomous run alive across resumable stops, and nothing else proves it.
+autonomous run alive across resumable stops, and nothing else proves it — and
+`internal/release`'s install test — the tick-4yb acceptance is a machine that
+never built ticfac installing it with one command and running `ticfac doctor`,
+and a broken installer ships silently broken releases.
 "This test is important" is not the bar; nearly every test is important, which
 is how a fast gate becomes a slow one. So the exception is bounded rather than
 argued: each `gate:` line carries a measured cost, the costs are summed against
@@ -127,3 +245,19 @@ tag, so releases upgrade the factory: configure `CLOUDFLARE_API_TOKEN`,
 skips the deploy with a warning naming what is missing — the factory is the
 operator's opt-in, not a service this repository runs.
 
+
+## Following the factory from a phone
+
+The deployed factory serves `/status` — a mobile-first, read-only page an
+operator signs into with the factory token (typed into a form, kept in an
+HttpOnly cookie, never in a URL) and installs to a phone home screen as a
+PWA. Every run the factory can see is listed attention first, the same view a
+bare `ticfac` prints: cloud runs live from the factory's own records, local
+runs from the status snapshots they push when opted in —
+`ticfac run-epic --status-push` per run, or once for the machine by setting
+`TICFAC_STATUS_PUSH=1` (the flag always wins; needs a configured factory;
+always best-effort). A local run pauses when its laptop sleeps, so the page
+marks an old local row PAUSED/STALE and says why rather than looking stuck.
+The same pushes drive the factory's Telegram alerts — a run needing a person (with the
+reason and the one command that clears it), an epic done, a run failed — one
+message per stop, deduplicated and rate-limited.

@@ -49,10 +49,13 @@ import (
 )
 
 // endToEndPackages are the packages whose tests build real git repositories
-// and spawn real worker processes, with the constructors that do it. These
-// three are the whole of the gate's old cost: measured on a quiet host they
-// ran 180s, 176s and 113s while every other package in the repository came to
-// ~270s between them.
+// or spawn real worker processes, with the constructors that do it. The
+// first three are the whole of the gate's old cost: measured on a quiet host
+// they ran 180s, 176s and 113s while every other package in the repository
+// came to ~270s between them. internal/release builds and installs the
+// binaries the release ships against a fake forge; its one harness test
+// claims a priced place IN the gate below, and belongs here to say what it
+// is.
 //
 // A new package that grows a harness of its own belongs in this table. Nothing
 // can force that entry to be added — but a package outside the table cannot
@@ -61,6 +64,7 @@ var endToEndPackages = map[string][]string{
 	filepath.Join("internal", "reconcile"):     {"newFixture", "newRepo", "cloneRepo"},
 	filepath.Join("internal", "exec", "herdr"): {"newHarness", "newRepo"},
 	filepath.Join("internal", "runstate"):      {"newOrigin"},
+	filepath.Join("internal", "release"):       {"newInstallHarness"},
 	// The sandbox image's scripts, run for real against stub binaries and
 	// real git (tick r6w moved the suite here from ticks with image/). ~200s
 	// serial: CI's `make test` pays for it, the per-tick gate does not.

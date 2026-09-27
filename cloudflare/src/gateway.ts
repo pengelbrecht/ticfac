@@ -230,7 +230,7 @@ export function gatewayConfig(env: Env): GatewayConfigResult {
       ok: false,
       detail:
         "no AI_GATEWAY_BASE_URL is configured — all cloud model traffic must go through " +
-        "the operator's AI Gateway; run `tk factory setup` to configure one",
+        "the operator's AI Gateway; run `ticfac factory setup` to configure one",
     };
   }
 
@@ -241,13 +241,13 @@ export function gatewayConfig(env: Env): GatewayConfigResult {
   } catch {
     return {
       ok: false,
-      detail: `AI_GATEWAY_BASE_URL is not a base URL (${base}) — run \`tk factory setup\` to configure one`,
+      detail: `AI_GATEWAY_BASE_URL is not a base URL (${base}) — run \`ticfac factory setup\` to configure one`,
     };
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     return {
       ok: false,
-      detail: `AI_GATEWAY_BASE_URL is not an http(s) base URL (${base}) — run \`tk factory setup\` to configure one`,
+      detail: `AI_GATEWAY_BASE_URL is not an http(s) base URL (${base}) — run \`ticfac factory setup\` to configure one`,
     };
   }
   if (VENDOR_HOSTS.includes(parsed.hostname)) {
@@ -255,7 +255,7 @@ export function gatewayConfig(env: Env): GatewayConfigResult {
       ok: false,
       detail:
         `AI_GATEWAY_BASE_URL points straight at the vendor (${parsed.hostname}) — that is a ` +
-        "vendor default, not a gateway; run `tk factory setup`",
+        "vendor default, not a gateway; run `ticfac factory setup`",
     };
   }
 
@@ -305,7 +305,7 @@ export function modelRoutingComplaint(env: Env): string | null {
   if (factoryBaseURL(env) === null) {
     return (
       "this deployment does not know its own base URL (FACTORY_BASE_URL), so a run's model " +
-      "traffic would have nowhere to present its gateway token; re-run `tk factory deploy`"
+      "traffic would have nowhere to present its gateway token; re-run `ticfac factory deploy`"
     );
   }
   return null;
@@ -845,7 +845,7 @@ export async function proxyModelRequest(
       error: "provider_not_configured",
       detail:
         `this factory has no ${provider.secret} behind its gateway, so it cannot route ` +
-        `${slug} traffic; run \`tk factory setup\` to configure the provider`,
+        `${slug} traffic; run \`ticfac factory setup\` to configure the provider`,
     });
   }
 
@@ -971,7 +971,7 @@ export function spendFailureRemedy(kind: SpendFailureKind): string {
   switch (kind) {
     case "not_configured":
       return (
-        "run `tk factory setup --cloudflare-api-token <token>` to configure gateway log " +
+        "run `ticfac factory setup --cloudflare-api-token <token>` to configure gateway log " +
         "access, or remove RUN_MAX_COST_USD to run without a cost budget"
       );
     case "request_rejected":
@@ -1190,7 +1190,7 @@ export async function fetchRunSpend(
       kind: "not_configured",
       detail:
         `AI_GATEWAY_BASE_URL (${config.config.base_url}) does not name a Cloudflare account and ` +
-        "gateway, so its logs cannot be read; run `tk factory setup`",
+        "gateway, so its logs cannot be read; run `ticfac factory setup`",
     };
   }
   const token = textVar(env.CLOUDFLARE_API_TOKEN);
@@ -1200,7 +1200,7 @@ export async function fetchRunSpend(
       kind: "not_configured",
       detail:
         "no CLOUDFLARE_API_TOKEN is configured, so gateway spend cannot be read — run " +
-        "`tk factory setup --cloudflare-api-token <token>` to enable cost telemetry",
+        "`ticfac factory setup --cloudflare-api-token <token>` to enable cost telemetry",
     };
   }
 

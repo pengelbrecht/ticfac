@@ -235,7 +235,7 @@ func TestCallsNameTheRemedyForARejectedToken(t *testing.T) {
 		return http.StatusForbidden, map[string]any{"success": false}
 	})
 	_, err := client.Calls(context.Background(), "run_1")
-	if err == nil || !strings.Contains(err.Error(), "tk factory setup --cloudflare-api-token") {
+	if err == nil || !strings.Contains(err.Error(), "ticfac factory setup --cloudflare-api-token") {
 		t.Fatalf("a rejected token does not name its remedy: %v", err)
 	}
 
@@ -291,7 +291,7 @@ func TestConfigFromNamesWhichHalfIsMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if _, err := ConfigFrom(file); err == nil || !strings.Contains(err.Error(), "tk factory setup") {
+	if _, err := ConfigFrom(file); err == nil || !strings.Contains(err.Error(), "ticfac factory setup") {
 		t.Fatalf("an unconfigured gateway does not name setup: %v", err)
 	}
 

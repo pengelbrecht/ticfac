@@ -1,0 +1,48 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "plan-repair",
+  "request": {
+    "epic_id": "2jn",
+    "failing_checks": [
+      "go"
+    ],
+    "gate_failures": "go (fail)",
+    "gate_sha": "c104a94350dc6a0ca565a812e8c5d8187869fa2b",
+    "job_id": "run-epic-2jn/tick-9sz/attempt-16",
+    "output_schema": "ticfac.job-result.plan-repair.v1",
+    "repair_branch": "ticfac/run-epic-2jn/tick-9sz/attempt-16",
+    "role": "plan-repair",
+    "source_grade": "write",
+    "tick_id": "9sz"
+  },
+  "response": {
+    "gate_failures": "go (fail)",
+    "job_id": "run-epic-2jn/tick-9sz/attempt-16",
+    "merge": "ea4e00240b4286ac3aad4cdc6ba70de9948ce94a",
+    "repair_head": "c6b575576bab191cf21852848ab8d29ed6431b57",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T10:04:10Z",
+  "answered_at": "2026-09-27T10:04:10Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "9sz",
+    "attempt": 16,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "4107b9432f8df4b2a494416ba5ff00ca42c40abe",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "plan-repair",
+    "tier": null,
+    "profile_digest": "sha256:be835a33fa1a726510c70da635ae8359bb0803c752cd67a6d35578bbd4e86ad6",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

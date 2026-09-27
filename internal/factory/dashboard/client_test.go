@@ -172,7 +172,7 @@ func TestAPIErrorCarriesTheFactorysOwnDetail(t *testing.T) {
 }
 
 func TestNewClientRefusesAnUnconfiguredFactoryByName(t *testing.T) {
-	if _, err := NewClient("", "", nil); err == nil || !strings.Contains(err.Error(), "tk factory setup") {
+	if _, err := NewClient("", "", nil); err == nil || !strings.Contains(err.Error(), "ticfac factory setup") {
 		t.Fatalf("an unconfigured factory must name the command that fixes it, got %v", err)
 	}
 	if _, err := NewClient("factory.example.com", "token", nil); err == nil {

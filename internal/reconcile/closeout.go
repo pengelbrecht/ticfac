@@ -584,9 +584,13 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 	}
 }
 
-// repoConfigPath is where the run reads the target repository's own config:
-// beside the runners.toml the gate reads, in the same `.tick/`.
-func repoConfigPath(repo string) string {
+// RepoConfigPath is where the run reads the target repository's own config:
+// beside the runners.toml the gate reads, in the same `.tick/`. Exported
+// because the host's own surface builder reads the close-out rule from the
+// same file the reconciler will (tick hio): the credential ladder runs only
+// when that rule says a forge is needed, and the two reads must resolve the
+// same path or the host's answer and the reconciler's could disagree.
+func RepoConfigPath(repo string) string {
 	return filepath.Join(repo, ".tick", "config.md")
 }
 

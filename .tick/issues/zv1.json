@@ -1,0 +1,14 @@
+{
+  "id": "zv1",
+  "title": "TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote fails at base on this shared host: temp tree ticfac-registry-guard-* left behind",
+  "description": "Running the full (non-short) internal/cli suite fails at the base commit (verified with my changes stashed) on 'the SIGTERM exit left its temp trees behind: [ticfac-registry-guard-\u003cpid\u003e]'. The test skips under -short, so `make gate` is unaffected, but `make test` on this host fails regardless of any tick's work. Likely the shared-machine-state class learnings already record (7ag: sibling suites write ~/.ticfac/registry mid-gate), i.e. environment, not tree.\n\nticfac run epic-2jn filed this backlog tick from the finding 4072b56812f8956157f430a3bdebcf54c87a7a25aaf2fb88ab9c243ab7379500 (reported by run-epic-2jn/tick-4nq/attempt-48): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/4072b56812f8956157f430a3bdebcf54c87a7a25aaf2fb88ab9c243ab7379500.json on the run branch.",
+  "notes": "2026-09-27 20:02 - ticfac run epic-2jn: created by absorbing finding 4072b56812f8956157f430a3bdebcf54c87a7a25aaf2fb88ab9c243ab7379500 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-2jn/absorptions/4072b56812f8956157f430a3bdebcf54c87a7a25aaf2fb88ab9c243ab7379500.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-4nq/attempt-48",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T18:02:20Z",
+  "updated_at": "2026-09-27T18:02:28.404497Z"
+}

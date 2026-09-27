@@ -1,0 +1,16 @@
+{
+  "id": "53k",
+  "title": "ticfac run's herdr panes drop runners.toml effort, args and socket: run-epic builds executorFactory with an empty gate path",
+  "description": "run never forwards --gate, and cli.go:339 captures *fl.gate (\"\") in executorFactory before reconcile defaults GateConfig to .tick/runners.toml. spawnArgv reads \"\", treats ENOENT as 'routes nothing', and launches claude without effort, pi without the --approve init writes, and at the default socket even when orchestration.socket is where run detected herdr. Pre-existing in executor.go, but ticfac run makes it the default path.\n\nticfac run epic-2jn created this tick by absorbing the finding d1fd2267c6ff8d2ff491b7c0f4d4821663cb9a7d3395a05f84a2e5de9931a522 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/d1fd2267c6ff8d2ff491b7c0f4d4821663cb9a7d3395a05f84a2e5de9931a522.json on the run branch.",
+  "notes": "2026-09-27 16:08 - ticfac run epic-2jn: created by absorbing finding d1fd2267c6ff8d2ff491b7c0f4d4821663cb9a7d3395a05f84a2e5de9931a522 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/d1fd2267c6ff8d2ff491b7c0f4d4821663cb9a7d3395a05f84a2e5de9931a522.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A1, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 16:23 - ticfac run epic-2jn: 53k try 1 (run dispatch #34) merged into epic/2jn as bb824bebe380; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:08:41Z",
+  "updated_at": "2026-09-27T14:23:06.324118Z",
+  "closed_at": "2026-09-27T14:23:06.324118Z"
+}

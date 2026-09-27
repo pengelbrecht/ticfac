@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
-
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The `.gitignore` fragment, asserted with git itself.
@@ -175,7 +173,10 @@ func TestThisRepositoryCarriesTheInstalledFragment(t *testing.T) {
 
 func gitIgnores(t *testing.T, root, path string) bool {
 	t.Helper()
-	cmd := exec.Command(gitbin.Path(), "check-ignore", "-q", "--no-index", path)
+	// gitCommand, like every other git this suite starts (tick 35l): a
+	// check-ignore is a read, but the rule reaches every git or it is not a
+	// rule, and this is a git in a repository the test is about to delete.
+	cmd := gitCommand("check-ignore", "-q", "--no-index", path).command(root)
 	cmd.Dir = root
 	err := cmd.Run()
 	if err == nil {

@@ -1,0 +1,265 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-2jn",
+  "epic_id": "2jn",
+  "sequence": 426,
+  "state": "completed",
+  "reason": "every tick of 2jn is closed behind the integrated gate",
+  "updated_at": "2026-09-27T20:57:13Z",
+  "ticks": [
+    {
+      "tick_id": "nwj",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "6dh",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "o0d",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "sg5",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "2qz",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "89m",
+      "state": "closed",
+      "attempt": 11
+    },
+    {
+      "tick_id": "9sz",
+      "state": "closed",
+      "attempt": 16
+    },
+    {
+      "tick_id": "i1r",
+      "state": "closed",
+      "attempt": 21
+    },
+    {
+      "tick_id": "8v3",
+      "state": "closed",
+      "attempt": 24
+    },
+    {
+      "tick_id": "ejw",
+      "state": "closed",
+      "attempt": 25
+    },
+    {
+      "tick_id": "4yb",
+      "state": "closed",
+      "attempt": 29
+    },
+    {
+      "tick_id": "xbp",
+      "state": "closed",
+      "attempt": 32
+    },
+    {
+      "tick_id": "rrl",
+      "state": "closed",
+      "attempt": 54
+    },
+    {
+      "tick_id": "152",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "fi3",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "vo4",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "8yn",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "hio",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "aj9",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "fc2",
+      "state": "closed",
+      "attempt": 14
+    },
+    {
+      "tick_id": "9oo",
+      "state": "closed",
+      "attempt": 15
+    },
+    {
+      "tick_id": "eih",
+      "state": "closed",
+      "attempt": 22
+    },
+    {
+      "tick_id": "35l",
+      "state": "closed",
+      "attempt": 27
+    },
+    {
+      "tick_id": "7ag",
+      "state": "closed",
+      "attempt": 23
+    },
+    {
+      "tick_id": "5bd",
+      "state": "closed",
+      "attempt": 26
+    },
+    {
+      "tick_id": "tem",
+      "state": "closed",
+      "attempt": 28
+    },
+    {
+      "tick_id": "gwi",
+      "state": "closed",
+      "attempt": 30
+    },
+    {
+      "tick_id": "ogv",
+      "state": "closed",
+      "attempt": 31
+    },
+    {
+      "tick_id": "4mv",
+      "state": "closed",
+      "attempt": 43
+    },
+    {
+      "tick_id": "53k",
+      "state": "closed",
+      "attempt": 34
+    },
+    {
+      "tick_id": "5o5",
+      "state": "closed",
+      "attempt": 35
+    },
+    {
+      "tick_id": "6vp",
+      "state": "closed",
+      "attempt": 36
+    },
+    {
+      "tick_id": "7ht",
+      "state": "closed",
+      "attempt": 37
+    },
+    {
+      "tick_id": "9ss",
+      "state": "closed",
+      "attempt": 38
+    },
+    {
+      "tick_id": "bot",
+      "state": "closed",
+      "attempt": 39
+    },
+    {
+      "tick_id": "gtk",
+      "state": "closed",
+      "attempt": 40
+    },
+    {
+      "tick_id": "nyi",
+      "state": "closed",
+      "attempt": 41
+    },
+    {
+      "tick_id": "wcl",
+      "state": "closed",
+      "attempt": 47
+    },
+    {
+      "tick_id": "4zo",
+      "state": "closed",
+      "attempt": 42
+    },
+    {
+      "tick_id": "rix",
+      "state": "closed",
+      "attempt": 49
+    },
+    {
+      "tick_id": "bkg",
+      "state": "closed",
+      "attempt": 44
+    },
+    {
+      "tick_id": "il6",
+      "state": "closed",
+      "attempt": 46
+    },
+    {
+      "tick_id": "4nq",
+      "state": "closed",
+      "attempt": 48
+    },
+    {
+      "tick_id": "vqc",
+      "state": "closed",
+      "attempt": 51
+    },
+    {
+      "tick_id": "8d6",
+      "state": "closed",
+      "attempt": 52
+    },
+    {
+      "tick_id": "c2g",
+      "state": "closed",
+      "attempt": 53
+    },
+    {
+      "tick_id": "tm5",
+      "state": "closed",
+      "attempt": 55
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "91580227ffac94b27e25ed618f0d34d9db15716f",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:be835a33fa1a726510c70da635ae8359bb0803c752cd67a6d35578bbd4e86ad6",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

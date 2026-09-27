@@ -241,3 +241,28 @@ jobs:
       - name: pnpm test
         working-directory: cloudflare
         run: pnpm test
+
+  # The release recipe, verified before a tag is the only thing that can
+  # discover it is broken (tick 4yb). goreleaser check validates
+  # .goreleaser.yaml against the real schema — the builds, the archive
+  # naming, the checksums, the release target — on every push and PR, so the
+  # config that cuts tagged releases cannot rot silently between releases.
+  # The behavioral half lives in the go job: internal/release's tests run
+  # install.sh against a fake forge serving the binaries the config builds.
+  release-config:
+    name: release config
+    # An epic branch already gets a push-triggered run on the same head
+    # commit (see `on:` above), so its PR's pull_request run was the same
+    # checks twice. Feature-branch PRs still run here: their branches are not
+    # in the push filter.
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: goreleaser check
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check

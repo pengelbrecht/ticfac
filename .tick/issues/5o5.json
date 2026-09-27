@@ -1,0 +1,16 @@
+{
+  "id": "5o5",
+  "title": "Cut the first ticfac release: install.sh's stable URL answers nothing until main carries it and a v* tag exists",
+  "description": "raw.githubusercontent.com/.../main/install.sh is 404 until the epic merges, and there is no v* tag or release, so releases/latest resolves to /releases and install.sh:48-51 aborts. No tick cuts the first tag after the merge, so A6's one-command install is unreachable until someone does it by hand. Also: install.sh:65's trap expands $TMP unquoted.\n\nticfac run epic-2jn created this tick by absorbing the finding 2c68d140f136077ab4f12f06d32a3cadcfb9f716d58187e14dae104c6d2e3bd6 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A6. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/2c68d140f136077ab4f12f06d32a3cadcfb9f716d58187e14dae104c6d2e3bd6.json on the run branch.",
+  "notes": "2026-09-27 16:10 - ticfac run epic-2jn: created by absorbing finding 2c68d140f136077ab4f12f06d32a3cadcfb9f716d58187e14dae104c6d2e3bd6 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/2c68d140f136077ab4f12f06d32a3cadcfb9f716d58187e14dae104c6d2e3bd6.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A6, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 16:29 - ticfac run epic-2jn: 5o5 try 1 (run dispatch #35) merged into epic/2jn as 204e57075e70; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:10:02Z",
+  "updated_at": "2026-09-27T14:29:57.128612Z",
+  "closed_at": "2026-09-27T14:29:57.128612Z"
+}

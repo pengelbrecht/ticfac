@@ -114,7 +114,7 @@ func CheckWorkersAIBilling(ctx context.Context, opts BillingOptions) (string, er
 	}
 	token := strings.TrimSpace(opts.CloudflareAPIToken)
 	if token == "" {
-		return "", errors.New("no Cloudflare API token is configured, so the gateway's Workers AI billing mode cannot be read — add one with 'tk factory setup --cloudflare-api-token <token>'")
+		return "", errors.New("no Cloudflare API token is configured, so the gateway's Workers AI billing mode cannot be read — add one with 'ticfac factory setup --cloudflare-api-token <token>'")
 	}
 	client := opts.HTTPClient
 	if client == nil {
@@ -168,7 +168,7 @@ func billingModeMismatch(gateway, expected, observed string) error {
 	return fmt.Errorf(
 		"gateway %s is on %s Workers AI billing, but this factory is configured for %s: %s. "+
 			"Check it in the dashboard under AI → AI Gateway → %s → Settings, "+
-			"or record the change with 'tk factory setup --workers-ai-billing-mode %s'",
+			"or record the change with 'ticfac factory setup --workers-ai-billing-mode %s'",
 		gateway, observed, expected, billingModeConsequence(observed), gateway, observed)
 }
 

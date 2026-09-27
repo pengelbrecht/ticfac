@@ -73,7 +73,7 @@ func TestStatusRejectsAnExpiredGitHubCredential(t *testing.T) {
 	if report.GitHub.OK {
 		t.Error("an expired credential was reported as live")
 	}
-	if !strings.Contains(report.GitHub.Detail, "tk factory setup") {
+	if !strings.Contains(report.GitHub.Detail, "ticfac factory setup") {
 		t.Errorf("status does not name the command that renews it:\n%s", report.GitHub.Detail)
 	}
 	if !slices.Contains(report.Failures(), "github") {

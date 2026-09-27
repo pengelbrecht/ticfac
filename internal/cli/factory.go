@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/factory"
 )
 
@@ -27,19 +29,30 @@ import (
 // factoryCommand dispatches the factory subcommands.
 // factoryDeploy installs (or upgrades) the factory in the operator's own
 // Cloudflare account, from the bundle embedded in this build.
-func factoryDeploy(args []string, stdout, stderr io.Writer) int {
+// newFactoryDeployCommand builds `factory deploy`'s cobra command.
+func newFactoryDeployCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "put the ticks cloud factory in your own Cloudflare account",
+		Long:  "Install (or upgrade) the factory in the operator's OWN Cloudflare account,\nfrom the bundle embedded in this build. A failure is a stop with the remedy\nin it, never a half-configured account left behind.",
+	}
 	fs := flag.NewFlagSet("factory deploy", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	var (
 		bundleDir   = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		rotateToken = fs.Bool("rotate-token", false, "mint a new factory token instead of reusing the stored one")
 		url         = fs.String("url", "", "the factory's base endpoint, when wrangler's output does not name it")
 		skipRollout = fs.Bool("skip-rollout-wait", false, "accept an unconfirmed container rollout")
+		asJSON      = fs.Bool("json", false, "print one versioned document (ticfac.factory-deploy.v1) with the deployment's facts; the token is never in it")
 	)
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipRollout, asJSON, stdout, stderr))
 	}
-	if fs.NArg() != 0 {
+	return cmd
+}
+
+func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipRollout *bool, asJSON *bool, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory deploy: takes no positional arguments\n")
 		return 2
 	}
@@ -58,6 +71,40 @@ func factoryDeploy(args []string, stdout, stderr io.Writer) int {
 		// default deployment.
 		fmt.Fprintf(stderr, "ticfac factory deploy: %v\n", err)
 		return 1
+	}
+
+	if *asJSON {
+		// The deployment's facts, and never the token: a credential that
+		// travelled inside a document would be one a log, a paste or an agent's
+		// transcript carried for free.
+		doc := struct {
+			agentDoc
+			URL              string `json:"url"`
+			Version          string `json:"version"`
+			SourceRef        string `json:"source_ref"`
+			BundleSHA        string `json:"bundle_sha"`
+			ImageRef         string `json:"image_ref"`
+			ImageDigest      string `json:"image_digest"`
+			RolloutConfirmed bool   `json:"rollout_confirmed"`
+			Rotated          bool   `json:"token_rotated"`
+			ConfigPath       string `json:"credentials_path"`
+		}{
+			agentDoc:         agentDoc{Schema: agentSchemaID("factory-deploy"), State: agentStateDone},
+			URL:              result.URL,
+			Version:          result.Version,
+			SourceRef:        result.SourceRef,
+			BundleSHA:        result.BundleSHA,
+			ImageRef:         result.ImageRef,
+			ImageDigest:      result.ImageDigest,
+			RolloutConfirmed: result.RolloutConfirmed,
+			Rotated:          result.Rotated,
+			ConfigPath:       result.ConfigPath,
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			fmt.Fprintf(stderr, "ticfac factory deploy: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 
 	// "Ready" is a claim about what a run started now would boot, so it is
@@ -85,9 +132,14 @@ func factoryDeploy(args []string, stdout, stderr io.Writer) int {
 // factorySetup walks the factory's credential ladder: a deployment, a GitHub
 // credential (the device flow by default), and model access through the
 // operator's own AI Gateway. It prompts for anything a flag did not supply.
-func factorySetup(args []string, stdout, stderr io.Writer) int {
+// newFactorySetupCommand builds `factory setup`'s cobra command.
+func newFactorySetupCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "setup",
+		Short: "walk the factory's credential ladder, one verified rung at a time",
+		Long:  "The first-run walk: a deployment, a GitHub credential (the device flow by\ndefault), and model access through the operator's own AI Gateway — every\nrung verified against the live service before it is stored. It prompts for\nanything a flag did not supply.",
+	}
 	fs := flag.NewFlagSet("factory setup", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	var (
 		bundleDir    = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		repo         = fs.String("repo", "", "the repository the GitHub credential must reach")
@@ -101,20 +153,30 @@ func factorySetup(args []string, stdout, stderr io.Writer) int {
 		cfAPIToken   = fs.String("cloudflare-api-token", "", "add cost telemetry: read what the gateway billed")
 		billingMode  = fs.String("workers-ai-billing-mode", "", "the wallet the gateway bills: postpaid | unified")
 		cfAPIBase    = fs.String("cloudflare-api-base", "", "Cloudflare's REST root (tests)")
+		asJSON       = fs.Bool("json", false, "print one versioned document (ticfac.factory-setup.v1) with the walked ladder's facts; no credential value is ever in it")
 	)
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(factorySetup(args, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+			gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase, asJSON, stdout, stderr))
 	}
-	if fs.NArg() != 0 {
+	return cmd
+}
+
+func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+	gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase *string, asJSON *bool, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory setup: takes no positional arguments\n")
 		return 2
 	}
 
-	_, err := factory.Setup(context.Background(), factory.SetupOptions{
-		Version:              Version,
-		BundleDir:            *bundleDir,
-		In:                   os.Stdin,
-		Out:                  stdout,
+	result, err := factory.Setup(context.Background(), factory.SetupOptions{
+		Version:   Version,
+		BundleDir: *bundleDir,
+		In:        os.Stdin,
+		// The walk's prose is a person's: under --json it goes to stderr so
+		// stdout stays the one document's.
+		Out:                  setupProseOut(asJSON, stdout, stderr),
 		GitHubAPIBase:        *githubAPI,
 		Repo:                 *repo,
 		GitHubToken:          *githubToken,
@@ -133,5 +195,56 @@ func factorySetup(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac factory setup: %v\n", err)
 		return 1
 	}
+	if *asJSON {
+		// The walked ladder's facts — which rungs were verified, what the
+		// gateway bills, the models it listed — and never a credential VALUE:
+		// the document is the map of what is stored, not the store.
+		doc := struct {
+			agentDoc
+			URL             string   `json:"url"`
+			Version         string   `json:"version"`
+			ConfigPath      string   `json:"config_path"`
+			Deployed        bool     `json:"deployed"`
+			GitHubLogin     string   `json:"github_login"`
+			GitHubAuth      string   `json:"github_auth"`
+			GitHubRefreshed bool     `json:"github_refreshed"`
+			GatewayURL      string   `json:"gateway_url"`
+			Provider        string   `json:"provider"`
+			CostTelemetry   bool     `json:"cost_telemetry"`
+			BillingMode     string   `json:"workers_ai_billing_mode"`
+			Models          []string `json:"models"`
+		}{
+			agentDoc:        agentDoc{Schema: agentSchemaID("factory-setup"), State: agentStateDone},
+			URL:             result.URL,
+			Version:         result.Version,
+			ConfigPath:      result.ConfigPath,
+			Deployed:        result.Deployed,
+			GitHubLogin:     result.GitHubLogin,
+			GitHubAuth:      result.GitHubAuth,
+			GitHubRefreshed: result.GitHubRefreshed,
+			GatewayURL:      result.GatewayURL,
+			Provider:        result.Provider,
+			CostTelemetry:   result.CostTelemetry,
+			BillingMode:     result.WorkersAIBillingMode,
+			Models:          result.Models,
+		}
+		if result.Models == nil {
+			doc.Models = []string{}
+		}
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			fmt.Fprintf(stderr, "ticfac factory setup: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	return 0
+}
+
+// setupProseOut picks where the setup walk's own prose goes: stdout for a
+// person, stderr under --json where the document owns stdout.
+func setupProseOut(asJSON *bool, stdout, stderr io.Writer) io.Writer {
+	if *asJSON {
+		return stderr
+	}
+	return stdout
 }

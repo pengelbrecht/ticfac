@@ -1,24 +1,27 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the gvc close-out, 2026-09-26.
+Seeded from ticks' learnings 2026-09-02; last compacted at the 2jn close-out, 2026-09-27.
 
 ## Planning an epic
 
-**Problem:** THREE epics closed without the run their acceptance names. Phase 4: no route created the
-Workflow. xte: internal/cli never registered the new executor. yoh: every tick green against fakes,
-the live run deferred to dha's u9h, and the gap only a live run shows (worker.sh never reads
-TICKS_ROLE_PROMPT) surfaced as an upstream finding. **Rule:** When an epic's gate is a run, the FIRST
-tick wires the thinnest end-to-end path through the PRODUCTION entry point, and a named tick INSIDE
-the epic performs the run before the review. If the run lives elsewhere, the acceptance says so.
+**Problem:** FOUR epics closed without the run their acceptance names (Phase 4, xte, yoh; 2jn's A1
+"init then run, claude in herdr" was traced by the review, tested with a stand-in child, and never
+run — 2jn itself ran on GLM subprocesses). **Rule:** When an epic's gate is a run, the FIRST tick wires
+the thinnest end-to-end path through the PRODUCTION entry point, and a named tick INSIDE the epic
+performs the run before the review. If the run lives elsewhere, the acceptance says so.
 
-**Problem:** gvc, the epic about absorbing findings, absorbed none of its 21. Its run was driven by a
-ticfac binary built before any of its absorption code merged, and its own acceptance was never
-marked into the [A<n>] items that code reads (klq's marking was a tracker write no worker may make).
-**Cause:** an epic that changes the orchestrator is run BY the old orchestrator, and the DATA its
-machinery reads was left to a tick's acceptance. **Rule:** Such an epic's done names the NEXT run on
-the rebuilt binary as its demonstration; data the machinery reads (marked acceptance, bindings)
-lands as a planning step before wave 1, never as a tick's acceptance.
+**Problem:** gvc absorbed none of its 21 findings (run by a pre-absorption binary, acceptance never
+marked). 2jn absorbed 30 and SCORED none: A1-A6 bind no command, so no item ever became runnable and
+every prediction stayed unchecked. **Cause:** the DATA the machinery reads was left to prose or to a
+tick. **Rule:** An epic that changes the orchestrator names the NEXT run on the rebuilt binary as its
+demonstration; marked [A<n>] items AND a command per item land at planning, before wave 1, or the
+run absorbs on guesses it can never score.
+
+**Problem:** 2jn's review said NOT READY with ten findings; each became its own parallel tick, three
+of them rewrote exit-code logic (bot, 4mv, then bkg/rix/vqc), and the post-review burst took 16 ticks,
+7 conflict resolves and a silent same-function collision (7o5). **Rule:** Fold a NOT READY review's
+findings by SEAM (one tick owns "exit codes", one owns "clear commands"), not one tick per finding.
 
 **Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a
 tier overlay replaced the model; yoh keyed the Workers-AI rule on the substrate while the
@@ -54,7 +57,8 @@ Settle in-flight state from durable evidence by whoever finds it, never by trust
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
 it where a person already is (the PR). A resume replays a recorded decision, never buys it again.
 
-**Problem:** A bare `go test ./...` died at the 10-minute package timeout. **Rule:** Use the Makefile.
+**Problem:** `tk close` usage prints, promotions pointed at uncommitted ticks, a spawn blamed "the
+probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
 ## Git state the run does not own
 
@@ -89,7 +93,6 @@ its CODE is AND where its worker can write; another repo's change is an `upstrea
 
 **Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
 GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable at a time.
-
 **Problem:** GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** Off-vendor, set `compat.thinkingFormat`.
 
 ## Reviews and repairs
@@ -114,15 +117,17 @@ the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's 
 a derived key a function of the thing it identifies, not of its history.
 
 **Problem:** The integrated gate refused innocent work six times through wall-clock tests measuring
-the host; a host-dependent git fixture failed at base in NINE yoh ticks, and the runstate
-maintenance fixture was filed FOUR more times in gvc. **Rule:** A gate verdict is about the tree only
-if the host is bounded. Telling workers to look a failure up does not work; show them the drafts.
+the host; a host-dependent git fixture failed at base in NINE yoh ticks, four gvc refiles, and five
+2jn backlog ticks (zv1, mtq, 0wp, 1zw, bsn) for ONE SIGTERM temp-tree defect 8d6 fixed. **Rule:**
+A gate verdict is about the tree only if the host is bounded — and a guard on shared machine state
+(7ag: sibling suites write ~/.ticfac/registry mid-gate) attributes by a per-process temp root, not
+a snapshot diff (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/` for the
+test's name: a promoted finding leaves the drafts, so the next worker cannot see it there.
 
 **Problem:** wne's per-tick gates went green while 7 of 10 relevant tests skipped under `-short`;
-yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate, and the
-review found three high defects there.
-**Rule:** A tick's evidence runs under the gate's own flags. A test the gate does not run is not
-evidence — add it to the gate, or name the gap in the acceptance.
+yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate; the
+review found three high defects there. **Rule:** A tick's evidence runs under the gate's own
+flags — a test the gate does not run is not evidence: add it to the gate, or name the gap.
 
 ## Fixtures
 
@@ -130,21 +135,16 @@ evidence — add it to the gate, or name the gap in the acceptance.
 work and report in ONE commit. **Rule:** A fake demands the identity and reproduces the real shape;
 a more forgiving fake certifies the defect it hides — fix it in the same change.
 
-**Problem:** Two identical fixture commits in one second got one SHA. **Rule:** Make them differ.
+**Problem:** Identical fixture commits shared a SHA; fake-runner keyed "first try" on TICFAC_ATTEMPT;
+verification workers left reports uncommitted. **Rule:** Make fixture commits differ; "the tick's
+first try" keys on `$TICFAC_TRY`; evidence output is committed even with no source change.
 
-**Problem:** fake-runner keyed "first try" on TICFAC_ATTEMPT, the RUN's counter. **Rule:** "The
-tick's first try" keys on `$TICFAC_TRY`; attempt numbers are identity, never an ordinal.
+## Boundaries this repo pays to learn
 
-**Problem:** Verification workers left `RESULT-<id>.md` uncommitted; collect saw `no-commits`.
-**Rule:** Evidence output is committed even with no source change.
+**Problem:** A new `factory_*` key in ~/.ticfacrc contradicts the pinned credential-ownership
+contract (additionalProperties: false — "an unknown factory_ key is a typo"). **Rule:** The config FILE's key
+vocabulary is the bundle's — but the $TICFAC_* ENVIRONMENT is this repo's own operator-preference surface
+(TICFAC_RUNNER, TICFAC_JEV_API_KEY): set-once defaults live there, as i1r's --status-push reading $TICFAC_STATUS_PUSH does, no bundle re-cut needed.
 
-## Tracker hygiene
-
-**Problem:** `tk close` on a parked tick printed usage. **Rule:** Usage is a REFUSAL — re-run with
-`--reason done` to read it; a `tk ask`-parked tick needs `--from human`; `git commit .tick/`.
-
-**Problem:** Promotions pointed at ticks that existed only as untracked files. **Rule:** A promotion
-is finished when the tick is COMMITTED where the next run reads it; re-read its text against what
-the epic deleted (u9h still names the deleted EpicReconcilerWorkflow).
-
-**Problem:** A spawn blamed "the probe" at 93% of its session limit. **Rule:** Test the pane by hand.
+**Problem:** A login-route test read the login page's own 401 as the login's answer: `SELF.fetch`
+FOLLOWS a 303. **Rule:** A redirect-asserting route test passes `redirect: "manual"`.

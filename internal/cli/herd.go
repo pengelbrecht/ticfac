@@ -34,7 +34,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -43,6 +42,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/herdr"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -59,29 +60,62 @@ func defaultHerdStateRoot() string {
 	return filepath.Join(subprocess.DefaultStateDir(), "runs")
 }
 
-// herdCommand is the `herd` group's dispatcher.
-func herdCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, herdUsage)
-		return exitUsage
+// newHerdCommand builds the `herd` group: the cobra command whose Long is the
+// decision record the ticks-side plugin tick reads, with the bare and
+// unknown-subcommand refusals kept byte-for-byte from the dispatcher it
+// replaces — a group with no subcommand named is a usage error that still
+// says the vocabulary.
+func newHerdCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "herd",
+		Short: "the herdr operator surfaces ticfac owns: badge panes, chime on blocks",
+		Long:  herdUsage,
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				fmt.Fprint(stderr, herdUsage)
+				return &printedExit{code: exitUsage}
+			}
+			if args[0] == "help" {
+				fmt.Fprint(stdout, herdUsage)
+				return nil
+			}
+			fmt.Fprintf(stderr, "ticfac herd: unknown subcommand %q\n\n%s", args[0], herdUsage)
+			return &printedExit{code: exitUsage}
+		},
 	}
-	name, rest := args[0], args[1:]
-	if len(rest) > 0 && (rest[0] == "--help" || rest[0] == "-h") {
-		fmt.Fprint(stdout, herdUsage)
-		return exitSuccess
+	cmd.AddCommand(newHerdPaintCommand(stdout, stderr), newHerdNotifyCommand(stdout, stderr))
+	return cmd
+}
+
+// newHerdPaintCommand builds `herd paint`'s cobra command: the flags the two
+// commands share plus its own, declared once so the tree carries them.
+func newHerdPaintCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "paint",
+		Short: "badge this run's herdr workspaces with the tick each worker is on",
 	}
-	switch name {
-	case "paint":
-		return herdPaintCommand(ctx, rest, stdout, stderr)
-	case "notify":
-		return herdNotifyCommand(ctx, rest, stdout, stderr)
-	case "help", "-h", "--help":
-		fmt.Fprint(stdout, herdUsage)
-		return exitSuccess
-	default:
-		fmt.Fprintf(stderr, "ticfac herd: unknown subcommand %q\n\n%s", name, herdUsage)
-		return exitUsage
+	fs, scope := herdFlags("herd paint", nil)
+	ttlMs := fs.Int64("ttl", 90000, "how long a painted badge survives without a repaint, in milliseconds")
+	seq := fs.Uint64("seq", 0, "sequence number ordering this paint against earlier ones (0 omits it)")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(herdPaintCommand(c.Context(), args, scope, ttlMs, seq, stdout, stderr))
 	}
+	return cmd
+}
+
+// newHerdNotifyCommand builds `herd notify`'s cobra command.
+func newHerdNotifyCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "notify",
+		Short: "chime when a worker blocks or a wave settles",
+	}
+	fs, scope := herdFlags("herd notify", nil)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(herdNotifyCommand(c.Context(), args, scope, stdout, stderr))
+	}
+	return cmd
 }
 
 // herdUsage is the group's help: the two commands this binary owns, and the
@@ -227,22 +261,13 @@ func tickStatuses(repo, runID string) map[string]string {
 }
 
 // herdPaintCommand is `ticfac herd paint`.
-func herdPaintCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := herdPaint(ctx, args, stdout, stderr)
+func herdPaintCommand(ctx context.Context, args []string, scope *herdScope, ttlMs *int64, seq *uint64, stdout, stderr io.Writer) int {
+	err := herdPaint(ctx, args, scope, ttlMs, seq, stdout, stderr)
 	return reportCommand("herd paint", err, stderr)
 }
 
-func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs, scope := herdFlags("herd paint", stderr)
-	ttlMs := fs.Int64("ttl", 90000, "how long a painted badge survives without a repaint, in milliseconds")
-	seq := fs.Uint64("seq", 0, "sequence number ordering this paint against earlier ones (0 omits it)")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
+func herdPaint(ctx context.Context, args []string, scope *herdScope, ttlMs *int64, seq *uint64, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 0 {
 		return newExitError(exitUsage, "herd paint takes no positional arguments")
 	}
@@ -254,7 +279,10 @@ func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 	if len(scope.Runs) == 0 {
 		if scope.AsJSON {
-			return writeJSON(stdout, map[string]any{"badges": []paint.Badge{}, "runs": []string{}})
+			return writeJSON(stdout, herdPaintJSON{
+				agentDoc: agentDoc{Schema: agentSchemaID("herd-paint"), State: agentStateDone},
+				Result:   paint.Result{Badges: []paint.Badge{}, Source: client.SourceHerdPaint},
+			})
 		}
 		fmt.Fprintln(stdout, "no herdr attempts recorded — nothing to paint")
 		return nil
@@ -296,10 +324,22 @@ func herdPaint(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 
 	if scope.AsJSON {
-		return writeJSON(stdout, combined)
+		return writeJSON(stdout, herdPaintJSON{
+			agentDoc: agentDoc{Schema: agentSchemaID("herd-paint"), State: agentStateDone},
+			Result:   combined,
+		})
 	}
 	herdPaintPrint(stdout, combined)
 	return nil
+}
+
+// herdPaintJSON is `herd paint --json`'s answer, ticfac.herd-paint.v1: the
+// paint result as the wire knows it, stamped with the envelope every --json
+// surface carries (tick 8v3) so a reader can refuse a shape it does not
+// know. The old bare result was a pre-tick shape; nothing pinned it.
+type herdPaintJSON struct {
+	agentDoc
+	paint.Result
 }
 
 // attemptsToPaint converts the executor's attempt facts into paint's worker
@@ -359,20 +399,13 @@ func herdPaintTokens(tokens map[string]string) string {
 }
 
 // herdNotifyCommand is `ticfac herd notify`.
-func herdNotifyCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := herdNotify(ctx, args, stdout, stderr)
+func herdNotifyCommand(ctx context.Context, args []string, scope *herdScope, stdout, stderr io.Writer) int {
+	err := herdNotify(ctx, args, scope, stdout, stderr)
 	return reportCommand("herd notify", err, stderr)
 }
 
-func herdNotify(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs, scope := herdFlags("herd notify", stderr)
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
+func herdNotify(ctx context.Context, args []string, scope *herdScope, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 0 {
 		return newExitError(exitUsage, "herd notify takes no positional arguments")
 	}
@@ -381,7 +414,10 @@ func herdNotify(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	}
 	if len(scope.Runs) == 0 {
 		if scope.AsJSON {
-			return writeJSON(stdout, []notify.Result{})
+			return writeJSON(stdout, herdNotifyJSON{
+				agentDoc:      agentDoc{Schema: agentSchemaID("herd-notify"), State: agentStateDone},
+				Notifications: []notify.Result{},
+			})
 		}
 		fmt.Fprintln(stdout, "no herdr attempts recorded — nothing to notify about")
 		return nil
@@ -417,7 +453,10 @@ func herdNotify(ctx context.Context, args []string, stdout, stderr io.Writer) er
 		if results == nil {
 			results = []notify.Result{}
 		}
-		return writeJSON(stdout, results)
+		return writeJSON(stdout, herdNotifyJSON{
+			agentDoc:      agentDoc{Schema: agentSchemaID("herd-notify"), State: agentStateDone},
+			Notifications: results,
+		})
 	}
 	herdNotifyPrint(stdout, results)
 	return nil
@@ -476,4 +515,13 @@ func writeJSON(out io.Writer, value any) error {
 	}
 	_, err = fmt.Fprintf(out, "%s\n", raw)
 	return err
+}
+
+// herdNotifyJSON is `herd notify --json`'s answer, ticfac.herd-notify.v1:
+// the per-run decisions as the envelope's `notifications` field, stamped with
+// the schema id every --json surface carries (tick 8v3). The old bare array
+// was a pre-tick shape; nothing pinned it.
+type herdNotifyJSON struct {
+	agentDoc
+	Notifications []notify.Result `json:"notifications"`
 }

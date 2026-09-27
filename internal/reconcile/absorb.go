@@ -76,10 +76,11 @@ type findingDecision struct {
 }
 
 // findingLeftNote is what the tick whose attempt discovered the finding says
-// about where the finding went: the triage commands when the run left it for a
-// person (the 7vn note, unchanged), and the tick the run promoted it to when
-// the decision was the run's — because a person reading the tracker, not only
-// the run state, needs to see which finding became whose work.
+// about where the finding went: the triage pointer when the run left it for a
+// person (the 7vn note, its command moved to `ticfac triage` by tick 8yn),
+// and the tick the run promoted it to when the decision was the run's —
+// because a person reading the tracker, not only the run state, needs to see
+// which finding became whose work.
 func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Finding, key string, decided findingDecision) string {
 	if decided.TickID != "" {
 		what := fmt.Sprintf("absorbed into the running epic as tick %s, with nobody triaging", decided.TickID)
@@ -96,12 +97,10 @@ func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Fi
 			finding.Severity, targetName(finding.Target), what, r.runID, key)
 	}
 	return fmt.Sprintf("ticfac run %s: %s reported a finding drafted for triage — %s %q "+
-		"(key %s, severity %s, for %s). Triage with `ticfac finding %s %s --promote-as <tick> --by "+
-		"\"<who>\"`, `--discard --by \"<who>\"`, or — when it was repaired inside this epic — "+
-		"`--fixed-as <commit> --by \"<who>\"`; the tick closes and the finding rides to the close-out, "+
+		"(key %s, severity %s, for %s). %s; the tick closes and the finding rides to the close-out, "+
 		"which does not hand over while it is untriaged.",
-		r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key, finding.Severity,
-		targetName(finding.Target), r.opts.EpicID, key)
+		r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key,
+		finding.Severity, targetName(finding.Target), triagePointer(r.opts.EpicID))
 }
 
 // decideFinding takes one drafted finding through the absorption decision. It
@@ -240,14 +239,13 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 				"absorbing the finding %s (%q), reported by %s, would be the %s absorption of ONE chain that "+
 					"already carries %d and the bound is %d (tick qjj): the run stops for a person rather than recurse "+
 					"past the bound, because unbounded the recursion is an epic that never closes and nothing "+
-					"announces it. The chain that produced the stop: %s. The finding stays a person's — triage it "+
-					"with `ticfac finding %s %s --promote-as <tick> --by \"<who>\"` or `--discard --by \"<who>\"`, or "+
-					"raise the bound with --absorption-depth and run the epic again. If this bound trips often, "+
+					"announces it. The chain that produced the stop: %s. The finding stays a person's. %s. Raise "+
+					"the bound with --absorption-depth and run the epic again instead. If this bound trips often, "+
 					"the criterion is wrong and the bound is hiding it — the chain above is what a person judges "+
 					"it by",
 				standing.Key, standing.Title, r.attemptName(marker.TickID, marker.Attempt),
 				ordinal(len(links)+1), len(links), bound, chainNarrative(links),
-				r.opts.EpicID, standing.Key)
+				triagePointer(r.opts.EpicID))
 		}
 	}
 

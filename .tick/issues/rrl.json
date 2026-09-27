@@ -1,10 +1,11 @@
 {
   "id": "rrl",
   "title": "Close out 2jn: retro, and what the next epic is",
-  "status": "open",
+  "notes": "2026-09-27 22:47 - ticfac run epic-2jn: rrl try 1 (run dispatch #54) reported a finding the run itself decided — proposed-tick \"Demonstrate 2jn's A1 and A5 live: ticfac init + ticfac run on claude in herdr, and one epic via run --cloud, on the merged binary\" (key 08a0146a8e996e5bf729c700b88fdca00f17feb41ac84e913ab4517c73c9d049, severity medium, for this repository) is absorbed into the running epic as tick tm5, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/08a0146a8e996e5bf729c700b88fdca00f17feb41ac84e913ab4517c73c9d049.json, and the draft is triaged as promoted.\n2026-09-27 22:47 - ticfac run epic-2jn: rrl try 1 (run dispatch #54) reported a finding the run itself decided — proposed-tick \"The absorber files the same defect again and again: one SIGTERM temp-tree failure became five backlog ticks\" (key f9268a329bb551f30336c0c17b8be5fb118867af54565490d6764e6db5cb74d2, severity medium, for this repository) is promoted to a backlog tick with an owner, s4p; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/f9268a329bb551f30336c0c17b8be5fb118867af54565490d6764e6db5cb74d2.json, and the draft is triaged as promoted.\n2026-09-27 22:47 - ticfac run epic-2jn: rrl try 1 (run dispatch #54) reported a finding the run itself decided — proposed-tick \"A run accepts an epic whose [A\u003cn\u003e] items bind no command, then absorbs on predictions it can never score\" (key 487ddd7e6b57d0df0147aa9bcdb6760d799a5b63d50da7f4cf1cc9ca3c03b5ca, severity low, for this repository) is promoted to a backlog tick with an owner, p2s; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/487ddd7e6b57d0df0147aa9bcdb6760d799a5b63d50da7f4cf1cc9ca3c03b5ca.json, and the draft is triaged as promoted.\n2026-09-27 22:57 - ticfac run epic-2jn: rrl try 1 (run dispatch #54) merged into epic/2jn as 9630c80c15b8; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "xbp"
   ],
@@ -12,5 +13,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T09:28:44.366371Z",
-  "updated_at": "2026-09-26T09:28:44.508068Z"
+  "updated_at": "2026-09-27T20:57:07.971623Z",
+  "closed_at": "2026-09-27T20:57:07.971623Z"
 }

@@ -967,10 +967,16 @@ func TestThePinnedModuleIsTheModuleTheImageInstalls(t *testing.T) {
 // what the deploy says when it cannot close it.
 // ---------------------------------------------------------------------------
 
-// rolloutOptions is h.options() with a wait short enough for a test.
+// rolloutOptions is h.options() with a fast poll. The ceiling is generous on
+// purpose: every caller that keeps it is a SUCCESS path, which returns the
+// moment the rollout confirms, while the fake's lag is counted in `containers
+// list` CALLS, each a shell-script spawn. A 2s ceiling raced those spawns on a
+// loaded host (the gate runs -parallel 12 beside sibling agents): three
+// listings fit, the fourth did not, and a correct deploy timed out. The
+// tests that assert the timeout itself set their own short ceiling.
 func (h *harness) rolloutOptions() Options {
 	opts := h.options()
-	opts.rolloutTimeout = 2 * time.Second
+	opts.rolloutTimeout = 2 * time.Minute
 	opts.rolloutPoll = time.Millisecond
 	return opts
 }

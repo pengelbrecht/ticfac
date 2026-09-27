@@ -20,12 +20,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runsignal"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -62,56 +65,131 @@ const ExitNoExecutor = 2
 // run that started.
 const NoExecutorMessage = reconcile.NoExecutorMessage
 
-const usage = `ticfac — execution and orchestration for ticks
+// Run's old hand-rolled dispatcher is gone (tick nwj): the switch lived in
+// cli.go and became the cobra tree in root.go — and the usage text it
+// printed, a hand-rolled const that said every command and flag a second
+// time beside the tree, is gone too (tick fi3). The bare invocation now
+// refuses with the tree's own help, derived from the same declarations the
+// help, the completions and the man pages render, so no operator-facing text
+// is maintained by hand beside the tree.
 
-usage:
-  ticfac run-epic <epic-id>                     run one epic through the reconciler
-  ticfac settle <epic-id> <tick-id> <attempt>   release an attempt nobody can address
-  ticfac findings <epic-id>                     list the worker findings drafted for triage
-  ticfac finding <epic-id> <key>                triage one drafted finding
-  ticfac status <run-id> [--json]              is the run alive, and when did it last say anything
-  ticfac events <run-id>                       a run's event feed: what it did, as it does it (--follow to subscribe)
-  ticfac watch <run-id>                        follow a run and say, to a human, when it ends holding something for one
-  ticfac version [--json]                       report this build and the contract bundle it serves
-  ticfac factory deploy                        put the ticks cloud factory in your own Cloudflare account
-  ticfac factory setup                         walk the factory's credential ladder, one verified rung at a time
-  ticfac factory <status|dashboard>            what the factory has configured; the read-only board
-  ticfac factory webhook                        point Telegram at the factory (--status reads it, --delete withdraws it)
-  ticfac herd <paint|notify>                   badge herdr workspaces; chime when a worker blocks or a wave settles
-  ticfac cloud <run|stop|status|logs|trace|supervisor>   drive a self-deployed cloud factory
+// runEpicFlags is `run-epic`'s flag surface: the same definitions the command
+// has always parsed, now declared once per invocation so cobra's parse (and
+// the help, completions and man pages derived from the tree) and the body's
+// reads share one declaration.
+type runEpicFlags struct {
+	repo, remote, branch, base, runID, owner, runner, tier, profiles, stateRoot, gate *string
+	budget, ceiling                                                                   *float64
+	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth                     *int
+	supervise, statusPush                                                             *bool
+	asJSON                                                                            *bool
+}
 
-run-epic flags:
-  --repo <dir>        the checkout attempts branch from (default: cwd)
-  --remote <name>     the remote holding the run's durable authority (default: origin)
-  --branch <name>     the EpicRun integration branch (default: epic/<epic-id>)
-  --base <ref>        what the integration branch is cut from (default: HEAD)
-  --run-id <id>       the run's id (default: epic-<epic-id>)
-  --owner <name>      who claims a tick in the tracker (default: ticfac)
-  --runner <name>     claude | codex | pi, when a profile routes none (default: $TICFAC_RUNNER, else claude)
-  --tier <name>       pin a [roles.*.tiers.<name>] overlay for EVERY dispatch of the run —
-                      an operator's explicit override; by default each dispatch DERIVES its
-                      tier from [tier_policy] in the target repo's runners.toml (tick facts,
-                      attempt number, declared ladder), or runs at the role's base values
-  --profiles <dir>    resolve role profiles from this directory instead of the compiled-in ones
-  --state-root <dir>  where attempt state lives, OUTSIDE the repository
-  --gate <file>       the runners.toml the integrated gate is read from
-  --budget <usd>      the budget an operator asks for
-  --ceiling <usd>     the deployment ceiling it is clamped to
-  --wall <seconds>    the wall clock one job is bounded by
-  --absorption-depth <n>  how many absorptions ONE chain of the recursion may carry before the
-                      run stops for a person carrying the whole chain. The default is 3 (the first
-                      link is what the epic exists to absorb, the second is a defect in the absorbed
-                      fix's own ground, a third is already far from home, and past that a person
-                      should judge the chain rather than let the run keep going). The bound the
-                      run applies is RECORDED on the run branch, so a restart without this flag
-                      applies the bound the run already ran with; naming the flag explicitly is
-                      the person's raise — it overrides the record (0, the default, means not
-                      named: adopt what the run records)
-  --evacuate-seconds <n>  how many seconds a SIGTERM's final flush may spend committing and pushing the
-                      in-flight work and writing the checkpoint before the process exits anyway — the
-                      platform's eviction is graceful (SIGTERM, up to fifteen minutes, then SIGKILL), and
-                      the flush is what spends a bounded slice of that window making the disk's loss
-                      survivable (0 disables the flush)
+// defineRunEpicFlags declares every run-epic flag on fs — defaults, usage
+// strings and the comments that explain the defaults, verbatim from the
+// body that parsed them.
+func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
+	return &runEpicFlags{
+		repo:      fs.String("repo", "", "the checkout attempts branch from"),
+		remote:    fs.String("remote", "origin", "the remote holding the run's durable authority"),
+		branch:    fs.String("branch", "", "the EpicRun integration branch"),
+		base:      fs.String("base", "HEAD", "what the integration branch is cut from"),
+		runID:     fs.String("run-id", "", "the run's id"),
+		owner:     fs.String("owner", "ticfac", "who claims a tick in the tracker"),
+		runner:    fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi"),
+		tier:      fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])"),
+		profiles:  fs.String("profiles", "", "resolve role profiles from this directory (\"herdr\" names the herdr set embedded in this binary)"),
+		stateRoot: fs.String("state-root", "", "where attempt state lives, outside the repository"),
+		gate:      fs.String("gate", "", "the runners.toml the integrated gate is read from"),
+		budget:    fs.Float64("budget", 0, "the budget an operator asks for"),
+		ceiling:   fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to"),
+		wall:      fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by"),
+		// Supervision is ON by default (tick go6), and the default is the
+		// argument. The behaviour it replaces is not "the run stops" — it is
+		// "the run stops and a person retypes the identical command", which
+		// the operator did about fifteen times in one day. Defaulting to off
+		// would keep exactly that behaviour with worse latency (the person has
+		// to notice first: two of the day's stalls were multi-hour) and no
+		// record that the loop happened at all. Neither is safer. What IS
+		// safer is that the loop is now bounded, classified and counted: it
+		// continues only across the closed set of stops that need nobody, it
+		// halts on a repeat over an unchanged tree, and every continuation is
+		// RECORDED as an intervention.
+		supervise: fs.Bool("supervise", true,
+			"continue across stops that only need resuming — a rejected attempt that left nothing, a tracker "+
+				"width refusal, gate evidence that went stale, a transient remote failure — adopting the "+
+				"in-flight attempts by identity, with bounded backoff and a cap. Every continuation is RECORDED "+
+				"as an intervention. A stop that needs a person still stops. --supervise=false stops at the "+
+				"first refusal"),
+		maxResumes: fs.Int("max-resumes", reconcile.DefaultAutoResumeCap,
+			"the most automatic continuations one supervised run makes before it stops with the refusal it "+
+				"stopped over; the cap is the safety against a run that resumes forever over the same stop"),
+		stallWarn: fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
+			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
+				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables"),
+		// The eviction flush's bound (tick ppt). The platform sends SIGTERM,
+		// waits up to fifteen minutes, then SIGKILLs; the flush commits and
+		// pushes the in-flight work and writes the checkpoint inside THIS many
+		// seconds, so a hung push cannot spend the whole window and reach
+		// SIGKILL anyway. Zero and below disable the flush — the pre-ppt
+		// behaviour, an immediate exit that leaves the work to whatever the
+		// last timer push carried away.
+		evacuateSeconds: fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
+			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
+				"and writing the checkpoint before the process exits anyway (0 disables the flush)"),
+		// The absorption recursion's bound (tick qjj). Depth rather than wall
+		// clock: depth counts how far the run has travelled from the epic
+		// anyone asked for, and only a person can judge that. The default's
+		// reasoning lives on the constant; here the operator reads what the
+		// number governs and where to raise it when the stop is wrong.
+		//
+		// The default here is 0 — NOT NAMED — rather than the constant,
+		// because the reconciler cannot tell an operator who wrote
+		// --absorption-depth 3 from one who wrote nothing (tick wz0, finding
+		// 95f5ee1a): a named bound is the person's raise over the recorded
+		// one, and an unnamed one adopts what the run branch records, so a
+		// cold restart honours the bound the warm run ran with. Zero and
+		// below still mean the DEFAULT inside the options' own normalising,
+		// never an unbounded recursion.
+		absorptionDepth: fs.Int("absorption-depth", 0,
+			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
+				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
+				"before the run stops for a person carrying the whole chain (0, the default, means not "+
+				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
+				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
+				"ground, a third is already far from home, and past that a person should judge the chain "+
+				"rather than let the run keep going)"),
+		// The remote view (tick i1r): opted in, the run pushes its status model
+		// to the configured factory on a short cadence, so the factory's phone
+		// page (/status) lists it beside the cloud runs it hosts - and a run
+		// needing a person pages the operator's Telegram through the same
+		// factory. Off by default: the factory's snapshot door is authenticated
+		// by the operator's own factory token, so the opt-in is the operator's -
+		// asked per run with the flag, or once for the machine with
+		// $TICFAC_STATUS_PUSH (the flag always wins).
+		statusPush: fs.Bool("status-push", statusPushEnvDefault(os.Getenv),
+			"push this run's status model to the factory every 30s (and once more at each ending), so it is "+
+				"followable from the factory's /status phone page and its stops page the operator's "+
+				"Telegram. Needs a configured factory (ticfac factory setup); without one this is a no-op, "+
+				"and it is always best-effort: a push that fails is a line in run.log, never a failure of the run "+
+				"(default: $TICFAC_STATUS_PUSH, read as a strict bool - set it once to follow every run; "+
+				"the flag always wins)"),
+		asJSON: fs.Bool("json", false,
+			"answer as one versioned document (ticfac.run-epic.v1) when the run ends: the run's state, "+
+				"every tick's state, the refusal's reason class when it stopped, and the interventions it made — "+
+				"the run's own prose goes to stderr, so stdout is the document's alone"),
+	}
+}
+
+// newRunEpicCommand builds the cobra command: the flags on the tree, the
+// body behind it.
+func newRunEpicCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run-epic <epic-id>",
+		Short: "run one epic through the reconciler",
+		Long: `Run one epic: reconcile the tracker against Git, dispatch each ready tick
+through the executor its resolved profile names, and integrate what the
+workers push.
 
 Each dispatch goes through the executor its resolved profile names — a profile
 naming the herdr executor launches the attempt in a herdr workspace, a profile
@@ -149,253 +227,39 @@ A target repository may declare, in .tick/config.md's Rules section, that an
 epic integrates through a PR + CI gate: the run opens the epic PR itself,
 holds the close-out until CI is green on it, and refuses typed — naming the
 failing job — when CI is red. That rule needs a code-hosting surface: the
-GitHub one is built from the remote and a GITHUB_TOKEN in the environment,
-and a repo declaring the rule is refused at startup until the token is set
-(tick 0iz).
-
-settle flags:
-  --release <who>     the person releasing the attempt (required); recorded as a stable
-                      pseudonymous id in the committed decision — the value you pass here
-                      never reaches the target repository, which may forbid operator
-                      identifiers in its tracked files; it is kept in run-local state under
-                      --state-root
-  --carry-work       base the next attempt of this tick on the released attempt's branch, so
-                      the next worker starts from its commits rather than redoing them — the
-                      gate still decides, and the new attempt's records state where its work
-                      came from
-  --repo, --remote, --branch, --run-id, --state-root, --gate, --profiles,
-  --tier, --runner    as for run-epic: the same run, addressed the same way
-
-An attempt whose supervisor died without settling it reads as lost, and every
-restart holds it rather than starting a second job over the same identity
-(Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
-the executor can still address, records the release durably as a decision
-naming who made it, and the next run dispatches a NEW attempt instead of
-adopting the released one. Whatever the released attempt committed stays on
-its own write ref — and the release says where that ref lives: on the remote,
-or only as a local branch in the checkout that holds it when the push never
-landed there.
-
-It releases one other attempt: one this run REJECTED while it was holding
-commits nothing merged. No run collects that attempt again (the teardown the
-refusal ran removed its worktree) and no run dispatches over it (that would
-orphan the only copy of the work), so a person reads the branch and then says
-here that the run may go on.
-
---carry-work is the third option that situation actually needs: release the
-attempt AND base the next one on its branch, so the next worker starts from the
-work rather than redoing it. Nothing merges unproven — the gate still decides —
-but the evidence the interrupted attempt produced is not thrown away, and the
-next attempt's provenance records that its source is the released attempt's
-ref and commit (tick 0z0).
-
-watch flags:
-  --repo <dir>        the checkout the run works in (default: cwd)
-
-"watch" is the consumer the run event feed was built for: it subscribes like
-events --follow, and when the run stops holding a tick for a person it SAYS
-SO — which tick, which attempt, why, and the command that moves it on. With a
-live run it joins the CURRENT incarnation: the ending of a previous
-incarnation is not replayed, and a hold already standing when the watch
-starts is reported as the hold it joined. Exit codes: 0 the run ended (the
-last line says how), 3 it ended holding something only a person can move,
-1 the feed could not be read or the watch was interrupted, 2 usage. A run
-whose process died without a terminal line is
-ticfac status's question, not the feed's.
-
-events flags:
-  --repo <dir>        the checkout the run works in (default: cwd)
-  --follow            keep the stream open: each event as it lands, until Ctrl-C
-
-"events" is how a NON-PARTICIPANT learns a run finished: the run writes one
-append-only JSONL stream at .ticfac/logs/<run-id>/events.jsonl, and this
-follows it — every event with its run/tick/attempt identity — instead of
-sleeping blind against the run or polling its durable records. A line is a
-hint about when to LOOK, never a verdict: completion is still decided by the
-evidence on the integration branch, the commits plus the report, so a
-subscriber that reads run_finished goes and looks rather than believing it.
-
-findings and finding flags:
-  --repo <dir>         as for run-epic (default: cwd)
-  --remote <name>      as for run-epic (default: origin)
-  --branch <name>      as for run-epic (default: epic/<epic-id>)
-  --run-id <id>        as for run-epic (default: epic-<epic-id>)
-
-finding flags:
-  --promote-as <tick>  record the tick a promotion created — a bare tick id for a
-                       finding that belongs to this repository, <owner/name>:<tick-id>
-                       for one routed to the repository its target names
-  --discard            record that a person looked and said no
-  --fixed-as <commit>  record that the finding was repaired inside this epic, naming
-                       the commit that repaired it — the claim stays checkable, and a
-                       later report of the same finding is NOT suppressed: it means
-                       the fix did not hold, and the run hears it again
-  --by <who>           the person triaging (required): a decision nobody can
-                       attribute is one nobody can audit
-
-A worker that discovers something outside its tick reports it as a typed
-findings block in its report; the reconciler drafts each finding under
-.ticfac/runs/<run-id>/findings/ on the integration branch, stamped with the
-attempt that discovered it. Each finding may carry done evidence — the
-[A<n>] acceptance item of the epic's definition of done the reporter says it
-breaks, and the command or test that would demonstrate it; the listing marks
-a finding that carries none as unlinked. The tick that reported it closes,
-the run continues, and the finding rides to the close-out — which does not
-hand over while any finding is untriaged, and refuses the hand-over when one
-is missing from the epic PR. Promotion keeps the
-scope decision human: it records the tick YOU created — pass the draft's
-discovered_from to the tracker when you file it, so the attempt that found
-it is never lost again — and nothing here writes the tracker for you.
-`
-
-// Run executes one invocation and returns the process exit code. Everything is
-// passed in rather than reached for, so the behaviour under test is the
-// behaviour that ships.
-func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
-		return 2
+GitHub one is built from the remote and a credential resolved from one
+ladder — GITHUB_TOKEN in the environment, or gh's own auth (tick vo4) —
+and a repo declaring the rule is refused at startup until one of them
+answers (tick 0iz).`,
 	}
-
-	switch args[0] {
-	case "run-epic":
-		return runEpic(args[1:], stdout, stderr)
-	case "settle":
-		return settle(args[1:], stdout, stderr)
-	case "findings":
-		return findingsCommand(args[1:], stdout, stderr)
-	case "finding":
-		return findingCommand(args[1:], stdout, stderr)
-	case "status":
-		// Signal-aware so a --follow table shuts down cleanly on Ctrl-C: a
-		// table a person leaves open is a subscription like any other.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return statusCommand(ctx, args[1:], stdout, stderr)
-	case "events":
-		// Signal-aware so a --follow shuts down cleanly on Ctrl-C: a
-		// subscription is a thing a person leaves open.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return eventsCommand(ctx, args[1:], stdout, stderr)
-	case "watch":
-		// Signal-aware for the same reason: a watch is a subscription a
-		// person leaves open until the run says it ended.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return watchCommand(ctx, args[1:], stdout, stderr)
-	case "version":
-		return version(args[1:], stdout, stderr)
-	case "factory":
-		// Signal-aware so the dashboard and a --follow shut down cleanly on
-		// Ctrl-C, the way tk's cobra contexts did.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return factoryCommand(ctx, args[1:], stdout, stderr)
-	case "herd":
-		// Signal-aware: a paint or notify driven from an event hook can be
-		// left alone to exit when its caller's subscription ends.
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return herdCommand(ctx, args[1:], stdout, stderr)
-	case "cloud":
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		return cloudCommand(ctx, args[1:], stdout, stderr)
-	case "help", "-h", "--help":
-		fmt.Fprint(stdout, usage)
-		return 0
-	default:
-		fmt.Fprintf(stderr, "ticfac: unknown command %q\n\n%s", args[0], usage)
-		return 2
+	fs := flag.NewFlagSet("run-epic", flag.ContinueOnError)
+	fl := defineRunEpicFlags(fs)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runEpic(args, fl, stdout, stderr))
 	}
+	return cmd
 }
 
-func runEpic(args []string, stdout, stderr io.Writer) (code int) {
-	fs := flag.NewFlagSet("run-epic", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var (
-		repo      = fs.String("repo", "", "the checkout attempts branch from")
-		remote    = fs.String("remote", "origin", "the remote holding the run's durable authority")
-		branch    = fs.String("branch", "", "the EpicRun integration branch")
-		base      = fs.String("base", "HEAD", "what the integration branch is cut from")
-		runID     = fs.String("run-id", "", "the run's id")
-		owner     = fs.String("owner", "ticfac", "who claims a tick in the tracker")
-		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
-		tier      = fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])")
-		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
-		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
-		gate      = fs.String("gate", "", "the runners.toml the integrated gate is read from")
-		budget    = fs.Float64("budget", 0, "the budget an operator asks for")
-		ceiling   = fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to")
-		wall      = fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by")
-		// Supervision is ON by default (tick go6), and the default is the
-		// argument. The behaviour it replaces is not "the run stops" — it is
-		// "the run stops and a person retypes the identical command", which
-		// the operator did about fifteen times in one day. Defaulting to off
-		// would keep exactly that behaviour with worse latency (the person has
-		// to notice first: two of the day's stalls were multi-hour) and no
-		// record that the loop happened at all. Neither is safer. What IS
-		// safer is that the loop is now bounded, classified and counted: it
-		// continues only across the closed set of stops that need nobody, it
-		// halts on a repeat over an unchanged tree, and every continuation is
-		// recorded as the intervention it is.
-		supervise = fs.Bool("supervise", true,
-			"continue across stops that only need resuming — a rejected attempt that left nothing, a tracker "+
-				"width refusal, gate evidence that went stale, a transient remote failure — adopting the "+
-				"in-flight attempts by identity, with bounded backoff and a cap. Every continuation is RECORDED "+
-				"as an intervention. A stop that needs a person still stops. --supervise=false stops at the "+
-				"first refusal")
-		maxResumes = fs.Int("max-resumes", reconcile.DefaultAutoResumeCap,
-			"the most automatic continuations one supervised run makes before it stops with the refusal it "+
-				"stopped over; the cap is the safety against a run that resumes forever over the same stop")
-		stallWarn = fs.Int("stall-warn", int(reconcile.DefaultStallWarnAfter/time.Second),
-			"how many seconds an in-flight attempt may produce nothing durable (branch unmoved, worktree unchanged) "+
-				"before the run says so in the feed — an early warning, never a verdict; 0 is the default, negative disables")
-		// The eviction flush's bound (tick ppt). The platform sends SIGTERM,
-		// waits up to fifteen minutes, then SIGKILLs; the flush commits and
-		// pushes the in-flight work and writes the checkpoint inside THIS many
-		// seconds, so a hung push cannot spend the whole window and reach
-		// SIGKILL anyway. Zero and below disable the flush — the pre-ppt
-		// behaviour, an immediate exit that leaves the work to whatever the
-		// last timer push carried away.
-		evacuateSeconds = fs.Int("evacuate-seconds", int(reconcile.DefaultEvacuationBudget/time.Second),
-			"how many seconds a SIGTERM's final flush may spend committing and pushing the in-flight work "+
-				"and writing the checkpoint before the process exits anyway (0 disables the flush)")
-		// The absorption recursion's bound (tick qjj). Depth rather than wall
-		// clock: depth counts how far the run has travelled from the epic
-		// anyone asked for, and only a person can judge that. The default's
-		// reasoning lives on the constant; here the operator reads what the
-		// number governs and where to raise it when the stop is wrong.
-		//
-		// The default here is 0 — NOT NAMED — rather than the constant,
-		// because the reconciler cannot tell an operator who wrote
-		// --absorption-depth 3 from one who wrote nothing (tick wz0, finding
-		// 95f5ee1a): a named bound is the person's raise over the recorded
-		// one, and an unnamed one adopts what the run branch records, so a
-		// cold restart honours the bound the warm run ran with. Zero and
-		// below still mean the DEFAULT inside the options' own normalising,
-		// never an unbounded recursion.
-		absorptionDepth = fs.Int("absorption-depth", 0,
-			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
-				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
-				"before the run stops for a person carrying the whole chain (0, the default, means not "+
-				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
-				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
-				"ground, a third is already far from home, and past that a person should judge the chain "+
-				"rather than let the run keep going)")
-	)
-	// Flags may follow the positionals: the remedies the run prints are written
-	// that way, and remedy_test.go holds every one of them to this parser.
-	rest, parseErr := parseCollectingPositionals(fs, args)
-	if parseErr != nil {
-		return 2
-	}
+func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code int) {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac run-epic: exactly one epic id is required\n")
 		return 2
 	}
 	epicID := rest[0]
+
+	// The document's writer and the prose's, kept apart from the first line
+	// (tick 8v3): with --json the run's own words — the startup line, the
+	// classifier's note, the per-tick report — all go to STDERR (and to
+	// run.log through the wrap below), and stdout carries exactly one
+	// document at the end. Without --json, prose is stdout's as it always
+	// was, byte-for-byte.
+	answer := stdout
+	prose := stdout
+	if *fl.asJSON {
+		prose = stderr
+	}
 
 	// The refusal, and the reason it is a refusal rather than a no-op: without
 	// a host behind the four-operation protocol there is nothing that could
@@ -414,9 +278,9 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// told 8 here and not in a journal nobody sees — and told what the number
 	// does on this host, because a budget printed like an enforced limit is
 	// worse than no line at all.
-	if *budget > 0 || *ceiling > 0 {
-		clamped := reconcile.ClampBudget(*budget, *ceiling)
-		fmt.Fprintf(stdout, "%s\n", budgetLine(clamped))
+	if *fl.budget > 0 || *fl.ceiling > 0 {
+		clamped := reconcile.ClampBudget(*fl.budget, *fl.ceiling)
+		fmt.Fprintf(prose, "%s\n", budgetLine(clamped))
 	}
 
 	// The classifier's credential, resolved BEFORE anything is dispatched (tick
@@ -430,27 +294,34 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// exists, so a refusal writes no stdout of any kind.
 	classifier, classifierNote := classifierForRun()
 
-	if *runner == "" {
-		*runner = "claude"
+	if *fl.runner == "" {
+		*fl.runner = "claude"
 	}
-	tracker, err := newTracker(*repo)
+	tracker, err := newTracker(*fl.repo)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: the tracker is not usable: %v\n", epicID, err)
 		return 1
 	}
 
 	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz):
-	// built from the remote and the token, handed to the reconciler, and nil
-	// — with a note, not a crash — when neither resolves. A target repo that
-	// declares no rule in .tick/config.md needs no surface; one that does is
-	// refused by the reconciler at construction, naming the credential.
-	repoDir := *repo
+	// built only when the target repo's own .tick/config.md declares the
+	// rule (tick hio), from the remote and the token, handed to the
+	// reconciler, and nil — with a note, not a crash — when neither resolves.
+	// A target repo that declares no rule needs no surface and no credential
+	// resolved at all; one that does is refused by the reconciler at
+	// construction, naming the credential.
+	repoDir := *fl.repo
 	if repoDir == "" {
 		if wd, wdErr := os.Getwd(); wdErr == nil {
 			repoDir = wd
 		}
 	}
-	pulls, pullsErr := pullRequestsForRun(repoDir, *remote)
+	// The code-hosting surface behind the PR + CI close-out rule (tick 0iz),
+	// built with the note naming which rung answered (tick 9sz). The note is
+	// SAID on the wrapped stdout below — beside the classifier's — so it
+	// lands in run.log with the run's other startup facts rather than on a
+	// stdout `ticfac run`'s child has already redirected elsewhere.
+	pulls, forgeNote, pullsErr := pullRequestsForRun(repoDir, *fl.remote)
 	if pullsErr != nil {
 		fmt.Fprintf(stderr, "ticfac run-epic %s: no code-hosting surface: %v. "+
 			"A repository that declares the PR + CI close-out rule in .tick/config.md will be refused "+
@@ -464,31 +335,31 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// interface is not nil — the seam would dial a client that does not exist,
 	// and the nil check each exchange runs would pass it straight through.
 	opts := reconcile.Options{
-		Repo:                 *repo,
-		Remote:               *remote,
+		Repo:                 *fl.repo,
+		Remote:               *fl.remote,
 		EpicID:               epicID,
-		RunID:                *runID,
-		IntegrationBranch:    *branch,
-		BaseRef:              *base,
-		Owner:                *owner,
+		RunID:                *fl.runID,
+		IntegrationBranch:    *fl.branch,
+		BaseRef:              *fl.base,
+		Owner:                *fl.owner,
 		Tracker:              tracker,
-		NewExecutor:          executorFactory(*runner, *gate),
+		NewExecutor:          executorFactory(*fl.runner, *fl.gate),
 		Executors:            knownExecutors(),
-		ExecStateRoot:        *stateRoot,
-		GateConfig:           *gate,
-		ProfileDir:           *profiles,
-		Tier:                 *tier,
-		WallSeconds:          *wall,
-		StallWarnAfter:       time.Duration(*stallWarn) * time.Second,
-		BudgetUSD:            *budget,
-		CeilingUSD:           *ceiling,
+		ExecStateRoot:        *fl.stateRoot,
+		GateConfig:           *fl.gate,
+		ProfileDir:           *fl.profiles,
+		Tier:                 *fl.tier,
+		WallSeconds:          *fl.wall,
+		StallWarnAfter:       time.Duration(*fl.stallWarn) * time.Second,
+		BudgetUSD:            *fl.budget,
+		CeilingUSD:           *fl.ceiling,
 		PullRequests:         pulls,
-		AutoResumeCap:        autoResumeCap(*supervise, *maxResumes),
-		AbsorptionDepthBound: *absorptionDepth,
+		AutoResumeCap:        autoResumeCap(*fl.supervise, *fl.maxResumes),
+		AbsorptionDepthBound: *fl.absorptionDepth,
 		// The person's raise (tick wz0): a bound named on the command line —
 		// and only one named there, never the default the flag merely carries
 		// — overrides the bound recorded on the run branch.
-		AbsorptionDepthExplicit: *absorptionDepth > 0,
+		AbsorptionDepthExplicit: *fl.absorptionDepth > 0,
 	}
 	if classifier != nil {
 		opts.Classifier = classifier
@@ -513,7 +384,9 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	}
 	operatorStderr := stderr
 	stderr = io.MultiWriter(stderr, life.Log())
-	stdout = io.MultiWriter(stdout, life.Log())
+	// The prose destination is the one chosen at the top: stdout for a
+	// person, stderr under --json where the document owns stdout.
+	stdout = io.MultiWriter(prose, life.Log())
 
 	// A redirected run-epic was silent until the run ended (tick bzx), so a
 	// redirected output was no monitoring signal. The run's id and the two
@@ -529,6 +402,16 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// that silently classifies nothing is exactly the silence the startup line
 	// exists to break.
 	fmt.Fprintf(stdout, "%s\n", classifierNote)
+
+	// Which rung the forge's credential came from — or nothing at all, said
+	// by hio's gate itself: a repo that declares no close-out rule resolves
+	// no credential and needs no note. This is the "says so" half of the
+	// one-command run (tick 9sz): a token fetched from gh's own auth is
+	// otherwise invisible, and a run that used it without naming it is a run
+	// whose credential story starts with a question.
+	if forgeNote != "" {
+		fmt.Fprintf(stdout, "%s\n", forgeNote)
+	}
 
 	// What killed processes left in the temp directory (tick w9j): a SIGKILL
 	// runs no cleanup at all. Conservative — only ticfac-* names, never the
@@ -552,9 +435,24 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
-	// Registered first so it runs last: whatever path the process leaves by,
-	// the pidfile is released and the log says how. Release is idempotent, so
-	// the specific outcomes below win.
+	// The remote view (tick i1r): opted in with --status-push and a factory
+	// configured, the run pushes its status model to the factory on a short
+	// cadence while it works, so the factory's phone page (/status) lists it
+	// beside the cloud runs it hosts. Nil — the default — is a run that pushes
+	// nothing and costs nothing. The Stop defer is registered BEFORE the
+	// pidfile release on purpose, so its ending push is written LAST — after
+	// the release — and carries the run's terminal answer (a probe that still
+	// saw the pidfile would make "done" read "running" forever on the page).
+	pusher := startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	defer func() {
+		if pusher != nil {
+			pusher.Stop()
+		}
+	}()
+
+	// Registered before everything below so the release runs after it: whatever
+	// path the process leaves by, the pidfile is released and the log says how.
+	// Release is idempotent, so the specific outcomes below win.
 	defer life.Release("returned")
 	// Every temp tree still open when the run returns — a gate abandoned
 	// mid-command, a leg that errored past its own cleanup — goes with it.
@@ -580,7 +478,7 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		select {
 		case <-finished:
 		case sig := <-signals:
-			detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
+			detail := signalStopDetail(sig)
 			life.Logf("%s", detail)
 			// The eviction flush (tick ppt): SIGTERM is the platform saying the
 			// container is going away, so the run spends a BOUNDED slice of the
@@ -592,9 +490,14 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 			//
 			// SIGINT keeps the immediate exit it always had: that is a person
 			// at a terminal, not a platform eviction, and a person's stop wants
-			// no ceremony. The flush is SIGTERM's.
-			if sig == syscall.SIGTERM && *evacuateSeconds > 0 {
-				budget := time.Duration(*evacuateSeconds) * time.Second
+			// no ceremony. The flush is SIGTERM's. But no ceremony is not the
+			// failed class: since tick vqc the SIGINT death line is LED by the
+			// cancelled state word (signalStopDetail), so the watch answers a
+			// deliberate stop with the cancelled class (7) — the same
+			// distinction the run_finished cancelled words got (tick rix) —
+			// while the SIGTERM eviction stays a death like a panic.
+			if sig == syscall.SIGTERM && *fl.evacuateSeconds > 0 {
+				budget := time.Duration(*fl.evacuateSeconds) * time.Second
 				lines := reconciler.Evacuate(sig.String(), budget)
 				for _, line := range lines {
 					life.Logf("evacuation: %s", line)
@@ -633,7 +536,10 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 		// woken just as much as a finished one, so the reboot does not wait out
 		// a whole cadence to learn what the container already knew. The branch
 		// may never have landed — the door takes a signal with no head.
-		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
+		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+		if *fl.asJSON {
+			emitRunEpicFailureJSON(epicID, err, answer)
+		}
 		return 1
 	}
 	defer life.Release(string(result.State))
@@ -674,8 +580,114 @@ func runEpic(args []string, stdout, stderr io.Writer) (code int) {
 	// factory in its environment — makes this a no-op, and a signal that cannot
 	// be delivered is said to the log (which is run.log here, the stream the
 	// Workflow drains to R2) and swallowed, never an exit code.
-	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *remote, reconciler.IntegrationBranch())
+	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+	if *fl.asJSON {
+		// The one document (tick 8v3): the run's whole answer as fields, so
+		// an agent branching on the exit code can read the same verdict's
+		// reason class — the refusal vocabulary, never prose — without a
+		// second command.
+		emitRunEpicResultJSON(result, answer)
+	}
 	return resultExitCode(result)
+}
+
+// runEpicFailureJSON is `run-epic --json`'s answer for a run that died
+// without a result: the error, as the one field it is.
+type runEpicFailureJSON struct {
+	agentDoc
+	EpicID string `json:"epic_id"`
+	Error  string `json:"error"`
+}
+
+func emitRunEpicFailureJSON(epicID string, err error, stdout io.Writer) {
+	doc := runEpicFailureJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("run-epic"), State: agentStateFailed},
+		EpicID:   epicID,
+		Error:    err.Error(),
+	}
+	_ = emitAgentJSON(stdout, doc)
+}
+
+// runEpicRefusalJSON is a run's typed refusal as the result document carries
+// it. Reason is the REASON CLASS — the stable refusal vocabulary
+// (reconcile's Refused* constants: finding_untriaged, closeout_ci_failed,
+// merge_failed...) an agent branches on; Message is the human sentence.
+type runEpicRefusalJSON struct {
+	Reason  string `json:"reason"`
+	TickID  string `json:"tick_id,omitempty"`
+	Message string `json:"message"`
+}
+
+// runEpicResumeJSON is one automatic continuation, the intervention record
+// the prose resume line counts.
+type runEpicResumeJSON struct {
+	Reason string `json:"reason"`
+	TickID string `json:"tick_id,omitempty"`
+}
+
+// runEpicTickJSON is one tick's durable state as the result names it.
+type runEpicTickJSON struct {
+	TickID string `json:"tick_id"`
+	State  string `json:"state"`
+}
+
+// runEpicResultJSON is `run-epic --json`'s answer, ticfac.run-epic.v1: the
+// whole Result — the run's own state word, every tick, the refusal that
+// stopped it with its REASON CLASS, the supervisor's halt, the automatic
+// continuations (each an intervention a caller reporting "unattended" must
+// count), and the never-silent notes about the feed and liveness records.
+// The state word is the table's — done when the run completed, held when the
+// run stopped holding something only a person can move (tick 4mv), cancelled
+// when it was stopped deliberately (tick rix: the resume path replays an
+// already-terminal checkpoint as a Result, and a cancelled replay must
+// answer the same word the watch answers), failed otherwise — so the exit
+// code and the document cannot disagree; the run's own terminal word
+// travels as run_state.
+type runEpicResultJSON struct {
+	agentDoc
+	RunID         string              `json:"run_id"`
+	EpicID        string              `json:"epic_id"`
+	RunState      string              `json:"run_state"`
+	Reason        string              `json:"reason,omitempty"`
+	Failure       *runEpicRefusalJSON `json:"failure,omitempty"`
+	Halt          string              `json:"halt,omitempty"`
+	Resumes       []runEpicResumeJSON `json:"resumes,omitempty"`
+	Ticks         []runEpicTickJSON   `json:"ticks"`
+	FeedError     string              `json:"feed_error,omitempty"`
+	LivenessError string              `json:"liveness_error,omitempty"`
+}
+
+func emitRunEpicResultJSON(result *reconcile.Result, stdout io.Writer) {
+	doc := runEpicResultJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("run-epic"), State: agentStateFailed},
+		RunID:    result.RunID,
+		EpicID:   result.EpicID,
+		RunState: string(result.State),
+		Reason:   result.Reason,
+		Halt:     result.Halt,
+		Ticks:    make([]runEpicTickJSON, 0, len(result.Ticks)),
+	}
+	doc.State = runEpicStateWord(result)
+	if result.Failure != nil {
+		doc.Failure = &runEpicRefusalJSON{
+			Reason:  result.Failure.Reason,
+			TickID:  result.Failure.TickID,
+			Message: result.Failure.Message,
+		}
+	}
+	for _, resume := range result.Resumes {
+		doc.Resumes = append(doc.Resumes, runEpicResumeJSON{Reason: resume.Reason, TickID: resume.TickID})
+	}
+	for _, tick := range result.Ticks {
+		doc.Ticks = append(doc.Ticks, runEpicTickJSON{TickID: tick.TickID, State: tick.State})
+	}
+	if result.FeedError != nil {
+		doc.FeedError = result.FeedError.Error()
+	}
+	if result.LivenessError != nil {
+		doc.LivenessError = result.LivenessError.Error()
+	}
+	_ = emitAgentJSON(stdout, doc)
 }
 
 // autoResumeCap turns the operator's two flags into the one number the
@@ -696,6 +708,23 @@ func autoResumeCap(supervise bool, cap int) int {
 // to perform, which is a real and reportable gain — and it is NOT the same
 // claim as a run that never stopped, so the line names each stop rather than
 // only counting them.
+
+// signalStopDetail is the run_died line a signal writes (tick vqc): the
+// plain sentence for SIGTERM — the platform's eviction, a death like a
+// panic — and, for SIGINT, the cancelled state word LED in front of the
+// same sentence, because a person at a terminal stopping the run is the
+// cancelled class's own case, not a failure to fix. The watch reads the
+// state word — the same vocabulary run_finished's details are led by — and
+// never has to parse the prose; the eviction keeps the failed class a
+// run's death has always had.
+func signalStopDetail(sig os.Signal) string {
+	detail := fmt.Sprintf("stopped by a signal (%s) before the run finished", sig)
+	if sig == syscall.SIGINT {
+		detail = string(runstate.StateCancelled) + ": " + detail
+	}
+	return detail
+}
+
 func resumeLine(result *reconcile.Result) string {
 	stops := make([]string, 0, len(result.Resumes))
 	for _, resume := range result.Resumes {
@@ -781,28 +810,73 @@ func budgetLine(budget reconcile.Budget) string {
 
 // settle releases one attempt nobody can address, on a person's word. See
 // internal/reconcile/settle.go for why a person is the next actor at all.
-func settle(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var (
-		repo      = fs.String("repo", "", "the checkout the run works in")
-		remote    = fs.String("remote", "origin", "the remote holding the run's durable authority")
-		branch    = fs.String("branch", "", "the EpicRun integration branch")
-		runID     = fs.String("run-id", "", "the run's id")
-		runner    = fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi")
-		tier      = fs.String("tier", "", "the tier the released attempt was dispatched at, as for run-epic")
-		profiles  = fs.String("profiles", "", "resolve role profiles from this directory")
-		stateRoot = fs.String("state-root", "", "where attempt state lives, outside the repository")
-		gate      = fs.String("gate", "", "the runners.toml the run's gate is read from")
-		release   = fs.String("release", "", "the person releasing the attempt")
-		carryWork = fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)")
-	)
-	// Flags may follow the positionals: the remedies the run prints are written
-	// that way, and remedy_test.go holds every one of them to this parser.
-	rest, parseErr := parseCollectingPositionals(fs, args)
-	if parseErr != nil {
-		return 2
+// settleFlags is `settle`'s flag surface, declared once per invocation.
+type settleFlags struct {
+	repo, remote, branch, runID, runner, tier, profiles, stateRoot, gate, release *string
+	carryWork                                                                     *bool
+	asJSON                                                                        *bool
+}
+
+func defineSettleFlags(fs *flag.FlagSet) *settleFlags {
+	return &settleFlags{
+		repo:      fs.String("repo", "", "the checkout the run works in"),
+		remote:    fs.String("remote", "origin", "the remote holding the run's durable authority"),
+		branch:    fs.String("branch", "", "the EpicRun integration branch"),
+		runID:     fs.String("run-id", "", "the run's id"),
+		runner:    fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi"),
+		tier:      fs.String("tier", "", "the tier the released attempt was dispatched at, as for run-epic"),
+		profiles:  fs.String("profiles", "", "resolve role profiles from this directory"),
+		stateRoot: fs.String("state-root", "", "where attempt state lives, outside the repository"),
+		gate:      fs.String("gate", "", "the runners.toml the run's gate is read from"),
+		release:   fs.String("release", "", "the person releasing the attempt"),
+		carryWork: fs.Bool("carry-work", false, "base the next attempt of this tick on the released attempt's branch, so the next worker starts from its commits rather than redoing them (the gate still decides)"),
+		asJSON:    fs.Bool("json", false, "print one versioned document (ticfac.settle.v1) recording the release: the decision, where the released attempt's work lives, and whether the next run carries it"),
 	}
+}
+
+// newSettleCommand builds the cobra command for `settle`.
+func newSettleCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "settle <epic-id> <tick-id> <attempt>",
+		Short: "release an attempt nobody can address",
+		Long: `Release one attempt nobody can address, on a person's word.
+
+An attempt whose supervisor died without settling it reads as lost, and every
+restart holds it rather than starting a second job over the same identity
+(Appendix A #6). "settle" is how a PERSON releases one: it refuses an attempt
+the executor can still address, records the release durably as a decision
+naming who made it, and the next run dispatches a NEW attempt instead of
+adopting the released one. Whatever the released attempt committed stays on
+its own write ref — and the release says where that ref lives: on the remote,
+or only as a local branch in the checkout that holds it when the push never
+landed there.
+
+It releases one other attempt: one this run REJECTED while it was holding
+commits nothing merged. No run collects that attempt again (the teardown the
+refusal ran removed its worktree) and no run dispatches over it (that would
+orphan the only copy of the work), so a person reads the branch and then says
+here that the run may go on.
+
+--carry-work is the third option that situation actually needs: release the
+attempt AND base the next one on its branch, so the next worker starts from the
+work rather than redoing it. Nothing merges unproven — the gate still decides —
+but the evidence the interrupted attempt produced is not thrown away, and the
+next attempt's provenance records that its source is the released attempt's
+ref and commit (tick 0z0).`,
+	}
+	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
+	fl := defineSettleFlags(fs)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(settle(args, fl, stdout, stderr))
+	}
+	return cmd
+}
+
+// settle releases one attempt nobody can address, on a person's word. See
+// internal/reconcile/settle.go for why a person is the next actor at all.
+func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 3 {
 		fmt.Fprintf(stderr, "ticfac settle: exactly one epic id, tick id and attempt number are required\n")
 		return 2
@@ -813,7 +887,7 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle: %q is not an attempt number\n", rest[2])
 		return 2
 	}
-	if *release == "" {
+	if *fl.release == "" {
 		fmt.Fprintf(stderr, "ticfac settle: --release names who is releasing the attempt; a release with no "+
 			"author is the clock release Appendix A #11 refuses\n")
 		return 2
@@ -825,10 +899,10 @@ func settle(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle %s: %s.\n%v\n", epicID, NoExecutorMessage, err)
 		return ExitNoExecutor
 	}
-	if *runner == "" {
-		*runner = "claude"
+	if *fl.runner == "" {
+		*fl.runner = "claude"
 	}
-	tracker, err := newTracker(*repo)
+	tracker, err := newTracker(*fl.repo)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s: the tracker is not usable: %v\n", epicID, err)
 		return 1
@@ -839,19 +913,19 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	// the code-hosting surface the PR + CI rule needs — a person releasing a
 	// stuck attempt is not refused for a GITHUB_TOKEN the release never uses.
 	reconciler, err := reconcile.New(reconcile.Options{
-		Repo:              *repo,
-		Remote:            *remote,
+		Repo:              *fl.repo,
+		Remote:            *fl.remote,
 		EpicID:            epicID,
-		RunID:             *runID,
-		IntegrationBranch: *branch,
+		RunID:             *fl.runID,
+		IntegrationBranch: *fl.branch,
 		Owner:             "ticfac",
 		Tracker:           tracker,
-		NewExecutor:       executorFactory(*runner, *gate),
+		NewExecutor:       executorFactory(*fl.runner, *fl.gate),
 		Executors:         knownExecutors(),
-		ExecStateRoot:     *stateRoot,
-		GateConfig:        *gate,
-		ProfileDir:        *profiles,
-		Tier:              *tier,
+		ExecStateRoot:     *fl.stateRoot,
+		GateConfig:        *fl.gate,
+		ProfileDir:        *fl.profiles,
+		Tier:              *fl.tier,
 		ReleaseOnly:       true,
 	})
 	if err != nil {
@@ -860,14 +934,17 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	}
 
 	var settled *reconcile.Settlement
-	if *carryWork {
-		settled, err = reconciler.SettleCarry(context.Background(), tickID, attempt, *release)
+	if *fl.carryWork {
+		settled, err = reconciler.SettleCarry(context.Background(), tickID, attempt, *fl.release)
 	} else {
-		settled, err = reconciler.Settle(context.Background(), tickID, attempt, *release)
+		settled, err = reconciler.Settle(context.Background(), tickID, attempt, *fl.release)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
 		return 1
+	}
+	if *fl.asJSON {
+		return emitSettleJSON(epicID, tickID, attempt, settled, stdout, stderr)
 	}
 	// The released attempt is named the way every line written for a person
 	// names one (tick h58): the tick's own try first, the run-wide dispatch
@@ -913,10 +990,63 @@ func settle(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// settleJSON is `settle --json`'s answer, ticfac.settle.v1: the release a
+// person made — attributed, recorded as the decision it landed as — and
+// WHERE the released attempt's work lives, the facts the prose paragraphs
+// say, as fields an agent can branch on without parsing them.
+type settleJSON struct {
+	agentDoc
+	EpicID      string `json:"epic_id"`
+	TickID      string `json:"tick_id"`
+	Attempt     int    `json:"attempt"`
+	Try         int    `json:"try"`
+	ReleasedBy  string `json:"released_by"`
+	State       string `json:"executor_state"`
+	Recorded    bool   `json:"recorded"`
+	Decision    int    `json:"decision"`
+	RunID       string `json:"run_id"`
+	Carried     bool   `json:"carried"`
+	CarryRef    string `json:"carry_ref,omitempty"`
+	WorkRef     string `json:"work_ref,omitempty"`
+	WorkSHA     string `json:"work_sha,omitempty"`
+	WorkDurable bool   `json:"work_durable"`
+	WorkIn      string `json:"work_in,omitempty"`
+}
+
+// emitSettleJSON prints the one document. An already-released attempt is a
+// done answer, not a failure: `recorded: false` is the fact a repeat caller
+// reads, and the exit code stays 0 either way.
+func emitSettleJSON(epicID, tickID string, attempt int, settled *reconcile.Settlement, stdout, stderr io.Writer) int {
+	doc := settleJSON{
+		agentDoc:    agentDoc{Schema: agentSchemaID("settle"), State: agentStateDone},
+		EpicID:      epicID,
+		TickID:      tickID,
+		Attempt:     attempt,
+		Try:         settled.Try,
+		ReleasedBy:  settled.ReleasedBy,
+		State:       settled.State,
+		Recorded:    settled.Recorded,
+		Decision:    settled.Decision,
+		RunID:       settled.RunID,
+		Carried:     settled.Carried,
+		CarryRef:    settled.CarryRef,
+		WorkRef:     settled.WorkRef,
+		WorkSHA:     settled.WorkSHA,
+		WorkDurable: settled.WorkDurable,
+		WorkIn:      settled.WorkIn,
+	}
+	if err := emitAgentJSON(stdout, doc); err != nil {
+		fmt.Fprintf(stderr, "ticfac settle %s %s %d: %v\n", epicID, tickID, attempt, err)
+		return 1
+	}
+	return 0
+}
+
 // buildInfo is what `version --json` prints. The contract bundle is part of
 // the answer: a consumer holding only this executable can ask which contracts
 // it was built against, without a checkout.
 type buildInfo struct {
+	Schema           string `json:"schema"`
 	Ticfac           string `json:"ticfac"`
 	ContractBundle   string `json:"contract_bundle"`
 	TicksRepository  string `json:"ticks_repository"`
@@ -924,13 +1054,23 @@ type buildInfo struct {
 	ContractsPinPath string `json:"contracts_pin"`
 }
 
-func version(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("version", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	asJSON := fs.Bool("json", false, "print machine-readable output")
-	if err := fs.Parse(args); err != nil {
-		return 2
+// newVersionCommand builds the cobra command for `version`, which reports
+// this build and the contract bundle it serves — a different, richer answer
+// than the --version flag fang feeds from the same Version variable.
+func newVersionCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "report this build and the contract bundle it serves",
+		Long:  "Report this build's version and the vendored ticks contract bundle\nit was compiled against, without needing a checkout.",
 	}
+	asJSON := cmd.Flags().Bool("json", false, "print machine-readable output")
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(version(args, asJSON, stdout, stderr))
+	}
+	return cmd
+}
+
+func version(args []string, asJSON *bool, stdout, stderr io.Writer) int {
 
 	info, err := BuildInfo()
 	if err != nil {
@@ -978,6 +1118,7 @@ func BuildInfo() (buildInfo, error) {
 	}
 
 	return buildInfo{
+		Schema:           agentSchemaID("version"),
 		Ticfac:           Version,
 		ContractBundle:   bundle.Version,
 		TicksRepository:  pin.Repository,

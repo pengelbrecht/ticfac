@@ -64,6 +64,15 @@ func TestExceedingTheAbsorptionDepthBoundStopsTheRunForAPersonWithTheChain(t *te
 	// person judging whether the run was right to keep going reads WHICH
 	// finding led to which, not a number.
 	tripped := result.Failure.TickID
+	// The stop's escape hatch names the everyday triage (tick 8yn): a person
+	// settling the tripped finding is sent to `ticfac triage` — absorb or
+	// discard, by short key prefix — never back to the old 64-hex command.
+	if !strings.Contains(result.Failure.Message, "ticfac triage qeu") {
+		t.Errorf("the depth stop does not teach the everyday triage: %s", result.Failure.Message)
+	}
+	if strings.Contains(result.Failure.Message, "ticfac finding qeu") {
+		t.Errorf("the depth stop still teaches the old 64-hex triage: %s", result.Failure.Message)
+	}
 	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
 	records, err := store.Absorptions()
 	if err != nil {

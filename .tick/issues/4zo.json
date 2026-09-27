@@ -1,0 +1,16 @@
+{
+  "id": "4zo",
+  "title": "forge.ParseRepo accepts non-GitHub hosts, so a GitLab origin passes the close-out guess and fails only at REST time",
+  "description": "ParseRepo resolves any host:owner/name or https://host/owner/name remote to an owner/name slug, so a GitLab or Bitbucket origin passes init's close-out guess and doctor's remote check, the run constructs a GitHub surface addressed at that slug, and the failure surfaces only at close-out time as 404s against api.github.com. forge.GitHub always addresses api.github.com (its API field is never set by pullRequestsForRun), so a non-github.com host is a remote the surface cannot speak with. A host check in ParseRepo (or at the three call sites that mean \"GitHub remote\": init's guess, doctor's check, pullRequestsForRun) would catch it where the operator can still fix it; GitHub Enterprise users would need forge.GitHub's API field wired first.\n\nticfac run epic-2jn created this tick by absorbing the finding a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e (reported by run-epic-2jn/tick-6vp/attempt-36): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e.json on the run branch.",
+  "notes": "2026-09-27 16:52 - ticfac run epic-2jn: created by absorbing finding a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/a5b1d8872fc95106873504c762ea4c664ea460c1b9d1bce74ed43afc99c89b2e.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A1, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 18:45 - ticfac run epic-2jn: 4zo try 1 (run dispatch #42) merged into epic/2jn as c8b2c40babb8; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-6vp/attempt-36",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:52:32Z",
+  "updated_at": "2026-09-27T16:45:34.703195Z",
+  "closed_at": "2026-09-27T16:45:34.703195Z"
+}

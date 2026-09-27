@@ -1,0 +1,16 @@
+{
+  "id": "aj9",
+  "title": "waits_on for a dead run and the per-checkout liveness answer: the listing surface needs one probing convention",
+  "description": "status's liveness (and therefore the model's dead-run wait) is per-checkout: a run whose pidfile lives in the repo it works in reads dead-run from anywhere else. Correct for `status \u003crun-id\u003e` (the model is a snapshot of what this checkout can read), but `ticfac` with no arguments (2qz) will list runs from multiple checkouts and needs one convention for where each run is probed — the run-state store's origin view or a per-run registration of the working repo. Worth deciding before 2qz builds its listing.\n\nticfac run epic-2jn created this tick by absorbing the finding 8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a (reported by run-epic-2jn/tick-6dh/attempt-2): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a.json on the run branch.",
+  "notes": "2026-09-27 08:30 - ticfac run epic-2jn: created by absorbing finding 8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a — placed before the final review, which is blocked-by aj9. The decision record is .ticfac/runs/epic-2jn/absorptions/8fbcd3dd98cd6031905e7d319956e651eb86835861bdc576a962e2a94acc3e6a.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 09:55 - ticfac run epic-2jn: aj9 try 1 (run dispatch #12) reported a finding the run itself decided — proposed-tick \"Claim's live-driver refusal is per-checkout: a second run-epic from another checkout of the same repo is not refused\" (key 760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85, severity medium, for this repository) is absorbed into the running epic as tick 9oo, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85.json, and the draft is triaged as promoted.\n2026-09-27 09:59 - ticfac run epic-2jn: aj9 try 1 (run dispatch #12) merged into epic/2jn as 1de411556741; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-6dh/attempt-2",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T06:29:48Z",
+  "updated_at": "2026-09-27T07:59:47.939822Z",
+  "closed_at": "2026-09-27T07:59:47.939822Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "1cs",
+  "title": "reconcile's harness pushes to local bare origins that env maintenance pins cannot reach — its qsn guard never traces a push",
+  "description": "reconcile's fixture pins its runner's environment with gitbin.WithNoAutoMaintenance and its trace guard (TestTheHarnessStartsNoGitItDoesNotWaitFor) covers clone/add/commit/fetch — but its bare origin (harness_test.go:559) is created with no config pins, and every `git push` its tests make (closeout_test, evacuate_test, attempt_identity_test, adoption_test, gate_repair_test, …) starts git-receive-pack with GIT_CONFIG_COUNT stripped by git's local transport (connect.c pushes local_repo_env), so the env pin never reaches the process that ends each push by starting `git maintenance run --auto --detach` in a t.TempDir origin. Verified empirically while fixing 35l: with env pins present, an unpinned local bare still gets one detached maintenance per push (traced to receive-pack via trace2 child events); pinning the bare's own config (maintenance.auto=false, receive.autogc=false, gc.auto=0) suppresses it. This is the same one-in-forty CI-flake class 35l was absorbed for, in the package where the qsn incident happened — reconcile's guard stays green because its traced sequence simply has no push in it. The fix mirrors 35l's: pin the origin at creation in the harness, and add a push to the guard's traced sequence.\n\nticfac run epic-2jn filed this backlog tick from the finding ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b (reported by run-epic-2jn/tick-35l/attempt-18): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b.json on the run branch.",
+  "notes": "2026-09-27 12:26 - ticfac run epic-2jn: created by absorbing finding ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-2jn/absorptions/ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-35l/attempt-18",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T10:26:27Z",
+  "updated_at": "2026-09-27T10:26:33.641645Z"
+}

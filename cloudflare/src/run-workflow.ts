@@ -91,6 +91,7 @@ import {
   syncRunCost,
 } from "./gateway";
 import type { Env } from "./index";
+import { notifyRunEnded } from "./notify";
 import {
   getReviewForRun,
   type ReviewTarget,
@@ -802,7 +803,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
       ok: false,
       detail:
         "the SANDBOXES binding is not configured on this deployment, so no orchestrator " +
-        "sandbox can be booted; re-run `tk factory deploy`",
+        "sandbox can be booted; re-run `ticfac factory deploy`",
     };
   }
 
@@ -2043,6 +2044,16 @@ export async function finalize(
       `factory run-workflow: ${params.run_id} could not stamp its progress verdict: ${String(error)}`,
     );
   });
+
+  // The operator's phone channel hears the ending here (ticfac tick i1r):
+  // "epic done" and "run failed" are paged through the same dedup memory
+  // (`status_alerts`) a local run's snapshots use, so a retried finalize step
+  // cannot page twice for one ending. A stopped run is the operator's own
+  // act and pages nothing. Never throws (see `notifyRunEnded`): a notifier
+  // that could fail a finalize would break the run it reports.
+  if (outcome.state === "completed" || outcome.state === "failed") {
+    await notifyRunEnded(env, params, outcome.state, outcome.detail);
+  }
 
   // The index row first, the Workflow params second: the row is what every
   // read surface answers from, and a run whose row was written before this

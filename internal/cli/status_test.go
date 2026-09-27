@@ -14,7 +14,18 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
+
+// workersOf is nil's honest count: a null workers list and an empty one are
+// different claims, and a test that counted them the same would pass on the
+// one it means to refuse.
+func workersOf(model statusmodel.Model) int {
+	if model.Workers == nil {
+		return 0
+	}
+	return len(*model.Workers)
+}
 
 // `ticfac status` reports, for each in-flight attempt, how long since its
 // branch last moved and its worktree last changed (tick 7zs) — the Phase 3
@@ -81,7 +92,7 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	t.Cleanup(func() { life.Release("test") })
 
 	var out bytes.Buffer
-	if code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	text := out.String()
@@ -96,25 +107,29 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := statusCommand(context.Background(), []string{"--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
-	var status runlife.Status
-	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
-		t.Fatalf("the JSON status does not decode: %v\n%s", err, out.String())
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
 	}
-	if len(status.Attempts) != 1 {
-		t.Fatalf("the JSON reports %d in-flight attempts, want 1:\n%s", len(status.Attempts), out.String())
+	if model.SchemaVersion != statusmodel.SchemaVersion || model.RunID != "r-status" || model.Host != statusmodel.HostLocal {
+		t.Errorf("the model does not name itself: version %d, run %q, host %q",
+			model.SchemaVersion, model.RunID, model.Host)
 	}
-	a := status.Attempts[0]
-	if a.TickID != "a1" || a.Attempt != 1 {
-		t.Errorf("the attempt reads as %s#%d, want a1#1", a.TickID, a.Attempt)
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the JSON reports %d in-flight workers, want 1:\n%s", workersOf(model), out.String())
 	}
-	if a.BranchIdle == nil || !strings.Contains(a.BranchIdle.String(), "3h0m") {
-		t.Errorf("the JSON branch gap is %+v, want ~3h", a.BranchIdle)
+	w := (*model.Workers)[0]
+	if w.TickID != "a1" || w.Attempt != 1 {
+		t.Errorf("the worker reads as %s#%d, want a1#1", w.TickID, w.Attempt)
 	}
-	if a.WorktreeIdle == nil || !strings.Contains(a.WorktreeIdle.String(), "2h0m") {
-		t.Errorf("the JSON worktree gap is %+v, want ~2h", a.WorktreeIdle)
+	if w.BranchIdleSeconds == nil || *w.BranchIdleSeconds < 2*3600 || *w.BranchIdleSeconds > 4*3600 {
+		t.Errorf("the JSON branch gap is %+v, want ~3h", w.BranchIdleSeconds)
+	}
+	if w.WorktreeIdleSeconds == nil || *w.WorktreeIdleSeconds < 1*3600 || *w.WorktreeIdleSeconds > 3*3600 {
+		t.Errorf("the JSON worktree gap is %+v, want ~2h", w.WorktreeIdleSeconds)
 	}
 }
 
@@ -127,7 +142,7 @@ func TestTheGapChangesNoVerdict(t *testing.T) {
 	repo := statusFixture(t, time.Now())
 
 	var out bytes.Buffer
-	code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{})
+	code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{})
 	if code != 1 {
 		t.Fatalf("a dead run exited %d: the gap must not change the verdict, only report beside it", code)
 	}
@@ -173,7 +188,7 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if code := statusCommand(context.Background(), []string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "wall clock fired 4m") {
@@ -184,31 +199,31 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := statusCommand(context.Background(), []string{"--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
-	var status runlife.Status
-	if err := json.Unmarshal(out.Bytes(), &status); err != nil {
-		t.Fatalf("the JSON status does not decode: %v\n%s", err, out.String())
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
 	}
-	if len(status.Attempts) != 1 {
-		t.Fatalf("the JSON reports %d in-flight attempts, want 1", len(status.Attempts))
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the JSON reports %d in-flight workers, want 1", workersOf(model))
 	}
-	if len(status.WallClocks) != 1 {
+	w := (*model.Workers)[0]
+	if w.WallClock == nil {
 		t.Fatalf("the JSON reports no firing for an attempt whose wall clock fired:\n%s", out.String())
 	}
-	w := status.WallClocks[0]
 	if w.TickID != "a1" || w.Attempt != 1 {
-		t.Errorf("the JSON's firing reads as %s#%d, want a1#1", w.TickID, w.Attempt)
+		t.Errorf("the JSON's worker reads as %s#%d, want a1#1", w.TickID, w.Attempt)
 	}
-	if w.FiredAt == nil || !w.FiredAt.Equal(firedAt) {
-		t.Errorf("the JSON's firing reads %s, want %s", w.FiredAt, firedAt)
+	if fired, err := time.Parse(time.RFC3339, w.WallClock.FiredAt); err != nil || !fired.Equal(firedAt) {
+		t.Errorf("the JSON's firing reads %s, want %s", w.WallClock.FiredAt, firedAt)
 	}
-	if w.FiredAgo == nil || !strings.Contains(w.FiredAgo.String(), "4m") {
-		t.Errorf("the JSON's firing age is %+v, want ~4m", w.FiredAgo)
+	if w.WallClock.Detail != detail {
+		t.Errorf("the JSON's firing detail does not carry the run's own line:\n got %q", w.WallClock.Detail)
 	}
-	if w.Detail != detail {
-		t.Errorf("the JSON's firing detail does not carry the run's own line:\n got %q", w.Detail)
+	if model.Health.WallClocksFired != 1 {
+		t.Errorf("the JSON's health counts %d firings, want 1", model.Health.WallClocksFired)
 	}
 }
 
@@ -236,7 +251,7 @@ func TestStatusReportsNoFiringFromProseAlone(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if code := statusCommand(context.Background(), []string{"--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if strings.Contains(out.String(), "wall clock fired") {
@@ -262,7 +277,7 @@ func TestStatusNamesAnAttemptByItsLabel(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if code := statusCommand(context.Background(), []string{"--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "a1 (wire the door) (run dispatch #1)") {
@@ -278,5 +293,159 @@ func TestTickLabelsOnAnUnreadableTrackerIsEmpty(t *testing.T) {
 	}
 	if got := tickRef(nil, "a1"); got != "a1" {
 		t.Errorf("tickRef with no labels = %q", got)
+	}
+}
+
+// TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory: `ticfac status
+// <epic-id>` — the id the operator has, after `ticfac run <epic> --cloud`
+// started the run there — answers the run the factory holds for this
+// checkout's project when nothing runs here (tick nyi). Before the fix the
+// epic id never looked in the factory at all: the command answered the
+// local pidfile probe's "not running here" and stopped.
+func TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("f888")
+
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "t1", nil,
+		reconcile.StageRunFinished, "completed: every tick of epic1 is closed behind the integrated gate"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case request.Path == "/api/runs/"+cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+cloudRun+"/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"status", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit %d for a finished cloud run, want 1 (not alive):\n%s\n%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "run "+cloudRun+": not alive") {
+		t.Errorf("stdout does not answer for the factory's run:\n%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), cloudRun) || !strings.Contains(stderr.String(), "epic-epic1") {
+		t.Errorf("stderr does not name the resolution from epic id to the factory's run:\n%s", stderr.String())
+	}
+}
+
+// The resumed-run case, on the surface that missed it (tick 4nq): the feed
+// is append-only per RUN ID, so a resumed local run appends to a file a
+// previous, failed incarnation already ended with a terminal line. A frame
+// that scans the whole standing feed for ANY terminal line marks the run
+// `ended` and `status --follow` stops following at the first frame, exit 0,
+// while the run is alive and dispatching — the same defect `ticfac watch`
+// carried until tick usx gave it cursor protection. A LIVE run claims the
+// follow: the previous incarnation's ending is history, and only a terminal
+// line the CURRENT incarnation writes ends it.
+func TestStatusFollowOnAResumedRunDoesNotEndOnThePreviousIncarnationsTerminalLine(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 1
+	// The previous incarnation: it dispatched tick a1 and failed on it —
+	// the exact line the old frame scanned as if it were happening now.
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-time.Hour), "r-1", "a1", &attempt, "dispatched", "attempt 1 started as run-x/tick-a1/attempt-1"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-30*time.Minute), "r-1", "", nil, reconcile.StageRunFinished, "failed: a1 did not pass"))
+
+	// The resumed run is in flight: this process claims it, the way the
+	// real second incarnation's own process does at startup.
+	life, err := runlife.Claim(repo, "r-1")
+	if err != nil {
+		t.Fatalf("claim the resumed run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr bytes.Buffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"status", "--repo", repo, "--follow", "--interval", "10ms", "r-1"}, &stdout, &stderr)
+	}()
+
+	// The follow joined the CURRENT incarnation: the resumed run writes a
+	// marker and the table renders it — a follow that ended on the previous
+	// incarnation's run_finished at the first frame can never render a line
+	// the current incarnation writes. Waits on that condition, never on a
+	// guessed interval.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+			time.Now(), "r-1", "a1", &attempt, "dispatched", "resumed incarnation dispatch marker"))
+		if strings.Contains(stdout.String(), "resumed incarnation dispatch marker") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(stdout.String(), "resumed incarnation dispatch marker") {
+		select {
+		case got := <-code:
+			t.Fatalf("the follow ended %d at the first frame on the previous incarnation's terminal line, while the run is alive and dispatching; stderr %q", got, stderr.String())
+		default:
+			t.Fatalf("the follow never rendered the current incarnation's line: %q", stdout.String())
+		}
+	}
+	select {
+	case got := <-code:
+		t.Fatalf("the follow returned %d while the run is still alive and dispatching; stderr %q", got, stderr.String())
+	default:
+	}
+
+	// The resumed run ends its own way, and the follow ends on THAT line.
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now(), "r-1", "", nil, reconcile.StageRunFinished, "completed: every tick closed behind the gate"))
+	select {
+	case got := <-code:
+		if got != 0 {
+			t.Fatalf("exit code %d, want 0 for a resumed run that ended clean while followed; stderr %q", got, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the follow never ended on the current incarnation's own terminal line")
+	}
+}
+
+// The other side of the cursor (tick 4nq): a run no live process claims is
+// answered by its standing feed — that IS the run's own last word, and the
+// follow ends on it at the first frame rather than following an open-ended
+// silence. A run about to be resumed has not claimed yet; its previous
+// ending was the truth until the resume.
+func TestStatusFollowOnAnUnclaimedRunEndsOnItsOwnTerminalLine(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 1
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-time.Hour), "r-1", "a1", &attempt, "dispatched", "attempt 1 started as run-x/tick-a1/attempt-1"))
+	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
+		time.Now().Add(-30*time.Minute), "r-1", "", nil, reconcile.StageRunFinished, "failed: a1 did not pass"))
+
+	var stdout, stderr bytes.Buffer
+	var code int
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		code = Run([]string{"status", "--repo", repo, "--follow", "--interval", "10ms", "r-1"}, &stdout, &stderr)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the follow never ended on an unclaimed run's own terminal line")
+	}
+	if code != 0 {
+		t.Fatalf("exit code %d, want 0 — ended is the surface's answer, never a verdict about the work; stderr %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "failed: a1 did not pass") {
+		t.Errorf("the frame does not carry the run's own last word: %q", stdout.String())
 	}
 }

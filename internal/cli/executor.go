@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -75,8 +76,11 @@ func knownExecutors() []reconcile.KnownExecutor {
 //
 // gate is the runners.toml path: the herdr half compiles its agent argv from
 // the [roles.*] table (full-auto template, model/effort flags, args) through
-// the same validated reader everything else uses. runner is the operator's
-// fallback for a dispatch whose profile resolved none.
+// the same validated reader everything else uses, and an EMPTY gate is the
+// dispatch's own repository's .tick/runners.toml — the reconciler applies the
+// same default to GateConfig, and a factory built with the flag's empty
+// default must read the same file the reconciler does (tick 53k). runner is
+// the operator's fallback for a dispatch whose profile resolved none.
 func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
 	local := reconcile.DefaultExecutor(runner, nil, pushInterval)
 	return func(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
@@ -207,8 +211,21 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 // roles table the profile itself was routed through, which is the only place
 // they live. A repository that routes nothing compiles the profile's kind and
 // model alone.
+//
+// gate is the runners.toml path, and an EMPTY one is the dispatch's own
+// repository's .tick/runners.toml — the same default the reconciler applies
+// to its GateConfig (tick 53k). The factory that calls here is built BEFORE
+// the reconciler defaults anything, and `ticfac run` names no --gate at all,
+// so the empty path is the DEFAULT path: read literally it is ENOENT, "routes
+// nothing", and a herdr pane that drops the roles table's effort and args and
+// dials the default socket even when orchestration.socket is where the run
+// detected herdr. Defaulting it here, at the dispatch, keeps the factory and
+// the reconciler reading one file rather than agreeing by luck.
 func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, error) {
 	w := runconfig.Worker{Role: d.Role, Kind: d.Profile.Runner, Model: d.Profile.Model}
+	if gate == "" {
+		gate = filepath.Join(d.Repo, filepath.FromSlash(runconfig.FileName))
+	}
 	// A herdr dispatch runs on this machine, so runners.local.toml merges
 	// over the common file (tick 5uo) — its tiers are real here.
 	cfg, err := runconfig.LoadFor(gate, runconfig.SubstrateHerdr)

@@ -1,0 +1,16 @@
+{
+  "id": "rix",
+  "title": "A cancelled run's end still reads as done/0 from watch — latent, nothing writes that state today",
+  "description": "The reconciler never currently writes runstate.StateCancelled (it is vocabulary only), but the resume path's already-terminal branch writes run_finished \"the run is already cancelled: …\", and the new failed classifier deliberately classifies only the failed word — so a cancelled end exits 0 / state \"done\". If a future tick starts cancelling runs (a stop that must be distinguishable from completion, as 2jn's A4 asks for failed), the watch and the exit-table vocabulary need a decided answer for it; the overview already names it its own word.\n\nticfac run epic-2jn created this tick by absorbing the finding 06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0 (reported by run-epic-2jn/tick-bot/attempt-39): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0.json on the run branch.",
+  "notes": "2026-09-27 17:03 - ticfac run epic-2jn: created by absorbing finding 06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A4, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 19:49 - ticfac run epic-2jn: rix try 1 (run dispatch #45) reported a finding the run itself decided — proposed-tick \"A person's SIGINT stop of a foreground run-epic reads as the failed class (run_died → exit 1), the same conflation rix removed for cancelled words\" (key 39605bc328cc83cec4998e950249bfd749da04b7a8032dd5e72724ffdb3fb674, severity low, for this repository) is absorbed into the running epic as tick vqc, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/39605bc328cc83cec4998e950249bfd749da04b7a8032dd5e72724ffdb3fb674.json, and the draft is triaged as promoted.\n2026-09-27 20:01 - ticfac run epic-2jn: rix try 2 (run dispatch #49) merged into epic/2jn as 3c0ca003a632; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-bot/attempt-39",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T15:03:17Z",
+  "updated_at": "2026-09-27T18:01:59.681205Z",
+  "closed_at": "2026-09-27T18:01:59.681205Z"
+}

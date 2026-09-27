@@ -2,19 +2,19 @@ package cli
 
 // `ticfac factory webhook` — register, inspect or withdraw the factory's
 // Telegram webhook. Ported from ticks' cmd/tk/cmd/factory_webhook.go (deleted
-// from ticks in pwp) with the cobra plumbing replaced by this package's plain
-// flag sets and the body otherwise verbatim, exactly the way the cloud slice
-// moved: this is the one factory operator surface pwp dropped without a
-// replacement, and the factory is ticfac's now (tick glb).
+// from ticks in pwp), with the body otherwise verbatim, exactly the way the
+// cloud slice moved; the cobra plumbing that port dropped is back (tick nwj).
+// This is the one factory operator surface pwp dropped without a replacement,
+// and the factory is ticfac's now (tick glb).
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/spf13/cobra"
 )
 
 // factoryWebhookPath is the factory route that administers webhook mode. The
@@ -23,24 +23,33 @@ import (
 // live there.
 const factoryWebhookPath = "/api/channels/telegram/webhook/registration"
 
-func factoryWebhook(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := runFactoryWebhook(ctx, args, stdout, stderr)
-	return reportCommand("factory webhook", err, stderr)
-}
-
-func runFactoryWebhook(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("factory webhook", stderr)
+// newFactoryWebhookCommand builds `factory webhook`'s cobra command.
+func newFactoryWebhookCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "webhook",
+		Short: "point Telegram at the factory",
+		Long:  "Register the factory's Telegram webhook by default; --status reads what\nTelegram believes it is, --delete withdraws it and hands the bot's updates\nback to polling.",
+	}
+	fs := newFlagSet("factory webhook", nil)
 	var (
 		delete = fs.Bool("delete", false, "withdraw the registration and hand the bot's updates back to polling")
 		status = fs.Bool("status", false, "report what Telegram believes the webhook is, changing nothing")
+		asJSON = fs.Bool("json", false, "print one versioned document (ticfac.factory-webhook.v1): the action and what Telegram believes the webhook is")
 	)
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(factoryWebhook(c.Context(), args, delete, status, asJSON, stdout, stderr))
 	}
+	return cmd
+}
+
+func factoryWebhook(ctx context.Context, args []string, delete, status *bool, asJSON *bool, stdout, stderr io.Writer) int {
+	err := runFactoryWebhook(ctx, args, delete, status, asJSON, stdout, stderr)
+	return reportCommand("factory webhook", err, stderr)
+}
+
+func runFactoryWebhook(ctx context.Context, args []string, delete, status *bool, asJSON *bool, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 0 {
 		return newExitError(exitUsage, "factory webhook takes no positional arguments")
 	}
@@ -75,6 +84,35 @@ func runFactoryWebhook(ctx context.Context, args []string, stdout, stderr io.Wri
 	}
 	if err := json.Unmarshal(data, &report); err != nil {
 		return newExitError(exitGeneric, "the factory's answer could not be read: %v", err)
+	}
+
+	if *asJSON {
+		action := "registered"
+		if *delete {
+			action = "withdrawn"
+		} else if *status {
+			action = "status"
+		}
+		doc := struct {
+			agentDoc
+			Action             string   `json:"action"`
+			URL                string   `json:"url"`
+			AllowedUpdates     []string `json:"allowed_updates"`
+			PrivacyMode        bool     `json:"privacy_mode"`
+			Secret             bool     `json:"secret"`
+			PendingUpdateCount int      `json:"pending_update_count"`
+			LastErrorMessage   string   `json:"last_error_message"`
+		}{
+			agentDoc:           agentDoc{Schema: agentSchemaID("factory-webhook"), State: agentStateDone},
+			Action:             action,
+			URL:                report.URL,
+			AllowedUpdates:     report.AllowedUpdates,
+			PrivacyMode:        report.PrivacyMode,
+			Secret:             report.Secret,
+			PendingUpdateCount: report.PendingUpdateCount,
+			LastErrorMessage:   report.LastErrorMessage,
+		}
+		return emitAgentJSON(stdout, doc)
 	}
 
 	switch {

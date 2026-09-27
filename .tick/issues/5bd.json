@@ -1,0 +1,16 @@
+{
+  "id": "5bd",
+  "title": "Merging tick 9sz will break the build: internal/cli gets a second TestMain",
+  "description": "9sz's branch adds internal/cli/run_test.go, whose TestMain doubles the test binary as the detached `ticfac run` child (dispatching on os.Args[1] == \"run-epic\"). epic/2jn now carries this tick's internal/cli/main_test.go TestMain (registrytest.GuardMain). Two TestMains in one package cannot compile, so the 9sz merge will fail go build/vet until a single TestMain does both: dispatch the detached child first, then registrytest.GuardMain(m). Predicted, not yet demonstrable — 9sz is unmerged and I could not build that union here.\n\nticfac run epic-2jn created this tick by absorbing the finding 33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826 (reported by run-epic-2jn/tick-7ag/attempt-23): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826.json on the run branch.",
+  "notes": "2026-09-27 12:20 - ticfac run epic-2jn: created by absorbing finding 33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826 — placed before the final review, which is blocked-by 5bd. The decision record is .ticfac/runs/epic-2jn/absorptions/33a9290dfc0daed1ca806d785cec349f1028a4d2bec512ef4913e914863c0826.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A1, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 13:14 - ticfac run epic-2jn: 5bd try 1 (run dispatch #26) merged into epic/2jn as 024fbe759833; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-7ag/attempt-23",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T10:20:23Z",
+  "updated_at": "2026-09-27T11:14:12.050545Z",
+  "closed_at": "2026-09-27T11:14:12.050545Z"
+}

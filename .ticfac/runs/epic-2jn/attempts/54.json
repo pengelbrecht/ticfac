@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "attempt": 54,
+  "tick_id": "rrl",
+  "dispatched_at": "2026-09-27T20:36:01Z",
+  "job_handle": {
+    "attempt": 54,
+    "base_sha": "c235973d5d865d7a8f2e2a5b2c1a0bfd70d11ccf",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-2jn/tick-rrl/attempt-54",
+    "model": "opus",
+    "prompt_digest": "sha256:c1a4c3ec11bfe3f2f90aeb52d97f2e5fb723234994dd52c194523a7c083cc6bb",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "closeout-epic",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "rrl",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "write_ref": "refs/heads/ticfac/run-epic-2jn/tick-rrl/attempt-54"
+  },
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "rrl",
+    "attempt": 54,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "c235973d5d865d7a8f2e2a5b2c1a0bfd70d11ccf",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:262ce67cbc25a58c2187bb990b95679b6b54e56db8e2568f34a17f92de6b83f2",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

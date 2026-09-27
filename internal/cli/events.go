@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
@@ -32,23 +35,48 @@ import (
 // means WORTH LOOKING NOW, never "the work is finished". The verdict stays with
 // the evidence on the integration branch; a subscriber that reads
 // run_finished goes and looks.
-func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+// newEventsCommand builds the cobra command for `events`.
+func newEventsCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "events <run-id>",
+		Short: "a run's event feed: what it did, as it does it",
+		Long: `Print the run's event feed — one JSONL line per event, with the
+run/tick/attempt identity on every line — or, with --follow, subscribe from
+now: each event as it lands, until Ctrl-C.
+
+The one rule this command must not bury in its help text: a line means WORTH
+LOOKING NOW, never "the work is finished". The verdict stays with the evidence
+on the integration branch; a subscriber that reads run_finished goes and looks.`,
+	}
 	fs := flag.NewFlagSet("events", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	follow := fs.Bool("follow", false, "keep the stream open: each event as it lands, from now, until Ctrl-C")
 	fromStart := fs.Bool("from-start", false, "with --follow, replay the standing feed first — including the terminal "+
 		"events of earlier incarnations of this run id")
 	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
 		"(a local feed is read at file-follow cadence)")
-	// Flags may follow the positionals: the remedies the run prints are written
-	// that way, and remedy_test.go holds every one of them to this parser.
-	rest, parseErr := parseCollectingPositionals(fs, args)
-	if parseErr != nil {
-		return 2
+	asJSON := fs.Bool("json", false, "print the standing feed as one versioned document (ticfac.events.v1); with --follow it refuses — a live stream is JSONL lines, not one document")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(eventsCommand(c.Context(), args, repo, follow, fromStart, interval, asJSON, stdout, stderr))
 	}
+	return cmd
+}
+
+func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac events: exactly one run id is required\n")
+		return 2
+	}
+	if *asJSON && *follow {
+		// The same refusal status --json gives its --follow: one document is
+		// one answer, and a subscription that stays open printing as things
+		// land is a different shape — the plain --follow's JSONL lines, each
+		// a versioned event, ARE the streaming answer.
+		fmt.Fprintf(stderr, "ticfac events: --json prints one document, the feed as it stands — a live stream is "+
+			"not one document. Read it with `ticfac events %s --json`, follow it with `ticfac events %s --follow` "+
+			"(its lines are versioned JSONL)\n", rest[0], rest[0])
 		return 2
 	}
 	runID := rest[0]
@@ -69,11 +97,14 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	// it knows the run. Either way the SAME loop follows it, and either way
 	// the lines are the same versioned schema — a cloud run's feed is
 	// indistinguishable from a local one's, by contract and by test.
-	source, kind, err := feedSource(ctx, *repo, runID, stderr)
+	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 		return 1
 	}
+	// The events answer for the run the id names, resolved: an epic id that
+	// named a factory run answers for that run's own id (tick nyi).
+	runID = resolved
 
 	print := func(event runfeed.Event) {
 		line, err := json.Marshal(event)
@@ -84,10 +115,12 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	}
 
 	// Without --follow, the feed as it stands is the answer: print it and
-	// stop. With --follow, the subscription starts at the cursor below and
-	// prints each line ONCE — the standing feed is not printed first, because
-	// this command without --follow is how a subscriber that wants history
-	// gets it.
+	// stop. With --json, the same standing feed is ONE document — every
+	// event inside it, each already a versioned JSON object, wrapped in one
+	// answer an agent parses without splitting lines. With --follow, the
+	// subscription starts at the cursor below and prints each line ONCE — the
+	// standing feed is not printed first, because this command without
+	// --follow is how a subscriber that wants history gets it.
 	if !*follow {
 		located, absent, err := feedStanding(ctx, source)
 		switch {
@@ -104,6 +137,28 @@ func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 				fmt.Fprintf(stderr, "ticfac events: the factory knows run %s, but the run has not written an event — which is what a run that has not started looks like\n", runID)
 			}
 			return 1
+		}
+		if *asJSON {
+			events := make([]runfeed.Event, 0, len(located))
+			for _, line := range located {
+				events = append(events, line.Event)
+			}
+			doc := struct {
+				agentDoc
+				RunID  string          `json:"run_id"`
+				Host   string          `json:"host"`
+				Events []runfeed.Event `json:"events"`
+			}{
+				agentDoc: agentDoc{Schema: agentSchemaID("events"), State: agentStateDone},
+				RunID:    runID,
+				Host:     kind,
+				Events:   events,
+			}
+			if err := emitAgentJSON(stdout, doc); err != nil {
+				fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+				return 1
+			}
+			return 0
 		}
 		for _, line := range located {
 			print(line.Event)

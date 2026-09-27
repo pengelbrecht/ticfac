@@ -509,17 +509,19 @@ func tickIDCandidates() []string {
 	return out
 }
 
-// MintTickID answers a tick id the tracker does not already carry, minted from
-// the pinned alphabet and checked against the tracker's own worktree — the
-// branch carries the records, so the branch is the index. The id is minted
-// BEFORE the absorption record is written, because the record names the tick
-// and the record is what a killed incarnation is resumed by.
-func (d *durableTracker) MintTickID() (string, error) {
-	if err := d.tree.sync(); err != nil {
+// mintTickID mints one tick id the tracker does not already carry, against
+// the tracker's own worktree — the branch carries the records, so the branch
+// is the index. The id is minted BEFORE the decision record that names it is
+// written (npq), because the record is what a killed incarnation is resumed
+// by; here it serves the person's promotion too (sg5), which mints before it
+// creates for the same reason: the tick the draft will name exists as a name
+// before anything can be killed under it.
+func mintTickID(tree *trackerTree) (string, error) {
+	if err := tree.sync(); err != nil {
 		return "", err
 	}
 	for _, id := range tickIDCandidates() {
-		if _, err := os.Stat(trackerRecordPath(d.tree.dir, id)); err == nil {
+		if _, err := os.Stat(trackerRecordPath(tree.dir, id)); err == nil {
 			continue // taken: the tracker is the index, not a cache of itself
 		} else if !os.IsNotExist(err) {
 			return "", err
@@ -528,6 +530,15 @@ func (d *durableTracker) MintTickID() (string, error) {
 	}
 	return "", fmt.Errorf("no tick id of the pinned 3-4 character alphabet is free in this tracker: " +
 		"the promotion refuses rather than colliding, and a person must file the tick by hand")
+}
+
+// MintTickID answers a tick id the tracker does not already carry, minted from
+// the pinned alphabet and checked against the tracker's own worktree — the
+// branch carries the records, so the branch is the index. The id is minted
+// BEFORE the absorption record is written, because the record names the tick
+// and the record is what a killed incarnation is resumed by.
+func (d *durableTracker) MintTickID() (string, error) {
+	return mintTickID(d.tree)
 }
 
 // CreateTick files a new tick record durably — CREATE-IF-ABSENT, so a
@@ -566,23 +577,17 @@ func (d *durableTracker) CreateTick(ctx context.Context, tick tk.Tick) (tk.Tick,
 		// file written exactly as the tracker's owner writes it is a record
 		// the tracker reads back unchanged. Create-if-absent is the file's
 		// existence: a record already there is the truth, never clobbered.
-		path := trackerRecordPath(d.tree.dir, tick.ID)
-		if _, err := os.Stat(path); err == nil {
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return tk.Tick{}, err
-			}
-			var standing tk.Tick
-			if err := json.Unmarshal(raw, &standing); err != nil {
-				return tk.Tick{}, fmt.Errorf("the record of %s does not read back as a tick: %w", tick.ID, err)
-			}
-			return standing, nil
-		} else if !os.IsNotExist(err) {
+		filed, existed, err := fileTick(d.tree, tick)
+		if err != nil {
 			return tk.Tick{}, err
 		}
-		if err := writeTrackerRecord(d.tree, tick); err != nil {
-			return tk.Tick{}, err
+		if existed {
+			// The idempotent resume — the record already there — must publish
+			// nothing rather than a no-change commit, and publish answers ""
+			// for exactly that.
+			return filed, nil
 		}
+		tick = filed
 	}
 	reason := "create tick " + tick.ID
 	commit, err := d.tree.publish(reason)
@@ -623,6 +628,36 @@ func (d *durableTracker) BlockOn(ctx context.Context, tickID, blocker string) er
 			tickID, blocker, d.tree.branch, short(commit))
 	}
 	return nil
+}
+
+// fileTick performs the file half of a create-if-absent tick record write,
+// against the pinned layout the tracker's owner writes
+// (contracts/tracker-layout.json): a record already there is the truth and is
+// returned untouched — existed says so, so the caller publishes nothing for
+// a no-change create — and an absent one is written exactly as Go's Store
+// reads it back. Both writers of a promotion use it (the reconciler's own
+// absorption, npq, and the person's, sg5), so the two cannot drift: the file
+// the run creates and the file a person creates are the same act by
+// different doors.
+func fileTick(tree *trackerTree, tick tk.Tick) (filed tk.Tick, existed bool, err error) {
+	path := trackerRecordPath(tree.dir, tick.ID)
+	if _, err := os.Stat(path); err == nil {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return tk.Tick{}, true, err
+		}
+		var standing tk.Tick
+		if err := json.Unmarshal(raw, &standing); err != nil {
+			return tk.Tick{}, true, fmt.Errorf("the record of %s does not read back as a tick: %w", tick.ID, err)
+		}
+		return standing, true, nil
+	} else if !os.IsNotExist(err) {
+		return tk.Tick{}, false, err
+	}
+	if err := writeTrackerRecord(tree, tick); err != nil {
+		return tk.Tick{}, false, err
+	}
+	return tick, false, nil
 }
 
 // writeTrackerRecord writes one tick record exactly the way the tracker's

@@ -38,14 +38,29 @@ func writeJSON(t *testing.T, w http.ResponseWriter, status int, body any) {
 	}
 }
 
+// TestParseRepo pins the reader every surface that means "GitHub remote"
+// resolves through — including the host check (tick 4zo): the surface this
+// package builds always addresses api.github.com, and its API field is
+// wired by nothing a run constructs, so a remote on another forge is a
+// remote the surface cannot speak with. The check lives HERE, in the one
+// reader init's close-out guess, doctor's remote check and the run's own
+// surface all share, so the three cannot disagree about what counts as a
+// GitHub remote — and a GitLab origin is refused where the operator can
+// still fix it, not as 404s against api.github.com at close-out time.
 func TestParseRepo(t *testing.T) {
 	t.Parallel()
 	for _, remote := range []string{
 		"git@github.com:example/example.git",
 		"https://github.com/example/example.git",
 		"https://github.com/example/example",
-		"http://local_proxy@127.0.0.1:8080/git/example/example",
 		"ssh://git@github.com/example/example.git",
+		// GitHub's own hosts, the way a checkout may carry them: the host is
+		// case-insensitive the way DNS is, ssh-over-443 lives on ssh.github.com,
+		// and an explicit port on a scheme URL names the same host.
+		"git@GitHub.com:example/example.git",
+		"ssh://git@ssh.github.com:443/example/example.git",
+		// Proxied forms still resolve to the LAST two path segments.
+		"https://github.com/proxy/example/example",
 	} {
 		repo, err := ParseRepo(remote)
 		if err != nil {
@@ -59,6 +74,28 @@ func TestParseRepo(t *testing.T) {
 	for _, remote := range []string{"", "git@github.com:", "https://github.com/", "not-a-remote"} {
 		if _, err := ParseRepo(remote); err == nil {
 			t.Errorf("ParseRepo(%q) was accepted", remote)
+		}
+	}
+	// A remote on a host the surface cannot speak with is refused HERE,
+	// naming the host it found and github.com it wanted — every other
+	// forge a git checkout may carry is the same refusal, and a GitHub
+	// Enterprise host is too, until the surface's API field is wired to
+	// something other than api.github.com.
+	for remote, host := range map[string]string{
+		"git@gitlab.com:example/example.git":                    "gitlab.com",
+		"https://gitlab.com/example/example.git":                "gitlab.com",
+		"https://bitbucket.org/example/example.git":             "bitbucket.org",
+		"ssh://git@gitlab.com/example/example.git":              "gitlab.com",
+		"https://ghe.example.com/example/example.git":           "ghe.example.com",
+		"http://local_proxy@127.0.0.1:8080/git/example/example": "127.0.0.1",
+	} {
+		_, err := ParseRepo(remote)
+		if err == nil {
+			t.Errorf("ParseRepo(%q) was accepted", remote)
+			continue
+		}
+		if !strings.Contains(err.Error(), host) || !strings.Contains(err.Error(), "github.com") {
+			t.Errorf("ParseRepo(%q) refusal does not name %s against github.com: %v", remote, host, err)
 		}
 	}
 }

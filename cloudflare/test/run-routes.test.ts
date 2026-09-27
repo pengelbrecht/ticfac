@@ -456,7 +456,7 @@ describe("submission on a free project", () => {
     expect(workflow.created).toEqual([]);
   });
 
-  it("fails closed when no AI Gateway is configured, naming tk factory setup", async () => {
+  it("fails closed when no AI Gateway is configured, naming ticfac factory setup", async () => {
     // D17: a run's model traffic goes through the operator's own gateway or it
     // does not go. The stop is HERE, at submission, while there is still an
     // operator reading the answer — never a sandbox that quietly falls back to
@@ -469,7 +469,7 @@ describe("submission on a free project", () => {
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string; detail: string };
     expect(body.error).toBe("run_unavailable");
-    expect(body.detail).toContain("tk factory setup");
+    expect(body.detail).toContain("ticfac factory setup");
     await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
     expect(workflow.created).toHaveLength(0);
   });

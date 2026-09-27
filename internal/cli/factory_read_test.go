@@ -69,7 +69,7 @@ func TestFactoryStatusWithNothingConfigured(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("ticfac factory status: %s\n%s", stderr.String(), out.String())
 	}
-	if !strings.Contains(out.String(), "tk factory setup") {
+	if !strings.Contains(out.String(), "ticfac factory setup") {
 		t.Errorf("status does not name the command that configures a factory:\n%s", out.String())
 	}
 }
@@ -138,7 +138,7 @@ func TestFactoryStatusFlagsStaleDeployment(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("ticfac factory status --offline: %s\n%s", stderr.String(), out.String())
 	}
-	if output := out.String(); !strings.Contains(output, "version behind") || !strings.Contains(output, "tk factory deploy") {
+	if output := out.String(); !strings.Contains(output, "version behind") || !strings.Contains(output, "ticfac factory deploy") {
 		t.Errorf("status does not flag the stale factory deployment:\n%s", output)
 	}
 }
@@ -223,7 +223,7 @@ func TestFactoryDashboardWithoutAFactoryNamesTheSetupCommand(t *testing.T) {
 	if code == exitSuccess {
 		t.Fatal("a dashboard with no factory configured must not start")
 	}
-	if !strings.Contains(stderr.String(), "tk factory setup") {
+	if !strings.Contains(stderr.String(), "ticfac factory setup") {
 		t.Fatalf("the refusal must name the fix, got %s", stderr.String())
 	}
 }

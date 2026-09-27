@@ -1,0 +1,16 @@
+{
+  "id": "9ss",
+  "title": "Bare 'ticfac' never lists a live local run: it reads \u003ccwd\u003e/.ticfac/runs, which a run never writes",
+  "description": "overview.go localRunIDs enumerates working-tree run directories, but runstate commits run state by plumbing to epic/\u003cid\u003e and never touches a working tree, so a checkout on main lists only merged epics (the operator's main checkout omits the live epic-2jn). The runregistry built for this (aj9) is never read by the overview, and liveness is probed with repo=cwd so a run live in another checkout reads dead. Fix: enumerate from runregistry.List and probe each run in its registered repo; test with state only on epic/\u003cid\u003e.\n\nticfac run epic-2jn created this tick by absorbing the finding 77b1578e9304b1f25a4865158b02b0831728960a18680229bbeb82c6cbc79b6f (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/77b1578e9304b1f25a4865158b02b0831728960a18680229bbeb82c6cbc79b6f.json on the run branch.",
+  "notes": "2026-09-27 16:07 - ticfac run epic-2jn: created by absorbing finding 77b1578e9304b1f25a4865158b02b0831728960a18680229bbeb82c6cbc79b6f — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/77b1578e9304b1f25a4865158b02b0831728960a18680229bbeb82c6cbc79b6f.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A2, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 17:02 - ticfac run epic-2jn: 9ss try 1 (run dispatch #38) merged into epic/2jn as 493241653463; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:07:29Z",
+  "updated_at": "2026-09-27T15:02:35.445476Z",
+  "closed_at": "2026-09-27T15:02:35.445476Z"
+}

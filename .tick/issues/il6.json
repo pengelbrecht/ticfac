@@ -1,0 +1,16 @@
+{
+  "id": "il6",
+  "title": "run_cloud_test's fake hold feed line does not reproduce the real run_held reason prefix",
+  "description": "TestRunCloudEndsHoldingForTriageAndTriageSettlesIt hand-crafts its run_held detail as prose ('the close-out does not hand over...') instead of the real reason-first shape the reconciler writes ('finding_untriaged: \u003cmessage\u003e'), so the watch's triage-verb branch is never exercised end-to-end on the cloud path — the test passes through the settle branch with prose that merely mentions triage. The local path covers the branch (TestWatchHoldAlertNamesTriageForAFindingHold); the fake should reproduce the real shape.\n\nticfac run epic-2jn created this tick by absorbing the finding 4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8 (reported by run-epic-2jn/tick-gtk/attempt-40): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8.json on the run branch.",
+  "notes": "2026-09-27 18:46 - ticfac run epic-2jn: created by absorbing finding 4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A2, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 19:53 - ticfac run epic-2jn: il6 try 1 (run dispatch #46) merged into epic/2jn as 701db46b9564; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-gtk/attempt-40",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T16:46:09Z",
+  "updated_at": "2026-09-27T17:54:02.516278Z",
+  "closed_at": "2026-09-27T17:54:02.516278Z"
+}

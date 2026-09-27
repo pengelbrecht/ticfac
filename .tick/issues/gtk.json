@@ -1,0 +1,16 @@
+{
+  "id": "gtk",
+  "title": "Clearing commands name the wrong verb: settle for finding holds, 'findings' (list) for the finding wait, run-epic for cloud failures",
+  "description": "statusmodel/build.go:761-775 emits 'ticfac settle ... --release' for every run_held line whatever the reason (finding_untriaged is cleared by ticfac triage); build.go:834 names 'ticfac findings \u003cepic\u003e', which only lists; overview.go:228,247 and build.go:755 name 'ticfac run-epic \u003cepic\u003e', which for a cloud run restarts it locally in the foreground instead of 'ticfac run \u003cepic\u003e --cloud'. watch.go:317 prints a literal \u003cepic-id\u003e placeholder. Merge waits and cancelled runs name no command.\n\nticfac run epic-2jn created this tick by absorbing the finding f476264ed5a26c09d3dc15265c177fd1d50d55174e23efe1480836515d5143a2 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/f476264ed5a26c09d3dc15265c177fd1d50d55174e23efe1480836515d5143a2.json on the run branch.",
+  "notes": "2026-09-27 16:08 - ticfac run epic-2jn: created by absorbing finding f476264ed5a26c09d3dc15265c177fd1d50d55174e23efe1480836515d5143a2 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/f476264ed5a26c09d3dc15265c177fd1d50d55174e23efe1480836515d5143a2.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A2, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 18:46 - ticfac run epic-2jn: gtk try 1 (run dispatch #40) reported a finding the run itself decided — defect \"run_cloud_test's fake hold feed line does not reproduce the real run_held reason prefix\" (key 4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8, severity low, for this repository) is absorbed into the running epic as tick il6, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/4fc335eb9911206ac998edbdf1d467eeeee619327383ad1423185e3ccdda90b8.json, and the draft is triaged as promoted.\n2026-09-27 19:00 - ticfac run epic-2jn: gtk try 1 (run dispatch #40) merged into epic/2jn as 990b92f8bfea; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:08:23Z",
+  "updated_at": "2026-09-27T17:00:32.973033Z",
+  "closed_at": "2026-09-27T17:00:32.973033Z"
+}

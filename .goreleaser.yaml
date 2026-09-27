@@ -1,0 +1,80 @@
+# ticfac's release recipe (tick 4yb): a tagged release (git push origin
+# vX.Y.Z) is cut by .github/workflows/release.yml, which runs goreleaser with
+# this config. Goreleaser cross-compiles BOTH binaries for every platform
+# install.sh serves — darwin and linux, amd64 and arm64 — packs them in ONE
+# archive per platform so ticfac-exec-subprocess lands beside ticfac
+# (internal/reconcile's supervisorArgv looks for it there first, and a run
+# refuses to start without it), and writes checksums and release notes from
+# the commit log.
+#
+# The config is pinned by internal/release's tests: the platform matrix, the
+# archive name install.sh requests, and the repository the release publishes
+# to are all read by the same suite that runs the installer end to end.
+version: 2
+project_name: ticfac
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # The distribution pair: ticfac, and the local subprocess executor that
+  # supervises every local attempt.
+  - id: ticfac
+    main: ./cmd/ticfac
+    binary: ticfac
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/pengelbrecht/ticfac/internal/cli.Version={{.Version}}
+  - id: ticfac-exec-subprocess
+    main: ./cmd/ticfac-exec-subprocess
+    binary: ticfac-exec-subprocess
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    # No builds filter: goreleaser packs EVERY built binary into each
+    # archive by default, which is exactly the distribution pair — and a
+    # filter naming only ticfac would ship an install a run refuses to
+    # start. (archives.builds is deprecated and `goreleaser check`, which CI
+    # runs on every push, refuses the config while it is there.)
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Release notes: generated from the commits since the last tag, the noise
+# filtered out, sorted oldest first — the same recipe ticks releases with.
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: pengelbrecht
+    name: ticfac
+  draft: false
+  prerelease: auto

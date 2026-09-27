@@ -1,0 +1,54 @@
+name: Release
+
+# A tagged release produces every platform binary (tick 4yb): pushing a v*
+# tag runs goreleaser with .goreleaser.yaml, which cross-compiles ticfac and
+# ticfac-exec-subprocess for darwin and linux, amd64 and arm64, packs each
+# platform's pair in one archive, and publishes the archives, checksums.txt
+# and release notes generated from the commit log — the artifacts install.sh
+# downloads.
+#
+# The config this job runs is the same one internal/release's tests pin: the
+# platform matrix, the archive naming and the repository are guarded there,
+# and the guards run on every push, so a tag cannot be the first thing to
+# discover the config is broken.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # The full history: the changelog (release notes) reads every
+          # commit since the last tag, and a shallow clone would cut it off.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt

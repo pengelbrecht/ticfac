@@ -1,0 +1,16 @@
+{
+  "id": "tem",
+  "title": "Cloud runs' status model reads their records under the factory run id, but the container writes them under epic-\u003cepic-id\u003e",
+  "description": "cloudStatusModel/statusRecords open the run-state store with RunID = the factory's run_\u003chex\u003e, yet a cloud run's orchestrator container runs ticfac run-epic \u003cepic\u003e, whose records land on the integration branch under .ticfac/runs/epic-\u003cepic-id\u003e/. So a real cloud run's model reads empty records: attempts, findings, evidence, checkpoint and cost degrade to feed-and-graph only, the live frame never shows waves from records, and a hold on untriaged findings surfaces only through the feed's run_held line, never as the model's WaitFinding attention with its triage pointer. Local runs are unaffected (their runID is epic-\u003cepic-id\u003e by construction).\n\nticfac run epic-2jn created this tick by absorbing the finding f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762 (reported by run-epic-2jn/tick-ejw/attempt-25): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762.json on the run branch.",
+  "notes": "2026-09-27 13:19 - ticfac run epic-2jn: created by absorbing finding f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762 — placed before the final review, which is blocked-by tem. The decision record is .ticfac/runs/epic-2jn/absorptions/f7b63de6cbe36d247a2a5d5727d2a424b7b19b82363a8aed415ff0aedefd2762.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A5, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 13:38 - ticfac run epic-2jn: tem try 1 (run dispatch #28) merged into epic/2jn as 0260831ee1e7; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-ejw/attempt-25",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T11:19:43Z",
+  "updated_at": "2026-09-27T11:38:20.665448Z",
+  "closed_at": "2026-09-27T11:38:20.665448Z"
+}

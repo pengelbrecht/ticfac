@@ -255,6 +255,24 @@ func (r *Reconciler) carriedUntriaged(tick string) int {
 	return n
 }
 
+// triagePointer is the one sentence every surface that TELLS somebody how
+// to triage a finding embeds (tick 8yn): the note the discovering tick's
+// record carries (findingLeftNote), the close-out's hold below, and the
+// absorption-depth stop (absorb.go). It teaches the everyday path —
+// `ticfac triage <epic>`, each finding addressed by a SHORT key prefix —
+// never the old `ticfac finding <epic> <64-hex> --promote-as ... --by ...`
+// shape: a person following the pointer must not be sent to type the very
+// friction the triage surface (tick sg5) exists to remove. The old command
+// is named bare, and only for the one thing it alone still does: promoting
+// a tick that ALREADY exists, into the repository a finding is routed to.
+func triagePointer(epicID string) string {
+	return fmt.Sprintf("Triage with `ticfac triage %s`: every untriaged finding of the run settles there, "+
+		"addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file "+
+		"(a backlog tick with an owner), fixed <commit>, or discard — and a finding routed to another "+
+		"repository keeps its routing: discard it here, or promote it into the repository it targets "+
+		"with `ticfac finding`", epicID)
+}
+
 // gateCloseoutOnFindings is the gate the per-tick hold became (tick aqm): the
 // close-out does not hand over while any finding of the run is untriaged,
 // naming them — one decision point at the end, where a person is already
@@ -295,14 +313,11 @@ func (r *Reconciler) gateCloseoutOnFindings(tick string, prNumber int) (*Refusal
 	return r.refuse(RefusedFindingUntriaged, tick,
 		"%d finding(s) this run drafted are still waiting for a person — %s — and the close-out does "+
 			"not hand over while one is (tick aqm): the ticks that reported them are closed, the findings rode "+
-			"here, and this is the one decision point. Triage each with `ticfac finding %s %s --promote-as "+
-			"<tick> --by \"<who>\"` (promote into the repository it targets), `ticfac finding %s %s --discard "+
-			"--by \"<who>\"`, or — when the finding was repaired inside this epic — `ticfac finding %s %s "+
-			"--fixed-as <commit> --by \"<who>\"`, then run the epic again under this run id: the gate has already "+
+			"here, and this is the one decision point. %s. Then run the epic again under this run id: the gate has already "+
 			"passed, so the close-out's close is the only step left — and the resume closes each role tick "+
 			"behind its recorded decision, it does not dispatch the job again (tick 80x). The drafts are keys %s under "+
 			".ticfac/runs/%s/findings/ on %s, listed by `ticfac findings %s`%s",
-		len(untriaged), strings.Join(titles, "; "), r.opts.EpicID, strings.Join(keys, "|"), r.opts.EpicID,
-		strings.Join(keys, "|"), r.opts.EpicID, strings.Join(keys, "|"), strings.Join(keys, ", "), r.runID,
+		len(untriaged), strings.Join(titles, "; "), triagePointer(r.opts.EpicID),
+		strings.Join(keys, ", "), r.runID,
 		r.opts.Remote, r.opts.EpicID, onThePR), nil
 }

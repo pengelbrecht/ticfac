@@ -820,7 +820,11 @@ const (
 	// run_finished: the process returned an operational error, panicked, or
 	// was stopped by a signal. It is written by run-epic around the
 	// reconciler, so a death is never a feed that simply stops on an ordinary
-	// success line (tick wdb; Phase 3 acceptance A4).
+	// success line (tick wdb; Phase 3 acceptance A4). One death is a
+	// deliberate stop, not a death to fix: a person's SIGINT, whose detail
+	// is LED by runstate's cancelled word (tick vqc), the same vocabulary
+	// run_finished's details are led by — the watch classifies that line
+	// cancelled, every other death failed.
 	StageRunDied = "run_died"
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
@@ -1115,7 +1119,7 @@ func New(opts Options) (*Reconciler, error) {
 		opts.GateConfig = filepath.Join(opts.Repo, ".tick", "runners.toml")
 	}
 	if opts.RepoConfig == "" {
-		opts.RepoConfig = repoConfigPath(opts.Repo)
+		opts.RepoConfig = RepoConfigPath(opts.Repo)
 	}
 	if opts.GateTimeout <= 0 {
 		opts.GateTimeout = DefaultGateTimeout
@@ -1208,9 +1212,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if rule.Declared && opts.PullRequests == nil && !opts.ReleaseOnly {
 		return nil, fmt.Errorf("reconcile: %s declares the PR + CI close-out rule — %q — and this build has no "+
-			"code-hosting surface configured to open or read the epic PR: set %s (the GitHub surface reads it), or "+
-			"run against a host that provides one",
-			opts.RepoConfig, rule.Stated, forge.TokenEnv)
+			"code-hosting surface configured to open or read the epic PR: set %s, or `gh auth login` on this host "+
+			"(the GitHub surface resolves %s first, then gh's own auth), or run against a host that provides one",
+			opts.RepoConfig, rule.Stated, forge.TokenEnv, forge.TokenEnv)
 	}
 
 	// The substrate this run executes on (tick 84z), resolved BEFORE any
@@ -2425,6 +2429,14 @@ func holdsForAPerson(reason string) bool {
 	}
 	return false
 }
+
+// HoldsForAPerson is holdsForAPerson exported for the surfaces that end a
+// run and must answer the same verdict about the same stop: `run-epic`'s
+// exit code and --json document (tick 4mv) branch on it, so the CLI's held
+// class is exactly this set and never a second opinion kept beside it —
+// the disagreement that set existed to remove was two commands answering
+// two different codes for one hold.
+func HoldsForAPerson(reason string) bool { return holdsForAPerson(reason) }
 
 func asRefusal(err error, into **Refusal) bool {
 	if refusal, ok := err.(*Refusal); ok {

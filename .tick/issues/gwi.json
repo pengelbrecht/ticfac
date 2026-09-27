@@ -1,0 +1,16 @@
+{
+  "id": "gwi",
+  "title": "cloud supervisor's disagreement note tells the operator to free the lease with 'tk cloud stop', not ticfac's own command",
+  "description": "internal/cli/cloud_supervisor.go's cloudSupervisorDisagreement line — the one line the command exists for — ends with \"Free the project lease with 'tk cloud stop %s --now'\", naming ticks' CLI while this binary's own 'ticfac cloud stop --now' is the command that does it. The factory move ported the text verbatim and the pointer was never repointed.\n\nticfac run epic-2jn created this tick by absorbing the finding ddc08aebc0f469d15f7d613a8f0c191017c177730f2a248c347f471a77577c16 (reported by run-epic-2jn/tick-8v3/attempt-24): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/ddc08aebc0f469d15f7d613a8f0c191017c177730f2a248c347f471a77577c16.json on the run branch.",
+  "notes": "2026-09-27 14:08 - ticfac run epic-2jn: created by absorbing finding ddc08aebc0f469d15f7d613a8f0c191017c177730f2a248c347f471a77577c16 — placed before the final review, which is blocked-by gwi. The decision record is .ticfac/runs/epic-2jn/absorptions/ddc08aebc0f469d15f7d613a8f0c191017c177730f2a248c347f471a77577c16.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A4, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 14:21 - ticfac run epic-2jn: gwi try 1 (run dispatch #30) reported a finding the run itself decided — proposed-tick \"Five more operator-facing strings still point operators at 'tk cloud/factory' commands ticfac does not serve\" (key 5ee7435d9e608585d6c95f0caf77299b2e4e5816ab31f3b1cd22511daff99e45, severity medium, for this repository) is absorbed into the running epic as tick ogv, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/5ee7435d9e608585d6c95f0caf77299b2e4e5816ab31f3b1cd22511daff99e45.json, and the draft is triaged as promoted.\n2026-09-27 14:23 - ticfac run epic-2jn: gwi try 1 (run dispatch #30) merged into epic/2jn as a05775c42a5c; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-8v3/attempt-24",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T12:08:37Z",
+  "updated_at": "2026-09-27T12:23:06.885858Z",
+  "closed_at": "2026-09-27T12:23:06.885858Z"
+}

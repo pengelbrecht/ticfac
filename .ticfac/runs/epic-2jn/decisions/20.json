@@ -1,0 +1,64 @@
+{
+  "schema_version": 3,
+  "decision": 20,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt_head": "72ee73aa952581ce659282d55398af28715aa8e1",
+    "conflict_files": [
+      "internal/cli/cli.go",
+      "internal/cli/exit.go",
+      "internal/cli/watch_test.go",
+      "skills/ticfac/SKILL.md"
+    ],
+    "conflicting_ticks": [
+      "rix",
+      "4mv",
+      "bkg",
+      "nyi"
+    ],
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-rix/resolve-49",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "resolve_branch": "ticfac/run-epic-2jn/tick-rix/resolve-49",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "rix"
+  },
+  "response": {
+    "conflict_detail": "4 conflicts: content in internal/cli/cli.go; content in internal/cli/exit.go; content in internal/cli/watch_test.go; content in skills/ticfac/SKILL.md",
+    "conflict_files": [
+      "internal/cli/cli.go",
+      "internal/cli/exit.go",
+      "internal/cli/watch_test.go",
+      "skills/ticfac/SKILL.md"
+    ],
+    "job_id": "run-epic-2jn/tick-rix/resolve-49",
+    "merge": "3c0ca003a632be3403bb0434a28b1b2da8462110",
+    "resolve_head": "e06933f4e2a1ac254cdd990c72bda1ff29dd6235",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T18:00:22Z",
+  "answered_at": "2026-09-27T18:00:22Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "rix",
+    "attempt": 49,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "9ed5334da731cef74533970c87479c5b11bb4d3a",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

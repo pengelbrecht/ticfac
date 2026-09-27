@@ -1,0 +1,62 @@
+{
+  "schema_version": 3,
+  "decision": 16,
+  "role": "resolve-conflict",
+  "request": {
+    "base_branch": "main",
+    "base_head": "e280a50060d20d4b5056949ecfce93ece16f8df9",
+    "conflict_files": [
+      "internal/cli/cli.go",
+      "internal/cli/events.go",
+      "internal/cli/findings.go",
+      "internal/cli/status.go",
+      "internal/cli/watch.go"
+    ],
+    "epic_head": "c66c57f694a9e116e191437996bec1b577cf52de",
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/base-fold-1",
+    "kind": "base-fold",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "resolve_branch": "ticfac/run-epic-2jn/base-fold-1-e280a50060d2",
+    "role": "resolve-conflict",
+    "source_grade": "write"
+  },
+  "response": {
+    "conflict_detail": "5 conflicts: content in internal/cli/cli.go; content in internal/cli/events.go; content in internal/cli/findings.go; content in internal/cli/status.go; content in internal/cli/watch.go",
+    "conflict_files": [
+      "internal/cli/cli.go",
+      "internal/cli/events.go",
+      "internal/cli/findings.go",
+      "internal/cli/status.go",
+      "internal/cli/watch.go"
+    ],
+    "job_id": "run-epic-2jn/base-fold-1",
+    "merge": "a5dfc123f8c917046cb410c3a77a2f95018cddff",
+    "resolve_head": "de40ccc83d69fff2cae4f8c7cddfeb742e87dd3d",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T17:35:22Z",
+  "answered_at": "2026-09-27T17:35:22Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "2jn",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "d540883f5eb90a518b8da175952719943b735d5b",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:44d26986e503ee3a7a8b09a9f712841cb79ab7be01965579e2bd08b7a527bcf0",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

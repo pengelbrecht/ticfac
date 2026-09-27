@@ -1,0 +1,16 @@
+{
+  "id": "35l",
+  "title": "runstate's gitRun carries no maintenance pins, so its fixture git can start the detached maintenance tick qsn chased out of reconcile",
+  "description": "gitRun (internal/runstate/origin_test.go) builds its environment from os.Environ() with no gitbin.WithNoAutoMaintenance and no WithNoAutoMaintenance, so every commit, push and fetch it runs ends by potentially starting `git maintenance run --auto --detach` in t.TempDir repositories. On this host the read-only grade's GIT_CONFIG_COUNT pins mask it; on CI's unpinned git 2.55 (geometric, repacking from two loose objects) that is exactly the shape that made reconcile's t.TempDir RemoveAll fail with 'directory not empty' and cost two days (tick qsn) — reconcile fixed it by pinning the harness runner and added a trace2 guard, runstate's gitRun was left unpinned. A one-in-forty flake in the full suite on CI, outside this tick's host-side scope.\n\nticfac run epic-2jn created this tick by absorbing the finding 689837d26f781106253c93d88cd8d5027cd7cfb9f61d837cbb14fe9aa39e0bac (reported by run-epic-2jn/tick-fc2/attempt-14): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/689837d26f781106253c93d88cd8d5027cd7cfb9f61d837cbb14fe9aa39e0bac.json on the run branch.",
+  "notes": "2026-09-27 10:36 - ticfac run epic-2jn: created by absorbing finding 689837d26f781106253c93d88cd8d5027cd7cfb9f61d837cbb14fe9aa39e0bac — placed before the final review, which is blocked-by 35l. The decision record is .ticfac/runs/epic-2jn/absorptions/689837d26f781106253c93d88cd8d5027cd7cfb9f61d837cbb14fe9aa39e0bac.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 12:26 - ticfac run epic-2jn: 35l try 1 (run dispatch #18) reported a finding the run itself decided — proposed-tick \"reconcile's harness pushes to local bare origins that env maintenance pins cannot reach — its qsn guard never traces a push\" (key ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b, severity medium, for this repository) is promoted to a backlog tick with an owner, 1cs; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/ba49c2aa7c6f870292a4957937b5b3663feff5571985b5ac5e3156c44e6c868b.json, and the draft is triaged as promoted.\n2026-09-27 13:27 - ticfac run epic-2jn: 35l try 2 (run dispatch #27) merged into epic/2jn as 9611f2b1c110; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-fc2/attempt-14",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T08:36:41Z",
+  "updated_at": "2026-09-27T11:27:56.34112Z",
+  "closed_at": "2026-09-27T11:27:56.34112Z"
+}

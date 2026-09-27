@@ -1,0 +1,14 @@
+{
+  "id": "bsn",
+  "title": "TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote fails at base: the SIGTERM exit leaves a ticfac-registry-guard temp tree behind",
+  "description": "Running the test alone, with or without GIT_CONFIG isolation, at base cd41beb2 and with this tick's changes, it fails identically: 'the SIGTERM exit left its temp trees behind: [ticfac-registry-guard-\u003crandom\u003e]'. The child's registry-guard temp tree under its TMPDIR is not cleaned up on the SIGTERM evacuation path, so every non-short full-suite run (make test) is red on this host. The per-tick gate is unaffected: internal/cli passes under -short.\n\nticfac run epic-2jn filed this backlog tick from the finding 0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d (reported by run-epic-2jn/tick-c2g/attempt-53): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-2jn/absorptions/0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d.json on the run branch.",
+  "notes": "2026-09-27 22:30 - ticfac run epic-2jn: created by absorbing finding 0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-2jn/absorptions/0281c58666b57f950421cd9fad36690eaa4337fb55c2c984278427e6bd65090d.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-2jn/tick-c2g/attempt-53",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T20:30:20Z",
+  "updated_at": "2026-09-27T20:30:26.979629Z"
+}

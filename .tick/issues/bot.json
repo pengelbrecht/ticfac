@@ -1,0 +1,16 @@
+{
+  "id": "bot",
+  "title": "A failed run exits 0 with state 'done' from ticfac watch / ticfac run / run --cloud",
+  "description": "watch.go:386-403 finishes as done on any run_finished not preceded by run_held, and holdsForAPerson excludes gate failures, merge conflicts and CI failures; run.go:506 maps 0 to done. Reproduced: feed run_finished 'failed: the integrated gate refused ...' then watch --json exits 0 with schema ticfac.watch.v1 state=done; the TTY path also exits 0. Failed and done are not distinguishable by exit code, which A4 requires.\n\nticfac run epic-2jn created this tick by absorbing the finding b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6 (reported by run-epic-2jn/tick-xbp/attempt-32): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6.json on the run branch.",
+  "notes": "2026-09-27 16:07 - ticfac run epic-2jn: created by absorbing finding b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-2jn/absorptions/b2e34be7e52f89febb5c8ae9888591122c3363c5b296664fe197e0e93ac5aca6.json on epic/2jn, and it says: no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks A4, and the finding is absorbed against that item. The claim is a prediction, scored later against what the done actually did\n2026-09-27 17:03 - ticfac run epic-2jn: bot try 1 (run dispatch #39) reported a finding the run itself decided — proposed-tick \"A cancelled run's end still reads as done/0 from watch — latent, nothing writes that state today\" (key 06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0, severity low, for this repository) is absorbed into the running epic as tick rix, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/06b4a44130718e4ad5a1f7b83cc2db1cb2664b1ec9925e05e602cafca028f0f0.json, and the draft is triaged as promoted.\n2026-09-27 17:14 - ticfac run epic-2jn: bot try 1 (run dispatch #39) merged into epic/2jn as 51a5ed3706d6; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-xbp/attempt-32",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T14:07:47Z",
+  "updated_at": "2026-09-27T15:14:54.192088Z",
+  "closed_at": "2026-09-27T15:14:54.192088Z"
+}

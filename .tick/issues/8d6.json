@@ -3,13 +3,15 @@
   "title": "The SIGTERM evacuation test's child skips the registry guard, so the temp-tree checks test the run's own trees again",
   "gloss": "evacuation test vs registry guard",
   "description": "epic/2jn CI fails deterministically (5/5) on TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote: 'evacuate_signal_test.go:213: the SIGTERM exit left its temp trees behind: [ticfac-registry-guard-NNN]'. Semantic conflict of two correct changes: main's w9j (#73) asserts no ticfac-* dir survives the child's SIGTERM; 2jn's 7ag made TestMain call registrytest.GuardMain (main_test.go:45), which creates ticfac-registry-guard-* (guard.go:84) in the re-executed child, whose os.Exit skips the cleanup (guard.go:73). It also moves the child's TMPDIR inside the guard dir, so the 'the live run holds a temp tree' check (~:175) passes vacuously. Fix: in main_test.go TestMain, dispatch the re-exec'd child straight to its test BEFORE GuardMain, as the run-epic child already is (it inherits the parent's registry redirect).",
-  "status": "open",
+  "notes": "2026-09-27 22:19 - ticfac run epic-2jn: 8d6 try 1 (run dispatch #52) merged into epic/2jn as 4230b469c676; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 1,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "2jn",
   "acceptance_criteria": "go test -count=5 -run TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote ./internal/cli/ passes, and the test's live-run temp-tree check fails if the run holds no temp tree",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T19:47:16.734961Z",
-  "updated_at": "2026-09-27T19:47:16.734961Z"
+  "updated_at": "2026-09-27T20:19:50.997981Z",
+  "closed_at": "2026-09-27T20:19:50.997981Z"
 }

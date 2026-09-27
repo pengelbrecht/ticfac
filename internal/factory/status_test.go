@@ -165,7 +165,7 @@ func TestStatusWithNothingConfigured(t *testing.T) {
 	var buf bytes.Buffer
 	report.Write(&buf)
 	out := buf.String()
-	if !strings.Contains(out, "tk factory setup") {
+	if !strings.Contains(out, "ticfac factory setup") {
 		t.Errorf("status does not point at the command that configures it:\n%s", out)
 	}
 	if h.github.calls.Load() != 0 || h.gateway.calls.Load() != 0 {

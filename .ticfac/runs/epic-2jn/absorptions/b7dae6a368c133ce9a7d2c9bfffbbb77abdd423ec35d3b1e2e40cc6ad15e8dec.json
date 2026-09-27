@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec",
+  "tick_id": "hio",
+  "gating": true,
+  "basis": "predicted",
+  "fallback": "no classifier is configured for gating predictions",
+  "reason": "no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6",
+  "placement": "before-review",
+  "decided_at": "2026-09-27T06:09:32Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "vo4",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "5921d6e54e994da7590c91b590d79fe2b5ec1bae",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:45e89c3c6088397058f46d6e0d2800c672ba61ed816db4436e170508412ac5b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

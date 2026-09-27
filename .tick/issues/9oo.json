@@ -1,0 +1,16 @@
+{
+  "id": "9oo",
+  "title": "Claim's live-driver refusal is per-checkout: a second run-epic from another checkout of the same repo is not refused",
+  "description": "runlife.Claim refuses a second driver only by reading the pidfile in the checkout it runs in, so the same run id started from a second checkout of the same repository starts a second reconciler; the run-state CAS is left as the only defence, which Claim's own doc calls the last line. The machine registration aj9 added names the checkout whose pidfile is live, so Claim could now also refuse a claim when the registered repo's probe answers alive. A test that claims a run in checkout A and asserts Claim from checkout B is refused would demonstrate it.\n\nticfac run epic-2jn created this tick by absorbing the finding 760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85 (reported by run-epic-2jn/tick-aj9/attempt-12): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85.json on the run branch.",
+  "notes": "2026-09-27 09:55 - ticfac run epic-2jn: created by absorbing finding 760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85 — placed before the final review, which is blocked-by 9oo. The decision record is .ticfac/runs/epic-2jn/absorptions/760e438a6dfaf869519e70e6a7b370dc9993f26e9240ef8c95367cdf41c11b85.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 10:32 - ticfac run epic-2jn: 9oo try 1 (run dispatch #15) reported a finding the run itself decided — defect \"internal/cli tests claim runs without redirecting TICFAC_REGISTRY_DIR, writing test registrations into the operator's real ~/.ticfac/registry\" (key ffcf041e457da2d27c37ee2a64907547eed5cc6aed94382a86e992ea6a0c2b2c, severity low, for this repository) is absorbed into the running epic as tick eih, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-2jn/absorptions/ffcf041e457da2d27c37ee2a64907547eed5cc6aed94382a86e992ea6a0c2b2c.json, and the draft is triaged as promoted.\n2026-09-27 10:34 - ticfac run epic-2jn: 9oo try 1 (run dispatch #15) merged into epic/2jn as b5721712d126; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-aj9/attempt-12",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T07:55:36Z",
+  "updated_at": "2026-09-27T08:34:41.378094Z",
+  "closed_at": "2026-09-27T08:34:41.378094Z"
+}

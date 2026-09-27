@@ -11,7 +11,25 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runregistry"
+	"github.com/pengelbrecht/ticfac/internal/runregistry/registrytest"
 )
+
+// Claim writes a machine-local registration beside the run's pidfile (tick
+// aj9), so this package's tests must not write on the machine that runs
+// them. registrytest.GuardMain is the whole TestMain (tick 7ag): it
+// redirects the registry away from the operator's home BEFORE any test
+// runs — a test that claims a run must not write on the machine that runs
+// it, and parallel tests could not each hold the one environment variable
+// that names where registrations live — and afterwards it scans the
+// operator's real registry and fails the package if this test run wrote
+// anything there, so a claim that reaches the real registry by any path
+// (a child spawned with an environment that drops the redirect) goes red
+// here instead of surfacing later as a phantom run in the bare `ticfac`
+// overview.
+func TestMain(m *testing.M) {
+	registrytest.GuardMain(m)
+}
 
 // startSleeper starts a real process and records it as the run's driver, the
 // way Claim would have from inside it.
@@ -125,6 +143,97 @@ func TestASecondProcessIsRefusedWhileTheFirstLives(t *testing.T) {
 	}
 }
 
+// Acceptance for tick 9oo: Claim's refusal of a second driver was
+// per-checkout — it read only the pidfile in the checkout it ran in, so the
+// same run id started from a second checkout of the same repository started
+// a second reconciler, and the run-state CAS was left as the only defence,
+// the one Claim's own doc calls the last line. The machine registration
+// (tick aj9) names the checkout whose pidfile is live, so Claim now reads it
+// back and refuses a claim when the registered checkout's probe answers
+// alive with another process — from any checkout.
+func TestASecondCheckoutIsRefusedWhileTheFirstDrives(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	// A real second process as the run's driver in the working checkout —
+	// the shape a second run-epic actually meets — with the pidfile and
+	// the machine registration Claim writes from inside the driver
+	// (startSleeper writes the pidfile the way Claim would have; the
+	// registration is what Claim writes beside it).
+	startSleeper(t, working, "r-cross")
+	if err := runregistry.Register("r-cross", working); err != nil {
+		t.Fatal(err)
+	}
+
+	// The premise, checked first: this checkout holds no pidfile of the
+	// run, so the per-checkout check alone is blind here — exactly the hole
+	// the registration closes.
+	elsewhere := t.TempDir()
+	if _, ok, err := readRecord(Dir(elsewhere, "r-cross")); err != nil || ok {
+		t.Fatalf("the second checkout should hold no pidfile to refuse with: ok=%v err=%v", ok, err)
+	}
+
+	if _, err := Claim(elsewhere, "r-cross"); !errors.Is(err, ErrAlreadyLive) {
+		t.Fatalf("claiming a run a live driver holds, from a second checkout of the same repository: %v, want ErrAlreadyLive", err)
+	}
+
+	// The refusal is a refusal, not a takeover: the first checkout keeps its
+	// live claim and the registration still names it.
+	if got := Probe(working, "r-cross", time.Now()); got.State != Alive {
+		t.Errorf("the first checkout's claim reads %s (%s) after the refused one: a refusal must not disturb it", got.State, got.Reason)
+	}
+	abs, err := filepath.Abs(working)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, ok, err := runregistry.Lookup("r-cross")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || reg.Repo != abs {
+		t.Errorf("the registration names %q (found=%v), want the first checkout %q: a refused claim must not move it", reg.Repo, ok, abs)
+	}
+}
+
+// The refusal must not lock the run to one checkout forever (tick 9oo): a
+// driver that died without releasing in the checkout the registration names
+// leaves a pidfile naming a process that is gone, and a resume from a second
+// checkout proceeds — the registration moving to the new checkout as the
+// last claim, the way aj9 documented it.
+func TestADeadDriverInAnotherCheckoutDoesNotBlockTheResume(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	cmd := startSleeper(t, working, "r-cross-resume")
+	// The run claimed in the working checkout the way Claim would have:
+	// its pidfile stands and the machine registration names the checkout.
+	if err := runregistry.Register("r-cross-resume", working); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Process.Kill()
+	_, _ = cmd.Process.Wait()
+
+	elsewhere := t.TempDir()
+	life, err := Claim(elsewhere, "r-cross-resume")
+	if err != nil {
+		t.Fatalf("resuming a run whose driver died in another checkout: %v", err)
+	}
+	defer life.Release("test")
+
+	if got := Probe(elsewhere, "r-cross-resume", time.Now()); got.State != Alive {
+		t.Errorf("the resumed run reads %s (%s)", got.State, got.Reason)
+	}
+	abs, err := filepath.Abs(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, ok, err := runregistry.Lookup("r-cross-resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || reg.Repo != abs {
+		t.Errorf("the registration names %q (found=%v), want the resuming checkout %q: the last claim is the run that is driving", reg.Repo, ok, abs)
+	}
+}
+
 // A driver that died without releasing must not lock the run forever: the
 // next run-epic resumes it.
 func TestADeadDriverDoesNotBlockTheResume(t *testing.T) {
@@ -176,6 +285,106 @@ func TestLivenessDoesNotDependOnTheEnvironment(t *testing.T) {
 		t.Errorf("under TZ=UTC a second claim on a live run returned %v, want ErrAlreadyLive", err)
 	}
 	_ = cmd
+}
+
+// Acceptance for tick aj9: claiming a run registers the checkout it works in
+// on this machine, so a surface that reads runs from MANY checkouts probes
+// this one where its pidfile lives instead of reading it dead from a second
+// checkout of the repository. Release does NOT remove the registration — a
+// finished run stays enumerable, its own terminal records answering what
+// its absent pidfile cannot.
+func TestClaimRegistersTheWorkingRepoOnThisMachine(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	life, err := Claim(repo, "r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reg, ok, err := runregistry.Lookup("r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("claiming a run did not register it on this machine")
+	}
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reg.Repo != abs {
+		t.Errorf("the registration names %q, want the checkout the run works in (%q)", reg.Repo, abs)
+	}
+
+	life.Release("completed")
+	reg, ok, err = runregistry.Lookup("r-reg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("releasing the run removed its registration: a finished run must stay enumerable")
+	}
+	if reg.Repo != abs {
+		t.Errorf("the surviving registration names %q, want %q", reg.Repo, abs)
+	}
+}
+
+// The convention end to end (tick aj9): a run claimed in one checkout reads
+// ALIVE from a different one through the machine registration — the answer
+// the per-checkout pidfile alone cannot give, and the one a surface that
+// lists runs from many checkouts needs before it names a dead-run wait.
+func TestASecondCheckoutProbesTheRunWhereItWorks(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	life, err := Claim(working, "r-second")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer life.Release("test")
+
+	// The premise, checked first: the per-checkout probe alone must NOT read
+	// a foreign run alive — elsewhere its pidfile never existed.
+	elsewhere := t.TempDir()
+	if got := Probe(elsewhere, "r-second", time.Now()); got.State == Alive {
+		t.Fatalf("a probe in another checkout reads %s: the premise of the convention does not hold", got.State)
+	}
+
+	repo, registered := runregistry.WorkingRepo("r-second", elsewhere)
+	if !registered {
+		t.Fatal("the claimed run has no machine registration")
+	}
+	if got := Probe(repo, "r-second", time.Now()); got.State != Alive {
+		t.Errorf("probing the registered working repo from another checkout reads %s (%s), want alive", got.State, got.Reason)
+	}
+}
+
+// A registration that cannot be written must not cost the run its life: the
+// registry is machine state, a machine that cannot hold it still runs epics,
+// and the listing falls back to the per-checkout answer. The run log says
+// what could not be done, because a silence here is a listing surface that
+// quietly degrades with nobody told.
+func TestAClaimSurvivesAnUnwritableRegistry(t *testing.T) {
+	// serial: t.Setenv cannot be used with t.Parallel.
+	file := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(file, []byte("a file, not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(runregistry.RegistryDirEnv, file)
+
+	repo := t.TempDir()
+	life, err := Claim(repo, "r-unwritable")
+	if err != nil {
+		t.Fatalf("a claim that cannot write the registry failed: %v", err)
+	}
+	defer life.Release("test")
+
+	log, err := os.ReadFile(filepath.Join(Dir(repo, "r-unwritable"), LogName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "could not register") {
+		t.Errorf("the run log should say the registration could not be written:\n%s", log)
+	}
 }
 
 // Probe answers the question liveness never did (tick 7zs): for every

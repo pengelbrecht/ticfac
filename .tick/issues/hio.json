@@ -1,0 +1,16 @@
+{
+  "id": "hio",
+  "title": "run-epic/settle now exec `gh auth token` at startup even for repos that declare no close-out rule",
+  "description": "pullRequestsForRun resolves its credential unconditionally at run start, so after vo4 a machine with gh installed and no GITHUB_TOKEN runs one `gh auth token` subprocess per `ticfac run-epic`/`ticfac settle` even when the target repo declares no PR + CI rule (the result is then discarded with the nil surface). The behavior is correct — it is the price of the ladder — but tick 9sz already plans 'when, and only when, the close-out rule needs a forge': its implementation can read the rule first (reconcile.ReadCloseoutRule) and skip the resolution entirely, or pullRequestsForRun can accept a rule argument.\n\nticfac run epic-2jn created this tick by absorbing the finding b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec (reported by run-epic-2jn/tick-vo4/attempt-7): the finding was judged against the epic's definition of done and gates the done, naming no single item (the fallback names every item at risk in its reason). The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-2jn/absorptions/b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec.json on the run branch.",
+  "notes": "2026-09-27 08:09 - ticfac run epic-2jn: created by absorbing finding b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec — placed before the final review, which is blocked-by hio. The decision record is .ticfac/runs/epic-2jn/absorptions/b7dae6a368c133ce9a7d2c9bfffbbb77abdd423ec35d3b1e2e40cc6ad15e8dec.json on epic/2jn, and it says: no prediction could be made — no classifier is configured for gating predictions — and the decision is to absorb anyway: a false negative would close an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a false positive wastes, and deferring would stop an unattended run on the one actor only a person can play. The unverified items at risk are A1, A2, A3, A4, A5, A6\n2026-09-27 09:29 - ticfac run epic-2jn: hio try 1 (run dispatch #9) merged into epic/2jn as 151bc15dd61e; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "2jn",
+  "discovered_from": "run-epic-2jn/tick-vo4/attempt-7",
+  "created_by": "ticfac run epic-2jn",
+  "created_at": "2026-09-27T06:09:34Z",
+  "updated_at": "2026-09-27T07:29:40.77035Z",
+  "closed_at": "2026-09-27T07:29:40.77035Z"
+}

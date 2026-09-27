@@ -61,6 +61,22 @@ const SchemaVersion = 1
 // DirName is where the profiles live, relative to the repository root.
 const DirName = "profiles"
 
+// HerdrFSRoot is the herdr profile set's directory as this repository
+// carries it (and as the embedded set is rooted): profiles-herdr/, the set
+// whose profiles name the herdr executor. It is also the PROVENANCE base
+// for a herdr-set resolution — a stable name, never a host path (tick
+// 0x1).
+const HerdrFSRoot = "profiles-herdr"
+
+// EmbeddedHerdr is the virtual directory that resolves the herdr profile
+// set compiled into this binary: `ticfac run` passes it (through
+// `--profiles herdr`) when it detects a live herdr (tick 9sz), so a herdr
+// run names no filesystem path and the set it resolves is the binary's own
+// bytes or nothing at all. A directory on disk that happens to carry this
+// name is not consulted — the name is the binary's, exactly as the empty
+// value always was.
+const EmbeddedHerdr = "herdr"
+
 // Roles are the three role profiles Phase 1 ships, in the order the reconciler
 // dispatches them. They are job-protocol.json's role names, not the tracker's
 // shorter ones: the profile is named for the job it configures.
@@ -116,7 +132,10 @@ func RunnersRoleCandidates(role string) []string {
 // Options say where a profile is resolved from.
 type Options struct {
 	// Dir is a profiles directory on disk. Empty resolves the copy compiled
-	// into this binary, which is the production path.
+	// into this binary, which is the production path; the virtual name
+	// [EmbeddedHerdr] ("herdr") resolves the herdr set compiled into this
+	// binary — the value `ticfac run` passes so a herdr run needs no
+	// filesystem path.
 	Dir string
 
 	// RunnersConfig is the TARGET repository's `.tick/runners.toml`, whose
@@ -451,9 +470,17 @@ func declaredTiers(role Role, substrate string) string {
 	return "it declares " + strings.Join(names, ", ")
 }
 
-// profileSource is the directory profiles are read from: the copy compiled into
-// this binary, or one on disk when a caller names it.
+// profileSource is the directory profiles are read from: the copy compiled
+// into this binary — the local set, or the herdr set through its virtual
+// name — or one on disk when a caller names it.
 func profileSource(dir string) (fs.FS, string, error) {
+	if dir == EmbeddedHerdr {
+		sub, err := fs.Sub(ticfac.HerdrProfiles(), HerdrFSRoot)
+		if err != nil {
+			return nil, "", fmt.Errorf("profile: the compiled-in %s/ is unreadable: %w", HerdrFSRoot, err)
+		}
+		return sub, HerdrFSRoot, nil
+	}
 	if dir == "" {
 		sub, err := fs.Sub(ticfac.ProfilesFS, DirName)
 		if err != nil {
