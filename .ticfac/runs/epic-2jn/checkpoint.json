@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 230,
-  "state": "running",
-  "reason": "4yb is closed",
-  "updated_at": "2026-09-27T12:43:53Z",
+  "sequence": 231,
+  "state": "collecting",
+  "reason": "collecting ogv attempt 31",
+  "updated_at": "2026-09-27T13:54:55Z",
   "ticks": [
     {
       "tick_id": "nwj",
