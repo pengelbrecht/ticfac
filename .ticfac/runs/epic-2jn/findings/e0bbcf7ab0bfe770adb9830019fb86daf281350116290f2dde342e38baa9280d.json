@@ -12,8 +12,11 @@
   "attempt": 47,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/cli/ -run 'TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote' -count=1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T18:39:35Z",
+  "triaged_at": "2026-09-27T18:39:44Z",
+  "triaged_by": "ticfac run epic-2jn absorbing mtq",
+  "promoted_as": "mtq",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "wcl",
