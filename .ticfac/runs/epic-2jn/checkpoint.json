@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 175,
-  "state": "publishing",
-  "reason": "closing 7ag behind the integrated gate on 17ff5150ae02",
-  "updated_at": "2026-09-27T10:25:33Z",
+  "sequence": 176,
+  "state": "running",
+  "reason": "7ag is closed",
+  "updated_at": "2026-09-27T10:25:42Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -121,7 +121,7 @@
     },
     {
       "tick_id": "7ag",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 23
     }
   ],
