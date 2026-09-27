@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "652ad8d95ae0e28ccdbff56975ba1113dfe2b7647e4b74b5be68907605ed9832",
+  "tick_id": "sw0",
+  "gating": false,
+  "basis": "predicted",
+  "fallback": "no classifier is configured for gating predictions; the reporter's own claim decided",
+  "reason": "no classifier prediction could be made — no classifier is configured for gating predictions — so the reporter's own claim decides: it breaks no done item, and the finding is filed to the backlog rather than absorbed. The claim is a prediction, scored later against what the done actually did",
+  "placement": "backlog",
+  "decided_at": "2026-09-27T14:10:52Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "xbp",
+    "attempt": 32,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "86f040b9e3100ee04551311be4a83ece37feae42",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "review",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:250a9e01aa04ebae91c0f09ab00303bb35306018a40ce967f814c1b4ace148c7",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
