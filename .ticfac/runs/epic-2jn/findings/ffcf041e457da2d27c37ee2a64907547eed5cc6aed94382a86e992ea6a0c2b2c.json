@@ -12,8 +12,11 @@
   "attempt": 15,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/cli -run 'TestStatus' -count=1 && ls ~/.ticfac/registry/r-status.json",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T08:32:27Z",
+  "triaged_at": "2026-09-27T08:32:41Z",
+  "triaged_by": "ticfac run epic-2jn absorbing eih",
+  "promoted_as": "eih",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "9oo",
