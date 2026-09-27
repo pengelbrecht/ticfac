@@ -403,7 +403,10 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// for a person answers 3 on a pipe and in the document, not only on a
 	// terminal, and a hold the stream's own run_held line named ends 3 even
 	// when the model cannot be gathered (the feed's line is the durable
-	// half; the model is the richer one).
+	// half; the model is the richer one). A gathered model holding nothing
+	// is not yet "done": the run's own terminal line still decides between
+	// done and failed below (tick bot), on both the gathered and the
+	// ungathered path.
 	model, gatherErr := watchGatherModel(ctx, source, kind, *repo, runID)
 	if gatherErr == nil {
 		if attention := watchHoldAttention(model); attention != nil {
@@ -417,9 +420,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			}
 			return finish(agentStateHeld, attention)
 		}
-		return finish(agentStateDone, nil)
-	}
-	if held {
+	} else if held {
 		return finish(agentStateHeld, nil)
 	}
 	if watchLineEndedFailed(terminal, terminalDetail) {
