@@ -92,4 +92,18 @@ func TestARunThatStoppedHoldingForAPersonExitsHeld(t *testing.T) {
 		t.Errorf("an epic-absent refusal answers the state word %q, want failed — the code's not-found half is the documented exception, not a state word",
 			state)
 	}
+
+	// Cancelled (tick rix) is decided before the refusal, in both
+	// authorities alike: a deliberate stop is neither a failure nor a hold,
+	// whatever refusal rode along with it, and the word and the code agree.
+	cancelled := &reconcile.Result{
+		State: runstate.StateCancelled, RunID: "epic-qeu", EpicID: "qeu",
+		Failure: &reconcile.Refusal{Reason: reconcile.RefusedHeld},
+	}
+	if code := resultExitCode(cancelled); code != exitCancelled {
+		t.Errorf("a cancelled run exits %d, want the cancelled code %d", code, exitCancelled)
+	}
+	if state := runEpicStateWord(cancelled); state != agentStateCancelled {
+		t.Errorf("a cancelled run answers the state word %q, want %q", state, agentStateCancelled)
+	}
 }

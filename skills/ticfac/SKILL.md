@@ -44,7 +44,9 @@ it, nothing the document needs on stderr — and exits the documented table:
 0 done, 1 failed, 2 usage, 3 the run ended holding something only a person
 can move — run-epic, run and watch alike, the reason class in the line —
 4 a lookup that came back empty,
-5 the command ended while the run is still going (detached — nothing is wrong), 6 io.
+5 the command ended while the run is still going (detached — nothing is wrong), 6 io,
+7 the run was stopped deliberately (cancelled — the work is neither done nor
+failed, and nothing is held).
 `ticfac status` is the one exception: it exits the run's liveness, 0 alive, 1 not.
 
 The epic finishes when its run completes: every tick gated and merged onto
@@ -53,4 +55,6 @@ A run that ends holding something for a person exits 3 and names the wait
 kind; clear it (triage, settle, the fix it names) and run again. A run that
 ends FAILED — its last line names what did not pass — exits 1; fix what the
 line names and run again, the run resumes without redoing what already
-passed.
+passed. A run that ends CANCELLED — stopped deliberately — exits 7: nothing
+is held and nothing needs a fix; read the stop's reason on the last line
+and the evidence on the integration branch before running the epic again.
