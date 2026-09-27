@@ -51,6 +51,12 @@ than maintained beside it:
 - The hidden `ticfac man` renders the whole tree as man pages (mango),
   writing roff to stdout — the same surface a terminal reads, in the format
   `man` presents.
+- Every command takes `--json` (tick 8v3): ONE versioned document on stdout —
+  the schema named inside it (`ticfac.<command>.v1`, beside the older
+  `ticfac.status.v1` and `ticfac.job-status.v1`), the command's prose on
+  stderr, and — where the answer is an outcome of the work — a `state` word
+  the exit code agrees with. A live stream (`--follow`, the dashboard) is
+  not one document and says so.
 - A bare `ticfac` is the overview (2qz): every run this checkout and the
   factory know, attention first — every run held or failed names its reason
   and the one command that clears it; `--json` emits the versioned overview

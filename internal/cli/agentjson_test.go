@@ -22,12 +22,9 @@ func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 // is already machine-readable, and they carry no answer of ticfac's to
 // version.
 var jsonExemptNames = map[string]bool{
-	"help":        true,
-	"completion":  true,
-	"__complete":  true,
-	"__compgen ":  false, // never real; guards a typo below
-	"man":         true,  // hidden anyway; listed so the intent is explicit
-	"completions": false,
+	"help":       true, // cobra's derived help viewer
+	"completion": true, // cobra's generated completion writer
+	"man":        true, // hidden roff output, derived from the tree
 }
 
 // jsonCarryingCommands walks the tree and yields every command that owes a
