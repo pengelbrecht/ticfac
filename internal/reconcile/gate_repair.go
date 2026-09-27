@@ -154,9 +154,8 @@ func (r *Reconciler) repairFailedGate(ctx context.Context, entry planEntry, mark
 			"checks named — routed at tier %q (%s)",
 		short(merged.GateSHA), failures, tier, tierNote)
 
-	jobID := fmt.Sprintf("run-%s/tick-%s/repair-%d", r.runID, tick, marker.Attempt)
-	writeRef := repairWriteRef(r.runID, tick, marker.Attempt)
-	stateDir := repairStateDir(r.execStateDir(tick, marker.Attempt))
+	identity := r.repairMarkerOf(marker)
+	jobID, writeRef, stateDir := identity.JobID, identity.WriteRef, identity.StateRoot
 	dispatch := Dispatch{
 		RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
 		Try: marker.Try, JobID: jobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote,
@@ -360,28 +359,54 @@ func (r *Reconciler) mergeRepair(marker attemptHandle, head string, g *gateProgr
 // over it — the same ending the dispatched path reaches. `attemptHead` is
 // the tick's own attempt head, the one the re-gate's fingerprint keeps as
 // its attempt_head (see repairFailedGate).
+//
+// `marker` is the TICK'S attempt marker — the one the gate and the close are
+// about. Everything done to the REPAIR (fetch its branch, name it in the
+// merge and the decision, retire it) is done with the repair's own marker,
+// derived from the same deterministic identity the dispatch uses. Working
+// the repair with the attempt's marker was the epic-2jn stall: the
+// retirement below deleted the ATTEMPT's branch on origin, the freshness
+// check then read that absent branch as an attempt head of "" and refused
+// the passing gate over the repaired tree as stale, and the next pass held
+// the tick as rejected work nobody had merged — while its head was on the
+// integration branch all along.
 func (r *Reconciler) finishRepairFromBranch(ctx context.Context, entry planEntry, marker attemptHandle,
 	attemptHead, remote string, g *gateProgress) error {
 
-	repairMerge, err := r.mergeRepair(marker, remote, g)
+	repairMarker := r.repairMarkerOf(marker)
+	repairMerge, err := r.mergeRepair(repairMarker, remote, g)
 	if err != nil {
 		return err
 	}
 	repaired := merge{AttemptHead: attemptHead, EpicHead: repairMerge, GateSHA: repairMerge, Merged: true}
 	if err := r.recordRepairDecision(
 		Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
-			JobID: marker.JobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote},
-		marker, "merged", repaired, remote, g); err != nil {
+			JobID: repairMarker.JobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote},
+		repairMarker, "merged", repaired, remote, g); err != nil {
 		return err
 	}
 	r.record(marker.TickID, StageIntegrated,
 		"the repair job of %s had already settled; its work on %s is finished into the merge %s and the gate runs "+
 			"as usual",
-		r.attemptName(marker.TickID, marker.Attempt), branchOf(marker.WriteRef), short(repaired.GateSHA))
-	// The branch that carried the work is retired the way a finished
-	// resolve's is, now that its commits are on the integration branch.
-	_, _, _ = r.git.try("", "push", r.opts.Remote, ":"+refFor(branchOf(marker.WriteRef)))
+		r.attemptName(marker.TickID, marker.Attempt), branchOf(repairMarker.WriteRef), short(repaired.GateSHA))
+	// The branch that carried the REPAIR's work is retired the way a finished
+	// resolve's is, now that its commits are on the integration branch. The
+	// attempt's own branch is not this function's to retire: the close does.
+	_, _, _ = r.git.try("", "push", r.opts.Remote, ":"+refFor(branchOf(repairMarker.WriteRef)))
 	return r.gateAndClose(ctx, entry, marker, nil, repaired)
+}
+
+// repairMarkerOf is the repair job's identity for one attempt's failed gate —
+// the job id, write ref and state directory repairFailedGate dispatches it
+// under — derived from the attempt's marker, so an incarnation finishing a
+// repair it did not dispatch names the same job and the same branch.
+func (r *Reconciler) repairMarkerOf(marker attemptHandle) attemptHandle {
+	repair := marker
+	repair.Role = RoleRepairGate
+	repair.JobID = fmt.Sprintf("run-%s/tick-%s/repair-%d", r.runID, marker.TickID, marker.Attempt)
+	repair.WriteRef = repairWriteRef(r.runID, marker.TickID, marker.Attempt)
+	repair.StateRoot = repairStateDir(r.execStateDir(marker.TickID, marker.Attempt))
+	return repair
 }
 
 // repairTitle is the dispatch title the sandbox door carries.
@@ -470,7 +495,12 @@ func (r *Reconciler) recordRepairDecision(dispatch Dispatch, marker attemptHandl
 		"job_id":        marker.JobID,
 	}
 	request := map[string]any{
-		"tick_id":        marker.TickID,
+		"tick_id": marker.TickID,
+		"attempt": marker.Attempt,
+		// The head of the tick's attempt the failing gate was over: the
+		// durable record of what is integrated, for a resume that finds the
+		// attempt's own branch gone from origin (recordedAttemptHead).
+		"attempt_head":   g.fingerprint["attempt_head"],
 		"epic_id":        r.opts.EpicID,
 		"job_id":         marker.JobID,
 		"role":           RoleRepairGate,

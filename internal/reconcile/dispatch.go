@@ -991,6 +991,15 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 			branch, short(remote), r.opts.Remote, r.branch)
 	}
 	if local := r.attemptWorkHead(marker); local != "" {
+		// Origin has no branch for the attempt, and this checkout carries its
+		// work. When the integration branch already carries that head, the
+		// work is merged — whatever retired the branch on origin (epic-2jn:
+		// the finish of a repair job retired the ATTEMPT's branch instead of
+		// its own) — and it is finished from the integration branch, never
+		// held as work nobody merged.
+		if r.integrated(local) {
+			return integratedAttempt, ""
+		}
 		return holdAttemptWork, fmt.Sprintf(
 			"%s carries %s in this checkout, and %s has no commit of this attempt at all",
 			branch, short(local), r.opts.Remote)
@@ -1003,7 +1012,51 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 	if carried := r.carriedDelivery(marker); carried != "" && r.integrated(carried) {
 		return integratedAttempt, ""
 	}
+	// Neither origin nor this checkout has a branch with the attempt's work
+	// (a fresh clone after the branch was retired): the head the run RECORDED
+	// as integrated is what says whether the work is merged, and a recorded
+	// head the integration branch carries is integrated, not spent.
+	if recorded := r.recordedAttemptHead(marker); recorded != "" && r.integrated(recorded) {
+		return integratedAttempt, ""
+	}
 	return redispatchAttempt, ""
+}
+
+// recordedAttemptHead is the attempt's head as the run's own durable records
+// state it, for an attempt whose branch origin no longer has: the head a
+// repair decision recorded for this attempt's failed gate — the gate that
+// was over this attempt's merge, so the head is one the run integrated. ""
+// when no record states one.
+func (r *Reconciler) recordedAttemptHead(marker attemptHandle) string {
+	decision, ok, err := r.repairDecisionOf(marker.TickID)
+	if err != nil || !ok {
+		return ""
+	}
+	// Read back from JSON the number is a float64; a record still in memory
+	// holds the int it was written with.
+	attempt := -1
+	switch n := decision.Request["attempt"].(type) {
+	case float64:
+		attempt = int(n)
+	case int:
+		attempt = n
+	}
+	if attempt != marker.Attempt {
+		return ""
+	}
+	head, _ := decision.Request["attempt_head"].(string)
+	return head
+}
+
+// offOriginAttemptHead is the attempt's head when origin has no branch for it:
+// the local branch's work head in this checkout, else the head the run's
+// records state. Neither is merged on the strength of existing — every caller
+// asks the integration branch whether it carries the head.
+func (r *Reconciler) offOriginAttemptHead(marker attemptHandle) string {
+	if local := r.attemptWorkHead(marker); local != "" {
+		return local
+	}
+	return r.recordedAttemptHead(marker)
 }
 
 // remoteWork is the attempt's head on ORIGIN when that head carries a commit
@@ -1083,6 +1136,12 @@ func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 		// (tick isp): that is the head the run merged, if anything merged it —
 		// and the head disposition finished the attempt from when it did.
 		head = r.carriedDelivery(marker)
+	}
+	if head == "" {
+		// Origin has no branch carrying the attempt's work: its head is the
+		// local branch's, or the one the run recorded (epic-2jn's retired
+		// attempt branch). Whether it is merged is asked of origin below.
+		head = r.offOriginAttemptHead(marker)
 	}
 	if head == "" {
 		return "", nil
