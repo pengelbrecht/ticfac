@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 7,
-  "state": "publishing",
-  "reason": "closing nwj behind the integrated gate on 0fc09212e0e8",
-  "updated_at": "2026-09-27T04:07:45Z",
+  "sequence": 8,
+  "state": "running",
+  "reason": "nwj is closed",
+  "updated_at": "2026-09-27T04:07:53Z",
   "ticks": [
     {
       "tick_id": "nwj",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
