@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "attempt": 22,
+  "tick_id": "eih",
+  "dispatched_at": "2026-09-27T09:19:49Z",
+  "job_handle": {
+    "attempt": 22,
+    "base_sha": "48f7ea97f05996b5ddb6e3be6a45bb1ff0b6bd0e",
+    "executor": "local-subprocess",
+    "job_id": "run-epic-2jn/tick-eih/attempt-22",
+    "model": "opus",
+    "prompt_digest": "sha256:7655b9a47c1bc911e6f37e1cfbd5debd6d52872c4a0f1601ba5aa2f91191631e",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "eih",
+      "attempt": 17,
+      "write_ref": "refs/heads/ticfac/run-epic-2jn/tick-eih/attempt-17",
+      "sha": "48f7ea97f05996b5ddb6e3be6a45bb1ff0b6bd0e",
+      "released_by": "person-c7fc8d8f82bd33b192baed10fd08a7bca0df93088e1145279a73b6ef066a417c"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "tick_id": "eih",
+    "tier": "frontier",
+    "touch": null,
+    "try": 4,
+    "write_ref": "refs/heads/ticfac/run-epic-2jn/tick-eih/attempt-22"
+  },
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "eih",
+    "attempt": 22,
+    "source_ref": "refs/heads/ticfac/run-epic-2jn/tick-eih/attempt-17",
+    "source_sha": "48f7ea97f05996b5ddb6e3be6a45bb1ff0b6bd0e",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "frontier",
+    "profile_digest": "sha256:8f76543dad2ff7e97068f389f647fea4dbf5d2bb1d3ad327c6b27627a246a6bc",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
