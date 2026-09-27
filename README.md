@@ -66,7 +66,7 @@ than maintained beside it:
 | `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
 | `ticfac status <run-id>` | is the run alive, and when did it last say anything |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
-| `ticfac watch <run-id>` | follow a run and say, to a human, when it ends holding something for one |
+| `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one |
 | `ticfac version` | report this build and the contract bundle it serves |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
 | `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
