@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 396,
-  "state": "running",
-  "reason": "8d6 is closed",
-  "updated_at": "2026-09-27T20:19:53Z",
+  "sequence": 397,
+  "state": "collecting",
+  "reason": "collecting c2g attempt 53",
+  "updated_at": "2026-09-27T20:30:12Z",
   "ticks": [
     {
       "tick_id": "nwj",
