@@ -317,7 +317,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	if probe.State == runlife.Alive {
 		fmt.Fprintf(stdout, "run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
 			runID, probe.Reason)
-		return attach(ctx, epicID, repo, runID, stdout, stderr)
+		return attachRun(ctx, epicID, repo, runID, stdout, stderr)
 	}
 
 	// Not running here — it never started, it released on its way out, or it
@@ -395,7 +395,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 		if p := runlife.Probe(repo, runID, time.Now()); p.State == runlife.Alive {
 			fmt.Fprintf(stdout, "run %s claimed its life (pid %d) — attaching; Ctrl-C detaches without stopping it\n",
 				runID, p.Record.PID)
-			return attach(ctx, epicID, repo, runID, stdout, stderr)
+			return attachRun(ctx, epicID, repo, runID, stdout, stderr)
 		}
 		if child.Exited() {
 			fmt.Fprintf(stderr, "ticfac run %s: the background run exited %d without claiming the run — what it said:\n",
@@ -434,7 +434,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 // because the operator left (the invocation's context, which a terminal
 // Ctrl-C cancels) is a detach, not a failure — the run keeps going, and the
 // line that says so names the one command that comes back.
-func attach(ctx context.Context, epicID, repo, runID string, stdout, stderr io.Writer) int {
+func attachRun(ctx context.Context, epicID, repo, runID string, stdout, stderr io.Writer) int {
 	code := runAttach(ctx, repo, runID, stdout, stderr)
 	if ctx.Err() != nil && code == 1 {
 		if probe := runlife.Probe(repo, runID, time.Now()); probe.State == runlife.Alive {
