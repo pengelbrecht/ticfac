@@ -12,8 +12,11 @@
   "attempt": 25,
   "done_item": "A5",
   "demonstrating_check": "go test ./internal/cli/ -run TestStatusJSONEmitsTheModelForACloudRun -count=1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T11:19:34Z",
+  "triaged_at": "2026-09-27T11:19:53Z",
+  "triaged_by": "ticfac run epic-2jn absorbing tem",
+  "promoted_as": "tem",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "ejw",
