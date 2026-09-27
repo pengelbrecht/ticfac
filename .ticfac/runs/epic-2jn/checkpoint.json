@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 223,
-  "state": "running",
-  "reason": "gwi is closed",
-  "updated_at": "2026-09-27T12:23:09Z",
+  "sequence": 224,
+  "state": "dispatching",
+  "reason": "dispatching ogv as attempt 31",
+  "updated_at": "2026-09-27T12:23:15Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -139,6 +139,10 @@
       "tick_id": "gwi",
       "state": "closed",
       "attempt": 30
+    },
+    {
+      "tick_id": "ogv",
+      "state": "ready"
     }
   ],
   "provenance": {
