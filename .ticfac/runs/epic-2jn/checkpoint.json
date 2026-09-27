@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 309,
-  "state": "dispatching",
-  "reason": "dispatching bkg as attempt 44",
-  "updated_at": "2026-09-27T16:45:44Z",
+  "sequence": 310,
+  "state": "running",
+  "reason": "bkg is running as attempt 44",
+  "updated_at": "2026-09-27T16:45:53Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -206,7 +206,8 @@
     },
     {
       "tick_id": "bkg",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 44
     }
   ],
   "provenance": {
