@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 315,
-  "state": "running",
-  "reason": "gtk is closed",
-  "updated_at": "2026-09-27T17:00:35Z",
+  "sequence": 316,
+  "state": "dispatching",
+  "reason": "dispatching rix as attempt 45",
+  "updated_at": "2026-09-27T17:00:46Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -208,6 +208,10 @@
       "tick_id": "bkg",
       "state": "dispatched",
       "attempt": 44
+    },
+    {
+      "tick_id": "il6",
+      "state": "ready"
     }
   ],
   "provenance": {
