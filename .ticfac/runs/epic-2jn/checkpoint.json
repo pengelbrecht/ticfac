@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 176,
-  "state": "running",
-  "reason": "7ag is closed",
-  "updated_at": "2026-09-27T10:25:42Z",
+  "sequence": 177,
+  "state": "dispatching",
+  "reason": "dispatching 5bd as attempt 26",
+  "updated_at": "2026-09-27T10:25:49Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -123,6 +123,10 @@
       "tick_id": "7ag",
       "state": "closed",
       "attempt": 23
+    },
+    {
+      "tick_id": "5bd",
+      "state": "ready"
     }
   ],
   "provenance": {
