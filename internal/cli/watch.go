@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -68,14 +70,29 @@ const ExitHeld = 3
 //     A run about to be resumed has not claimed yet; its previous ending was
 //     the truth until the resume, and a watch started in that gap reports
 //     that ending rather than an open-ended silence.
-func watchCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
-	if err := fs.Parse(args); err != nil {
-		return 2
+//
+// newWatchCommand builds the cobra command for `watch`.
+func newWatchCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "watch <run-id>",
+		Short: "follow a run and say, to a human, when it ends holding something for one",
+		Long: `Subscribe like events --follow, and when the run stops holding a tick
+for a person SAY SO — which tick, which attempt, why, and the command that
+moves it on. Exit codes: 0 the run ended (the last line says how), 3 it ended
+holding something only a person can move, 1 the feed could not be read or the
+watch was interrupted, 2 usage.`,
 	}
-	rest := fs.Args()
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(watchCommand(c.Context(), args, repo, stdout, stderr))
+	}
+	return cmd
+}
+
+func watchCommand(ctx context.Context, args []string, repo *string, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac watch: exactly one run id is required\n")
 		return 2

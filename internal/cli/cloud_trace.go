@@ -6,8 +6,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
@@ -31,24 +31,31 @@ var cloudTraceHTTPClient = &http.Client{Timeout: 30 * time.Second}
 // on; it is small enough not to look like an attack on the operator's own API.
 const cloudTraceDetailWorkers = 6
 
-func runCloudTrace(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudTrace(ctx, args, stdout, stderr)
-	return reportCommand("cloud trace", err, stderr)
-}
-
-func cloudTrace(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("cloud trace", stderr)
+// newCloudTraceCommand builds `cloud trace`'s cobra command.
+func newCloudTraceCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "trace <run-id>",
+		Short: "what the model said and decided",
+	}
+	fs := newFlagSet("cloud trace", nil)
 	asJSON := fs.Bool("json", false, "emit the raw gateway log rows (or one call's raw bodies with --call)")
 	call := fs.Int("call", 0, "dump one exchange in full, by its 1-based call number")
 	tools := fs.Bool("tools", false, "list only the tool calls and their arguments")
 	cache := fs.Bool("cache", false, "per-call prefix-cache table: input tokens, cached tokens, hit rate")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runCloudTrace(c.Context(), args, asJSON, tools, cache, call, stdout, stderr))
 	}
+	return cmd
+}
+
+func runCloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, stdout, stderr io.Writer) int {
+	err := cloudTrace(ctx, args, asJSON, tools, cache, call, stdout, stderr)
+	return reportCommand("cloud trace", err, stderr)
+}
+
+func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
 	}

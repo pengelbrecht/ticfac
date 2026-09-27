@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/factory"
 )
 
@@ -27,19 +29,29 @@ import (
 // factoryCommand dispatches the factory subcommands.
 // factoryDeploy installs (or upgrades) the factory in the operator's own
 // Cloudflare account, from the bundle embedded in this build.
-func factoryDeploy(args []string, stdout, stderr io.Writer) int {
+// newFactoryDeployCommand builds `factory deploy`'s cobra command.
+func newFactoryDeployCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "put the ticks cloud factory in your own Cloudflare account",
+		Long:  "Install (or upgrade) the factory in the operator's OWN Cloudflare account,\nfrom the bundle embedded in this build. A failure is a stop with the remedy\nin it, never a half-configured account left behind.",
+	}
 	fs := flag.NewFlagSet("factory deploy", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	var (
 		bundleDir   = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		rotateToken = fs.Bool("rotate-token", false, "mint a new factory token instead of reusing the stored one")
 		url         = fs.String("url", "", "the factory's base endpoint, when wrangler's output does not name it")
 		skipRollout = fs.Bool("skip-rollout-wait", false, "accept an unconfirmed container rollout")
 	)
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipRollout, stdout, stderr))
 	}
-	if fs.NArg() != 0 {
+	return cmd
+}
+
+func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipRollout *bool, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory deploy: takes no positional arguments\n")
 		return 2
 	}
@@ -85,9 +97,14 @@ func factoryDeploy(args []string, stdout, stderr io.Writer) int {
 // factorySetup walks the factory's credential ladder: a deployment, a GitHub
 // credential (the device flow by default), and model access through the
 // operator's own AI Gateway. It prompts for anything a flag did not supply.
-func factorySetup(args []string, stdout, stderr io.Writer) int {
+// newFactorySetupCommand builds `factory setup`'s cobra command.
+func newFactorySetupCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "setup",
+		Short: "walk the factory's credential ladder, one verified rung at a time",
+		Long:  "The first-run walk: a deployment, a GitHub credential (the device flow by\ndefault), and model access through the operator's own AI Gateway — every\nrung verified against the live service before it is stored. It prompts for\nanything a flag did not supply.",
+	}
 	fs := flag.NewFlagSet("factory setup", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	var (
 		bundleDir    = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		repo         = fs.String("repo", "", "the repository the GitHub credential must reach")
@@ -102,10 +119,17 @@ func factorySetup(args []string, stdout, stderr io.Writer) int {
 		billingMode  = fs.String("workers-ai-billing-mode", "", "the wallet the gateway bills: postpaid | unified")
 		cfAPIBase    = fs.String("cloudflare-api-base", "", "Cloudflare's REST root (tests)")
 	)
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(factorySetup(args, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+			gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase, stdout, stderr))
 	}
-	if fs.NArg() != 0 {
+	return cmd
+}
+
+func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+	gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase *string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory setup: takes no positional arguments\n")
 		return 2
 	}

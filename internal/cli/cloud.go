@@ -3,11 +3,11 @@ package cli
 // `ticfac cloud` — the operator's closed command surface over a self-deployed
 // cloud factory. Ported from ticks' cmd/tk/cmd/cloud.go (the run, stop and
 // status commands, the shared client and the tracker reads; the spawn/wait/
-// wave/collect family stays with the local orchestrator), with the cobra
-// plumbing replaced by this package's plain flag sets and every body otherwise
-// verbatim — including the messages, which name `tk` commands exactly as ticks
-// spelled them: this code is a copy of ticks' until ticks tick 1ya deletes it,
-// and a copy that has already edited its own strings is not a copy.
+// wave/collect family stays with the local orchestrator): cobra plumbing in
+// (tk's own, returned to by tick nwj), every body otherwise verbatim —
+// including the messages, which name `tk` commands exactly as ticks spelled
+// them: this code is a copy of ticks' until ticks tick 1ya deletes it, and a
+// copy that has already edited its own strings is not a copy.
 
 import (
 	"bytes"
@@ -26,42 +26,43 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 )
 
-// cloudCommand is the `cloud` group's dispatcher: args[0] names the
-// subcommand, the rest are its flags and operands.
-func cloudCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, cloudUsage)
-		return exitUsage
+// newCloudCommand builds the `cloud` group: the cobra command whose Long is
+// cloudUsage — the closed D21 vocabulary and why — with the bare and
+// unknown-subcommand refusals kept byte-for-byte from the dispatcher it
+// replaces.
+func newCloudCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cloud",
+		Short: "run and inspect epics in your cloud factory",
+		Long:  cloudUsage,
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				fmt.Fprint(stderr, cloudUsage)
+				return &printedExit{code: exitUsage}
+			}
+			if args[0] == "help" {
+				fmt.Fprint(stdout, cloudUsage)
+				return nil
+			}
+			fmt.Fprintf(stderr, "ticfac cloud: unknown subcommand %q\n\n%s", args[0], cloudUsage)
+			return &printedExit{code: exitUsage}
+		},
 	}
-	name, rest := args[0], args[1:]
-	if len(rest) > 0 && (rest[0] == "--help" || rest[0] == "-h") {
-		fmt.Fprint(stdout, cloudUsage)
-		return exitSuccess
-	}
-	switch name {
-	case "run":
-		return runCloudRun(ctx, rest, stdout, stderr)
-	case "stop":
-		return runCloudStop(ctx, rest, stdout, stderr)
-	case "status":
-		return runCloudStatus(ctx, rest, stdout, stderr)
-	case "logs":
-		return runCloudLogs(ctx, rest, stdout, stderr)
-	case "trace":
-		return runCloudTrace(ctx, rest, stdout, stderr)
-	case "supervisor":
-		return runCloudSupervisor(ctx, rest, stdout, stderr)
-	case "help", "-h", "--help":
-		fmt.Fprint(stdout, cloudUsage)
-		return exitSuccess
-	default:
-		fmt.Fprintf(stderr, "ticfac cloud: unknown subcommand %q\n\n%s", name, cloudUsage)
-		return exitUsage
-	}
+	cmd.AddCommand(
+		newCloudRunCommand(stdout, stderr),
+		newCloudStopCommand(stdout, stderr),
+		newCloudStatusCommand(stdout, stderr),
+		newCloudLogsCommand(stdout, stderr),
+		newCloudTraceCommand(stdout, stderr),
+		newCloudSupervisorCommand(stdout, stderr),
+	)
+	return cmd
 }
 
 // cloudUsage is the group's help: the closed vocabulary and why the open
@@ -333,37 +334,37 @@ func newFlagSet(name string, errOutput io.Writer) *flag.FlagSet {
 	return fs
 }
 
-// setFlagsOf reports which flags the invocation actually passed, because
-// "flag given" and "flag defaulted" are different questions for --max-cost
-// (a zero that lowers nothing). It stands in for cobra's Flags().Changed.
-func setFlagsOf(fs *flag.FlagSet) map[string]bool {
-	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	return set
-}
-
-func runCloudRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudRun(ctx, args, stdout, stderr)
-	return reportCommand("cloud run", err, stderr)
-}
-
-func cloudRun(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("cloud run", stderr)
+// newCloudRunCommand builds `cloud run`'s cobra command.
+func newCloudRunCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run <epic-id>",
+		Short: "push the current branch and start a run",
+	}
+	fs := newFlagSet("cloud run", nil)
 	notify := fs.String("notify", "", "notification channel for this submission")
 	queue := fs.Bool("queue", false, "park behind the current project lease instead of refusing")
 	maxCost := fs.Float64("max-cost", 0, "cost ceiling in USD for this run; may lower the deployment budget, never raise it")
 	maxWallClock := fs.Duration("max-wall-clock", 0, "wall-clock ceiling for this run (e.g. 45m); may lower the deployment budget, never raise it")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		changed := func(name string) bool { return c.Flags().Changed(name) }
+		return codeToErr(runCloudRun(c.Context(), args, notify, queue, maxCost, maxWallClock, changed, stdout, stderr))
 	}
+	return cmd
+}
+
+func runCloudRun(ctx context.Context, args []string, notify *string, queue *bool, maxCost *float64,
+	maxWallClock *time.Duration, changed func(string) bool, stdout, stderr io.Writer) int {
+	err := cloudRun(ctx, args, notify, queue, maxCost, maxWallClock, changed, stdout, stderr)
+	return reportCommand("cloud run", err, stderr)
+}
+
+func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, maxCost *float64,
+	maxWallClock *time.Duration, changed func(string) bool, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one epic id is required")
 	}
-	set := setFlagsOf(fs)
 
 	client, err := newCloudClient()
 	if err != nil {
@@ -371,7 +372,7 @@ func cloudRun(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 	// Parsed before anything is pushed: a budget the factory would refuse must
 	// not first cost a push and a lease.
-	budget, err := cloudRunBudget(set, *maxCost, *maxWallClock)
+	budget, err := cloudRunBudget(changed, *maxCost, *maxWallClock)
 	if err != nil {
 		return newExitError(exitUsage, "%v", err)
 	}
@@ -442,15 +443,15 @@ type cloudRunBudgetOverride struct {
 	maxWallClockMS int64
 }
 
-func cloudRunBudget(set map[string]bool, maxCost float64, maxWallClock time.Duration) (cloudRunBudgetOverride, error) {
+func cloudRunBudget(changed func(string) bool, maxCost float64, maxWallClock time.Duration) (cloudRunBudgetOverride, error) {
 	var budget cloudRunBudgetOverride
-	if set["max-cost"] {
+	if changed("max-cost") {
 		if maxCost <= 0 {
 			return budget, fmt.Errorf("--max-cost must be a positive amount in USD, got %v", maxCost)
 		}
 		budget.maxCostUSD = maxCost
 	}
-	if set["max-wall-clock"] {
+	if changed("max-wall-clock") {
 		if maxWallClock <= 0 {
 			return budget, fmt.Errorf("--max-wall-clock must be a positive duration, got %s", maxWallClock)
 		}
@@ -490,21 +491,28 @@ func printCloudRunBudget(out io.Writer, budget *cloudEffectiveBudget) {
 	}
 }
 
-func runCloudStop(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudStop(ctx, args, stdout)
+func runCloudStop(ctx context.Context, args []string, now *bool, stdout, stderr io.Writer) int {
+	err := cloudStop(ctx, args, now, stdout)
 	return reportCommand("cloud stop", err, stderr)
 }
 
-func cloudStop(ctx context.Context, args []string, stdout io.Writer) error {
+// newCloudStopCommand builds `cloud stop`'s cobra command.
+func newCloudStopCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stop <run-id>",
+		Short: "stop a live run, cleanly or right now",
+	}
 	fs := newFlagSet("cloud stop", nil)
 	now := fs.Bool("now", false, "hard stop: revoke the run's gateway credential immediately and skip closeout")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runCloudStop(c.Context(), args, now, stdout, stderr))
 	}
+	return cmd
+}
+
+func cloudStop(ctx context.Context, args []string, now *bool, stdout io.Writer) error {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
 	}
@@ -557,20 +565,25 @@ func cloudStop(ctx context.Context, args []string, stdout io.Writer) error {
 	return nil
 }
 
+// newCloudStatusCommand builds `cloud status`'s cobra command.
+func newCloudStatusCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status [run-id]",
+		Short: "runs, leases and queue; or one run",
+	}
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runCloudStatus(c.Context(), args, stdout, stderr))
+	}
+	return cmd
+}
+
 func runCloudStatus(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	err := cloudStatus(ctx, args, stdout, stderr)
 	return reportCommand("cloud status", err, stderr)
 }
 
 func cloudStatus(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("cloud status", nil)
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
+	rest := args
 	if len(rest) > 1 {
 		return newExitError(exitUsage, "at most one run id is allowed")
 	}
@@ -1080,24 +1093,9 @@ func cloudGit(ctx context.Context, root string, args ...string) (string, error) 
 	return string(output), nil
 }
 
-// parseCollectingPositionals parses args with fs the way cobra did: flags may
-// appear after the positional arguments ("cloud run epic1 --max-cost 2"),
-// which the flag package alone would treat as more positionals. The first
-// non-flag argument is pulled out and parsing resumes after it, so an
-// operator's muscle memory from `tk cloud run <epic> --max-cost 2` survives
-// the move unchanged.
-func parseCollectingPositionals(fs *flag.FlagSet, args []string) ([]string, error) {
-	var positionals []string
-	rest := args
-	for {
-		if err := fs.Parse(rest); err != nil {
-			return nil, err
-		}
-		trailing := fs.Args()
-		if len(trailing) == 0 {
-			return positionals, nil
-		}
-		positionals = append(positionals, trailing[0])
-		rest = trailing[1:]
-	}
-}
+// parseCollectingPositionals was the hand-rolled stand-in for what cobra does
+// natively (tick nwj): flags may appear after the positional arguments
+// ("cloud run epic1 --max-cost 2"), which the flag package alone would treat
+// as more positionals. The command tree parses interspersed now, so the loop
+// is gone and the muscle memory it preserved — `ticfac cloud run <epic>
+// --max-cost 2` — survives by living in cobra.

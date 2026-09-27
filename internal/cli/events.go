@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
@@ -32,19 +35,35 @@ import (
 // means WORTH LOOKING NOW, never "the work is finished". The verdict stays with
 // the evidence on the integration branch; a subscriber that reads
 // run_finished goes and looks.
-func eventsCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+// newEventsCommand builds the cobra command for `events`.
+func newEventsCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "events <run-id>",
+		Short: "a run's event feed: what it did, as it does it",
+		Long: `Print the run's event feed — one JSONL line per event, with the
+run/tick/attempt identity on every line — or, with --follow, subscribe from
+now: each event as it lands, until Ctrl-C.
+
+The one rule this command must not bury in its help text: a line means WORTH
+LOOKING NOW, never "the work is finished". The verdict stays with the evidence
+on the integration branch; a subscriber that reads run_finished goes and looks.`,
+	}
 	fs := flag.NewFlagSet("events", flag.ContinueOnError)
-	fs.SetOutput(stderr)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	follow := fs.Bool("follow", false, "keep the stream open: each event as it lands, from now, until Ctrl-C")
 	fromStart := fs.Bool("from-start", false, "with --follow, replay the standing feed first — including the terminal "+
 		"events of earlier incarnations of this run id")
 	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
 		"(a local feed is read at file-follow cadence)")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(eventsCommand(c.Context(), args, repo, follow, fromStart, interval, stdout, stderr))
 	}
-	rest := fs.Args()
+	return cmd
+}
+
+func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, stdout, stderr io.Writer) int {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac events: exactly one run id is required\n")
 		return 2

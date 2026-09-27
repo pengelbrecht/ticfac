@@ -6,13 +6,13 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
@@ -23,21 +23,28 @@ import (
 // through a transport, never a loopback listener.
 var cloudflareHTTPClient *http.Client
 
-func runCloudSupervisor(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	err := cloudSupervisor(ctx, args, stdout, stderr)
+// newCloudSupervisorCommand builds `cloud supervisor`'s cobra command.
+func newCloudSupervisorCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "supervisor <run-id>",
+		Short: "whether the Workflow is alive",
+	}
+	fs := newFlagSet("cloud supervisor", nil)
+	steps := fs.Int("steps", 0, "also print the last N steps of the trail (0 prints the current step and every failed one)")
+	commandFlags(cmd, fs)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(runCloudSupervisor(c.Context(), args, steps, stdout, stderr))
+	}
+	return cmd
+}
+
+func runCloudSupervisor(ctx context.Context, args []string, steps *int, stdout, stderr io.Writer) int {
+	err := cloudSupervisor(ctx, args, steps, stdout, stderr)
 	return reportCommand("cloud supervisor", err, stderr)
 }
 
-func cloudSupervisor(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("cloud supervisor", stderr)
-	steps := fs.Int("steps", 0, "also print the last N steps of the trail (0 prints the current step and every failed one)")
-	rest, err := parseCollectingPositionals(fs, args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return err
-		}
-		return newExitError(exitUsage, "%v", err)
-	}
+func cloudSupervisor(ctx context.Context, args []string, steps *int, stdout, stderr io.Writer) error {
+	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
 	}
