@@ -12,8 +12,11 @@
   "attempt": 8,
   "done_item": "none",
   "demonstrating_check": "go test -run TestTheStoresFetchStartsNoMaintenanceInTheRepositoryItWritesTo ./internal/runstate/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-27T07:50:34Z",
+  "triaged_at": "2026-09-27T07:50:57Z",
+  "triaged_by": "ticfac run epic-2jn absorbing fc2",
+  "promoted_as": "fc2",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "8yn",
