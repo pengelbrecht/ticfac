@@ -1641,3 +1641,4 @@
 {"ts":"2026-09-27T11:36:55.842874Z","tick":"fn8","action":"create","actor":"peter@engelbrecht.dk","epic":"t8u","data":{"priority":2,"title":"TestTheEvacuationFlushesInFlightWorkAndWritesTheCheckpoint failed once under load: reproduce and fix","type":"task"}}
 {"ts":"2026-09-27T11:36:55.980075Z","tick":"tyv","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":3,"title":"Prune a run's WIP snapshot refs on origin when the tick closes","type":"task"}}
 {"ts":"2026-09-27T15:26:50.939607Z","tick":"w9j","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":2,"title":"ticfac leaves its temp dirs behind: 1,300+ ticfac-* dirs, 11 GB in $TMPDIR","type":"task"}}
+{"ts":"2026-09-27T15:41:29.263221Z","tick":"w9j","action":"update","actor":"peter@engelbrecht.dk","data":{"title":"ticfac leaves its temp dirs behind: 1,370 ticfac-* dirs in TMPDIR, growing without bound"}}
