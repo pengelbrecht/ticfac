@@ -111,31 +111,37 @@ var safeArgs = append([]string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=
 // not there, a credential that is wrong — comes back on the first attempt,
 // untouched, because that is what the callers below are written against.
 //
-// A retried PUSH has one narrow seam worth stating rather than discovering.
-// If the remote accepted the push and the connection died before git read the
-// response, the retry re-pushes the same commit against a lease naming the
-// OLD head — which the remote now refuses, because the ref has moved to this
-// writer's own commit. The CAS loop above then re-examines the per-path guard
-// against origin, finds the path already written, and reports a conflict: a
-// true statement about origin, attributed to the wrong writer. It is a
-// strictly smaller failure than the one this retry removes — the run stops
-// with a typed conflict instead of dying on a transport error — and it is
-// narrower than it looks, because it needs the reset to land in the window
-// between the remote's commit and the client's read of it. Telling the two
-// apart means asking whether origin's head is this writer's own commit, which
-// is a change to the CAS and belongs with the CAS, not here.
+// A retried PUSH has one seam, and the CAS in store.go closes it (tick o82).
+// If the remote accepted a push and the connection died before git read the
+// response, the retry pushes against a lease naming the OLD head while origin
+// may already be at this writer's own commit — and a remote that committed
+// the first push late refuses the retry outright. Epic-gvc halted on exactly
+// that, as conflict_stale_sha. So a refusal that follows an attempt this
+// writer never heard back from is not, by itself, evidence of anybody else;
+// tryCounted is how the store learns there was such an attempt, and put asks
+// whether origin's head is this writer's own write before calling it a loss.
 func (g *git) try(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	stdout, stderr, _, err = g.tryCounted(stdin, extraEnv, args...)
+	return stdout, stderr, err
+}
+
+// tryCounted is try, also saying how many times the command ran. More than
+// one means an earlier attempt failed in transit, and what it did on the
+// remote is unknown.
+func (g *git) tryCounted(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, tries int, err error) {
 	if sub, remote := RemoteSubcommand(args); remote {
 		retryErr := g.retry.Do("git "+sub, func() error {
+			tries++
 			stdout, stderr, err = g.once(stdin, extraEnv, args...)
 			return err
 		})
 		// The last attempt's stdout and stderr are what a caller reading a
 		// refusal out of stderr should see; the error is the bound's, which
 		// wraps that attempt's and names how many there were.
-		return stdout, stderr, retryErr
+		return stdout, stderr, tries, retryErr
 	}
-	return g.once(stdin, extraEnv, args...)
+	stdout, stderr, err = g.once(stdin, extraEnv, args...)
+	return stdout, stderr, 1, err
 }
 
 // once is one invocation: no retry, no classification, just the process.

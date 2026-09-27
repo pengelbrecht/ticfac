@@ -995,6 +995,14 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 			"%s carries %s in this checkout, and %s has no commit of this attempt at all",
 			branch, short(local), r.opts.Remote)
 	}
+	// A carried attempt that added nothing delivered the carried work (tick
+	// isp). When that work is on the integration branch — merged by this run
+	// before a gate refused it, or by a person — the attempt is integrated
+	// exactly as one with commits of its own would be. Otherwise it is spent,
+	// and the next attempt is cut from the carried work again.
+	if carried := r.carriedDelivery(marker); carried != "" && r.integrated(carried) {
+		return integratedAttempt, ""
+	}
 	return redispatchAttempt, ""
 }
 
@@ -1069,6 +1077,12 @@ func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read %s on %s to see whether %s is already integrated: %w",
 			branchOf(marker.WriteRef), r.opts.Remote, r.attemptName(marker.TickID, marker.Attempt), err)
+	}
+	if head == "" {
+		// A carried attempt that added nothing delivered the carried head
+		// (tick isp): that is the head the run merged, if anything merged it —
+		// and the head disposition finished the attempt from when it did.
+		head = r.carriedDelivery(marker)
 	}
 	if head == "" {
 		return "", nil
@@ -2373,6 +2387,10 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	if err != nil {
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
 	}
+	// A carried attempt that added nothing still delivers the carried work
+	// (tick isp) — decided BEFORE the collected line, so the line a person
+	// reads states the verdict the run acts on.
+	collected = r.deliverCarriedWork(marker, collected)
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
@@ -2497,6 +2515,128 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 	}
 	_ = status
 	return collected, nil
+}
+
+// deliverCarriedWork is the collect's answer for an attempt CARRIED from a
+// released one (tick isp) whose worker added nothing to the carried work.
+//
+// The executor measures "commits beyond the base" from the base the attempt
+// was dispatched at, and for a carried attempt that base IS the carried head
+// (planDispatch): the released attempt's commits are below it, so a worker
+// that finds the work already done and correctly adds nothing collects as
+// `no-commits`. That verdict is true of the worker and false of the attempt.
+// On epic-2jn it rejected eih's carried attempt; nothing merged the carried
+// work, and every later attempt was cut from the same carried head again —
+// dispatch, no-commits, resume, forever, until a person merged the carried
+// commit by hand.
+//
+// So for a carried attempt "beyond the base" is measured from the base the
+// ORIGINAL released attempt was cut from (followed through a chain of carries,
+// carriedBase). When the carried head has commits beyond it, the attempt's
+// delivery is the carried head: the verdict is ready-to-merge with that head,
+// and the merge and gate that follow are the ones every attempt gets — the
+// integrate's containment check makes carried work already on the
+// integration branch "already contained" rather than merged twice. Only the
+// empty-carried-attempt case changes; every other verdict, and a carried
+// attempt that added commits of its own, is the executor's as collected.
+func (r *Reconciler) deliverCarriedWork(marker attemptHandle, collected *subprocess.Collection) *subprocess.Collection {
+	if collected == nil || collected.Result == nil || collected.Verdict != subprocess.VerdictNoCommits ||
+		marker.ResumedFrom == nil || marker.BaseSHA == "" {
+		return collected
+	}
+	// A collect measured from any other base is the boundary refusal's to
+	// answer, below; nothing is delivered on the strength of it.
+	if collected.Result.Source.BaseSHA != marker.BaseSHA {
+		return collected
+	}
+	carried := marker.BaseSHA
+	base, err := r.carriedBase(marker)
+	if err != nil {
+		r.record(marker.TickID, StageCarried,
+			"%s added nothing to the carried work, and the base the released attempt was cut from could not be "+
+				"read (%v): it is collected as the executor measured it", r.attemptName(marker.TickID, marker.Attempt), err)
+		return collected
+	}
+	count, err := r.git.run("", "rev-list", "--count", base+".."+carried)
+	commits, convErr := strconv.Atoi(strings.TrimSpace(count))
+	if err != nil || convErr != nil || commits == 0 {
+		return collected
+	}
+
+	result := *collected.Result
+	head := carried
+	result.Source.HeadSHA = &head
+	result.Source.Commits = commits
+	result.Outcome = subprocess.OutcomeSucceeded
+	result.FailureClass = ""
+	if collected.Result.RoleResult != nil {
+		role := *collected.Result.RoleResult
+		role.Summary = subprocess.RoleSummary(role.Role, collected.Report, subprocess.VerdictReadyToMerge)
+		payload := make(map[string]any, len(role.Result))
+		for k, v := range role.Result {
+			payload[k] = v
+		}
+		payload["commits"] = commits
+		if _, ok := payload["verdict"]; ok {
+			payload["verdict"] = subprocess.VerdictReadyToMerge
+		}
+		role.Result = payload
+		result.RoleResult = &role
+	}
+	delivered := *collected
+	delivered.Result = &result
+	delivered.Verdict = subprocess.VerdictReadyToMerge
+	delivered.Message = ""
+	r.record(marker.TickID, StageCarried,
+		"%s added no commit to the work it was carried from, so it delivers that work: %d commit(s) from %s to "+
+			"the carried head %s, measured from the base %s was cut from",
+		r.attemptName(marker.TickID, marker.Attempt), commits, short(base), short(carried),
+		r.attemptName(marker.ResumedFrom.TickID, marker.ResumedFrom.Attempt))
+	return &delivered
+}
+
+// carriedBase is the base the work a carried attempt delivers is measured
+// from: the base the RELEASED attempt was cut from, read off that attempt's own
+// marker on origin — and, when that attempt was itself carried, followed down
+// the chain to the first attempt that was cut from the integration branch.
+func (r *Reconciler) carriedBase(marker attemptHandle) (string, error) {
+	seen := map[int]bool{}
+	for marker.ResumedFrom != nil {
+		from := marker.ResumedFrom
+		if seen[from.Attempt] {
+			return "", fmt.Errorf("the carries of %s form a cycle at attempt %d", marker.TickID, from.Attempt)
+		}
+		seen[from.Attempt] = true
+		record, ok, err := r.store.Attempt(from.Attempt)
+		if err != nil {
+			return "", err
+		}
+		if !ok || record.TickID != from.TickID {
+			return "", fmt.Errorf("no marker on %s for %s", r.opts.Remote, r.attemptName(from.TickID, from.Attempt))
+		}
+		marker = handleFromMap(record.JobHandle)
+	}
+	if marker.BaseSHA == "" {
+		return "", fmt.Errorf("the marker of %s names no base", r.attemptName(marker.TickID, marker.Attempt))
+	}
+	return marker.BaseSHA, nil
+}
+
+// carriedDelivery is, for a CARRIED attempt whose own branch adds nothing to
+// the carried work (tick isp), the carried head it delivered — when origin's
+// branch for the attempt holds exactly that head — and "" otherwise. It is
+// what lets the resume questions that measure an attempt's work from its
+// dispatched base (disposition, integratedHead) see a carried attempt's
+// delivery, which sits AT that base rather than beyond it.
+func (r *Reconciler) carriedDelivery(marker attemptHandle) string {
+	if marker.ResumedFrom == nil || marker.BaseSHA == "" {
+		return ""
+	}
+	head, err := r.git.remoteHead(branchOf(marker.WriteRef))
+	if err != nil || head != marker.BaseSHA {
+		return ""
+	}
+	return head
 }
 
 // needsHuman is the escalation set, read from the STATUS the worker wrote: the

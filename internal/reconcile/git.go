@@ -139,7 +139,17 @@ func (g *repoGit) contains(commit, container string) bool {
 // so a run whose branch does not exist yet has nowhere to record that it
 // started.
 func (g *repoGit) ensureRemoteBranch(branch, base string) (string, error) {
-	if head, err := g.remoteHead(branch); err == nil && head != "" {
+	// Only an ANSWERED "no such branch" creates it. A remote that could not
+	// be asked (DNS gone, an SSH refusal mid-flap) is not evidence of absence:
+	// reading it as absence pushed the base over a live epic branch on
+	// epic-yoh (2026-09-24), which only the fast-forward check refused, and
+	// the refusal then read as an unclassified stop. The failure is returned
+	// as it arrived, so the remote-transient layer classifies it.
+	head, err := g.remoteHead(branch)
+	if err != nil {
+		return "", fmt.Errorf("read %s on %s: %w", branch, g.remote, err)
+	}
+	if head != "" {
 		return head, nil
 	}
 	baseSHA, err := g.resolve(base)

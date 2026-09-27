@@ -78,6 +78,14 @@ type Resume struct {
 // vocabulary: a Resume's Reason is always a value a caller can switch on.
 const StoppedRemoteTransient = "remote_transient"
 
+// StoppedRemoteAuthRefused is the remote refusing this machine's credentials
+// past the small bound runstate waits through (tick jsz). It is NAMED so the
+// run never halts over "a stop this run has no classification for" when the
+// cause is known, and its message says what to check. It is NOT resumable:
+// the in-run bound already rode out a blip, so what is left is a key, an
+// agent or an access grant, and those are a person's to fix.
+const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
+
 // resumesWithoutAPerson is the closed set of stops the run may continue across
 // by itself: the ones that are resumable BY CONSTRUCTION, where the next
 // incarnation adopts by identity, re-derives, and continues, and where no
@@ -172,9 +180,7 @@ func (r *Reconciler) stopOf(result *Result, err error) (supervisedStop, bool) {
 	switch {
 	case err != nil:
 		stop.Message = err.Error()
-		if runstate.ClassifyRemote(err) == runstate.RemoteTransient {
-			stop.Reason = StoppedRemoteTransient
-		}
+		stop.Reason = errorStopReason(err)
 		return stop, true
 	case result == nil:
 		stop.Message = "the run returned neither a result nor an error"
@@ -190,6 +196,18 @@ func (r *Reconciler) stopOf(result *Result, err error) (supervisedStop, bool) {
 		stop.Message = result.Reason
 		return stop, true
 	}
+}
+
+// errorStopReason names the stop an operational error is, when runstate can
+// classify it, and is empty — the unclassified stop — when it cannot.
+func errorStopReason(err error) string {
+	switch runstate.ClassifyRemote(err) {
+	case runstate.RemoteTransient:
+		return StoppedRemoteTransient
+	case runstate.RemoteAuthRefused:
+		return StoppedRemoteAuthRefused
+	}
+	return ""
 }
 
 // integrationTree fingerprints the WORK on origin's integration branch: every
@@ -342,6 +360,9 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 // told first: a decision beats a spin, and a spin beats a budget.
 func haltReason(stop, previous supervisedStop, made, capped int) string {
 	switch {
+	case stop.Reason == StoppedRemoteAuthRefused:
+		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent or " +
+			"an access grant is a person's to fix, and the refusal below says what to check"
 	case !resumesWithoutAPerson(stop.Reason):
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"

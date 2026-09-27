@@ -355,6 +355,16 @@ silent)
 nocommit)
 	report
 	;;
+a1-adds-nothing)
+	# The isp shape: a1's attempt was cut from a RELEASED attempt's carried
+	# work, finds the work already done, and correctly adds nothing — a
+	# report over an empty branch. Every other tick does its work, so the
+	# run's only question is what the carried attempt delivers.
+	if [ "$TICFAC_TICK" != "a1" ]; then
+		commit
+	fi
+	report
+	;;
 finding)
 	# The discovery case: the work is done, the report is DONE, and the
 	# report also carries a typed findings block — one finding for this

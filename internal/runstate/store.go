@@ -241,25 +241,39 @@ func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
 		verb = "update"
 	}
 
+	landed := func() (Outcome, error) {
+		s.pushes++
+		if update {
+			return Updated, nil
+		}
+		return Created, nil
+	}
+
 	base := s.head
+	// pushed is every commit this call has sent, and uncertain says whether
+	// any send failed in transit — a push whose effect on origin nobody heard
+	// back about. Together they are how a lost acknowledgement is told apart
+	// from a foreign write (tick o82).
+	var pushed []string
+	uncertain := false
 	for try := 0; try < maxContendedPushes; try++ {
 		commit, err := s.git.commitWithFile(base, path, blob, s.message(verb, path))
 		if err != nil {
 			return "", err
 		}
-		_, stderr, pushErr := s.git.try(nil, nil, "push",
+		pushed = append(pushed, commit)
+		_, stderr, tries, pushErr := s.git.tryCounted(nil, nil, "push",
 			"--force-with-lease="+s.branchRef()+":"+base,
 			s.remote, commit+":"+s.branchRef())
+		if tries > 1 {
+			uncertain = true
+		}
 		if pushErr == nil {
 			// A successful push refreshes the WRITER's view of the path it
 			// wrote, and no other actor's.
 			s.head = commit
 			s.view[path] = blob
-			s.pushes++
-			if update {
-				return Updated, nil
-			}
-			return Created, nil
+			return landed()
 		}
 		if !refusedPush(stderr) {
 			return "", pushErr
@@ -272,6 +286,24 @@ func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
 		freshHead, freshView, err := s.peek()
 		if err != nil {
 			return "", err
+		}
+		// Before either: is what moved the ref THIS writer? A push that landed
+		// and whose acknowledgement was lost leaves origin at this writer's
+		// own commit, and the retry of it is refused against a head that is
+		// its own write. Calling that a conflict halts the run on its own
+		// hand — epic-gvc, 2026-09-25. A write that is only ours when it is
+		// provably ours: the path carries this call's blob, AND the head is a
+		// commit this call built, or (after a send that failed in transit)
+		// one indistinguishable from it — same tree, same parent, same message.
+		if freshView[path] == blob {
+			own, err := s.ownWrite(freshHead, pushed, uncertain)
+			if err != nil {
+				return "", err
+			}
+			if own {
+				s.head, s.view = freshHead, freshView
+				return landed()
+			}
 		}
 		if !s.guardOff {
 			if update {
@@ -291,6 +323,38 @@ func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
 	return "", fmt.Errorf("runstate: %s on %s: origin's %s moved under this writer %d times running; "+
 		"that is an operational problem, not a conflict to spin on",
 		verb, path, s.branch, maxContendedPushes)
+}
+
+// ownWrite reports whether origin's head is this writer's own write: one of
+// the commits this call pushed, or — only when a push of this call failed in
+// transit, so that its outcome is unknown — a commit carrying exactly what one
+// of them carried (tree, parents and message). The second is deliberately
+// gated: without an uncertain push there is no write of ours it could be, and
+// a byte-identical record from another reconciler is still another
+// reconciler's, which for a create-if-absent marker is the whole guard.
+func (s *Store) ownWrite(head string, pushed []string, uncertain bool) (bool, error) {
+	for _, commit := range pushed {
+		if head == commit {
+			return true, nil
+		}
+	}
+	if !uncertain {
+		return false, nil
+	}
+	landed, err := s.git.run("show", "-s", "--format=%T %P%n%B", head)
+	if err != nil {
+		return false, err
+	}
+	for _, commit := range pushed {
+		ours, err := s.git.run("show", "-s", "--format=%T %P%n%B", commit)
+		if err != nil {
+			return false, err
+		}
+		if ours == landed {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // peek reads origin without touching this writer's view. Refreshing the view

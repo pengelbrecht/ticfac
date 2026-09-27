@@ -126,25 +126,27 @@ func TestARunThatGaveUpSaysHowManyTimesItTried(t *testing.T) {
 // TestATerminalRemoteFailureLeavesNoRetryInTheFeed.
 //
 // The feed is the second half of the classification: a run that stopped on a
-// rejected key must not show a person a run that spent its bound waiting on
-// the network, because that is where they would then go looking.
+// repository the remote does not have must not show a person a run that spent its bound waiting on
+// the network, because that is where they would then go looking. (A rejected
+// KEY is retried a small bound since tick jsz, and says so as a key:
+// TestARefusedKeyIsRetriedInTheFeedAsAKey.)
 // short: the retry policy over a stubbed sleep and an in-memory feed
 func TestATerminalRemoteFailureLeavesNoRetryInTheFeed(t *testing.T) {
 	t.Parallel()
 	r, _ := feedReader(t, runstate.RemoteRetry{
 		Attempts: 5,
 		Backoff:  time.Millisecond,
-		Sleep:    func(time.Duration) { t.Error("the run waited on a key the remote rejected") },
+		Sleep:    func(time.Duration) { t.Error("the run waited on a repository the remote does not have") },
 	})
 
 	tries := 0
 	err := r.remoteRetry().Do("git push", func() error {
 		tries++
-		return errors.New("git push: exit status 128: git@remote.invalid: Permission denied (publickey).\n" +
+		return errors.New("git push: exit status 128: ERROR: Repository not found.\n" +
 			"fatal: Could not read from remote repository.")
 	})
 	if err == nil {
-		t.Fatal("a rejected key returned success")
+		t.Fatal("a missing repository returned success")
 	}
 	if tries != 1 {
 		t.Errorf("the push ran %d times, want exactly one", tries)
@@ -156,5 +158,50 @@ func TestATerminalRemoteFailureLeavesNoRetryInTheFeed(t *testing.T) {
 	}
 	if _, err := os.Stat(runfeed.Path(r.opts.Repo, r.runID)); !os.IsNotExist(err) {
 		t.Errorf("a feed exists for a run that never retried anything: %v", err)
+	}
+}
+
+// TestARefusedKeyIsRetriedInTheFeedAsAKey is tick jsz in the feed: the small
+// auth bound's retries are said out loud, as a KEY refusal rather than as a
+// transient network failure, and the line that gives up names the class and
+// what to check.
+// short: the retry policy over a stubbed sleep and an in-memory feed
+func TestARefusedKeyIsRetriedInTheFeedAsAKey(t *testing.T) {
+	t.Parallel()
+	r, _ := feedReader(t, runstate.RemoteRetry{
+		Attempts: 5,
+		Backoff:  time.Millisecond,
+		Sleep:    func(time.Duration) {},
+	})
+
+	tries := 0
+	err := r.remoteRetry().Do("git fetch", func() error {
+		tries++
+		return errors.New("git fetch: exit status 128: git@remote.invalid: Permission denied (publickey).\n" +
+			"fatal: Could not read from remote repository.")
+	})
+	var named *runstate.RemoteAuthRefusedError
+	if !errors.As(err, &named) {
+		t.Fatalf("a persistent key refusal is not the named class: %v", err)
+	}
+	if tries != runstate.AuthRefusalAttempts {
+		t.Errorf("the fetch ran %d times, want the auth bound of %d", tries, runstate.AuthRefusalAttempts)
+	}
+	journal := r.Journal()
+	if len(journal) != runstate.AuthRefusalAttempts {
+		t.Fatalf("the feed carries %d lines, want %d retries and one giving up: %+v",
+			len(journal), runstate.AuthRefusalAttempts-1, journal)
+	}
+	for _, event := range journal[:len(journal)-1] {
+		if event.Stage != StageRemoteRetried || !strings.Contains(event.Detail, "refused authentication") ||
+			strings.Contains(event.Detail, "transiently") {
+			t.Errorf("a retry line does not say it was a key: %+v", event)
+		}
+	}
+	last := journal[len(journal)-1]
+	for _, want := range []string{runstate.RemoteAuthRefusedClass, "ssh-agent", "gh auth status"} {
+		if last.Stage != StageRemoteExhausted || !strings.Contains(last.Detail, want) {
+			t.Errorf("the giving-up line does not say %q: %+v", want, last)
+		}
 	}
 }

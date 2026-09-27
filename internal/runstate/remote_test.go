@@ -59,16 +59,36 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 			want:   RemoteTransient,
 		},
 		{
+			// git's HTTPS transport when the TCP connect never completed
+			// (this host's IPv4 flapping, 2026-09-24).
+			name:   "an https connect that never completed",
+			stderr: "fatal: unable to access 'https://github.com/o/r.git/': Failed to connect to github.com port 443 after 62 ms: Couldn't connect to server",
+			want:   RemoteTransient,
+		},
+		{
 			// The same tail line as the reset above. Everything rests on the
-			// terminal markers being read first.
+			// refusal markers being read first: never a reset. Its own class
+			// since tick jsz, because the observed one was a blip.
 			name: "a key the remote rejected",
 			stderr: "git@remote.invalid: Permission denied (publickey).\n" +
 				"fatal: Could not read from remote repository.",
-			want: RemoteTerminal,
+			want: RemoteAuthRefused,
 		},
 		{
 			name:   "credentials the remote refused",
 			stderr: "remote: Invalid username or password.\nfatal: Authentication failed for 'https://remote.invalid/x'",
+			want:   RemoteAuthRefused,
+		},
+		{
+			// A "permission denied" that is not ssh's is not an auth refusal.
+			name:   "a file this machine may not write",
+			stderr: "error: unable to create temporary file: Permission denied",
+			want:   RemoteTerminal,
+		},
+		{
+			// An answer about the repository wins over the key beside it.
+			name:   "a repository not found beside a key refusal",
+			stderr: "Permission denied (publickey).\nERROR: Repository not found.",
 			want:   RemoteTerminal,
 		},
 		{
@@ -89,7 +109,7 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 		{
 			name:   "a prompt the reconciler refuses to answer",
 			stderr: "fatal: could not read Username for 'https://remote.invalid': terminal prompts disabled",
-			want:   RemoteTerminal,
+			want:   RemoteAuthRefused,
 		},
 		{
 			// A lost lease is the compare-and-swap doing its job, and the
@@ -233,14 +253,15 @@ func TestOneResetIsWaitedThroughAndTheWorkGoesOn(t *testing.T) {
 	}
 }
 
-// TestAnAuthenticationFailureIsNotRetried.
+// TestAnAnswerWaitingCannotChangeIsNotRetried.
 //
-// Ten attempts at a credential that will never be right is its own bug, and
-// it is the one a naive "just retry remote errors" fix ships with.
+// Ten attempts at a repository that is not there is its own bug, and it is
+// the one a naive "just retry remote errors" fix ships with. (An auth refusal
+// gets a small bound: TestAnAuthRefusalIsRetriedABoundAndThenNamed.)
 // short: remote failure classification over captured stderr, with a stubbed sleep
-func TestAnAuthenticationFailureIsNotRetried(t *testing.T) {
+func TestAnAnswerWaitingCannotChangeIsNotRetried(t *testing.T) {
 	for _, stderr := range []string{
-		"git@remote.invalid: Permission denied (publickey).\nfatal: Could not read from remote repository.",
+		"remote: Repository not found.\nfatal: repository 'https://remote.invalid/x' not found",
 		"fatal: couldn't find remote ref refs/heads/epic/nope",
 		"! [rejected] abc -> epic/qeu (stale info)",
 	} {
