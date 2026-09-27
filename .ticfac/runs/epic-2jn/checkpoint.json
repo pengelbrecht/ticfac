@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 334,
-  "state": "running",
-  "reason": "bkg is closed",
-  "updated_at": "2026-09-27T17:47:20Z",
+  "sequence": 335,
+  "state": "dispatching",
+  "reason": "dispatching wcl as attempt 47",
+  "updated_at": "2026-09-27T17:47:27Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -214,6 +214,10 @@
       "tick_id": "il6",
       "state": "dispatched",
       "attempt": 46
+    },
+    {
+      "tick_id": "4nq",
+      "state": "ready"
     }
   ],
   "provenance": {
