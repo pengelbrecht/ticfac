@@ -548,6 +548,104 @@ func TestACompletedRunWithAnOpenPRWaitsOnTheMerge(t *testing.T) {
 	}
 }
 
+// TestAResumedRunWhoseFirstIncarnationFailedIsNotCompleted: a failed run is
+// resumable under the same run id, so its feed carries the failed
+// incarnation's run_finished beside the resumed run's own lines. The model
+// must not read that first ending as the run's completion (tick bkg): the
+// merge wait is for a run that finished its own work, and a run that stopped
+// failed and was resumed has just begun again.
+func TestAResumedRunWhoseFirstIncarnationFailedIsNotCompleted(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	// The first incarnation's ending and the resume, placed chronologically
+	// inside the fixture's own feed: the failed run_finished stands before the
+	// resume line, and the work that stands now comes after both.
+	feed := []runfeed.Event{}
+	for _, e := range src.Feed {
+		if e.Stage == reconcile.StageResumedAutomatically {
+			feed = append(feed,
+				runfeed.NewEvent(testNow.Add(-70*time.Minute), "epic-2jn", "", nil,
+					reconcile.StageRunFinished, "failed: 6dh did not pass: the run stopped rather than integrating over an unproven change"),
+				runfeed.NewEvent(testNow.Add(-65*time.Minute), "epic-2jn", "", nil,
+					reconcile.StageResumed, "the run stopped at failed and is resumed under the same run id: 6dh did not pass"),
+			)
+		}
+		feed = append(feed, e)
+	}
+	src.Feed = feed
+	// The open PR is what makes the defect bite: a run read as completed
+	// with an open PR surfaces the merge wait — a person's — for work that is
+	// still going.
+	src.CI = &CIInput{
+		State: "green",
+		PR: &PR{Number: 12, URL: "https://github.com/example/ticfac/pull/12",
+			HeadRef: "epic/2jn", HeadSHA: "9f2ab", BaseRef: "main"},
+		Checks: []CheckState{{Name: "go", Status: "completed", Conclusion: "success"}},
+	}
+	model := Build(src)
+
+	if model.Lifecycle.Phase != PhaseWaves {
+		t.Errorf("a resumed run mid-wave reads phase %q, want waves: the failed incarnation's run_finished is not the run's completion", model.Lifecycle.Phase)
+	}
+	for _, p := range model.Lifecycle.Phases {
+		if p.Phase == PhaseMerge && p.State == PhaseStateActive {
+			t.Errorf("the merge phase reads %q for a run that has not finished its own work", p.State)
+		}
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitWorkers {
+		t.Errorf("the resumed run waits on %+v, want its live workers", model.WaitsOn)
+	}
+	for _, a := range model.Attention {
+		if a.Kind == WaitMerge {
+			t.Errorf("a run that stopped failed and was resumed raises the merge wait: %+v", a)
+		}
+	}
+}
+
+// TestTheFeedLastRunFinishedLineIsTheRunsOwnWord: where the records could
+// not be read and the feed is all the model has, the run's own word is the
+// LAST run_finished line — never the first one, and never a line whose own
+// detail names a failure. A completed ending after a failed one is the
+// resumed run's; a failed one alone is an ending that is not a completion.
+func TestTheFeedLastRunFinishedLineIsTheRunsOwnWord(t *testing.T) {
+	t.Parallel()
+
+	mergeWait := func(feed []runfeed.Event) *Wait {
+		src := runningEpicSources()
+		// The records could not be read at all: the feed is the only writer
+		// the model has, and a cloud record's finished vocabulary is what the
+		// liveness answer carries.
+		src.Records = &Records{}
+		src.Feed = feed
+		src.Standing, src.StandingRead, src.Session = nil, false, nil
+		src.Liveness = LivenessInput{
+			Alive: false, State: "completed",
+			Reason: "the factory's record says completed — written by the Workflow, and a finished run is not alive",
+			Source: "workflow-record",
+		}
+		src.CI = &CIInput{
+			State: "green",
+			PR: &PR{Number: 12, URL: "https://github.com/example/ticfac/pull/12",
+				HeadRef: "epic/2jn", HeadSHA: "9f2ab", BaseRef: "main"},
+			Checks: []CheckState{{Name: "go", Status: "completed", Conclusion: "success"}},
+		}
+		model := Build(src)
+		return model.WaitsOn
+	}
+
+	failed := runfeed.NewEvent(testNow.Add(-2*time.Hour), "epic-2jn", "", nil,
+		reconcile.StageRunFinished, "failed: 6dh did not pass: the run stopped rather than integrating over an unproven change")
+	completed := runfeed.NewEvent(testNow.Add(-1*time.Hour), "epic-2jn", "", nil,
+		reconcile.StageRunFinished, "completed: every tick of 2jn is closed behind the integrated gate")
+
+	if w := mergeWait([]runfeed.Event{failed, completed}); w == nil || w.Kind != WaitMerge {
+		t.Errorf("a run whose last run_finished names its completion waits on %+v, want the merge", w)
+	}
+	if w := mergeWait([]runfeed.Event{failed}); w != nil {
+		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion", w)
+	}
+}
+
 // TestTheCloseoutCIIHoldIsAWaitNobodyAlarms: the close-out's own typed line
 // is a wait the run watches itself — needs_person false, the state a
 // renderer shows, not an alarm it raises.
