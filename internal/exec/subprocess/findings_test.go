@@ -143,10 +143,7 @@ func TestEveryMalformedFindingsBlockIsRefused(t *testing.T) {
 		{"an object, not an array", `{"kind": "defect"}`, "not a JSON array"},
 		{"trailing content", `[] junk`, "trailing content"},
 		{"a missing field", `[{"kind": "defect", "title": "t", "body": "", "severity": "low"}]`, `omits "target"`},
-		{"a kind outside the vocabulary", `[{"kind": "wish", "title": "t", "body": "", "severity": "low", "target": ""}]`, "finding.kind"},
-		{"a severity outside the vocabulary", `[{"kind": "defect", "title": "t", "body": "", "severity": "urgent", "target": ""}]`, "finding.severity"},
 		{"no title", `[{"kind": "defect", "title": "  ", "body": "", "severity": "low", "target": ""}]`, "finding.title"},
-		{"a target that is not a repository", `[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "the other repo over there"}]`, "finding.target"},
 		{"an upstream tick with no target", `[{"kind": "upstream-tick", "title": "t", "body": "", "severity": "low", "target": ""}]`, "finding.target is empty"},
 		{"an empty block", "", "not a JSON array"},
 	}
@@ -402,5 +399,44 @@ func TestTheEnvelopeCarriesFindingsAsThePinnedRecord(t *testing.T) {
 			t.Errorf("the envelope carries %q, which the pinned $defs.finding refuses (additionalProperties: "+
 				"false) until the bundle adopts it: %s", pending, raw)
 		}
+	}
+}
+
+// A worker that gets a closed-vocabulary value slightly wrong costs a folded
+// line, not the tick's work (epic-2jn stopped on a target written as
+// "pengelbrecht/ticks (contracts bundle)"). The original value always rides
+// in the body, so a triager sees what the worker wrote.
+func TestSlightlyWrongFindingValuesAreNormalisedNotRefused(t *testing.T) {
+	cases := []struct {
+		name, block, kind, severity, target, bodyHas string
+	}{
+		{"a decorated target keeps its owner/name", `[{"kind": "upstream-tick", "title": "t", "body": "", "severity": "low", "target": "pengelbrecht/ticks (contracts bundle)"}]`,
+			"upstream-tick", "low", "pengelbrecht/ticks", `folded target: pengelbrecht/ticks (contracts bundle)`},
+		{"a target with no repository becomes this one", `[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "the other repo over there"}]`,
+			"defect", "low", "", "folded target: the other repo over there"},
+		{"an upstream tick with no recoverable target becomes a proposal", `[{"kind": "upstream-tick", "title": "t", "body": "", "severity": "low", "target": "somewhere"}]`,
+			"proposed-tick", "low", "", "folded kind: upstream-tick"},
+		{"a kind outside the vocabulary becomes a defect", `[{"kind": "wish", "title": "t", "body": "", "severity": "low", "target": ""}]`,
+			"defect", "low", "", "folded kind: wish"},
+		{"a severity outside the vocabulary becomes medium", `[{"kind": "defect", "title": "t", "body": "", "severity": "urgent", "target": ""}]`,
+			"defect", "medium", "", "folded severity: urgent"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			findings, problem, folded := ParseFindings("```findings\n" + tc.block + "\n```\n")
+			if problem != "" || len(findings) != 1 {
+				t.Fatalf("problem %q, findings %v", problem, findings)
+			}
+			f := findings[0]
+			if f.Kind != tc.kind || f.Severity != tc.severity || f.Target != tc.target {
+				t.Errorf("got kind=%q severity=%q target=%q, want %q %q %q", f.Kind, f.Severity, f.Target, tc.kind, tc.severity, tc.target)
+			}
+			if !strings.Contains(f.Body, tc.bodyHas) {
+				t.Errorf("body %q does not carry %q", f.Body, tc.bodyHas)
+			}
+			if len(folded) == 0 {
+				t.Error("the normalisation was not reported as folded")
+			}
+		})
 	}
 }
