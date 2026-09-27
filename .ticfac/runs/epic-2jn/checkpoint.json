@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 360,
-  "state": "publishing",
-  "reason": "closing rix behind the integrated gate on 3c0ca003a632",
-  "updated_at": "2026-09-27T18:01:51Z",
+  "sequence": 361,
+  "state": "running",
+  "reason": "rix is closed",
+  "updated_at": "2026-09-27T18:02:02Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -203,7 +203,7 @@
     },
     {
       "tick_id": "rix",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 49
     },
     {
