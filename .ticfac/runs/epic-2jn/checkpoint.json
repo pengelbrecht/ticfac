@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 358,
-  "state": "integrating",
-  "reason": "integrating rix attempt 49 into epic/2jn",
-  "updated_at": "2026-09-27T17:56:15Z",
+  "sequence": 359,
+  "state": "gating",
+  "reason": "running the integrated gate for rix on 3c0ca003a632",
+  "updated_at": "2026-09-27T18:00:29Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -203,7 +203,7 @@
     },
     {
       "tick_id": "rix",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 49
     },
     {
