@@ -12,8 +12,10 @@
   "attempt": 19,
   "done_item": "none",
   "demonstrating_check": "ls ~/.ticfac/registry/",
-  "status": "proposed",
+  "status": "discarded",
   "proposed_at": "2026-09-27T08:53:48Z",
+  "triaged_at": "2026-09-27T09:01:10Z",
+  "triaged_by": "claude (operator-delegated): stale test registrations removed by hand; eih's own fix stops the tests writing them",
   "provenance": {
     "run_id": "epic-2jn",
     "tick_id": "eih",
