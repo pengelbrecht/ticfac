@@ -71,6 +71,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 // commands whose help, completion and man pages derive from the declaration
 // rather than from a hand-maintained usage string.
 func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
+	// The overview's own flags, declared before the tree so the root's RunE
+	// can close over them. They sit on the root's LOCAL set, so they parse
+	// only when the root itself runs (the bare invocation) and no
+	// subcommand's flag surface changes.
+	fs := flag.NewFlagSet("ticfac", flag.ContinueOnError)
+	overviewRepo := fs.String("repo", "", "the checkout whose runs the overview lists (default: cwd)")
+	overviewJSON := fs.Bool("json", false, "print the versioned overview model: one status model per run, attention first")
 	root := &cobra.Command{
 		Use:   "ticfac",
 		Short: "execution and orchestration for ticks",
@@ -80,22 +87,22 @@ executor protocol (start / inspect / cancel / collect), role jobs for review
 and closeout, and the hosts behind it — the local subprocess executor,
 herdr, and the cloud factory's sandbox door.
 
-Run 'ticfac <command> --help' for a command's flags; 'ticfac help <command>'
-for any subcommand's. The exit codes are the contract a script branches on:
-0 the command did its work, 1 a failure that is not a usage mistake,
+Run 'ticfac' with no arguments for the overview: every run this checkout and
+the factory know, attention first — every run held or failed names its
+reason and the one command that clears it. Run 'ticfac <command> --help'
+for a command's flags; 'ticfac help <command>' for any subcommand's. The
+exit codes are the contract a script branches on: 0 the command did its
+work, 1 a failure that is not a usage mistake,
 2 a malformed invocation, 4 a lookup that honestly came back empty.`,
-		// A bare invocation is a usage refusal, exactly as it was before the
-		// tree: usage on stderr and exit 2 — but the text is DERIVED, not
-		// maintained (tick fi3). The hand-rolled usage const cli.go carried
-		// beside the tree said the same things a second time — every command,
-		// every flag, twice — and was the one surface that could drift while
-		// the help, the completions and the man pages stayed derived. Now the
-		// refusal IS the tree's own help, fang-styled like `ticfac --help`,
-		// printed to stderr: a person who ran the wrong thing reads the same
-		// page --help would have shown, and a pipe or a test buffer sees the
-		// same words fang's colorprofile writer always strips down to. The
-		// Args validator below types the unknown-command refusal for everything
-		// the dispatcher's default arm used to catch.
+		// The bare invocation IS the overview (tick 2qz): every run this
+		// checkout and the factory know, attention first, every stop named
+		// with the one command that clears it. fi3's contract — a bare call
+		// means usage, because a program with no default action refuses — is
+		// deliberately replaced: ticfac now has a default action, the one
+		// screen an unattended factory is glanced at with, and `ticfac --help`
+		// remains the place a person reads the whole tree. The Args validator
+		// below still types the unknown-command refusal for everything the
+		// dispatcher's default arm used to catch.
 		Args: func(c *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return newExitError(exitUsage,
@@ -105,13 +112,12 @@ for any subcommand's. The exit codes are the contract a script branches on:
 			return nil
 		},
 		RunE: func(c *cobra.Command, args []string) error {
-			c.SetOut(stderr)
-			_ = c.Help()
-			return &printedExit{code: exitUsage}
+			return codeToErr(overviewCommand(c.Context(), *overviewRepo, *overviewJSON, stdout, stderr))
 		},
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
+	commandFlags(root, fs)
 	// Flag-parse failures are usage errors (exit 2), typed at the source.
 	// Subcommands inherit this through cobra's FlagErrorFunc parent lookup.
 	root.SetFlagErrorFunc(usageFlagError)

@@ -738,8 +738,15 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 	}
 
 	// A run whose process is gone without its own terminal record: nothing
-	// advances it, and only a person can say whether it resumes.
-	if !src.Liveness.Alive && !runTerminal(recs) {
+	// advances it, and only a person can say whether it resumes. The
+	// liveness answer itself may carry the run's own durable word that it
+	// ENDED — a cloud run's record state, written by the Workflow it lives
+	// in — and a run whose own record says it ended is not dead, whatever a
+	// checkout that cannot read that record fails to hold. Without this, the
+	// factory's finished runs — the ones this checkout holds no run state
+	// for at all, because they belong to other projects — were every one of
+	// them "dead" on the surface that aggregates every run (tick 2qz).
+	if !src.Liveness.Alive && !runTerminal(recs) && !livenessNamesAnEnd(src.Liveness.State) {
 		w := Wait{
 			Kind:        WaitDeadRun,
 			What:        fmt.Sprintf("run %s is %s: %s", m.RunID, src.Liveness.State, src.Liveness.Reason),
@@ -839,6 +846,20 @@ func runTerminal(recs Records) bool {
 		return false
 	}
 	return recs.Checkpoint.State.Terminal()
+}
+
+// livenessNamesAnEnd says whether the liveness state IS the run's own
+// durable word that it ended: the cloud record's finished vocabulary
+// (completed, stopped, failed), written by the Workflow the run lives in and
+// carried verbatim by the probe. The local probe's states never name an end
+// — for a local run, dead means gone without a terminal word, which is
+// exactly the claim [buildWaits] makes for it.
+func livenessNamesAnEnd(state string) bool {
+	switch state {
+	case "completed", "stopped", "failed":
+		return true
+	}
+	return false
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations

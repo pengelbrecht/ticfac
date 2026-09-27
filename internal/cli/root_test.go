@@ -167,46 +167,22 @@ func TestTheBuiltBinaryRendersManPagesAndReportsItsVersion(t *testing.T) {
 	}
 }
 
-// The bare invocation keeps the contract it had before the tree: usage on
-// stderr and exit 2 — a program with no default action says what it does and
-// refuses. What the tree changed is where the TEXT comes from, not what an
-// argumentless call means: the refusal is the tree's own help (below), so
-// the text cannot drift from the tree the way the hand-rolled usage const
-// did (tick fi3).
-func TestABareInvocationIsStillAUsageRefusal(t *testing.T) {
+// The bare invocation IS the overview (tick 2qz): `ticfac` with no
+// arguments lists every run the checkout and the factory know, attention
+// first. fi3's contract — a bare call is a usage refusal, because a program
+// with no default action refuses — is deliberately replaced by this tick:
+// ticfac now has a default action, the one screen an unattended factory is
+// glanced at with, and `ticfac --help` stays the place a person reads the
+// whole tree. The empty world here is pinned where the overview's own
+// tests pin the full one.
+func TestABareInvocationIsTheOverview(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
 	var stdout, stderr bytes.Buffer
-	if code := Run(nil, &stdout, &stderr); code != exitUsage {
-		t.Fatalf("ticfac exits %d, want %d", code, exitUsage)
+	if code := Run(nil, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("ticfac exits %d, want %d: %s", code, exitSuccess, stderr.String())
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("the bare invocation wrote to stdout: %q", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "ticfac") {
-		t.Errorf("the bare invocation does not say what ticfac does: %q", stderr.String())
-	}
-}
-
-// The refusal is DERIVED, not maintained (tick fi3): a bare invocation must
-// print byte for byte what `ticfac --help` prints — the tree's own styled
-// help, rendered by fang — only to stderr and with exit 2. Before the tree,
-// this was a hand-rolled usage const in cli.go that said the same things a
-// second time and drifted; the pin is the equality, because a hand-maintained
-// copy cannot pass it.
-func TestTheBareInvocationRefusalIsTheTreeHelp(t *testing.T) {
-	var bareStdout, bareStderr bytes.Buffer
-	if code := Run(nil, &bareStdout, &bareStderr); code != exitUsage {
-		t.Fatalf("ticfac exits %d, want %d", code, exitUsage)
-	}
-	if bareStdout.Len() != 0 {
-		t.Errorf("the bare invocation wrote to stdout: %q", bareStdout.String())
-	}
-
-	var helpStdout, helpStderr bytes.Buffer
-	if code := Run([]string{"--help"}, &helpStdout, &helpStderr); code != exitSuccess {
-		t.Fatalf("--help exits %d, want %d: %s", code, exitSuccess, helpStderr.String())
-	}
-	if got, want := bareStderr.String(), helpStdout.String(); got != want {
-		t.Errorf("the bare invocation refuses with something other than the tree's help:\n"+
-			"--help prints:\n%s\nthe bare invocation prints:\n%s", want, got)
+	if !strings.Contains(stdout.String(), "No runs.") {
+		t.Errorf("the bare invocation does not list the (absent) runs: %q", stdout.String())
 	}
 }

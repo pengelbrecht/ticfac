@@ -51,12 +51,15 @@ than maintained beside it:
 - The hidden `ticfac man` renders the whole tree as man pages (mango),
   writing roff to stdout — the same surface a terminal reads, in the format
   `man` presents.
-- A bare `ticfac` refuses with exit 2, printing that same help to stderr —
-  a program with no default action says what it does and points at the
-  one flag that shows more.
+- A bare `ticfac` is the overview (2qz): every run this checkout and the
+  factory know, attention first — every run held or failed names its reason
+  and the one command that clears it; `--json` emits the versioned overview
+  model, one status model per run. `ticfac --help` remains the place a
+  person reads the whole tree.
 
 | command | what it does |
 |---|---|
+| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`) |
 | `ticfac run-epic <epic-id>` | run one epic through the reconciler |
 | `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the close-out rule (refuses to overwrite) |
 | `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
