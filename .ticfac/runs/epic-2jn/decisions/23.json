@@ -1,0 +1,78 @@
+{
+  "schema_version": 3,
+  "decision": 23,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "2jn",
+    "job_id": "run-epic-2jn/tick-rrl/attempt-54",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (local-subprocess/claude, opus)",
+    "profile_digest": "sha256:262ce67cbc25a58c2187bb990b95679b6b54e56db8e2568f34a17f92de6b83f2",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "c235973d5d865d7a8f2e2a5b2c1a0bfd70d11ccf",
+    "tick_id": "rrl"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "2jn's A1 was traced by the review and tested with a stand-in child; no run in the epic started from 'ticfac init' then 'ticfac run <epic>' in herdr panes on claude (the run itself used GLM on local subprocesses), and A5's run --cloud is tested only against a fake factory. Run the next epic (t8u) that way and one small epic with --cloud, and record the evidence; this is the fourth epic that closed without the run its acceptance names.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Demonstrate 2jn's A1 and A5 live: ticfac init + ticfac run on claude in herdr, and one epic via run --cloud, on the merged binary"
+      },
+      {
+        "body": "zv1, mtq, 0wp, 1zw and bsn were filed by five workers over 2.5 hours for one failure of TestSIGTERMToALiveRunEvacuatesItsWorkToTheRemote; a promoted finding leaves the drafts workers see, and nothing checks open ticks the run itself promoted. 8d6 (4230b469) fixed it and the test passes 3/3 at the tip, so the five can close as fixed. Deduplicate a new finding against open ticks the run promoted (same demonstrating_check or test name) before filing.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "The absorber files the same defect again and again: one SIGTERM temp-tree failure became five backlog ticks"
+      },
+      {
+        "body": "2jn made 20 item-naming absorption predictions and scored 0: scorePredictions only scores an item that has become runnable, and none of A1-A6 binds a command, so the run produced no calibration evidence for the absorb threshold while tripling the epic's size on the reporter's claim alone. The run (or doctor) should say at start that the epic's predictions will be unscoreable, and the close-out's data should count them as unchecked explicitly rather than by the predictions/ directory's absence.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A run accepts an epic whose [A<n>] items bind no command, then absorbs on predictions it can never score"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-2jn/tick-rrl/attempt-54",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-2jn/rrl/RESULT-rrl.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "A1 and A5 are met in code but were never demonstrated live. A6 needs the first `v*` tag after the merge (`make release VERSION=v0.1.0`), and the ticks skill contradiction is in untriaged upstream finding a009316a. 0 of 20 absorption predictions were scored (the acceptance binds no command). 5 findings are still untriaged, and 5 backlog ticks (zv1/mtq/0wp/1zw/bsn) are one defect already fixed by 8d6."
+  },
+  "validated": true,
+  "requested_at": "2026-09-27T20:47:55Z",
+  "answered_at": "2026-09-27T20:47:55Z",
+  "provenance": {
+    "run_id": "epic-2jn",
+    "tick_id": "rrl",
+    "attempt": 54,
+    "source_ref": "refs/heads/epic/2jn",
+    "source_sha": "c235973d5d865d7a8f2e2a5b2c1a0bfd70d11ccf",
+    "integration_ref": "refs/heads/epic/2jn",
+    "phase": "closeout",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:262ce67cbc25a58c2187bb990b95679b6b54e56db8e2568f34a17f92de6b83f2",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
