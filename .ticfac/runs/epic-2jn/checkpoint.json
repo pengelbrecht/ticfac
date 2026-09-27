@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 142,
-  "state": "running",
-  "reason": "eih try 4 (run dispatch #22) is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (48f7ea97f059)",
-  "updated_at": "2026-09-27T09:24:49Z",
+  "sequence": 143,
+  "state": "failed",
+  "reason": "eih try 4 (run dispatch #22) is no-commits: the attempt branch carries no commit beyond the base it was cut from (48f7ea97f059)",
+  "updated_at": "2026-09-27T09:24:54Z",
   "ticks": [
     {
       "tick_id": "nwj",
