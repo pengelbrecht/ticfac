@@ -2,10 +2,10 @@ package cli
 
 // `ticfac factory webhook` — register, inspect or withdraw the factory's
 // Telegram webhook. Ported from ticks' cmd/tk/cmd/factory_webhook.go (deleted
-// from ticks in pwp) with the cobra plumbing replaced by this package's plain
-// flag sets and the body otherwise verbatim, exactly the way the cloud slice
-// moved: this is the one factory operator surface pwp dropped without a
-// replacement, and the factory is ticfac's now (tick glb).
+// from ticks in pwp), with the body otherwise verbatim, exactly the way the
+// cloud slice moved; the cobra plumbing that port dropped is back (tick nwj).
+// This is the one factory operator surface pwp dropped without a replacement,
+// and the factory is ticfac's now (tick glb).
 
 import (
 	"context"

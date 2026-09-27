@@ -3,11 +3,11 @@ package cli
 // `ticfac cloud` — the operator's closed command surface over a self-deployed
 // cloud factory. Ported from ticks' cmd/tk/cmd/cloud.go (the run, stop and
 // status commands, the shared client and the tracker reads; the spawn/wait/
-// wave/collect family stays with the local orchestrator), with the cobra
-// plumbing replaced by this package's plain flag sets and every body otherwise
-// verbatim — including the messages, which name `tk` commands exactly as ticks
-// spelled them: this code is a copy of ticks' until ticks tick 1ya deletes it,
-// and a copy that has already edited its own strings is not a copy.
+// wave/collect family stays with the local orchestrator): cobra plumbing in
+// (tk's own, returned to by tick nwj), every body otherwise verbatim —
+// including the messages, which name `tk` commands exactly as ticks spelled
+// them: this code is a copy of ticks' until ticks tick 1ya deletes it, and a
+// copy that has already edited its own strings is not a copy.
 
 import (
 	"bytes"

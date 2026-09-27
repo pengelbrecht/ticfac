@@ -7,8 +7,10 @@ package cli
 // package's plain flag sets and every body otherwise verbatim.
 //
 // The group's help still describes deploy and setup, because that is the
-// surface the finished move serves; until b3a lands they answer here with a
-// refusal that says so, and b3a's wiring replaces the two cases.
+// surface the finished move serves; b3a's wiring answers them here.
+//
+// The bodies run on cobra again (tick nwj): the plumbing moved back from this
+// package's plain flag sets to the tree, every body still verbatim.
 
 import (
 	"context"
