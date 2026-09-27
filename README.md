@@ -60,7 +60,7 @@ than maintained beside it:
 | command | what it does |
 |---|---|
 | `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`) |
-| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`) |
+| `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`); with `--cloud` the same verbs, view and triage drive your cloud factory: submit the epic, attach the same live view, run it again to attach or resume |
 | `ticfac run-epic <epic-id>` | run one epic through the reconciler — the foreground form scripts drive; `ticfac run` is this command, started detached with the defaults decided |
 | `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the close-out rule (refuses to overwrite) |
 | `ticfac doctor` | say what a run still needs on this machine, each missing thing with its fix |
@@ -74,7 +74,7 @@ than maintained beside it:
 | `ticfac version` | report this build and the contract bundle it serves |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
 | `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
-| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | run and inspect epics in your cloud factory |
+| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface) |
 
 Exit codes are the contract a script branches on: 0 the command did its
 work, 1 a failure that is not a usage mistake, 2 a malformed invocation,
