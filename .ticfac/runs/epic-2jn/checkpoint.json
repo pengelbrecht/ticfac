@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-2jn",
   "epic_id": "2jn",
-  "sequence": 282,
-  "state": "dispatching",
-  "reason": "dispatching nyi as attempt 41",
-  "updated_at": "2026-09-27T15:02:48Z",
+  "sequence": 283,
+  "state": "running",
+  "reason": "nyi is running as attempt 41",
+  "updated_at": "2026-09-27T15:02:58Z",
   "ticks": [
     {
       "tick_id": "nwj",
@@ -188,7 +188,8 @@
     },
     {
       "tick_id": "nyi",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 41
     },
     {
       "tick_id": "wcl",
