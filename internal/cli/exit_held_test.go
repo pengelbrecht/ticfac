@@ -23,11 +23,13 @@ func TestARunThatStoppedHoldingForAPersonExitsHeld(t *testing.T) {
 
 	// Every refusal the reconciler's own set names as a hold — the same set
 	// that decides StageRunHeld on the feed, so the exit code and the feed
-	// line can never disagree about whether a stop was a hold. All eight of
-	// holdsForAPerson's reasons are pinned here, one by name: the tick's
+	// line can never disagree about whether a stop was a hold. Every one of
+	// holdsForAPerson's reasons is pinned here, one by name: the tick's
 	// "test each path" is each reason's path through resultExitCode, and a
 	// reason that joined the reconciler's set without this loop noticing
-	// would be a hold the exit table answers failed for.
+	// would be a hold the exit table answers failed for. (The list had
+	// drifted one short of the set — RefusedLandReviewNotReady was missing —
+	// and was made whole when RefusedForeignClaim joined it, tick 823.)
 	for _, reason := range []string{
 		reconcile.RefusedHeld,
 		reconcile.RefusedFindingUntriaged,
@@ -35,6 +37,8 @@ func TestARunThatStoppedHoldingForAPersonExitsHeld(t *testing.T) {
 		reconcile.RefusedRoleAnswer,
 		reconcile.RefusedAbsorptionDepth,
 		reconcile.RefusedClaimWidth,
+		reconcile.RefusedForeignClaim,
+		reconcile.RefusedLandReviewNotReady,
 		reconcile.RefusedUnaddressed,
 		reconcile.RefusedRejectedWork,
 	} {
