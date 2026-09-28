@@ -228,6 +228,10 @@ type cloudRunRecord struct {
 	State     string `json:"state"`
 	StartedAt string `json:"started_at"`
 	EndedAt   string `json:"ended_at"`
+	// CostUSD is the factory's own ground-truth cost for the run, the number
+	// its row carries (set by the gateway's usage telemetry): the dashboard's
+	// cost lines read it. Nil when the record carries no number.
+	CostUSD *float64 `json:"cost_usd"`
 }
 
 type cloudHolder struct {

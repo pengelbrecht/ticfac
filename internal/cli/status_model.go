@@ -253,7 +253,13 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 			Source: "run.pid",
 		},
 		Session: session,
-		CI:      ci,
+		// The dashboard's per-worker and per-tick readers (hn6 wave 1): the
+		// activity window from the runner's transcript and the attempt reports
+		// from the run's records. Both are stub constructors in their own
+		// files, answering nil until the wave-2 ticks fill them.
+		Activity: statusmodel.TranscriptActivity(home),
+		Report:   statusmodel.AttemptReports(repo, runID),
+		CI:       ci,
 	})
 }
 
@@ -364,6 +370,14 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		ci = input
 	}
 
+	// The factory's own ground-truth cost, when its run record carries one: the
+	// dashboard's cost lines read it (hn6 wave 1). A record that carries none
+	// states none — the model's cost lines answer empty.
+	var workerCost *statusmodel.WorkerCostInput
+	if record.CostUSD != nil {
+		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
+	}
+
 	return statusmodel.Build(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
@@ -380,7 +394,13 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 			Reason: liveness.Reason,
 			Source: liveness.Source,
 		},
-		CI: ci,
+		// A cloud run's runners and attempt reports are not on this machine
+		// (its worktrees belong to the factory's containers): the readers pass
+		// nil and the model leaves the fields null, the honest not-measured.
+		Activity:   nil,
+		Report:     nil,
+		WorkerCost: workerCost,
+		CI:         ci,
 	})
 }
 

@@ -216,7 +216,11 @@ func watchHealthLine(m statusmodel.Model, st watchStyles) string {
 	if m.Liveness.LastEventAgeSeconds != nil && *m.Liveness.LastEventAgeSeconds >= 0 {
 		line += fmt.Sprintf(" · last word %s ago", humanDuration(*m.Liveness.LastEventAgeSeconds))
 	}
-	if h := m.Health; h != (statusmodel.Health{}) {
+	// The health counts alone decide whether the segment shows: the verdict
+	// riding beside them is always populated by the model (hn6 wave 1), so a
+	// whole-struct zero check would never be false again — the counts are the
+	// display question, and they are what the line renders either way.
+	if h := m.Health; h.RemoteRetries > 0 || h.Interventions > 0 || h.StallWarnings > 0 || h.WallClocksFired > 0 {
 		var counts []string
 		for _, c := range []struct {
 			n    int

@@ -53,6 +53,26 @@ loud.
 
 ---
 
+## 1.1.0
+
+MINOR: `status-model.json` grows the dashboard vocabulary — additive fields
+within schema_version 1, which does not move (the phone page's snapshot parser
+refuses any other version, and every reader of this contract lives in this
+repository). Epic hn6, wave 1 (tick r5i): the per-tick pipeline cell
+(`pipeline`, with the stage list per role documented in the contract and
+spelled in Go as PipelineImplement/PipelineReview/PipelineCloseout),
+`parent_tick_id`, `duration_seconds`, per-tick `findings` and `report`,
+per-try `tier`/`reason`/`next_step`, per-worker `handle` and `activity`,
+`health.verdict`, per-source `cost.lines` (usd MUST be null when metered is
+false — pinned by an anyOf and refused by a new negative), and the top-level
+`recent` and `epic_title`. One new golden, `dashboard`, carries
+every new field populated — it is the fixture the wave-3 renderers and the
+phone page test against — and three new negatives refuse an unknown pipeline
+stage, an unmetered line with a number, and an unknown verdict state.
+An unchanged consumer is still correct but no longer complete.
+
+---
+
 ## 1.0.1
 
 PATCH: one description, no rule. `status-model.json`'s epic `phase`

@@ -124,6 +124,63 @@ const (
 	WaitFinding = "finding"
 )
 
+// Pipeline stages, the closed vocabulary of the per-tick pipeline cell the
+// dashboard renders (epic hn6): the stops one tick passes through, from its
+// claim to its end. The stage list is PER ROLE — a review tick never gates
+// and a close-out never merges — and the lists are the exported vars below.
+const (
+	StageClaim  = "claim"
+	StageWork   = "work"
+	StageReview = "review"
+	StageGate   = "gate"
+	StageCI     = "ci"
+	StageMerged = "merged"
+	StageClosed = "closed"
+)
+
+// Pipeline states, the closed vocabulary of one stage's own state inside the
+// pipeline cell: not reached, happening now, behind it, or refused there.
+// They are deliberately NOT the phase states — a stage can fail where a
+// phase only moves on.
+const (
+	StageStatePending = "pending"
+	StageStateActive  = "active"
+	StageStateDone    = "done"
+	StageStateFailed  = "failed"
+)
+
+// The pipeline stage list per role, the fixed shape a renderer lays the cell
+// out from. A tick with no role is an implement tick; the review and
+// close-out roles carry their own stages — the same three lists the
+// contract documents, spelled once here so the Go builder and the schema
+// cannot drift over a list one side never agreed to.
+var (
+	PipelineImplement = []string{StageClaim, StageWork, StageGate, StageMerged}
+	PipelineReview    = []string{StageClaim, StageReview, StageClosed}
+	PipelineCloseout  = []string{StageClaim, StageWork, StageCI, StageClosed}
+)
+
+// Health verdict states, the closed vocabulary of the headline the dashboard
+// answers "is it healthy" with: a word a person reads, not four counters they
+// have to interpret.
+const (
+	VerdictHealthy  = "healthy"
+	VerdictDegraded = "degraded"
+	VerdictStopped  = "stopped"
+)
+
+// Cost line sources, the closed vocabulary of where a cost line's number came
+// from. The source names the RIVER, metered says whether anything measured
+// it, and the two together are what keeps an unmetered line from wearing a
+// fabricated $0.00 (the epic's rule 7).
+const (
+	CostSourceDecisions = "decisions"
+	CostSourceWorkersAI = "workers-ai"
+	CostSourceClaude    = "claude"
+	CostSourcePiLocal   = "pi-local"
+	CostSourceOther     = "other"
+)
+
 // Model is one run's whole answer, `ticfac.status.v1`. Every field that can
 // be genuinely absent is REQUIRED-AND-NULL rather than omittable, the
 // convention the bundle's provenance object established: "no waves were
@@ -145,6 +202,19 @@ type Model struct {
 	Liveness  Liveness  `json:"liveness"`
 	Lifecycle Lifecycle `json:"lifecycle"`
 	Progress  Progress  `json:"progress"`
+
+	// EpicTitle is the epic's own title, copied straight off the tracker's
+	// graph. Null when the graph could not be read — an unread tracker and
+	// a titleless epic are different claims, and only the first is a claim
+	// at all.
+	EpicTitle *string `json:"epic_title"`
+
+	// Recent is the run's own last words: the last five lines of the feed,
+	// oldest first — the tail a dashboard shows where the watch used to
+	// drown the screen in the whole stream. The same event shape
+	// Liveness.LastEvent carries, and empty — never null — when the feed is
+	// empty or unreadable.
+	Recent []runfeed.Event `json:"recent"`
 
 	// Waves is every wave of the epic with its ticks, from the same layering
 	// `tk graph` computes. Null when the tracker could not be read — no
@@ -261,10 +331,39 @@ type Wave struct {
 type Tick struct {
 	TickID string `json:"tick_id"`
 	Title  string `json:"title,omitempty"`
+	// Gloss is the tracker's own one-line gloss, copied straight off the
+	// graph task. Absent when the tracker states none.
+	Gloss string `json:"gloss,omitempty"`
 	// Role names the tick's role when it carries one (review, closeout) —
-	// the fact the lifecycle phases are derived from.
+	// the fact the lifecycle phases and the pipeline stage list derive from.
 	Role  string `json:"role,omitempty"`
 	State string `json:"state"`
+
+	// Pipeline is the tick's own pipeline cell — the stages this role's
+	// tick passes through, each with its own state, the shape a dashboard
+	// fills left to right. The stage list is the role's (PipelineImplement,
+	// PipelineReview, PipelineCloseout), so a renderer lays the cell out
+	// from the list alone.
+	Pipeline []PipelineStage `json:"pipeline"`
+
+	// ParentTickID is the tick this row indents under — a repair tick or an
+	// absorbed finding under its source tick. Null for a direct child of
+	// the epic.
+	ParentTickID *string `json:"parent_tick_id"`
+
+	// DurationSeconds is from the tick's first dispatch to its close, or to
+	// the model's `now` while it is open. Null when no dispatch marker
+	// states a start.
+	DurationSeconds *int64 `json:"duration_seconds"`
+
+	// Findings is what this tick's report drafted: each finding's key and
+	// title and whether it gated — the drill-in behind a marked row. Empty
+	// when the tick drafted none.
+	Findings []TickFinding `json:"findings"`
+
+	// Report is the attempt report a person drills into: its summary and
+	// its diff stats. Null when the report was not read.
+	Report *TickReport `json:"report"`
 
 	// Absorbed says the run itself created this tick, by absorbing a
 	// finding into the epic it was running — the epic's shape changed
@@ -306,6 +405,49 @@ type Try struct {
 	// the marker could not be read — the try exists because a record names
 	// it, but a stamp that did not parse is stated as empty, never guessed.
 	DispatchedAt string `json:"dispatched_at"`
+
+	// Tier is this attempt's provenance tier — the rung of the ladder that
+	// routed the model. Null when no record states it.
+	Tier *string `json:"tier"`
+	// Reason is, for an attempt that did not close, the record's own word
+	// for why — the sentence the dashboard shows instead of a bare
+	// "rejected ×n". Null when the attempt closed or nothing states why.
+	Reason *string `json:"reason"`
+	// NextStep is what the run did next, for an attempt that did not close
+	// — the answer to "and then what". Null on the same terms as Reason.
+	NextStep *string `json:"next_step"`
+}
+
+// PipelineStage is one stop of the per-tick pipeline cell: the stage's name
+// from the closed stage vocabulary and its own state from the closed state
+// vocabulary.
+type PipelineStage struct {
+	Stage string `json:"stage"`
+	State string `json:"state"`
+}
+
+// TickFinding is one finding this tick's report drafted: its durable key,
+// its title, and whether it gates — the last one tri-state, because a draft
+// nobody triaged yet has no answer, and null is that honest no-answer.
+type TickFinding struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	Gating *bool  `json:"gating"`
+}
+
+// TickReport is the attempt report a person drills into: the report's own
+// one-line summary and its diff stats. Summary is null when the report
+// carried none; Diff is null when the diff was not read.
+type TickReport struct {
+	Summary *string     `json:"summary"`
+	Diff    *ReportDiff `json:"diff"`
+}
+
+// ReportDiff is a report's diff, as three counts.
+type ReportDiff struct {
+	Files      int `json:"files"`
+	Insertions int `json:"insertions"`
+	Deletions  int `json:"deletions"`
 }
 
 // Worker is one live worker: a standing attempt, its measured gaps, its
@@ -335,6 +477,16 @@ type Worker struct {
 	// run said no such thing.
 	WallClock *WallClock `json:"wall_clock"`
 
+	// Handle is the executor's own name for the worker — for example a
+	// herdr pane or agent name — the word a person uses to find the worker
+	// on the machine. Null when the executor named none.
+	Handle *string `json:"handle"`
+
+	// Activity is the worker's measured activity window: the sparkline a
+	// dashboard draws, the last tool action and when it happened, and the
+	// nudges the run sent. Null when nothing measured it.
+	Activity *WorkerActivity `json:"activity"`
+
 	// SilenceSeconds is how long since the runner's own session log last
 	// grew (pi appends on every turn, so the log's age is the worker's
 	// liveness, the signal tick b1t names). Null when the runner has no
@@ -353,6 +505,18 @@ type WallClock struct {
 	// last seen doing belongs to the person deciding what to do about an
 	// attempt that is past its bound.
 	Detail string `json:"detail"`
+}
+
+// WorkerActivity is one worker's measured activity window: buckets of
+// events at a fixed width (oldest first), the window's own span, the last
+// action and its stamp, and the nudges the run sent. Every dashboard's
+// per-agent card (hn6 rule 5): current action, progress.
+type WorkerActivity struct {
+	WindowSeconds int     `json:"window_seconds"`
+	Buckets       []int   `json:"buckets"`
+	LastAction    *string `json:"last_action"`
+	LastActionAt  *string `json:"last_action_at"`
+	Nudges        int     `json:"nudges"`
 }
 
 // Wait is what the run is blocked on. Attention is the same shape, one entry
@@ -377,12 +541,32 @@ type Attention Wait
 
 // Health is the run's interventions and warnings, counted from the typed
 // feed lines that stated them: the facts a watcher reads to answer "is it
-// healthy" without parsing a single line of prose.
+// healthy" without parsing a single line of prose. The Verdict is the
+// answer itself — a word a person reads, grown by its own wave-2 tick from
+// the counts and the run's own words.
 type Health struct {
-	RemoteRetries   int `json:"remote_retries"`
-	Interventions   int `json:"interventions"`
-	StallWarnings   int `json:"stall_warnings"`
-	WallClocksFired int `json:"wall_clocks_fired"`
+	RemoteRetries   int           `json:"remote_retries"`
+	Interventions   int           `json:"interventions"`
+	StallWarnings   int           `json:"stall_warnings"`
+	WallClocksFired int           `json:"wall_clocks_fired"`
+	Verdict         HealthVerdict `json:"verdict"`
+}
+
+// HealthVerdict is the headline: a state a person reads, the one-line why
+// beside it, and what the run recovered from on its own — the things that
+// happened and cost nothing, shown as calm, not as alarms.
+type HealthVerdict struct {
+	State     string     `json:"state"`
+	Summary   string     `json:"summary"`
+	Recovered []Recovery `json:"recovered"`
+}
+
+// Recovery is one thing the run got past by itself: what it was, how many
+// times, and how long the last one took — null when nobody measured that.
+type Recovery struct {
+	What    string `json:"what"`
+	Count   int    `json:"count"`
+	Seconds *int64 `json:"seconds"`
 }
 
 // Gate is one gate evidence record, per check per head, exactly as the run
@@ -443,6 +627,23 @@ type Cost struct {
 	// multiplies by their own rates when the records carry no prices.
 	Attempts int    `json:"attempts"`
 	Basis    string `json:"basis"`
+
+	// Lines is the cost split per source: which river, whether anything
+	// measured it, the number where one exists — and no number where none
+	// does, because an unmetered line wearing a $0.00 is a fabricated spend
+	// (hn6 rule 7). Empty when nothing has been split yet.
+	Lines []CostLine `json:"lines"`
+}
+
+// CostLine is one source's share of the run's spend: the river, whether the
+// number was measured or only the dispatches counted, and the basis naming
+// what the number covers.
+type CostLine struct {
+	Source   string   `json:"source"`
+	Metered  bool     `json:"metered"`
+	USD      *float64 `json:"usd"`
+	Attempts int      `json:"attempts"`
+	Basis    string   `json:"basis"`
 }
 
 // Remaining is the approximate time left, ONLY where measured tick durations
