@@ -43,14 +43,18 @@ import (
 // between any two steps is completed by the next one from that record
 // (PurgeState is the separate, explicit step that retires it).
 //
-// Never Force. Uncommitted work in the worktree means the collect step has
-// not been believed yet; the one narrow exception, carried from ticks'
-// cleanup, is the attempt's OWN untracked report, which is archived beside
-// the attempt record first so the report survives the worktree and the
-// remove can proceed without Force. That refusal IS this executor's wip
-// policy (tick pbb): herdr's teardown destroys no uncommitted work — the
-// only destruction here is the wall-clock pane close, which rj0 gates on
-// its own snapshot — so disposal takes none. The branch, when deletion is
+// The ORDER is workspace, then worktree, then branch — and every step is
+// this teardown's, whoever held the resource last. The attempt's OWN
+// untracked report is archived beside the attempt record first so it
+// survives the worktree. Any other uncommitted work is preserved on the
+// job's wip ref (tick pbb) before the removal is allowed to force past it:
+// the old never-Force rule answered dirt with a refusal no retry could ever
+// answer differently, and the attempt stayed stranded for a person. When
+// herdr no longer holds the workspace — a wall-clock pane close takes it
+// (epic-6in, 46x attempt 2) — or held it and left the worktree behind, the
+// worktree is removed from git's census, attributed by the recorded path
+// and the branch checked out there; only then can the branch go, since git
+// refuses to delete a branch a worktree still has checked out. The branch, when deletion is
 // permitted, is this executor's to delete — against the safety check that
 // refuses a branch whose commits no remote has, exactly as the local
 // executor's does, in the same refusal vocabulary the reconciler already
@@ -132,20 +136,28 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 		return err
 	}
 
+	// The uncommitted work is preserved BEFORE anything can destroy it (tick
+	// pbb). A worktree whose only dirt was its own report is clean by now and
+	// takes no snapshot; one holding real work has it put on the job's wip
+	// ref, and only then may the removal force past it. The removal used to
+	// refuse on dirt instead — and a refusal no later retry can answer
+	// differently is a teardown retried forever: a worktree, a workspace and
+	// a branch stranded for a person to clean by hand.
+	preserved, err := e.preserveForRemoval(st, record)
+	if err != nil {
+		return fmt.Errorf("preserve the uncommitted work before the worktree goes: %w", err)
+	}
+
 	var removalID string
 	removedWorkspace := false
 	switch {
 	case att.gone:
 		// Corroborated absence: herdr answered, and nothing it holds
-		// belongs to this attempt. This is the state the old teardown
-		// reached by believing `workspace_not_found` — indistinguishable
-		// then from a stale id, provable now.
-		if _, statErr := os.Stat(record.Worktree); statErr == nil {
-			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-				Detail: fmt.Sprintf("herdr holds no workspace for this attempt, but the worktree %s is still on "+
-					"disk: a workspace herdr lost left its worktree behind, and this teardown does not remove "+
-					"git state it cannot attribute", record.Worktree)})
-		}
+		// belongs to this attempt — the state a pane close leaves when it
+		// takes the workspace with it (epic-6in, 46x attempt 2: the wall
+		// clock closed the pane, herdr dropped the workspace, and the
+		// worktree stayed registered on disk). The worktree is still this
+		// attempt's, and removeOwnWorktree below takes it from git's census.
 	case att.id != full.WorkspaceID:
 		// The recorded id is STALE, and the reclaim is recorded BEFORE the
 		// removal: a process that dies between the recognition and the
@@ -179,7 +191,10 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 	if removalID != "" {
 		_, removeErr := e.client.WorktreeRemove(context.Background(), client.WorktreeRemoveParams{
 			WorkspaceID: removalID,
-			Force:       false,
+			// Forced only past dirt that is preserved above: herdr's own
+			// refusal over uncommitted work is the rule until the work is
+			// safe on a ref of its own.
+			Force: preserved,
 		})
 		if removeErr != nil && !client.IsCode(removeErr, client.CodeWorkspaceNotFound) {
 			// A removal herdr refused is a removal that did not happen; read
@@ -199,6 +214,18 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 			}
 			removedWorkspace = true
 		}
+	}
+
+	// The worktree, from git's own census, AFTER the workspace and BEFORE the
+	// branch: git refuses to delete a branch a worktree still has checked
+	// out, which is exactly the refusal 46x attempt 2's cleanup logged.
+	// herdr's worktree.remove normally takes the worktree with the
+	// workspace; when herdr no longer held the workspace, or held it and
+	// left the worktree behind, the worktree is this teardown's to remove —
+	// attributed by the path the attempt record names AND the branch git
+	// says is checked out there, never by a guess.
+	if err := e.removeOwnWorktree(st, record); err != nil {
+		return err
 	}
 
 	// The branch, with the one refusal a Reason does NOT lift: a caller
@@ -400,6 +427,71 @@ func (e *Executor) archiveOwnReport(st *store, record *attemptRecord) error {
 	return nil
 }
 
+// preserveForRemoval snapshots the attempt's uncommitted work before a
+// removal may destroy it, and records where. It answers whether anything was
+// preserved — whether the removal may force past the dirt it found.
+func (e *Executor) preserveForRemoval(st *store, record *attemptRecord) (bool, error) {
+	if record.Worktree == "" {
+		return false, nil
+	}
+	snap, ok, err := subprocess.PreserveUncommitted(record.Worktree, record.JobID, record.Spec.ArtifactPrefix)
+	if err != nil || !ok {
+		return false, err
+	}
+	snap.TakenAt = e.stamp()
+	if _, recorded := st.wipSnapshot(); !recorded {
+		if err := st.markWIPSnapshot(snap); err != nil {
+			return false, err
+		}
+	}
+	_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+		Detail: fmt.Sprintf("preserved the uncommitted work of attempt %d of %s on %s (commit %s) before its worktree "+
+			"was removed: the snapshot is material a later attempt can be pointed at, never evidence of completion",
+			record.Attempt, record.JobID, snap.Ref, short(snap.Commit))})
+	return true, nil
+}
+
+// removeOwnWorktree removes the attempt's worktree and its registration when
+// git still holds them after the workspace step. The worktree is attributed
+// by BOTH facts the teardown can check: the path the attempt record names,
+// and the branch git says is checked out there — a worktree at that path on
+// any other branch is somebody else's and is refused, not removed. A
+// directory git does not hold is left alone (git state nothing registers is
+// nothing this teardown can attribute), and a registration whose directory
+// is gone is pruned.
+func (e *Executor) removeOwnWorktree(st *store, record *attemptRecord) error {
+	if record.Worktree == "" {
+		return nil
+	}
+	regs, err := subprocess.ListWorktrees(record.Repo)
+	if err != nil {
+		return fmt.Errorf("read the worktree census before removing %s: %w", record.Worktree, err)
+	}
+	reg, held := subprocess.FindWorktree(regs, record.Worktree)
+	if !held {
+		if _, statErr := os.Stat(record.Worktree); statErr == nil {
+			_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+				Detail: fmt.Sprintf("the directory %s is still on disk but git holds no worktree there: it is left "+
+					"alone — nothing registers it as this attempt's", record.Worktree)})
+		}
+		return nil
+	}
+	if reg.Branch != "" && reg.Branch != record.Branch {
+		return fmt.Errorf("the worktree at %s has %s checked out, not this attempt's branch %s: it is not "+
+			"this teardown's to remove", record.Worktree, reg.Branch, record.Branch)
+	}
+	if _, err := e.preserveForRemoval(st, record); err != nil {
+		return fmt.Errorf("preserve the uncommitted work before the worktree goes: %w", err)
+	}
+	if err := subprocess.RemoveWorktree(record.Repo, record.Worktree); err != nil {
+		return fmt.Errorf("remove the attempt worktree: %w", err)
+	}
+	_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
+		Detail: fmt.Sprintf("removed the worktree %s and its registration: herdr no longer held it, and the branch "+
+			"cannot go while a worktree has it checked out", record.Worktree)})
+	return nil
+}
+
 // excludeDirFor is the directory the exclude file is resolved from: the
 // attempt's worktree while it is still there, because that is where Start's
 // append resolved it, and the repository once it is gone.
@@ -429,7 +521,11 @@ func disposalNote(record *attemptRecord, opts subprocess.DisposeOptions, persist
 		what = "workspace and worktree"
 	}
 	if !removedWorkspace {
-		what = "branch (the herdr workspace " + record.WorkspaceID + " was already gone — herdr was asked, and holds nothing of this attempt)"
+		what = "worktree and branch"
+		if opts.KeepBranch {
+			what = "worktree"
+		}
+		what += " (the herdr workspace " + record.WorkspaceID + " was already gone — herdr was asked, and holds nothing of this attempt)"
 	}
 	if opts.Reason != "" {
 		return fmt.Sprintf("disposed the %s of attempt %d: %s", what, record.Attempt, opts.Reason)

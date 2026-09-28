@@ -7,11 +7,12 @@ package cli
 // run's own liveness, refreshed in place until Ctrl-C.
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func TestEventsReadsACloudRunsFeedFromTheFactory(t *testing.T) {
 		return 500, nil
 	})
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"events", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d for a cloud run with a standing feed, stderr %q", code, stderr.String())
@@ -100,7 +101,7 @@ func TestEventsNamesACloudRunThatHasNotWrittenYet(t *testing.T) {
 		t.Fatalf("unexpected factory request %s", request.Path)
 		return 500, nil
 	})
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"events", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a cloud run with no event was read as a standing feed")
@@ -124,7 +125,7 @@ func TestEventsSurfacesADeploymentWithoutABucket(t *testing.T) {
 		t.Fatalf("unexpected factory request %s", request.Path)
 		return 500, nil
 	})
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"events", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a feed the factory cannot serve was read without complaint")
@@ -143,15 +144,22 @@ func TestEventsFollowDeliversACloudRunsLinesAsTheyLand(t *testing.T) {
 	attempt := 1
 	standing := feedLine(t, runfeed.NewEvent(
 		time.Now(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "a1", &attempt, "dispatched", "worker container dispatched"))
+	// The feed the factory serves grows while the follow reads it: the
+	// test writes it and the command's reads answer from it, so it is
+	// guarded.
+	var textMu sync.Mutex
 	text := standing
 	_, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 		switch request.Path {
 		case "/api/runs/run_62c289d1478fae4b1d5c7a2e3f0a9b8c":
 			return 200, map[string]any{"run": map[string]any{"run_id": "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "state": "running"}}
 		case "/api/runs/run_62c289d1478fae4b1d5c7a2e3f0a9b8c/events":
+			textMu.Lock()
+			served := text
+			textMu.Unlock()
 			return 200, map[string]any{
-				"run_id": "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "state": "running", "text": text,
-				"bytes": len(text), "total_bytes": len(text),
+				"run_id": "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "state": "running", "text": served,
+				"bytes": len(served), "total_bytes": len(served),
 			}
 		}
 		t.Fatalf("unexpected factory request %s", request.Path)
@@ -159,11 +167,18 @@ func TestEventsFollowDeliversACloudRunsLinesAsTheyLand(t *testing.T) {
 	})
 	configureCloudFactory(t, "https://factory.test")
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
+	// A follow left open is what --follow means; the test ends it by
+	// cancelling, and waits for it, so it never outlives the seams (the
+	// factory's HTTP client) this test swapped in.
+	ctx, cancel := context.WithCancel(context.Background())
+	followed := make(chan struct{})
+	repo := t.TempDir()
 	go func() {
-		// A follow left open is what --follow means; the test process ends it.
-		_ = Run([]string{"events", "--repo", t.TempDir(), "--follow", "--interval", "50ms", "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
+		defer close(followed)
+		_ = runContext(ctx, []string{"events", "--repo", repo, "--follow", "--interval", "50ms", "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	}()
+	defer func() { cancel(); <-followed }()
 
 	// The subscription must be live — its cursor taken — before the line
 	// that matters lands; the observable is the follow's first read of the
@@ -183,8 +198,11 @@ func TestEventsFollowDeliversACloudRunsLinesAsTheyLand(t *testing.T) {
 	}
 
 	// The line that lands while the follow is open.
-	text += feedLine(t, runfeed.NewEvent(
+	landed := feedLine(t, runfeed.NewEvent(
 		time.Now(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "", nil, "run_finished", "completed: every tick closed behind the gate"))
+	textMu.Lock()
+	text += landed
+	textMu.Unlock()
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) && !strings.Contains(stdout.String(), "run_finished") {
 		time.Sleep(5 * time.Millisecond)
@@ -197,7 +215,7 @@ func TestEventsFollowDeliversACloudRunsLinesAsTheyLand(t *testing.T) {
 // seenEventsRead waits on the observable a follow exposes: whether it has
 // read the events route yet.
 func seenEventsRead(requests *[]cloudFactoryRequest) bool {
-	for _, request := range *requests {
+	for _, request := range cloudFactoryRequests(requests) {
 		if strings.HasSuffix(request.Path, "/events") {
 			return true
 		}
@@ -230,7 +248,7 @@ func TestWatchEndsOnACloudRunsOwnLastWord(t *testing.T) {
 		return 500, nil
 	})
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d for a cloud run that ended cleanly, stderr %q", code, stderr.String())
@@ -267,7 +285,7 @@ func TestWatchJoinsACloudRunsCurrentIncarnation(t *testing.T) {
 		return 500, nil
 	})
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
@@ -316,7 +334,7 @@ func TestStatusAnswersForACloudRunFromTheWorkflow(t *testing.T) {
 	// credentials carry no Cloudflare API token, so the record's claim is the
 	// answer, with its limit stated.
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"status", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d for a live cloud run, stderr %q", code, stderr.String())
@@ -383,7 +401,7 @@ func TestStatusReportsAFrozenRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"status", "--repo", t.TempDir(), "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatalf("a cloud run whose Workflow instance is errored answered alive: %q", stdout.String())
@@ -406,8 +424,16 @@ func TestStatusFollowIsTheLiveTable(t *testing.T) {
 
 	// The record says running until the table has been observed; then the
 	// run finishes, and the follow ends on the run's own word.
+	// The record's state flips while the follow reads it: guarded.
+	var stateMu sync.Mutex
 	state := "running"
+	stateNow := func() string {
+		stateMu.Lock()
+		defer stateMu.Unlock()
+		return state
+	}
 	cloudFeedFactory(t, func(request cloudFactoryRequest) (int, any) {
+		state := stateNow()
 		switch request.Path {
 		case "/api/runs/run_62c289d1478fae4b1d5c7a2e3f0a9b8c":
 			return 200, map[string]any{"run": map[string]any{"run_id": "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "state": state}}
@@ -421,7 +447,7 @@ func TestStatusFollowIsTheLiveTable(t *testing.T) {
 		return 500, nil
 	})
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"status", "--repo", t.TempDir(), "--follow", "--interval", "50ms", "run_62c289d1478fae4b1d5c7a2e3f0a9b8c"}, &stdout, &stderr)
@@ -451,7 +477,9 @@ func TestStatusFollowIsTheLiveTable(t *testing.T) {
 	}
 
 	// The run finishes; the follow must end on that, of its own.
+	stateMu.Lock()
 	state = "completed"
+	stateMu.Unlock()
 	select {
 	case got := <-code:
 		if got != 0 {

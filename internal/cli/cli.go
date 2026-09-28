@@ -344,6 +344,7 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		Owner:                *fl.owner,
 		Tracker:              tracker,
 		NewExecutor:          executorFactory(*fl.runner, *fl.gate),
+		NewSweeper:           sweeperFactory(*fl.gate),
 		Executors:            knownExecutors(),
 		ExecStateRoot:        *fl.stateRoot,
 		GateConfig:           *fl.gate,

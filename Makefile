@@ -28,7 +28,7 @@ GOTEST_PARALLEL ?= 12
 # `test` below has no -short and CI runs BOTH targets on every push and pull
 # request, so everything the gate skips is still refused before main.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test gate release
+.PHONY: build vet test-short test test-race gate release
 
 build:
 	go build ./...
@@ -41,6 +41,11 @@ test-short:
 
 test:
 	go test -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+
+# The short suite under the race detector — CI's `go race` job. -count=1
+# because a cached pass from a non-race build says nothing about races.
+test-race:
+	go test -race -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
 # What the integrated gate runs, kept here so a human and CI run exactly what
 # gates a tick. The authoritative copy is .tick/runners.toml — that file is what

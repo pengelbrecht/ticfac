@@ -249,14 +249,30 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		// An earlier incarnation's repair under this same identity may have
 		// SETTLED — its work is on the branch above, and finishing from the
 		// branch is the honest answer to that, not a restart.
+		// A branch still at the commit the job was cut from is NOT that
+		// answer: the job never did anything, and "merging" it records a
+		// repair over nothing (roleJobAnsweredNothing).
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
-			if remote := r.settledJobHead(branch); remote != "" {
+			if remote := r.settledJobHead(branch); remote != "" && !roleJobAnsweredNothing(remote, base, carried, ledger, "repair_head") {
 				return false, r.finishRepairFromBranch(ctx, entry, marker, identity, merged.AttemptHead, remote, g)
 			}
 		}
-		return false, r.refuse(RefusedGate, tick,
-			"the integrated gate on %s did not pass for %s (%s) and the repair job could not be started: %v",
-			short(merged.GateSHA), tick, failures, err)
+		startErr := r.refuse(RefusedGate, tick,
+			"the integrated gate on %s did not pass for %s (%s) and the repair job %s could not be started: %v",
+			short(merged.GateSHA), tick, failures, jobID, err)
+		if !startIsOperational(err) {
+			return false, startErr
+		}
+		// It never started, so it never answered: an operational failure of
+		// the allowance (role_allowance.go), recorded and torn down like one,
+		// and the next job of the allowance is dispatched.
+		recorded := r.recordRepairOutcome(
+			Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
+				JobID: jobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote},
+			repairMarker, "failed", merge{}, "", g, failureOperational, failureReason(startErr)) == nil
+		r.tearDownSettled(repairMarker, fmt.Sprintf("the repair job %s for %s never started", jobID,
+			r.attemptName(tick, marker.Attempt)), true)
+		return recorded && ctx.Err() == nil, startErr
 	}
 	if note := roleJobResumeNote(job, "the repair job for "+r.attemptName(tick, marker.Attempt)); note != "" {
 		r.record(tick, StageAdopted, "%s", note)
@@ -284,7 +300,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		recorded := r.disposeRepair(handle, executor, repairMarker, g, rerr, failureOperational, repairHead)
 		return recorded && ctx.Err() == nil, rerr
 	}
-	if rerr == nil && repairHead == "" {
+	if rerr == nil && roleJobAnsweredNothing(repairHead, base, carried, ledger, "repair_head") {
 		rerr = r.refuse(RefusedGate, tick,
 			"the integrated gate did not pass for %s (%s) and its repair job settled without a commit to merge: %s. "+
 				"The tick is neither repaired nor closed; the job's branch is kept, with whatever it left",

@@ -336,8 +336,10 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 		// An earlier incarnation's resolve job under this same identity may
 		// already have SETTLED — its work is on the branch above, and the
 		// finish from the branch is the honest answer to that, not a restart.
+		// A branch still at the conflicted commit the job was cut from is not
+		// that answer (roleJobAnsweredNothing).
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
-			if remote := r.settledJobHead(branch); remote != "" {
+			if remote := r.settledJobHead(branch); remote != "" && !roleJobAnsweredNothing(remote, wip, carried, ledger, "resolve_head") {
 				merged, ferr := r.finishResolveFromBranch(resolveMarker, head, epicHead, conflict, remote)
 				if ferr != nil {
 					return "", nil, false, ferr
@@ -345,9 +347,22 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 				return merged, r.finalizeResolve(resolveMarker, head, merged, remote, conflict), false, nil
 			}
 		}
-		return "", nil, false, r.refuse(RefusedMerge, tick,
-			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: %v",
-			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
+		startErr := r.refuse(RefusedMerge, tick,
+			"%s does not merge onto %s (%s) and the resolve-conflict job %s could not be started: %v",
+			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, jobID, err)
+		if !startIsOperational(err) {
+			return "", nil, false, startErr
+		}
+		// It never started, so it never answered: an operational failure of
+		// the allowance, recorded and torn down like one, and the next job of
+		// the allowance is dispatched.
+		recorded := r.recordResolveOutcome(
+			Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: tick, Attempt: marker.Attempt,
+				JobID: jobID, Role: RoleResolveConflict, Repo: r.opts.Repo, Remote: r.opts.Remote},
+			resolveMarker, head, "failed", "", "", conflict, nil, failureOperational, failureReason(startErr)) == nil
+		r.tearDownSettled(resolveMarker, fmt.Sprintf("the resolve-conflict job %s for %s never started", jobID,
+			r.attemptName(tick, marker.Attempt)), true)
+		return "", nil, recorded && ctx.Err() == nil, startErr
 	}
 	if note := roleJobResumeNote(job, "the resolve-conflict job for "+r.attemptName(tick, marker.Attempt)); note != "" {
 		r.record(tick, StageAdopted, "%s", note)
@@ -375,7 +390,7 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 		recorded := r.disposeResolve(handle, executor, resolveMarker, head, resolveHead, conflict, rerr, failureOperational)
 		return "", nil, recorded && ctx.Err() == nil, rerr
 	}
-	if rerr == nil && resolveHead == "" {
+	if rerr == nil && roleJobAnsweredNothing(resolveHead, wip, carried, ledger, "resolve_head") {
 		rerr = r.refuse(RefusedMerge, tick,
 			"%s does not merge onto %s (%s) and its resolve-conflict job settled without a commit to merge: %s. "+
 				"The tick is neither resolved nor re-dispatched; the job's branch is kept, with whatever it left",

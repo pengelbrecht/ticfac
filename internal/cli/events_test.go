@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,7 +33,7 @@ func TestEventsPrintsTheFeedThatStands(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Date(2026, 9, 14, 12, 41, 3, 0, time.UTC), "r-1", "", nil, "run_finished", "completed"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"events", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d, stderr %q", code, stderr.String())
@@ -60,7 +59,7 @@ func TestEventsPrintsTheFeedThatStands(t *testing.T) {
 }
 
 func TestEventsNamesARunThatHasNotWritten(t *testing.T) {
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"events", "--repo", t.TempDir(), "r-none"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a run with no feed printed nothing and exited 0")
@@ -72,7 +71,7 @@ func TestEventsNamesARunThatHasNotWritten(t *testing.T) {
 
 func TestEventsNeedsExactlyOneRunID(t *testing.T) {
 	for _, args := range [][]string{{"events"}, {"events", "a", "b"}, {"events", ""}} {
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		if code := Run(args, &stdout, &stderr); code != 2 {
 			t.Errorf("%v: exit code %d, want 2", args, code)
 		}
@@ -85,7 +84,7 @@ func TestEventsFollowDeliversEachLineAsItLands(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Now(), "r-1", "a1", &attempt, "dispatched", "attempt 1 started as job-7f2a"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"events", "--repo", repo, "--follow", "r-1"}, &stdout, &stderr)
@@ -139,7 +138,7 @@ func TestEventsFollowSeesOnlyTheCurrentRunsTerminalEvent(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Now(), "r-1", "", nil, "run_finished", "failed: attempt 1 of a1 is missing-result"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"events", "--repo", repo, "--follow", "r-1"}, &stdout, &stderr)
@@ -196,7 +195,7 @@ func TestEventsFollowSeesOnlyTheCurrentRunsTerminalEvent(t *testing.T) {
 // the cursor was taken are exactly the lines a from-now subscription does not
 // show. It fails the test if the follower never goes live, because every
 // assertion after it depends on the subscription, not on luck.
-func syncMarkerFeed(t *testing.T, repo string, stdout *bytes.Buffer) {
+func syncMarkerFeed(t *testing.T, repo string, stdout *syncBuffer) {
 	t.Helper()
 	for i := 0; i < 40; i++ {
 		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
@@ -222,7 +221,7 @@ func TestEventsFollowFromStartReplaysTheStandingFeed(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Now(), "r-1", "", nil, "run_finished", "failed: attempt 1 of a1 is missing-result"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"events", "--repo", repo, "--follow", "--from-start", "r-1"}, &stdout, &stderr)
@@ -256,7 +255,7 @@ func TestEventsFollowRefusesAMalformedFeed(t *testing.T) {
 	if err := os.WriteFile(runfeed.Path(repo, "r-1"), []byte("not a line\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	// --from-start: the malformed line is in the STANDING feed, and a
 	// from-now cursor would never read it — the replay is how a follower
 	// meets a feed an earlier writer left unreadable.

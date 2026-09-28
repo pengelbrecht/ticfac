@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -91,8 +90,8 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	}
 	t.Cleanup(func() { life.Release("test") })
 
-	var out bytes.Buffer
-	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	var out syncBuffer
+	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	text := out.String()
@@ -107,7 +106,7 @@ func TestStatusReportsTheGapOfEveryInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := Run([]string{"status", "--repo", repo, "--json", "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "--json", "r-status"}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
 	var model statusmodel.Model
@@ -141,8 +140,8 @@ func TestTheGapChangesNoVerdict(t *testing.T) {
 	t.Parallel()
 	repo := statusFixture(t, time.Now())
 
-	var out bytes.Buffer
-	code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{})
+	var out syncBuffer
+	code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &syncBuffer{})
 	if code != 1 {
 		t.Fatalf("a dead run exited %d: the gap must not change the verdict, only report beside it", code)
 	}
@@ -187,8 +186,8 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 		t.Fatalf("append the later line: %v", err)
 	}
 
-	var out bytes.Buffer
-	if code := Run([]string{"status", "--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	var out syncBuffer
+	if code := Run([]string{"status", "--repo", repo, runID}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "wall clock fired 4m") {
@@ -199,7 +198,7 @@ func TestStatusReportsTheWallClockFiringOfAnInFlightAttempt(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
+	if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d in --json: %s", code, out.String())
 	}
 	var model statusmodel.Model
@@ -250,8 +249,8 @@ func TestStatusReportsNoFiringFromProseAlone(t *testing.T) {
 		t.Fatalf("append the stall line: %v", err)
 	}
 
-	var out bytes.Buffer
-	if code := Run([]string{"status", "--repo", repo, runID}, &out, &bytes.Buffer{}); code != 0 {
+	var out syncBuffer
+	if code := Run([]string{"status", "--repo", repo, runID}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if strings.Contains(out.String(), "wall clock fired") {
@@ -276,8 +275,8 @@ func TestStatusNamesAnAttemptByItsLabel(t *testing.T) {
 		return map[string]string{"a1": "wire the door"}
 	}
 
-	var out bytes.Buffer
-	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &bytes.Buffer{}); code != 0 {
+	var out syncBuffer
+	if code := Run([]string{"status", "--repo", repo, "r-status"}, &out, &syncBuffer{}); code != 0 {
 		t.Fatalf("a live run exited %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "a1 (wire the door) (run dispatch #1)") {
@@ -330,7 +329,7 @@ func TestStatusByEpicIDAnswersTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
 	})
 	configureCloudFactory(t, endpoint)
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"status", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit %d for a finished cloud run, want 1 (not alive):\n%s\n%s", code, stdout.String(), stderr.String())
@@ -370,7 +369,7 @@ func TestStatusFollowOnAResumedRunDoesNotEndOnThePreviousIncarnationsTerminalLin
 	}
 	t.Cleanup(func() { life.Release("test") })
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"status", "--repo", repo, "--follow", "--interval", "10ms", "r-1"}, &stdout, &stderr)
@@ -430,7 +429,7 @@ func TestStatusFollowOnAnUnclaimedRunEndsOnItsOwnTerminalLine(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Now().Add(-30*time.Minute), "r-1", "", nil, reconcile.StageRunFinished, "failed: a1 did not pass"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	var code int
 	done := make(chan struct{})
 	go func() {
