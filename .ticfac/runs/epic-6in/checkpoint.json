@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 53,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for tdu",
-  "updated_at": "2026-09-28T08:52:02Z",
+  "sequence": 54,
+  "state": "publishing",
+  "reason": "closing tdu behind its validated review-epic answer",
+  "updated_at": "2026-09-28T08:52:48Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "tdu",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 7
     },
     {
