@@ -24,20 +24,20 @@ const (
 )
 
 type fixture struct {
-	t        *testing.T
-	root     string // scratch root
-	source   string // the "remote" repository
-	workdir  string // where the entrypoint clones to
-	record   string // the harness stub's recording
-	env      map[string]string
-	firstSHA string
-	headSHA  string
-	mise     string // the version-manager stub's recording
-	tkRecord string // the tk stub's recording of `tk sandbox ...` calls
-	curlRec  string // the curl stub's recording of the model probe
-	probeRec string // the harness stub's recording of the pre-flight round-trip
-	binDir   string // the stub bin directory at the front of PATH
-	home     string // the container HOME the harness reads its config out of
+	t            *testing.T
+	root         string // scratch root
+	source       string // the "remote" repository
+	workdir      string // where the entrypoint clones to
+	record       string // the harness stub's recording
+	env          map[string]string
+	firstSHA     string
+	headSHA      string
+	mise         string // the version-manager stub's recording
+	ticfacRecord string // the ticfac stub's recording of `ticfac sandbox ...` calls
+	curlRec      string // the curl stub's recording of the model probe
+	probeRec     string // the harness stub's recording of the pre-flight round-trip
+	binDir       string // the stub bin directory at the front of PATH
+	home         string // the container HOME the harness reads its config out of
 }
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -167,13 +167,27 @@ exit "${TICKS_TEST_HARNESS_EXIT:-0}"
 	writeStub(t, filepath.Join(binDir, "pnpm"), `echo "11.0.6"
 `)
 	// `tk` is stubbed the way the toolchains are: the entrypoint's job is to
-	// DELEGATE the repository's [sandbox] declaration to tk, and this records
+	// DELEGATE the repository's [sandbox] declaration to ticfac, and this records
 	// that it did. What tk then does with the declaration is proved against the
 	// real implementation in setup_test.go, not against a shell stub.
+	// `tk` is stubbed the way the toolchains are: the container still runs it
+	// for the TRACKER commands the scripts need — verify_tk's version check,
+	// and the parked-question sweep's `tk list --awaiting` / `tk answer`.
+	// The sandbox verbs left tk with tick 46x: the scripts ask `ticfac` for
+	// them, and the ticfac stub below is what records that delegation.
 	writeStub(t, filepath.Join(binDir, "tk"), `case "$1" in
   version) echo "tk ${TICKS_TEST_TK_VERSION}"; echo "Update available: pretend" ;;
+  *) exit 0 ;;
+esac
+`)
+	// `ticfac` is stubbed the way tk used to be: the entrypoint's job is to
+	// DELEGATE the repository's [sandbox] declaration and the boot questions
+	// to ticfac, and this records that it did. What ticfac then does with the
+	// declaration is proved against the real implementation in
+	// internal/sandbox's suite, not against a shell stub.
+	writeStub(t, filepath.Join(binDir, "ticfac"), `case "$1" in
   sandbox)
-    printf '%s\n' "$*" >> "$TICKS_TEST_TK_RECORD"
+    printf '%s\n' "$*" >> "$TICKS_TEST_TICFAC_RECORD"
     case "$2" in
       toolchain) [ -z "${TICKS_TEST_SANDBOX_TOOLCHAIN:-}" ] || printf '%s\n' $TICKS_TEST_SANDBOX_TOOLCHAIN ;;
       image) [ -z "${TICKS_TEST_SANDBOX_IMAGE_DECLARED:-}" ] || printf '%s\n' "$TICKS_TEST_SANDBOX_IMAGE_DECLARED" ;;
@@ -216,6 +230,10 @@ exit "${TICKS_TEST_HARNESS_EXIT:-0}"
         ;;
     esac
     ;;
+  cloud)
+    printf '%s\n' "$*" >> "$TICKS_TEST_TICFAC_RECORD"
+    exit 0
+    ;;
   *) exit 0 ;;
 esac
 `)
@@ -252,15 +270,15 @@ esac
 
 	f := &fixture{
 		t: t, root: root, source: source,
-		workdir:  filepath.Join(root, "work"),
-		record:   record,
-		mise:     mise,
-		tkRecord: filepath.Join(root, "tk-record"),
-		curlRec:  filepath.Join(root, "curl-record"),
-		probeRec: filepath.Join(root, "harness-probe-record"),
-		binDir:   binDir,
-		home:     filepath.Join(root, "home"),
-		firstSHA: first, headSHA: head,
+		workdir:      filepath.Join(root, "work"),
+		record:       record,
+		mise:         mise,
+		ticfacRecord: filepath.Join(root, "ticfac-record"),
+		curlRec:      filepath.Join(root, "curl-record"),
+		probeRec:     filepath.Join(root, "harness-probe-record"),
+		binDir:       binDir,
+		home:         filepath.Join(root, "home"),
+		firstSHA:     first, headSHA: head,
 	}
 	f.env = map[string]string{
 		"PATH":                            binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -277,7 +295,7 @@ esac
 		EnvRunID:                          "run_test",
 		"TICKS_TEST_RECORD":               record,
 		"TICKS_TEST_MISE_RECORD":          mise,
-		"TICKS_TEST_TK_RECORD":            f.tkRecord,
+		"TICKS_TEST_TICFAC_RECORD":        f.ticfacRecord,
 		"TICKS_TEST_TK_VERSION":           "0.31.0",
 		"TICKS_TEST_CURL_RECORD":          f.curlRec,
 		"TICKS_TEST_HARNESS_PROBE_RECORD": f.probeRec,
@@ -328,10 +346,11 @@ func (f *fixture) harnessRecord() string {
 	return string(b)
 }
 
-// tkCalls returns every `tk sandbox ...` invocation the stub saw.
-func (f *fixture) tkCalls() string {
+// ticfacCalls returns every `ticfac sandbox ...`/`ticfac cloud ...`
+// invocation the stub saw.
+func (f *fixture) ticfacCalls() string {
 	f.t.Helper()
-	b, err := os.ReadFile(f.tkRecord)
+	b, err := os.ReadFile(f.ticfacRecord)
 	if err != nil {
 		return ""
 	}
@@ -405,7 +424,7 @@ func (f *fixture) routeModelThroughTheRepository(runners, model string) {
 
 // addMigratedEnvironment adds the structured run config to the submitted
 // repository and configures the tk stub to exercise that command path. The
-// command tests cover the real tk implementation; this fixture isolates the
+// command tests cover the real ticfac implementation; this fixture isolates the
 // entrypoint's delegation and boot-stop behavior.
 func (f *fixture) addMigratedEnvironment(label, command string) {
 	f.t.Helper()
@@ -649,8 +668,8 @@ func TestEntrypointRunsMigratedEnvironmentChecks(t *testing.T) {
 		t.Fatalf("the migrated environment check did not run: %v\n%s", err, out)
 	}
 	mustContain(t, out, "migrated marker", "the migrated check is named in the boot log")
-	if !strings.Contains(f.tkCalls(), "sandbox environment --root "+f.workdir) {
-		t.Errorf("the entrypoint did not delegate the migrated checks to tk:\n%s", f.tkCalls())
+	if !strings.Contains(f.ticfacCalls(), "sandbox environment --root "+f.workdir) {
+		t.Errorf("the entrypoint did not delegate the migrated checks to ticfac:\n%s", f.ticfacCalls())
 	}
 }
 
@@ -969,12 +988,16 @@ func TestEntrypointBootsTheWavePhase(t *testing.T) {
 	mustContain(t, rec, EnvPass+"=2", "the pass number authorises this container to dispatch")
 	mustContain(t, rec, "reconcile", "a wave boot adopts the pushed state first")
 	mustContain(t, rec, "dispatched 3 per-tick", "the prompt says what it inherited")
-	mustContain(t, rec, "tk cloud spawn", "the prompt names the dispatch verb")
 	mustContain(t, rec, "tk graph", "readiness is computed HERE, by tk")
 	// The one instruction that makes the handshake work: containers are booted
 	// by the supervisor after this pass exits, so waiting here waits forever.
+	// Since tick 46x the wave is recorded with the dispatch door, not with the
+	// tk cloud verbs that no longer exist anywhere.
 	mustContain(t, rec, "EXIT 0", "the prompt says to exit after dispatching")
-	mustContain(t, rec, "Do NOT run 'tk cloud wait'", "the prompt forbids waiting on a wave it just asked for")
+	mustContain(t, rec, "the pass ending is the handshake", "the prompt says why ending is not failure")
+	if strings.Contains(rec, "cloud spawn") {
+		t.Errorf("the prompt names a tk cloud verb ticks no longer has:\n%s", rec)
+	}
 	// And unlike a closeout, it is allowed to start new work.
 	if strings.Contains(rec, "Do not start new work") {
 		t.Errorf("a wave pass was told not to start new work:\n%s", rec)
@@ -993,11 +1016,15 @@ func TestEntrypointTellsACloudSubstrateOrchestratorToSpawnContainers(t *testing.
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
 	rec := f.harnessRecord()
-	mustContain(t, rec, "tk cloud spawn", "the prompt names the container dispatch verb")
+	mustContain(t, rec, "Each wave is one cloud worker container per tick",
+		"the prompt names the container dispatch shape")
 	// The harness-substrate instruction would be actively wrong here: this
 	// orchestrator's workers are sibling containers, not its own subagents.
 	if strings.Contains(rec, "dispatch workers as subagents of this harness") {
 		t.Errorf("a cloud-substrate orchestrator was told to dispatch subagents:\n%s", rec)
+	}
+	if strings.Contains(rec, "cloud spawn") {
+		t.Errorf("the prompt names a tk cloud verb ticks no longer has:\n%s", rec)
 	}
 }
 
@@ -1033,7 +1060,7 @@ func TestEntrypointRunsUnchangedWithoutASandboxDeclaration(t *testing.T) {
 	if calls := f.miseCalls(); calls != "" {
 		t.Errorf("nothing was declared but the version manager was used:\n%s", calls)
 	}
-	if calls := f.tkCalls(); !strings.Contains(calls, "sandbox setup") {
+	if calls := f.ticfacCalls(); !strings.Contains(calls, "sandbox setup") {
 		t.Errorf("the entrypoint never asked about the repository's sandbox:\n%s", calls)
 	}
 }
@@ -1062,7 +1089,7 @@ func TestEntrypointRunsTheRepositorySetupBeforeTheHarness(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	calls := f.tkCalls()
+	calls := f.ticfacCalls()
 	if !strings.Contains(calls, "sandbox setup --root "+f.workdir) {
 		t.Errorf("setup was not run against the checkout:\n%s", calls)
 	}
@@ -1107,8 +1134,8 @@ func TestEntrypointIgnoresSetupInjectedThroughTheEnvironment(t *testing.T) {
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("a setup command injected through the environment ran")
 	}
-	if strings.Contains(f.tkCalls(), marker) {
-		t.Errorf("the injected command was passed to tk:\n%s", f.tkCalls())
+	if strings.Contains(f.ticfacCalls(), marker) {
+		t.Errorf("the injected command was passed to ticfac:\n%s", f.ticfacCalls())
 	}
 }
 
@@ -1210,7 +1237,7 @@ kind = "claude"
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	mustContain(t, f.tkCalls(), "sandbox model", "the entrypoint asked tk for the routed model")
+	mustContain(t, f.ticfacCalls(), "sandbox model", "the entrypoint asked ticfac for the routed model")
 	rec := f.harnessRecord()
 	mustContain(t, rec, "TICKS_MODEL=workers-ai/meta/llama-3.3-70b-instruct-fp8-fast",
 		"the routed model is exported")
@@ -1230,8 +1257,8 @@ func TestEntrypointPrefersTheControlPlanesModel(t *testing.T) {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
 	mustContain(t, f.harnessRecord(), "TICKS_MODEL=claude-fable-5", "TICKS_MODEL wins")
-	if strings.Contains(f.tkCalls(), "sandbox model") {
-		t.Errorf("the entrypoint asked the repository for a model it had already been given:\n%s", f.tkCalls())
+	if strings.Contains(f.ticfacCalls(), "sandbox model") {
+		t.Errorf("the entrypoint asked the repository for a model it had already been given:\n%s", f.ticfacCalls())
 	}
 }
 
@@ -1397,7 +1424,7 @@ func TestEntrypointDistinguishesABrokenConfigFromAMissingModel(t *testing.T) {
 		t.Errorf("a broken config was reported as a missing model:\n%s", out)
 	}
 	if f.harnessStarted() {
-		t.Error("the harness started on a config tk could not read")
+		t.Error("the harness started on a config ticfac could not read")
 	}
 }
 
@@ -1680,7 +1707,7 @@ func TestEntrypointProbesTheHarnessBeforeTheSlowSteps(t *testing.T) {
 	if code != ExitHarness {
 		t.Fatalf("exit %d, want %d\n%s", code, ExitHarness, out)
 	}
-	if calls := f.tkCalls(); strings.Contains(calls, "sandbox setup") || strings.Contains(calls, "sandbox environment") {
+	if calls := f.ticfacCalls(); strings.Contains(calls, "sandbox setup") || strings.Contains(calls, "sandbox environment") {
 		t.Errorf("the entrypoint ran the repository's setup and pre-flight for a run that could not start:\n%s", calls)
 	}
 }
@@ -1733,7 +1760,7 @@ func TestSandboxReadmeDocumentsThePerKindGatewayCredentials(t *testing.T) {
 // container that a cloud sandbox runs the harness substrate.
 // ---------------------------------------------------------------------------
 
-// TestEntrypointResolvesTheSubstrateBeforeTheHarness: the container asks tk,
+// TestEntrypointResolvesTheSubstrateBeforeTheHarness: the container asks ticfac,
 // says what it resolved and why, and hands the harness both the substrate and
 // the note to record. A cloud boot with no control-plane opinion resolves the
 // harness substrate — Phase 1's design — rather than inheriting a local pin.
@@ -1743,7 +1770,7 @@ func TestEntrypointResolvesTheSubstrateBeforeTheHarness(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	mustContain(t, f.tkCalls(), "sandbox substrate", "the entrypoint asks tk, not a TOML parser of its own")
+	mustContain(t, f.ticfacCalls(), "sandbox substrate", "the entrypoint asks ticfac, not a TOML parser of its own")
 	mustContain(t, out, "substrate harness", "the boot log states the resolved substrate")
 	mustContain(t, out, "runner-state: substrate=harness", "the boot log carries the durable note line")
 

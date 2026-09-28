@@ -143,6 +143,7 @@ inside it, so an agent never parses prose.`,
 		newFactoryCommand(stdout, stderr),
 		newHerdCommand(stdout, stderr),
 		newCloudCommand(stdout, stderr),
+		newSandboxCommand(stdout, stderr),
 	)
 	return root
 }

@@ -120,7 +120,8 @@ than maintained beside it:
 | `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
 | `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
-| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface) |
+| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor\|branch` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface); `cloud branch` is the container-side write a sandbox's entrypoint uses to record the branch it created — it authenticates with the run's own token, never the operator's config |
+| `ticfac sandbox image\|toolchain\|model\|substrate\|setup\|environment\|worker-prompt` | the sandbox image's boot questions, ported from tk (46x): the image a checkout's `[sandbox]` table declares, its extra toolchain pins, the model its routing resolves for a boot, the substrate a run dispatches through, the idempotent warm step, the `[environment.commands]` pre-flight and the per-tick worker prompt — the run scripts call these after their clone so no shell ever parses runners.toml |
 
 Exit codes are the contract a script branches on — every command's process
 code is one of this table, the same words in `ticfac --help` and in every

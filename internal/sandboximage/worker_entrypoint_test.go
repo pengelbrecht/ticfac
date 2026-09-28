@@ -81,18 +81,18 @@ func (b *safeBuffer) String() string {
 // thing this script exists for — what happens AFTER the agent stops.
 
 type workerFixture struct {
-	t        *testing.T
-	root     string
-	source   string // the "remote"
-	workdir  string
-	binDir   string
-	home     string
-	baseSHA  string
-	env      map[string]string
-	tkRecord string
-	record   string
-	epic     string
-	tick     string
+	t            *testing.T
+	root         string
+	source       string // the "remote"
+	workdir      string
+	binDir       string
+	home         string
+	baseSHA      string
+	env          map[string]string
+	ticfacRecord string
+	record       string
+	epic         string
+	tick         string
 }
 
 const (
@@ -127,36 +127,36 @@ func newWorkerFixture(t *testing.T) *workerFixture {
 
 	f := &workerFixture{
 		t: t, root: root, source: source,
-		workdir:  filepath.Join(root, "work"),
-		binDir:   binDir,
-		home:     home,
-		baseSHA:  base,
-		tkRecord: filepath.Join(root, "tk-record"),
-		record:   filepath.Join(root, "harness-record"),
-		epic:     workerTestEpic,
-		tick:     workerTestTick,
+		workdir:      filepath.Join(root, "work"),
+		binDir:       binDir,
+		home:         home,
+		baseSHA:      base,
+		ticfacRecord: filepath.Join(root, "ticfac-record"),
+		record:       filepath.Join(root, "harness-record"),
+		epic:         workerTestEpic,
+		tick:         workerTestTick,
 	}
 	f.writeStubs()
 
 	f.env = map[string]string{
-		"PATH":                   binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"HOME":                   home,
-		"XDG_CONFIG_HOME":        filepath.Join(home, ".config"),
-		EnvRepoURL:               source,
-		EnvBaseSHA:               base,
-		EnvEpic:                  workerTestEpic,
-		EnvTick:                  workerTestTick,
-		EnvGatewayBaseURL:        testGatewayURL,
-		EnvGatewayToken:          testGatewayToken,
-		EnvWorkdir:               f.workdir,
-		EnvCacheDir:              filepath.Join(root, "cache"),
-		EnvTkVersion:             "0.31.0",
-		EnvRunID:                 "run_worker",
-		EnvModel:                 "claude-fable-5",
-		"TICKS_TEST_TK_RECORD":   f.tkRecord,
-		"TICKS_TEST_TK_VERSION":  "0.31.0",
-		"TICKS_TEST_RECORD":      f.record,
-		"TICKS_TEST_CURL_RECORD": filepath.Join(root, "curl-record"),
+		"PATH":                     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"HOME":                     home,
+		"XDG_CONFIG_HOME":          filepath.Join(home, ".config"),
+		EnvRepoURL:                 source,
+		EnvBaseSHA:                 base,
+		EnvEpic:                    workerTestEpic,
+		EnvTick:                    workerTestTick,
+		EnvGatewayBaseURL:          testGatewayURL,
+		EnvGatewayToken:            testGatewayToken,
+		EnvWorkdir:                 f.workdir,
+		EnvCacheDir:                filepath.Join(root, "cache"),
+		EnvTkVersion:               "0.31.0",
+		EnvRunID:                   "run_worker",
+		EnvModel:                   "claude-fable-5",
+		"TICKS_TEST_TICFAC_RECORD": f.ticfacRecord,
+		"TICKS_TEST_TK_VERSION":    "0.31.0",
+		"TICKS_TEST_RECORD":        f.record,
+		"TICKS_TEST_CURL_RECORD":   filepath.Join(root, "curl-record"),
 		// The stand-in agent's default behaviour: do the job properly.
 		"TICKS_TEST_WORKER_COMMIT": "1",
 		"TICKS_TEST_WORKER_RESULT": "STATUS: DONE",
@@ -223,13 +223,20 @@ fi
 exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `)
 	writeStub(t, filepath.Join(f.binDir, "mise"), "exit 0\n")
-	// `tk` delegates the same four questions the orchestrator asks plus the
-	// worker's own prompt. What tk really does with each is proved against the
-	// real implementation elsewhere; this records that the entrypoint asked.
+	// `tk` still answers the TRACKER commands the worker entrypoint runs —
+	// verify_tk's version check — and nothing else: the sandbox verbs left tk
+	// with tick 46x and the scripts ask `ticfac` for them.
 	writeStub(t, filepath.Join(f.binDir, "tk"), `case "$1" in
   version) echo "tk ${TICKS_TEST_TK_VERSION}" ;;
+  *) exit 0 ;;
+esac
+`)
+	// `ticfac` delegates the same questions the orchestrator asks plus the
+	// worker's own prompt. What ticfac really does with each is proved against
+	// the real implementation elsewhere; this records that the entrypoint asked.
+	writeStub(t, filepath.Join(f.binDir, "ticfac"), `case "$1" in
   sandbox)
-    printf '%s\n' "$*" >> "$TICKS_TEST_TK_RECORD"
+    printf '%s\n' "$*" >> "$TICKS_TEST_TICFAC_RECORD"
     case "$2" in
       model) [ -z "${TICKS_TEST_SANDBOX_MODEL:-}" ] || printf '%s\n' "$TICKS_TEST_SANDBOX_MODEL" ;;
       image) ;;
@@ -241,6 +248,10 @@ exit "${TICKS_TEST_WORKER_EXIT:-0}"
         printf '%s\n' "${TICKS_TEST_PROMPT:-implement the tick}"
         ;;
     esac
+    ;;
+  cloud)
+    printf '%s\n' "$*" >> "$TICKS_TEST_TICFAC_RECORD"
+    exit 0
     ;;
   *) exit 0 ;;
 esac
@@ -325,9 +336,9 @@ func (f *workerFixture) remoteLog(branch string) []string {
 	return strings.Split(strings.TrimSpace(out), "\n")
 }
 
-func (f *workerFixture) tkCalls() string {
+func (f *workerFixture) ticfacCalls() string {
 	f.t.Helper()
-	b, err := os.ReadFile(f.tkRecord)
+	b, err := os.ReadFile(f.ticfacRecord)
 	if err != nil {
 		return ""
 	}
@@ -439,8 +450,8 @@ func TestWorkerRoutesItselfAtTheImplementRole(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	mustContain(t, f.tkCalls(), "sandbox model --root", "the model delegation")
-	mustContain(t, f.tkCalls(), "--role implement", "the worker's own routing cell")
+	mustContain(t, f.ticfacCalls(), "sandbox model --root", "the model delegation")
+	mustContain(t, f.ticfacCalls(), "--role implement", "the worker's own routing cell")
 }
 
 // The job comes from the tracker in the checkout, read by tk, and reaches the
@@ -453,8 +464,8 @@ func TestWorkerRunsTheHarnessOnTheTicksOwnPrompt(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	mustContain(t, f.tkCalls(), "sandbox worker-prompt", "the prompt delegation")
-	mustContain(t, f.tkCalls(), "--tick "+f.tick, "the tick the prompt is for")
+	mustContain(t, f.ticfacCalls(), "sandbox worker-prompt", "the prompt delegation")
+	mustContain(t, f.ticfacCalls(), "--tick "+f.tick, "the tick the prompt is for")
 	mustContain(t, f.harnessRecord(), "IMPLEMENT-TICK-TAP-PLEASE", "the prompt the harness was given")
 }
 
@@ -505,8 +516,8 @@ func TestWorkerRunsTheHarnessOnTheDispatchedRolePrompt(t *testing.T) {
 			if strings.Contains(rec, "CHECKOUT-RENDERED-PROMPT") {
 				t.Errorf("the harness was given the checkout's prompt although the dispatch carried one:\n%s", rec)
 			}
-			if strings.Contains(f.tkCalls(), "sandbox worker-prompt") {
-				t.Errorf("the worker rendered a prompt from the checkout although the dispatch carried one:\n%s", f.tkCalls())
+			if strings.Contains(f.ticfacCalls(), "sandbox worker-prompt") {
+				t.Errorf("the worker rendered a prompt from the checkout although the dispatch carried one:\n%s", f.ticfacCalls())
 			}
 			mustContain(t, out, EnvRolePrompt, "the log line saying which prompt the worker runs on")
 			if _, ok := f.remoteFile(WorkerBranch(f.epic, f.tick), WorkerResultFile(f.tick)); !ok {
@@ -541,7 +552,7 @@ func TestWorkerFallsBackToTheCheckoutPromptWithoutARolePrompt(t *testing.T) {
 			if code != 0 {
 				t.Fatalf("exit %d:\n%s", code, out)
 			}
-			mustContain(t, f.tkCalls(), "sandbox worker-prompt", "the fallback's prompt delegation")
+			mustContain(t, f.ticfacCalls(), "sandbox worker-prompt", "the fallback's prompt delegation")
 			mustContain(t, f.harnessRecord(), "CHECKOUT-RENDERED-PROMPT", "the checkout's prompt")
 		})
 	}
@@ -1074,7 +1085,7 @@ func TestWorkerTimesTheRepositorySetup(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	mustContain(t, f.tkCalls(), "sandbox setup", "the repository's own setup")
+	mustContain(t, f.ticfacCalls(), "sandbox setup", "the repository's own setup")
 	mustContain(t, out, "repository setup took", "the per-boot cost of the step fan-out pays N times")
 }
 
@@ -1085,7 +1096,7 @@ func TestWorkerSkipsSetupWhenTheWaveAsksItTo(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d:\n%s", code, out)
 	}
-	if strings.Contains(f.tkCalls(), "sandbox setup") {
+	if strings.Contains(f.ticfacCalls(), "sandbox setup") {
 		t.Error("TICKS_WORKER_SETUP=skip still ran the repository's setup")
 	}
 	mustContain(t, out, "does NOT run the repository's [sandbox] setup", "what skipping costs")

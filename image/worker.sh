@@ -325,17 +325,17 @@ worker_repo_setup() {
 # files on branches that all merge into one integration commit — the exact
 # conflict class the invariant exists to prevent, and D4's one-writer rule with
 # it. `worker-collect.ts` already refuses such a branch with
-# `boundary-violation`, the way `tk herd collect` does, so tracker state could
+# `boundary-violation`, the way a herdr collect does, so tracker state could
 # never have merged; what it could do, and did, is throw away a tick whose
 # implementation commit was good. The guard is what keeps the good commit.
 #
 # SO IT IS ENFORCED, NOT REQUESTED. The container is ours end to end, and the
-# split is clean: every `tk` this script needs — the version check, the model
-# cell, the toolchain, the repository setup, the pre-flight and the prompt —
-# runs BEFORE the harness starts, and nothing after it needs tk at all. So the
-# harness, and everything it spawns, gets a PATH whose first `tk` refuses,
-# while the container keeps its own. Three layers, because each closes a route
-# the one before it does not:
+# split is clean: every `tk` and every `ticfac` this script needs — the tk
+# version check, the branch record, the model cell, the toolchain, the
+# repository setup, the pre-flight and the worker prompt — runs BEFORE the
+# harness starts, and nothing after it needs either. So the harness, and everything it spawns, gets
+# a PATH whose first `tk` refuses, while the container keeps its own.
+# Three layers, because each closes a route the one before it does not:
 #
 #   1. the shim   — the route the observed agent took, and every route through
 #                   the tracker CLI including ones nobody enumerated;
@@ -494,15 +494,15 @@ sweep_boundary_state() {
 # ---------------------------------------------------------------------------
 # The prompt
 #
-# Rendered by `tk` out of the checkout at the base SHA, from the same template
-# `tk herd spawn` gives a herdr worker (internal/herd/spawn.BuildPrompt). One
-# template, so a container-per-tick substrate and a herdr-pane substrate cannot
-# hand the same tick two different jobs — the same reason `worker-collect.ts`
-# is a port of `internal/herd/collect` rather than a second opinion about what
-# "ready to merge" means.
+# Rendered by `ticfac` out of the checkout at the base SHA, from the same
+# template every worker substrate hands a worker. One template, so a
+# container-per-tick substrate and a herdr-pane substrate cannot hand the same
+# tick two different jobs — the same reason `worker-collect.ts` is a port of
+# the herdr collect rather than a second opinion about what "ready to merge"
+# means.
 #
 # The shell never learns the tracker format for the same reason it never learns
-# runners.toml: `tk` owns it, and it is running in the checkout.
+# runners.toml: `ticfac` owns it, and it is running in the checkout.
 # ---------------------------------------------------------------------------
 # Sets `prompt_text` rather than printing, because `die` inside a command
 # substitution kills the SUBSHELL and nothing else: a `prompt="$(build)"` that
@@ -528,13 +528,13 @@ build_worker_prompt() {
 	if [[ -n $role_prompt ]]; then
 		warn "TICKS_ROLE_PROMPT is set but blank; rendering the worker prompt from the checkout instead"
 	fi
-	prompt_text="$(tk sandbox worker-prompt --root "$workdir" --tick "$tick_id" --branch "$worker_branch" --base "$base_sha")"
+	prompt_text="$(ticfac sandbox worker-prompt --root "$workdir" --tick "$tick_id" --branch "$worker_branch" --base "$base_sha")"
 	status=$?
 	if ((status != 0)); then
-		die $EXIT_CONFIG "tk could not build the worker prompt for ${tick_id} ('tk sandbox worker-prompt' exited $status; its reason is above) — the tick has to exist in the checkout at ${base_sha}"
+		die $EXIT_CONFIG "ticfac could not build the worker prompt for ${tick_id} ('ticfac sandbox worker-prompt' exited $status; its reason is above) — the tick has to exist in the checkout at ${base_sha}"
 	fi
 	if [[ -z $prompt_text ]]; then
-		die $EXIT_CONFIG "tk built an empty worker prompt for ${tick_id} — refusing to start a harness with nothing to do"
+		die $EXIT_CONFIG "ticfac built an empty worker prompt for ${tick_id} — refusing to start a harness with nothing to do"
 	fi
 }
 
@@ -845,7 +845,7 @@ run_harness() {
 #
 # `RESULT-<tick>.md` is the only channel a worker has, and in this substrate it
 # has to be COMMITTED: the container is destroyed and collect reads the file
-# off the pushed branch through GitHub, not out of a worktree the way `tk herd
+# off the pushed branch through GitHub, not out of a worktree the way a herdr
 # collect` does. The agent is told not to commit it (that is the herdr-shaped
 # instruction it shares with every other worker); this script commits it, as
 # its own commit, with an explicit pathspec so a stray staged file cannot ride

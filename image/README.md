@@ -33,7 +33,7 @@ discipline. Those tests are end-to-end: CI's `make test` runs them all, and the
 
 ## The orchestrator role
 
-`tk cloud run <epic>` starts a Run Workflow; the Workflow boots **one** sandbox
+`ticfac cloud run <epic>` starts a Run Workflow; the Workflow boots **one** sandbox
 from this image and starts `ticks-orchestrator` inside it, which clones the repo
 at the submitted SHA, verifies `tk`, provisions anything the repository needs
 that the image does not already carry, runs the repository's own `[sandbox]`
@@ -145,7 +145,7 @@ plans no waves and dispatches nobody), plus:
 | Variable | Required | Meaning |
 |---|---|---|
 | `TICKS_TICK` | yes | The one tick this container implements. A worker with no tick refuses to boot (exit 2) rather than run something else's prompt. |
-| `TICKS_ROLE_PROMPT` | no | The rendered role prompt the dispatch resolved for this attempt — the prompt **text** itself (not a path), UTF-8 prose with no control character but tab/LF/CR, at most 65536 bytes (the door's rule since ticfac #66), set by a factory's sandbox dispatch door (ticfac `worker-boot.ts`, yoh tick 9iz). When set (and not blank) the harness runs on it **verbatim** and `tk sandbox worker-prompt` is not called, so the worker runs on exactly the prompt the run's records digest into `prompt_digest`. When absent — an older factory, or the image driven by hand — the worker renders its prompt from the checkout as before (tick nue). |
+| `TICKS_ROLE_PROMPT` | no | The rendered role prompt the dispatch resolved for this attempt — the prompt **text** itself (not a path), UTF-8 prose with no control character but tab/LF/CR, at most 65536 bytes (the door's rule since ticfac #66), set by a factory's sandbox dispatch door (ticfac `worker-boot.ts`, yoh tick 9iz). When set (and not blank) the harness runs on it **verbatim** and `ticfac sandbox worker-prompt` is not called, so the worker runs on exactly the prompt the run's records digest into `prompt_digest`. When absent — an older factory, or the image driven by hand — the worker renders its prompt from the checkout as before (tick nue). |
 | `TICKS_WORKER_SETUP` | no | `always` (default) or `skip` — whether this worker runs the repository's `[sandbox]` setup. See below. |
 | `TICKS_WORKER_TIMEOUT` | no | Seconds the harness may run before the container stops waiting and pushes what it has; `0` (default) leaves it unbounded. Derived per run from its wall-clock allowance — see below. |
 | `TICKS_WORKER_STATE_DIR` | no | Where the container keeps the harness pid and any lodged cancellation, so `--cancel` (a second process) can find them. Defaults to `/tmp/ticks-worker`; overridden only by the repository's tests. |
@@ -153,7 +153,7 @@ plans no waves and dispatches nobody), plus:
 | `TICKS_WORKER_BRANCH` | derived | **Output, not input.** `tick/<epic>/<tick>`, exported for everything the harness spawns. |
 
 `TICKS_MODEL`, when unset, is resolved from the **`implement`** cell of the
-repository's role/tier table (`tk sandbox model --role implement`), not from
+repository's role/tier table (`ticfac sandbox model --role implement`), not from
 `[orchestrator].model`. The orchestrator's cell is a frontier one because it
 plans waves and reviews epics; routing every per-tick container at it is a
 silent multiple on a wave's bill.
@@ -273,7 +273,7 @@ it boots. Read it before changing either.**
 
 The image used to install a *released* tk, pinned by version and checksum like
 every other download. That produced a chicken-and-egg the moment the entrypoint
-learned a new subcommand: an epic adds `tk sandbox …`, the entrypoint calls it,
+learned a new subcommand: an epic adds a tk subcommand, the entrypoint calls it,
 and the newest released tk does not have it yet — so a container booted,
 streamed its first lines and then died at exit 6 with `unknown command:
 sandbox`. The image could only ever be one release behind the bundle it boots,
@@ -314,24 +314,27 @@ What this needs, and what it costs:
 
 ### The subcommand gate
 
-Two checks make a too-old tk a *stop*, never a container that dies mid-run:
-
-1. **In the deploy, before anything is built.** `ticfac factory deploy` derives
-   every `tk` subcommand `entrypoint.sh` and `preflight.sh` invoke
-   (`factory.EntrypointTkCommands`) and asserts this binary implements each one.
-   A miss names the subcommand — ``this tk (0.31.0) has no `tk sandbox
-   environment`, but the orchestrator entrypoint this deploy would ship runs
-   it`` — and nothing is staged, built or created.
-2. **In the image build, against the tk it actually produced.** The same derived
-   list ships in the build context as `required-tk-commands`; the last tk layer
-   runs `tk <sub> --help` for every line and fails the build, naming the missing
-   subcommand, if one does not answer. A failed image build fails the deploy.
+The Dockerfile's required-commands layer makes a too-old tk a *stop*, never a
+container that dies mid-run: the derived list ships in the build context as
+`required-tk-commands`, and the last tk layer runs `tk <sub> --help` for every
+line and fails the build, naming the missing subcommand, if one does not answer.
+A failed image build fails the deploy.
 
 The list is **derived, never hand-maintained** — a hand-maintained list is
 exactly what went stale. `TestRequiredTkCommandsFileMatchesTheEntrypoint`
 (`go test ./internal/factory`) fails when the committed file and the scripts
-drift, so teaching the entrypoint a new subcommand is a two-line change: use it,
-regenerate the file.
+drift, so teaching the entrypoint a new tk subcommand is a two-line change: use
+it, regenerate the file.
+
+Since tick 46x the list carries **tracker commands only**. The sandbox verbs and
+the branch write the scripts need run through `ticfac …` instead, and the
+ticfac binary cannot lag them the way a released tk could: `ticfac factory
+deploy` cross-compiles it from the same tree it stages `image/` from, so the
+binary the container runs and the scripts it runs are the same commit by
+construction. What is left to prove is that every `ticfac …` a script runs
+names a command ticfac has, and that is a test on its command tree:
+`TestEveryTicfacCommandTheImageRunsExists` (`go test ./internal/cli`), fed by
+the same scanner (`factory.EntrypointTicfacCommands`).
 
 ## One image, many projects
 
@@ -394,11 +397,10 @@ skill's `references/runners-config.md`, *The sandbox a run gets*:
 |---|---|
 | `image` | **Booted by the control plane**, which reads this file at the submitted SHA before it starts a container (`cloudflare/src/repo-config.ts`). The entrypoint is the backstop: it compares what the repo declares against `TICKS_SANDBOX_IMAGE` and **refuses the boot** (exit 6) when they differ, because provisioning and spending in an image the repository did not ask for fails later and less legibly. A boot with no `TICKS_SANDBOX_IMAGE` at all — the image driven by hand — warns instead, having nothing to compare against. |
 | `toolchain` | Provisioned with the ecosystem pins above, through `mise`, into `TICKS_CACHE_DIR`. |
-| `setup` | Run by `tk sandbox setup` after the checkout and before the harness — idempotent, cache-populating commands (`pnpm install --frozen-lockfile`, `go mod download`). A failure ends the boot with exit 6. |
+| `setup` | Run by `ticfac sandbox setup` after the checkout and before the harness — idempotent, cache-populating commands (`pnpm install --frozen-lockfile`, `go mod download`). A failure ends the boot with exit 6. |
 
-The entrypoint never parses that file itself: it shells out to the `tk` it
-already verified, so the tracked config has exactly one reader, and the same
-`tk sandbox setup` warms a local herdr worktree.
+The entrypoint never parses that file itself: it shells out to `ticfac`
+(`ticfac sandbox setup`), so the tracked config has exactly one reader.
 
 **Where setup may come from.** This container holds the run's gateway token and
 its GitHub credential, and `setup` is arbitrary shell. It is therefore read from
@@ -453,7 +455,7 @@ starts a command in a sandbox.
 | `AI_GATEWAY_BASE_URL` | yes | The gateway every model call goes through — the factory's own `/api/gateway` prefix in a cloud run, or an AI Gateway base URL directly when you are driving the image by hand. Never a vendor host. |
 | `AI_GATEWAY_TOKEN` | yes | The run's gateway credential (D17). It is the ONLY model credential in the container, and it is what every vendor key variable is set to. |
 | `TICKS_HARNESS` | no | `pi` (default), `omp` or `claude`. The factory always sets it, so the default is a last resort only; it is `pi` because the cloud runs pi on GLM. |
-| `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`tk sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
+| `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
 | `TICKS_HARNESS_PROBE_TIMEOUT` | no | Seconds the harness's own pre-flight round-trip may take (default 120). Larger than the gateway probe's because it starts a whole agent CLI. |
 | `TICKS_SUBSTRATE` | no | The dispatch substrate this run uses: `harness` (default), `herdr`, `auto` or `cloud`. It **overrides** `[orchestration].substrate` in the checkout, which a repository pins for its LOCAL runs; the checkout is read, never rewritten. A value that is not a substrate is exit 2. The default is load-bearing: a checkout may now declare `cloud`, and a container that inherited that declaration would dispatch worker containers from inside a container. See *The substrate, and why a container is told* below. |
@@ -523,9 +525,11 @@ nothing and risks nothing.
 
 The branch also descends from `TICKS_BASE_SHA`, which is whatever branch the
 operator submitted from — so a run submitted from an epic branch that was ahead
-of the default branch carries that epic's commits into its own closeout PR. The
-body for that PR comes from `tk cloud pr-body`, which enumerates every commit
-the run did not create, above the ones it did.
+of the default branch carries that epic's commits into its own closeout PR.
+tk's `cloud pr-body` verb used to enumerate those commits in the PR body; ticks
+removed it with the rest of its cloud surface (ticks epic chz), and ticfac's
+close-out body (`internal/reconcile/closeout_body.go`) carries the review's
+verdict and findings, not that list — so read the PR's commit list for it.
 
 It exists because the property the design claimed was not true. D4 says a run's
 tracker state is on a pushed run branch and is therefore "durable, recoverable,
@@ -790,7 +794,7 @@ defaults to `harness` — Phase 1's design: the existing harness substrate
   container would change the base every worker commits against and put a config
   change nobody submitted into the run's diff. The pin keeps working for local
   runs; the override applies to this run only.
-- **`tk` resolves it, not this shell.** `tk sandbox substrate --root <checkout>`
+- **`ticfac` resolves it, not this shell.** `ticfac sandbox substrate --root <checkout>`
   prints the resolved substrate and the `runner-state:` note line on stdout, and
   its reasoning on stderr. The entrypoint has one reader for the repository's
   structured config; the shell never learns a second format.
@@ -819,17 +823,18 @@ says so by setting `TICKS_SUBSTRATE=cloud` explicitly.
 
 **And since tick wiy it does exactly that, for one kind of boot.** A `wave`
 phase container — the pass a cloud run boots between container waves — is given
-`TICKS_SUBSTRATE=cloud`, a `TICKS_PASS` number, and its factory endpoint, and
-its prompt tells it to dispatch the next wave with `tk cloud spawn`. Nothing
+`TICKS_SUBSTRATE=cloud`, a `TICKS_PASS` number, and its factory endpoint. (Its
+prompt used to teach tk's `cloud spawn`; since tick 46x a staged run boot runs
+`ticfac run-epic` rather than a harness on that prompt.) Nothing
 about the default changed: permission is the control plane's to give, per boot,
 and a container that was not given a pass number is refused by the dispatch
 endpoint however its checkout is pinned and whatever the agent inside it
 believes. A `closeout` gets no pass, which is what keeps a run being wound up
 from starting new work even if its prompt were argued around.
 
-Note what such a container still cannot do: boot a sibling itself. `tk cloud
-spawn` inside a run records the wave with the run's own supervisor, which boots
-it after the pass exits — so the containers are still dispatched by the one
+Note what such a container still cannot do: boot a sibling itself. A wave
+record inside a run asks the run's own supervisor, which boots it after the
+pass exits — so the containers are still dispatched by the one
 party holding the `SANDBOXES` binding, the checkpoints, the budgets and the
 kill switch.
 
@@ -851,7 +856,7 @@ image can produce, so three things happen before the harness is started.
 
 **The model comes from routing.** `TICKS_MODEL` wins when the control plane
 sets one (`RUN_MODEL` on the factory, an operator override on purpose).
-Otherwise the entrypoint asks the checkout through `tk sandbox model`, which
+Otherwise the entrypoint asks the checkout through `ticfac sandbox model`, which
 reads `[orchestrator].model` from `.tick/runners.toml`, and failing that
 resolves role `orchestrator` at the `frontier` tier — falling back to
 `[roles.implement]` like any other unnamed role. The orchestrator is routed by

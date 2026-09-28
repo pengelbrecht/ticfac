@@ -61,6 +61,7 @@ func newCloudCommand(stdout, stderr io.Writer) *cobra.Command {
 		newCloudLogsCommand(stdout, stderr),
 		newCloudTraceCommand(stdout, stderr),
 		newCloudSupervisorCommand(stdout, stderr),
+		newCloudBranchCommand(stdout, stderr),
 	)
 	return cmd
 }
@@ -76,6 +77,7 @@ usage:
   ticfac cloud logs <run> [-f] [--tail N] what the container printed
   ticfac cloud trace <run>                what the model said and decided
   ticfac cloud supervisor <run> [--steps N] whether the Workflow is alive
+  ticfac cloud branch <name> [--detail <why>]  record a branch this run created
 
 run flags:
   --notify <channel>      notification channel for this submission
@@ -92,6 +94,12 @@ checkout, and submit it again so the new orchestrator follows the reconcile
 path. logs, trace and supervisor are observation: they read records a run left
 behind and cannot steer one, so the operator-to-orchestrator command vocabulary
 stays run/stop/status/answer (D21).
+
+branch is the container-side write, not an operator one: a sandbox records the
+branch its entrypoint just created so CI remediation can decide what it may
+push to, and it authenticates with the run's own TICKS_FACTORY_TOKEN rather
+than the operator's config. It commands no run and is read to decide what
+remediation may NOT do.
 `
 
 // cloudHTTPClient is a package variable so command tests can exercise the

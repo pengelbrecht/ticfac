@@ -112,7 +112,7 @@ func TestEntrypointReviewRunsNothingTheRepositoryDeclares(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	calls := f.tkCalls()
+	calls := f.ticfacCalls()
 	for _, forbidden := range []string{"sandbox setup", "sandbox environment", "sandbox toolchain"} {
 		if strings.Contains(calls, forbidden) {
 			t.Errorf("a review boot ran %q:\n%s", forbidden, calls)

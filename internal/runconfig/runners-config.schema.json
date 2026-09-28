@@ -290,7 +290,7 @@
           "minLength": 1,
           "maxLength": 512,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*(:[A-Za-z0-9._-]+)?(@sha256:[a-f0-9]{64})?$",
-          "description": "Custom image reference this repository's sandbox boots. Omitted means the version-pinned base image, which is what almost every repository wants: `toolchain` and `setup` extend the base without a factory-wide image rebuild. Whatever boots a sandbox takes the reference as a parameter, so the resolved value is `tk sandbox image`."
+          "description": "Custom image reference this repository's sandbox boots. Omitted means the version-pinned base image, which is what almost every repository wants: `toolchain` and `setup` extend the base without a factory-wide image rebuild. Whatever boots a sandbox takes the reference as a parameter, so the resolved value is `ticfac sandbox image`."
         },
         "toolchain": {
           "type": "array",

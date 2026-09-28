@@ -109,10 +109,10 @@ printf 'exit=%s\n' "$?" >>"$TICKS_TEST_TK_ATTEMPT"`)
 	}
 	mustContain(t, string(got), WorkerTkDeniedMessage, "the refusal the agent is handed")
 
-	// The entrypoint's own tk is untouched: the guard is the agent's PATH, not
-	// the container's. A guard that denied both would have taken the prompt
-	// with it and this run would never have started.
-	mustContain(t, f.tkCalls(), "sandbox worker-prompt", "the entrypoint's own tk still answering")
+	// The entrypoint's own ticfac is untouched: the guard is the agent's
+	// PATH, not the container's. A guard that denied both would have taken the
+	// prompt with it and this run would never have started.
+	mustContain(t, f.ticfacCalls(), "sandbox worker-prompt", "the entrypoint's own ticfac still answering")
 
 	branch := WorkerBranch(f.epic, f.tick)
 	if paths := f.remoteTickPaths(branch); len(paths) != 0 {

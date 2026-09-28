@@ -12,7 +12,7 @@
  *    convention. The pattern is tick wiy's: the credential is the run's own
  *    gateway token, so the token decides which run is speaking and a container
  *    cannot record a branch on behalf of a run it is not. `entrypoint.sh` and
- *    `worker.sh` call it through `tk cloud branch` at the moment they create a
+ *    `worker.sh` call it through `ticfac cloud branch` at the moment they create a
  *    branch, so the record is written by the substrate rather than asked of an
  *    agent's prompt (`.tick/learnings.md`, tick dxk).
  *  - **A person, about any branch** ({@link branchOwnershipRoute},
