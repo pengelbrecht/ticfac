@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/sandboximage/ (a new case: entrypoint with ticfac absent from PATH)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:52:20Z",
+  "triaged_at": "2026-09-28T10:18:41Z",
+  "triaged_by": "ticfac run epic-6in absorbing 07f",
+  "promoted_as": "07f",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "tdu",
