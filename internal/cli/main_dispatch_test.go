@@ -45,16 +45,10 @@ func TestTheDispatchedRunEpicChildClaimsIntoTheRedirectedRegistry(t *testing.T) 
 	// Assert BEFORE anything is spawned, the same discipline
 	// registry_redirect_test holds: with the redirect lost, failing here
 	// leaves nothing written on the operator's machine. The operator's real
-	// directory is derived the way registrytest.GuardMain derives it — from
-	// runregistry with the redirect briefly unset — rather than spelled here,
-	// so the two cannot drift. Safe outside TestMain because this test is
-	// sequential: this package's t.Parallel tests run only after its
-	// sequential ones are done, so no other test reads the variable while it
-	// is unset.
-	redirected := os.Getenv(runregistry.RegistryDirEnv)
-	os.Unsetenv(runregistry.RegistryDirEnv)
-	operator := runregistry.Dir()
-	os.Setenv(runregistry.RegistryDirEnv, redirected)
+	// directory is named the way registrytest.GuardMain names it — by
+	// runregistry.OperatorDir — rather than spelled here, so the two cannot
+	// drift.
+	operator := runregistry.OperatorDir()
 	dir := runregistry.Dir()
 	if dir == operator {
 		t.Fatalf("runregistry.Dir() is the operator's own %s: the child this test spawns claims a run, and TestMain must point %s away from the operator's home before any test — or any child — runs.",

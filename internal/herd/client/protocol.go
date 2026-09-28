@@ -164,6 +164,12 @@ const (
 	// documented recovery is to send it again, so this code is transient on
 	// a first prompt — see internal/herd/spawn's gate.
 	CodeAgentPromptStalled = "agent_prompt_stalled"
+	// CodeAgentNameTaken means agent.start's name is already held by another
+	// pane's agent. Observed live against herdr 0.9.1 / protocol 22 (epic-6in,
+	// 2026-09-28): the message names the holder's terminal, pane, workspace,
+	// cwd and status as "candidates". It is a rejection, not a race — the
+	// same call fails the same way until the holder is gone.
+	CodeAgentNameTaken = "agent_name_taken"
 )
 
 // Capability names, exactly as herdr spells them in the `capabilities` object

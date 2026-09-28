@@ -78,6 +78,7 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	fs := flag.NewFlagSet("ticfac", flag.ContinueOnError)
 	overviewRepo := fs.String("repo", "", "the checkout whose runs the overview lists (default: cwd)")
 	overviewJSON := fs.Bool("json", false, "print the versioned overview model: one status model per run, attention first")
+	overviewAll := fs.Bool("all", false, "list every run, history included (runs of closed epics, runs a later run superseded, runs finished more than a week ago)")
 	root := &cobra.Command{
 		Use:   "ticfac",
 		Short: "execution and orchestration for ticks",
@@ -116,7 +117,7 @@ inside it, so an agent never parses prose.`,
 			return nil
 		},
 		RunE: func(c *cobra.Command, args []string) error {
-			return codeToErr(overviewCommand(c.Context(), *overviewRepo, *overviewJSON, stdout, stderr))
+			return codeToErr(overviewCommand(c.Context(), *overviewRepo, *overviewJSON, *overviewAll, stdout, stderr))
 		},
 	}
 	root.SetOut(stdout)

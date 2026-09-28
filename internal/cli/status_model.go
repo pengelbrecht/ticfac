@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
@@ -58,12 +59,38 @@ var epicGraph = func(ctx context.Context, repo, epicID string) *tk.Graph {
 	return &graph
 }
 
+var (
+	statusRecordsMu    sync.Mutex
+	statusRecordsLocks = map[string]*sync.Mutex{}
+)
+
+// lockStatusRecords takes the lock for one checkout's run and returns its
+// release.
+func lockStatusRecords(key string) func() {
+	statusRecordsMu.Lock()
+	lock, ok := statusRecordsLocks[key]
+	if !ok {
+		lock = &sync.Mutex{}
+		statusRecordsLocks[key] = lock
+	}
+	statusRecordsMu.Unlock()
+	lock.Lock()
+	return lock.Unlock
+}
+
 // statusRecords reads the run's durable records: through the run-state store
 // (origin — durable means pushed, and the store is the authority every other
 // surface reads) and, where no remote can be fetched, from the run directory
 // the checkout holds. The fallback is a fallback for checkouts without a
 // remote, not a second opinion: what origin says, goes.
 func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
+	// One store fetch at a time per run in a checkout: the store fetches into
+	// a ref private to this PROCESS and run, so two concurrent reads of the
+	// same run here (the overview gathers cloud runs concurrently, and every
+	// cloud run of one epic reads the same epic-<id> records) would race on
+	// that ref's lock and one would come back degraded.
+	unlock := lockStatusRecords(repo + "\x00" + runID)
+	defer unlock()
 	if epicID != "" {
 		store, err := runstate.Open(runstate.Options{Repo: repo, Branch: "epic/" + epicID, RunID: runID})
 		if err == nil {

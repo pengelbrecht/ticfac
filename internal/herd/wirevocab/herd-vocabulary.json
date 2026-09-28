@@ -255,6 +255,7 @@
       "Two members have no Go constant yet (agent_not_ready, unsupported_event_wait_match); they are pinned here so that a future constant lands in the same vocabulary, not beside it."
     ],
     "members": [
+      "agent_name_taken",
       "agent_not_found",
       "agent_not_ready",
       "agent_pane_busy",
@@ -266,6 +267,7 @@
       "workspace_not_found"
     ],
     "client_used": [
+      "agent_name_taken",
       "agent_not_found",
       "agent_pane_busy",
       "agent_prompt_stalled",
@@ -275,6 +277,7 @@
       "workspace_not_found"
     ],
     "notes": {
+      "agent_name_taken": "agent.start's name is already held by another pane's agent; the message lists the holder as candidates (terminal, pane, workspace, cwd, status). A rejection, not a race. Observed live against herdr 0.9.1 / protocol 22 (epic-6in, 2026-09-28). Client constant CodeAgentNameTaken.",
       "agent_not_found": "The agent target does not resolve. Client constant CodeAgentNotFound.",
       "agent_not_ready": "Prompting an agent whose launch is still pending (agent.start answered launch_pending). Documented in herdtest's Config.LaunchPending and internal/herd/spawn's readiness gate: sample agent.get until readiness flips. Observed against herdr 0.8.x; no Go constant yet.",
       "agent_pane_busy": "agent.start's target pane is not at an available shell prompt — notably in the first few hundred ms of a worktree.create'd pane. Transient startup race, not a rejection. Client constant CodeAgentPaneBusy.",

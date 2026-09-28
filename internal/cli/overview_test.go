@@ -218,6 +218,11 @@ func fakeOverviewGraph(t *testing.T) {
 	epicGraph = func(context.Context, string, string) *tk.Graph {
 		return fakeGraph()
 	}
+	// The epic-status seam the history rule reads: every epic open, so no
+	// test that does not ask for history gets any from a tracker binary.
+	realClosed := overviewEpicClosed
+	t.Cleanup(func() { overviewEpicClosed = realClosed })
+	overviewEpicClosed = func(context.Context, string, string) (bool, bool) { return false, true }
 }
 
 // TestTheBareOverviewListsEveryRunAttentionFirst: the bare invocation lists

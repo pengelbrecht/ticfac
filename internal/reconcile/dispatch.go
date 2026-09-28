@@ -3024,12 +3024,15 @@ func (r *Reconciler) attemptWorkHead(marker attemptHandle) string {
 // branch, so the commits stay and the worktree still goes. A teardown that
 // answered "delete it anyway" would be the reconciler taking back the one
 // safety the executor has against a run that thought it was finished.
+//
+// It reports whether the attempt was disposed: a teardown the executor
+// refused is one a later step must try again, never one to take as done.
 func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, marker attemptHandle,
-	reason string, keepBranch bool) {
+	reason string, keepBranch bool) bool {
 
 	if _, err := executor.Cancel(handle); err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the attempt's credential could not be revoked: %v", err)
-		return
+		return false
 	}
 	err := executor.Dispose(handle, subprocess.DisposeOptions{Reason: reason, KeepBranch: keepBranch})
 	if err != nil && !keepBranch && isBranchUnsafe(err) {
@@ -3040,19 +3043,19 @@ func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, m
 		// it, which is the shape the invariant exists to refuse.
 		if _, err := executor.Cancel(handle); err != nil {
 			r.record(marker.TickID, StageCleanedUp, "the attempt's credential could not be revoked: %v", err)
-			return
+			return false
 		}
 		if retry := executor.Dispose(handle, subprocess.DisposeOptions{Reason: reason, KeepBranch: true}); retry != nil {
 			r.record(marker.TickID, StageCleanedUp, "the attempt was not disposed: %v", retry)
-			return
+			return false
 		}
 		r.record(marker.TickID, StageCleanedUp,
 			"%s; the branch is kept because it holds commits %s does not have", reason, r.opts.Remote)
-		return
+		return true
 	}
 	if err != nil {
 		r.record(marker.TickID, StageCleanedUp, "the attempt was not disposed: %v", err)
-		return
+		return false
 	}
 	if keepBranch {
 		// The branch is kept for the commits on it, and the record says WHERE
@@ -3065,17 +3068,18 @@ func (r *Reconciler) tearDown(handle *subprocess.JobHandle, executor Executor, m
 			if remote, err := r.git.remoteHead(branch); err == nil && remote == local {
 				r.record(marker.TickID, StageCleanedUp,
 					"%s; the worktree is gone and the branch is kept, its commits durable on %s", reason, r.opts.Remote)
-				return
+				return true
 			}
 			r.record(marker.TickID, StageCleanedUp,
 				"%s; the worktree is gone and the branch is kept — its commits are only on the local branch %s in "+
 					"this checkout, NOT on %s", reason, branch, r.opts.Remote)
-			return
+			return true
 		}
 		r.record(marker.TickID, StageCleanedUp, "%s; the worktree is gone and the branch is kept for the commits on it", reason)
-		return
+		return true
 	}
 	r.record(marker.TickID, StageCleanedUp, "%s", reason)
+	return true
 }
 
 func isBranchUnsafe(err error) bool {

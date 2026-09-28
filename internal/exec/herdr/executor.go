@@ -101,6 +101,11 @@ type Options struct {
 	// report before it is re-prompted (nudge.go). Zero is DefaultIdleGrace.
 	IdleGrace time.Duration
 
+	// InterruptGrace is how long Dispose waits for an interrupt Cancel
+	// delivered to land before refusing an agent that still reports
+	// `working` (dispose.go). Zero is DefaultInterruptGrace.
+	InterruptGrace time.Duration
+
 	Now func() time.Time
 
 	// ProtocolWarning, when set, receives the client's above-warn protocol
@@ -275,6 +280,15 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	// A6: adopt by stable identity. A fresh attempt is created only when the
 	// previous one is proven settled or never started.
 	if existing, err := st.readAttempt(); err == nil {
+		// A launch herdr REFUSED over a name another pane holds never reached
+		// this attempt's pane, and no prompt was ever submitted to anything:
+		// the attempt never started, which is the one state A6 lets a Start
+		// act on. It is relaunched in its own workspace under its job's own
+		// name — never answered from the other pane's agent, whose liveness
+		// is not this attempt's.
+		if handle, relaunched, err := e.relaunchRefusedLaunch(st, existing, spec); relaunched || err != nil {
+			return handle, err
+		}
 		status := e.statusOf(existing)
 		switch {
 		case status.State == subprocess.StateRunning || status.State == subprocess.StateStarting ||
@@ -339,13 +353,15 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	// one an operator would reasonably close being the one holding the only
 	// copy of the work. The label follows the agent's own name convention
 	// ("tick-<id>-a<n>"), so the workspace and the agent in it read as one
-	// attempt.
+	// attempt — and, like the name, it is the JOB's (jobAgentName): a
+	// repair or resolve job of the same attempt is a workspace of its own.
 	info := e.client.ServerInfo()
+	name := jobAgentName(spec, attempt)
 	created, err := e.client.WorktreeCreate(ctx, client.WorktreeCreateParams{
 		Cwd:    client.Ptr(e.repo),
 		Branch: client.Ptr(branch),
 		Base:   client.Ptr(base),
-		Label:  client.Ptr(agentName(tickOf(spec), attempt)),
+		Label:  client.Ptr(name),
 		Focus:  false,
 	})
 	if err != nil {
@@ -370,7 +386,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		BaseSHA:        base,
 		WorkspaceID:    created.Workspace.WorkspaceID,
 		PaneID:         created.RootPane.PaneID,
-		AgentName:      agentName(tickOf(spec), attempt),
+		AgentName:      name,
 		Worktree:       worktree,
 		State:          dir,
 		Kind:           e.opts.Kind,
@@ -481,6 +497,7 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 		params.StartupTimeout = wait
 	}
 	deadline := e.now().Add(e.opts.StartupTimeout)
+	nameCleared := false
 	for {
 		started, err := e.client.AgentStart(ctx, params)
 		if err == nil {
@@ -492,6 +509,24 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 			// herdr that did not take the startup wait, or one too old
 			// to offer it. Poll readiness.
 			return e.waitInteractiveReady(ctx, st, record)
+		}
+		if client.IsCode(err, client.CodeAgentNameTaken) && !nameCleared {
+			// Once, never a loop: a name that is still taken after its
+			// stale holder was closed is somebody's, and the refusal says so.
+			nameCleared = true
+			adopted, clearErr := e.resolveNameTaken(ctx, st, record, err)
+			if clearErr != nil {
+				return nil, clearErr
+			}
+			if adopted != nil {
+				return adopted, nil
+			}
+			continue
+		}
+		if client.IsCode(err, client.CodeAgentNameTaken) {
+			return nil, refuse(RefusedAgentNameTaken,
+				"herdr agent.start for %s: the name is still taken after its stale holder was closed (%v); "+
+					"the attempt is not launched over it", record.AgentName, err)
 		}
 		if !client.IsCode(err, client.CodeAgentPaneBusy) {
 			return nil, fmt.Errorf("herdr agent.start for %s failed: %w", record.AgentName, err)

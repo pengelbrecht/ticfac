@@ -268,9 +268,11 @@ func (r *Reconciler) carriedUntriaged(tick string) int {
 func triagePointer(epicID string) string {
 	return fmt.Sprintf("Triage with `ticfac triage %s`: every untriaged finding of the run settles there, "+
 		"addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file "+
-		"(a backlog tick with an owner), fixed <commit>, or discard — and a finding routed to another "+
-		"repository keeps its routing: discard it here, or promote it into the repository it targets "+
-		"with `ticfac finding`", epicID)
+		"(a backlog tick with an owner), fixed <commit>, or discard. A finding routed to another "+
+		"repository is not yours to settle and never holds the run: the run disposes of it itself — "+
+		"filed into the target's tracker when .tick/runners.toml allows it ([findings.route.\"owner/name\"] "+
+		"file = true), else a backlog tick here naming the target; `ticfac finding` remains for promoting "+
+		"one into a tick that already exists", epicID)
 }
 
 // gateCloseoutOnFindings is the gate the per-tick hold became (tick aqm): the

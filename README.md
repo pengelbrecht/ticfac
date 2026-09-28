@@ -95,13 +95,16 @@ than maintained beside it:
   not one document and says so.
 - A bare `ticfac` is the overview (2qz): every run this checkout and the
   factory know, attention first — every run held or failed names its reason
-  and the one command that clears it; `--json` emits the versioned overview
-  model, one status model per run. `ticfac --help` remains the place a
+  and the one command that clears it. Runs that need nobody — their epic is
+  closed, a later run of the epic superseded them, or they finished more than
+  a week ago — are one summary line; `--all` lists them, and `--json` emits
+  the versioned overview model with every run, one status model each, the
+  history ones flagged with the reason. `ticfac --help` remains the place a
   person reads the whole tree.
 
 | command | what it does |
 |---|---|
-| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it (`--json`); another project's cloud runs are listed from their own record and feed alone — this repo's records, tracker and PR are never read for them, and their rows name no command |
+| `ticfac` (no arguments) | the overview: every local and cloud run, attention first, every held or failed run with its reason and the one command that clears it, history (closed epics, superseded runs, runs finished over a week ago) collapsed into one line (`--all` lists it, `--json`); another project's cloud runs are listed from their own record and feed alone — this repo's records, tracker and PR are never read for them, and their rows name no command |
 | `ticfac run <epic-id>` | the one command for a local run: start the epic in the background — into herdr panes with the embedded herdr profile set when a live herdr is detected — and attach the live view; run it again to attach to a live run or resume a stopped one, Ctrl-C detaches without stopping the run, and the epic id is accepted everywhere (also spelled `epic-<id>`); with `--cloud` the same verbs, view and triage drive your cloud factory: submit the epic, attach the same live view, run it again to attach to this project's run or resume a finished or frozen one |
 | `ticfac run-epic <epic-id>` | run one epic through the reconciler — the foreground form scripts drive; `ticfac run` is this command, started detached with the defaults decided |
 | `ticfac init` | make this repository ready to run an epic: routing, the guessed gate, the guessed close-out rule — `pr` when origin names a GitHub repository, `none` otherwise; `--closeout` overrides (refuses to overwrite) |

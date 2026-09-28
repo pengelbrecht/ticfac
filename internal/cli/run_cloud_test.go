@@ -336,8 +336,10 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 		"and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings " +
 		"rode here, and this is the one decision point. Triage with `ticfac triage epic1`: every untriaged finding of the " +
 		"run settles there, addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file " +
-		"(a backlog tick with an owner), fixed <commit>, or discard — and a finding routed to another repository keeps its " +
-		"routing: discard it here, or promote it into the repository it targets with `ticfac finding`. Then run the epic " +
+		"(a backlog tick with an owner), fixed <commit>, or discard. A finding routed to another repository is not yours to " +
+		"settle and never holds the run: the run disposes of it itself — filed into the target's tracker when " +
+		".tick/runners.toml allows it ([findings.route.\"owner/name\"] file = true), else a backlog tick here naming the " +
+		"target; `ticfac finding` remains for promoting one into a tick that already exists. Then run the epic " +
 		"again under this run id: the gate has already passed, so the close-out's close is the only step left — and the " +
 		"resume closes each role tick behind its recorded decision, it does not dispatch the job again (tick 80x). The " +
 		"drafts are keys " + triageKey("d34db33f") + " under .ticfac/runs/epic-epic1/findings/ on origin, listed by " +
