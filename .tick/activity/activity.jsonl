@@ -1968,3 +1968,4 @@
 {"ts":"2026-09-28T17:21:14.111942Z","tick":"hn6","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"watch becomes a dashboard: stable rows, pipeline per tick, health verdict, needs-you first","type":"epic"}}
 {"ts":"2026-09-28T17:24:37.087514Z","tick":"lej","action":"create","actor":"peter@engelbrecht.dk","epic":"dm6","data":{"priority":2,"title":"credential-ownership contract: name the GitHub App rung (ticks bundle re-cut, then adopt)","type":"task"}}
 {"ts":"2026-09-28T18:24:22.564316Z","tick":"v7z","action":"note","actor":"ticfac","epic":"6in","data":{"note":"\n2026-09-28 20:24 - ticfac run epic-6in: v7z try 3 (run dispatch #12) merged into epic/6in as 9fda65a3ecb3; the integrated gate (go, ts) passed.","title":"Close out Phase 7: retro and project checkpoint"}}
+{"ts":"2026-09-28T18:24:26.018942Z","tick":"v7z","action":"close","actor":"ticfac","epic":"6in","data":{"title":"Close out Phase 7: retro and project checkpoint"}}
