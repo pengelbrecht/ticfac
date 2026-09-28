@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 46,
-  "state": "collecting",
-  "reason": "collecting dz1 attempt 6",
-  "updated_at": "2026-09-28T08:35:27Z",
+  "sequence": 47,
+  "state": "integrating",
+  "reason": "integrating dz1 attempt 6 into epic/6in",
+  "updated_at": "2026-09-28T08:36:00Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "dz1",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
