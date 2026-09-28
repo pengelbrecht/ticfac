@@ -6,6 +6,9 @@
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
+  "blocked_by": [
+    "bib"
+  ],
   "parent": "6in",
   "role": "review",
   "created_by": "ticfac run epic-6in",
