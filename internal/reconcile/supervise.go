@@ -152,13 +152,8 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // person; that is the case go6 names, and it is this one.
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
-<<<<<<< HEAD
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
-		RefusedBlockedRedispatch:
-=======
-	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
 		RefusedBlockedRedispatch, RefusedRejectedRedispatch:
->>>>>>> 16f6df9ef56170a179ff35bebb2f7a82d25ede2a
 		return true
 	}
 	return waitsOnCI(reason)

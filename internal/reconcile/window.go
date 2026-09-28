@@ -191,18 +191,13 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return false
 		}
 		switch {
-<<<<<<< HEAD
-		case refusal.Reason == RefusedBlockedRedispatch:
+		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch:
 			// The claim the requeued tick carries is the one THIS run took
 			// when it dispatched the attempt that asked: redispatching into it
 			// takes no new claim (dz1), and it is no foreign party's to hold
 			// on (tick 823) — without OwnClaim the window read its own claim
 			// as a live foreign one and held the run on it.
 			entry.Claimed, entry.OwnClaim, entry.StaleClaim, entry.InFlight = true, true, false, false
-=======
-		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch:
-			entry.Claimed, entry.InFlight = true, false
->>>>>>> 16f6df9ef56170a179ff35bebb2f7a82d25ede2a
 			queue = append([]planEntry{entry}, queue...)
 			return true
 		case refusal.Reason == RefusedNeedsHuman && !isRoleJob(entry.Role):
