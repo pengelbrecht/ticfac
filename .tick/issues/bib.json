@@ -2,6 +2,7 @@
   "id": "bib",
   "title": "ticfac sandbox image needs ticfac's source tree, so the container's declared-image check is always skipped",
   "description": "internal/cli/sandbox.go:114-123 resolves the default tk version with sandboximage.PinnedTkVersion(), which walks up from the cwd to a go.mod and reads image/Dockerfile. It does this even under --declared-only. In a worker container there is no ticfac checkout, so the verb exits 1. image/common.sh:1056 swallows the failure (|| declared=\"\"), and check_declared_image never refuses a mismatched image. Reproduced: a repo declaring [sandbox] image, `ticfac sandbox image --declared-only --root \u003crepo\u003e` run from outside the module gives exit 1 'no go.mod above'. Fix: read the pin from the embedded image/ FS, or skip version resolution under --declared-only, and add a test run outside the module root.\n\nticfac run epic-6in filed this backlog tick from the finding b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f (reported by run-epic-6in/tick-tdu/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f.json on the run branch.",
+  "notes": "2026-09-28 12:17 - ticfac run epic-6in: created by absorbing finding b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-6in/tick-tdu/attempt-7",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T10:17:13Z",
-  "updated_at": "2026-09-28T10:17:13Z"
+  "updated_at": "2026-09-28T10:17:22.046818Z"
 }
