@@ -308,8 +308,13 @@ func ReadAttemptWork(stateDir string) (AttemptWork, error) {
 }
 
 // KillLiveProcesses SIGKILLs the process group of every process this attempt's
-// own locks prove is still alive, and waits up to grace for them to be gone.
-// It reports whether anything is still alive when it returns.
+// own locks prove is still alive, and keeps doing so for up to grace until
+// they are gone. It reports whether anything is still alive when it returns.
+//
+// The kill is repeated, not sent once and waited on: a group signal misses a
+// member forked while it is delivered (see killUntilGone), and a missed member
+// keeps the lock held. Every round re-reads the locks, so each signal is sent
+// only to a process group a held lock proves is still this attempt's.
 //
 // It never signals on a saved pid: an attempt whose state has no locks — one
 // started before liveness moved to locks — is left alone, because nothing about
@@ -319,11 +324,11 @@ func ReadAttemptWork(stateDir string) (AttemptWork, error) {
 // may by then be someone else's (tick rmc).
 func KillLiveProcesses(stateDir string, grace time.Duration) (bool, error) {
 	st := newStore(stateDir)
-	if _, err := stopProven(st, func(pgid int, _ func() bool) { _ = signalGroup(pgid, sigKill()) }); err != nil {
-		return true, err
-	}
 	deadline := time.Now().Add(grace)
 	for {
+		if _, err := stopProven(st, func(pgid int, _ func() bool) { _ = groupSignal(pgid, sigKill()) }); err != nil {
+			return true, err
+		}
 		live, err := st.liveLocks()
 		if err != nil {
 			return true, err
