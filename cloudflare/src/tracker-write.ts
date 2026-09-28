@@ -39,6 +39,7 @@
  * a writer, it commits or it says why it could not.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 import { TICK_RECORD_DIR, tickRecordPath } from "./tick-membership";
@@ -264,18 +265,15 @@ export function base64Utf8(text: string): string {
  */
 export function githubTrackerWriter(env: Env): TrackerWriter {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github+json",
     "content-type": "application/json",
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async create(project, path, input): Promise<TrackerWriteResult> {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const url = `${base}/repos/${project}/contents/${path}`;
       const body: Record<string, unknown> = {
         message: input.message,

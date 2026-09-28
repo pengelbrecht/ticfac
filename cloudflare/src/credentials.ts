@@ -66,6 +66,7 @@
  */
 
 import { authorizeRunCredential, type GatewayDenial } from "./gateway";
+import { GITHUB_APP_READ_PERMISSIONS, githubCredentialFor } from "./github-app";
 import type { Env } from "./index";
 
 // ------------------------------------------------------------ the grades ---
@@ -371,14 +372,22 @@ export async function proxyGitRequest(
     });
   }
 
-  const operatorToken = typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "";
+  // The credential behind the door is the rung's, asked for a READ: with the
+  // App rung that is a contents:read token minted for this one repository,
+  // so even the factory's own side of a read-only run cannot write.
+  const credential = await githubCredentialFor(env, project, {
+    permissions: GITHUB_APP_READ_PERMISSIONS,
+    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+  });
+  if (!credential.ok) return refuseGit(request, credential.denial);
+  const operatorToken = credential.token;
   if (operatorToken === "") {
     return refuseGit(request, {
       status: 503,
       error: "github_not_configured",
       detail:
-        "this factory has no GITHUB_TOKEN behind its git door, so it cannot read the " +
-        "repository on a run's behalf; run `ticfac factory setup`",
+        "this factory has no GitHub credential (no GitHub App and no GITHUB_TOKEN) behind its " +
+        "git door, so it cannot read the repository on a run's behalf; run `ticfac factory setup`",
     });
   }
 

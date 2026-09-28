@@ -236,6 +236,12 @@ type GitHub struct {
 	API    string
 	Repo   string
 	Client *http.Client
+	// Refresh, when set, answers the token each call speaks with, falling
+	// back to Token when it cannot (epic dm6). A cloud run on the factory's
+	// GitHub App rung boots with an installation token that dies an hour
+	// later while the run lives up to six, so its forge asks the factory for
+	// the current one instead of holding the first — see FactoryTokenSource.
+	Refresh func(ctx context.Context) (string, error)
 }
 
 // githubHosts are the hosts GitHub's own remotes live on: github.com
@@ -354,7 +360,16 @@ func (g GitHub) api() string {
 // bounded: an error a person reads names what the forge refused, and the
 // refusal a typed close-out refusal carries forward names its cause.
 func (g GitHub) call(ctx context.Context, method, path string, body any, out any) error {
-	if g.Token == "" {
+	token := g.Token
+	if g.Refresh != nil {
+		// A refresh that fails is not the call failing: the token the run
+		// booted with may well still be live, and if it is not, GitHub's own
+		// 401 below says so with the call it refused.
+		if fresh, err := g.Refresh(ctx); err == nil && fresh != "" {
+			token = fresh
+		}
+	}
+	if token == "" {
 		return fmt.Errorf("the GitHub surface has no token: set %s, or gh auth login", TokenEnv)
 	}
 	if g.Repo == "" {
@@ -373,7 +388,7 @@ func (g GitHub) call(ctx context.Context, method, path string, body any, out any
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("Authorization", "Bearer "+g.Token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "ticfac")
 	if body != nil {

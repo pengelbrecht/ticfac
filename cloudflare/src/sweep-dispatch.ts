@@ -52,6 +52,7 @@
  */
 
 import { getEnrolledProject, insertSweepSelection, listEnrolledProjects } from "./db";
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL, repoRefs } from "./progress";
 import { repoConfig } from "./repo-config";
@@ -112,17 +113,17 @@ export function tickIndexReader(env: Env): TickIndexReader {
   return injected === undefined || injected === null ? githubTickIndex(env) : injected;
 }
 
-function githubHeaders(env: Env, accept: string): Record<string, string> {
-  const headers: Record<string, string> = {
+async function githubHeaders(
+  env: Env,
+  project: string,
+  accept: string,
+): Promise<Record<string, string>> {
+  return {
     accept,
     // GitHub rejects an API request with no user agent outright.
     "user-agent": "ticks-factory",
+    ...(await githubAuthorization(env, project)),
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
-  return headers;
 }
 
 /**
@@ -140,7 +141,7 @@ export function githubTickIndex(env: Env): TickIndexReader {
       const query = ref === "" ? "" : `?ref=${encodeURIComponent(ref)}`;
       const url = `${base}/repos/${project}/contents/${TICK_RECORD_DIR}${query}`;
       const response = await fetch(url, {
-        headers: githubHeaders(env, "application/vnd.github+json"),
+        headers: await githubHeaders(env, project, "application/vnd.github+json"),
       });
       if (response.status === 404) return [];
       if (!response.ok) {
@@ -259,7 +260,7 @@ export function githubSweepBase(env: Env): SweepBaseReader {
   return {
     async head(project: string): Promise<SweepBase> {
       const response = await fetch(`${base}/repos/${project}`, {
-        headers: githubHeaders(env, "application/vnd.github+json"),
+        headers: await githubHeaders(env, project, "application/vnd.github+json"),
       });
       if (!response.ok) {
         throw new Error(`GitHub answered HTTP ${response.status} for the repository ${project}`);

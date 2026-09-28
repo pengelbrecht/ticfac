@@ -97,6 +97,7 @@ import { carriesLabel, consentLabel, labelNames } from "./consent";
 import { credentialGrade, gradeMayWrite } from "./credentials";
 import { getEnrolledProject } from "./db";
 import { authorizeRunCredential, type GatewayDenial } from "./gateway";
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 import { type RunSubmission, submitRun } from "./runs";
@@ -1031,18 +1032,18 @@ export function githubReviewCommenter(env: Env): ReviewCommenter {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
   return {
     async comment(project: string, number: number, body: string): Promise<{ id: string }> {
-      const token = typeof env.GITHUB_TOKEN === "string" ? env.GITHUB_TOKEN.trim() : "";
-      if (token === "") {
+      const auth = await githubAuthorization(env, project);
+      if (auth.authorization === undefined) {
         throw new Error(
-          "this factory holds no GITHUB_TOKEN, so it cannot post a review comment; run " +
-            "`ticfac factory setup`",
+          "this factory holds no GitHub credential (no GitHub App and no GITHUB_TOKEN), so it " +
+            "cannot post a review comment; run `ticfac factory setup`",
         );
       }
       const response = await fetch(`${base}/repos/${project}/issues/${number}/comments`, {
         method: "POST",
         headers: {
           accept: "application/vnd.github+json",
-          authorization: `Bearer ${token}`,
+          authorization: auth.authorization,
           "content-type": "application/json",
           // GitHub rejects an API request with no user agent outright.
           "user-agent": "ticks-factory",

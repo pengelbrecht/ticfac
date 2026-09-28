@@ -69,6 +69,7 @@ import { CHECK_RUN_EVENT, checkRunWebhookRoute } from "./ci-webhook";
 import { carriesLabel, consentLabel, DEFAULT_CONSENT_LABEL, labelNames } from "./consent";
 import { getEnrolledProject } from "./db";
 import { announceDraft } from "./drafts";
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { ingestPullRequestEvent, PULL_REQUEST_EVENT } from "./pr-review";
 import { GITHUB_API_BASE_URL } from "./progress";
@@ -552,18 +553,15 @@ export function issueLabels(env: Env): IssueLabelReader {
  */
 export function githubIssueLabels(env: Env): IssueLabelReader {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github+json",
     // GitHub rejects an API request with no user agent outright.
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async current(project: string, number: number): Promise<string[] | null> {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const names: string[] = [];
       for (let page = 1; page <= MAX_LABEL_PAGES; page++) {
         const url =

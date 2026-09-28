@@ -194,6 +194,38 @@ export const SANDBOX_DISPATCH_PREFIX = "/api/sandbox";
 export const BRANCH_CLAIM_PREFIX = "/api/branches";
 
 /**
+ * The GitHub token door (epic dm6), exempt for the same reason as the doors
+ * above: its caller is a write-grade container holding its run's own token,
+ * never the operator's. It hands back a fresh installation token for the
+ * run's own repository — installation tokens live an hour and a run lives up
+ * to six — so the run token, not anything in the request, decides which
+ * repository.
+ *
+ * Declared here rather than imported from src/github-app.ts because this
+ * module deliberately imports nothing (see {@link isAuthExempt}); the two
+ * spellings are pinned together by a test.
+ */
+export const GITHUB_TOKEN_DOOR = "/api/github/token";
+
+/**
+ * The GitHub App manifest flow's browser pages (epic dm6): the page that posts
+ * the manifest to GitHub, the callback GitHub returns the code to, and the
+ * page GitHub shows after an install. Exempt because their caller is the
+ * operator's BROWSER, on any device, which carries no factory token; the
+ * one-time state `ticfac factory setup` minted is the capability, and the
+ * callback consumes it.
+ *
+ * Declared here rather than imported from src/github-app.ts because this
+ * module deliberately imports nothing (see {@link isAuthExempt}); the
+ * spellings are pinned together by a test.
+ */
+export const GITHUB_APP_FLOW_PAGES = [
+  "/github/app/start",
+  "/github/app/callback",
+  "/github/app/installed",
+] as const;
+
+/**
  * The phone page (ticfac tick i1r): `/status` and its install assets.
  *
  * Exempt from the FACTORY bearer token, and not unauthenticated: the page
@@ -385,6 +417,8 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === GIT_PREFIX || pathname.startsWith(`${GIT_PREFIX}/`)) return true;
   if (pathname === REVIEW_PREFIX) return true;
   if (pathname === BRANCH_CLAIM_PREFIX) return true;
+  if (pathname === GITHUB_TOKEN_DOOR) return true;
+  if ((GITHUB_APP_FLOW_PAGES as readonly string[]).includes(pathname)) return true;
   if (pathname === STATUS_PAGE_PATH || pathname.startsWith(`${STATUS_PAGE_PATH}/`)) return true;
   return pathname === WEBHOOK_PREFIX || pathname.startsWith(`${WEBHOOK_PREFIX}/`);
 }

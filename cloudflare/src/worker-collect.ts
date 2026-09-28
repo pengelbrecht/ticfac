@@ -27,6 +27,7 @@
  * dyo's guarantee is only half the cloud.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 
 // ------------------------------------------------------------- the verdict ---
@@ -220,16 +221,22 @@ export function workerCollector(env: Env, project: string): WorkerCollector {
 
 export const GITHUB_API_BASE_URL = "https://api.github.com";
 
-function githubHeaders(env: Env): Record<string, string> {
-  const headers: Record<string, string> = {
-    accept: "application/vnd.github+json",
-    "user-agent": "ticks-factory",
-  };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
+async function githubHeaders(
+  env: Env,
+  project: string,
+): Promise<{ ok: true; headers: Record<string, string> } | { ok: false; detail: string }> {
+  try {
+    return {
+      ok: true,
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "ticks-factory",
+        ...(await githubAuthorization(env, project)),
+      },
+    };
+  } catch (error) {
+    return { ok: false, detail: String((error as Error).message ?? error) };
   }
-  return headers;
 }
 
 function apiBase(env: Env): string {
@@ -262,7 +269,9 @@ async function compareBranch(
   const url =
     `${apiBase(env)}/repos/${project}/compare/` +
     `${encodeURIComponent(base)}...${encodeURIComponent(branch)}`;
-  const response = await fetch(url, { headers: githubHeaders(env) });
+  const auth = await githubHeaders(env, project);
+  if (!auth.ok) return { ok: false, missing: false, detail: auth.detail };
+  const response = await fetch(url, { headers: auth.headers });
   if (response.status === 404) return { ok: false, missing: true };
   if (!response.ok) {
     return {
@@ -301,7 +310,9 @@ async function readFileAt(
   path: string,
 ): Promise<ContentsResult> {
   const url = `${apiBase(env)}/repos/${project}/contents/${path}?ref=${encodeURIComponent(ref)}`;
-  const response = await fetch(url, { headers: githubHeaders(env) });
+  const auth = await githubHeaders(env, project);
+  if (!auth.ok) return { ok: false, missing: false, detail: auth.detail };
+  const response = await fetch(url, { headers: auth.headers });
   if (response.status === 404) return { ok: false, missing: true };
   if (!response.ok) {
     return {

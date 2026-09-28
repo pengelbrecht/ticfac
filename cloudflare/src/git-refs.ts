@@ -30,6 +30,7 @@
  * push nobody tests.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 
 export const GITHUB_API_BASE_URL = "https://api.github.com";
@@ -68,16 +69,12 @@ function apiBase(env: Env): string {
   return (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
 }
 
-function headers(env: Env): Record<string, string> {
-  const out: Record<string, string> = {
+async function headers(env: Env, project: string): Promise<Record<string, string>> {
+  return {
     accept: "application/vnd.github+json",
     "user-agent": "ticks-factory",
+    ...(await githubAuthorization(env, project)),
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    out.authorization = `Bearer ${token.trim()}`;
-  }
-  return out;
 }
 
 type RefRead = { ok: true; sha: string } | { ok: false; missing: boolean; detail: string };
@@ -85,7 +82,7 @@ type RefRead = { ok: true; sha: string } | { ok: false; missing: boolean; detail
 /** GET /git/ref/heads/<branch> — the branch's head, or its absence. */
 async function readBranchHead(env: Env, project: string, branch: string): Promise<RefRead> {
   const url = `${apiBase(env)}/repos/${project}/git/ref/${encodeURIComponent(`heads/${branch}`)}`;
-  const response = await fetch(url, { headers: headers(env) });
+  const response = await fetch(url, { headers: await headers(env, project) });
   if (response.status === 404)
     return { ok: false, missing: true, detail: `${branch} is not on origin` };
   if (!response.ok) {
@@ -106,9 +103,15 @@ type RefCreate = { ok: true } | { ok: false; exists: boolean; detail: string };
 
 /** POST /git/refs — create the ref at a head, once. */
 async function createRef(env: Env, project: string, ref: string, sha: string): Promise<RefCreate> {
+  let auth: Record<string, string>;
+  try {
+    auth = await headers(env, project);
+  } catch (error) {
+    return { ok: false, exists: false, detail: String((error as Error).message ?? error) };
+  }
   const response = await fetch(`${apiBase(env)}/repos/${project}/git/refs`, {
     method: "POST",
-    headers: { ...headers(env), "content-type": "application/json" },
+    headers: { ...auth, "content-type": "application/json" },
     body: JSON.stringify({ ref, sha }),
   });
   if (response.ok) return { ok: true };
@@ -121,11 +124,17 @@ type RefUpdate = { ok: true } | { ok: false; detail: string };
 /** PATCH /git/refs/heads/<branch> — advance the ref, fast-forward only. */
 async function updateRef(env: Env, project: string, ref: string, sha: string): Promise<RefUpdate> {
   const branch = writeRefBranch(ref);
+  let auth: Record<string, string>;
+  try {
+    auth = await headers(env, project);
+  } catch (error) {
+    return { ok: false, detail: String((error as Error).message ?? error) };
+  }
   const response = await fetch(
     `${apiBase(env)}/repos/${project}/git/refs/${encodeURIComponent(`heads/${branch}`)}`,
     {
       method: "PATCH",
-      headers: { ...headers(env), "content-type": "application/json" },
+      headers: { ...auth, "content-type": "application/json" },
       // force is the whole rule: absent means fast-forward only, and a
       // refusal here is reported rather than forced over.
       body: JSON.stringify({ sha, force: false }),
