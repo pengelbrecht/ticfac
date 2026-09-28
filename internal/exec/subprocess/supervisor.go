@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -235,6 +234,7 @@ func Supervise(stateDir string) error {
 		}
 		// The supervisor's own copy goes: the runner's copy is the same open file
 		// description, and it is the runner's life the lock now describes.
+		runnerLockPath := runnerLock.Name()
 		runnerLock.Close()
 		if err := atomicWrite(st.path(fileRunnerPID), []byte(strconv.Itoa(runnerPID)+"\n"), 0o644); err != nil {
 			note("the runner pid file could not be written (%v); cancel reaches this runner through its "+
@@ -242,32 +242,19 @@ func Supervise(stateDir string) error {
 		}
 		started(runnerPID)
 
-		// reaped is the one liveness question about the runner no pid reuse can
-		// fake: until Wait has reaped it, its pid — and so its process group id —
-		// cannot be handed to anybody else, which is what makes stopTree's
-		// signals below this supervisor's own child's and nobody else's.
-		var reaped atomic.Bool
-		runnerAlive := func() bool { return !reaped.Load() }
-
-		waited := make(chan int, 1)
-		go func() {
-			err := runner.Wait()
-			reaped.Store(true)
-			code := 0
-			if err != nil {
-				code = 1
-				var exitErr *exec.ExitError
-				if ok := asExitError(err, &exitErr); ok {
-					code = exitErr.ExitCode()
-				}
-			}
-			waited <- code
-		}()
+		// The runner is alive, for a stop, while it runs or while something it
+		// started still holds its lock — and its exit is observed WITHOUT
+		// reaping it, so that until this loop collects the exit code below its
+		// pid, and so its process group id, cannot be handed to anybody else.
+		// That is what makes stopTree's signals this supervisor's own child's
+		// and nobody else's, even after the runner itself is gone (exitwait.go).
+		life := watchRunner(runner, runnerLockPath)
+		runnerAlive := life.alive
 
 		for {
 			select {
-			case code := <-waited:
-				return code, false, nil
+			case <-life.exitedCh:
+				return life.code(), false, nil
 
 			case <-ticker.C:
 				switch outcome := push.maybePush(st.credentialLive()); outcome {
@@ -452,9 +439,10 @@ func (r *attemptRecord) canPush() bool {
 // asked before every signal rather than kill(pid, 0) (tick rmc): a process
 // that exits during the grace period frees its number, and on a host measured
 // reusing ~700 pids a second the KILL that follows could otherwise land on
-// whoever was handed it. The supervisor answers it with "my runner has not
-// been reaped", which no reuse can fake; cancel answers it with the process's
-// own lock.
+// whoever was handed it. The supervisor answers it with "my runner is running,
+// or its lock is still held while I have not reaped it" — an unreaped runner's
+// pid, and so its group id, cannot be reused (exitwait.go); cancel answers it
+// with the process's own lock.
 //
 // The KILL is not sent once: it is sent again for as long as alive says the
 // group is still there (see killUntilGone for why one is not enough).
