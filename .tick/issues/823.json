@@ -3,7 +3,7 @@
   "title": "A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)",
   "description": "Since dz1 (5e493a2f) the run counts every in_flight_ids claim it did not make as foreign, so a re-run of an epic under a new run id refuses with claim_width on the claim the stopped first run left on a1 and never dispatches it. TestARunUnderANewRunIDIsOfferedThePreviousRunsReports fails deterministically on epic/6in (CI runs 36398581837, 36400030743; 3/3 locally) and passes at 28385b75/5d151d7b and on main; it is EndToEnd, so the -short gate never ran it. Fold with 08e5bcc0 (dispatch over a foreign claim with room): one tick owns telling a live foreign claim from a stopped run's, and the full reconcile suite is its evidence.\n\nticfac run epic-6in created this tick by absorbing the finding e8409b05fe6d5d4e71b0cb6a9e7e4493de055e74317271f78b194f6d24d38b8c (reported by run-epic-6in/tick-v7z/attempt-8): the finding was judged against the epic's definition of done and its reporter claims it breaks the build or CI, which gates any epic's done, prose or not. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-6in/absorptions/e8409b05fe6d5d4e71b0cb6a9e7e4493de055e74317271f78b194f6d24d38b8c.json on the run branch.",
   "notes": "2026-09-28 12:18 - ticfac run epic-6in: created by absorbing finding e8409b05fe6d5d4e71b0cb6a9e7e4493de055e74317271f78b194f6d24d38b8c — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-6in/absorptions/e8409b05fe6d5d4e71b0cb6a9e7e4493de055e74317271f78b194f6d24d38b8c.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so no item can be pointed at — but the reporter claims this finding breaks the build or CI (\"A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)\"), and a red build fails every definition of done, prose or not: it is a gating defect, absorbed into the running epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-epic-6in/tick-v7z/attempt-8",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T10:18:23Z",
-  "updated_at": "2026-09-28T10:18:30.292266Z"
+  "updated_at": "2026-09-28T10:18:57.255669Z",
+  "started_at": "2026-09-28T10:18:57.255669Z"
 }
