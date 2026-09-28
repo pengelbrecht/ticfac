@@ -92,7 +92,7 @@ func TestAnIntegratedAttemptWhoseHeadVanishedIsRefusedNotCollected(t *testing.T)
 	releasedRef, releasedHead := releaseCarryingA1(t, f)
 
 	blocked := fakeRunnerArgv(t, "a1-adds-nothing")
-	blocked = append([]string{blocked[0], "FAKE_RUNNER_STATUS=BLOCKED"}, blocked[1:]...)
+	blocked = append([]string{blocked[0], "FAKE_RUNNER_A1_STATUS=BLOCKED"}, blocked[1:]...)
 	f.Runner = blocked
 	_, refused, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {

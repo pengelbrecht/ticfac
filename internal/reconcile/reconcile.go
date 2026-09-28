@@ -391,6 +391,13 @@ type Dispatch struct {
 	// are — and for one more: a dispatch conflict that runs the gather twice
 	// must not carry a stale record on a marker that reaches origin.
 	PriorSnapshots []subprocess.PriorSnapshot
+
+	// Escalation is the earlier attempt of this tick that stopped to ask
+	// (tick tyd) — its question, its report, and whether this dispatch is at
+	// the tier ceiling and so decides under the standing orders. Re-derived
+	// at every dispatch like the prior reports: the report path is a host
+	// path, and nothing here reaches the marker.
+	Escalation *subprocess.Escalation
 }
 
 // carriedWork is a released attempt whose WORK the next dispatch of its tick
@@ -2351,6 +2358,12 @@ const (
 	// the same question. It is distinct from RefusedRoleAnswer because a role
 	// job's answer IS its deliverable, while this one arrives beside a branch
 	// somebody now has to decide about.
+	//
+	// Since tick tyd it is the LAST rung, not the first: a question is first
+	// dispatched one tier up, then at the ceiling decided under the standing
+	// orders (blocked.go). Only an always-ask question, or one that came back
+	// from the worker told to decide it, is refused this way — and it holds
+	// only its own tick: the window keeps working the ticks not behind it.
 	RefusedNeedsHuman = "attempt_needs_human"
 
 	// The one the TIER derivation adds (tick 5eq): a tick carries a tier

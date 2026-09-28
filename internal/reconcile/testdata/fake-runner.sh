@@ -504,8 +504,12 @@ a1-adds-nothing)
 	# work, finds the work already done, and correctly adds nothing — a
 	# report over an empty branch. Every other tick does its work, so the
 	# run's only question is what the carried attempt delivers.
+	# FAKE_RUNNER_A1_STATUS is a1's status alone (tick tyd): a question a
+	# person must answer is a1's here, and the other ticks keep going.
 	if [ "$TICFAC_TICK" != "a1" ]; then
 		commit
+	else
+		status="${FAKE_RUNNER_A1_STATUS:-$status}"
 	fi
 	report
 	;;
@@ -713,6 +717,42 @@ blocked-first)
 		report
 	else
 		commit
+		report
+	fi
+	;;
+ask)
+	# A worker that stops to ask (tick tyd): a1 (or $FAKE_RUNNER_ASK_TICK)
+	# commits and answers BLOCKED with $FAKE_RUNNER_QUESTION until its prompt
+	# answers it — at once when it
+	# is re-dispatched with the question (FAKE_RUNNER_ASK_UNTIL=escalated), or
+	# only once the prompt tells it to decide under the STANDING ORDERS (the
+	# default, "decide"; "never" asks every time). A worker that decides logs
+	# the decision under a Decisions heading, as the prompt asks. Other ticks
+	# behave like the plain report mode. The prompt arrives as $1.
+	prompt="${1:-}"
+	until="${FAKE_RUNNER_ASK_UNTIL:-decide}"
+	answered=no
+	if printf '%s' "$prompt" | grep -q "An earlier attempt stopped to ask"; then
+		if [ "$until" = "escalated" ]; then
+			answered=yes
+		elif [ "$until" = "decide" ] && printf '%s' "$prompt" | grep -q "STANDING ORDERS"; then
+			answered=yes
+		fi
+	fi
+	commit
+	if [ "$TICFAC_TICK" != "${FAKE_RUNNER_ASK_TICK:-a1}" ]; then
+		report
+	elif [ "$answered" = "yes" ]; then
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '## Decisions\n\n'
+			printf -- '- question: %s; choice: the first option; reason: the standing orders delegate it; class: naming\n\n' "${FAKE_RUNNER_QUESTION:-}"
+			verdict_line
+			printf 'STATUS: DONE\n'
+		} > "$TICFAC_RESULT_PATH"
+	else
+		status="BLOCKED — ${FAKE_RUNNER_QUESTION:-a question}"
 		report
 	fi
 	;;

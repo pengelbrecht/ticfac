@@ -135,6 +135,73 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	// incarnation and adopted, collected and closed by the next.
 	stopped := false
 
+	// parked are the ticks whose worker's question HOLDS for a person (tick
+	// tyd): an always-ask question, or one asked again after the run told the
+	// worker to decide it. Unlike every other refusal a held question stops
+	// only its own tick. Nothing it did reached the integration branch — the
+	// question is answered before anything merges — so the tree every other
+	// tick gates on is the tree the refusal says nothing about, and the run
+	// keeps working every tick that does not wait behind the held one. It
+	// ends held once nothing else is left to do.
+	parked := map[string]*Refusal{}
+	var parkOrder []string
+	park := func(tick string, refusal *Refusal) {
+		if _, already := parked[tick]; already {
+			return
+		}
+		parked[tick] = refusal
+		parkOrder = append(parkOrder, tick)
+		failed = append(failed, tick)
+		r.setTick(tick, refusedTickState(refusal))
+		r.record(tick, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+	}
+	// behindParked says a queued entry cannot run while a question holds: the
+	// held tick itself (a replan re-adds it), a tick sequenced behind it or
+	// behind one already dropped for it, and the role jobs, which run over the
+	// whole epic.
+	waiting := map[string]bool{}
+	behindParked := func(entry planEntry) bool {
+		if len(parked) == 0 {
+			return false
+		}
+		if _, held := parked[entry.TickID]; held || waiting[entry.TickID] || isRoleJob(entry.Role) {
+			return true
+		}
+		for _, blocker := range entry.BlockedBy {
+			if _, held := parked[blocker]; held || waiting[blocker] {
+				return true
+			}
+		}
+		return false
+	}
+	endHeld := func() ([]string, error) {
+		refusal := parked[parkOrder[0]]
+		r.failure = refusal
+		if _, err := r.checkpoint(runstate.StateFailed, refusal.Error()); err != nil {
+			return nil, err
+		}
+		return failed, nil
+	}
+	// again answers a finish or an admission that refused with a question the
+	// run answers itself: dispatched again (escalate or decide) is a requeue
+	// of the tick at the head of the queue, and a hold is a park.
+	again := func(entry planEntry, err error) bool {
+		var refusal *Refusal
+		if !asRefusal(err, &refusal) || refusal.TickID != entry.TickID {
+			return false
+		}
+		switch {
+		case refusal.Reason == RefusedBlockedRedispatch:
+			entry.Claimed, entry.InFlight = true, false
+			queue = append([]planEntry{entry}, queue...)
+			return true
+		case refusal.Reason == RefusedNeedsHuman && !isRoleJob(entry.Role):
+			park(entry.TickID, refusal)
+			return true
+		}
+		return false
+	}
+
 	reject := func(tick string, refusal *Refusal) error {
 		failed = append(failed, tick)
 		r.failure = refusal
@@ -180,7 +247,20 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return nil, err
 		}
 
-		for !stopped && len(queue) > 0 && r.mayAdmit(queue[0], &window, plan) {
+		for !stopped && len(queue) > 0 {
+			if behindParked(queue[0]) {
+				entry := queue[0]
+				queue = queue[1:]
+				if _, held := parked[entry.TickID]; !held && !waiting[entry.TickID] {
+					waiting[entry.TickID] = true
+					r.record(entry.TickID, StageWaitsBehindHeld,
+						"not dispatched: it waits behind the question held on %s", strings.Join(parkOrder, ", "))
+				}
+				continue
+			}
+			if !r.mayAdmit(queue[0], &window, plan) {
+				break
+			}
 			entry := queue[0]
 			queue = queue[1:]
 			fl, err := r.admit(ctx, entry)
@@ -196,6 +276,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 					if err == nil {
 						continue
 					}
+				}
+				if again(entry, err) {
+					continue
 				}
 				var refusal *Refusal
 				if !asRefusal(err, &refusal) {
@@ -241,6 +324,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			done, err := r.advanceFinish(ctx, f)
 			if err != nil {
 				window.finish = nil
+				if again(f.fl.entry, err) {
+					continue
+				}
 				return stop(f.fl.entry.TickID, err)
 			}
 			if done {
@@ -272,6 +358,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		if len(window.live) == 0 {
 			holders := window.holders()
 			if len(queue) == 0 && len(holders) == 0 {
+				if len(parkOrder) > 0 {
+					return endHeld()
+				}
 				return failed, nil
 			}
 			// Nothing to poll, and something still to do: a finish mid-gate

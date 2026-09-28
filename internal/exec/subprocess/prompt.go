@@ -77,6 +77,10 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	// to merge. Empty for a first attempt, like the reports section.
 	b.WriteString(PriorSnapshotsSection(record.PriorSnapshots))
 
+	// The earlier attempt that stopped to ask (tick tyd): its question, and
+	// the instruction to decide and proceed rather than ask again.
+	b.WriteString(EscalationSection(record.Escalation))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "It is also in your environment as $TICFAC_RESULT_PATH. Write it there whatever your\n")
