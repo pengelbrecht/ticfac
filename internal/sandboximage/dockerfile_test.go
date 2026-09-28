@@ -77,6 +77,33 @@ func readDockerfile(t *testing.T) string {
 	return string(b)
 }
 
+// The pin must answer wherever the binary runs, not only from a checkout:
+// `ticfac sandbox image` reads it in worker containers, where no ticfac
+// module root sits above the cwd for [Dir]'s walk to find. PinnedTkVersion
+// therefore reads the EMBEDDED image context, which is the pin the shipped
+// binary was built with — and this is the reproduction shape of tick bib: a
+// cwd outside the module, which used to fail with "no go.mod above".
+//
+// short: reads the embedded FS and the tree; no process runs
+func TestPinnedTkVersionAnswersOutsideTheModule(t *testing.T) {
+	// The tree's own ARG is read FIRST, while the cwd is still the module —
+	// readDockerfile walks up from the cwd, exactly the walk that has
+	// nothing to find once the cwd moves outside.
+	want := tkVersionArg.FindStringSubmatch(readDockerfile(t))
+	if want == nil {
+		t.Fatal("the Dockerfile declares no ARG TK_VERSION")
+	}
+
+	t.Chdir(t.TempDir())
+	version, err := PinnedTkVersion()
+	if err != nil {
+		t.Fatalf("PinnedTkVersion outside the module: %v", err)
+	}
+	if version != string(want[1]) {
+		t.Errorf("PinnedTkVersion() = %q outside the module, want the tree's pin %q", version, want[1])
+	}
+}
+
 // The image must build the same bytes tomorrow: every base image carries a
 // digest, and every download carries a version and a checksum.
 //
@@ -329,7 +356,7 @@ func TestRequiredTkCommandsCoverTheEntrypoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EntrypointTkCommands: %v", err)
 	}
-	for _, want := range []string{"sandbox environment", "sandbox setup", "version"} {
+	for _, want := range []string{"answer", "list", "version"} {
 		found := false
 		for _, c := range commands {
 			if c == want {
@@ -338,6 +365,16 @@ func TestRequiredTkCommandsCoverTheEntrypoint(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("the entrypoint runs `tk %s` but the scanner did not see it: %q", want, commands)
+		}
+	}
+	// The reverse guard (tick 46x): the sandbox verbs and the branch write
+	// moved to ticfac, so a tk entry here would gate the image build on a
+	// subcommand the tracker-only tk no longer has.
+	for _, gone := range []string{"sandbox environment", "sandbox setup", "sandbox model", "sandbox image", "sandbox toolchain", "sandbox substrate", "sandbox worker-prompt", "cloud branch"} {
+		for _, c := range commands {
+			if c == gone {
+				t.Errorf("the entrypoint still runs `tk %s`, which ticks no longer has: %q", gone, commands)
+			}
 		}
 	}
 }

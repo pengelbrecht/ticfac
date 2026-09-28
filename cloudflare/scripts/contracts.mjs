@@ -181,7 +181,7 @@ export function verifyBundle(contractsDir, pin) {
         `  contracts/${BUNDLE_FILE} is ${bundle.version}\n` +
         `  contracts.pin.json "bundleVersion" is ${pin.bundleVersion}\n\n` +
         "This package is pinned to a bundle version it is not being tested against. If\n" +
-        "ticks cut a new bundle, read contracts/CHANGELOG.md, make the TypeScript side\n" +
+        "ticfac re-cuts the bundle, read contracts/CHANGELOG.md, make the TypeScript side\n" +
         "follow whatever the entry says changed, and then move the pin — moving the pin\n" +
         "first is adopting a contract change without reading it.",
     );
@@ -247,8 +247,8 @@ export function verifyBundle(contractsDir, pin) {
         problems.map((line) => `  ${line}`).join("\n") +
         "\n\nA contract changed without the bundle being re-cut, so the version no longer\n" +
         'names the bytes it claims to. Bump "version" in contracts/bundle.json, add the\n' +
-        "contracts/CHANGELOG.md entry, run `make contracts-bundle` in the ticks repository,\n" +
-        'and move "bundleVersion" here in the same commit.',
+        'contracts/CHANGELOG.md entry, and move "bundleVersion" here in the same\n' +
+        "commit.",
     );
   }
 
@@ -289,8 +289,8 @@ export function verifyBundle(contractsDir, pin) {
       `${bundlePath}: version ${bundle.version} has no "version_digests" entry.\n` +
         "Every cut version records the digest of its own digests map, so that re-cutting\n" +
         "one at an unchanged version is visible to a consumer pinned by exact value.\n" +
-        "Run `make contracts-bundle` in the ticks repository — it adds the entry for a\n" +
-        "version it has not cut before, and never rewrites one it has.",
+        "Cut a version the ledger has not recorded before, and never rewrite one it\n" +
+        "has.",
     );
   }
   const canonical =
@@ -308,8 +308,8 @@ export function verifyBundle(contractsDir, pin) {
         'A fixture changed and the manifest was re-cut WITHOUT bumping "version". The\n' +
         "per-file digests agree again, so nothing else can see it — and this package,\n" +
         "which pins the version by exact value, could not see it at all. That is the one\n" +
-        "drift the version exists to make loud. In the ticks repository: bump `version`,\n" +
-        "add the contracts/CHANGELOG.md entry, re-run `make contracts-bundle`, and move\n" +
+        "drift the version exists to make loud. Bump `version` in contracts/bundle.json,\n" +
+        "add the contracts/CHANGELOG.md entry, refresh the digests, and move\n" +
         '"bundleVersion" here in the same commit. If the re-cut was a mistake, revert it.',
     );
   }
@@ -515,9 +515,10 @@ function checkDigests(pin) {
         problems.map((line) => `  ${line}`).join("\n") +
         "\n\nThe vendored copy is not editable. It is a copy of what ticks published,\n" +
         "and the digests are what makes an edit to this side detectable at all.\n" +
-        'If ticks changed the contract, bump "ref" and run `pnpm contracts:sync`.\n' +
-        "If you changed it here, revert — the change belongs in the ticks repository,\n" +
-        "where the Go readers that also assert against it live.",
+        "A contract was changed without the bundle being re-cut. If it is a ticfac-owned\n" +
+        "one, bump the version and add the CHANGELOG entry in the same commit; if it is\n" +
+        "one of the two ticks-owned files, move the root contracts.pin.json and run\n" +
+        "`go run ./cmd/contracts sync` rather than editing here.",
     );
   }
 }

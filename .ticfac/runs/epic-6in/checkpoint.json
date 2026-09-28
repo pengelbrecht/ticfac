@@ -1,0 +1,75 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-6in",
+  "epic_id": "6in",
+  "sequence": 149,
+  "state": "running",
+  "reason": "rzi is closed",
+  "updated_at": "2026-09-28T19:31:06Z",
+  "ticks": [
+    {
+      "tick_id": "060",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "46x",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "4i8",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "dz1",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "tdu",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "v7z",
+      "state": "closed",
+      "attempt": 12
+    },
+    {
+      "tick_id": "823",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "bib",
+      "state": "closed",
+      "attempt": 13
+    },
+    {
+      "tick_id": "rzi",
+      "state": "closed",
+      "attempt": 14
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "08f8fbc7d084e89eae0c5497734fc67d18f3b1d9",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:2902a74b05a0d18d64b28bd8555ce256270f9fb7954b335b943363d32f8af173",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

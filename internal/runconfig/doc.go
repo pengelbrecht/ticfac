@@ -1,8 +1,9 @@
 // Package config is ticfac's reader for the EXECUTION half of
-// `.tick/runners.toml` — the per-repo run configuration whose format is
-// published by ticks (skills/ticks/references/runners-config.md and its JSON
-// Schema) and whose rules are pinned in this repository through the vendored
-// contract bundle (contracts/runners-config-contract.json).
+// `.tick/runners.toml` — the per-repo run configuration whose authoring
+// reference this package owns (runners-config.md and its JSON Schema, beside
+// this file, taken over from ticks when it became tracker-only) and whose
+// rules are pinned through the contract bundle ticfac authors
+// (contracts/runners-config-contract.json).
 //
 // # The split this package is
 //

@@ -1,0 +1,92 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "6in",
+    "job_id": "run-epic-6in/tick-tdu/attempt-7",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:37af087a4209c6281207709538defb2711ed409bf57ce5f83ff67af51c9f417a",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "04e558ca206b9d42809ff9ee0cdca99a0da1f377",
+    "tick_id": "tdu"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "internal/cli/sandbox.go:114-123 resolves the default tk version with sandboximage.PinnedTkVersion(), which walks up from the cwd to a go.mod and reads image/Dockerfile. It does this even under --declared-only. In a worker container there is no ticfac checkout, so the verb exits 1. image/common.sh:1056 swallows the failure (|| declared=\"\"), and check_declared_image never refuses a mismatched image. Reproduced: a repo declaring [sandbox] image, `ticfac sandbox image --declared-only --root <repo>` run from outside the module gives exit 1 'no go.mod above'. Fix: read the pin from the embedded image/ FS, or skip version resolution under --declared-only, and add a test run outside the module root.",
+        "kind": "proposed-tick",
+        "severity": "high",
+        "target": "",
+        "title": "ticfac sandbox image needs ticfac's source tree, so the container's declared-image check is always skipped"
+      },
+      {
+        "body": "image/worker.sh nudge_due (715-727) refuses a nudge only once the time since the first start has reached harness_timeout. Each nudge then runs under a fresh `timeout $harness_timeout` (823-824) and a fresh omp --max-time. A first run that exits 0 with no report at 0.9T can therefore run to about 1.9T, past the dispatcher bound the variable exists to stay under, and a killed container pushes nothing. This is latent while no caller sets harness_budget_ms. Pass the remaining budget to each nudge, and test a nudge combined with a bound.",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Worker re-prompts each get a full harness bound, so a nudged worker can run ~2x TICKS_WORKER_TIMEOUT"
+      },
+      {
+        "body": "After 46x the image scripts need ticfac, but worker.sh --probe (225-249) and the Dockerfile's green-start layer check only tk, git and the harness. A missing ticfac (exit 127) surfaces as EXIT_CONFIG 'TICKS_SUBSTRATE must be herdr, harness, auto or cloud' (entrypoint.sh:170-173) or EXIT_MODEL 'broken config' (common.sh:222-225), and toolchain provisioning and the image check are skipped silently. Add ticfac to the probe and a verify_ticfac check that names the real cause. This complements finding b87b1159, which is about installing ticfac in image/Dockerfile.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A worker image without ticfac probes green, then dies with a misleading config/model error"
+      },
+      {
+        "body": "readSandboxTick (internal/cli/sandbox.go:697-711) only JSON-decodes the record. A tick {\"id\":\"a1w\",\"title\":\"t\"} renders a prompt where tk exited 1 because status is required. `--tick ../evil` reads .tick/evil.json and renders branch tick//evil. The code's own comment says booting a worker on damaged state is worse than not booting. Validate the id as a tick id, and the record's required fields, as tk did.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "ticfac sandbox worker-prompt accepts schema-invalid and path-escaping tick records that tk refused"
+      },
+      {
+        "body": "4i8 deleted TestAnEditedChangelogIsRefused. contracts/CHANGELOG.md and README.md are no longer covered by any digest: only a '## <version>' heading is checked, so a past entry can be rewritten silently. cloudflare/scripts/contracts.mjs still carries the 'pinned' mode and contracts:sync, which fetch all 16 files from ticks, which ships two. cloudflare/CONTRACTS.md:35,114 still documents it. herdr-kinds.md:18 also links a heading (#the-helper-tk-herd) that no longer exists, and references_test.go ignores anchors.",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Contract changelog/README lost digest coverage and cloudflare contracts.mjs keeps a dead ticks-sync path"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-6in/tick-tdu/attempt-7",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-6in/tdu/RESULT-tdu.md",
+      "review_verdict": "NOT READY"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T08:52:46Z",
+  "answered_at": "2026-09-28T08:52:46Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "tdu",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "04e558ca206b9d42809ff9ee0cdca99a0da1f377",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:37af087a4209c6281207709538defb2711ed409bf57ce5f83ff67af51c9f417a",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -350,6 +351,32 @@ func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) 
 		graph.Waves = append(graph.Waves, w)
 	}
 	graph.Stats = tk.GraphStats{TotalTasks: len(state.Ticks), WaveCount: len(state.Waves)}
+	// The dispatch block, exactly as tk 0.32.0 answers it (dz1): the
+	// ready-now reading from tracker state ALONE. tk configures no width any
+	// more — the exit-8 refusal retired when ticks became tracker-only (chz) —
+	// so max_parallel is 0 and free is -1 and nothing is capped. What the
+	// window needs is in_flight_ids: the claimed-and-not-closed children of
+	// the epic, WHOEVER holds the claim — this run, another run, a person.
+	inFlightIDs := []string{}
+	for _, id := range state.Order {
+		tick := state.Ticks[id]
+		if tick.Type == "epic" || tick.Parent != epicID || tick.Status != "in_progress" {
+			continue
+		}
+		inFlightIDs = append(inFlightIDs, id)
+	}
+	sort.Strings(inFlightIDs)
+	now := []string{}
+	if len(graph.Waves) > 0 {
+		for _, task := range graph.Waves[0].Tasks {
+			if task.Status == "open" {
+				now = append(now, task.ID)
+			}
+		}
+	}
+	graph.Dispatch = tk.GraphDispatch{
+		InFlight: len(inFlightIDs), InFlightIDs: inFlightIDs, Free: -1, Now: now,
+	}
 	return graph, nil
 }
 
@@ -419,6 +446,24 @@ func (f *fakeTracker) relentAfterRefusals(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.claims.relentAfter = n
+}
+
+// holdClaimsAs makes the tracker read these ticks as claimed by ANOTHER
+// party — a second run under the same epic, or a person with tk — without
+// granting anything: the claim is already in the tracker's state, exactly as
+// tk 0.32.0 reports it in dispatch.in_flight_ids. The fake's Claim path is
+// deliberately NOT used, and refuseClaimsBeyond stays unset: tk 0.32.0 has no
+// exit 8, so the tracker grants whatever it is asked for and the WIDTH is the
+// caller's own arithmetic (tick dz1).
+func (f *fakeTracker) holdClaimsAs(t *testing.T, owner string, ids ...string) {
+	t.Helper()
+	for _, id := range ids {
+		if _, err := f.mutate(id, func(tick *tk.Tick) {
+			tick.Status, tick.Owner = "in_progress", owner
+		}); err != nil {
+			t.Fatalf("hold %s for %s: %v", id, owner, err)
+		}
+	}
 }
 
 func (f *fakeTracker) Note(_ context.Context, tickID, text string) (tk.Tick, error) {

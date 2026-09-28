@@ -147,7 +147,7 @@ harness_model_selector=""
 git_identity_name="ticks sandbox"
 git_identity_email="ticks-sandbox@ticks.invalid"
 
-# Which role/tier cell `resolve_model` asks `tk sandbox model` for, and the
+# Which role/tier cell `resolve_model` asks `ticfac sandbox model` for, and the
 # table to name when it routes nothing. Empty role means the command's own
 # default, which is the orchestrator cell.
 model_role=""
@@ -231,8 +231,8 @@ configure_model_routing() {
 }
 
 # The model the harness runs on, from the same role/tier routing every other
-# role uses. `tk` owns the runners.toml parser, so this shell asks it rather
-# than learning the format — the same delegation as `tk sandbox setup`.
+# role uses. `ticfac` owns the runners.toml parser, so this shell asks it rather
+# than learning the format — the same delegation as `ticfac sandbox setup`.
 #
 # The control plane's TICKS_MODEL wins when it sets one: an operator pinning
 # RUN_MODEL on the factory is overriding the repository on purpose. Neither is
@@ -247,10 +247,10 @@ resolve_model() {
 		local routed status
 		local -a model_args=(--root "$workdir")
 		[[ -z $model_role ]] || model_args+=(--role "$model_role")
-		routed="$(tk sandbox model "${model_args[@]}")"
+		routed="$(ticfac sandbox model "${model_args[@]}")"
 		status=$?
 		if ((status != 0)); then
-			die $EXIT_MODEL "tk could not read the checkout's routing config ('tk sandbox model' exited $status; its reason is above) — fix .tick/runners.toml at the submitted SHA. This is a broken config, not a missing model."
+			die $EXIT_MODEL "ticfac could not read the checkout's routing config ('ticfac sandbox model' exited $status; its reason is above) — fix .tick/runners.toml at the submitted SHA. This is a broken config, not a missing model."
 		fi
 		model="$(printf '%s\n' "$routed" | sed -n 1p | tr -d '[:space:]')"
 		[[ -z $model ]] || say "model $model (from the repository's role/tier routing for ${model_role:-orchestrator})"
@@ -357,11 +357,12 @@ select_model_route() {
 #
 # CI remediation decides whether it may push to a branch from a positive
 # record, not from the branch's name. A name is a claim anybody can make —
-# `tk herd spawn` creates `tick/<id>` branches on an operator's laptop every
-# wave — and the branches the factory really does create are pushed from in
-# here, by a container with no database handle. This is the write side that
-# closes that: `tk cloud branch` posts to the control plane on the run's own
-# gateway token, and the token decides which run is speaking.
+# a wave of worker containers creates `tick/<id>` branches on the factory's
+# behalf every run — and the branches the factory really does create are
+# pushed from in here, by a container with no database handle. This is the
+# write side that closes that: `ticfac cloud branch` posts to the control
+# plane on the run's own gateway token, and the token decides which run is
+# speaking.
 #
 # Called at the moment a branch is created, by the script that creates it, so
 # the record is written by the substrate rather than asked of the agent's
@@ -372,6 +373,10 @@ select_model_route() {
 # a reported refusal for a lost run. The unrecorded branch is refused by
 # remediation and reported in the daily digest, which is the designed failure
 # mode and not a silent one.
+#
+# `ticfac cloud branch`, ported from tk with the rest of the sandbox surface
+# (tick 46x): it answers the run's own TICKS_FACTORY_* environment — a
+# container holds no ~/.ticfacrc.
 record_branch() {
 	local branch="$1" detail="${2:-}"
 	if [[ -z $branch ]]; then
@@ -382,7 +387,7 @@ record_branch() {
 		return 0
 	fi
 	local recorded=1
-	tk cloud branch "$branch" --detail "$detail" || recorded=0
+	ticfac cloud branch "$branch" --detail "$detail" || recorded=0
 	if ((recorded)); then
 		return 0
 	fi
@@ -393,7 +398,7 @@ record_branch() {
 # Prove the route before the harness gets it: one bounded, one-token completion
 # through the gateway, with the run's own credential.
 #
-# This is the content gate `tk herd spawn` applies to workers, for the same
+# This is the content gate the herd spawner applies to workers, for the same
 # reason. A misconfigured model does not announce itself — the harness starts,
 # prints its banner, reaches the skill loop and then waits on a call that will
 # never answer. A probe converts that silence into a message with a status code
@@ -600,7 +605,7 @@ select_harness_route() {
 }
 
 # Where omp keeps its model/provider config. Asked of omp rather than assumed:
-# it is the same delegation as `tk sandbox model` — the tool that owns the
+# it is the same delegation as `ticfac sandbox model` — the tool that owns the
 # format is the one that says where the file lives.
 omp_config_dir() {
 	local dir
@@ -1050,7 +1055,7 @@ provision_toolchain() {
 # whose Rust is not pinned by any manifest the image reads).
 declared_tool_specs() {
 	local version
-	tk sandbox toolchain --root "$workdir" 2>/dev/null || true
+	ticfac sandbox toolchain --root "$workdir" 2>/dev/null || true
 	if [[ -f go.mod ]]; then
 		version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
 		[[ -z $version ]] || printf 'go@%s\n' "$version"
@@ -1086,7 +1091,7 @@ tool_satisfied() {
 # deliberately cannot express: an Environment check is verification only ("test,
 # don't ask").
 #
-# The commands are read by `tk` out of the checkout at the submitted SHA and
+# The commands are read by `ticfac` out of the checkout at the submitted SHA and
 # from nowhere else. Nothing in this script's environment can supply one, which
 # is the point: this shell runs inside a container holding the run's gateway
 # credential and its GitHub token, so the capability to run arbitrary commands
@@ -1098,11 +1103,11 @@ tool_satisfied() {
 # fails the same way, at model prices; one legible stop beats that.
 repo_setup() {
 	local declared
-	declared="$(tk sandbox image --declared-only --root "$workdir" 2>/dev/null)" || declared=""
+	declared="$(ticfac sandbox image --declared-only --root "$workdir" 2>/dev/null)" || declared=""
 	[[ -z $booted_image ]] || say "sandbox image $booted_image"
 	check_declared_image "$declared"
 
-	tk sandbox setup --root "$workdir" ||
+	ticfac sandbox setup --root "$workdir" ||
 		die $EXIT_SETUP "the repository's [sandbox] setup failed — the failing command is named above; fix it in .tick/runners.toml (it must be idempotent) or remove it"
 }
 
@@ -1112,7 +1117,7 @@ repo_setup() {
 # submitted SHA and boots it (tick x3v), so reaching here with a mismatch means
 # that resolution did not happen or did not agree: the control plane could not
 # read the file, its reader disagreed with this one, or the deployment served
-# something else. This is the check that cannot be skipped — `tk` is the
+# something else. This is the check that cannot be skipped — `ticfac` is the
 # authoritative reader of runners.toml, and it is running in the checkout.
 #
 # A mismatch is a REFUSAL, not a warning. The container cannot change what it
@@ -1155,11 +1160,11 @@ run_preflight() {
 			die $EXIT_PREFLIGHT "environment pre-flight failed — the failing check is named above; fix it or correct .tick/runners.toml"
 		return 0
 	fi
-	# `tk` owns the runners.toml parser and the command execution. Keeping this
-	# call here, beside `tk sandbox setup`, means the entrypoint has one reader
-	# for the repository's structured run configuration; the shell never learns
-	# a second format.
-	tk sandbox environment --root "$workdir" ||
+	# `ticfac` owns the runners.toml parser and the command execution. Keeping
+	# this call here, beside `ticfac sandbox setup`, means the entrypoint has
+	# one reader for the repository's structured run configuration; the shell
+	# never learns a second format.
+	ticfac sandbox environment --root "$workdir" ||
 		die $EXIT_PREFLIGHT "environment pre-flight failed — the failing check is named above; fix it or correct .tick/runners.toml"
 }
 

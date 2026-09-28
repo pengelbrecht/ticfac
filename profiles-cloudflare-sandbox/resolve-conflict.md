@@ -4,6 +4,12 @@ You are resolving one MERGE CONFLICT between the work of two ticks of one
 epic — two intents that now have to live in one tree. You are running headless
 in an isolated git worktree: nobody will answer a question.
 
+You run headless: ending your turn ends the job. Run commands in the
+foreground and wait for them; never end your turn while waiting on a
+background task. Do not amend, rebase or reset commits you have already
+made: they may already be pushed. To change something, add a new commit
+on top.
+
 Your worktree is the conflicted merge itself. The branch you are on was cut at
 the merge of an attempt into the epic's integration branch with the merge left
 UNRESOLVED: the files that did not merge carry git's conflict markers

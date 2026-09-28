@@ -1,0 +1,14 @@
+{
+  "id": "gmq",
+  "title": "Worker re-prompts each get a full harness bound, so a nudged worker can run ~2x TICKS_WORKER_TIMEOUT",
+  "description": "image/worker.sh nudge_due (715-727) refuses a nudge only once the time since the first start has reached harness_timeout. Each nudge then runs under a fresh `timeout $harness_timeout` (823-824) and a fresh omp --max-time. A first run that exits 0 with no report at 0.9T can therefore run to about 1.9T, past the dispatcher bound the variable exists to stay under, and a killed container pushes nothing. This is latent while no caller sets harness_budget_ms. Pass the remaining budget to each nudge, and test a nudge combined with a bound.\n\nticfac run epic-6in filed this backlog tick from the finding 5052956483b3c2e1ef602f752eb615696aecbd91a917156081cd3078d695c87e (reported by run-epic-6in/tick-tdu/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/5052956483b3c2e1ef602f752eb615696aecbd91a917156081cd3078d695c87e.json on the run branch.",
+  "notes": "2026-09-28 12:15 - ticfac run epic-6in: created by absorbing finding 5052956483b3c2e1ef602f752eb615696aecbd91a917156081cd3078d695c87e — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/5052956483b3c2e1ef602f752eb615696aecbd91a917156081cd3078d695c87e.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-tdu/attempt-7",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:15:24Z",
+  "updated_at": "2026-09-28T10:15:33.526541Z"
+}

@@ -120,7 +120,8 @@ than maintained beside it:
 | `ticfac skills list\|get\|install` | the agent skills embedded in this binary — `ticfac skills install ticfac` is the one command, installing the execution skill into the same `.claude/skills/` / `.agents/skills/` directories `tk skills install ticks` does |
 | `ticfac factory deploy\|setup\|status\|dashboard\|webhook` | put and run the ticks cloud factory in your own Cloudflare account |
 | `ticfac herd paint\|notify` | the herdr operator surfaces ticfac owns: badge panes, chime on blocks |
-| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface) |
+| `ticfac cloud run\|stop\|status\|logs\|trace\|supervisor\|branch` | the expert half of running epics in your cloud factory (`ticfac run <epic> --cloud` is the everyday surface); `cloud branch` is the container-side write a sandbox's entrypoint uses to record the branch it created — it authenticates with the run's own token, never the operator's config |
+| `ticfac sandbox image\|toolchain\|model\|substrate\|setup\|environment\|worker-prompt` | the sandbox image's boot questions, ported from tk (46x): the image a checkout's `[sandbox]` table declares, its extra toolchain pins, the model its routing resolves for a boot, the substrate a run dispatches through, the idempotent warm step, the `[environment.commands]` pre-flight and the per-tick worker prompt — the run scripts call these after their clone so no shell ever parses runners.toml |
 
 Exit codes are the contract a script branches on — every command's process
 code is one of this table, the same words in `ticfac --help` and in every
@@ -151,12 +152,18 @@ cannot lag the tree the way it once did.
 
 ## Contracts
 
-`contracts/` is a **vendored, pinned copy** of the ticks contract bundle —
-version 3.0.0, fetched from `pengelbrecht/ticks` at the commit recorded in
-`contracts.pin.json`. It is verified offline by digest on every test run and
-against GitHub at the pinned ref in CI, and every file in it has a Go reader in
-`internal/contracts/parity`. `CONTRACTS.md` says how that works and how to
-adopt a new bundle version. Never edit a file under `contracts/` here.
+`contracts/` is the **cross-language contract bundle ticfac authors** (tick
+4i8): `contracts/bundle.json` carries ticfac's own version and changelog, and
+every contract describing a ticfac format is edited and re-cut here. Two files
+in it — `tk-json-manifest.json` and `tracker-layout.json` — describe ticks'
+own formats and are a **vendored, pinned copy** of ticks bundle 7.0.0, fetched
+from `pengelbrecht/ticks` at the commit recorded in `contracts.pin.json`.
+Everything is verified offline by digest on every test run, the ticks-owned
+files also against GitHub at the pinned ref in CI, and every file in the bundle
+has a Go reader in `internal/contracts/parity` and a TypeScript reader in
+`cloudflare/test`. `CONTRACTS.md` says how that works, how to cut a bundle
+version, and how to adopt a new ticks release. Never edit a ticks-owned fixture
+here — a ticfac-owned one is edited here and re-cut in the same commit.
 
 ## image
 
@@ -177,7 +184,7 @@ copy embedded in the binary; nothing fetches it from ticks.
 go build ./...                    # the ticfac binary
 make test-short                   # the short suite: seconds, and what a tick's gate runs
 make test                         # the full suite, end-to-end included (-timeout 45m)
-go run ./cmd/contracts check      # verify the vendored bundle, offline
+go run ./cmd/contracts check      # verify the bundle, offline
 ```
 
 `-short` means something here (tick miu). `internal/reconcile`,

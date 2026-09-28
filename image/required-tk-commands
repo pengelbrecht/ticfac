@@ -7,14 +7,13 @@
 # build reads it too — the last layer of the Dockerfile runs every line against
 # the tk it just built, so an image whose tk predates one of these fails to
 # build instead of booting a container that dies mid-run with "unknown command".
+#
+# Tracker commands only. The sandbox verbs and the branch write the scripts
+# used to run through tk moved to ticfac with tick 46x — ticks became
+# tracker-only — and the scripts call `ticfac …` for them. The
+# ticfac in the image cannot lag the scripts the way tk could: the deploy
+# cross-compiles it from the same tree it stages image/ from, so binary and
+# scripts are the same commit by construction, and no gate is needed to say so.
 answer
-cloud branch
 list
-sandbox environment
-sandbox image
-sandbox model
-sandbox setup
-sandbox substrate
-sandbox toolchain
-sandbox worker-prompt
 version

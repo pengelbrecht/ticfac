@@ -86,6 +86,75 @@
     "refused": [0, -1],
     "refused_toml_values": ["1.5", "\"3\"", "true"]
   },
+  "findings": {
+    "why": [
+      "THE [findings] TABLE. `[findings.route.<owner/name>]` is the explicit,",
+      "reviewed authorisation for a run to FILE a finding a worker routed to",
+      "ANOTHER repository into that repository's own tracker: until it existed a",
+      "routed finding waited for a person and held the close-out (the epic-2jn",
+      "stall, 2026-09-27). The allowlist is explicit and per repository on",
+      "purpose — pushing to another repository's default branch is a write outside",
+      "the run's own tree, and the tracked, PR-reviewed config is the only thing",
+      "that may authorise it.",
+      "",
+      "The table joined the format after this file stopped being vendored (ticfac",
+      "tick #85), so it was covered only by ticfac's own config tests until ticfac",
+      "took this contract over (tick 4i8) and pinned it here. It is ticfac's",
+      "alone: the run that routes and files findings is ticfac's",
+      "(internal/runconfig, `Findings`/`FindingRoute`), and every case below runs",
+      "through that real reader over whole documents."
+    ],
+    "path": "findings.route.<owner/name>",
+    "target_pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$",
+    "target_rule": "A route's key is a target repository, owner/name — the same spelling a worker's finding carries in its `target`, so a typo'd key is refused rather than filed to.",
+    "file_rule": "boolean. `true` lets the run file the finding as a tick in the target's own tracker; `false` (or absent) is the documented fallback: a local backlog tick naming the target, so a person finds it in the tracker they already read.",
+    "remote_rule": "The git URL the target is fetched from and pushed to. Absent derives it from this repository's own remote with the owner/name replaced; present, it must be a place, never an option: non-empty, no leading '-', no whitespace or control characters.",
+    "accepted": [
+      {
+        "name": "two routes, one derived remote",
+        "why": "The shape the table exists for: one target filed in its own tracker, one with an explicit remote. Both load; an undeclared target answers no route at all — the allowlist is explicit, not a pattern.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"pengelbrecht/ticks\"]\nfile = true\n\n[findings.route.\"example/elsewhere\"]\nfile = false\nremote = \"git@example.com:example/elsewhere.git\"\n"
+      }
+    ],
+    "refused": [
+      {
+        "name": "a target that is not owner/name",
+        "why": "The key is the repository a finding is pushed to; anything that is not owner/name is a typo a run would otherwise push to, and the refusal names the shape.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"ticks\"]\nfile = true\n",
+        "expect_error_contains": "is not a repository a finding can be routed to"
+      },
+      {
+        "name": "a remote git would read as an option",
+        "why": "The remote is handed to git as an argument, so a leading '-' must never reach it: `--upload-pack` is a command, not a place.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"a/b\"]\nfile = true\nremote = \"--upload-pack=touch x\"\n",
+        "expect_error_contains": "must not begin with '-'"
+      },
+      {
+        "name": "an empty remote",
+        "why": "Empty is not \"derive\" — derivation is the ABSENT key, so an explicit empty string is refused rather than half-deriving.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"a/b\"]\nfile = true\nremote = \"\"\n",
+        "expect_error_contains": "must not be empty"
+      },
+      {
+        "name": "a remote with whitespace",
+        "why": "A URL with a space in it is not a place git recognises, and whitespace is how a second argument hides inside one.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"a/b\"]\nfile = true\nremote = \"git@x:a/b c\"\n",
+        "expect_error_contains": "whitespace"
+      },
+      {
+        "name": "a typo'd key inside a route",
+        "why": "The route's key vocabulary is closed: `fiel = true` is a typo, not a future key, and unknown keys fail closed as everywhere else in this document.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"a/b\"]\nfiel = true\n",
+        "expect_error_contains": "unknown key"
+      },
+      {
+        "name": "a file flag that is not a boolean",
+        "why": "`file = \"yes\"` is a string where a boolean is declared; a reader that coerced it would turn a typo into an authorisation.",
+        "toml": "version = 2\n\n[roles.implement]\nkind = \"claude\"\n\n[findings.route.\"a/b\"]\nfile = \"yes\"\n",
+        "expect_error_contains": "file"
+      }
+    ]
+  },
   "tables": {
     "why": [
       "THE TABLE ENUMERATION (4.0.0). `.tick/runners.toml` is ONE document with TWO",
@@ -123,7 +192,7 @@
     ],
     "version_key": "version",
     "version_rule": "The version key is the one property of the WHOLE document, gated by both readers before shape: a file from a future format version is refused with one upgrade line, never with a list of unknown keys.",
-    "execution_tables": ["orchestrator", "orchestration", "roles", "testing", "evidence", "environment", "sandbox", "tier_policy"],
+    "execution_tables": ["orchestrator", "orchestration", "roles", "testing", "evidence", "environment", "sandbox", "tier_policy", "findings"],
     "execution_owner": "ticfac (internal/runconfig, lifted from this repository's internal/herd/config); this repository's reader still validates the shared half until it retires its execution machinery (ticfac tick 4l2)",
     "tracker_tables": ["signals", "sweeps"],
     "tracker_owner": "ticks: the cloud factory's control plane acts on them and tk is their author-time validator",

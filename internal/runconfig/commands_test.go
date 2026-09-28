@@ -5,11 +5,12 @@ import (
 	"testing"
 )
 
-// In ticks' copy of this package this file opens with two tests that read the
-// authoring doc (runners-config.md, pi-runner.md) and prove its fenced TOML
-// blocks load. Those tests need ticks' skill references and stayed there; the
-// transcribed examples they were checking are asserted as fixture documents
-// here (docexamples_test.go, load_test.go).
+// The authoring doc for this format is runners-config.md, beside this file —
+// ticfac took it over with the rest of the execution surface when ticks became
+// tracker-only. Its fenced TOML blocks are transcribed as fixture documents
+// here (docexamples_test.go) and asserted as parseable configs in load_test.go;
+// the transcription cross-check that used to live in ticks' copy of this
+// package has no upstream to run against any more.
 
 // TestCommandSurfaceParses proves worked example 6 — routing plus all four
 // command tables — loads and exposes what the doc says it does. This is the

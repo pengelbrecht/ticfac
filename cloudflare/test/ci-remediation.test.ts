@@ -211,7 +211,7 @@ async function enrolled(): Promise<string> {
   // Ownership is a positive record since tick t4y, so a test about the flake
   // gate or the strike budget has to say that the factory created the branch
   // it is failing on — the same sentence `image/worker.sh` says
-  // through `tk cloud branch` the moment it creates one. The block that tests
+  // through `ticfac cloud branch` the moment it creates one. The block that tests
   // the record itself uses `unrecordedProject()` instead.
   await recorded(project, OWNED);
   return project;
@@ -385,7 +385,7 @@ describe("branch ownership is structural", () => {
  *
  *  - `tk herd spawn` names a worker's branch `<worktree_branch_prefix><tick-id>`
  *    and that prefix defaults to `tick/` — it is the branch this very tick runs
- *    on. `skills/ticks/references/herdr-runner.md` further documents setting it
+ *    on. `worktree_branch_prefix` (internal/runconfig/runners-config.md) can set it
  *    to `tick/<epic-id>/`, which produces a name SHAPE-IDENTICAL to the cloud
  *    worker's `tick/<epic>/<tick>`. No segment count can separate them.
  *  - `epic/<id>` is pushed by whichever orchestrator ran the epic, and

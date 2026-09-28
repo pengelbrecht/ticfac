@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 10,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "6in",
+    "job_id": "run-epic-6in/tick-rzi/attempt-14",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "90adeeb622802fd754a0230d0b3911c6ac865cf0",
+    "tick_id": "rzi"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "bib was a stub/real gap: every entrypoint test that checks [sandbox].image uses a stub ticfac, which answered a call the real binary failed outside a checkout, and common.sh swallowed that failure. The fix is proven at the CLI level. Nothing drives image/common.sh repo_setup -> check_declared_image with the REAL binary and a repo declaring a different image than TICKS_SANDBOX_IMAGE. Add one to entrypoint_realticfac_test.go and assert EXIT_SETUP, so a regression in the verb or its stdout/stderr split fails a test rather than silently skipping the check.\nevidence: internal/sandboximage/entrypoint_realticfac_test.go (no [sandbox].image case); internal/sandboximage/entrypoint_test.go:1147 uses the stub via TICKS_TEST_SANDBOX_IMAGE_DECLARED",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Real-ticfac entrypoint test for the declared-image refusal"
+      },
+      {
+        "body": "claim.go reads the holder as the run with the most recent dispatch marker, and calls the claim stale when that run's checkpoint is terminal and its row for the tick is not 'closed'. Suppose a run released a tick without closing it (row 'rejected' or 'ready'), then ended failed or cancelled, and a person later claimed the tick with tk. That person leaves no marker, so the dead run is still the newest witness and the person's live claim reads as stale and is taken over. The file's own contract says a person's claim is treated as LIVE. Seen by reading the code, not reproduced. A fix could require the claim to predate the holder's terminal checkpoint, or treat only 'dispatched' or 'reported' rows as orphans.\nevidence: internal/reconcile/claim.go foreignClaims (w.stale = exists && Terminal() && !closedRow) and closedRow",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Foreign-claim takeover can seize a person's claim on a tick a dead run released"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-6in/tick-rzi/attempt-14",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-6in/rzi/RESULT-rzi.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T19:30:54Z",
+  "answered_at": "2026-09-28T19:30:54Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "rzi",
+    "attempt": 14,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "90adeeb622802fd754a0230d0b3911c6ac865cf0",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}

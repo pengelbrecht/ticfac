@@ -1,0 +1,14 @@
+{
+  "id": "r4b",
+  "title": "Contract changelog/README lost digest coverage and cloudflare contracts.mjs keeps a dead ticks-sync path",
+  "description": "4i8 deleted TestAnEditedChangelogIsRefused. contracts/CHANGELOG.md and README.md are no longer covered by any digest: only a '## \u003cversion\u003e' heading is checked, so a past entry can be rewritten silently. cloudflare/scripts/contracts.mjs still carries the 'pinned' mode and contracts:sync, which fetch all 16 files from ticks, which ships two. cloudflare/CONTRACTS.md:35,114 still documents it. herdr-kinds.md:18 also links a heading (#the-helper-tk-herd) that no longer exists, and references_test.go ignores anchors.\n\nticfac run epic-6in filed this backlog tick from the finding dca8415acfcf9fbcc3aecb2f4a248b4f3c08049371035ce52d3adca3fa125180 (reported by run-epic-6in/tick-tdu/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/dca8415acfcf9fbcc3aecb2f4a248b4f3c08049371035ce52d3adca3fa125180.json on the run branch.",
+  "notes": "2026-09-28 12:17 - ticfac run epic-6in: created by absorbing finding dca8415acfcf9fbcc3aecb2f4a248b4f3c08049371035ce52d3adca3fa125180 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/dca8415acfcf9fbcc3aecb2f4a248b4f3c08049371035ce52d3adca3fa125180.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-tdu/attempt-7",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:17:48Z",
+  "updated_at": "2026-09-28T10:17:57.004289Z"
+}

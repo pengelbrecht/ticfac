@@ -1,0 +1,14 @@
+{
+  "id": "07f",
+  "title": "A worker image without ticfac probes green, then dies with a misleading config/model error",
+  "description": "After 46x the image scripts need ticfac, but worker.sh --probe (225-249) and the Dockerfile's green-start layer check only tk, git and the harness. A missing ticfac (exit 127) surfaces as EXIT_CONFIG 'TICKS_SUBSTRATE must be herdr, harness, auto or cloud' (entrypoint.sh:170-173) or EXIT_MODEL 'broken config' (common.sh:222-225), and toolchain provisioning and the image check are skipped silently. Add ticfac to the probe and a verify_ticfac check that names the real cause. This complements finding b87b1159, which is about installing ticfac in image/Dockerfile.\n\nticfac run epic-6in filed this backlog tick from the finding fb8faed421d74f7ed7680b42f6add714e5f2ecd6f73ff8b7794ac00b455c7bea (reported by run-epic-6in/tick-tdu/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/fb8faed421d74f7ed7680b42f6add714e5f2ecd6f73ff8b7794ac00b455c7bea.json on the run branch.",
+  "notes": "2026-09-28 12:18 - ticfac run epic-6in: created by absorbing finding fb8faed421d74f7ed7680b42f6add714e5f2ecd6f73ff8b7794ac00b455c7bea — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/fb8faed421d74f7ed7680b42f6add714e5f2ecd6f73ff8b7794ac00b455c7bea.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-tdu/attempt-7",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:18:37Z",
+  "updated_at": "2026-09-28T10:18:43.863176Z"
+}

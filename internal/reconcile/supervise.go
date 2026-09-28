@@ -122,6 +122,15 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     in holdsForAPerson and it still writes its run_held line: what changed is
 //     only that the person it was waiting for was, in every observed case,
 //     waiting to type the same command back.
+//   - RefusedForeignClaim: a live party holds a claim on a tick this run has
+//     room to dispatch but no right to (tick 823, finding 08e5bcc0). The same
+//     fact about the world, with the same clock: it resolves when the
+//     holder's tick closes — or when the holder's run stops, which the next
+//     incarnation reads from the records it left — and re-deriving is the
+//     whole of the repair. A claim a STOPPED run left never reaches this
+//     stop: the next incarnation reads the holder's terminal checkpoint and
+//     takes the orphaned claim over, so what remains here is live by every
+//     record this checkout can read.
 //   - RefusedStale: the integration branch moved under a gate, so its evidence
 //     is no longer about what would be published (gate.go). Re-deriving is the
 //     entire repair, it is keyed by commit, and a person has no part in it.
@@ -148,7 +157,7 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // person; that is the case go6 names, and it is this one.
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
-	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
+	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
 		RefusedBlockedRedispatch, RefusedRejectedRedispatch:
 		return true
 	}

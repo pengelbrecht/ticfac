@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 9,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "internal/cli/sandbox.go:114-123 resolves the default tk version with sandboximage.PinnedTkVersion(), which walks up from the cwd to a go.mod and reads image/Dockerfile. It does this even under --declared-only. In a worker container there is no ticfac checkout, so the verb exits 1. image/common.sh:1056 swallows the failure (|| declared=\"\"), and check_declared_image never refuses a mismatched image. Reproduced: a repo declaring [sandbox] image, `ticfac sandbox image --declared-only --root <repo>` run from outside the module gives exit 1 'no go.mod above'. Fix: read the pin from the embedded image/ FS, or skip version resolution under --declared-only, and add a test run outside the module root.\n\nticfac run epic-6in filed this backlog tick from the finding b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f (reported by run-epic-6in/tick-tdu/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/b4f826681c8bcbf6d6ee88a69a5c73a0f3f898024d36f2aa24f7e02d3e30964f.json on the run branch.",
+    "epic_id": "6in",
+    "role": "classify-tick",
+    "tick_id": "bib",
+    "title": "ticfac sandbox image needs ticfac's source tree, so the container's declared-image check is always skipped"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.53,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.15,
+      "design": 0.15,
+      "diagnosis": 0.06,
+      "mechanical": 0.63,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1382,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T19:06:33Z",
+  "answered_at": "2026-09-28T19:06:33Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "bib",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "a0f53a7c9c9a7775df03b720f717998d19414f56",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:2902a74b05a0d18d64b28bd8555ce256270f9fb7954b335b943363d32f8af173",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

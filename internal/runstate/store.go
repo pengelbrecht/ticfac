@@ -779,6 +779,82 @@ func (s *Store) Decisions() ([]Decision, error) {
 	return out, nil
 }
 
+// ------------------------------------------------------- another run ---
+//
+// The integration branch is shared by every run of the epic, so one run's
+// fetched view already carries the records of its contemporaries. Reading
+// them is what lets a run asked to wait for another run's claim tell that
+// run's liveness from its own records — the only durable witness there is —
+// instead of trusting the claim to mean its holder is still going (tick 823).
+// Reads only, and through the same fetched view every other read goes
+// through: this store still writes nowhere outside its own run's directory.
+
+// ForeignAttempts returns every dispatch marker on the integration branch
+// that belongs to a run OTHER than this store's, in a deterministic order:
+// by run id, then by attempt number. A run that never pushed its markers to
+// the branch is absent — which is itself the answer, because a holder whose
+// records cannot be read is a holder the reader must treat as live.
+func (s *Store) ForeignAttempts() ([]Attempt, error) {
+	prefix := Root + "/runs/"
+	others := map[string][]int{}
+	for path := range s.view {
+		rest, ok := strings.CutPrefix(path, prefix)
+		if !ok {
+			continue
+		}
+		parts := strings.Split(rest, "/")
+		if len(parts) != 3 || parts[1] != "attempts" || parts[0] == s.runID {
+			continue
+		}
+		digits, ok := strings.CutSuffix(parts[2], ".json")
+		if !ok {
+			continue
+		}
+		n, err := strconv.Atoi(digits)
+		if err != nil || n < 1 {
+			continue
+		}
+		others[parts[0]] = append(others[parts[0]], n)
+	}
+	runs := make([]string, 0, len(others))
+	for run := range others {
+		runs = append(runs, run)
+	}
+	sort.Strings(runs)
+	out := []Attempt{}
+	for _, run := range runs {
+		numbers := others[run]
+		sort.Ints(numbers)
+		for _, n := range numbers {
+			var a Attempt
+			ok, err := s.load(AttemptPath(run, n), &a)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, a)
+			}
+		}
+	}
+	return out, nil
+}
+
+// ForeignCheckpoint returns another run's checkpoint as this writer last
+// fetched it, and whether the run has one at all. The run id is validated the
+// way this store's own is, because it reaches a path from outside: a run id
+// with a separator in it would read outside `.ticfac/runs/`.
+func (s *Store) ForeignCheckpoint(runID string) (*Checkpoint, bool, error) {
+	if err := checkSegment("run id", runID); err != nil {
+		return nil, false, fmt.Errorf("runstate: %w", err)
+	}
+	var c Checkpoint
+	ok, err := s.load(CheckpointPath(runID), &c)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	return &c, true, nil
+}
+
 // EvidenceKeys returns the keys of the run's evidence, sorted.
 func (s *Store) EvidenceKeys() []string {
 	prefix := RunDir(s.runID) + "/evidence/"

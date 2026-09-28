@@ -1105,6 +1105,7 @@ type buildInfo struct {
 	ContractBundle   string `json:"contract_bundle"`
 	TicksRepository  string `json:"ticks_repository"`
 	TicksRef         string `json:"ticks_ref"`
+	TicksBundle      string `json:"ticks_bundle"`
 	ContractsPinPath string `json:"contracts_pin"`
 }
 
@@ -1115,7 +1116,7 @@ func newVersionCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "report this build and the contract bundle it serves",
-		Long:  "Report this build's version and the vendored ticks contract bundle\nit was compiled against, without needing a checkout.",
+		Long:  "Report this build's version, the contract bundle ticfac authors, and the\nticks release the two ticks-owned contracts were vendored from — without\nneeding a checkout.",
 	}
 	asJSON := cmd.Flags().Bool("json", false, "print machine-readable output")
 	cmd.RunE = func(c *cobra.Command, args []string) error {
@@ -1142,14 +1143,21 @@ func version(args []string, asJSON *bool, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "ticfac %s\ncontract bundle %s (%s@%s)\n",
-		info.Ticfac, info.ContractBundle, info.TicksRepository, info.TicksRef)
+	fmt.Fprintf(stdout, "ticfac %s\ncontract bundle %s (ticks contracts from %s@%s, ticks bundle %s)\n",
+		info.Ticfac, info.ContractBundle, info.TicksRepository, info.TicksRef, info.TicksBundle)
 	return 0
 }
 
 // BuildInfo reads the embedded pin and manifest. They are embedded, not read
 // from disk, so what the binary reports and what it was compiled against
 // cannot disagree.
+//
+// Two version claims travel in the answer, and they are different claims
+// since the ownership split (tick 4i8): ContractBundle is TICFAC's bundle —
+// the one every consumer pins by exact value — and TicksBundle is the ticks
+// bundle the two vendored ticks-owned files (tk-json-manifest.json,
+// tracker-layout.json) were fetched from. They coincide only by accident of
+// history, so they are reported side by side rather than asserted equal.
 func BuildInfo() (buildInfo, error) {
 	var pin struct {
 		BundleVersion string `json:"bundleVersion"`
@@ -1165,10 +1173,10 @@ func BuildInfo() (buildInfo, error) {
 	if err := json.Unmarshal(ticfac.BundleJSON, &bundle); err != nil {
 		return buildInfo{}, fmt.Errorf("the embedded contracts/bundle.json is unreadable: %w", err)
 	}
-	if bundle.Version != pin.BundleVersion {
+	if pin.Repository == "" || len(pin.Ref) != 40 {
 		return buildInfo{}, fmt.Errorf(
-			"this build embeds bundle %s and pins %s — they were compiled from a tree that "+
-				"had not been synced", bundle.Version, pin.BundleVersion)
+			"the embedded contracts.pin.json names no immutable ticks ref: repository %q, ref %q",
+			pin.Repository, pin.Ref)
 	}
 
 	return buildInfo{
@@ -1177,6 +1185,7 @@ func BuildInfo() (buildInfo, error) {
 		ContractBundle:   bundle.Version,
 		TicksRepository:  pin.Repository,
 		TicksRef:         pin.Ref,
+		TicksBundle:      pin.BundleVersion,
 		ContractsPinPath: "contracts.pin.json",
 	}, nil
 }

@@ -45,6 +45,7 @@ var readers = map[string]reader{
 	"run-event-feed.json":           {kind: executable, file: "run_event_feed_test.go"},
 	"runners-config-contract.json":  {kind: executable, file: "runners_config_test.go"},
 	"tracker-layout.json":           {kind: executable, file: "tracker_layout_test.go"},
+	"status-model.json":             {kind: executable, file: "status_model_test.go"},
 	"worker-boot-contract.json":     {kind: structural, file: "worker_boot_test.go", turnedExecutableBy: "the Herdr executor (SPEC §12 Phase 2)"},
 	"sandbox-image-cases.json":      {kind: structural, file: "toml_cases_test.go", turnedExecutableBy: "a .tick/runners.toml reader (SPEC §12 Phase 2)"},
 	"signal-source-cases.json":      {kind: structural, file: "toml_cases_test.go", turnedExecutableBy: "a .tick/runners.toml reader (SPEC §12 Phase 2)"},
@@ -93,8 +94,9 @@ func TestEveryBundleFileHasAReader(t *testing.T) {
 		}
 	}
 
-	if len(bundle.Files) != 15 {
-		t.Errorf("bundle %s carries %d contracts; 5.1.0 carries 14 — if that is intended, "+
+	if len(bundle.Files) != 16 {
+		t.Errorf("bundle %s carries %d contracts; ticfac's 1.0.0 carries 16 (ticks 6.3.0's fifteen, "+
+			"plus status-model.json moved in from internal/statusmodel) — if that is intended, "+
 			"move the pin deliberately and add the reader in the same commit",
 			bundle.Version, len(bundle.Files))
 	}

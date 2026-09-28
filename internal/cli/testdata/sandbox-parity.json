@@ -1,0 +1,350 @@
+{
+  "cloud-branch/answers": [
+    {
+      "exit": 0,
+      "stdout": "recorded tick-run/epic1 as created by this run\n",
+      "stderr": "",
+      "request": {
+        "authorization": "Bearer tkr_run_scoped",
+        "body": {
+          "branch": "tick-run/epic1",
+          "detail": "run branch"
+        },
+        "content_type": "application/json",
+        "method": "POST",
+        "path": "/api/branches"
+      }
+    },
+    {
+      "exit": 0,
+      "stdout": "tick-run/epic1 was already recorded; this run did not change it\n",
+      "stderr": "",
+      "request": {
+        "authorization": "Bearer tkr_run_scoped",
+        "body": {
+          "branch": "tick-run/epic1"
+        },
+        "content_type": "application/json",
+        "method": "POST",
+        "path": "/api/branches"
+      }
+    },
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: the factory refused to record branch tick/other/meo (branch_outside_epic): tick/other/meo belongs to epic \"other\"\n",
+      "request": {
+        "authorization": "Bearer tkr_run_scoped",
+        "body": {
+          "branch": "tick/other/meo"
+        },
+        "content_type": "application/json",
+        "method": "POST",
+        "path": "/api/branches"
+      }
+    },
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: the factory refused to record branch tick-run/epic1 (): the factory answered 401\n",
+      "request": {
+        "authorization": "Bearer tkr_run_scoped",
+        "body": {
+          "branch": "tick-run/epic1"
+        },
+        "content_type": "application/json",
+        "method": "POST",
+        "path": "/api/branches"
+      }
+    },
+    {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: name the branch to record\n"
+    }
+  ],
+  "cloud-branch/naked-container": [
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: this container has no factory endpoint or credential, so it cannot record branch tick-run/epic1; the factory will refuse to act on it and report it in the daily digest\n"
+    }
+  ],
+  "environment/green": [
+    {
+      "exit": 0,
+      "stdout": "sandbox: [1/2] running a-first: echo first-ok\nfirst-ok\nsandbox: [1/2] PASS  a-first: echo first-ok\nsandbox: [2/2] running go is on PATH: echo go-ok\ngo-ok\nsandbox: [2/2] PASS  go is on PATH: echo go-ok\nsandbox: 2 of 2 environment checks green\n",
+      "stderr": ""
+    }
+  ],
+  "environment/none": [
+    {
+      "exit": 0,
+      "stdout": "sandbox: no [environment.commands] in .tick/runners.toml — nothing to check\n",
+      "stderr": ""
+    }
+  ],
+  "environment/red": [
+    {
+      "exit": 1,
+      "stdout": "sandbox: [1/2] running a check that fails: echo nope \u003e\u00262; exit 5\nnope\nsandbox: [1/2] FAILED  a check that fails: echo nope \u003e\u00262; exit 5 (exit 5)\nsandbox: [2/2] running fine: true\nsandbox: [2/2] PASS  fine: true\nsandbox: environment pre-flight red: 1 of 2 checks failed\nsandbox:   failing check: a check that fails: echo nope \u003e\u00262; exit 5\n",
+      "stderr": "Error: environment pre-flight failed: 1 of 2 checks failed\nUsage:\n  tk sandbox environment [flags]\n\nFlags:\n  -h, --help   help for environment\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "image/base": [
+    {
+      "exit": 0,
+      "stdout": "ticks-orchestrator:0.32.0\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "image/broken-config": [
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox image: .tick/runners.toml: toml: line 3 (last key \"sandbox.image\"): incompatible types: TOML value has type int64; destination has type string\nUsage:\n  tk sandbox image [flags]\n\nFlags:\n      --declared-only       print only an image the repository itself declares, and nothing when it declares none\n  -h, --help                help for image\n      --tk-version string   tk version the base image is pinned to (default: this tk's version)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "image/declared": [
+    {
+      "exit": 0,
+      "stdout": "registry.example.com/acme/orchestrator:2.0.0\n",
+      "stderr": "note: \u003cROOT\u003e declares this image; whatever boots the sandbox must pass it\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "registry.example.com/acme/orchestrator:2.0.0\n",
+      "stderr": "note: \u003cROOT\u003e declares this image; whatever boots the sandbox must pass it\n"
+    }
+  ],
+  "image/no-config": [
+    {
+      "exit": 0,
+      "stdout": "ticks-orchestrator:dev\n",
+      "stderr": ""
+    }
+  ],
+  "model/broken-config": [
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox model: .tick/runners.toml: toml: line 3: expected '.' or ']' to end table name, but got '\\n' instead\nUsage:\n  tk sandbox model [flags]\n\nFlags:\n  -h, --help          help for model\n      --role string   role cell to resolve (default: the orchestrator's own cell)\n      --tier string   tier to resolve --role at (economy, balanced, strong, frontier)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "model/frontier-tier": [
+    {
+      "exit": 0,
+      "stdout": "opus-frontier\n",
+      "stderr": "note: routed by roles.implement.tiers.frontier.model\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "sonnet\n",
+      "stderr": "note: routed by roles.implement.model\n"
+    }
+  ],
+  "model/no-config": [
+    {
+      "exit": 0,
+      "stdout": "",
+      "stderr": "note: .tick/runners.toml routes no model for the orchestrator — set [orchestrator].model, or a model on the role it falls back to ([roles.implement])\n"
+    }
+  ],
+  "model/nothing-routed": [
+    {
+      "exit": 0,
+      "stdout": "",
+      "stderr": "note: .tick/runners.toml routes no model for the orchestrator — set [orchestrator].model, or a model on the role it falls back to ([roles.implement])\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "",
+      "stderr": "note: .tick/runners.toml routes no model for role implement — set a model on [roles.implement] (or on [roles.implement], which it falls back to)\n"
+    }
+  ],
+  "model/orchestrator-table": [
+    {
+      "exit": 0,
+      "stdout": "orchestrator-model\n",
+      "stderr": "note: routed by orchestrator.model\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "sonnet\n",
+      "stderr": "note: routed by roles.implement.model\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "opus\n",
+      "stderr": "note: routed by roles.implement.tiers.strong.model\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "haiku\n",
+      "stderr": "note: routed by roles.review.model\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "sonnet\n",
+      "stderr": "note: routed by roles.implement.model\n"
+    }
+  ],
+  "model/role-fallback": [
+    {
+      "exit": 0,
+      "stdout": "sonnet\n",
+      "stderr": "note: routed by roles.implement.model\n"
+    }
+  ],
+  "model/unknown-tier": [
+    {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: unknown --tier \"supreme\" (want one of economy, balanced, strong, frontier)\nUsage:\n  tk sandbox model [flags]\n\nFlags:\n  -h, --help          help for model\n      --role string   role cell to resolve (default: the orchestrator's own cell)\n      --tier string   tier to resolve --role at (economy, balanced, strong, frontier)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "setup/failing": [
+    {
+      "exit": 1,
+      "stdout": "sandbox: [1/1] a step that fails: echo before; exit 3\nbefore\n",
+      "stderr": "Error: sandbox setup: [1/1] a step that fails: echo before; exit 3: exit status 3 (from .tick/runners.toml in the checkout at the submitted commit)\nUsage:\n  tk sandbox setup [flags]\n\nFlags:\n      --force          run the setup commands even when this checkout is already warm\n  -h, --help           help for setup\n      --stamp string   path of the warm record (default: \u003cgit-dir\u003e/ticks/sandbox-setup)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "setup/no-git-dir": [
+    {
+      "exit": 0,
+      "stdout": "sandbox: no git directory to record the warm in; setup runs every time (it is required to be idempotent)\nsandbox: [1/2] warm the caches: echo warmed\nwarmed\nsandbox: [2/2] echo second\nsecond\nsandbox: 2 setup command(s) green\n",
+      "stderr": ""
+    }
+  ],
+  "setup/none-declared": [
+    {
+      "exit": 0,
+      "stdout": "sandbox: no [sandbox] setup in .tick/runners.toml — nothing to warm\n",
+      "stderr": ""
+    }
+  ],
+  "setup/runs-then-skips": [
+    {
+      "exit": 0,
+      "stdout": "sandbox: [1/2] warm the caches: echo warmed\nwarmed\nsandbox: [2/2] echo second\nsecond\nsandbox: 2 setup command(s) green\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "sandbox: already warm — 2 setup command(s) ran in this checkout\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "sandbox: [1/2] warm the caches: echo warmed\nwarmed\nsandbox: [2/2] echo second\nsecond\nsandbox: 2 setup command(s) green\n",
+      "stderr": ""
+    }
+  ],
+  "substrate/auto": [
+    {
+      "exit": 0,
+      "stdout": "harness\nrunner-state: substrate=harness requested=auto reason=auto-no-herdr\n",
+      "stderr": "note: .tick/runners.toml requests substrate = \"auto\" and no herdr is running (HERDR_ENV is unset, the resolved socket /tmp/no-such-herdr-46x.sock does not answer a read-only call: herdclient: dial /tmp/no-such-herdr-46x.sock: dial unix /tmp/no-such-herdr-46x.sock: connect: no such file or directory): workers are dispatched as subagents of the orchestrating harness, which is what \"auto\" asks for.\n"
+    }
+  ],
+  "substrate/declared-cloud": [
+    {
+      "exit": 0,
+      "stdout": "cloud\nrunner-state: substrate=cloud requested=cloud reason=config-terminal\n",
+      "stderr": "note: .tick/runners.toml requests substrate = \"cloud\": workers are dispatched as one cloud sandbox per tick through the run API, and herdr is not probed for. Workers are containers, not local processes: no worktree, pane or local branch appears for a tick until its container pushes one, [roles] routes the harness each container runs rather than a local CLI, and dispatch needs the project to be enrolled with a cloud factory. `tk herd spawn` is not the dispatch verb for this substrate and refuses rather than starting a second worker on a tick.\nnote: wave width 4 from .tick/runners.toml [orchestration].max_parallel — under the cloud substrate that is concurrent worker containers, and a deployment's own instance ceiling can lower it further\nnote: the width is enforced on the dispatch path — claiming a 4+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "harness\nrunner-state: substrate=harness requested=harness config=cloud source=TICKS_SUBSTRATE reason=explicit-override\n",
+      "stderr": "note: TICKS_SUBSTRATE=harness is set for this run, so the effective substrate is harness; .tick/runners.toml requests substrate = \"cloud\", which stands for runs where it applies (the checkout is not modified). Cross-vendor role routing in [roles] will not apply — every worker runs on the orchestrating harness, branch naming follows the harness adapter rather than worktree_branch_prefix, and workers no longer outlive the orchestrator.\nnote: wave width 4 from .tick/runners.toml [orchestration].max_parallel — under the harness substrate that is concurrent subagents in one sandbox\nnote: the width is enforced on the dispatch path — claiming a 4+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    }
+  ],
+  "substrate/override": [
+    {
+      "exit": 0,
+      "stdout": "harness\nrunner-state: substrate=harness requested=harness config=herdr source=TICKS_SUBSTRATE reason=explicit-override\n",
+      "stderr": "note: TICKS_SUBSTRATE=harness is set for this run, so the effective substrate is harness; .tick/runners.toml requests substrate = \"herdr\", which stands for runs where it applies (the checkout is not modified). Cross-vendor role routing in [roles] will not apply — every worker runs on the orchestrating harness, branch naming follows the harness adapter rather than worktree_branch_prefix, and workers no longer outlive the orchestrator.\nnote: wave width 3 from .tick/runners.toml [orchestration].max_parallel — under the harness substrate that is concurrent subagents in one sandbox\nnote: the width is enforced on the dispatch path — claiming a 3+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "cloud\nrunner-state: substrate=cloud requested=cloud config=herdr source=TICKS_SUBSTRATE reason=explicit-override\n",
+      "stderr": "note: TICKS_SUBSTRATE=cloud is set for this run, so the effective substrate is cloud; .tick/runners.toml requests substrate = \"herdr\", which stands for runs where it applies (the checkout is not modified). Workers are containers, not local processes: no worktree, pane or local branch appears for a tick until its container pushes one, [roles] routes the harness each container runs rather than a local CLI, and dispatch needs the project to be enrolled with a cloud factory. `tk herd spawn` is not the dispatch verb for this substrate and refuses rather than starting a second worker on a tick.\nnote: wave width 3 from .tick/runners.toml [orchestration].max_parallel — under the cloud substrate that is concurrent worker containers, and a deployment's own instance ceiling can lower it further\nnote: the width is enforced on the dispatch path — claiming a 3+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    },
+    {
+      "exit": 0,
+      "stdout": "harness\nrunner-state: substrate=harness requested=herdr config=herdr source=TICKS_SUBSTRATE reason=herdr-unavailable\n",
+      "stderr": "note: TICKS_SUBSTRATE=herdr is set for this run, so the effective substrate is harness; .tick/runners.toml requests substrate = \"herdr\", which stands for runs where it applies (the checkout is not modified). TICKS_SUBSTRATE requests substrate = \"herdr\", but herdr is unavailable (HERDR_ENV is unset and the resolved socket /tmp/no-such-herdr-46x.sock does not answer a read-only call: herdclient: dial /tmp/no-such-herdr-46x.sock: dial unix /tmp/no-such-herdr-46x.sock: connect: no such file or directory). Falling back to harness orchestration via the claude adapter for this run. Cross-vendor role routing in [roles] will not apply — every worker runs on the orchestrating harness, branch naming follows the harness adapter rather than worktree_branch_prefix, and workers no longer outlive the orchestrator.\nnote: wave width 3 from .tick/runners.toml [orchestration].max_parallel — under the harness substrate that is concurrent subagents in one sandbox\nnote: the width is enforced on the dispatch path — claiming a 3+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    },
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: sandbox substrate: TICKS_SUBSTRATE=\"subagents\" is not a substrate: expected one of \"herdr\", \"harness\", \"auto\", \"cloud\"\nUsage:\n  tk sandbox substrate [flags]\n\nFlags:\n  -h, --help   help for substrate\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "substrate/unsatisfiable-pin": [
+    {
+      "exit": 0,
+      "stdout": "harness\nrunner-state: substrate=harness requested=herdr reason=herdr-unavailable\n",
+      "stderr": "note: .tick/runners.toml requests substrate = \"herdr\", but herdr is unavailable (HERDR_ENV is unset and the resolved socket /tmp/no-such-herdr-46x.sock does not answer a read-only call: herdclient: dial /tmp/no-such-herdr-46x.sock: dial unix /tmp/no-such-herdr-46x.sock: connect: no such file or directory). Falling back to harness orchestration via the claude adapter for this run. Cross-vendor role routing in [roles] will not apply — every worker runs on the orchestrating harness, branch naming follows the harness adapter rather than worktree_branch_prefix, and workers no longer outlive the orchestrator. If this repository is sometimes driven without herdr, substrate = \"auto\" is the truthful setting: it uses herdr when it is there and dispatches subagents when it is not, without calling either one a failure.\nnote: wave width 3 from .tick/runners.toml [orchestration].max_parallel — under the harness substrate that is concurrent subagents in one sandbox\nnote: the width is enforced on the dispatch path — claiming a 3+1th tick in a wave (tk update --status in_progress, tk herd spawn) is refused with exit 8 until a slot frees\n"
+    }
+  ],
+  "toolchain/declared": [
+    {
+      "exit": 0,
+      "stdout": "rust@1.90.0\npython@3.13\n",
+      "stderr": ""
+    }
+  ],
+  "toolchain/none": [
+    {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "worker-prompt/refusals": [
+    {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: --tick is required: a worker container implements exactly one tick\nUsage:\n  tk sandbox worker-prompt [flags]\n\nFlags:\n      --base string     the base commit the branch was cut from, named in the prompt so the worker can verify it\n      --branch string   the branch the worker works on (default: tick/\u003cepic\u003e/\u003ctick\u003e)\n  -h, --help            help for worker-prompt\n      --tick string     the tick the worker implements (required)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    },
+    {
+      "exit": 4,
+      "stdout": "",
+      "stderr": "Error: failed to read tick zzz: read tick zzz: open \u003cROOT\u003e/.tick/issues/zzz.json: no such file or directory\nUsage:\n  tk sandbox worker-prompt [flags]\n\nFlags:\n      --base string     the base commit the branch was cut from, named in the prompt so the worker can verify it\n      --branch string   the branch the worker works on (default: tick/\u003cepic\u003e/\u003ctick\u003e)\n  -h, --help            help for worker-prompt\n      --tick string     the tick the worker implements (required)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    },
+    {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: failed to read tick bad: parse tick bad: invalid character 'n' looking for beginning of object key string\nUsage:\n  tk sandbox worker-prompt [flags]\n\nFlags:\n      --base string     the base commit the branch was cut from, named in the prompt so the worker can verify it\n      --branch string   the branch the worker works on (default: tick/\u003cepic\u003e/\u003ctick\u003e)\n  -h, --help            help for worker-prompt\n      --tick string     the tick the worker implements (required)\n\nGlobal Flags:\n      --json-contract string   require this tk --json contract version; exit 11 if this build cannot serve it\n      --root string            checkout to read .tick/runners.toml from (default: the repo containing the working directory)\n\n"
+    }
+  ],
+  "worker-prompt/rendered": [
+    {
+      "exit": 0,
+      "stdout": "You are implementing one task from the Ticks issue tracker, working in an isolated git worktree\non branch tick/gy1/a1w. You are one of several workers running in parallel.\n\nIMPORTANT FIRST STEP: verify this worktree contains integration commit 930f1cf4dbcac5505cce506cbf2a8412d8248b92\n(`git merge-base --is-ancestor 930f1cf4dbcac5505cce506cbf2a8412d8248b92 HEAD`). If it does not, report BLOCKED in RESULT-a1w.md if that base\ncannot be established.\n\n## Task\nTitle: Deliver the spawn command\nTick ID: a1w\nEpic: Herd helper CLI (gy1)\n\n## Description\ndeliver the spawn command\n\nwith a second paragraph\n\n## Acceptance criteria\ngo test green\n\n## Instructions\n1. Read `.tick/learnings.md` (if present) — accumulated gotchas from earlier epics.\n2. Read `.tick/config.md` (if present) — test commands and project-specific rules for implementers.\n3. Read the repository instruction file used by your CLI (`AGENTS.md`, `CLAUDE.md`, or equivalent)\n   and any nested instruction files that apply.\n4. Read the relevant existing code before changing anything.\n5. Implement the task test-first: write the failing test, then make it pass.\n6. Run the tests named in the acceptance criteria and confirm they pass. Run\n   them in the FOREGROUND and read the results before your message ends — never\n   park test runs (or any final-step work) in your harness's background tasks\n   and end your turn to wait for them: the moment your turn ends, the substrate\n   reads you as finished, and your commit and report will not exist yet.\n7. Commit your changes in this worktree: `git add -A \u0026\u0026 git commit -m \"tick a1w: \u003cshort summary\u003e\"`.\n8. Write your report to RESULT-a1w.md at the root of this worktree (see below) — do NOT commit it.\n\n## Boundaries (important)\n- Do NOT run any `tk` command and do NOT touch the `.tick/` directory — the orchestrator owns all tick state.\n- Work only inside this worktree. Do not touch sibling worktrees, other branches, or the main checkout.\n- Stay in scope: implement this tick only. Don't add features it didn't ask for.\n- Your `RESULT-\u003ctick-id\u003e.md` report stays UNCOMMITTED in the worktree root — write it\n  after your commit (or exclude it): it is run state the orchestrator collects, not repo content.\n- Commit source and tests only — never build/run artifacts (`__pycache__`, `*.pyc`, coverage files,\n  caches). If `.gitignore` doesn't cover what your test run produces, extend it as part of your change.\n- If the task is ambiguous or you're missing something, stop and report it in RESULT-a1w.md — don't guess.\n\n## Reporting — RESULT-a1w.md is the ONLY channel\nYour terminal output is not read. Anything not committed or written to RESULT-a1w.md is lost.\nWrite RESULT-a1w.md in this worktree (the filename must carry the tick id — sibling\nworkers write their own, and a shared filename collides when the wave is merged) containing:\n- Branch name (`git rev-parse --abbrev-ref HEAD`)\n- Files changed and tests added\n- Anything the next tick should know\n- A final line, exactly one of:\n  STATUS: DONE\n  STATUS: DONE_WITH_CONCERNS — \u003cwhat to double-check\u003e\n  STATUS: NEEDS_CONTEXT — \u003cwhat you need\u003e\n  STATUS: BLOCKED — \u003cwhy\u003e\n\n## Where you are running\n\nYou are in an ephemeral cloud container, not a worktree beside an orchestrator.\nThis checkout is a fresh clone and is already on tick/gy1/a1w. Everything you do here dies\nwith the container except what is committed on that branch — so commit as you\ngo, and do not wait until the end.\n\nDo NOT push, and do not create or switch branches. When you exit, this\ncontainer's entrypoint commits RESULT-a1w.md and pushes tick/gy1/a1w for you; that push\nis the only channel out. Terminal output is not read by anything.\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "You are implementing one task from the Ticks issue tracker, working in an isolated git worktree\non branch tick-run/custom. You are one of several workers running in parallel.\n\n## Task\nTitle: Deliver the spawn command\nTick ID: a1w\nEpic: Herd helper CLI (gy1)\n\n## Description\ndeliver the spawn command\n\nwith a second paragraph\n\n## Acceptance criteria\ngo test green\n\n## Instructions\n1. Read `.tick/learnings.md` (if present) — accumulated gotchas from earlier epics.\n2. Read `.tick/config.md` (if present) — test commands and project-specific rules for implementers.\n3. Read the repository instruction file used by your CLI (`AGENTS.md`, `CLAUDE.md`, or equivalent)\n   and any nested instruction files that apply.\n4. Read the relevant existing code before changing anything.\n5. Implement the task test-first: write the failing test, then make it pass.\n6. Run the tests named in the acceptance criteria and confirm they pass. Run\n   them in the FOREGROUND and read the results before your message ends — never\n   park test runs (or any final-step work) in your harness's background tasks\n   and end your turn to wait for them: the moment your turn ends, the substrate\n   reads you as finished, and your commit and report will not exist yet.\n7. Commit your changes in this worktree: `git add -A \u0026\u0026 git commit -m \"tick a1w: \u003cshort summary\u003e\"`.\n8. Write your report to RESULT-a1w.md at the root of this worktree (see below) — do NOT commit it.\n\n## Boundaries (important)\n- Do NOT run any `tk` command and do NOT touch the `.tick/` directory — the orchestrator owns all tick state.\n- Work only inside this worktree. Do not touch sibling worktrees, other branches, or the main checkout.\n- Stay in scope: implement this tick only. Don't add features it didn't ask for.\n- Your `RESULT-\u003ctick-id\u003e.md` report stays UNCOMMITTED in the worktree root — write it\n  after your commit (or exclude it): it is run state the orchestrator collects, not repo content.\n- Commit source and tests only — never build/run artifacts (`__pycache__`, `*.pyc`, coverage files,\n  caches). If `.gitignore` doesn't cover what your test run produces, extend it as part of your change.\n- If the task is ambiguous or you're missing something, stop and report it in RESULT-a1w.md — don't guess.\n\n## Reporting — RESULT-a1w.md is the ONLY channel\nYour terminal output is not read. Anything not committed or written to RESULT-a1w.md is lost.\nWrite RESULT-a1w.md in this worktree (the filename must carry the tick id — sibling\nworkers write their own, and a shared filename collides when the wave is merged) containing:\n- Branch name (`git rev-parse --abbrev-ref HEAD`)\n- Files changed and tests added\n- Anything the next tick should know\n- A final line, exactly one of:\n  STATUS: DONE\n  STATUS: DONE_WITH_CONCERNS — \u003cwhat to double-check\u003e\n  STATUS: NEEDS_CONTEXT — \u003cwhat you need\u003e\n  STATUS: BLOCKED — \u003cwhy\u003e\n\n## Where you are running\n\nYou are in an ephemeral cloud container, not a worktree beside an orchestrator.\nThis checkout is a fresh clone and is already on tick-run/custom. Everything you do here dies\nwith the container except what is committed on that branch — so commit as you\ngo, and do not wait until the end.\n\nDo NOT push, and do not create or switch branches. When you exit, this\ncontainer's entrypoint commits RESULT-a1w.md and pushes tick-run/custom for you; that push\nis the only channel out. Terminal output is not read by anything.\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "You are implementing one task from the Ticks issue tracker, working in an isolated git worktree\non branch tick/zz9/o9p. You are one of several workers running in parallel.\n\n## Task\nTitle: A tick with an epic this checkout lacks\nTick ID: o9p\nEpic: zz9\n\n## Instructions\n1. Read `.tick/learnings.md` (if present) — accumulated gotchas from earlier epics.\n2. Read `.tick/config.md` (if present) — test commands and project-specific rules for implementers.\n3. Read the repository instruction file used by your CLI (`AGENTS.md`, `CLAUDE.md`, or equivalent)\n   and any nested instruction files that apply.\n4. Read the relevant existing code before changing anything.\n5. Implement the task test-first: write the failing test, then make it pass.\n6. Run the tests named in the acceptance criteria and confirm they pass. Run\n   them in the FOREGROUND and read the results before your message ends — never\n   park test runs (or any final-step work) in your harness's background tasks\n   and end your turn to wait for them: the moment your turn ends, the substrate\n   reads you as finished, and your commit and report will not exist yet.\n7. Commit your changes in this worktree: `git add -A \u0026\u0026 git commit -m \"tick o9p: \u003cshort summary\u003e\"`.\n8. Write your report to RESULT-o9p.md at the root of this worktree (see below) — do NOT commit it.\n\n## Boundaries (important)\n- Do NOT run any `tk` command and do NOT touch the `.tick/` directory — the orchestrator owns all tick state.\n- Work only inside this worktree. Do not touch sibling worktrees, other branches, or the main checkout.\n- Stay in scope: implement this tick only. Don't add features it didn't ask for.\n- Your `RESULT-\u003ctick-id\u003e.md` report stays UNCOMMITTED in the worktree root — write it\n  after your commit (or exclude it): it is run state the orchestrator collects, not repo content.\n- Commit source and tests only — never build/run artifacts (`__pycache__`, `*.pyc`, coverage files,\n  caches). If `.gitignore` doesn't cover what your test run produces, extend it as part of your change.\n- If the task is ambiguous or you're missing something, stop and report it in RESULT-o9p.md — don't guess.\n\n## Reporting — RESULT-o9p.md is the ONLY channel\nYour terminal output is not read. Anything not committed or written to RESULT-o9p.md is lost.\nWrite RESULT-o9p.md in this worktree (the filename must carry the tick id — sibling\nworkers write their own, and a shared filename collides when the wave is merged) containing:\n- Branch name (`git rev-parse --abbrev-ref HEAD`)\n- Files changed and tests added\n- Anything the next tick should know\n- A final line, exactly one of:\n  STATUS: DONE\n  STATUS: DONE_WITH_CONCERNS — \u003cwhat to double-check\u003e\n  STATUS: NEEDS_CONTEXT — \u003cwhat you need\u003e\n  STATUS: BLOCKED — \u003cwhy\u003e\n\n## Where you are running\n\nYou are in an ephemeral cloud container, not a worktree beside an orchestrator.\nThis checkout is a fresh clone and is already on tick/zz9/o9p. Everything you do here dies\nwith the container except what is committed on that branch — so commit as you\ngo, and do not wait until the end.\n\nDo NOT push, and do not create or switch branches. When you exit, this\ncontainer's entrypoint commits RESULT-o9p.md and pushes tick/zz9/o9p for you; that push\nis the only channel out. Terminal output is not read by anything.\n",
+      "stderr": ""
+    },
+    {
+      "exit": 0,
+      "stdout": "You are implementing one task from the Ticks issue tracker, working in an isolated git worktree\non branch tick//gy1. You are one of several workers running in parallel.\n\n## Task\nTitle: Herd helper CLI\nTick ID: gy1\n\n## Description\nThe epic a1w belongs to\n\n## Acceptance criteria\nepic done\n\n## Instructions\n1. Read `.tick/learnings.md` (if present) — accumulated gotchas from earlier epics.\n2. Read `.tick/config.md` (if present) — test commands and project-specific rules for implementers.\n3. Read the repository instruction file used by your CLI (`AGENTS.md`, `CLAUDE.md`, or equivalent)\n   and any nested instruction files that apply.\n4. Read the relevant existing code before changing anything.\n5. Implement the task test-first: write the failing test, then make it pass.\n6. Run the tests named in the acceptance criteria and confirm they pass. Run\n   them in the FOREGROUND and read the results before your message ends — never\n   park test runs (or any final-step work) in your harness's background tasks\n   and end your turn to wait for them: the moment your turn ends, the substrate\n   reads you as finished, and your commit and report will not exist yet.\n7. Commit your changes in this worktree: `git add -A \u0026\u0026 git commit -m \"tick gy1: \u003cshort summary\u003e\"`.\n8. Write your report to RESULT-gy1.md at the root of this worktree (see below) — do NOT commit it.\n\n## Boundaries (important)\n- Do NOT run any `tk` command and do NOT touch the `.tick/` directory — the orchestrator owns all tick state.\n- Work only inside this worktree. Do not touch sibling worktrees, other branches, or the main checkout.\n- Stay in scope: implement this tick only. Don't add features it didn't ask for.\n- Your `RESULT-\u003ctick-id\u003e.md` report stays UNCOMMITTED in the worktree root — write it\n  after your commit (or exclude it): it is run state the orchestrator collects, not repo content.\n- Commit source and tests only — never build/run artifacts (`__pycache__`, `*.pyc`, coverage files,\n  caches). If `.gitignore` doesn't cover what your test run produces, extend it as part of your change.\n- If the task is ambiguous or you're missing something, stop and report it in RESULT-gy1.md — don't guess.\n\n## Reporting — RESULT-gy1.md is the ONLY channel\nYour terminal output is not read. Anything not committed or written to RESULT-gy1.md is lost.\nWrite RESULT-gy1.md in this worktree (the filename must carry the tick id — sibling\nworkers write their own, and a shared filename collides when the wave is merged) containing:\n- Branch name (`git rev-parse --abbrev-ref HEAD`)\n- Files changed and tests added\n- Anything the next tick should know\n- A final line, exactly one of:\n  STATUS: DONE\n  STATUS: DONE_WITH_CONCERNS — \u003cwhat to double-check\u003e\n  STATUS: NEEDS_CONTEXT — \u003cwhat you need\u003e\n  STATUS: BLOCKED — \u003cwhy\u003e\n\n## Where you are running\n\nYou are in an ephemeral cloud container, not a worktree beside an orchestrator.\nThis checkout is a fresh clone and is already on tick//gy1. Everything you do here dies\nwith the container except what is committed on that branch — so commit as you\ngo, and do not wait until the end.\n\nDo NOT push, and do not create or switch branches. When you exit, this\ncontainer's entrypoint commits RESULT-gy1.md and pushes tick//gy1 for you; that push\nis the only channel out. Terminal output is not read by anything.\n",
+      "stderr": ""
+    }
+  ]
+}

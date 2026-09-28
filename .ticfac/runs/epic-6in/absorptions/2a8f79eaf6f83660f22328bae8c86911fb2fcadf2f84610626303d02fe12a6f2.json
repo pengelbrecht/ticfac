@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "2a8f79eaf6f83660f22328bae8c86911fb2fcadf2f84610626303d02fe12a6f2",
+  "tick_id": "ee5",
+  "gating": false,
+  "basis": "rule",
+  "reason": "the epic's acceptance is prose (the acceptance carries no [A<n>]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A<n>] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
+  "placement": "backlog",
+  "decided_at": "2026-09-28T10:15:05Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "4i8",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "d78ab66157c5381141ca674b8e2c0337abb75860",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:2300d2fefb7c03f5c83a8a9afdd29d639909492268a8e184c0930c8c48f2b9d4",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}

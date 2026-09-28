@@ -3,6 +3,12 @@
 You are implementing ONE unit of work from the ticks tracker, headless, in an
 isolated git worktree that is yours alone. Nobody will answer a question.
 
+You run headless: ending your turn ends the job. Run commands in the
+foreground and wait for them; never end your turn while waiting on a
+background task. Do not amend, rebase or reset commits you have already
+made: they may already be pushed. To change something, add a new commit
+on top.
+
 - Read the tracker record for this tick, the repository's own instruction file,
   and `.tick/config.md` and `.tick/learnings.md` where they exist, before you
   change anything.

@@ -1,10 +1,11 @@
-// Command contracts is the vendoring gate for the pinned ticks contract
-// bundle. Two subcommands, and the split between them is the whole safety
-// argument (ticks cloud/factory/CONTRACTS.md, applied here):
+// Command contracts is the contracts gate for the repository root `contracts/`
+// directory — ticfac's own authored bundle, carrying two contracts vendored
+// from a pinned ticks release. Two subcommands, and the split between them is
+// the whole safety argument (CONTRACTS.md):
 //
 //	check            every test run, every CI run. NEVER touches the network.
-//	verify-upstream  CI only. Fetches the pinned ref and compares.
-//	sync             a person adopting a new pin. Requires the network.
+//	verify-upstream  CI only. Fetches the pinned ticks ref and compares.
+//	sync             a person adopting a new ticks pin. Requires the network.
 //
 // `check` is the gate and makes no network call, so no network failure can
 // turn a test run green by skipping it. `sync` is the only thing that needs
@@ -38,7 +39,7 @@ func main() {
 		if err := contracts.VerifyPin(root); err != nil {
 			fail(err)
 		}
-		fmt.Println("contracts: the vendored bundle matches contracts.pin.json (offline check)")
+		fmt.Println("contracts: ticfac's bundle verifies, and the ticks-owned files match contracts.pin.json (offline check)")
 
 	case "verify-upstream":
 		upstream, pin := fetch(root)
@@ -47,16 +48,16 @@ func main() {
 			fail(err)
 		}
 		if len(problems) > 0 {
-			fmt.Fprintf(os.Stderr, "the vendored contracts/ is not what %s published at %s:\n",
+			fmt.Fprintf(os.Stderr, "the vendored ticks contracts are not what %s published at %s:\n",
 				pin.Repository, pin.Ref)
 			for _, p := range problems {
 				fmt.Fprintf(os.Stderr, "  %s\n", p)
 			}
-			fmt.Fprintln(os.Stderr, "\nRun `go run ./cmd/contracts sync` and commit contracts/ with contracts.pin.json.")
+			fmt.Fprintln(os.Stderr, "\nRun `go run ./cmd/contracts sync`, re-cut ticfac's bundle in the same commit, and commit contracts/ with contracts.pin.json.")
 			os.Exit(1)
 		}
-		fmt.Printf("contracts: the vendored bundle is byte-for-byte %s@%s:%s\n",
-			pin.Repository, pin.Ref[:12], pin.Directory)
+		fmt.Printf("contracts: the vendored ticks contracts are byte-for-byte %s@%s:%s (ticks bundle %s)\n",
+			pin.Repository, pin.Ref[:12], pin.Directory, pin.BundleVersion)
 
 	case "sync":
 		upstream, pin := fetch(root)
@@ -64,9 +65,14 @@ func main() {
 			fail(err)
 		}
 		if err := contracts.VerifyPin(root); err != nil {
-			fail(err)
+			fail(fmt.Errorf("the vendored ticks contracts were written; the offline gate still refuses:\n%w\n\n"+
+				"Adopting the new ticks bytes is one deliberate act: re-cut ticfac's bundle\n"+
+				"(bump `version` in contracts/bundle.json, refresh the digests, add the\n"+
+				"contracts/CHANGELOG.md entry) in the same commit, and commit contracts/\n"+
+				"with contracts.pin.json together.", err))
 		}
-		fmt.Printf("contracts: vendored %d files from %s@%s\n", len(upstream), pin.Repository, pin.Ref[:12])
+		fmt.Printf("contracts: vendored %d ticks contracts from %s@%s (ticks bundle %s)\n",
+			len(pin.Files), pin.Repository, pin.Ref[:12], pin.BundleVersion)
 
 	default:
 		fmt.Fprintln(os.Stderr, "usage: contracts <check|verify-upstream|sync>")

@@ -16,7 +16,7 @@ import (
 // verifies tk, adopts the run branch, provisions the toolchain, runs the
 // repository's `[sandbox]` setup and its `[environment.commands]` pre-flight,
 // exports TK_ACTOR=cloud:orchestrator, starts the RUN KEEPER — and then execs
-// a headless harness on the ticks skill loop, which is a MODEL deciding
+// a headless harness on the orchestrator loop, which is a MODEL deciding
 // control flow. Only that last step changes. Everything above it is kept,
 // the keeper most of all: it pushes the run branch as soon as there is
 // anything on it and heartbeats on a timer, which is why committed work

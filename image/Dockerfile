@@ -42,8 +42,8 @@ FROM docker.io/cloudflare/sandbox:0.12.7-python@sha256:6dfa7301e69d3e5cd8e0404b9
 # assume. Building an entrypoint that runs a subcommand no release has yet is
 # `./build.sh --tk-ref <pushed commit>`; without it the assertion at the end of
 # the tk block below fails the build and names what is missing.
-ARG TK_VERSION=0.31.0
-ARG TK_SOURCE_REF=v0.31.0
+ARG TK_VERSION=0.32.0
+ARG TK_SOURCE_REF=v0.32.0
 ARG TK_MODULE=github.com/pengelbrecht/ticks/cmd/tk
 
 ARG OMP_VERSION=17.3.8
@@ -184,7 +184,7 @@ RUN set -euo pipefail; \
 # release.
 #
 # This is the fix for a chicken-and-egg the release pin created: the entrypoint
-# below runs `tk sandbox ...`, an epic adds that subcommand, and the newest
+# below ran tk verbs an epic could add, and the newest
 # released tk does not have it yet — so the image could only ever be one
 # release behind the bundle it boots, and a container booted, streamed, and
 # then died with "unknown command: sandbox". Source removes the lag entirely:
@@ -215,6 +215,9 @@ RUN set -euo pipefail; \
 # container boots and then dies mid-run. The list is derived from the scripts
 # themselves (internal/factory.EntrypointTkCommands) and shipped in the build
 # context, so this assertion cannot go stale the way a hand-written one does.
+# It carries TRACKER commands only (tick 46x): the sandbox verbs and the branch
+# write moved to ticfac, whose binary the deploy stages from the same tree as
+# these scripts, so the two cannot disagree about a verb's existence.
 # Failing HERE fails the deploy, with the missing subcommand named.
 COPY required-tk-commands /usr/local/share/ticks/required-tk-commands
 RUN set -euo pipefail; \

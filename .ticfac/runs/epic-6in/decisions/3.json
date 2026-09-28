@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 10,
+    "attempt_head": "77e400895bce0381639a83b4a07a13d0190a9228",
+    "conflict_files": [
+      "internal/reconcile/supervise.go",
+      "internal/reconcile/supervise_test.go"
+    ],
+    "conflicting_ticks": [
+      "823"
+    ],
+    "epic_id": "6in",
+    "job_id": "run-epic-6in/tick-823/resolve-10",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "resolve_branch": "ticfac/run-epic-6in/tick-823/resolve-10",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "823"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in internal/reconcile/supervise.go; content in internal/reconcile/supervise_test.go",
+    "conflict_files": [
+      "internal/reconcile/supervise.go",
+      "internal/reconcile/supervise_test.go"
+    ],
+    "job_id": "run-epic-6in/tick-823/resolve-10",
+    "merge": "6503882af75157724e837c647f52cd2a9d24dc17",
+    "resolve_head": "194234dc26854488c995fa7e61ee96ad77ca96e9",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T15:12:16Z",
+  "answered_at": "2026-09-28T15:12:16Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "823",
+    "attempt": 10,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "7e9107575f13b9d2ac6886e9de46acbd8ac3c8e7",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

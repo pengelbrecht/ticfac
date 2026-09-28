@@ -58,7 +58,8 @@
 // # Socket path
 //
 // [ResolveSocketPath] implements the order documented in
-// skills/ticks/references/runners-config.md: an explicit path, then
+// internal/runconfig/runners-config.md (ticfac's copy of the reference ticks
+// dropped with its execution surface, tick dz1): an explicit path, then
 // $HERDR_SOCKET_PATH, then ~/.config/herdr/herdr.sock.
 //
 // The package depends on the standard library only.
