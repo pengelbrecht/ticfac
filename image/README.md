@@ -38,7 +38,8 @@ from this image and starts `ticks-orchestrator` inside it, which clones the repo
 at the submitted SHA, verifies `tk`, provisions anything the repository needs
 that the image does not already carry, runs the repository's own `[sandbox]`
 setup, runs the Environment pre-flight, exports `TK_ACTOR=cloud:orchestrator`,
-and execs the headless harness on the ticks skill loop. See
+and execs the headless harness on the orchestrator loop
+(`internal/runconfig/agent-runner.md`). See
 `docs/design/cloud-factory.md` (Phase 1).
 
 ## The worker role
@@ -390,8 +391,9 @@ Environment check that looks for it fails and names itself.
 ## The repository's own sandbox (`[sandbox]`)
 
 A repository declares what its runs need on top of this image in the `[sandbox]`
-table of the tracked `.tick/runners.toml` — the full contract is in the ticks
-skill's `references/runners-config.md`, *The sandbox a run gets*:
+table of the tracked `.tick/runners.toml` — the full contract is in
+ticfac's own `internal/runconfig/runners-config.md`, *The sandbox a run
+gets*:
 
 | Key | What this image does with it |
 |---|---|

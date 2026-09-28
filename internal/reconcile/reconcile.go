@@ -772,6 +772,16 @@ type Reconciler struct {
 	pinnedTier   string
 	hostWidth    int
 
+	// inFlightIDs is the width's raw material since tk 0.32.0 (tick dz1): the
+	// epic's claimed-and-not-closed children as the graph's
+	// dispatch.in_flight_ids reports them, re-read at every graph read. The
+	// plan's own Claimed flags agree with it for ticks the plan carries, but
+	// the ids are the tracker's count of EVERY claim under the epic, including
+	// ticks the plan does not carry, whoever holds them: this run, another
+	// run, a person. tk enforced this width itself until chz retired exit 8;
+	// since then the enforcement is this run's or nobody's.
+	inFlightIDs []string
+
 	// substrate is where this run executes, as runconfig spells it — the
 	// axis role routing resolved against (tick 84z). It is never auto by
 	// the time a Reconciler exists: New resolves it or refused the run.
@@ -1755,6 +1765,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		}
 		return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 	}
+	// The width's raw material (tick dz1): the claims the graph itself counts
+	// under this epic, whoever holds them — this run's, another run's, a
+	// person's. Re-read the same way at every graph read below (replan);
+	// tk stopped enforcing this at 0.32.0, so this count is the enforcement.
+	r.inFlightIDs = graph.Dispatch.InFlightIDs
 	plan := planFrom(graph)
 	if len(plan) == 0 {
 		// Every tick is closed. A run whose close-out ran and whose readying
@@ -1917,11 +1932,22 @@ type planEntry struct {
 	BlockedBy []string
 
 	// Claimed is the tracker's own answer that the tick is in_progress: it
-	// holds a claim, and tk counts every claim under the epic against the
-	// width whoever holds it and whether or not this run's window is holding
-	// it (epic-yoh: cr4, lkd and ppt were claimed and not in the window). It is
-	// a graph fact like the wave, and is re-read with it.
+	// holds a claim, and the run counts every claim under the epic against
+	// the width whoever holds it and whether or not this run's window is
+	// holding it (epic-yoh: cr4, lkd and ppt were claimed and not in the
+	// window). It is a graph fact like the wave, and is re-read with it.
 	Claimed bool
+
+	// OwnClaim marks a Claimed tick whose claim is THIS RUN'S — it dispatched
+	// the tick in an earlier incarnation and the claim is still standing, so
+	// admitting it takes no claim the width has not already counted (tick
+	// dz1). A claimed tick this run never dispatched is somebody ELSE'S —
+	// another run under the epic, a person with tk — and it is exactly what
+	// the width counts: tk stopped refusing over-width claims at 0.32.0 (exit
+	// 8 retired, epic chz), so a run that dispatched over a foreign claim
+	// would be an over-claim nobody refused. OwnClaim is set where the run's
+	// own dispatch memory is (adoptionFirst) and follows Claimed on refresh.
+	OwnClaim bool
 
 	// InFlight marks a tick this run already has a live attempt of — a
 	// dispatched marker whose tick the checkpoint reads as dispatched,

@@ -159,10 +159,11 @@ const (
 	CodeAgentPaneBusy = "agent_pane_busy"
 	// CodeAgentPromptStalled means agent.prompt observed no state change
 	// after submitting. It is herdr's own detection of the DROPPED FIRST
-	// PROMPT documented in skills/ticks/references/herdr-kinds.md: the CLI
-	// was still painting its startup UI and never received the text. The
-	// documented recovery is to send it again, so this code is transient on
-	// a first prompt — see internal/herd/spawn's gate.
+	// PROMPT documented in internal/runconfig/herdr-kinds.md (ticfac's copy
+	// of the per-kind reference ticks dropped with its execution surface,
+	// tick dz1): the CLI was still painting its startup UI and never received
+	// the text. The documented recovery is to send it again, so this code is
+	// transient on a first prompt — see internal/herd/spawn's gate.
 	CodeAgentPromptStalled = "agent_prompt_stalled"
 	// CodeAgentNameTaken means agent.start's name is already held by another
 	// pane's agent. Observed live against herdr 0.9.1 / protocol 22 (epic-6in,

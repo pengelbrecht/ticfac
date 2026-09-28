@@ -590,7 +590,8 @@ func initConfigNote(closeout bool) string {
 func runnersTOML(substrate, kind, model string, gates []guessedGate) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# Worker routing for epic runs, written by `+"`ticfac init`"+`.
-# Schema and semantics: the ticks skill's references/runners-config.md.
+# Schema and semantics: internal/runconfig/runners-config.md (ticfac's own
+# authoring reference for this file).
 version = 2
 
 [orchestration]

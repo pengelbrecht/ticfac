@@ -14,7 +14,7 @@
  *
  * This tick was written asking for `.tick/config.md`. It is implemented against
  * `.tick/runners.toml`, and the reason is the repository's own recorded rule
- * (`skills/ticks/references/runners-config.md`, tick 79x's human decision):
+ * (`internal/runconfig/runners-config.md`, tick 79x's human decision):
  *
  *   *if a PROGRAM parses it and a mistake fails closed, it needs a schema; if a
  *   MODEL reads it, markdown is right.*

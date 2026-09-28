@@ -274,6 +274,53 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			if len(queue) == 0 && len(holders) == 0 {
 				return failed, nil
 			}
+			// The window holds NOTHING of this run's and the queue's head
+			// still cannot join. With no holder there is no wave to run past,
+			// no blocker to wait on and no role job running alone — the only
+			// thing that can be holding the head back is the WIDTH, and with
+			// the window empty every claim it is counting is SOMEBODY ELSE'S
+			// (tick dz1): another run under this epic, a person with tk.
+			//
+			// That is not a state to rest in. A rest waits for something this
+			// run is holding to settle, and nothing is; the re-derivation that
+			// would see the width free runs when one of this run's attempts
+			// closes, and none ever will. Spinning here would be a hot loop
+			// asking a question nobody re-answers. The answer is the one the
+			// tracker's own refusal used to be (tick 3mp): HOLD, with the
+			// claim_width vocabulary a watcher matches on, resumable by
+			// construction — a resume re-derives from a fresh graph, and the
+			// width frees itself as the other holders' ticks close.
+			if len(holders) == 0 {
+				// The count is a reading of the graph and a reading can be
+				// stale: re-derive once before holding, so the hold is about
+				// the world and not about a snapshot of it.
+				var replanErr error
+				plan, queue, replanErr = r.replan(ctx, plan, queue)
+				if replanErr != nil {
+					return nil, replanErr
+				}
+				holders = window.holders()
+				if len(queue) == 0 && len(holders) == 0 {
+					return failed, nil
+				}
+				if len(queue) > 0 && r.mayAdmit(queue[0], &window, plan) {
+					continue
+				}
+				entry := queue[0]
+				stopped = true
+				if cErr := reject(entry.TickID, r.refuse(RefusedClaimWidth, entry.TickID,
+					"the width %s declares is already full of claims this run does not hold: the graph counts %d in "+
+						"dispatch.in_flight_ids (%s), and tk stopped refusing over-width claims at 0.32.0 (exit 8 retired, "+
+						"ticks became tracker-only), so this run counts the width itself and holds rather than claiming past "+
+						"it. The run is HELD, not failed: running the epic again under this run id re-derives from the graph and "+
+						"proceeds the moment a slot frees. A claim lives until its tick CLOSES, so the width frees itself as "+
+						"the ticks in flight finish; if it does not, look at what else holds a claim under this epic (another "+
+						"run, or a person's claim)",
+					r.opts.EpicID, len(r.inFlightIDs), strings.Join(r.inFlightIDs, ", "))); cErr != nil {
+					return nil, cErr
+				}
+				return failed, nil
+			}
 			// Nothing to poll, and something still to do: a finish mid-gate
 			// with no worker left beside it. Resting is the honest answer —
 			// spinning on it would spend the host on asking — and it rests at
@@ -360,6 +407,12 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 	out := append([]planEntry{}, plan...)
 	for i := range out {
 		out[i].InFlight = rank(out[i]) == 0
+		// Whose claim a claimed tick holds (tick dz1): the run's own dispatch
+		// memory is the only witness the graph does not carry. A claimed tick
+		// this run dispatched before is its own to finish — admitting it takes
+		// no claim the width has not already counted. A claimed tick it never
+		// dispatched is somebody else's, and exactly what the width counts.
+		out[i].OwnClaim = out[i].Claimed && dispatched[out[i].TickID]
 	}
 	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
 	return out, nil
@@ -431,6 +484,9 @@ func (r *Reconciler) replan(ctx context.Context, plan, queue []planEntry) ([]pla
 	if err != nil {
 		return nil, nil, fmt.Errorf("reconcile: re-read the epic graph of %s: %w", r.opts.EpicID, err)
 	}
+	// The in-flight claims are re-read with the graph (tick dz1): a close is
+	// exactly when a claim ends, and the width is counted from these.
+	r.inFlightIDs = graph.Dispatch.InFlightIDs
 	freshEntries := planFrom(graph)
 	fresh := map[string]planEntry{}
 	for _, entry := range freshEntries {
@@ -695,12 +751,17 @@ func resequence(entries []planEntry, fresh map[string]planEntry) []planEntry {
 
 // refreshClaims re-reads each entry's Claimed from a fresh reading of the
 // graph. An entry the fresh graph does not carry is a tick the tracker closed,
-// and a closed tick holds no claim.
+// and a closed tick holds no claim. OwnClaim follows Claimed (tick dz1): the
+// claim's holder is not in the graph, so ownership is what the run already
+// knew — sticky while the claim stands, gone the moment it does.
 func refreshClaims(entries []planEntry, fresh map[string]planEntry) []planEntry {
 	out := append([]planEntry{}, entries...)
 	for i := range out {
 		now, ok := fresh[out[i].TickID]
 		out[i].Claimed = ok && now.Claimed
+		if !out[i].Claimed {
+			out[i].OwnClaim = false
+		}
 	}
 	return out
 }
@@ -924,14 +985,14 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 // All four boundaries are read against everything the window is HOLDING — the
 // live workers, the settled attempts waiting their turn, and the one being
 // finished — because all of them are ticks this run has CLAIMED and not closed.
-// That includes the declared width, which is the tracker's number before it is
-// ours: asking for a claim the width forbids is asking for a refusal, and a run
-// must never ask the tracker for something the tracker will refuse (tick 3mp).
+// That includes the declared width, which — since tk 0.32.0 retired its exit-8
+// refusal (tick dz1) — is enforced HERE and nowhere else: asking for a claim
+// the width forbids is no longer asking for a refusal, it is TAKING one, so a
+// run that asked would be the over-claim the width exists to stop. The
+// principle is 3mp's, unchanged: a run must never ask the tracker for
+// something the tracker's own count refuses.
 func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bool {
 	holders := window.holders()
-	if len(holders) == 0 {
-		return true
-	}
 	// An attempt this run already has in flight is ADOPTED, not dispatched: it
 	// takes no new claim and starts no new work, so neither the width nor a
 	// graph boundary is a reason to leave it unaddressed — only a role job the
@@ -944,6 +1005,20 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 			}
 		}
 		return true
+	}
+	if len(holders) == 0 {
+		// The window holds nothing of its own, so no boundary of its own can
+		// stand in the way — no wave to run past, no role job running alone.
+		// What can still say no is the WIDTH, and with the window empty every
+		// claim it is counting is SOMEBODY ELSE'S, read from the graph's
+		// dispatch.in_flight_ids (tick dz1): another run under this epic, a
+		// person with tk. The one exception is a tick whose claim is this run's
+		// own — redispatching into a claim the width already counts takes no new
+		// one.
+		if next.OwnClaim {
+			return true
+		}
+		return r.claimsHeld(window, plan) < r.widthForWave(plan, next.Wave)
 	}
 	// reconciler-decision:D27:begin:isrole-next — a role job is admitted only
 	// when the window holds nothing; the Workflow host's admission carries no
@@ -975,37 +1050,55 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 		}
 		// reconciler-decision:D26:end:boundaries
 	}
-	// claims(), not workers(): the finishing attempt and the settled ones
+	// claimsHeld(), not workers(): the finishing attempt and the settled ones
 	// waiting their turn still hold claims, so they still occupy the width.
 	// This is the line tick e3c lifts — once a claim can say it is merely
 	// integrating, this may count workers again and the slot a settled attempt
 	// frees becomes admissible in the moment it frees it (9pz's gain, and
 	// TestE3cWillRestoreAdmissionWhileASettledAttemptIsBeingFinished).
 	//
-	// And the claims the window is NOT holding count too, because tk counts
-	// them (epic-yoh): a tick claimed under this epic and not yet closed —
-	// rejected and waiting for a person, adopted later in the queue, or held
-	// by somebody else entirely. A tick that already holds a claim is the one
+	// And the claims the window is NOT holding count too, every id the graph
+	// counts in dispatch.in_flight_ids — this run's own stragglers and another
+	// party's claims alike (tick dz1): the width is a property of the EPIC, not
+	// of this window. A tick whose claim is this run's own is the one
 	// exception: admitting it takes no new one.
-	if next.Claimed {
+	if next.OwnClaim {
 		return true
 	}
 	return r.claimsHeld(window, plan) < r.widthForWave(plan, next.Wave)
 }
 
-// claimsHeld is how many claims tk counts under this epic as the window sees
-// it: every attempt the window holds, plus every tick of the plan the tracker
-// reads as claimed that the window is not holding.
+// claimsHeld is how many claims sit under this epic as the graph counts them:
+// every attempt the window holds, plus every id the graph's
+// dispatch.in_flight_ids reports that the window is not holding (tick dz1).
+// The graph's count is the tracker's own — it carries claims the plan's
+// entries cannot see (a tick deferred out of the waves, a tick the plan never
+// carried) and it never excludes one for being a foreign holder's: another
+// run's, a person's. The window's own holders are in the ids too, so they are
+// counted once — from the window, where the run's memory of them is newer
+// than the graph's last reading. The plan's own Claimed flags are counted
+// beside the ids rather than replaced by them, so a tracker that answers
+// without the ids counts no fewer claims than it did before dz1.
 func (r *Reconciler) claimsHeld(window *held, plan []planEntry) int {
 	count := window.claims()
-	holding := map[string]bool{}
+	counted := map[string]bool{}
 	for _, fl := range window.holders() {
-		holding[fl.entry.TickID] = true
+		counted[fl.entry.TickID] = true
 	}
+	claimed := append([]string{}, r.inFlightIDs...)
 	for _, entry := range plan {
-		if entry.Claimed && !holding[entry.TickID] && r.tickState(entry.TickID) != "closed" {
-			count++
+		if entry.Claimed {
+			claimed = append(claimed, entry.TickID)
 		}
+	}
+	for _, id := range claimed {
+		// A tick this run closed since the graph was last read holds no
+		// claim, whatever the reading says.
+		if counted[id] || r.tickState(id) == "closed" {
+			continue
+		}
+		counted[id] = true
+		count++
 	}
 	return count
 }

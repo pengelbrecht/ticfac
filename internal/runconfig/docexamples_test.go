@@ -324,10 +324,9 @@ setup = [
 ]
 `
 
-// The transcription check ticks runs against these constants
-// (TestDocExampleTranscriptionsMatch, which reads runners-config.md from the
-// ticks skill references on disk) stays in ticks: it needs the skill doc beside
-// it. Here the constants stand on their own, byte-identical to ticks' copy, so
-// the two suites remain comparable example by example; when ticks retires its
-// execution machinery (ticfac tick 4l2) the doc and the check move with the
-// rest of it.
+// The transcription check ticks used to run against these constants
+// (TestDocExampleTranscriptionsMatch, which read runners-config.md from
+// the ticks skill references on disk) left with the skill doc when ticks
+// deleted its execution surface (chz): the doc is ticfac's now
+// (internal/runconfig/runners-config.md), the check travels with it, and
+// these constants stay byte-identical to the examples the doc carries.

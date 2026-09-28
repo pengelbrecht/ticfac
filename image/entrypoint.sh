@@ -384,7 +384,7 @@ start_keeper() {
 # establish it the same way.
 reconcile_instruction() {
 	cat <<PROMPT
-Run the ticks skill's reconcile protocol for epic ${epic} first, before you
+Run the orchestrator loop's reconcile protocol for epic ${epic} first, before you
 touch anything: establish what actually happened from evidence, in this order —
 worker manifests, then git (branches, merges, commits), then the live sandbox
 list — and adopt that state. Do not redo work that is already merged and do not
@@ -408,7 +408,7 @@ prompt_footer() {
 	# finds herdr is RIGHT to stop, and this is what tells it not to.
 	local guidance
 	if [[ $substrate_resolved == "herdr" ]]; then
-		guidance="Dispatch through herdr as references/herdr-runner.md specifies; the checkout's config is read, never rewritten."
+		guidance="Dispatch through herdr as the herdr substrate contract specifies (internal/runconfig/herdr-runner.md of ticfac, which owns it since ticks became tracker-only); the checkout's config is read, never rewritten."
 	elif [[ $substrate_resolved == "cloud" ]]; then
 		# The control plane set this deliberately, for a boot it is prepared to
 		# dispatch a wave for (tick wiy). It is never inferred from the
@@ -510,9 +510,9 @@ fresh. Work in ${workdir}.
 
 $(reconcile_instruction)
 
-Then continue the ticks skill's orchestrator loop
-(references/agent-runner.md) to the end of epic ${epic}: waves, spawn, wait,
-collect, merge, integrated gate, close, review, closeout.
+Then continue the orchestrator loop (the runner-neutral contract ticfac
+owns since ticks became tracker-only) to the end of epic ${epic}: waves,
+spawn, wait, collect, merge, integrated gate, close, review, closeout.
 $(prompt_footer)
 PROMPT
 		;;
@@ -540,7 +540,7 @@ Your job this pass, in order:
      the next boot collects the wave it ran.
   4. If nothing is left to dispatch, finish the epic instead: run its review
      and closeout process ticks, leave the tracker consistent with the branch,
-     open the PR through the ticks skill's closeout, and exit 0.
+     open the PR through the closeout process tick, and exit 0.
 
 $(prompt_footer)
 PROMPT
@@ -563,8 +563,9 @@ PROMPT
 		;;
 	*)
 		cat <<PROMPT
-You are the ticks orchestrator for a cloud run. Use the ticks skill and run its
-orchestrator loop (references/agent-runner.md) for epic ${epic} in ${workdir}.
+You are the ticks orchestrator for a cloud run. Run the orchestrator loop
+(the runner-neutral contract ticfac owns since ticks became tracker-only) for
+epic ${epic} in ${workdir}.
 
 Run continuously to the end of the epic: graph, EPIC-SKELETON repair, waves,
 spawn, wait, collect, merge, integrated gate, close, review, closeout.
