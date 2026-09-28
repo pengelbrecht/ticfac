@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 func main() {
@@ -87,7 +88,7 @@ func fetch(root string) (map[string][]byte, *contracts.Pin) {
 		fail(err)
 	}
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := httpnet.Client(60 * time.Second)
 	url := pin.TarballURL()
 	resp, err := client.Get(url)
 	if err != nil {

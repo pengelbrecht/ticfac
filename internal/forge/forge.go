@@ -41,6 +41,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // DefaultAPI is GitHub's REST API, the forge this implementation speaks.
@@ -345,7 +347,7 @@ func (g GitHub) client() *http.Client {
 	if g.Client != nil {
 		return g.Client
 	}
-	return &http.Client{Timeout: 30 * time.Second}
+	return httpnet.Client(30 * time.Second)
 }
 
 func (g GitHub) api() string {

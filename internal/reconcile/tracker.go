@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -628,6 +629,62 @@ func (d *durableTracker) BlockOn(ctx context.Context, tickID, blocker string) er
 			tickID, blocker, d.tree.branch, short(commit))
 	}
 	return nil
+}
+
+// tickAdopter is the tracker's half of ADOPTING an existing tick into an
+// epic (review_rounds.go): a blocking finding of a NOT READY review that the
+// absorption decision filed as backlog becomes the epic's work, re-parented
+// rather than re-created, so its id, notes and history stay one record. A
+// test tracker implements it; the tk client has no verb for it, so the
+// durable wrapper rewrites the record the way placeBlocker does.
+type tickAdopter interface {
+	Adopt(ctx context.Context, tickID, parent string) error
+}
+
+// Adopt makes a tick a child of an epic durably, idempotently: a tick already
+// the epic's child publishes nothing.
+func (d *durableTracker) Adopt(ctx context.Context, tickID, parent string) error {
+	if err := d.tree.sync(); err != nil {
+		return err
+	}
+	if w, ok := d.inner.(tickAdopter); ok {
+		if err := w.Adopt(ctx, tickID, parent); err != nil {
+			return err
+		}
+	} else if err := adoptTick(d.tree, tickID, parent, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	reason := "adopt " + tickID + " into " + parent
+	commit, err := d.tree.publish(reason)
+	if err != nil {
+		return fmt.Errorf("%s reached the tracker and not %s: a parent that is not pushed is an epic the next "+
+			"wave's worker cannot read: %w", reason, d.tree.remote, err)
+	}
+	if commit != "" && d.r != nil {
+		d.r.record(tickID, StagePublished, "%s is a child of %s on %s as %s", tickID, parent, d.tree.branch, short(commit))
+	}
+	return nil
+}
+
+// adoptTick rewrites one tick record with its parent set, for the tracker
+// that has no verb of its own for it. Idempotent: a tick already the parent's
+// child is left alone.
+func adoptTick(tree *trackerTree, tickID, parent, at string) error {
+	path := trackerRecordPath(tree.dir, tickID)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s to adopt it into %s: %w", tickID, parent, err)
+	}
+	var tick tk.Tick
+	if err := json.Unmarshal(raw, &tick); err != nil {
+		return fmt.Errorf("the record of %s does not read back as a tick: %w", tickID, err)
+	}
+	if tick.Parent == parent {
+		return nil
+	}
+	tick.Parent = parent
+	tick.UpdatedAt = at
+	return writeTrackerRecord(tree, tick)
 }
 
 // fileTick performs the file half of a create-if-absent tick record write,

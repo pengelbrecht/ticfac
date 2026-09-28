@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -31,6 +30,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/factory/dashboard"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // newFactoryCommand builds the `factory` group: the cobra command whose Long
@@ -311,7 +311,7 @@ func factoryDashboard(ctx context.Context, args []string, project *string, inter
 	client, err := dashboard.NewClient(
 		config.Get(credentials.KeyURL),
 		config.Get(credentials.KeyToken),
-		&http.Client{Timeout: 15 * time.Second},
+		httpnet.Client(15*time.Second),
 	)
 	if err != nil {
 		return newExitError(exitGeneric, "%v", err)

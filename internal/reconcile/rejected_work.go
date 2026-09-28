@@ -74,6 +74,10 @@ const (
 	// The steps of the bound a run release spends.
 	rejectedStepEscalate = "escalate"
 	rejectedStepCeiling  = "ceiling"
+	// rejectedStepSuperseded: a close-out answered over red CI, carried onto
+	// the repaired tree. It spends no rung of the bound: the attempt did not
+	// fail, the CI did, and the repair job is what bounds that loop.
+	rejectedStepSuperseded = "superseded"
 
 	// runReleaser is who a run release names. It is not a person, so it is
 	// recorded as it is rather than as a pseudonymous handle.
@@ -401,4 +405,101 @@ func classifyRecordedRejection(reason string) (string, bool, bool) {
 		return subprocess.VerdictMissingResult, true, true
 	}
 	return "", false, false
+}
+
+// carryOntoIntegration is the base a carried close-out is cut from: the
+// carried head merged onto the integration branch as origin has it (current),
+// so the close-out starts from its earlier work AND the epic as it is now.
+// When current is already in the carried head there is nothing to merge. The
+// merge commit is pushed to the carried attempt's own branch — a fast-forward,
+// its first parent is that branch's head — so every executor, local or not,
+// can resolve it. A conflict, or a merge that cannot be made durable, falls
+// back to the carried head alone, said on the feed.
+func (r *Reconciler) carryOntoIntegration(tick string, carried attemptHandle, head, current string) string {
+	if current == "" || current == head || r.git.contains(current, head) {
+		return head
+	}
+	name := r.attemptName(carried.TickID, carried.Attempt)
+	fallBack := func(why string) string {
+		r.record(tick, StageCarried, "the work %s carries (%s) could not be merged onto %s at %s (%s): the next "+
+			"try starts from the carried commits alone", name, short(head), r.branch, short(current), why)
+		return head
+	}
+	out, err := r.git.run("", "merge-tree", "--write-tree", "--no-messages", head, current)
+	if err != nil {
+		return fallBack("they conflict")
+	}
+	tree := strings.TrimSpace(strings.SplitN(out, "\n", 2)[0])
+	merged, err := r.git.run("", "commit-tree", tree, "-p", head, "-p", current, "-m",
+		fmt.Sprintf("ticfac: carry the work of %s onto %s", name, r.branch))
+	if err != nil {
+		return fallBack(firstLine(err.Error()))
+	}
+	branch := branchOf(carried.WriteRef)
+	if _, err := r.git.run("", "push", r.opts.Remote, merged+":"+refFor(branch)); err != nil {
+		return fallBack("the merge could not be put on " + r.opts.Remote + ": " + firstLine(err.Error()))
+	}
+	r.record(tick, StageCarried, "the work %s carries (%s) is merged onto %s at %s (%s, on %s): the next try "+
+		"starts from its commits over the epic as it is now", name, short(head), r.branch, short(current),
+		short(merged), branch)
+	return merged
+}
+
+// carriedOntoMerge says some try in marker's carry chain (marker included)
+// was cut from its carried work merged onto the integration branch — its base
+// is not the head it resumed from.
+func (r *Reconciler) carriedOntoMerge(marker attemptHandle) bool {
+	seen := map[int]bool{}
+	for marker.ResumedFrom != nil && !seen[marker.ResumedFrom.Attempt] {
+		if marker.BaseSHA != "" && marker.ResumedFrom.SHA != "" && marker.BaseSHA != marker.ResumedFrom.SHA {
+			return true
+		}
+		seen[marker.ResumedFrom.Attempt] = true
+		record, ok, err := r.store.Attempt(marker.ResumedFrom.Attempt)
+		if err != nil || !ok {
+			return false
+		}
+		marker = handleFromMap(record.JobHandle)
+	}
+	return false
+}
+
+// carriedPaths is every path the carried tries of marker's chain changed, each
+// measured above the base that try was cut from, up to the head the next try
+// resumed from — never the integration history a merged base brought in.
+func (r *Reconciler) carriedPaths(marker attemptHandle) ([]string, error) {
+	seen := map[int]bool{}
+	set := map[string]bool{}
+	var out []string
+	for marker.ResumedFrom != nil {
+		from := marker.ResumedFrom
+		if seen[from.Attempt] {
+			return nil, fmt.Errorf("the carries of %s form a cycle at attempt %d", marker.TickID, from.Attempt)
+		}
+		seen[from.Attempt] = true
+		record, ok, err := r.store.Attempt(from.Attempt)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || record.TickID != from.TickID {
+			return nil, fmt.Errorf("no marker on %s for %s", r.opts.Remote, r.attemptName(from.TickID, from.Attempt))
+		}
+		prev := handleFromMap(record.JobHandle)
+		if prev.BaseSHA == "" || from.SHA == "" {
+			return nil, fmt.Errorf("the marker of %s names no base", r.attemptName(prev.TickID, prev.Attempt))
+		}
+		diff, err := r.git.run("", "diff", "--name-only", "--no-renames", prev.BaseSHA, from.SHA)
+		if err != nil {
+			return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
+				r.attemptName(prev.TickID, prev.Attempt), short(prev.BaseSHA), short(from.SHA), err)
+		}
+		for _, path := range strings.Split(strings.TrimSpace(diff), "\n") {
+			if path != "" && !set[path] {
+				set[path] = true
+				out = append(out, path)
+			}
+		}
+		marker = prev
+	}
+	return out, nil
 }

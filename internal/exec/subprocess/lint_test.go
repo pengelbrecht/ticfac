@@ -231,6 +231,13 @@ func TestTheCheckerSaysWhereAndWhatIsAllowed(t *testing.T) {
 	}{
 		{"no status", "prose\nStatus: complete\n", []string{"STATUS", "line 2", "DONE_WITH_CONCERNS"}, true},
 		{"no verdict", "STATUS: DONE\n", []string{"REVIEW-VERDICT", "NOT READY"}, true},
+		// epic-6in: a NOT READY the run cannot act on is pushed back — the
+		// bare verdict 6in's review gave ("DONE (NOT READY)"), and one whose
+		// reasons are prose with no blocking (high) finding.
+		{"a bare NOT READY", "```findings v2\n[{\"kind\":\"defect\",\"title\":\"t\",\"severity\":\"high\"}]\n```\nREVIEW-VERDICT: NOT READY\nSTATUS: DONE\n",
+			[]string{"REVIEW-VERDICT", "carries no detail", "what would make the epic ready"}, true},
+		{"a NOT READY with no blocking finding", "```findings v2\n[{\"kind\":\"defect\",\"title\":\"t\",\"severity\":\"medium\"}]\n```\nREVIEW-VERDICT: NOT READY — the gate never ran\nSTATUS: DONE\n",
+			[]string{"REVIEW-VERDICT", "blocking findings", "`high`"}, true},
 		{"unparseable block", "```findings v2\n[{\"kind\": \n```\nREVIEW-VERDICT: READY\nSTATUS: DONE\n",
 			[]string{"findings block", "report line 3"}, true},
 		{"a v2 kind", "```findings v2\n[{\"kind\":\"upstream-tick\",\"title\":\"t\",\"severity\":\"low\"}]\n```\nREVIEW-VERDICT: READY\nSTATUS: DONE\n",
@@ -266,6 +273,32 @@ func TestTheCheckerSaysWhereAndWhatIsAllowed(t *testing.T) {
 				t.Errorf("fatal %v, want %v:\n%s", fatal, tc.fatal, text)
 			}
 		})
+	}
+}
+
+// A NOT READY that says what would make the epic ready and names a blocking
+// (high) finding is one the run can act on: the checker passes it, and
+// collect reads it (epic-6in).
+//
+// short: pure parsing.
+func TestANotReadyWithDetailAndABlockingFindingPasses(t *testing.T) {
+	t.Parallel()
+	body := "```findings v2\n[{\"kind\":\"defect\",\"title\":\"the image check is always skipped\",\"severity\":\"high\"}," +
+		"{\"kind\":\"proposal\",\"title\":\"a polish\",\"severity\":\"low\"}]\n```\n" +
+		"REVIEW-VERDICT: NOT READY — the declared-image check never runs in a container\nSTATUS: DONE\n"
+	if lint := LintReport(body, LintContext{Role: "review-epic"}); !lint.Clean() {
+		t.Fatalf("an actionable NOT READY was refused:\n%s", lint.Text())
+	}
+	if refusal := ReportRefusal("review-epic", ParseReport(body)); len(refusal) > 0 {
+		t.Fatalf("collect refuses an actionable NOT READY: %v", refusal)
+	}
+	if refusal := ReportRefusal("review-epic", ParseReport("REVIEW-VERDICT: NOT READY\nSTATUS: DONE\n")); len(refusal) != 2 {
+		t.Fatalf("collect reads a bare NOT READY with no blocking finding (%v): nothing can act on it", refusal)
+	}
+	// Only the review states a verdict; another role's NOT READY is ignored,
+	// never pushed back as a review's.
+	if lint := LintReport("REVIEW-VERDICT: NOT READY\nSTATUS: DONE\n", LintContext{Role: "implement-tick"}); !lint.Clean() {
+		t.Fatalf("an implement report was held to the review's contract:\n%s", lint.Text())
 	}
 }
 

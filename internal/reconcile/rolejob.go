@@ -303,6 +303,18 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect %s: %w", tick, err)
 	}
+	// A carried role job that added nothing still delivers the carried work
+	// (tick isp, the implement collect's rule): the executor measured it from
+	// the carried head it was cut from, and its no-commits is true of the
+	// worker and false of the attempt. Epic-6in v7z: a close-out cut from a
+	// released close-out's retro found the retro done, committed nothing, and
+	// was refused here as an undelivered deliverable on every resume, forever.
+	// The carried commits are then held to the boundary like the job's own.
+	collected = r.deliverCarriedWork(marker, collected)
+	collected, err = r.checkCarriedWork(marker, collected)
+	if err != nil {
+		return nil, nil, err
+	}
 	r.setTick(tick, "reported")
 	// Tick 19l: what the role answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
@@ -576,6 +588,15 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 	r.record(tick, StageClosed, "closed behind a validated %s answer (%s)", answer.Role, answer.Status)
 	if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is closed", tick)); err != nil {
 		return err
+	}
+	// A review that judged the epic NOT READY is the run's to act on
+	// (review_rounds.go): its blocking findings become the epic's work, and a
+	// re-review is placed behind them and before the close-out — which the
+	// close-out's open-children gate then works first.
+	if answer.Role == "review-epic" {
+		if _, err := r.answerNotReadyReview(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
