@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 120,
-  "state": "failed",
-  "reason": "v7z did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the closeout-epic job for v7z answered DONE_WITH_CONCERNS, and the run's verdict is no-commits (failed): the attempt branch carries no commit beyond the base it was cut from (1fcee78373a0). The tick is NOT closed: for this role an empty branch is an undelivered deliverable, whatever the answer says",
-  "updated_at": "2026-09-28T17:51:04Z",
+  "sequence": 121,
+  "state": "gating",
+  "reason": "running the integrated gate for 823 on 7197ce1fd81b",
+  "updated_at": "2026-09-28T17:51:35Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -48,7 +48,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/6in",
-    "source_sha": "d4d60760451ae4bf38e717807850443c5ea88d79",
+    "source_sha": "7197ce1fd81bf96a649ea2e407d539ea78027cc9",
     "integration_ref": "refs/heads/epic/6in",
     "phase": "worker",
     "executor": null,
