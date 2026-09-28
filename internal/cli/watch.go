@@ -119,6 +119,10 @@ var watchKeepStages = map[string]bool{
 	reconcile.StageBlockedEscalated: true,
 	reconcile.StageBlockedDecide:    true,
 	reconcile.StageBlockedHeld:      true,
+	// A rejected attempt with work, disposed by the run (epic-6in 823):
+	// where the work went is worth coming back to.
+	reconcile.StageRejectedWorkCarried:  true,
+	reconcile.StageRejectedWorkReleased: true,
 }
 
 // watchIsTerminal says whether a writer is a terminal: the seam the live

@@ -191,7 +191,7 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return false
 		}
 		switch {
-		case refusal.Reason == RefusedBlockedRedispatch:
+		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch:
 			entry.Claimed, entry.InFlight = true, false
 			queue = append([]planEntry{entry}, queue...)
 			return true

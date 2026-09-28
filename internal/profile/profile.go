@@ -77,6 +77,13 @@ const HerdrFSRoot = "profiles-herdr"
 // value always was.
 const EmbeddedHerdr = "herdr"
 
+// EmbeddedSets are the profile sets compiled into this binary, by the Dir
+// value that resolves each: the local set ("") and the herdr set. A caller
+// that must find the set whose profiles name a given executor — a dispatch
+// rebuilt from an attempt's marker, whose executor is a recorded fact —
+// walks these rather than spelling an executor's name itself.
+var EmbeddedSets = []string{"", EmbeddedHerdr}
+
 // Roles are the three role profiles Phase 1 ships, in the order the reconciler
 // dispatches them. They are job-protocol.json's role names, not the tracker's
 // shorter ones: the profile is named for the job it configures.

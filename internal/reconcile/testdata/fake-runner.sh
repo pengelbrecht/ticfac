@@ -904,6 +904,33 @@ hang-undeclared)
 	commit
 	exec sleep 86400
 	;;
+stuck-first)
+	# The epic-6in 823 shape: a1's FIRST TRY commits real work and then goes
+	# quiet — the network went away under it — so the stuck watch stops it and
+	# it collects as missing-result WITH commits. Every later try (and every
+	# other tick) does its work and reports. Keyed on $TICFAC_TRY, never the
+	# run-wide attempt number (tick vw0).
+	# The nudge re-prompts it in its own session, which runs this script
+	# again: it touches nothing the second time, so it stays quiet and the
+	# watch stops it.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		[ -e "$TICFAC_WORKTREE/$file" ] || commit
+		exec sleep 86400
+	fi
+	commit
+	report
+	;;
+boundary-first)
+	# a1's FIRST TRY writes under the tracker's authority (the boundary mode's
+	# forged record) beside its work and reports DONE — rejected on the
+	# merits. Every later try is clean.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		mkdir -p "$TICFAC_WORKTREE/.tick/issues"
+		printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
+	fi
+	commit
+	report
+	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.
 	# `exec` replaces this shell with the sleeper, so the runner's process
