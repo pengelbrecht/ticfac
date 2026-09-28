@@ -63,7 +63,8 @@ func TestTheReviewsPayloadCarriesItsOwnVerdictNotTheCollects(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(local.ResultPath, []byte(
-		"REVIEW-VERDICT: NOT READY — the reconciler was never wired to the run\n\nSTATUS: DONE_WITH_CONCERNS\n"), 0o644); err != nil {
+		"```findings v2\n[{\"kind\": \"defect\", \"title\": \"The reconciler is never wired to the run\", \"severity\": \"high\"}]\n```\n\n"+
+			"REVIEW-VERDICT: NOT READY — the reconciler was never wired to the run\n\nSTATUS: DONE_WITH_CONCERNS\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	collected, err := h.ex.CollectDetail(review)

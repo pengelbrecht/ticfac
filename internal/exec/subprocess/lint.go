@@ -105,7 +105,9 @@ type LintContext struct {
 
 // roleContract is what each role's prompt asks its report to carry beyond the
 // STATUS line and the findings block, and what collect reads: the review's
-// REVIEW-VERDICT line (tick b50). The close-out's contract asks for prose (the
+// REVIEW-VERDICT line (tick b50) — and, for a NOT READY, the detail and the
+// blocking findings that make it one the run can act on (notReadyProblems,
+// epic-6in). The close-out's contract asks for prose (the
 // retro, what was absorbed, what is left open) and no typed evidence line, so
 // it has nothing typed to check here; a typed line added to a role's contract
 // is added to this table, and the checker, the pushback and collect's refusal
@@ -155,7 +157,58 @@ func fatalProblems(role string, report Report, lines []string) []LintProblem {
 		}
 		out = append(out, LintProblem{Where: "REVIEW-VERDICT", Message: msg, Fatal: true})
 	}
+	if roleContracts[role].reviewVerdict && report.ReviewVerdict == ReviewVerdictNotReady {
+		out = append(out, notReadyProblems(report)...)
+	}
 	return out
+}
+
+// notReadyProblems is what a NOT READY verdict must carry to be acted on
+// (epic-6in, 2026-09-28): what would make the epic ready, on the verdict line,
+// and the BLOCKING findings that say it in a form the run can act on. A
+// review's NOT READY is the run's to act on — each blocking finding is
+// absorbed into the epic and the epic is reviewed again (reconcile's
+// review_rounds.go) — so a bare "NOT READY", or one whose reasons are prose
+// with no blocking finding, is a verdict nothing can act on: 6in's review
+// answered "DONE (NOT READY)", and all its hold could say was "merge it by
+// hand or close it".
+//
+// Both are FATAL: a verdict the run cannot act on is not an answer, and a
+// review is cheap to ask again, where a hold is a person.
+func notReadyProblems(report Report) []LintProblem {
+	var out []LintProblem
+	if report.ReviewVerdictDetail == "" {
+		out = append(out, LintProblem{Where: "REVIEW-VERDICT", Fatal: true, Message: "`REVIEW-VERDICT: NOT READY` " +
+			"carries no detail; say what would make the epic ready after an em dash: " +
+			"`REVIEW-VERDICT: NOT READY — <what would make it ready>`"})
+	}
+	if report.FindingsProblem == "" && !HasBlockingFinding(report.Findings) {
+		out = append(out, LintProblem{Where: "REVIEW-VERDICT", Fatal: true, Message: "a NOT READY names its " +
+			"blocking findings: every reason the epic is not ready is a finding of severity `high` in the findings " +
+			"block — the run absorbs each blocking finding into the epic, fixes it and reviews the epic again, " +
+			"and a NOT READY with no high-severity finding is a verdict nothing can act on. Lower severities are " +
+			"not reasons: they are filed as backlog"})
+	}
+	return out
+}
+
+// BlockingFinding is whether a review's finding is one of the reasons for its
+// NOT READY: a finding of severity high. The definition is the severity and
+// nothing else — the one field every finding already carries, required and in
+// a closed vocabulary — so the review's prompt, this checker and the run that
+// absorbs the finding read "blocking" the same way.
+func BlockingFinding(f Finding) bool {
+	return f.Severity == FindingSeverityHigh
+}
+
+// HasBlockingFinding is whether any of the findings is blocking.
+func HasBlockingFinding(findings []Finding) bool {
+	for _, f := range findings {
+		if BlockingFinding(f) {
+			return true
+		}
+	}
+	return false
 }
 
 // nearMiss finds the last line that starts like a typed line (any case) but

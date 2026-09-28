@@ -45,6 +45,12 @@ import (
 //     a body the forge cannot carry is a typed refusal (tick 4sb) — the run
 //     cannot hand over behind a PR that hides its own review's judgement.
 //
+// AND IT IS ACTED ON FIRST (epic-6in, review_rounds.go): before the verdict is
+// carried anywhere, the run absorbs the review's blocking (high-severity)
+// findings into the epic, fixes them and reviews the epic again, at most
+// maxReviewRounds times. What is carried to the PR — and held at the land —
+// is a NOT READY that survived that, with its reasons.
+//
 // What still holds the run is unchanged: an answer that is BLOCKED or
 // NEEDS_CONTEXT (needsHuman) holds the review tick for a person, untriaged
 // findings hold at the close-out, and CI holds the close-out. A NOT READY
@@ -111,7 +117,7 @@ func reviewVerdictParagraph(decision runstate.Decision) string {
 		return fmt.Sprintf("The final review (decision %d) judged the epic NOT READY: %s\n"+
 			"The close-out is not held on this verdict; it is carried here, because the merge is a person's "+
 			"judgement and this PR is where that judgement is made. The durable record states the same verdict.\n",
-			decision.Decision, summary)
+			decision.Decision, notReadyReasons(decision))
 	}
 	return fmt.Sprintf("The final review (decision %d) judged the epic READY: %s\n", decision.Decision, summary)
 }
