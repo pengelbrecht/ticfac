@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "bib",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T19:24:40Z",
+  "triaged_at": "2026-09-28T19:24:50Z",
+  "triaged_by": "ticfac run epic-6in absorbing bik",
+  "promoted_as": "bik",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "bib",
