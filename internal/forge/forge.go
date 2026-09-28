@@ -185,6 +185,15 @@ type CIRestarter interface {
 	RestartCancelledOnce(ctx context.Context, runIDs []int64) (restarted []int64, err error)
 }
 
+// CIDispatcher is the third optional half of the CI seam: start the CI
+// workflow on a branch when the code it carries has NO run at all — not a
+// cancelled one to restart, nothing (a push whose run was cancelled while
+// still queued leaves no check run behind, and the pushes after it changed
+// only ignored paths). The workflow must declare workflow_dispatch.
+type CIDispatcher interface {
+	DispatchWorkflow(ctx context.Context, workflow, ref string) error
+}
+
 // PullRequests is the seam the close-out rule needs: find the PR for the
 // epic branch, open one if it does not exist, ask what CI says on it, and
 // write the body the PR carries (tick 4sb).
@@ -723,6 +732,21 @@ func (g GitHub) RestartCancelledOnce(ctx context.Context, runIDs []int64) ([]int
 		restarted = append(restarted, id)
 	}
 	return restarted, nil
+}
+
+// DispatchWorkflow starts the workflow (a path like .github/workflows/ci.yml,
+// or its file name) on ref through GitHub's workflow_dispatch event. The run
+// attaches its check runs to the ref's head commit.
+func (g GitHub) DispatchWorkflow(ctx context.Context, workflow, ref string) error {
+	name := workflow
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+	if name == "" || ref == "" {
+		return fmt.Errorf("a workflow dispatch names a workflow and a ref: %q on %q", workflow, ref)
+	}
+	return g.call(ctx, http.MethodPost, "/repos/"+g.Repo+"/actions/workflows/"+name+"/dispatches",
+		map[string]string{"ref": ref}, nil)
 }
 
 func splitRepo(repo string) (owner, name string, ok bool) {
