@@ -171,6 +171,8 @@ declare namespace Cloudflare {
     BOARD_TOKEN?: string;
     /** Test/deployment override; defaults to api.github.com. */
     GITHUB_API_BASE_URL?: string;
+    /** Test override for github.com, where App manifests post and apps install. */
+    GITHUB_WEB_BASE_URL?: string;
     /**
      * Budget and cadence vars for the Run Workflow (wrangler `[vars]`), so
      * enforcement is a deployment decision and never a prompt. Bounds and
@@ -279,6 +281,21 @@ declare namespace Cloudflare {
      */
     /** Fine-grained, repo-scoped GitHub PAT runs clone and push with. */
     GITHUB_TOKEN?: string;
+    /**
+     * The operator's OWN GitHub App (epic dm6, src/github-app.ts): its id,
+     * its private key (PEM) and its slug, stored by `ticfac factory setup`'s
+     * manifest flow. With an id and a key this deployment mints a per-run,
+     * one-repository installation token instead of using GITHUB_TOKEN.
+     */
+    GITHUB_APP_ID?: string;
+    GITHUB_APP_PRIVATE_KEY?: string;
+    GITHUB_APP_SLUG?: string;
+    /**
+     * 32 random bytes (base64) the manifest flow seals the App's private key
+     * and webhook secret under in D1. Put once by `ticfac factory setup`;
+     * replacing it orphans the sealed App.
+     */
+    GITHUB_APP_SEALING_KEY?: string;
     /** The operator's AI Gateway base URL — all model traffic goes through it. */
     AI_GATEWAY_BASE_URL?: string;
     /**

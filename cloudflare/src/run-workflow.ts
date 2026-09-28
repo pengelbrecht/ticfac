@@ -90,6 +90,7 @@ import {
   spendFailureRemedy,
   syncRunCost,
 } from "./gateway";
+import { containerGitHub } from "./github-app";
 import type { Env } from "./index";
 import { notifyRunEnded } from "./notify";
 import {
@@ -895,6 +896,18 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
   });
   if (!git.ok) return { ok: false, detail: git.detail };
 
+  // The GitHub rung, asked once before any container exists (epic dm6): an
+  // App that is not installed on this repository, whose key GitHub refuses,
+  // or whose installation has not accepted the permissions a run needs is a
+  // run that would fail at its first push — so it stops here, naming the fix.
+  // The token itself is NOT kept: each boot mints its own (a Workflow step's
+  // result is journalled, and a token does not belong in a journal). A
+  // GitHub that is merely unavailable is left to the boot, which retries.
+  const github = await containerGitHub(env, params.project, git.plan, factoryBaseURL(env));
+  if (!github.ok && github.denial.error !== "github_app_unavailable") {
+    return { ok: false, detail: github.denial.detail };
+  }
+
   const context: RunContext = {
     repo_url: git.plan.repo_url,
     git: git.plan,
@@ -1494,6 +1507,17 @@ async function supervisePass(
           // explicitly destroyed... to prevent containers running indefinitely
           // and counting toward your account limits". Every ending of a boot
           // destroys it in the finally below, and `finalize` sweeps as backstop.
+          // This boot's GitHub credential, minted now rather than carried in
+          // the run's context (epic dm6): on the App rung it is an hour-long
+          // installation token for this one repository, plus the door the
+          // container refreshes it from.
+          const github = await containerGitHub(
+            env,
+            params.project,
+            context.git,
+            factoryBaseURL(env),
+          );
+          if (!github.ok) throw new Error(github.denial.detail);
           const sandbox = await binding.get(name, { image, keepAlive: true });
           const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
             env: orchestratorEnv({
@@ -1512,7 +1536,8 @@ async function supervisePass(
               // that can push, `run` hands over this run's own `tkr_` credential,
               // which github.com will not accept and this factory's git door will
               // not forward a push for.
-              github_token: containerGitToken(context.git, env.GITHUB_TOKEN, credential.token),
+              github_token: containerGitToken(context.git, github.token, credential.token),
+              ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
               // Which harness and model the container's entrypoint probes before
               // it starts its job. The two jobs are routed differently (tick dl8):
               //

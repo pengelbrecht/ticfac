@@ -26,6 +26,7 @@
  * A test assigns an in-memory store; a deployment gets the GitHub one below.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import type { HolderCredentials } from "./lease";
 import { GITHUB_API_BASE_URL } from "./progress";
@@ -142,21 +143,24 @@ function decodeBase64Utf8(text: string, encoding: string): string {
  */
 export function githubContentsStore(env: Env, project: string, ref: string): ContentsStore {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github+json",
     "content-type": "application/json",
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
+
+  // Resolved per request, not once per store: an App installation token
+  // lives an hour, and the rung's cache is what keeps this cheap.
+  const headers = async (): Promise<Record<string, string>> => ({
+    ...baseHeaders,
+    ...(await githubAuthorization(env, project)),
+  });
 
   const entryURL = (path: string) =>
     `${base}/repos/${project}/contents/${path}?ref=${encodeURIComponent(ref)}`;
 
   async function getJSON(url: string, method: "GET" = "GET"): Promise<Response> {
-    return fetch(url, { method, headers });
+    return fetch(url, { method, headers: await headers() });
   }
 
   async function put(path: string, body: Record<string, unknown>): Promise<StoreWrite> {
@@ -169,7 +173,7 @@ export function githubContentsStore(env: Env, project: string, ref: string): Con
     // somewhere else, which is exactly what a cloud run did to `main`.
     const response = await fetch(entryURL(path), {
       method: "PUT",
-      headers,
+      headers: await headers(),
       body: JSON.stringify({ ...body, branch: ref }),
     });
     if (response.status === 409) {

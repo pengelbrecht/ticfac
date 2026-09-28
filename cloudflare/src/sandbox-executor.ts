@@ -63,6 +63,7 @@ import { containerGitToken, planSandboxGit } from "./credentials";
 import { recordSandboxAttemptBoot, type SandboxAttemptBoot, sandboxAttemptBootModel } from "./db";
 import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
 import { type GitRefWriter, gitRefWriter, writeRefBranch } from "./git-refs";
+import { containerGitHub } from "./github-app";
 import type { Env } from "./index";
 import {
   deploymentImage,
@@ -942,6 +943,12 @@ export function sandboxExecutorDepsFromEnv(
         // own adoption and cancel boots, which arrive while other workers are
         // mid-tick. The credential is still per worker, never shared across
         // attempts: one revocation cannot take it back from just this attempt.
+        // The worker's GitHub credential, per boot (epic dm6): the rung's
+        // token for this run's repository and, on the App rung, where the
+        // worker refreshes it. Asked before the run token is minted, so a
+        // refusal spends nothing.
+        const github = await containerGitHub(env, input.project, git.plan, factory);
+        if (!github.ok) throw new Error(github.denial.detail);
         const credential = await issueWorkerRunToken(env, {
           run_id: spec.run_id,
           tick_id: spec.tick_id,
@@ -966,7 +973,8 @@ export function sandboxExecutorDepsFromEnv(
           // attempt outranks the deployment's standing one.
           model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
           prompt: spec.prompt,
-          github_token: containerGitToken(git.plan, env.GITHUB_TOKEN, credential.token),
+          github_token: containerGitToken(git.plan, github.token, credential.token),
+          ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
           sandbox_image: deploymentImage(env),
           factory_url: factory as string,
           factory_token: credential.token,

@@ -153,9 +153,12 @@ var watchTerminalSize = func(w io.Writer) (int, int, bool) {
 // newWatchCommand builds the cobra command for `watch`.
 func newWatchCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "watch <run-id>",
+		Use:   "watch <run-id|epic-id>",
 		Short: "the whole epic at a glance, live in place — and it says so when a person is needed",
-		Long: `The whole epic at a glance, redrawn in place: attention first (only when
+		Long: `The run is named by its run id (epic-6in) or by the epic id it was started
+with (6in, as in 'ticfac run 6in'); 'ticfac' alone lists the runs there are.
+
+The whole epic at a glance, redrawn in place: attention first (only when
 a person is needed, naming the command that moves it on), the lifecycle as a
 progress bar with elapsed and cost, done waves one line each, the active wave
 one fixed row per tick with its silence graded amber then red, upcoming waves
@@ -195,7 +198,7 @@ content.`,
 func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
-		fmt.Fprintf(stderr, "ticfac watch: exactly one run id is required\n")
+		fmt.Fprintf(stderr, "ticfac watch: exactly one run id (epic-<id>) or epic id is required\n")
 		return 2
 	}
 	runID := rest[0]
@@ -211,9 +214,19 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// checkout when it holds the feed, else the factory when it knows the
 	// run. The watch then reads through the same one loop `events --follow`
 	// reads through, whichever host the run is on.
+	// The run id or the epic id, resolved once (runid.go): `ticfac watch
+	// 6in` answers for epic-6in, the run `ticfac run 6in` started.
+	resolution := resolveRunArg(*repo, runID)
+	runID = resolution.RunID
 	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+		return 1
+	}
+	// No spelling names a run here and the factory holds none for the epic:
+	// an id nobody found, answered as that — never as a run with no feed.
+	if kind == "local" && !resolution.Known {
+		fmt.Fprintln(stderr, unknownRunMessage("watch", *repo, rest[0], resolution))
 		return 1
 	}
 	// The watch answers for the run the id names, resolved: an epic id that

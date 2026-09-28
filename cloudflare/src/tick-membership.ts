@@ -20,6 +20,7 @@
  * change fails a test rather than turning silently into nulls.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 
@@ -119,17 +120,14 @@ export interface TrackerReader {
  */
 export function githubTrackerReader(env: Env): TrackerReader {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github.raw",
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async read(project: string, ref: string, tickID: string): Promise<string | null> {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const path = tickRecordPath(tickID);
       // An empty ref means "the repository's default branch", which is what
       // the contents API does with no `?ref` at all — and emphatically not

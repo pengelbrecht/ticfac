@@ -86,7 +86,9 @@ the command that clears it:
                       [tier_policy.start]
   docker             cloud only: the sandbox image builds from one
   wrangler            cloud only: the factory is driven through it
-  factory             cloud only: a configured factory to boot the containers from
+  factory             cloud only: a configured factory to boot the containers from,
+                      and its GitHub rung checked live — on the App rung, a
+                      read-only token minted for this repository
 
 The cloud checks run when the repository declares the cloud (its
 .tick/runners.toml substrate, or a .tick/runners.cloud.toml) or --cloud is
@@ -265,7 +267,25 @@ var (
 		if !report.Configured() {
 			return "", fmt.Errorf("no factory is configured in %s", report.ConfigPath)
 		}
-		return fmt.Sprintf("configured (re-check it live: ticfac factory status) — %s", report.ConfigPath), nil
+		// The GitHub rung IS checked live (epic dm6): which rung the factory
+		// uses is the factory's own fact — it may hold a GitHub App this
+		// machine has no record of — and on the App rung the check is a
+		// read-only token minted for the repository, which is the one thing
+		// that proves a run could clone and push.
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		github, err := factory.GitHubRung(ctx, factory.StatusOptions{})
+		if err != nil {
+			return "", err
+		}
+		if github.Configured && github.Checked && !github.OK {
+			return "", fmt.Errorf("github %s: %s", github.Summary, github.Detail)
+		}
+		rung := "github: not configured"
+		if github.Configured {
+			rung = "github " + github.Summary + " — " + orUncheckedDetail(github.Detail)
+		}
+		return fmt.Sprintf("configured (re-check it all live: ticfac factory status) — %s; %s", report.ConfigPath, rung), nil
 	}
 )
 
@@ -492,4 +512,12 @@ func doctorReport(checks []doctorCheck, substrate string, cloudish bool, asJSON 
 		fmt.Fprintf(stdout, "%d things missing — run each fix above and doctor again\n", missing)
 	}
 	return exitGeneric
+}
+
+// orUncheckedDetail is a rung's detail, or what its absence means.
+func orUncheckedDetail(detail string) string {
+	if detail == "" {
+		return "not checked"
+	}
+	return detail
 }

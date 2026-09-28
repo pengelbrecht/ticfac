@@ -206,6 +206,7 @@ import {
 } from "./branch-registry";
 import { credentialGrade, type RunCredentialGrade } from "./credentials";
 import { type DispatchReason, getEnrolledProject, insertDispatchLog } from "./db";
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 import { newRunID, type RunSubmission, submitRun } from "./runs";
@@ -677,18 +678,15 @@ const CHECK_PAGE_SIZE = 100;
  */
 export function githubCheckHistory(env: Env): CheckHistoryReader {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github+json",
     // GitHub rejects an API request with no user agent outright.
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async conclusions(project, ref, checkName) {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const url =
         `${base}/repos/${project}/commits/${encodeURIComponent(ref)}/check-runs` +
         `?per_page=${CHECK_PAGE_SIZE}&check_name=${encodeURIComponent(checkName)}`;
@@ -710,6 +708,14 @@ export function githubCheckHistory(env: Env): CheckHistoryReader {
 
     async rerun(project, checkRunID) {
       if (checkRunID <= 0) return false;
+      let headers: Record<string, string>;
+      try {
+        headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
+      } catch (error) {
+        // No credential for this repository is GitHub declining, from here.
+        console.error(`factory ci: no GitHub credential to re-run a check on ${project}: ${error}`);
+        return false;
+      }
       const response = await fetch(`${base}/repos/${project}/check-runs/${checkRunID}/rerequest`, {
         method: "POST",
         headers,

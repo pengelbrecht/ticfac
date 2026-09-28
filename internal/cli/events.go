@@ -38,9 +38,12 @@ import (
 // newEventsCommand builds the cobra command for `events`.
 func newEventsCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "events <run-id>",
+		Use:   "events <run-id|epic-id>",
 		Short: "a run's event feed: what it did, as it does it",
-		Long: `Print the run's event feed — one JSONL line per event, with the
+		Long: `The run is named by its run id (epic-6in) or by the epic id it was started
+with (6in, as in 'ticfac run 6in'); 'ticfac' alone lists the runs there are.
+
+Print the run's event feed — one JSONL line per event, with the
 run/tick/attempt identity on every line — or, with --follow, subscribe from
 now: each event as it lands, until Ctrl-C.
 
@@ -66,7 +69,7 @@ on the integration branch; a subscriber that reads run_finished goes and looks.`
 func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
-		fmt.Fprintf(stderr, "ticfac events: exactly one run id is required\n")
+		fmt.Fprintf(stderr, "ticfac events: exactly one run id (epic-<id>) or epic id is required\n")
 		return 2
 	}
 	if *asJSON && *follow {
@@ -97,9 +100,19 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 	// it knows the run. Either way the SAME loop follows it, and either way
 	// the lines are the same versioned schema — a cloud run's feed is
 	// indistinguishable from a local one's, by contract and by test.
+	// The run id or the epic id, resolved once (runid.go): `ticfac events
+	// 6in` answers for epic-6in, the run `ticfac run 6in` started.
+	resolution := resolveRunArg(*repo, runID)
+	runID = resolution.RunID
 	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+		return 1
+	}
+	// No spelling names a run here and the factory holds none for the epic:
+	// an id nobody found, answered as that — never as a run with no feed.
+	if kind == "local" && !resolution.Known {
+		fmt.Fprintln(stderr, unknownRunMessage("events", *repo, rest[0], resolution))
 		return 1
 	}
 	// The events answer for the run the id names, resolved: an epic id that

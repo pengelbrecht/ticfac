@@ -942,6 +942,31 @@ explain_git_refusal() {
 	return 0
 }
 
+# The git credential helper: GITHUB_TOKEN, answered for any host (D11).
+#
+# On the factory's GitHub App rung (epic dm6) GITHUB_TOKEN is an installation
+# token that GitHub kills an hour after it was minted, and a run lives up to
+# six. So when the control plane also handed over TICKS_GITHUB_TOKEN_URL, the
+# helper asks THAT — the factory's token door, authenticated by this run's own
+# credential — for the current token every time git needs one, and falls back
+# to the token the container booted with only when the door cannot answer.
+# The factory caches the token it mints, so asking costs a request, not a
+# GitHub mint. Without the URL (the PAT and device-flow rungs) the helper is
+# the static one it always was.
+install_git_credential_helper() {
+	[[ -n ${GITHUB_TOKEN:-} ]] || return 0
+	if [[ -n ${TICKS_GITHUB_TOKEN_URL:-} && -n ${TICKS_FACTORY_TOKEN:-} ]]; then
+		# POSIX sh (git runs the helper through sh), and the token is read out
+		# of the door's JSON with sed: the image has jq, but the helper must
+		# not depend on anything a slimmer image could drop.
+		git config --global credential.helper \
+			'!f() { test "$1" = get || exit 0; t=$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${TICKS_FACTORY_TOKEN}" "${TICKS_GITHUB_TOKEN_URL}" 2>/dev/null | sed -n '"'"'s/.*"token":"\([^"]*\)".*/\1/p'"'"'); echo username=x-access-token; echo "password=${t:-$GITHUB_TOKEN}"; }; f' || true
+		return 0
+	fi
+	git config --global credential.helper \
+		'!f() { echo username=x-access-token; echo "password=${GITHUB_TOKEN}"; }; f' || true
+}
+
 # The submission boundary is a pushed SHA: the factory never sees local state,
 # and the run is pinned to the base it was submitted with. The checkout is
 # always fresh, even in a sandbox that has run before.
@@ -950,10 +975,7 @@ explain_git_refusal() {
 # ROLE's decision — `tick-run/<epic>` for an orchestrator, `tick/<epic>/<tick>`
 # for a worker — so each entrypoint takes its own branch step after this.
 clone_at_sha() {
-	if [[ -n ${GITHUB_TOKEN:-} ]]; then
-		git config --global credential.helper \
-			'!f() { echo username=x-access-token; echo "password=${GITHUB_TOKEN}"; }; f' || true
-	fi
+	install_git_credential_helper
 	# The container commits — tracker state as an orchestrator, the tick's own
 	# work as a worker — so it needs an identity before anything (including the
 	# pre-flight that checks for one) runs.

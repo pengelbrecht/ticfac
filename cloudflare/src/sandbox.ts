@@ -528,6 +528,13 @@ export type OrchestratorEnvInput = {
   gateway_token: string;
   phase: OrchestratorPhase;
   github_token?: string;
+  /**
+   * Where the container refreshes `github_token` (epic dm6): set on the App
+   * rung only, because an installation token dies an hour after it is minted
+   * and an orchestrator lives up to six. Absent, the token it boots with is
+   * the only one it gets — exactly the PAT and device-flow behaviour.
+   */
+  github_token_url?: string;
   harness?: string;
   model?: string;
   workdir?: string;
@@ -617,6 +624,9 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   // container execs, reads no phase and no stop reason.
   if (input.github_token !== undefined && input.github_token !== "") {
     env.GITHUB_TOKEN = input.github_token;
+  }
+  if (input.github_token_url !== undefined && input.github_token_url !== "") {
+    env.TICKS_GITHUB_TOKEN_URL = input.github_token_url;
   }
   if (input.harness !== undefined && input.harness !== "") env.TICKS_HARNESS = input.harness;
   if (input.model !== undefined && input.model !== "") env.TICKS_MODEL = input.model;
