@@ -247,7 +247,7 @@ export function verifyBundle(contractsDir, pin) {
         problems.map((line) => `  ${line}`).join("\n") +
         "\n\nA contract changed without the bundle being re-cut, so the version no longer\n" +
         'names the bytes it claims to. Bump "version" in contracts/bundle.json, add the\n' +
-        "contracts/CHANGELOG.md entry, and move \"bundleVersion\" here in the same\n" +
+        'contracts/CHANGELOG.md entry, and move "bundleVersion" here in the same\n' +
         "commit.",
     );
   }

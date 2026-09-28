@@ -4,10 +4,11 @@ import (
 	"regexp"
 )
 
-// The worked examples from ticks' runners-config.md (skills/ticks/references/
-// in the ticks repository), transcribed verbatim (comments included).
-// TestDocExamplesResolveAndCompile (compile_test.go) proves each one parses,
-// resolves and compiles exactly as the doc states.
+// The worked examples from runners-config.md — the authoring doc beside this
+// file, taken over from ticks when it became tracker-only — transcribed
+// verbatim (comments included). TestDocExamplesResolveAndCompile
+// (compile_test.go) proves each one parses, resolves and compiles exactly as
+// the doc states.
 
 var runnersConfigTomlBlock = regexp.MustCompile("(?s)```toml\\n(.*?)```")
 

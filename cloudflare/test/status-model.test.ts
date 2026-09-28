@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import contract from "../../contracts/status-model.json";
 import { STATUS_SCHEMA_VERSION } from "../src/status";
-import { type Defs, parseDefs, parseSchema, validate, type Json } from "./json-schema";
+import { type Defs, type Json, parseDefs, parseSchema, validate } from "./json-schema";
 
 /**
  * contracts/status-model.json — the TypeScript half of `ticfac.status.v1`.
@@ -34,8 +34,10 @@ describe("the factory reads the status model the bundle pins", () => {
     const goldens = contract.golden as Record<string, Json>;
     expect(Object.keys(goldens).length).toBeGreaterThan(0);
     for (const [name, document] of Object.entries(goldens)) {
-      expect(validate(statusModel, defs, document), `golden ${name} is refused by its own schema`)
-        .toEqual([]);
+      expect(
+        validate(statusModel, defs, document),
+        `golden ${name} is refused by its own schema`,
+      ).toEqual([]);
     }
   });
 
@@ -79,8 +81,10 @@ describe("the factory reads the status model the bundle pins", () => {
     const wait = defs.wait;
     expect(wait).toBeDefined();
     for (const field of ["kind", "what", "since", "needs_person", "unblock_command"]) {
-      expect(Object.keys(wait.properties ?? {}), `an attention row no longer carries ${field}`)
-        .toContain(field);
+      expect(
+        Object.keys(wait.properties ?? {}),
+        `an attention row no longer carries ${field}`,
+      ).toContain(field);
     }
   });
 
