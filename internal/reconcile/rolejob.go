@@ -81,6 +81,15 @@ func (r *Reconciler) processRoleJob(ctx context.Context, entry planEntry) error 
 	collected, answer, err := r.collectRole(ctx, entry, handle, executor, marker, status)
 	if err != nil {
 		r.disposeRefused(handle, executor, marker, err)
+		// A role job that stopped to ask and is dispatched again to decide
+		// under the standing orders (tick tyd) is dispatched here, in this
+		// pass: the next dispatch reads the recorded answer and carries the
+		// question. It is bounded — a second question from the job told to
+		// decide holds.
+		var refusal *Refusal
+		if asRefusal(err, &refusal) && refusal.Reason == RefusedBlockedRedispatch {
+			return r.processRoleJob(ctx, entry)
+		}
 		return err
 	}
 
@@ -388,9 +397,11 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 					answer.Summary)
 			}
 		}
-		return nil, nil, r.refuse(RefusedRoleAnswer, tick,
-			"the %s job for %s answered %s: %s. The tick stays open, because a role job's answer IS its verdict and "+
-				"this one asks for a person", entry.Role, tick, answer.Status, answer.Summary)
+		// Tick tyd: a role job runs outside the tier ladder, so its question
+		// meets the standing orders at once — dispatched again to decide it
+		// and log the decision, unless it is in an always-ask class (or came
+		// back from the job told to decide it), which holds naming it.
+		return nil, nil, r.answerBlocked(ctx, entry, marker, answer, RefusedRoleAnswer)
 	}
 
 	// The review's judgement, validated the way the envelope was (tick b50):

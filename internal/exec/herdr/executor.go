@@ -77,6 +77,11 @@ type Options struct {
 	// Host-supplied for the same reason the prior reports are.
 	PriorSnapshots []subprocess.PriorSnapshot
 
+	// Escalation is the earlier attempt of this tick that stopped to ask
+	// (tick tyd), for the same section of the prompt the local executor
+	// renders.
+	Escalation *subprocess.Escalation
+
 	// Remote is the origin in-progress work is durable on, for disposal's
 	// branch-safety question. Empty means "origin", and a repository without
 	// that remote records no remote rather than inventing one.
@@ -412,6 +417,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		RolePrompt:     e.opts.RolePrompt,
 		PriorReports:   e.opts.PriorReports,
 		PriorSnapshots: e.opts.PriorSnapshots,
+		Escalation:     e.opts.Escalation,
 		WallSeconds:    spec.Limits.WallSeconds,
 		Remote:         e.remoteFor(spec),
 		SourceGrade:    spec.Credentials.Source.Grade(),

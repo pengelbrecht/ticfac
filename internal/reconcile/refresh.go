@@ -56,6 +56,7 @@ func (r *Reconciler) refreshFromBase(ctx context.Context) error {
 // start, and the landing's fold of the branch the epic PR merges into
 // (land.go) — one fold, with one resolve job and one lease, whoever asks.
 func (r *Reconciler) refreshFrom(ctx context.Context, base string) error {
+	r.folded = ""
 	if base == "" || base == r.branch {
 		return nil
 	}
@@ -167,6 +168,7 @@ func (r *Reconciler) refreshFrom(ctx context.Context, base string) error {
 				}
 			}
 			r.base = merged
+			r.folded = merged
 			r.record("", StageRefreshed, "%s of %s is folded into %s as %s",
 				short(baseHead), base, r.branch, short(merged))
 			return nil
@@ -320,4 +322,42 @@ func branchName(ref, remote string) string {
 		name = strings.TrimPrefix(name, remote+"/")
 	}
 	return name
+}
+
+// gateRunStartFold runs the integrated gate over the fold this run start just
+// pushed, when the epic branch already carries work this run integrated — and
+// a failing check is the repair job's, before any worker is cut from the tree
+// (epic-6in, 2026-09-28).
+//
+// The fold is a merge like any other, and a merge can be clean as text and
+// broken as code. 6in's run-start fold of main (28385b75) merged main's edit
+// of contracts/status-model.json beside the epic's re-cut contract bundle:
+// no conflict, and a digest the bundle no longer matched. Nothing gated the
+// fold, so it went to origin, CI went red on it (go and go race, every
+// internal/contracts check), and the next worker, dz1, was dispatched onto
+// the broken tree and paid to fix a break that was not its tick's. Every
+// other merge onto the integration branch is gated before anything builds on
+// it; the readying's fold of the base already is (land.go's gateLanding).
+// This is that gate, at the fold every run start makes.
+//
+// It is skipped when the run has closed nothing yet: the epic branch is then
+// the base plus nothing this run merged, the base's own CI speaks for it, and
+// there is no work a repair could be dispatched under.
+func (r *Reconciler) gateRunStartFold(ctx context.Context) error {
+	folded := r.folded
+	if folded == "" || r.store == nil {
+		return nil
+	}
+	owner, err := r.ciRepairOwner(ctx)
+	if err != nil || owner == nil {
+		return err
+	}
+	base := branchName(r.baseBranch(ctx), r.opts.Remote)
+	if _, err := r.gateLanding(ctx, owner, base, folded); err != nil {
+		return err
+	}
+	// The gate, and a repair's merge when it ran one, wrote the run branch:
+	// what the run plans from is what origin now holds.
+	_, err = r.store.Fetch()
+	return err
 }

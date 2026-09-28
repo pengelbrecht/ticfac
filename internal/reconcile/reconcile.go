@@ -391,6 +391,13 @@ type Dispatch struct {
 	// are — and for one more: a dispatch conflict that runs the gather twice
 	// must not carry a stale record on a marker that reaches origin.
 	PriorSnapshots []subprocess.PriorSnapshot
+
+	// Escalation is the earlier attempt of this tick that stopped to ask
+	// (tick tyd) — its question, its report, and whether this dispatch is at
+	// the tier ceiling and so decides under the standing orders. Re-derived
+	// at every dispatch like the prior reports: the report path is a host
+	// path, and nothing here reaches the marker.
+	Escalation *subprocess.Escalation
 }
 
 // carriedWork is a released attempt whose WORK the next dispatch of its tick
@@ -686,6 +693,15 @@ type Reconciler struct {
 
 	base    string
 	baseRef string
+	// folded is the merge commit the last refreshFrom pushed, "" when the
+	// branch already carried the base: the one fold a run start must gate.
+	folded string
+
+	// ciSilentSince and ciDispatched are dispatchSilentCI's memory: when this
+	// incarnation first saw a commit's code with no CI run, and which commits
+	// it has already started the workflow for (once each).
+	ciSilentSince map[string]time.Time
+	ciDispatched  map[string]bool
 
 	// tracker is the tracker as this run uses it: pointed at a worktree on the
 	// integration branch, and pushing every write. It is built in Run, because
@@ -1764,7 +1780,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// diverges from the base the moment either side writes: a tick filed on the
 	// base after the branch forked is one this run cannot see until the fold
 	// happens (refresh.go).
-	if err := r.refreshFromBase(ctx); err != nil {
+	err = r.refreshFromBase(ctx)
+	if err == nil {
+		err = r.gateRunStartFold(ctx)
+	}
+	if err != nil {
 		var refusal *Refusal
 		if !asRefusal(err, &refusal) {
 			return nil, fmt.Errorf("reconcile: refresh %s from the epic's base branch: %w", r.branch, err)
@@ -2364,6 +2384,12 @@ const (
 	// the same question. It is distinct from RefusedRoleAnswer because a role
 	// job's answer IS its deliverable, while this one arrives beside a branch
 	// somebody now has to decide about.
+	//
+	// Since tick tyd it is the LAST rung, not the first: a question is first
+	// dispatched one tier up, then at the ceiling decided under the standing
+	// orders (blocked.go). Only an always-ask question, or one that came back
+	// from the worker told to decide it, is refused this way — and it holds
+	// only its own tick: the window keeps working the ticks not behind it.
 	RefusedNeedsHuman = "attempt_needs_human"
 
 	// The one the TIER derivation adds (tick 5eq): a tick carries a tier

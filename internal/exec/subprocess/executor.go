@@ -66,6 +66,11 @@ type Options struct {
 	// Host-supplied for the same reason the prior reports are.
 	PriorSnapshots []PriorSnapshot
 
+	// Escalation is the earlier attempt of this tick that stopped to ask
+	// (tick tyd): the re-dispatched worker's prompt carries its question and
+	// the instruction to decide and proceed. Host-supplied like the reports.
+	Escalation *Escalation
+
 	// SupervisorArgv is how this executor re-invokes itself to supervise an
 	// attempt. Defaults to the running executable plus "supervise".
 	SupervisorArgv []string
@@ -378,6 +383,7 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		RolePrompt:     e.opts.RolePrompt,
 		PriorReports:   e.opts.PriorReports,
 		PriorSnapshots: e.opts.PriorSnapshots,
+		Escalation:     e.opts.Escalation,
 		WallSeconds:    spec.Limits.WallSeconds,
 		PushInterval:   int(e.opts.PushInterval / time.Second),
 		PushOnTimer:    e.guarded("push_on_timer"),

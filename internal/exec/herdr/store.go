@@ -120,6 +120,9 @@ type attemptRecord struct {
 	// the prompt file beside this record is the rendered whole.
 	PriorSnapshots []subprocess.PriorSnapshot `json:"prior_snapshots,omitempty"`
 
+	// Escalation is the earlier attempt that stopped to ask (tick tyd).
+	Escalation *subprocess.Escalation `json:"escalation,omitempty"`
+
 	WallSeconds int    `json:"wall_seconds"`
 	Remote      string `json:"remote"`
 	SourceGrade string `json:"source_grade"`

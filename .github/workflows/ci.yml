@@ -26,6 +26,11 @@ on:
   pull_request:
     paths-ignore:
       - ".ticfac/**"
+  # The run starts CI itself when the code an epic PR would merge has no run
+  # at all — its push's run cancelled while still queued, and every push since
+  # changed only .ticfac/ (internal/reconcile/closeout_ci.go, dispatchSilentCI).
+  # Without this trigger that code would never get a verdict to wait for.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -174,7 +174,7 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 			r.opts.EpicID, tick, marker.Attempt)
 	}
 
-	collected, err := r.collect(ctx, fl.handle, fl.executor, marker, f.status)
+	collected, err := r.collect(ctx, fl.entry, fl.handle, fl.executor, marker, f.status)
 	if err != nil {
 		// The collect's own refusals tear their attempt down where they are
 		// raised, which is why nothing is disposed here.

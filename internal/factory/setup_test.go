@@ -151,6 +151,14 @@ type fakeCloudflareAPI struct {
 	// billingMode is what the gateway object reports. Empty means the object
 	// omits the field entirely, which is its own failure class.
 	billingMode string
+	// jevPaths is every Workers AI run the fake answered.
+	jevPaths []string
+}
+
+func (api *fakeCloudflareAPI) jevRuns() []string {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	return append([]string{}, api.jevPaths...)
 }
 
 func newFakeCloudflareAPI(t *testing.T, token string) *fakeCloudflareAPI {
@@ -169,6 +177,41 @@ func newFakeCloudflareAPI(t *testing.T, token string) *fakeCloudflareAPI {
 		}
 		if strings.HasSuffix(r.URL.Path, "/logs") {
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []any{}})
+			return
+		}
+		// Workers AI's run endpoint, where Jev answers (tick tum): every
+		// question it is asked, answered over its own criteria in the
+		// envelope verified live.
+		if strings.HasSuffix(r.URL.Path, "/ai/run") {
+			api.mu.Lock()
+			api.jevPaths = append(api.jevPaths, r.URL.Path)
+			api.mu.Unlock()
+			var run struct {
+				Input struct {
+					Questions map[string]struct {
+						Criteria map[string]json.RawMessage `json:"criteria"`
+					} `json:"questions"`
+				} `json:"input"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&run)
+			answers := map[string]any{}
+			for id, question := range run.Input.Questions {
+				probabilities := map[string]float64{}
+				choice := ""
+				for label := range question.Criteria {
+					probabilities[label] = 0
+					if choice == "" || label < choice {
+						choice = label
+					}
+				}
+				probabilities[choice] = 1
+				answers[id] = map[string]any{"type": "choice", "choice": choice, "probabilities": probabilities, "confidence": 1}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": map[string]any{
+				"state": "Completed",
+				"result": map[string]any{"model": "jev-1.13.0", "answers": answers,
+					"usage": map[string]any{"input_tokens": 200, "output_tokens": 0}},
+			}})
 			return
 		}
 		if id, ok := gatewayObjectPath(r.URL.Path); ok {

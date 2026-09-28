@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -198,11 +199,14 @@ func TestFollowSourceRefusesAMalformedLine(t *testing.T) {
 func TestFollowSourceWaitsForAFeedThatDoesNotExistYet(t *testing.T) {
 	source := &scriptSource{misses: 3}
 	ctx, cancel := context.WithCancel(context.Background())
-	var seen int
+	// seen is written by the follower goroutine and read here: atomic, not
+	// guarded by source.mu, which the callback never holds (the race the
+	// -race job caught on PR #102).
+	var seen atomic.Int32
 	var err error
 	done := make(chan struct{})
 	go func() {
-		err = FollowSource(ctx, source, time.Millisecond, 0, func(Event) { seen++ })
+		err = FollowSource(ctx, source, time.Millisecond, 0, func(Event) { seen.Add(1) })
 		close(done)
 	}()
 	// The first three reads answer nothing; the loop must still be running
@@ -226,18 +230,15 @@ func TestFollowSourceWaitsForAFeedThatDoesNotExistYet(t *testing.T) {
 	}
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		source.mu.Lock()
-		written := seen
-		source.mu.Unlock()
-		if written == 1 {
+		if seen.Load() == 1 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 	cancel()
 	<-done
-	if seen != 1 {
-		t.Fatalf("the line was delivered %d times, want once", seen)
+	if got := seen.Load(); got != 1 {
+		t.Fatalf("the line was delivered %d times, want once", got)
 	}
 	if err != nil {
 		t.Fatalf("FollowSource: %v", err)

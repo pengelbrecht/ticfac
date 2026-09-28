@@ -1112,6 +1112,7 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		// What the tick's earlier attempts left PRESERVED (tick pbb),
 		// forwarded the same way.
 		PriorSnapshots: d.PriorSnapshots,
+		Escalation:     d.Escalation,
 		// The stuck watch's window, forwarded the way the production
 		// factories forward it (tick wv2).
 		StuckAfter: d.StuckAfter,

@@ -23,6 +23,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/pengelbrecht/ticfac"
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -213,12 +215,15 @@ cheaply. It binds a METERED credential; the local subprocess executor issues a
 flat-rate one, so on this host the number travels with the job and is reported
 everywhere, and the wall clock is what actually stops one.
 
-Each role-less implementation tick is classified through Jev before its first
-dispatch, and the credential that call rides is resolved from the environment
-and printed at startup (tick x0k): inside a cloud sandbox it is the run's own
-gateway route (AI_GATEWAY_BASE_URL/jev) with the run token, locally it is the
-operator's own key in $TICFAC_JEV_API_KEY (an optional $TICFAC_JEV_API_BASE
-overrides the API root). No credential — or an unreachable, refused or
+Each role-less implementation tick is classified through Jev (typesafe/jev on
+Cloudflare Workers AI) before its first dispatch, and the credential that call
+rides is resolved and printed at startup: inside a cloud sandbox it is the
+run's own gateway route (AI_GATEWAY_BASE_URL/jev) with the run token, locally
+it is the Cloudflare API token and account 'ticfac factory setup' stored in
+~/.ticfacrc (factory_cloudflare_api_token, and the account in
+factory_gateway_url; $TICFAC_JEV_API_TOKEN and $TICFAC_JEV_ACCOUNT_ID override
+them). 'ticfac doctor' asks Jev one tiny question to say whether it answers.
+No credential — or an unreachable, refused or
 misconfigured classifier — is the documented fallback, said at startup and
 recorded per ask: the run classifies nothing or records its no-answer, and
 every dispatch starts at [tier_policy.start].
@@ -291,8 +296,8 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 
 	// The classifier's credential, resolved BEFORE anything is dispatched (tick
 	// x0k): inside a cloud sandbox the source is the run's own gateway route
-	// with the run token; locally it is the operator's own key in
-	// $TICFAC_JEV_API_KEY. An unconfigured source is the documented fallback —
+	// with the run token; locally it is the operator's Cloudflare credential
+	// from ~/.ticfacrc (tick tum). An unconfigured source is the documented fallback —
 	// the run classifies nothing and every dispatch starts at [tier_policy.start]
 	// — and the note saying so is printed on the run's own stdout below, so a
 	// redirected invocation and run.log both carry it. Resolution happens here
@@ -759,22 +764,40 @@ func startupLine(runID string) string {
 }
 
 // classifierForRun builds the classifier this run classifies with, from the
-// credential source the process found (tick x0k): the run's own gateway route
-// inside a cloud sandbox, the operator's key in $TICFAC_JEV_API_KEY locally,
-// and nil — with the note saying what the run does without one — when neither
-// resolves, which is the documented degradation to [tier_policy.start]. The
-// one client is handed to BOTH exchanges that ask it: the work-type
-// classification (reconcile.Classifier) and the gating prediction the
-// absorption decision drives (gating.Classifier, tick npq) — the same
-// credential, the same client, two different questions. It is a function of
-// its own so the wiring is the same under test as in production: what
-// run-epic hands the reconciler is exactly what these tests build.
+// credential source the process found (tick x0k, rewired to Workers AI by tick
+// tum): the run's own gateway route inside a cloud sandbox, the operator's
+// Cloudflare API token and account from ~/.ticfacrc locally, and nil — with
+// the note saying what the run does without one — when neither resolves,
+// which is the documented degradation to [tier_policy.start]. The one client
+// is handed to BOTH exchanges that ask it: the work-type classification
+// (reconcile.Classifier) and the gating prediction the absorption decision
+// drives (gating.Classifier, tick npq) — the same credential, the same client,
+// two different questions. It is a function of its own so the wiring is the
+// same under test as in production: what run-epic hands the reconciler is
+// exactly what these tests build.
 func classifierForRun() (classifier *jev.Client, note string) {
-	source := jev.ResolveCredential(os.Getenv)
+	source := resolveClassifierCredential()
 	if !source.Configured {
 		return nil, source.Note
 	}
 	return jev.New(source.Config, nil), source.Note
+}
+
+// resolveClassifierCredential resolves the classifier's credential from this
+// process's environment and ~/.ticfacrc: the Cloudflare API token the factory
+// setup ladder stored (factory_cloudflare_api_token) and the account its AI
+// Gateway URL carries (factory_gateway_url). A ~/.ticfacrc that cannot be read
+// is no stored credential, and the note that follows says what is missing —
+// classification is a degradation, never a reason to refuse a run.
+func resolveClassifierCredential() jev.CredentialSource {
+	var stored jev.Stored
+	if file, err := credentials.Load(); err == nil {
+		stored.APIToken = file.Get(credentials.KeyCloudflareAPIToken)
+		if account, _, ok := gatewaytrace.GatewayIDs(file.Get(credentials.KeyGatewayURL)); ok {
+			stored.AccountID = account
+		}
+	}
+	return jev.ResolveCredential(os.Getenv, stored)
 }
 
 // feedFailureLine is the one sentence a run whose feed could not be written

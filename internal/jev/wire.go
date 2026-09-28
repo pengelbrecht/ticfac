@@ -3,12 +3,15 @@ package jev
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
-// The wire contract, as the epic's measurement proved it on 2026-09-22. Two
+// The wire contract, as the epic's measurement proved it on 2026-09-22 and as
+// Workers AI serves it (tick tum, 2026-09-28: POST <Cloudflare REST root>/
+// accounts/<account>/ai/run with {"model": "typesafe/jev", "input": {…}}). Two
 // details cost real time to find, and both are pinned by the tests:
 //
 //   - The response nests ONE DEEPER than the model page shows:
@@ -42,8 +45,8 @@ import (
 // diagnosis) is pinned exactly there.
 type Criterion struct {
 	What     string   `json:"what"`
-	NotFor   string   `json:"not_for"`
-	Examples []string `json:"examples"`
+	NotFor   string   `json:"not_for,omitempty"`
+	Examples []string `json:"examples,omitempty"`
 }
 
 // Choice is one option of a [Question]: its label — a member of the closed
@@ -143,10 +146,77 @@ type question struct {
 }
 
 // request is one classifier round trip: the state is the material every
-// question is judged against, and the questions are one per thing asked.
+// question is judged against, and the questions are one per thing asked, in
+// the caller's order.
+//
+// ON THE WIRE it is Workers AI's run body (tick tum), which is NOT this
+// struct's shape: {"model": "typesafe/jev", "input": {"state", "questions"}},
+// where questions is an OBJECT KEYED BY QUESTION ID and each question is
+// exactly {type, instructions, criteria} — the model's input schema refuses
+// any other property, so the id travels as the key, never inside the question.
+// MarshalJSON and UnmarshalJSON are that translation, both ways.
 type request struct {
-	State     string     `json:"state"`
-	Questions []question `json:"questions"`
+	State     string
+	Questions []question
+}
+
+// wireQuestion is one question as the input schema allows it.
+type wireQuestion struct {
+	Type         string               `json:"type"`
+	Instructions string               `json:"instructions"`
+	Criteria     map[string]Criterion `json:"criteria"`
+}
+
+// wireRun is the Workers AI run body.
+type wireRun struct {
+	Model string `json:"model"`
+	Input struct {
+		State     string                  `json:"state"`
+		Questions map[string]wireQuestion `json:"questions"`
+	} `json:"input"`
+}
+
+func (r request) MarshalJSON() ([]byte, error) {
+	var run wireRun
+	run.Model = Model
+	run.Input.State = r.State
+	run.Input.Questions = make(map[string]wireQuestion, len(r.Questions))
+	for _, one := range r.Questions {
+		run.Input.Questions[one.ID] = wireQuestion{Type: one.Type, Instructions: one.Instructions, Criteria: one.Criteria}
+	}
+	return json.Marshal(run)
+}
+
+// UnmarshalJSON reads a run body back — what a fake endpoint in a test does.
+// JSON objects are unordered, so the questions come back sorted by id, and
+// each one's label order is its criteria's sorted keys.
+func (r *request) UnmarshalJSON(body []byte) error {
+	var run wireRun
+	if err := json.Unmarshal(body, &run); err != nil {
+		return err
+	}
+	if run.Model != Model {
+		return fmt.Errorf("the run body names model %q, want %q", run.Model, Model)
+	}
+	ids := make([]string, 0, len(run.Input.Questions))
+	for id := range run.Input.Questions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	r.State = run.Input.State
+	r.Questions = make([]question, 0, len(ids))
+	for _, id := range ids {
+		one := run.Input.Questions[id]
+		order := make([]string, 0, len(one.Criteria))
+		for label := range one.Criteria {
+			order = append(order, label)
+		}
+		sort.Strings(order)
+		r.Questions = append(r.Questions, question{
+			ID: id, Type: one.Type, Instructions: one.Instructions, Criteria: one.Criteria, order: order,
+		})
+	}
+	return nil
 }
 
 // stateText is the classification question's shared state: each asked tick's
@@ -324,7 +394,18 @@ func (set *answerSet) UnmarshalJSON(body []byte) error {
 // shows: result -> {state, result: {model, answers, usage}}. A reader at
 // result.answers finds zero answers and no error, which is exactly the trap
 // this shape exists to make loud.
+//
+// That is Workers AI's own envelope (tick tum, verified live 2026-09-28):
+// {"result": {"state": "Completed", "result": {"model": "jev-1.13.0",
+// "answers": {…}, "usage": {…}}, "gatewayMetadata": {…}}, "success": true}.
+// A false success is Cloudflare refusing the call in its own words, so its
+// errors are the no-answer's reason.
 type responseEnvelope struct {
+	Success *bool `json:"success"`
+	Errors  []struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
 	Result *struct {
 		State  json.RawMessage `json:"state"`
 		Result *struct {
@@ -343,6 +424,13 @@ func parseResponse(body []byte) (answers answerSet, model string, usage Usage, u
 	var envelope responseEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		return nil, "", Usage{}, fmt.Sprintf("the classifier's response did not decode as JSON: %v", err)
+	}
+	if envelope.Success != nil && !*envelope.Success {
+		reasons := make([]string, 0, len(envelope.Errors))
+		for _, one := range envelope.Errors {
+			reasons = append(reasons, fmt.Sprintf("%d %s", one.Code, one.Message))
+		}
+		return nil, "", Usage{}, "Workers AI refused the classification: " + strings.Join(reasons, "; ")
 	}
 	if envelope.Result == nil || envelope.Result.Result == nil {
 		return nil, "", Usage{}, "the response carries no result.result.answers: Jev answers nest one level deeper than the model page shows " +

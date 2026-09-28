@@ -1,0 +1,14 @@
+{
+  "id": "ms9",
+  "title": "Jev for the tick's starting tier only: skip role ticks, route on probability mass, measure the threshold",
+  "gloss": "Jev tier start only",
+  "description": "Operator, 2026-09-28: 'last thing i wanna do is to use jev to use jev. only clear value cases.' The one clear case is the starting tier: without it every tick starts on pi/GLM and big ones burn an hour before escalating (46x, dz1 in epic-6in), and the 2026-09-22 evaluation (49 ticks, $0.0022) showed labels above ~0.75 confidence match human judgement. Do: skip ticks that carry a role; route to the expensive tier when P(design)+P(diagnosis) \u003e threshold; measure the threshold on history (the 49-tick wne set plus 2jn/6in ticks with their actual outcomes); record each classification on the run branch so a resume replays it.\n\nConsidered and NOT doing unless a real failure shows a rule can't cover it: report-honesty checks (the gate and CI verify the work, not the report's claim), finding gating prediction (the reporter's-claim rule plus the absorption fixes hold), live-demo detection (#92's rule), BLOCKED question classes (the frontier worker applies the standing orders itself), stuck disambiguation (activity signals plus a nudge), prose-acceptance mapping (#100 backlogs).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Tier start uses Jev with role ticks skipped and a measured probability-mass threshold recorded in the tick; classifications replay on resume; with Jev unavailable the run starts at the policy default as today",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T10:46:16.678484Z",
+  "updated_at": "2026-09-28T10:49:32.884419Z"
+}

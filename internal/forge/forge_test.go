@@ -513,3 +513,23 @@ func TestRerunFailedOnceSkipsARunAlreadyRetried(t *testing.T) {
 		}
 	}
 }
+
+// A workflow dispatch addresses the workflow by its file name and names the
+// ref the run is for — the request GitHub's workflow_dispatch event takes.
+func TestDispatchWorkflowStartsTheWorkflowOnTheRef(t *testing.T) {
+	t.Parallel()
+	var body map[string]string
+	g, seen := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	if err := g.DispatchWorkflow(context.Background(), ".github/workflows/ci.yml", "epic/6in"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "POST /repos/example/example/actions/workflows/ci.yml/dispatches"; len(*seen) != 1 || (*seen)[0] != want {
+		t.Errorf("requests %v, want exactly %q", *seen, want)
+	}
+	if body["ref"] != "epic/6in" {
+		t.Errorf("the dispatch names ref %q, want epic/6in", body["ref"])
+	}
+}

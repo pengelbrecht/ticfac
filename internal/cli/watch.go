@@ -115,6 +115,10 @@ var watchKeepStages = map[string]bool{
 	// back to.
 	reconcile.StageStuckNudged:  true,
 	reconcile.StageStuckStopped: true,
+	// A worker that stopped to ask (tick tyd): each step names the question.
+	reconcile.StageBlockedEscalated: true,
+	reconcile.StageBlockedDecide:    true,
+	reconcile.StageBlockedHeld:      true,
 }
 
 // watchIsTerminal says whether a writer is a terminal: the seam the live

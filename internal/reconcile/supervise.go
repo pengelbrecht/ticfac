@@ -103,6 +103,11 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     no commits, nothing mergeable. The next incarnation redispatches it,
 //     which is what the run's own terminal reason already says it does. There
 //     is nothing for a person to decide about work that does not exist.
+//   - RefusedBlockedRedispatch: a worker stopped to ask and the run answered
+//     by dispatching the tick again, one tier up or to decide under the
+//     standing orders (tick tyd). The window requeues it in-run; should the
+//     refusal escape, the next incarnation reads the recorded answer and
+//     dispatches the same way.
 //   - RefusedClaimWidth: the tracker refused a claim because the epic's
 //     declared width is full (tick 3mp). It is a fact about the WORLD — another
 //     run's claims, a tick a person holds — not a verdict on this run's work,
@@ -114,6 +119,9 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //   - RefusedStale: the integration branch moved under a gate, so its evidence
 //     is no longer about what would be published (gate.go). Re-deriving is the
 //     entire repair, it is keyed by commit, and a person has no part in it.
+//   - RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending:
+//     the run's bound on a wait for CI ran out (waitsOnCI). Waiting is not a
+//     decision, and the next incarnation's wait is for a run that exists.
 //   - RefusedCloseoutOverRedCI: a close-out answered BLOCKED over code whose
 //     CI the run itself reads as red (epic-6in). The next incarnation's
 //     admission answers the red CI with the repair job — the tree changes —
@@ -129,7 +137,26 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // person; that is the case go6 names, and it is this one.
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
-	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI:
+	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
+		RefusedBlockedRedispatch:
+		return true
+	}
+	return waitsOnCI(reason)
+}
+
+// waitsOnCI reports whether a stop is the run's own bound on a wait for CI —
+// the close-out's admission or close, or the readying — running out while CI
+// was still pending or had produced no run yet (epic-6in follow-up). Waiting
+// on CI is not a decision: nobody has anything to judge, and a person asked
+// could only type the same command back. The next incarnation re-derives CI
+// from the PR, and a code commit with no run, or only cancelled ones, has its
+// workflow started or restarted (closeout_ci.go), so the wait is for a run
+// that exists. The tree need not change between two such stops — the world
+// being waited on is the forge's, not the branch's — so the anti-spin rule
+// does not apply to them; the continuation cap is their bound.
+func waitsOnCI(reason string) bool {
+	switch reason {
+	case RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending:
 		return true
 	}
 	return false
@@ -371,7 +398,7 @@ func haltReason(stop, previous supervisedStop, made, capped int) string {
 	case !resumesWithoutAPerson(stop.Reason):
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"
-	case stop.sameStop(previous):
+	case stop.sameStop(previous) && !waitsOnCI(stop.Reason):
 		// The safety this tick is really about. The last incarnation changed
 		// nothing — the integration branch head did not move — and came back
 		// with the identical refusal. Another resume would ask the same

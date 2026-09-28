@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
 )
@@ -152,7 +153,65 @@ func (r *Reconciler) ciForCode(ctx context.Context, pr forge.PullRequest, at str
 		}
 		return forge.CIReport{State: forge.CIPending, CancelledRuns: cancelled}, at, nil
 	}
+	if restart && r.dispatchSilentCI(ctx, pr, at) {
+		return forge.CIReport{State: forge.CIPending}, at, nil
+	}
 	return own, at, nil
+}
+
+// ciDispatchAfter is how long the code a PR would merge may carry NO CI run
+// at all before the run starts the workflow itself: long enough for a push's
+// own run to appear (tick ox0's "not yet" window, which is seconds), short
+// enough that a close-out is not spent waiting for a run nobody will start.
+const ciDispatchAfter = 3 * time.Minute
+
+// dispatchSilentCI starts the CI workflow on the PR's branch, ONCE per commit
+// per incarnation, when neither the commit nor any commit carrying its code
+// has had a CI run for ciDispatchAfter (or half the run's CI bound, whichever
+// is shorter). A push whose run was cancelled while still queued leaves no
+// check run behind, and when the pushes after it changed only ignored paths
+// nothing will ever run CI on that code: waiting — the whole bound, then a
+// resume, then the bound again — waits for nothing. It answers whether it
+// dispatched, so the caller says pending: a real wait for a run that exists.
+func (r *Reconciler) dispatchSilentCI(ctx context.Context, pr forge.PullRequest, at string) bool {
+	dispatcher, ok := r.opts.PullRequests.(forge.CIDispatcher)
+	if !ok || pr.HeadRef == "" {
+		return false
+	}
+	if r.ciSilentSince == nil {
+		r.ciSilentSince = map[string]time.Time{}
+		r.ciDispatched = map[string]bool{}
+	}
+	if r.ciDispatched[at] {
+		return true
+	}
+	now := r.now()
+	since, seen := r.ciSilentSince[at]
+	if !seen {
+		r.ciSilentSince[at] = now
+		return false
+	}
+	after := ciDispatchAfter
+	if bound := r.opts.GateTimeout / 2; bound > 0 && bound < after {
+		after = bound
+	}
+	if now.Sub(since) < after {
+		return false
+	}
+	workflow := r.closeoutRule.CIWorkflow
+	if workflow == "" {
+		workflow = DefaultCIWorkflow
+	}
+	if err := dispatcher.DispatchWorkflow(ctx, workflow, pr.HeadRef); err != nil {
+		r.record("", StageCIRestarted, "the code of %s has had no CI run for %s and %s could not be started on %s: %v",
+			short(at), now.Sub(since).Round(time.Second), workflow, pr.HeadRef, err)
+		return false
+	}
+	r.ciDispatched[at] = true
+	r.record("", StageCIRestarted, "the code of %s has had no CI run for %s — no run to wait for and none coming — so "+
+		"%s is started on %s, once: an automatic intervention, and the wait is for that run",
+		short(at), now.Sub(since).Round(time.Second), workflow, pr.HeadRef)
+	return true
 }
 
 // sameCodeAncestors lists, newest first, the ancestors of `at` whose tree
