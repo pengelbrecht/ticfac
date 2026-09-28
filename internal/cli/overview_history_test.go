@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runregistry"
+	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
 // The bare `ticfac` is glanced at to answer "does anything need me". On the
@@ -50,12 +52,16 @@ func fakeEpicStatus(t *testing.T, closed ...string) {
 // historyFactory serves a factory whose run index holds what an operator's
 // factory accumulates: the live and the recent beside a long tail of
 // finished runs that need nobody.
-func historyFactory(t *testing.T, now time.Time) (attention, history []string) {
+func historyFactory(t *testing.T, now time.Time) (attention, history []string, requests *[]cloudFactoryRequest) {
 	t.Helper()
 	at := func(ago time.Duration) string { return now.Add(-ago).UTC().Format(time.RFC3339) }
 	runs := []any{}
+	project := ""
 	add := func(id, epic, state string, startedAgo, endedAgo time.Duration) {
 		record := map[string]any{"run_id": id, "epic": epic, "state": state, "started_at": at(startedAgo)}
+		if project != "" {
+			record["project"] = project
+		}
 		if endedAgo > 0 {
 			record["ended_at"] = at(endedAgo)
 		}
@@ -72,7 +78,9 @@ func historyFactory(t *testing.T, now time.Time) (attention, history []string) {
 
 	// History: an earlier failed run of the same open epic, superseded by
 	// hex(1); a recent failure of an epic the tracker says is closed; and
-	// twenty runs that finished a month ago.
+	// twenty runs that finished a month ago — nineteen of another project the
+	// factory also hosts (the operator's factory runs ticks' PR reviews), and
+	// one of this checkout's own (see historyRepo).
 	add(hex(4), "opn", "failed", 6*time.Hour, 5*time.Hour)
 	add(hex(5), "cls", "failed", 2*time.Hour, time.Hour)
 	history = []string{hex(4), hex(5)}
@@ -82,25 +90,144 @@ func historyFactory(t *testing.T, now time.Time) (attention, history []string) {
 			state = "completed"
 		}
 		id := hex(100 + i)
+		project = "other/proj"
+		if i == ownOldRun {
+			project = ""
+		}
 		add(id, fmt.Sprintf("o%02d", i), state, 31*24*time.Hour, 30*24*time.Hour)
+		project = ""
 		history = append(history, id)
 	}
 
-	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 		if request.Path == "/api/runs" {
 			return 200, map[string]any{"runs": runs}
 		}
 		return 404, map[string]any{"error": "not_found"}
 	})
 	configureCloudFactory(t, endpoint)
-	return attention, history
+	return attention, history, requests
+}
+
+// ownOldRun is the one old run of the history fixture that is THIS
+// checkout's: its record alone cannot say whether it holds a person (its
+// epic's records might), so even the human view gathers it before it ages
+// into history.
+const ownOldRun = 19
+
+// historyRepo is a checkout whose origin names the GitHub project acme/project
+// — so the factory's runs of other projects are told apart from its own — and
+// is a real bare repository beside it, so a records fetch fails fast instead
+// of reaching the network.
+func historyRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	bare := filepath.Join(root, "acme", "project.git")
+	repo := filepath.Join(root, "repo")
+	execTestCmd(t, root, "git", "init", "--quiet", "--bare", bare)
+	execTestCmd(t, root, "git", "init", "--quiet", repo)
+	execTestCmd(t, repo, "git", "remote", "add", "origin", "file://"+bare)
+	return repo
+}
+
+// feedReadsOf names the runs whose feed the factory was asked for.
+func feedReadsOf(requests []cloudFactoryRequest) map[string]bool {
+	read := map[string]bool{}
+	for _, request := range requests {
+		if rest, ok := strings.CutPrefix(request.Path, "/api/runs/"); ok {
+			if id, ok := strings.CutSuffix(rest, "/events"); ok {
+				read[id] = true
+			}
+		}
+	}
+	return read
+}
+
+// countGraphReads swaps the tracker seam for one that records which epics
+// were read, answering the same fake graph fakeOverviewGraph answers.
+func countGraphReads(t *testing.T) func() map[string]bool {
+	t.Helper()
+	var mu sync.Mutex
+	read := map[string]bool{}
+	real := epicGraph
+	t.Cleanup(func() { epicGraph = real })
+	epicGraph = func(_ context.Context, _ string, epicID string) *tk.Graph {
+		mu.Lock()
+		read[epicID] = true
+		mu.Unlock()
+		return fakeGraph()
+	}
+	return func() map[string]bool {
+		mu.Lock()
+		defer mu.Unlock()
+		out := map[string]bool{}
+		for k, v := range read {
+			out[k] = v
+		}
+		return out
+	}
+}
+
+// The overview is glanced at, so it must be quick, and on the operator's
+// machine it took 41s: every one of ~90 cloud runs got a full status model —
+// its feed read from the factory, its epic's graph from the tracker, its PR
+// from the forge — including the ~70 the screen then collapsed into one
+// line. A history run needs none of that to be recognised as history: its
+// record says it finished, when, and for which epic. The human view reads
+// nothing more for it; --json and --all, which show it, still read it all.
+func TestTheBareOverviewReadsNothingMoreForAHistoryRun(t *testing.T) {
+	now := time.Now()
+	ownRegistry(t)
+	repo := historyRepo(t)
+	attention, history, requests := historyFactory(t, now)
+	fakeOverviewGraph(t)
+	graphReads := countGraphReads(t)
+	fakeEpicStatus(t, "cls")
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d:\n%s\n%s", code, stdout.String(), stderr.String())
+	}
+	feeds := feedReadsOf(*requests)
+	for _, id := range history {
+		if id == fmt.Sprintf("run_%032x", 100+ownOldRun) {
+			continue // this checkout's own: gathered, then aged into history
+		}
+		if feeds[id] {
+			t.Errorf("the human view read the feed of history run %s", id)
+		}
+	}
+	for _, id := range attention {
+		if !feeds[id] {
+			t.Errorf("the human view did not read the feed of %s, which it lists", id)
+		}
+	}
+	graphs := graphReads()
+	for _, epic := range []string{"cls"} {
+		if graphs[epic] {
+			t.Errorf("the human view read the tracker graph of epic %s, whose only run is history", epic)
+		}
+	}
+
+	// --json lists every run with its full model, so it reads them all.
+	*requests = (*requests)[:0]
+	stdout.Reset()
+	if code := Run([]string{"--repo", repo, "--json"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview --json exits %d:\n%s\n%s", code, stdout.String(), stderr.String())
+	}
+	feeds = feedReadsOf(*requests)
+	for _, id := range append(append([]string{}, attention...), history...) {
+		if !feeds[id] {
+			t.Errorf("--json did not read the feed of %s", id)
+		}
+	}
 }
 
 func TestTheBareOverviewLeadsWithWhatNeedsAPersonAndCollapsesHistory(t *testing.T) {
 	now := time.Now()
 	ownRegistry(t)
-	repo := t.TempDir()
-	attention, history := historyFactory(t, now)
+	repo := historyRepo(t)
+	attention, history, _ := historyFactory(t, now)
 	fakeOverviewGraph(t)
 	fakeEpicStatus(t, "cls")
 

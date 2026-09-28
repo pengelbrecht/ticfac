@@ -35,6 +35,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
 // defaultStatusFollowInterval is how often the live table re-renders. Two
@@ -142,11 +143,19 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 		answer := cloudRunLiveness(ctx, runID, state)
 		alive = answer.Alive
 		stateWord := "alive"
-		if !alive {
+		switch {
+		case answer.State == cloudLivenessOrphaned:
+			stateWord = "not alive (orphaned)"
+		case !alive:
 			stateWord = "not alive"
 		}
 		liveness = fmt.Sprintf("%s — %s", stateWord, answer.Reason)
-		ended = !cloudRunStillGoing(state)
+		if answer.State == cloudLivenessOrphaned && cloudSource.epic != "" {
+			liveness += " — clear with: " + statusmodel.ResumeCommand(statusmodel.HostCloud, cloudSource.epic)
+		}
+		// An orphaned record will never be written again: nothing more is
+		// coming, so a follow ends on it as on the run's own terminal word.
+		ended = !cloudRunStillGoing(state) || answer.State == cloudLivenessOrphaned
 	default:
 		probe := runlife.Probe(repo, runID, time.Now())
 		alive = probe.State == runlife.Alive
@@ -490,10 +499,20 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 	}
 
 	stateWord := "alive"
-	if !answer.Alive {
+	switch {
+	case answer.State == cloudLivenessOrphaned:
+		stateWord = "not alive (orphaned)"
+	case !answer.Alive:
 		stateWord = "not alive"
 	}
 	fmt.Fprintf(stdout, "run %s: %s — %s\n", runID, stateWord, answer.Reason)
+	if answer.State == cloudLivenessOrphaned {
+		if client, err := newCloudClient(); err == nil {
+			if record, err := readCloudRunRecord(ctx, client, runID); err == nil && strings.TrimSpace(record.Epic) != "" {
+				fmt.Fprintf(stdout, "clear with: %s\n", statusmodel.ResumeCommand(statusmodel.HostCloud, strings.TrimSpace(record.Epic)))
+			}
+		}
+	}
 	if status.LastEvent != nil {
 		tick := "-"
 		if status.LastEvent.TickID != nil {

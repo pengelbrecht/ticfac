@@ -266,6 +266,19 @@ func (s *Supervisor) FailedSteps() []SupervisorStep {
 // "Cloudflare has no instance for that run" send an operator to three different
 // places, and answering all three with one refusal has already cost this
 // project a misdiagnosis.
+// NoSupervisorError is Cloudflare's own answer that no Workflow instance
+// exists for a run: never created, or past Cloudflare's retention. It is a
+// verdict, not a failed read — the one answer that lets a caller say a run
+// whose record still claims life is dead (see ticfac's cloudRunLiveness).
+type NoSupervisorError struct {
+	Workflow string
+	RunID    string
+}
+
+func (e *NoSupervisorError) Error() string {
+	return fmt.Sprintf("Cloudflare has no %s instance for %s: either no supervisor was ever created for that run, or the instance has passed Cloudflare's retention", e.Workflow, e.RunID)
+}
+
 func ReadSupervisor(ctx context.Context, runID string, opts SupervisorOptions) (*Supervisor, error) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
@@ -312,7 +325,7 @@ func ReadSupervisor(ctx context.Context, runID string, opts SupervisorOptions) (
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		return nil, fmt.Errorf("the Cloudflare API token was rejected (%s) reading Workflow %q — it needs Workflows read access on this account", resp.Status, workflow)
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, fmt.Errorf("Cloudflare has no %s instance for %s: either no supervisor was ever created for that run, or the instance has passed Cloudflare's retention", workflow, runID)
+		return nil, &NoSupervisorError{Workflow: workflow, RunID: runID}
 	case resp.StatusCode >= 300:
 		return nil, fmt.Errorf("the Workflows API answered %s for %s: %s", resp.Status, runID, strings.TrimSpace(string(body)))
 	}
