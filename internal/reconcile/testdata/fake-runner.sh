@@ -1109,6 +1109,20 @@ closeout_red)
 		report
 	fi
 	;;
+closeout_red_uncarried)
+	# Epic-6in's v7z: the close-out, cut from the integration branch, writes
+	# its retro and answers BLOCKED; a close-out cut from that retro (its work
+	# CARRIED) finishes. A fresh close-out would answer BLOCKED again, so the
+	# mode tells a carried try from a fresh one.
+	if [ "$TICFAC_TICK" = "co" ] && [ ! -e "$TICFAC_WORKTREE/$file" ]; then
+		commit
+		status="BLOCKED"
+		report
+	else
+		commit
+		report
+	fi
+	;;
 finding_build_red)
 	# The prose rule's exception (epic-6in): the work is done, and the report
 	# carries ONE in-repository finding whose reporter claims it breaks the

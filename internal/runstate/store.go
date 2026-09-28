@@ -675,6 +675,41 @@ func (s *Store) Checkpoint() (*Checkpoint, bool, error) {
 	return &c, true, nil
 }
 
+// CheckpointHistory is every version of the run's checkpoint on the branch as
+// this writer last fetched it, OLDEST FIRST. The checkpoint is the run's one
+// mutable record, so what it said at a moment the run has since moved past —
+// the reason an attempt was rejected, say — is only in its history. A version
+// that does not decode (an older schema) is skipped rather than failing the
+// read: the history is evidence, and one unreadable version is not a reason to
+// read none.
+func (s *Store) CheckpointHistory() ([]Checkpoint, error) {
+	if err := s.ensureFetched(); err != nil {
+		return nil, err
+	}
+	if s.head == "" {
+		return nil, nil
+	}
+	path := CheckpointPath(s.runID)
+	out, err := s.git.run("log", "--format=%H", "--reverse", s.head, "--", path)
+	if err != nil {
+		return nil, err
+	}
+	var history []Checkpoint
+	for _, commit := range strings.Fields(out) {
+		raw, err := s.git.catFile(commit + ":" + path)
+		if err != nil {
+			// The commit deleted the file (a run branch retired and restarted).
+			continue
+		}
+		var c Checkpoint
+		if decodeRecord(raw, &c) != nil {
+			continue
+		}
+		history = append(history, c)
+	}
+	return history, nil
+}
+
 // Attempt returns one dispatch marker.
 func (s *Store) Attempt(n int) (*Attempt, bool, error) {
 	if err := checkIndex("attempt", n); err != nil {

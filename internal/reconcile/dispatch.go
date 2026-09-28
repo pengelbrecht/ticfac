@@ -648,10 +648,23 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// The BACKSTOP (epic-6in 823). A collect disposes of a rejected
 			// attempt's work by itself — carried or released by the
 			// rejection's class, recorded before the rejection is durable
-			// (rejected_work.go) — so a resume reaches this hold only for a
-			// rejection the run could not classify (a merge refused, work that
-			// reached origin late) or once the bound is spent: the ladder at
-			// its ceiling and the one further try there rejected too.
+			// (rejected_work.go). A rejection that has NO such decision — made
+			// before the collect decided, or by a path that does not (a role
+			// job's; epic-6in v7z) — is decided here, from the reason the run
+			// recorded when it rejected the attempt, by the same classifier and
+			// under the same bound. So the hold is reached only for a rejection
+			// the run cannot classify (a merge refused, work that reached
+			// origin late) or once the bound is spent: the ladder at its
+			// ceiling and the one further try there rejected too.
+			disposed, carries, reason, why := r.disposeUndecidedRejection(ctx, entry, marker, released)
+			if disposed {
+				failed++
+				if carries && (carry == nil || existing.Attempt > carry.marker.Attempt) {
+					carry = &carriedWork{marker: marker, by: runReleaser + " (" + reason + ")",
+						at: r.now().UTC().Format(time.RFC3339)}
+				}
+				continue
+			}
 			spent := ""
 			if prior := runReleasesOf(released, tick); len(prior) > 0 {
 				spent = fmt.Sprintf(" The run already released %d rejected attempt(s) of this tick by itself and its "+
@@ -666,7 +679,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"branch; then take the work, or release the attempt with "+
 					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt.%s",
 				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.opts.EpicID,
-				tick, existing.Attempt, spent)
+				tick, existing.Attempt, why+spent)
 		}
 		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
 		// the highest-numbered one, which is the one the pass remembers — the

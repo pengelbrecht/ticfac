@@ -3,9 +3,11 @@ package reconcile
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -158,4 +160,132 @@ func TestRejectedWorkDisposalIsBoundedByTheLadder(t *testing.T) {
 		t.Errorf("the backstop does not say the bound is spent: %s", resumed.Failure.Message)
 	}
 	_ = r
+}
+
+// Epic-6in v7z, the stall on a build that included the disposal: a close-out
+// rejected with its retro committed by a path that writes NO disposition — a
+// close-out that answered BLOCKED over red CI, as v7z's did before the
+// collect disposed of anything — resumed into the backstop hold once CI read
+// green again, and a person typed `ticfac settle --release … --carry-work`.
+// The resume now decides it from the rejection it recorded: a close-out
+// rejected over red CI is operational, its commits are carried, and a new
+// close-out is dispatched from them, with nobody.
+func TestARejectedCloseoutWithWorkAndNoDispositionIsCarriedOnResumeWithNoPerson(t *testing.T) {
+	t.Parallel()
+	const mode = "closeout_red_uncarried"
+	var resumed atomic.Bool
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{mode: mode, pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareCloseoutRule(t, f.Repo)
+	pr.ci = func(string) forge.CIReport {
+		if resumed.Load() || f.dispatch("co").TickID == "" {
+			// The false green the close-out was admitted on; and, on resume,
+			// CI re-run green — the red-CI supersede has nothing to read.
+			return forge.CIReport{State: forge.CIGreen}
+		}
+		return forge.CIReport{State: forge.CIRed, Failing: []string{"go"}}
+	}
+
+	first, stopped, err := f.run(f.Repo, fixtureOptions{mode: mode, pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the first run did not finish: %v", err)
+	}
+	if stopped.Failure == nil || stopped.Failure.Reason != RefusedCloseoutOverRedCI {
+		t.Fatalf("the first run ended %s (%+v), want the %s stop", stopped.State, stopped.Failure,
+			RefusedCloseoutOverRedCI)
+	}
+	rejected := markerOfTry(t, first, "co", 1)
+	head := strings.TrimSpace(runGitQuiet(f.Repo.Origin, "rev-parse", "--verify", "--quiet",
+		refFor(branchOf(rejected.WriteRef))))
+	if head == "" || head == rejected.BaseSHA {
+		t.Fatal("the rejected close-out committed nothing; the scenario proves nothing")
+	}
+	// The premise: the rejection carries work and no decision says what
+	// becomes of it.
+	if released, err := first.settlements(); err != nil {
+		t.Fatal(err)
+	} else if s, ok := released[attemptKey("co", rejected.Attempt)]; ok {
+		t.Fatalf("the rejection already has a disposition %+v; the scenario proves nothing", s)
+	}
+
+	resumed.Store(true)
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: mode, pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the resume did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the resume ended %s (%+v): a rejected close-out's work is carried by the run, not held for a "+
+			"person", result.State, result.Failure)
+	}
+	for _, e := range r.Journal() {
+		if strings.Contains(e.Detail, RefusedRejectedWork) || e.Stage == StageRunHeld {
+			t.Errorf("the run held or named the hold: %s %s", e.Stage, e.Detail)
+		}
+	}
+	next := markerOfTry(t, r, "co", 2)
+	if next.ResumedFrom == nil || next.ResumedFrom.Attempt != rejected.Attempt || next.ResumedFrom.SHA != head {
+		t.Fatalf("the new close-out resumed from %+v, want attempt %d's work at %s", next.ResumedFrom,
+			rejected.Attempt, short(head))
+	}
+	if next.BaseSHA != head {
+		t.Errorf("the new close-out was cut from %s, want the rejected close-out's head %s", short(next.BaseSHA),
+			short(head))
+	}
+	if !strings.HasPrefix(next.ResumedFrom.ReleasedBy, runReleaser) {
+		t.Errorf("the carry is attributed to %q, want the run", next.ResumedFrom.ReleasedBy)
+	}
+	released, err := r.settlements()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := released[attemptKey("co", rejected.Attempt)]
+	if !ok || !s.byRun || !s.carry || !strings.Contains(s.reason, "red CI") ||
+		!strings.Contains(s.reason, rejectedOnResume) {
+		t.Errorf("the release record of the rejected close-out is %+v (present %v), want a run release carrying "+
+			"its work, naming the recorded rejection", s, ok)
+	}
+	if line, ok := journalLine(r, "co", StageRejectedWorkCarried); !ok || !strings.Contains(line, "red CI") {
+		t.Errorf("the feed does not say the work was carried and why: %q", line)
+	}
+	current, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Errorf("the close-out is %s, want closed behind the carried try", current.Status)
+	}
+}
+
+// The classifier over RECORDED reasons, on the reasons the run really writes —
+// v7z's own among them.
+//
+// short: string matching over a table; no repository, no run
+func TestARecordedRejectionIsClassifiedAsTheCollectWouldHave(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		reason       string
+		carry, known bool
+	}{
+		// v7z attempt 8, from epic-6in's checkpoint history.
+		{`the closeout-epic job for v7z answered BLOCKED: epic/6in's integrated code fails CI deterministically ` +
+			`(TestARunUnderANewRunIDIsOfferedThePreviousRunsReports, regressed by dz1 5e493a2f), and the "CI green" ` +
+			`that admitted this close-out was a false green from all-skipped PR checks. The tick stays open, because ` +
+			`a role job's answer IS its verdict and this one asks for a person`, true, true},
+		{"the closeout-epic job for co answered BLOCKED, and it was dispatched over code whose CI is red (go failed " +
+			"on the code of 1234567)", true, true},
+		{"a1 try 1 (run dispatch #1) is rejected (missing-result): no report", true, true},
+		{"a1 try 1 (run dispatch #1) is rejected (boundary-violation): wrote .tick/x", false, true},
+		{"a1 try 1 (run dispatch #1) is rejected (ready-to-merge): the collected base is not the dispatched base",
+			false, true},
+		{"the review-epic job for rv wrote under an authority that is not its own (.tick/x): no", false, true},
+		{"a1 try 1 (run dispatch #1) is rejected (no-commits): nothing", false, false},
+		{"a1 could not be merged onto epic/qeu: add/add in work-a1.txt", false, false},
+	} {
+		_, carry, known := classifyRecordedRejection(c.reason)
+		if carry != c.carry || known != c.known {
+			t.Errorf("%q classified carry=%v known=%v, want carry=%v known=%v", c.reason, carry, known, c.carry,
+				c.known)
+		}
+	}
 }
