@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "rzi",
   "attempt": 14,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T19:30:11Z",
+  "triaged_at": "2026-09-28T19:30:20Z",
+  "triaged_by": "ticfac run epic-6in absorbing i2w",
+  "promoted_as": "i2w",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "rzi",
