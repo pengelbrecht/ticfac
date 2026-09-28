@@ -1,0 +1,13 @@
+{
+  "id": "d8h",
+  "title": "No mechanical guard that ticfac never imports or requires a ticks Go package",
+  "description": "6in set out to prove the dependency direction mechanically. The contract direction is checked (contracts check/verify-upstream) and ticks pins its removed verbs by test, but ticfac's 'never import a ticks Go package' lives only in .tick/config.md prose; today go.mod requires nothing from pengelbrecht/ticks, but nothing fails if that changes. A whole-repo test asserting go.mod has no github.com/pengelbrecht/ticks require and no package's deps include one closes it cheaply.\n\nticfac run epic-6in filed this backlog tick from the finding 52c0facb0e60a007e8927e38ef1633e32bcb097caf7d61cc877a5cfc1a0a1a7e (reported by run-epic-6in/tick-v7z/attempt-8): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/52c0facb0e60a007e8927e38ef1633e32bcb097caf7d61cc877a5cfc1a0a1a7e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-v7z/attempt-8",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:15:43Z",
+  "updated_at": "2026-09-28T10:15:43Z"
+}
