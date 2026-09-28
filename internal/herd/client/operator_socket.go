@@ -21,6 +21,33 @@ var operatorSockets = func() []string {
 	return operatorSocketsFrom(os.Getenv(SocketPathEnv), home)
 }()
 
+// paneEnv is what a herdr pane exports to every process in it: the live
+// server's socket, the pane and its tab and workspace, and HERDR_ENV=1, the
+// substrate's env probe (runconfig.EnvVar).
+var paneEnv = []string{SocketPathEnv, "HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"}
+
+// A test binary does not inherit the operator's herdr pane. Every package
+// that can reach herdr links this one, so its init is where the pane is
+// shed — AFTER operatorSockets has recorded what was inherited, and before
+// any test runs. Without this, a test started in a pane reads HERDR_ENV=1
+// and auto-detects the herdr substrate the operator happens to be sitting
+// in, resolves the live socket, and hands the pane's identity to every
+// child it spawns (a real `claude` a test starts reports its session into
+// the operator's pane through its SessionStart hook). HERDR_SOCKET_PATH is
+// pointed at a socket nothing listens on, so resolution answers "no live
+// herdr" on every host alike instead of falling through to the default
+// path; a test that wants herdr sets its own fake with t.Setenv. The live
+// round-trip test opts out with TK_HERD_LIVE_TEST=1.
+func init() {
+	if !testing.Testing() || os.Getenv(liveOptInEnv) != "" {
+		return
+	}
+	for _, name := range paneEnv {
+		os.Unsetenv(name)
+	}
+	os.Setenv(SocketPathEnv, filepath.Join(os.TempDir(), fmt.Sprintf("ticfac-test-no-herdr-%d.sock", os.Getpid())))
+}
+
 // operatorSocketsFrom names the operator's sockets from an inherited
 // HERDR_SOCKET_PATH and a home directory, canonicalized for comparison.
 func operatorSocketsFrom(inherited, home string) []string {

@@ -103,6 +103,35 @@ func TestATestBinaryCannotDialTheOperatorsHerdr(t *testing.T) {
 	conn.Close()
 }
 
+// A test binary sheds the pane it was started in: no HERDR_ENV (the
+// substrate's env probe), no pane identity for children to report into, and
+// a HERDR_SOCKET_PATH nothing listens on, so resolution never falls through
+// to the operator's default socket. Run `go test` from a herdr pane (or with
+// HERDR_ENV=1 HERDR_SOCKET_PATH=... in the environment) to see this bite.
+func TestATestBinaryDoesNotInheritTheOperatorsPane(t *testing.T) {
+	if os.Getenv(liveOptInEnv) != "" {
+		t.Skip("the live round-trip test opted into the operator's herdr")
+	}
+	for _, name := range paneEnv[1:] {
+		if value, ok := os.LookupEnv(name); ok {
+			t.Errorf("%s=%q reached the test binary from the pane it was started in", name, value)
+		}
+	}
+	path, err := ResolveSocketPath("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operator := range operatorSockets {
+		if canonicalSocket(path) == operator {
+			t.Errorf("a test resolves herdr to the operator's socket %s", path)
+		}
+	}
+	if conn, err := NewUnixTransport(path).Dial(context.Background()); err == nil {
+		conn.Close()
+		t.Errorf("something answers at the test binary's herdr socket %s", path)
+	}
+}
+
 // The operator's sockets are the inherited HERDR_SOCKET_PATH and the default
 // path under the home the process started with.
 func TestTheOperatorsSocketsAreTheInheritedAndTheDefault(t *testing.T) {
