@@ -1,0 +1,13 @@
+{
+  "id": "4cu",
+  "title": "runners-config.md still documents tk cloud spawn/wait/collect, which no longer exist",
+  "description": "internal/runconfig/runners-config.md (the cloud substrate section, ~lines 626-652) tells a local orchestrator to dispatch cloud workers with `tk cloud spawn/wait/collect/reconcile`; ticks deleted those verbs in chz and ticfac has no equivalent verbs. The section should describe ticfac's cloud dispatch instead.\n\nticfac run epic-6in filed this backlog tick from the finding 8dec6cf23d0af8c3a6655b2a55f95bdad1b8eb2d17809861fccdd05d1bcb6ad4 (reported by run-epic-6in/tick-46x/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/8dec6cf23d0af8c3a6655b2a55f95bdad1b8eb2d17809861fccdd05d1bcb6ad4.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-46x/attempt-4",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:16:36Z",
+  "updated_at": "2026-09-28T10:16:36Z"
+}
