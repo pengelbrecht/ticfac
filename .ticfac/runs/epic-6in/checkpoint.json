@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 55,
+  "sequence": 56,
   "state": "running",
-  "reason": "tdu is closed",
-  "updated_at": "2026-09-28T08:52:58Z",
+  "reason": "the epic PR #98 (epic/6in → main) is open; close-out of 6in waits on CI",
+  "updated_at": "2026-09-28T08:53:11Z",
   "ticks": [
     {
       "tick_id": "060",
