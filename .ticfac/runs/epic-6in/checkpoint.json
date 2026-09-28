@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 35,
-  "state": "dispatching",
-  "reason": "dispatching dz1 as attempt 5",
-  "updated_at": "2026-09-28T06:42:59Z",
+  "sequence": 36,
+  "state": "running",
+  "reason": "dz1 is running as attempt 5",
+  "updated_at": "2026-09-28T06:43:10Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "dz1",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "tdu",
