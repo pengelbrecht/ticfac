@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 48,
-  "state": "gating",
-  "reason": "running the integrated gate for dz1 on a4a058c3725d",
-  "updated_at": "2026-09-28T08:36:13Z",
+  "sequence": 49,
+  "state": "publishing",
+  "reason": "closing dz1 behind the integrated gate on a4a058c3725d",
+  "updated_at": "2026-09-28T08:38:10Z",
   "ticks": [
     {
       "tick_id": "060",
