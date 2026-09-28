@@ -112,17 +112,35 @@ func TestARejectedAttemptsWorkIsDurableBeforeTheRejectionIsRecorded(t *testing.T
 			short(remote), short(local))
 	}
 
+	// Since epic-6in 823 the run carries a missing-result attempt's work
+	// into one more try by itself (rejected_work.go), so the rejection the
+	// run ENDS on is the latest try's: the same promise is checked on it.
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
+	all, err := store.Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range all {
+		if record.TickID == "a1" && record.Attempt > marker.Attempt {
+			marker = handleFromMap(record.JobHandle)
+		}
+	}
+	branch = branchOf(marker.WriteRef)
+	local = branchHead(f.Repo.Dir, branch)
+	if remote := remoteHeadOf(t, f, branch); local == "" || remote != local {
+		t.Fatalf("the last rejected try's work is at %s on origin, want its local head %s", short(remote), short(local))
+	}
+
 	// The rejection IS recorded — durably, on origin — and the attempt's
 	// worktree is gone; the branch is kept, and the commits on it are the
 	// same ones origin now carries.
-	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
 	checkpoint, ok, err := store.Checkpoint()
 	if err != nil || !ok {
 		t.Fatalf("read the run's checkpoint from origin: %v", err)
 	}
 	rejected := false
 	for _, ts := range checkpoint.Ticks {
-		if ts.TickID == "a1" && ts.State == "rejected" && ts.Attempt == 1 {
+		if ts.TickID == "a1" && ts.State == "rejected" && ts.Attempt == marker.Attempt {
 			rejected = true
 		}
 	}
@@ -140,7 +158,7 @@ func TestARejectedAttemptsWorkIsDurableBeforeTheRejectionIsRecorded(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	settled, err := settler.Settle(context.Background(), "a1", 1, "an operator")
+	settled, err := settler.Settle(context.Background(), "a1", marker.Attempt, "an operator")
 	if err != nil {
 		t.Fatalf("settle the rejected attempt: %v", err)
 	}
