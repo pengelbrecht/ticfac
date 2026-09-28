@@ -2,6 +2,7 @@
   "id": "3e5",
   "title": "forge.CI reads a head whose every check run is SKIPPED as green, and admitted 6in's close-out over a red go job",
   "description": "GitHub.CI starts at CIGreen and treats skipped as neither pass nor fail, so a head carrying only skipped check runs is green. ci.yml skips every pull_request job on epic PRs by design and paths-ignores .ticfac/ on push, so every run-state head of an epic PR is all-skipped: the admission read green at seq 64, two seconds after recording red, and ciForTree never walked back to the code commit (its walk only runs on CINone). An all-skipped (or skipped/neutral-only) set must read as no verdict so the walk finds the code commit's push run; the close gate after the close-out has the same exposure.\n\nticfac run epic-6in filed this backlog tick from the finding aa8eb9cb2ac6d4b414f179ad28f4024e176efe7be39e5ebc2b0300570a22aca2 (reported by run-epic-6in/tick-v7z/attempt-8): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/aa8eb9cb2ac6d4b414f179ad28f4024e176efe7be39e5ebc2b0300570a22aca2.json on the run branch.",
+  "notes": "2026-09-28 12:17 - ticfac run epic-6in: created by absorbing finding aa8eb9cb2ac6d4b414f179ad28f4024e176efe7be39e5ebc2b0300570a22aca2 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/aa8eb9cb2ac6d4b414f179ad28f4024e176efe7be39e5ebc2b0300570a22aca2.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-6in/tick-v7z/attempt-8",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T10:16:54Z",
-  "updated_at": "2026-09-28T10:16:54Z"
+  "updated_at": "2026-09-28T10:17:03.581925Z"
 }
