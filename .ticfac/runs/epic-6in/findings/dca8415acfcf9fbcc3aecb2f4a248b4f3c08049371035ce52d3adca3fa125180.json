@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "none",
   "demonstrating_check": "go run ./cmd/contracts check (after editing an existing CHANGELOG entry)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:52:37Z",
+  "triaged_at": "2026-09-28T10:17:54Z",
+  "triaged_by": "ticfac run epic-6in absorbing r4b",
+  "promoted_as": "r4b",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "tdu",
