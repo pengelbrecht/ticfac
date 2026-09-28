@@ -192,7 +192,12 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		}
 		switch {
 		case refusal.Reason == RefusedBlockedRedispatch:
-			entry.Claimed, entry.InFlight = true, false
+			// The claim the requeued tick carries is the one THIS run took
+			// when it dispatched the attempt that asked: redispatching into it
+			// takes no new claim (dz1), and it is no foreign party's to hold
+			// on (tick 823) — without OwnClaim the window read its own claim
+			// as a live foreign one and held the run on it.
+			entry.Claimed, entry.OwnClaim, entry.StaleClaim, entry.InFlight = true, true, false, false
 			queue = append([]planEntry{entry}, queue...)
 			return true
 		case refusal.Reason == RefusedNeedsHuman && !isRoleJob(entry.Role):
@@ -397,12 +402,27 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				}
 				holders = window.holders()
 				if len(queue) == 0 && len(holders) == 0 {
+					if len(parkOrder) > 0 {
+						return endHeld()
+					}
 					return failed, nil
 				}
 				if len(queue) > 0 && r.mayAdmit(queue[0], &window, plan) {
 					continue
 				}
 				entry := queue[0]
+				// A question this run parked (tick tyd) keeps its tick's claim
+				// standing, and that claim is THIS run's own. When the width is
+				// full only because of those claims, neither hold below is true —
+				// the width is not "full of claims this run does not hold", and
+				// no foreign party stands on the head — and what really holds
+				// the run is the parked question: nothing more can join until a
+				// person answers it. End held on it, as a run with nothing left
+				// to do does.
+				if len(parkOrder) > 0 && !entry.liveForeignClaim() &&
+					r.claimsHeld(&window, plan)-r.parkedClaims(parkOrder, plan) < r.widthForWave(plan, entry.Wave) {
+					return endHeld()
+				}
 				stopped = true
 				// Which hold is it? The width's, when the width is full of claims
 				// this run does not hold. The claim's, when the width has ROOM
@@ -1274,6 +1294,27 @@ func (r *Reconciler) claimsHeld(window *held, plan []planEntry) int {
 		}
 		counted[id] = true
 		count++
+	}
+	return count
+}
+
+// parkedClaims counts the claims among those claimsHeld counts that stand on
+// ticks this run parked behind a held question (tick tyd): the run's own
+// claims, kept standing because the tick is neither closed nor released. They
+// are counted exactly as claimsHeld counts them — named by the graph's
+// in-flight ids or by the plan's Claimed flag, and not closed since.
+func (r *Reconciler) parkedClaims(parked []string, plan []planEntry) int {
+	count := 0
+	for _, tick := range parked {
+		claimed := slices.Contains(r.inFlightIDs, tick)
+		for _, entry := range plan {
+			if entry.TickID == tick && entry.Claimed {
+				claimed = true
+			}
+		}
+		if claimed && r.tickState(tick) != "closed" {
+			count++
+		}
 	}
 	return count
 }
