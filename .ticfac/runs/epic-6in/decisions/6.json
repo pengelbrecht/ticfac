@@ -1,0 +1,44 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 8,
+    "epic_id": "6in",
+    "job_id": "run-epic-6in/tick-v7z/attempt-8",
+    "op": "settle_attempt",
+    "run_id": "epic-6in",
+    "state": "succeeded",
+    "tick_id": "v7z"
+  },
+  "response": {
+    "carry_ref": "refs/heads/ticfac/run-epic-6in/tick-v7z/attempt-8",
+    "carry_sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+    "disposition": "carry-work",
+    "released_by": "person-97ac31e84ef9d393226c70c05416751376534af7b6cbb2b3b1d72d68f64a59d5",
+    "settled": true,
+    "state": "succeeded"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T17:21:37Z",
+  "answered_at": "2026-09-28T17:21:37Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "v7z",
+    "attempt": 8,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "2222207938a4d6f1685fc3a3d4649d75d63c789b",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}
