@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // cloudBranchEndpoint is the factory path this command posts to. It mirrors
@@ -134,7 +136,7 @@ func recordCloudBranch(ctx context.Context, out io.Writer, branch, detail string
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	if cloudHTTPClient == nil {
-		cloudHTTPClient = &http.Client{Timeout: 15 * time.Second}
+		cloudHTTPClient = httpnet.Client(15 * time.Second)
 	}
 	res, err := cloudHTTPClient.Do(req)
 	if err != nil {
