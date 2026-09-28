@@ -2,7 +2,7 @@
   "id": "rzi",
   "title": "Re-review 6in after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic 6in again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (tdu, decision 1) judged it NOT READY: DONE (NOT READY); its blocking finding(s): \"ticfac sandbox image needs ticfac's source tree, so the container's declared-image check is always skipped\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run: it holds for a person with your reasons.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -13,5 +13,6 @@
   "role": "review",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T19:06:19Z",
-  "updated_at": "2026-09-28T19:06:19Z"
+  "updated_at": "2026-09-28T19:27:04.105995Z",
+  "started_at": "2026-09-28T19:27:04.105995Z"
 }
