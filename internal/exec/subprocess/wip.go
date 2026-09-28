@@ -44,8 +44,10 @@ import (
 // The snapshot is NOT evidence of completion and is never merged. It is
 // material a LATER attempt of the same tick is pointed at in its prompt —
 // the nvn shape for reports, applied to work — and it is pruned by
-// PurgeState, the same explicit step that retires the record naming it:
-// nothing else prunes it, because it must outlive the attempt's own teardown
+// PurgeState, the same explicit step that retires the record naming it, or by
+// the run's leftover sweep once its tick is closed (tick tyv) — locally and on
+// the remote an evacuation pushed it to — when no later attempt can want it.
+// Nothing else prunes it, because it must outlive the attempt's own teardown
 // exactly as long as the archived report does.
 
 // FileWIPSnapshot is where an executor records that an attempt's uncommitted

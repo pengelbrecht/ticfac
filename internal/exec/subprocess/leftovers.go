@@ -155,6 +155,38 @@ func PruneWorktrees(repo string) error {
 	return err
 }
 
+// LiveAttemptProcesses is the pids of the local executor's processes still
+// alive for the attempt whose worktree this is (tick tyv): the supervisor
+// and runner pid files of the attempt state the worktree sits in, each asked
+// about BY PID through the operating system — never by matching a process
+// name, which on a host shared with other agents' runs answers about THEIR
+// processes too. A worktree that is not a local-executor attempt's (no
+// attempt record beside it naming it) has none.
+//
+// A pid the kernel has handed out again reads as alive (tick rmc): here that
+// errs towards keeping, and a sweep that keeps a worktree is retried by the
+// next one, so the cost is a worktree that goes later, never one that goes
+// from under a live process.
+func LiveAttemptProcesses(worktree string) []int {
+	clean := filepath.Clean(worktree)
+	if filepath.Base(clean) != dirWorktree {
+		return nil
+	}
+	dir := filepath.Dir(clean)
+	work, err := ReadAttemptWork(dir)
+	if err != nil || !SamePath(work.Worktree, worktree) {
+		return nil
+	}
+	st := newStore(dir)
+	var live []int
+	for _, pid := range []int{st.supervisorPID(), st.runnerPID()} {
+		if processAlive(pid) && (len(live) == 0 || live[0] != pid) {
+			live = append(live, pid)
+		}
+	}
+	return live
+}
+
 // DeleteBranch deletes one local branch. The caller has already decided the
 // branch is meant to go — its commits are merged, or it carries none.
 func DeleteBranch(repo, branch string) error {

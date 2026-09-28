@@ -3,12 +3,14 @@
   "title": "Prune a run's WIP snapshot refs on origin when the tick closes",
   "gloss": "prune origin WIP refs",
   "description": "From #68: evacuation and wall-clock snapshots are pushed to refs/ticfac/wip/\u003crun\u003e/tick-\u003ct\u003e/attempt-\u003cn\u003e on origin and never pruned there (PurgeState deletes only the local ref). Delete them on origin when the tick closes, as the close retires the attempt branch.",
-  "status": "open",
+  "status": "closed",
   "priority": 3,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "After a tick closes, origin carries none of its WIP refs; a test asserts it",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T11:36:55.979638Z",
-  "updated_at": "2026-09-27T11:36:55.979638Z"
+  "updated_at": "2026-09-28T08:07:43.161565Z",
+  "closed_at": "2026-09-28T08:07:43.161565Z",
+  "closed_reason": "The leftover sweep retires a closed tick's wip refs locally and on origin; failures are recorded with their remote class and retried by the next sweep; an open tick keeps them. The sweep also skips a worktree whose local-executor attempt has a live supervisor or runner pid. Tests in internal/reconcile/sweep_test.go."
 }
