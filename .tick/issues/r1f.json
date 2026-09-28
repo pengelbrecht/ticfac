@@ -1,0 +1,15 @@
+{
+  "id": "r1f",
+  "title": "The per-tick gate also runs the full (non-short) tests of the packages a tick touched",
+  "gloss": "full tests for touched packages",
+  "description": "epic-6in (2026-09-28): dz1's regression (tk 0.32.0 stopped refusing over-width claims → TestARunUnderANewRunIDIsOfferedThePreviousRunsReports and three more reconcile tests red) passed every per-tick gate, because the gate runs the short suite and those tests are end-to-end (newFixture skips under -short). It surfaced only at close-out in CI's full suite, costing a repair and two ~30-min CI cycles. Make the integrated gate additionally run ?   \tgithub.com/pengelbrecht/ticfac\t[no test files] (non-short, with -timeout and the gate's parallelism) for the Go packages whose files the tick changed, plus packages that import them if cheap to compute (go list -deps reverse); keep the whole-repo short suite as today. Bound it (a package's full suite can be 20+ min: reconcile) — decide per-package budgets or a cap, and justify. Evidence keyed as today so an unchanged package is a cache hit.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "A tick that breaks an end-to-end test in a package it touched fails its per-tick gate (fixture reproducing dz1's shape); untouched packages' full suites are not run; gate time on a typical tick measured before/after and reported",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T17:08:45.382636Z",
+  "updated_at": "2026-09-28T17:08:45.382636Z"
+}
