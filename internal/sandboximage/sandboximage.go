@@ -24,9 +24,12 @@ package sandboximage
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/pengelbrecht/ticfac"
 )
 
 // Env names the entrypoint's inputs. They are TICKS_-prefixed like the rest of
@@ -313,19 +316,24 @@ func Path(name string) (string, error) {
 const ImageName = "ticks-orchestrator"
 
 // PinnedTkVersion reports the tk version the image embeds, read from the
-// Dockerfile so the pin is stated once.
+// Dockerfile so the pin is stated once. The Dockerfile is read from the
+// EMBEDDED image context, never off the working tree: the one caller that
+// needs the default (`ticfac sandbox image`) also runs inside worker
+// containers, where no ticfac checkout sits above the cwd for [Dir]'s walk
+// to find — the tree walk made the verb exit 1 there, which image/common.sh
+// swallowed, and the container's declared-image check never refused a
+// mismatched image (tick bib). The embedded copy is also the honest source
+// for a shipped binary: the pin and the code that reads it are one commit by
+// construction, and TestTheImageTreeIsWhatTheBinaryShips keeps it equal to
+// the tree.
 func PinnedTkVersion() (string, error) {
-	p, err := Path(DockerfileName)
-	if err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(p)
+	b, err := fs.ReadFile(ticfac.SandboxFS(), "image/"+DockerfileName)
 	if err != nil {
 		return "", err
 	}
 	m := tkVersionArg.FindSubmatch(b)
 	if m == nil {
-		return "", fmt.Errorf("%s declares no ARG TK_VERSION", p)
+		return "", fmt.Errorf("%s declares no ARG TK_VERSION", DockerfileName)
 	}
 	return string(m[1]), nil
 }

@@ -77,6 +77,33 @@ func readDockerfile(t *testing.T) string {
 	return string(b)
 }
 
+// The pin must answer wherever the binary runs, not only from a checkout:
+// `ticfac sandbox image` reads it in worker containers, where no ticfac
+// module root sits above the cwd for [Dir]'s walk to find. PinnedTkVersion
+// therefore reads the EMBEDDED image context, which is the pin the shipped
+// binary was built with — and this is the reproduction shape of tick bib: a
+// cwd outside the module, which used to fail with "no go.mod above".
+//
+// short: reads the embedded FS and the tree; no process runs
+func TestPinnedTkVersionAnswersOutsideTheModule(t *testing.T) {
+	// The tree's own ARG is read FIRST, while the cwd is still the module —
+	// readDockerfile walks up from the cwd, exactly the walk that has
+	// nothing to find once the cwd moves outside.
+	want := tkVersionArg.FindStringSubmatch(readDockerfile(t))
+	if want == nil {
+		t.Fatal("the Dockerfile declares no ARG TK_VERSION")
+	}
+
+	t.Chdir(t.TempDir())
+	version, err := PinnedTkVersion()
+	if err != nil {
+		t.Fatalf("PinnedTkVersion outside the module: %v", err)
+	}
+	if version != string(want[1]) {
+		t.Errorf("PinnedTkVersion() = %q outside the module, want the tree's pin %q", version, want[1])
+	}
+}
+
 // The image must build the same bytes tomorrow: every base image carries a
 // digest, and every download carries a version and a checksum.
 //
