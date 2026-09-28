@@ -80,7 +80,7 @@ const NoExecutorMessage = reconcile.NoExecutorMessage
 type runEpicFlags struct {
 	repo, remote, branch, base, runID, owner, runner, tier, profiles, stateRoot, gate *string
 	budget, ceiling                                                                   *float64
-	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth                     *int
+	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth, stuckAfter         *int
 	supervise, statusPush                                                             *bool
 	asJSON                                                                            *bool
 }
@@ -103,7 +103,13 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 		gate:      fs.String("gate", "", "the runners.toml the integrated gate is read from"),
 		budget:    fs.Float64("budget", 0, "the budget an operator asks for"),
 		ceiling:   fs.Float64("ceiling", 0, "the deployment ceiling it is clamped to"),
-		wall:      fs.Int("wall", reconcile.DefaultWallSeconds, "the wall clock one job is bounded by"),
+		wall: fs.Int("wall", reconcile.DefaultWallSeconds, "the runaway backstop one job is bounded by, in seconds "+
+			"(a stuck worker is found by the stuck watch, not by this); [tier_policy.wall_seconds] and a tick's "+
+			"wall_minutes:<n> label override it"),
+		stuckAfter: fs.Int("stuck-after", int(reconcile.DefaultStuckAfter/time.Second),
+			"how many seconds a worker may show no activity — no transcript event, no tool-process CPU, no worktree "+
+				"or branch change — before it is nudged in its own session, and again before it is stopped; "+
+				"negative disables the stuck watch"),
 		// Supervision is ON by default (tick go6), and the default is the
 		// argument. The behaviour it replaces is not "the run stops" — it is
 		// "the run stops and a person retypes the identical command", which
@@ -351,6 +357,7 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		ProfileDir:           *fl.profiles,
 		Tier:                 *fl.tier,
 		WallSeconds:          *fl.wall,
+		StuckAfter:           time.Duration(*fl.stuckAfter) * time.Second,
 		StallWarnAfter:       time.Duration(*fl.stallWarn) * time.Second,
 		BudgetUSD:            *fl.budget,
 		CeilingUSD:           *fl.ceiling,

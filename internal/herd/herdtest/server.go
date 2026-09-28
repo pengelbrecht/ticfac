@@ -28,6 +28,7 @@ const (
 	MethodAgentList       = "agent.list"
 	MethodAgentGet        = "agent.get"
 	MethodPaneClose       = "pane.close"
+	MethodPaneProcessInfo = "pane.process_info"
 	MethodPaneRead        = "pane.read"
 	MethodEventsSubscribe = "events.subscribe"
 	MethodEventsWait      = "events.wait"
@@ -623,6 +624,8 @@ func (s *Server) builtin(method string) (Handler, bool) {
 		return s.handlePaneClose, true
 	case MethodPaneRead:
 		return s.handlePaneRead, true
+	case MethodPaneProcessInfo:
+		return s.handlePaneProcessInfo, true
 	case MethodEventsSubscribe:
 		return s.handleEventsSubscribe, true
 	case MethodPaneReportMetadata:

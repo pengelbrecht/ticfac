@@ -85,6 +85,12 @@ type attemptHandle struct {
 	// an answer to "is this the same profile" — not to "which tier was this".
 	Tier string `json:"tier"`
 
+	// WallSeconds is the backstop the attempt was ISSUED (tick wv2): an
+	// adopting run measures the attempt against it, never against a bound
+	// today's config would derive. Absent on a marker from before; the run's
+	// own bound then governs.
+	WallSeconds int `json:"wall_seconds,omitempty"`
+
 	// SubstrateProtocol and SubstrateServerVersion are the substrate this
 	// dispatch was STARTED under — the versioned thing its executor drives,
 	// observed at the build that ran the job (tick to1, epic av8). They ride
@@ -148,6 +154,9 @@ func (a attemptHandle) asMap() map[string]any {
 		// omitted — "no resume" is a claim, and a reader that cannot tell it
 		// from an unrecorded one is a reader guessing at provenance.
 		"resumed_from": a.ResumedFrom,
+		// The backstop the attempt was issued (tick wv2): what an adopting
+		// run measures it against.
+		"wall_seconds": a.WallSeconds,
 	}
 }
 
@@ -216,8 +225,16 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		resumed.SHA, _ = fields["sha"].(string)
 		resumed.ReleasedBy, _ = fields["released_by"].(string)
 	}
+	wall := 0
+	switch value := raw["wall_seconds"].(type) {
+	case float64:
+		wall = int(value)
+	case int:
+		wall = value
+	}
 	return attemptHandle{
-		Executor: get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
+		WallSeconds: wall,
+		Executor:    get("executor"), JobID: get("job_id"), Attempt: attempt, TickID: get("tick_id"),
 		Try:  try,
 		Role: get("role"), Remote: get("remote"), WriteRef: get("write_ref"),
 		BaseSHA: get("base_sha"),
@@ -298,6 +315,15 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 	// settle runs again over a graph that has closed them; only when nothing
 	// this run is doing can close a child does the gate's refusal stand.
 	if entry.Role == "closeout-epic" {
+		// Every finding still waiting for a triage is decided first, by the
+		// same rules as at its filing (prose.go): the close-out's findings
+		// gate must meet decisions, not a queue for a person, and a finding
+		// absorbed here is a child the open-children gate below waits behind.
+		if r.store != nil {
+			if err := r.decideUndecidedFindings(ctx); err != nil {
+				return true, err
+			}
+		}
 		open, refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry)
 		if err != nil {
 			return true, err
@@ -529,6 +555,24 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			failed++
 			continue
 		case holdAttemptWork:
+			// A CLOSE-OUT dispatched over RED CI is superseded, not held
+			// (epic-6in). Its answer was about the tree — the run's own
+			// truthful read of CI on the code it was cut from is red — and the
+			// admission this dispatch passed has since answered that with the
+			// repair job and seen CI green. Its commits (a retro written over
+			// a tree that was about to change) stay on its branch on origin;
+			// the close-out is dispatched afresh over the repaired tree. No
+			// rung is earned: the attempt did not fail, the CI did.
+			if entry.Role == "closeout-epic" {
+				if failing, red := r.closeoutDispatchedOverRedCI(ctx, marker); red {
+					r.record(tick, StageRedispatched,
+						"%s was rejected after it was dispatched over red CI (%s failed on the code of %s); its "+
+							"commits stay where they are (%s), and a new try is dispatched over the repaired tree",
+						attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt),
+						strings.Join(failing, ", "), short(marker.BaseSHA), where)
+					continue
+				}
+			}
 			// REJECTED, and the commits are still there. Dispatching over it
 			// would orphan the only copy of what a person has to look at, and
 			// collecting it again would report a missing report this run
@@ -1280,8 +1324,12 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 	if r.budget.Effective > 0 {
 		budgetNote = fmt.Sprintf(", with the effective budget $%.2f (the clamp governs spend, the tier governs routing, and neither silently modifies the other)", r.budget.Effective)
 	}
-	r.record(entry.TickID, StageTierDerived, "%s runs at tier %q (%s)%s",
-		attemptLabel(entry.TickID, try, number), tier, reason, budgetNote)
+	wall, wallWhy, err := r.wallFor(entry, tier)
+	if err != nil {
+		return Dispatch{}, attemptHandle{}, r.refuse(RefusedWallLabel, entry.TickID, "%s: the tick is neither dispatched nor claimed, and the label is the thing to fix", err.Error())
+	}
+	r.record(entry.TickID, StageTierDerived, "%s runs at tier %q (%s)%s; its runaway backstop is %s (%s), and a stuck worker is found by the stuck watch, not by the clock",
+		attemptLabel(entry.TickID, try, number), tier, reason, budgetNote, time.Duration(wall)*time.Second, wallWhy)
 
 	jobID := attemptJobID(r.runID, entry.TickID, number)
 	stateDir := r.execStateDir(entry.TickID, number)
@@ -1322,7 +1370,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		BaseRef: r.opts.BaseRef, Title: entry.Title,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
-		ResumedFrom: resumed,
+		ResumedFrom: resumed, WallSeconds: wall,
 		// What the tick's earlier attempts found (tick nvn): the reports a
 		// re-dispatched attempt is shown in its prompt, newest first. Gathered
 		// here rather than recorded on the marker because they are re-derivable
@@ -1345,7 +1393,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		Role: entry.Role, Repo: r.opts.Repo, Remote: r.opts.Remote,
 		WriteRef: dispatch.WriteRef, BaseSHA: base, StateRoot: stateDir,
 		Model: dispatchProfile.Model, PromptDigest: promptDigest(dispatchProfile),
-		Tier: tier, ResumedFrom: resumed,
+		Tier: tier, ResumedFrom: resumed, WallSeconds: wall,
 	}
 	// The tick's file declaration, copied at PLANNING time (tick 01u): the
 	// malformed labels were already refused at admission, so what is left
@@ -1431,7 +1479,7 @@ func (r *Reconciler) jobSpec(d Dispatch) *subprocess.JobSpec {
 		// host is the wall clock beside it. A metered executor is where it
 		// starts binding, and the JobSpec already carries what such an
 		// executor needs.
-		Limits: subprocess.Limits{WallSeconds: r.opts.WallSeconds, MaxCostUSD: d.BudgetUSD},
+		Limits: subprocess.Limits{WallSeconds: r.wallOfDispatch(d), MaxCostUSD: d.BudgetUSD},
 	}
 }
 
@@ -1637,7 +1685,8 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		JobID: marker.JobID, Role: marker.Role, Repo: marker.Repo, Remote: marker.Remote,
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		BaseRef: r.opts.BaseRef, Title: r.titleOf(marker.TickID),
-		Tier: marker.Tier,
+		Tier:        marker.Tier,
+		WallSeconds: marker.WallSeconds,
 		// The executor the attempt RAN ON, off the marker — never the one a
 		// profile re-resolved today would name (tick d6s): a later leg must
 		// record what the attempt used, exactly as it does for the tier and
@@ -2118,6 +2167,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		fl.cursor = *status.Cursor
 	}
 	r.announceNudges(marker.TickID, status)
+	r.announceActivity(marker.TickID, status)
 	if status.Terminal {
 		// How long it outlived its bound, if it had one and had passed it
 		// (tick dh1). Neither ncv attempt honoured the wall-clock interrupt:
@@ -2131,7 +2181,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			r.record(marker.TickID, StageWaiting,
 				"settled as %s, %s after the wall clock of %ds fired: the stop was not instant, and how long it took "+
 					"is the honest measure of whether the interrupt was honoured — %s",
-				status.State, overran.Round(time.Second), r.opts.WallSeconds, lastObservation(status))
+				status.State, overran.Round(time.Second), r.wallOf(marker), lastObservation(status))
 			return status, nil
 		}
 		r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
@@ -2197,7 +2247,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 					"it is finished; look at it, stop whatever is still running, then release it with "+
 					"`ticfac settle %s %s %d --release \"<who>\"`",
 				r.attemptName(marker.TickID, marker.Attempt), status.State, over.Round(time.Second),
-				r.opts.WallSeconds, watched.Round(time.Second), lastObservation(status),
+				r.wallOf(marker), watched.Round(time.Second), lastObservation(status),
 				r.opts.EpicID, marker.TickID, marker.Attempt)
 		}
 
@@ -2269,14 +2319,14 @@ func lastObservation(status *subprocess.JobStatus) string {
 // date is a line a reader cannot act on, and the attempt falls to the
 // settlement deadline as before.
 func (r *Reconciler) wallClockAt(marker attemptHandle) (time.Time, bool) {
-	if r.opts.WallSeconds <= 0 {
+	if r.wallOf(marker) <= 0 {
 		return time.Time{}, false
 	}
 	issued, ok := r.dispatchedAt(marker)
 	if !ok {
 		return time.Time{}, false
 	}
-	return issued.Add(time.Duration(r.opts.WallSeconds) * time.Second), true
+	return issued.Add(time.Duration(r.wallOf(marker)) * time.Second), true
 }
 
 // announceWall writes the bound's firing to the feed — ONCE per tick, like
@@ -2304,7 +2354,7 @@ func (r *Reconciler) announceWall(marker attemptHandle, status *subprocess.JobSt
 	}
 	r.record(marker.TickID, StageWallClock,
 		"the wall clock of %ds fired %s ago and %s has not settled: the executor is stopping it — %s",
-		r.opts.WallSeconds, r.now().Sub(wallAt).Round(time.Second), r.attemptName(marker.TickID, marker.Attempt),
+		r.wallOf(marker), r.now().Sub(wallAt).Round(time.Second), r.attemptName(marker.TickID, marker.Attempt),
 		lastObservation(status))
 }
 
@@ -2381,7 +2431,7 @@ func (r *Reconciler) announceStall(fl *inflightAttempt) {
 			"worktree last changed %s ago, and %s — a reason to look, not a verdict; the wall clock of %ds is "+
 			"still the bound",
 		r.attemptName(marker.TickID, marker.Attempt), idle,
-		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), writtenOf(gap.ChangedFiles), r.opts.WallSeconds)
+		idleOf(gap.BranchIdle), idleOf(gap.WorktreeIdle), writtenOf(gap.ChangedFiles), r.wallOf(marker))
 }
 
 // writtenOf renders the liveness count for the warning's prose, and says
@@ -2441,7 +2491,7 @@ func (r *Reconciler) settlementDeadline(marker attemptHandle) time.Time {
 	// the refusal, where it is spent in the run's own clock. What is left is
 	// the one thing calendar time answers honestly: the attempt's issued
 	// budget is spent.
-	return issued.Add(time.Duration(r.opts.WallSeconds) * time.Second).Round(0)
+	return issued.Add(time.Duration(r.wallOf(marker)) * time.Second).Round(0)
 }
 
 // unaddressable is the reconciler's own deadline, and it takes TWO clocks to
@@ -3139,6 +3189,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			PushInterval:   pushInterval,
 			PriorReports:   d.PriorReports,
 			PriorSnapshots: d.PriorSnapshots,
+			StuckAfter:     d.StuckAfter,
 		})
 		if err != nil {
 			return nil, Substrate{}, err

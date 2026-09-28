@@ -578,14 +578,24 @@ func (r *Reconciler) landingCI(ctx context.Context, co *landingCloseout, pr *for
 // is — and the repair's merge is gated as usual.
 func (r *Reconciler) repairLandingCI(ctx context.Context, co *landingCloseout, pr *forge.PullRequest, sha string,
 	report forge.CIReport) error {
+	return r.repairRedCI(ctx, co.entry, co.marker, pr, sha, report, "land-ci")
+}
 
-	tick := co.marker.TickID
+// repairRedCI is the one answer to a red CI verdict on the epic's code, at
+// every place the run meets one — the close-out's admission, the close-out's
+// close, and the readying (epic-6in): the failing jobs are recorded as gate
+// evidence under `prefix`, and the repair job is dispatched over them under
+// the attempt `marker` names, its merge gated as usual behind `entry`.
+func (r *Reconciler) repairRedCI(ctx context.Context, entry planEntry, marker attemptHandle, pr *forge.PullRequest,
+	sha string, report forge.CIReport, prefix string) error {
+
+	tick := marker.TickID
 	failing := strings.Join(report.Failing, ", ")
 	if failing == "" {
 		failing = "a job the forge did not name"
 	}
-	key := fmt.Sprintf("land-ci-%s-%d-%s", tick, co.marker.Attempt, short(sha))
-	if err := r.recordCIEvidence(co.marker, key, sha, pr, report); err != nil {
+	key := fmt.Sprintf("%s-%s-%d-%s", prefix, tick, marker.Attempt, short(sha))
+	if err := r.recordCIEvidence(marker, key, sha, pr, report); err != nil {
 		return err
 	}
 	g := &gateProgress{
@@ -593,8 +603,14 @@ func (r *Reconciler) repairLandingCI(ctx context.Context, co *landingCloseout, p
 		failures: []string{fmt.Sprintf("CI on the epic PR #%d (%s)", pr.Number, failing)},
 		failed:   []gateCheck{{Name: "ci", Key: key}},
 	}
-	merged := merge{AttemptHead: r.landingAttemptHead(co, sha), EpicHead: sha, GateSHA: sha, Merged: true}
-	return r.repairFailedGate(ctx, co.entry, co.marker, merged, g)
+	attemptHead := sha
+	if marker.WriteRef != "" {
+		if head, err := r.git.remoteHead(branchOf(marker.WriteRef)); err == nil && head != "" {
+			attemptHead = head
+		}
+	}
+	merged := merge{AttemptHead: attemptHead, EpicHead: sha, GateSHA: sha, Merged: true}
+	return r.repairFailedGate(ctx, entry, marker, merged, g)
 }
 
 // recordCIEvidence writes a red CI verdict as a gate evidence record: the

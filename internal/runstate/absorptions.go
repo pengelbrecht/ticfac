@@ -205,6 +205,16 @@ func (a Absorption) Validate() error {
 				"decision (target %q, basis %q, gating %v): a live-run remedy is decided by rule, here, gating "+
 				"nothing", a.Key, a.Target, a.Basis, a.Gating)
 		}
+	} else if a.Basis == AbsorptionRule && a.Target == "" && a.Placement != AbsorptionRouted {
+		// The prose rule's own agreement with itself (epic-6in): an epic
+		// whose acceptance carries no [A<n>] items has no item to name, so
+		// the run's rule decides about THIS repository — a backlog tick, or,
+		// for a reporter's claim that the build or CI is broken, a gating
+		// absorption naming no item. No classifier answered it.
+		if a.ItemID != "" || a.Confidence != 0 || a.Model != "" {
+			return fmt.Errorf("absorption of %s is the prose rule's and names an item, a confidence or a model: "+
+				"a prose done has no item, and no classifier answered it", a.Key)
+		}
 	} else if a.Basis == AbsorptionRule || a.Target != "" || a.Placement == AbsorptionRouted {
 		// The routed decision's own agreement with itself: a finding routed
 		// to another repository is decided by the run's rule, never gates

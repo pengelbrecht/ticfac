@@ -922,6 +922,10 @@ type fixtureOptions struct {
 	// Zero leaves the default.
 	stallWarn time.Duration
 
+	// stuckAfter overrides the stuck watch's window (tick wv2) for the same
+	// reason: fifteen minutes is testable in a second and a half.
+	stuckAfter time.Duration
+
 	// progressProbe overrides how often a live attempt's worktree is walked
 	// for the liveness record (tick dh1). The fixture's default is the
 	// harness's own cadence rather than the production minute: a probe that
@@ -966,6 +970,10 @@ type fixtureOptions struct {
 	// — the default — is the documented fallback: no classifier configured,
 	// every prediction falls back to absorbing.
 	gatingClassifier gating.Classifier
+	// proseFindingsForAPerson keeps a finding against the fixture's prose
+	// acceptance untriaged (Options.proseFindingsForAPerson): for the tests of
+	// the untriaged-findings hold and the PR body that carries such findings.
+	proseFindingsForAPerson bool
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -1049,19 +1057,21 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		// A supervised resume waits before the next incarnation, and the wait
 		// is spent through Sleep above — milliseconds here, the production
 		// number everywhere else.
-		AutoResumeBackoff:    time.Millisecond,
-		PullRequests:         opts.pullRequests,
-		StallWarnAfter:       opts.stallWarn,
-		ProgressProbeEvery:   progressProbe,
-		GateHeartbeatEvery:   opts.gateHeartbeat,
-		Sleep:                func(time.Duration) { time.Sleep(5 * time.Millisecond) },
-		guardsOff:            opts.guardsOff,
-		stopAfter:            opts.stopAfter,
-		NewExecutor:          f.newExecutor,
-		NewSweeper:           f.newSweeper,
-		Substrate:            opts.substrate,
-		GatingClassifier:     opts.gatingClassifier,
-		AbsorptionDepthBound: opts.absorptionDepth,
+		AutoResumeBackoff:       time.Millisecond,
+		PullRequests:            opts.pullRequests,
+		StallWarnAfter:          opts.stallWarn,
+		StuckAfter:              opts.stuckAfter,
+		ProgressProbeEvery:      progressProbe,
+		GateHeartbeatEvery:      opts.gateHeartbeat,
+		Sleep:                   func(time.Duration) { time.Sleep(5 * time.Millisecond) },
+		guardsOff:               opts.guardsOff,
+		stopAfter:               opts.stopAfter,
+		NewExecutor:             f.newExecutor,
+		NewSweeper:              f.newSweeper,
+		Substrate:               opts.substrate,
+		GatingClassifier:        opts.gatingClassifier,
+		proseFindingsForAPerson: opts.proseFindingsForAPerson,
+		AbsorptionDepthBound:    opts.absorptionDepth,
 		// A depth the test NAMES is explicit — the person's raise over the
 		// recorded bound — and zero adopts whatever the run branch records
 		// (tick wz0), exactly as the CLI's flag does.
@@ -1102,6 +1112,9 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		// What the tick's earlier attempts left PRESERVED (tick pbb),
 		// forwarded the same way.
 		PriorSnapshots: d.PriorSnapshots,
+		// The stuck watch's window, forwarded the way the production
+		// factories forward it (tick wv2).
+		StuckAfter: d.StuckAfter,
 	})
 	if err != nil {
 		return nil, Substrate{}, err

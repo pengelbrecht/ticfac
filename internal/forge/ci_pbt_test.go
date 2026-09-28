@@ -90,10 +90,19 @@ func TestPBTCIVerdictIgnoresOrderAndSkips(t *testing.T) {
 				latest[r.name] = r
 			}
 		}
+		ran := false
 		for _, r := range latest {
 			if r.conclusion == "failure" && want == CIGreen {
 				ht.Fatalf("check %s's latest executed run failed, yet the verdict is green: %+v", r.name, runs)
 			}
+			if r.conclusion == "success" {
+				ran = true
+			}
+		}
+		// Green needs a check that RAN (epic-6in): a verdict whose every
+		// latest run was skipped or neutral is no CI, never green.
+		if want == CIGreen && !ran {
+			ht.Fatalf("no check's latest run succeeded, yet the verdict is green: %+v", runs)
 		}
 	}, hegel.WithTestCases(300))
 }

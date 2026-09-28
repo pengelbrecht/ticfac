@@ -2,7 +2,9 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
@@ -66,76 +68,121 @@ func (r *Reconciler) ciForTree(ctx context.Context, pr *forge.PullRequest) (forg
 		*pr = *fresh
 	}
 
-	head := pr.HeadSHA
-	report, err := r.opts.PullRequests.CI(ctx, *pr)
-	if err != nil {
-		return forge.CIReport{}, head, true, err
-	}
-	if report.State != forge.CINone {
-		return report, head, true, nil
-	}
-
-	// Nothing on the head. Look back for a commit CI did run on, and take its
-	// verdict only if this tree's code is that commit's code.
-	older, olderReport, ok, err := r.ciFromAnAncestor(ctx, pr)
-	if err != nil || !ok {
-		// No verdict anywhere in reach: the honest answer is the one the
-		// forge gave about the head.
-		return report, head, true, err
-	}
-	return olderReport, older, false, nil
+	report, sha, err := r.ciForCode(ctx, *pr, pr.HeadSHA, true)
+	return report, sha, sha == pr.HeadSHA, err
 }
 
-// ciFromAnAncestor walks back from the PR's head for a commit that has a CI
-// verdict, and proves the walk crossed nothing but run state.
-func (r *Reconciler) ciFromAnAncestor(ctx context.Context, pr *forge.PullRequest) (string, forge.CIReport, bool, error) {
-	// The branch has to be in this checkout before its history can be read.
-	// A fetch failure is not fatal here: the walk simply finds nothing and
-	// the caller falls back to the head's own answer.
-	if err := r.git.fetch(pr.HeadRef); err != nil {
-		return "", forge.CIReport{}, false, nil
-	}
-	out, err := r.git.run("", "rev-list", "--max-count="+fmt.Sprint(ciWalkLimit), pr.HeadSHA)
+// ciForCode answers what CI says about the CODE at one commit of the PR's
+// branch: the commit's own verdict when CI ran on it, else the verdict of the
+// newest ancestor CI ran on whose tree differs from it only under the paths
+// CI ignores (.ticfac/, runStatePrefix) — and the sha that verdict is about.
+//
+// Three things make the answer truthful rather than merely available
+// (epic-6in, 2026-09-28):
+//
+//   - A commit whose every check was SKIPPED has no verdict (forge answers
+//     none for it): 6in's checkpoint head carried five skipped pull_request
+//     checks, read green, and admitted a close-out over a red go job one
+//     commit back. The walk below treats it as the absence it is.
+//   - The walk ends where the code does. A commit outside the confined chain
+//     describes other code, so no verdict from it or beyond is taken, and
+//     none is looked for.
+//   - When the chain's only verdicts were CANCELLED — a later push superseded
+//     the run, and the push that superseded it changed only ignored paths, so
+//     nothing replaced it — waiting cannot produce a verdict. With `restart`
+//     the cancelled runs are restarted ONCE (forge.CIRestarter) and the answer
+//     is pending: a real wait for a run that now exists.
+func (r *Reconciler) ciForCode(ctx context.Context, pr forge.PullRequest, at string, restart bool) (forge.CIReport, string, error) {
+	probe := pr
+	probe.HeadSHA = at
+	own, err := r.opts.PullRequests.CI(ctx, probe)
 	if err != nil {
-		return "", forge.CIReport{}, false, nil
+		return forge.CIReport{}, at, err
 	}
+	if own.State != forge.CINone {
+		return own, at, nil
+	}
+
+	// Nothing ran on this commit. Look back along the chain of commits whose
+	// code IS this commit's code for one CI did run on.
+	running := false
+	var cancelled []int64
+	for _, sha := range r.sameCodeAncestors(pr.HeadRef, at) {
+		probe.HeadSHA = sha
+		report, err := r.opts.PullRequests.CI(ctx, probe)
+		if err != nil {
+			return forge.CIReport{}, at, err
+		}
+		switch report.State {
+		case forge.CIGreen, forge.CIRed:
+			// A CONCLUSIVE verdict about this very code: sameCodeAncestors
+			// proved every change since it lives under .ticfac/.
+			return report, sha, nil
+		case forge.CIPending:
+			// PENDING IS NOT A VERDICT, it is the absence of one, and taking
+			// it would end the walk with the very answer the walk exists to
+			// get past (tick tk3): a cancelled ancestor reads pending forever,
+			// and a green one may sit one commit further on.
+			if len(report.CancelledRuns) > 0 {
+				cancelled = append(cancelled, report.CancelledRuns...)
+			} else {
+				running = true
+			}
+		}
+	}
+	if running {
+		// A run is executing on this code: that is the wait, and nothing
+		// needs restarting for it.
+		return forge.CIReport{State: forge.CIPending}, at, nil
+	}
+	if len(cancelled) > 0 {
+		if restart {
+			if restarter, ok := r.opts.PullRequests.(forge.CIRestarter); ok {
+				restarted, err := restarter.RestartCancelledOnce(ctx, cancelled)
+				if err != nil {
+					r.record("", StageCIRestarted, "the cancelled CI run(s) %v on the code of %s could not be "+
+						"restarted: %v", cancelled, short(at), err)
+				}
+				if len(restarted) > 0 {
+					r.record("", StageCIRestarted, "CI on the code of %s has no verdict: its run(s) were cancelled by "+
+						"a later push that changed only %s, so nothing would ever run them again — workflow run(s) "+
+						"%v are restarted ONCE, and the wait is for them", short(at), runStatePrefix, restarted)
+				}
+			}
+		}
+		return forge.CIReport{State: forge.CIPending, CancelledRuns: cancelled}, at, nil
+	}
+	return own, at, nil
+}
+
+// sameCodeAncestors lists, newest first, the ancestors of `at` whose tree
+// differs from it only under .ticfac/ — the commits a CI verdict can be
+// borrowed from for `at`'s code. The list ends at the first ancestor outside
+// that chain: it and everything past it describe other code.
+//
+// A branch this checkout cannot fetch, or a history it cannot read, answers
+// nothing: the caller falls back to the commit's own answer, and a proof that
+// could not be read is not a proof.
+func (r *Reconciler) sameCodeAncestors(branch, at string) []string {
+	if err := r.git.fetch(branch); err != nil {
+		return nil
+	}
+	out, err := r.git.run("", "rev-list", "--max-count="+fmt.Sprint(ciWalkLimit), at)
+	if err != nil {
+		return nil
+	}
+	var chain []string
 	for i, line := range strings.Split(out, "\n") {
 		sha := strings.TrimSpace(line)
 		if sha == "" || i == 0 {
-			continue // i == 0 is the head, already asked
+			continue // i == 0 is `at` itself, already asked
 		}
-		candidate := *pr
-		candidate.HeadSHA = sha
-		report, err := r.opts.PullRequests.CI(ctx, candidate)
-		if err != nil {
-			return "", forge.CIReport{}, false, err
+		if !r.onlyRunState(sha, at) {
+			break
 		}
-		// PENDING IS NOT A VERDICT, it is the absence of one, and taking it
-		// ends the walk with the very answer the walk exists to get past
-		// (tick tk3). Measured closing Phase 4: the walk stopped at an
-		// ancestor whose checks had been CANCELLED — which forge reads as
-		// pending, permanently, because nothing ever re-runs on a superseded
-		// commit (tick 5ob) — while a fully green ancestor sat ONE COMMIT
-		// further on and every change between it and the head was under
-		// .ticfac/.
-		//
-		// Walking past pending is sound for the same reason the walk is sound
-		// at all: onlyRunState below proves the ancestor's code IS this tree's
-		// code, so a conclusive older verdict describes this tree whatever a
-		// newer commit's CI happens to be doing at this moment.
-		if report.State == forge.CINone || report.State == forge.CIPending {
-			continue
-		}
-		// A CONCLUSIVE verdict. It describes this tree only if nothing outside run state
-		// changed since — and a diff this cannot read counts as "changed",
-		// because a gate that cannot prove the tree is unchanged does not get
-		// to assume it.
-		if confined := r.onlyRunState(sha, pr.HeadSHA); !confined {
-			return "", forge.CIReport{}, false, nil
-		}
-		return sha, report, true, nil
+		chain = append(chain, sha)
 	}
-	return "", forge.CIReport{}, false, nil
+	return chain
 }
 
 // onlyRunState reports whether every path that changed between two commits
@@ -168,4 +215,87 @@ func ciSubject(sha string, isHead bool, pr *forge.PullRequest) string {
 	}
 	return fmt.Sprintf("%s, the newest commit of the epic PR #%d that CI ran on (every commit since changes only %s, so the verdict is about this tree's code)",
 		short(sha), pr.Number, runStatePrefix)
+}
+
+// errClosedBehindRepair is the close-out close gate's answer when CI was red
+// at the close and the repair job answered it: the repair's merge was gated
+// and the close-out closed behind that gate, so the caller's own close is
+// over (gate.go's closeAfterGate treats it as done, not as a failure).
+var errClosedBehindRepair = errors.New("the close-out closed behind the repair of its red CI")
+
+// ciRepairOwner is the attempt a repair of red CI is dispatched under at the
+// close-out's admission, where the close-out itself has no attempt yet: the
+// latest attempt this run dispatched for a tick that is now CLOSED — the work
+// the red verdict is about, in the order it integrated. Nil when the run
+// closed nothing (then there is nothing of this run's to repair, and the
+// admission refuses as it always did).
+//
+// A closed tick is the right owner because the repair is gated and "closed"
+// behind it exactly like any merge onto the tick's tree (gateAndClose), and
+// closing a closed tick is a no-op; and it keeps the close-out's own repair
+// allowance for the close-out's own writes.
+func (r *Reconciler) ciRepairOwner(ctx context.Context) (*landingCloseout, error) {
+	if r.store == nil {
+		return nil, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return nil, err
+	}
+	attempts, err := r.store.Attempts()
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(attempts, func(i, j int) bool { return attempts[i].Attempt > attempts[j].Attempt })
+	asked := map[string]bool{}
+	for _, attempt := range attempts {
+		marker := handleFromMap(attempt.JobHandle)
+		if marker.TickID == "" {
+			marker.TickID = attempt.TickID
+		}
+		if marker.Attempt == 0 {
+			marker.Attempt = attempt.Attempt
+		}
+		if marker.TickID == "" || marker.Attempt < 1 || asked[marker.TickID] || marker.Role == "closeout-epic" {
+			continue
+		}
+		asked[marker.TickID] = true
+		current, err := r.tracker.Show(ctx, marker.TickID)
+		if err != nil || current.Status != "closed" {
+			continue
+		}
+		if marker.Role == "" {
+			marker.Role = "implement-tick"
+		}
+		marker.Repo = r.opts.Repo
+		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
+		return &landingCloseout{
+			entry:  planEntry{TickID: marker.TickID, Role: marker.Role, Title: r.titles[marker.TickID]},
+			marker: marker,
+		}, nil
+	}
+	return nil, nil
+}
+
+// closeoutDispatchedOverRedCI reports whether the code a close-out attempt
+// was cut from had a RED CI verdict — read truthfully (ciForCode: executed
+// checks only, the commit that changed code), not from the attempt's answer.
+//
+// It is how a close-out's BLOCKED is told apart from a close-out's BLOCKED
+// about red CI without parsing prose (epic-6in): the latter is about the tree,
+// the repair job's to fix, and never a person's. The admission now refuses to
+// dispatch a close-out over red CI at all, so this answers true only for an
+// attempt a false green let through — 6in's v7z attempt 8 is one.
+func (r *Reconciler) closeoutDispatchedOverRedCI(ctx context.Context, marker attemptHandle) ([]string, bool) {
+	if !r.closeoutRule.Declared || r.opts.PullRequests == nil || marker.BaseSHA == "" {
+		return nil, false
+	}
+	pr := forge.PullRequest{HeadRef: r.branch, BaseRef: r.prBase()}
+	if found, err := r.opts.PullRequests.Find(ctx, r.branch, pr.BaseRef); err == nil && found != nil {
+		pr = *found
+	}
+	report, _, err := r.ciForCode(ctx, pr, marker.BaseSHA, false)
+	if err != nil || report.State != forge.CIRed {
+		return nil, false
+	}
+	return report.Failing, true
 }

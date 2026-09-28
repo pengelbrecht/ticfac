@@ -94,6 +94,11 @@ type Options struct {
 	PushInterval  time.Duration
 	SalvageWindow time.Duration
 
+	// StuckAfter is the stuck watch's window (activity.go, tick wv2), carried
+	// into the supervisor through the attempt record. Zero is
+	// DefaultStuckAfter; negative turns the watch off.
+	StuckAfter time.Duration
+
 	Now func() time.Time
 
 	// guardsOff disables one named guard, for the invariants suite's negative
@@ -423,6 +428,20 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 	record.NudgeArgv = nudge
+	// The stuck watch's nudge (activity.go): the runner is interrupted and
+	// re-prompted in its own session, rendered now for the same reason.
+	if e.opts.StuckAfter >= 0 {
+		after := e.opts.StuckAfter
+		if after == 0 {
+			after = DefaultStuckAfter
+		}
+		record.StuckAfterMS = after.Milliseconds()
+		stuck, err := stuckArgv(e.opts.Runner, e.opts.RunnerArgv, at, record, after)
+		if err != nil {
+			return nil, err
+		}
+		record.StuckArgv = stuck
+	}
 
 	if err := e.makeWorktree(record, start); err != nil {
 		return nil, err

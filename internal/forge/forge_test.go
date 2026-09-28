@@ -297,7 +297,27 @@ func TestCI(t *testing.T) {
 			{"name": "go", "status": "queued"},
 		}, CIPending, nil},
 		{"neutral neither passes nor fails", []map[string]string{
+			{"name": "go", "status": "completed", "conclusion": "success"},
 			{"name": "lint", "status": "completed", "conclusion": "neutral"},
+		}, CIGreen, nil},
+		// epic-6in's false green (2026-09-28): the PR head was a .ticfac/-only
+		// checkpoint, ci.yml skips its pull_request jobs for epic heads and its
+		// push trigger ignores .ticfac/**, so every check on the head was a
+		// skip — and read green over a red go job one commit back. A verdict
+		// with no check that RAN is no CI for this code yet.
+		{"every check skipped is no CI, never green", []map[string]string{
+			{"name": "go", "status": "completed", "conclusion": "skipped"},
+			{"name": "go race", "status": "completed", "conclusion": "skipped"},
+			{"name": "contracts", "status": "completed", "conclusion": "skipped"},
+			{"name": "typescript", "status": "completed", "conclusion": "skipped"},
+			{"name": "release config", "status": "completed", "conclusion": "skipped"},
+		}, CINone, nil},
+		{"only neutral is no CI, never green", []map[string]string{
+			{"name": "lint", "status": "completed", "conclusion": "neutral"},
+		}, CINone, nil},
+		{"a success beside skips is green", []map[string]string{
+			{"name": "go", "status": "completed", "conclusion": "success"},
+			{"name": "typescript", "status": "completed", "conclusion": "skipped"},
 		}, CIGreen, nil},
 		{"cancelled is not green", []map[string]string{
 			{"name": "go", "status": "completed", "conclusion": "cancelled"},
@@ -394,6 +414,73 @@ func TestCIReadsOnlyTheLatestRunOfEachCheck(t *testing.T) {
 		if fmt.Sprint(report.FailingRuns) != fmt.Sprint(tc.wantRuns) && !(len(report.FailingRuns) == 0 && len(tc.wantRuns) == 0) {
 			t.Errorf("%s: failing runs = %v, want %v", tc.name, report.FailingRuns, tc.wantRuns)
 		}
+	}
+}
+
+// A cancelled check names the workflow run behind it, so a caller that needs
+// a verdict for that commit can restart it (epic-6in: the push run on the
+// last commit that changed code was cancelled by the next push, and nothing
+// ever ran it again).
+func TestCINamesTheCancelledRuns(t *testing.T) {
+	t.Parallel()
+	runs := []map[string]string{
+		{"name": "go", "status": "completed", "conclusion": "cancelled",
+			"details_url": "https://github.com/example/example/actions/runs/333/job/1"},
+		{"name": "go race", "status": "completed", "conclusion": "cancelled",
+			"details_url": "https://github.com/example/example/actions/runs/333/job/2"},
+		{"name": "typescript", "status": "completed", "conclusion": "success",
+			"details_url": "https://github.com/example/example/actions/runs/333/job/3"},
+	}
+	g, _ := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, http.StatusOK, map[string]any{"total_count": len(runs), "check_runs": runs})
+	})
+	report, err := g.CI(context.Background(), PullRequest{Number: 7, HeadSHA: "abc123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.State != CIPending {
+		t.Errorf("state = %q, want pending: a cancelled check is not a verdict", report.State)
+	}
+	if fmt.Sprint(report.CancelledRuns) != "[333]" {
+		t.Errorf("cancelled runs = %v, want [333], once", report.CancelledRuns)
+	}
+}
+
+// Restarting a cancelled run is once, by GitHub's own count, and it re-runs
+// the whole run (a cancelled run has no failed jobs to re-run).
+func TestRestartCancelledOnceSkipsARunAlreadyRestarted(t *testing.T) {
+	t.Parallel()
+	g, seen := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/actions/runs/1"):
+			writeJSON(t, w, http.StatusOK, map[string]any{"id": 1, "run_attempt": 1})
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/actions/runs/2"):
+			writeJSON(t, w, http.StatusOK, map[string]any{"id": 2, "run_attempt": 2})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/rerun"):
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	restarted, err := g.RestartCancelledOnce(context.Background(), []int64{1, 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(restarted) != "[1]" {
+		t.Errorf("restarted %v, want only [1]", restarted)
+	}
+	want := "POST /repos/example/example/actions/runs/1/rerun"
+	found := false
+	for _, call := range *seen {
+		if call == want {
+			found = true
+		}
+		if call == "POST /repos/example/example/actions/runs/2/rerun" {
+			t.Error("restarted a workflow run already on its second attempt")
+		}
+	}
+	if !found {
+		t.Errorf("no %s among %v", want, *seen)
 	}
 }
 

@@ -106,6 +106,17 @@ type Options struct {
 	// `working` (dispose.go). Zero is DefaultInterruptGrace.
 	InterruptGrace time.Duration
 
+	// StuckAfter is how long an agent may show no activity — no transcript
+	// event, no tool-process CPU, no worktree or branch change — before it
+	// is nudged, and again after the nudge before it is stopped (activity.go,
+	// tick wv2). Zero is subprocess.DefaultStuckAfter; negative turns the
+	// watch off.
+	StuckAfter time.Duration
+
+	// Procs reads the process table the stuck watch walks. Nil is
+	// subprocess.SystemProcs; tests hand in a table of their own.
+	Procs subprocess.ProcTable
+
 	Now func() time.Time
 
 	// ProtocolWarning, when set, receives the client's above-warn protocol
@@ -190,6 +201,12 @@ func New(opts Options) (*Executor, error) {
 	}
 	if opts.IdleGrace <= 0 {
 		opts.IdleGrace = DefaultIdleGrace
+	}
+	if opts.StuckAfter == 0 {
+		opts.StuckAfter = subprocess.DefaultStuckAfter
+	}
+	if opts.Procs == nil {
+		opts.Procs = subprocess.SystemProcs
 	}
 	if opts.StartupTimeout <= 0 {
 		opts.StartupTimeout = DefaultStartupTimeout

@@ -53,9 +53,10 @@ import (
 //
 // WHAT STAYS: a finding the done is reachable without is still a backlog tick
 // with an owner, and it is still reported — unattended means nobody has to be
-// there, not that nobody is ever told. And a finding the run cannot decide —
-// an epic whose acceptance carries no [A<n>] items (the refusal: klq) — stays
-// a person's at the close-out, where the hold already is. A finding routed to
+// there, not that nobody is ever told. A finding against an epic whose
+// acceptance carries no [A<n>] items (the refusal: klq) is no longer left for
+// a person either (epic-6in): the prose rule decides it — backlog, unless its
+// reporter claims it breaks the build or CI (prose.go). A finding routed to
 // ANOTHER repository is no longer among them: it is filed in the target's
 // tracker or backlogged here naming it, and gates nothing (routed.go).
 
@@ -189,9 +190,18 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 			"acceptance this run cannot read, and a person must fix the epic's own text: %w", key, r.opts.EpicID, err)
 	}
 	if refusal != nil {
-		r.record(marker.TickID, StageAbsorptionRefused,
-			"finding %s is left for a person: %s", key, refusal.Reason)
-		return findingDecision{Left: refusal.Reason}, nil
+		// PROSE IS NOT A PERSON'S DECISION (epic-6in, 2026-09-28): 6in's
+		// fifteen findings were each "left for a person" here, and the close-out
+		// then held the run for them. With no [A<n>] item there is nothing a
+		// finding can be judged to gate, so the run's own rule decides — a
+		// backlog tick, the reason recorded — except a finding whose reporter
+		// claims it breaks the build or CI, which gates any done (prose.go).
+		if r.opts.proseFindingsForAPerson {
+			r.record(marker.TickID, StageAbsorptionRefused,
+				"finding %s is left for a person: %s", key, refusal.Reason)
+			return findingDecision{Left: refusal.Reason}, nil
+		}
+		return r.decideProseFinding(ctx, marker, *standing, dispatch, refusal.Reason)
 	}
 
 	// The verdict: the oracle where the done can be run, the predictor where
@@ -450,6 +460,14 @@ func verdictLine(record runstate.Absorption) string {
 	if isLiveRun(record) {
 		return "its remedy is a live run of an epic, which no worker inside this one can do, so it gates no item " +
 			"of this epic's done"
+	}
+	if record.Basis == runstate.AbsorptionRule && record.Target == "" {
+		// The prose rule (prose.go): an epic whose acceptance carries no
+		// [A<n>] items.
+		if record.Gating {
+			return "its reporter claims it breaks the build or CI, which gates any epic's done, prose or not"
+		}
+		return "the epic's acceptance is prose, so no item exists for it to gate: it is backlog work"
 	}
 	if record.Basis == runstate.AbsorptionRule {
 		return fmt.Sprintf("routed to %s, which this run cannot fix, so it gates no item of this epic's done",

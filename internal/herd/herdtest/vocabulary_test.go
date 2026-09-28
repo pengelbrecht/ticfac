@@ -33,6 +33,7 @@ func fakeMethodConstants() []string {
 		MethodAgentList, MethodAgentGet,
 		MethodPaneClose,
 		MethodPaneRead,
+		MethodPaneProcessInfo,
 		MethodEventsSubscribe, MethodEventsWait,
 		MethodPaneReportMetadata, MethodWorkspaceReportMetadata,
 		MethodNotificationShow,

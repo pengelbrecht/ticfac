@@ -999,6 +999,53 @@ finding_live_run)
 		printf 'STATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 	;;
+closeout_red)
+	# Epic-6in's close-out: CI on the epic's code is red (the test's forge
+	# reads red on any tree without ci-fix.txt once the close-out has been
+	# dispatched — before that it answers the false green 6in was admitted
+	# on). The close-out, cut from a red tree, writes its retro and answers
+	# BLOCKED; the plan-repair job commits the fix the failing CI job named;
+	# a close-out cut from the repaired tree answers DONE. Every other job
+	# does its work and reports.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		printf 'the fix the red CI job named\n' > "$TICFAC_WORKTREE/ci-fix.txt"
+		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" commit -q -m "repair: the fix the red CI job named" >/dev/null 2>&1
+		report
+	elif [ "$TICFAC_TICK" = "co" ] && [ ! -e "$TICFAC_WORKTREE/ci-fix.txt" ]; then
+		commit
+		status="BLOCKED"
+		report
+	else
+		commit
+		report
+	fi
+	;;
+finding_build_red)
+	# The prose rule's exception (epic-6in): the work is done, and the report
+	# carries ONE in-repository finding whose reporter claims it breaks the
+	# build — which gates any done, prose or not.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found the build broken.\n\n'
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "A re-run holds forever on a stale claim (regression; full suite red)",'
+		printf '%s\n' '  "body": "The full suite fails on the regression test.",'
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "none",'
+		printf '%s\n' '  "demonstrating_check": "go"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
 *)
 	printf 'unknown FAKE_RUNNER_MODE %s\n' "$mode" >&2
 	exit 64

@@ -81,9 +81,9 @@ func proposedCount(t *testing.T, s *runstate.Store) int {
 func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding"})
 	repo := f.Repo
-	reconciler, result, err := f.run(repo, fixtureOptions{mode: "finding"})
+	reconciler, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 	// hold lifted without re-dispatching a single work tick or the review,
 	// which is the loop the old per-tick hold bought (epic-ncv's three
 	// byte-identical reviews).
-	_, result, err = f.run(repo, fixtureOptions{mode: "finding"})
+	_, result, err = f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding"})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
@@ -288,9 +288,9 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "finding_blocked"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked"})
 	repo := f.Repo
-	opts := fixtureOptions{mode: "finding_blocked"}
+	opts := fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked"}
 
 	// Attempt 1 of a1 answers BLOCKED with nothing committed, and its report
 	// carries the finding: the attempt is refused, the DISCOVERY is drafted.
@@ -397,8 +397,8 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "finding_bad"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_bad"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_bad"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_bad"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -425,9 +425,9 @@ func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 func TestAFindingWithAnUnknownKeyIsFoldedIntoItsBodyAndNoted(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "finding_folds"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_folds"})
 	repo := f.Repo
-	reconciler, result, err := f.run(repo, fixtureOptions{mode: "finding_folds"})
+	reconciler, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_folds"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -496,9 +496,9 @@ func TestAFindingWithAnUnknownKeyIsFoldedIntoItsBodyAndNoted(t *testing.T) {
 func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "finding_blocked"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked"})
 	repo := f.Repo
-	opts := fixtureOptions{mode: "finding_blocked"}
+	opts := fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked"}
 
 	// Attempt 1 of a1 answers BLOCKED with nothing committed, and its report
 	// carries the two findings: the attempt is refused, the discoveries are
@@ -644,10 +644,10 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "review_finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	// One work tick that reports nothing unusual, so the run reaches the
 	// review wave; the review job itself answers DONE with a findings block.
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -714,8 +714,8 @@ func TestAReviewJobsFindingRidesToTheCloseOut(t *testing.T) {
 func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "review_finding"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -753,7 +753,7 @@ func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testin
 	}
 
 	// The resume: the review closes behind its recorded decision.
-	_, result, err = f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	_, result, err = f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
@@ -830,8 +830,8 @@ func TestATriagedReviewClosesBehindItsRecordedDecisionWithoutADispatch(t *testin
 func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "review_finding"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -841,7 +841,7 @@ func TestAnUntriagedReviewHoldsOnResumeWithoutBuyingTheReviewAgain(t *testing.T)
 
 	// Nobody triages. The resume stops at the same gate — and the review is
 	// not dispatched again: the answer it would re-buy is already recorded.
-	_, result, err = f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	_, result, err = f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}

@@ -149,6 +149,10 @@ func TestAMalformedTierPolicyIsRefusedNamingTheCell(t *testing.T) {
 		{"role routed to an unknown tier", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.roles]\nreview = \"ultra\"\n", "is not one of"},
 		{"concurrency for an unknown tier", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.concurrency]\npremium = 4\n", "is not one of"},
 		{"concurrency of zero", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.concurrency]\nstrong = 0\n", "not a width"},
+		// The runaway backstop (tick wv2).
+		{"a wall for an unknown tier", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.wall_seconds]\npremium = 7200\n", "neither a tier"},
+		{"a wall for an unknown role and tier", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.wall_seconds]\n\"implements.strong\" = 7200\n", "is not <role>.<tier>"},
+		{"a wall too short to be a backstop", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.wall_seconds]\nstrong = 30\n", "not a backstop"},
 		{"rate limit answers immediately", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nresponse = \"retry-immediately\"\n", "backoff-and-retry is the only one"},
 		{"rate limit without patience", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nmax_delay_ms = 100\n", "not a backoff ceiling"},
 		{"rate limit with no attempts", "[tier_policy]\ndefault = \"balanced\"\n\n[tier_policy.rate_limit]\nmax_attempts = 0\n", "not a retry budget"},
@@ -739,5 +743,38 @@ func TestAMassRoutedStartStillEarnsItsRungsBoundedByTheCeiling(t *testing.T) {
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Errorf("the classified derivation is not a function: %+v then %+v", first, second)
+	}
+}
+
+// The runaway backstop per role and tier (tick wv2): the most specific key
+// wins, every spelling of a role is accepted, and nothing declared is false.
+func TestWallSecondsForTakesTheMostSpecificDeclaration(t *testing.T) {
+	cfg, err := Parse([]byte("version = 2\n\n[roles.implement]\nkind = \"pi\"\n\n[tier_policy]\ndefault = \"balanced\"\n\n" +
+		"[tier_policy.wall_seconds]\nstrong = 7200\nimplement = 14400\n\"implement.strong\" = 21600\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.TierPolicy
+	for _, tc := range []struct {
+		role string
+		tier Tier
+		want int
+		from string
+	}{
+		{"implement-tick", "strong", 21600, "tier_policy.wall_seconds.implement.strong"},
+		{"implement-tick", "balanced", 14400, "tier_policy.wall_seconds.implement"},
+		{"review-epic", "strong", 7200, "tier_policy.wall_seconds.strong"},
+	} {
+		got, from, ok := p.WallSecondsFor(tc.role, tc.tier)
+		if !ok || got != tc.want || from != tc.from {
+			t.Errorf("WallSecondsFor(%s, %s) = %d from %q (%t), want %d from %q", tc.role, tc.tier, got, from, ok, tc.want, tc.from)
+		}
+	}
+	if _, _, ok := p.WallSecondsFor("review-epic", "economy"); ok {
+		t.Error("an undeclared role and tier answered a backstop: the run's own default governs there")
+	}
+	var none *TierPolicy
+	if _, _, ok := none.WallSecondsFor("implement-tick", "strong"); ok {
+		t.Error("no policy answered a backstop")
 	}
 }

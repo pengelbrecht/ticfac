@@ -92,8 +92,12 @@ const (
 	// (tick rj0). The interrupt agent.send_keys delivers is a courtesy an
 	// agent inside a long shell call never reads; closing the pane is the
 	// stop that actually stops the agent herdr owns.
-	MethodPaneClose         = "pane.close"
-	MethodPaneRead          = "pane.read"
+	MethodPaneClose = "pane.close"
+	MethodPaneRead  = "pane.read"
+	// MethodPaneProcessInfo answers a pane's shell pid and foreground
+	// processes — the root the stuck watch walks the process tree from
+	// (tick wv2), by pid and never by name.
+	MethodPaneProcessInfo   = "pane.process_info"
 	MethodPaneWaitForOutput = "pane.wait_for_output"
 	// MethodPaneReportMetadata and MethodWorkspaceReportMetadata are the
 	// display-only metadata channels: a source reports title, state labels
@@ -125,6 +129,7 @@ const (
 	resultAgentInfo           = "agent_info"
 	resultAgentList           = "agent_list"
 	resultPaneRead            = "pane_read"
+	resultPaneProcessInfo     = "pane_process_info"
 	resultOutputMatched       = "output_matched"
 	resultSubscriptionStarted = "subscription_started"
 	resultWaitMatched         = "wait_matched"

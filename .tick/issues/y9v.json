@@ -1,0 +1,15 @@
+{
+  "id": "y9v",
+  "title": "Distribution: install from ticks.sh, ticfac upgrade, skills diff, and automatic releases",
+  "gloss": "ticfac distribution",
+  "description": "Future work (operator, 2026-09-28: 'ticfac can share ticks.sh with ticks, and install from there' … 'it should have automatic releases, once it works. this is all future work though').\n\nState today: .goreleaser.yaml + tag-triggered release.yml + install.sh exist (4yb), but no v* tag or GitHub release has ever been cut (5o5 closed without one), so install.sh resolves nothing; locally built binaries report 'dev'. No self-upgrade (tk has tk upgrade). ticfac skills list/get/install exist; no skills diff. ticks.sh (operator's Cloudflare zone) serves the ticks landing page and 302s /install to ticks' raw install.sh; where that redirect/page is defined is unknown (not in either repo) — ask before touching it.\n\nScope:\n1. Cut v0.1.0 and prove install.sh end to end on macOS (both binaries, ad-hoc codesign — an unsigned/broken signature dies with exit 137) and Linux.\n2. install.sh also installs/upgrades tk when missing or below the contract ticfac needs.\n3. https://ticks.sh/ticfac serves ticfac's installer the way /install serves tk's; the landing page gets a ticfac section. (Live-site change in the operator's account: needs the operator's go and the site's location.)\n4. ticfac upgrade: replace both binaries from the latest release, re-sign on macOS, refuse while a live run uses them; mirrors tk upgrade.\n5. ticfac skills diff, and ticfac doctor warns when installed skills lag the binary.\n6. Automatic releases once 1-5 work: in ticfac's own repo a landed epic (and/or merged fix) cuts the next patch tag; release.yml publishes; the factory deploy follows its existing tag trigger.",
+  "notes": "2026-09-28 11:25 - Operator, 2026-09-28: feature parity with ticks for installation, upgrade and skill management. Before planning, list tk's surface (tk upgrade, tk version, tk skills list/get/install/diff, install.sh + install.ps1 for Windows, INSTALL_DIR handling, skill install targets and stamps, any doctor/whoami checks) and give ticfac the same verb for each, same flags and behaviour where it applies.",
+  "status": "open",
+  "priority": 3,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[A1] curl -fsSL https://ticks.sh/ticfac | sh on a clean macOS and Linux machine yields working ticfac, ticfac-exec-subprocess and tk; [A2] ticfac upgrade moves an installed build to the latest release; [A3] ticfac skills diff reports an out-of-date installed skill; [A4] a landed epic in ticfac's repo produces a new GitHub release without a person",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T09:25:48.666464Z",
+  "updated_at": "2026-09-28T09:25:55.16652Z"
+}
