@@ -690,6 +690,12 @@ type Reconciler struct {
 	// branch already carried the base: the one fold a run start must gate.
 	folded string
 
+	// ciSilentSince and ciDispatched are dispatchSilentCI's memory: when this
+	// incarnation first saw a commit's code with no CI run, and which commits
+	// it has already started the workflow for (once each).
+	ciSilentSince map[string]time.Time
+	ciDispatched  map[string]bool
+
 	// tracker is the tracker as this run uses it: pointed at a worktree on the
 	// integration branch, and pushing every write. It is built in Run, because
 	// the worktree it runs in is the integration branch's head — which does not

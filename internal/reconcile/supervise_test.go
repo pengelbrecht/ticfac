@@ -312,7 +312,8 @@ func TestTheCapIsWhatStopsAResumableStopThatKeepsChangingTheTree(t *testing.T) {
 // short: the supervisor's rules over synthesised stops
 func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	t.Parallel()
-	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient} {
+	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient,
+		RefusedCloseoutOverRedCI, RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending} {
 		if !resumesWithoutAPerson(reason) {
 			t.Errorf("%s is resumable by construction and the supervisor refuses to continue across it", reason)
 		}
@@ -371,5 +372,28 @@ func TestAPersistentAuthRefusalIsANamedStopThatSaysWhatToCheck(t *testing.T) {
 	// And a transient failure is still the resumable one.
 	if got := errorStopReason(errors.New("git fetch: exit status 128: Connection reset by github.com port 22")); got != StoppedRemoteTransient {
 		t.Errorf("a reset is stop %q, want %q", got, StoppedRemoteTransient)
+	}
+}
+
+// Waiting on CI is not a decision (epic-6in follow-up): a CI wait whose bound
+// ran out resumes without a person even over an UNCHANGED tree — the world
+// waited on is the forge's, not the branch's — and the continuation cap still
+// bounds it.
+// short: the supervisor's rules over synthesised stops
+func TestACIWaitResumesOverAnUnchangedTreeUntilTheCap(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending} {
+		stop := supervisedStop{Reason: reason, TickID: "co", Tree: "tree-1"}
+		if halt := haltReason(stop, stop, 1, 12); halt != "" {
+			t.Errorf("%s over an unchanged tree halted the run for a person: %q", reason, halt)
+		}
+		if halt := haltReason(stop, stop, 12, 12); halt == "" {
+			t.Errorf("%s continued past the cap: the wait must stay bounded", reason)
+		}
+	}
+	// And the anti-spin rule still holds for everything else.
+	stale := supervisedStop{Reason: RefusedStale, TickID: "a1", Tree: "tree-1"}
+	if halt := haltReason(stale, stale, 1, 12); halt == "" {
+		t.Error("a repeated non-CI stop over an unchanged tree was continued: the anti-spin rule is gone")
 	}
 }
