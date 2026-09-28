@@ -232,3 +232,49 @@ func (r *Reconciler) settledJobHead(branch string) string {
 	}
 	return local
 }
+
+// roleJobAnsweredNothing says a run-dispatched job's head is no answer at all:
+// its branch still sits at the commit the job was cut from. The one exception
+// is a job cut at work HANDED to it — the committed fix or resolution an
+// earlier job of the allowance left when it failed without answering — and
+// answering with that very commit is its answer. The hand-off is read from
+// the LEDGER (the operational decisions' recorded heads, under headKey) as
+// well as from `carried`, because a later pass recomputes `carried` against
+// an integration branch that may have moved while the job's base did not.
+// Anything else at its base did nothing, and finishing it "from its branch"
+// recorded a merge over nothing: the gate failed again over the same tree and
+// the tick's one job was spent on a job that never ran (the hazard epic-6in's
+// resume of repair-3 walked into).
+func roleJobAnsweredNothing(head, base, carried string, ledger roleJobLedger, headKey string) bool {
+	if head == "" {
+		return true
+	}
+	if head != base {
+		return false
+	}
+	if base == carried {
+		return false
+	}
+	for _, decision := range ledger.operational {
+		if handed, _ := decision.Response[headKey].(string); handed != "" && handed == base {
+			return false
+		}
+	}
+	return true
+}
+
+// startIsOperational says a run-dispatched job's failed Start is a job that
+// never answered — an operational failure the allowance retries — rather than
+// a stop. A plain error is the substrate failing to launch it (epic-6in:
+// herdr's agent_name_taken), and so is a SETTLED refusal the caller could not
+// finish from the branch: the identity is spent with nothing to show for it.
+// Every other refusal stays the stop it was: live or unaddressable work under
+// the identity is never dispatched over, and a cancelled or unenforceable
+// dispatch is a person's to read.
+func startIsOperational(err error) bool {
+	refusal, ok := subprocess.AsRefusal(err)
+	if !ok {
+		return err != nil
+	}
+	return refusal.Reason == subprocess.RefusedSettled
+}
