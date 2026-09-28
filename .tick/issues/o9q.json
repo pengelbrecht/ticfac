@@ -1,0 +1,13 @@
+{
+  "id": "o9q",
+  "title": "Ship the runner references in the ticfac skill and install it in the orchestrator image",
+  "description": "Since ticks v0.32.0 the ticks skill the image installs has no agent-runner/herdr-runner references, and ticfac's copies live in internal/runconfig of ticfac's own repo, which an orchestrator container working another repository cannot read. The entrypoint's fallback prompts (reboot/default/herdr guidance) now name that contract but nothing in the container carries it. Put the references under skills/ticfac/references (embedded via go:embed all:skills) and install the ticfac skill in image/Dockerfile beside the ticks one, then point the prompts at the installed path.\n\nticfac run epic-6in filed this backlog tick from the finding 29b5ab5aeed121a01f39c1651288922cb334c85beeb8dad1940ca47028181142 (reported by run-epic-6in/tick-dz1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/29b5ab5aeed121a01f39c1651288922cb334c85beeb8dad1940ca47028181142.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-dz1/attempt-6",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:14:51Z",
+  "updated_at": "2026-09-28T10:14:51Z"
+}
