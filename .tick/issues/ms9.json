@@ -1,0 +1,14 @@
+{
+  "id": "ms9",
+  "title": "Jev at the judgement seams: semantic report checks, finding triage, BLOCKED classes, stuck disambiguation, prose acceptance",
+  "gloss": "Jev judgement seams",
+  "description": "After the Jev rewire (Workers AI typesafe/jev) and the report linter (4m6). Principle: deterministic rules decide everything a rule can; Jev only at judgement seams; confidence-gated (act only above a measured threshold, else do nothing / fall back to today's rule); never the sole hard refusal; every classification recorded on the run branch so a resume replays it instead of re-asking.\n\nSeams, each tied to observed problems (2026-09-22..28):\n1. Report honesty (collect, after the structural lint): status vs content (DONE while tests fail/skip), DONE_WITH_CONCERNS that is really 'gave up' (→ escalate, not merge), done-item evidence present vs merely claimed (4 epics closed without the run their acceptance names; tm5/gv0). Pushback to the same session on a confident failure.\n2. Findings triage: gating prediction (#60's over-absorption; built in bse, never ran without a key), live-run/demo detection replacing #92's text match, target routing sanity (#85).\n3. BLOCKED/NEEDS_CONTEXT question → standing-order class (decide-and-log vs always-ask) for tyd.\n4. Stuck disambiguation (wv2): on a quiet window, classify the transcript tail (looping / waiting on something / thinking) to choose nudge vs stop.\n5. Prose acceptance (6in's findings stopped for a person; #100 now backlogs them): map a finding onto the acceptance's sentences to decide gating, instead of never gating.\n6. Tier start (wne): turn on with role ticks skipped and the probability-mass rule (P(design)+P(diagnosis)\u003e0.5).\nFirst step: measure each seam on labelled history before it is load-bearing (2jn/6in reports and findings with known outcomes; the 49-tick wne set), pick thresholds from that, record them.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Each enabled seam has a recorded evaluation on past data with its threshold; a low-confidence answer never changes behaviour; classifications are replayed from the run branch on resume; report-honesty pushback demonstrated on a DONE-but-tests-skipped fixture",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T10:46:16.678484Z",
+  "updated_at": "2026-09-28T10:46:16.678484Z"
+}
