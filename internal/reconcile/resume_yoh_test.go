@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -245,11 +246,20 @@ func TestAResumeAdoptsEveryInFlightAttemptBeforeClaimingNewWork(t *testing.T) {
 	}
 }
 
-// BUG A's other half: a claim the window is NOT holding still counts against the
-// width, because tk counts it. On epic-yoh cr4 was one — rejected, still
+// BUG A's other half: a claim the window is NOT holding still counts against
+// the width, because tk counts it. On epic-yoh cr4 was one — rejected, still
 // claimed — and the window's count left it out. Here b1 is claimed by a person
 // before the run starts; with a width of two the run must never ask for a
 // third claim, and it must not stop on a refusal it could have predicted.
+//
+// Since tick 823 folded the finding 08e5bcc0 into the claim seam, the shape of
+// the end changed: the person's claim is a LIVE foreign one (no record
+// witnesses it as a stopped run's), so the run works what the width leaves
+// room for and then HOLDS on b1 rather than dispatching a worker over a tick a
+// person is working on — where before this fold it claimed b1 again and did the
+// person's tick under its own name. The width half of the point is unchanged
+// and still the first assertion that matters: with b1's claim counted, a width
+// of two leaves room for exactly one dispatch at a time.
 func TestAClaimTheWindowIsNotHoldingStillCountsAgainstTheWidth(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: wideGate})
@@ -262,14 +272,48 @@ func TestAClaimTheWindowIsNotHoldingStillCountsAgainstTheWidth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
-	if result.Failure != nil && result.Failure.Reason == RefusedClaimWidth {
-		t.Fatalf("the run asked for a claim the width forbids, counting only what its window held: %s",
-			result.Failure.Message)
+	if result.Failure == nil || result.Failure.Reason != RefusedForeignClaim || result.Failure.TickID != "b1" {
+		t.Fatalf("the run ended %s with %+v, want a %s refusal of b1: the person's claim is live, and the "+
+			"run does not dispatch over it however much room the width has", result.State, result.Failure,
+			RefusedForeignClaim)
 	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %+v", result.State, result.Failure)
+	if result.State != runstate.StateFailed {
+		t.Errorf("the run ended %s; a held run is checkpointed so it can be resumed", result.State)
 	}
+	// The WIDTH half of the point: the run was never asked for a claim the
+	// width forbids, because the person's claim was in the count all along.
 	if peak := f.Tracker.peakClaims(); peak > 2 {
 		t.Errorf("%d claims were open at once under a width of 2", peak)
+	}
+	if got := f.Tracker.count("claim:b1"); got != 1 {
+		t.Errorf("the tracker saw %d claims of b1, want the person's 1 alone: a claim the width counts is one "+
+			"thing, a claim a live person holds is another, and this run asked for neither", got)
+	}
+	// And the work the width DID leave room for was finished before the hold:
+	// a hold is a stop at a boundary, never an abandonment of what was in
+	// progress.
+	if !slices.Contains(result.Closed, "a1") || !slices.Contains(result.Closed, "a2") {
+		t.Errorf("the run closed %v before holding; want a1 and a2 finished — the person's claim must cost "+
+			"the wait, not the work already under the width", result.Closed)
+	}
+
+	// The person finished and CLOSED b1 — a claim lives until its tick closes —
+	// and the resumed run works what the person's tick was holding back,
+	// without redoing it.
+	if _, err := f.Tracker.Close(context.Background(), "b1"); err != nil {
+		t.Fatalf("close the person's b1: %v", err)
+	}
+	_, resumed, err := f.run(f.Repo, fixtureOptions{gate: wideGate})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if resumed.State != runstate.StateCompleted {
+		t.Fatalf("the resumed run ended %s: %s (failure %+v)", resumed.State, resumed.Reason, resumed.Failure)
+	}
+	for _, id := range []string{"rv", "co"} {
+		if !slices.Contains(resumed.Closed, id) {
+			t.Errorf("the resumed run closed %v, want %s among them: the person's tick must cost nothing "+
+				"but the wait", resumed.Closed, id)
+		}
 	}
 }
