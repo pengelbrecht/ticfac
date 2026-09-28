@@ -1,0 +1,13 @@
+{
+  "id": "kxl",
+  "title": "Worker boundary shim guards tk but not ticfac on the harness PATH",
+  "description": "image/worker.sh puts a refusing `tk` shim first on the harness's PATH so a worker agent cannot write the tracker, but the ticfac binary the deploy stages into /usr/local/bin is reachable by the agent unguarded. Every ticfac call worker.sh needs runs before the harness starts, so a matching ticfac shim would cost nothing and close the same door. Predates 46x (ticfac entered the image with tick prs).\n\nticfac run epic-6in filed this backlog tick from the finding 0b9c17d3662433a783c4911fa3302acdc78c790282f58eaeaed5b57b4724d8f9 (reported by run-epic-6in/tick-46x/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/0b9c17d3662433a783c4911fa3302acdc78c790282f58eaeaed5b57b4724d8f9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-46x/attempt-4",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:14:33Z",
+  "updated_at": "2026-09-28T10:14:33Z"
+}
