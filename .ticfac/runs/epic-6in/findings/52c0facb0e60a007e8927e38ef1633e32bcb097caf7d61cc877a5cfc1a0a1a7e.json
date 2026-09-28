@@ -12,8 +12,11 @@
   "attempt": 8,
   "done_item": "none",
   "demonstrating_check": "go list -deps ./... | grep -c github.com/pengelbrecht/ticks",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T09:27:17Z",
+  "triaged_at": "2026-09-28T10:15:48Z",
+  "triaged_by": "ticfac run epic-6in absorbing d8h",
+  "promoted_as": "d8h",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "v7z",
