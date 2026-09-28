@@ -259,8 +259,15 @@ func (r *Reconciler) releaseWorker(f *finishing) {
 	if f.released || fl.handle == nil || fl.executor == nil {
 		return
 	}
-	f.released = true
-	r.tearDown(fl.handle, fl.executor, fl.marker, fmt.Sprintf(
+	// Released only when the teardown actually happened. A release the
+	// executor refused — a herdr agent still reporting `working` in the
+	// moment after its interrupt — used to count as done anyway, so the
+	// refusal path below said the worktree had gone and disposed of nothing,
+	// and the attempt's pane outlived the run (epic-6in, 4i8 attempt 3: the
+	// repair job then met the implement attempt's agent still holding its
+	// herdr name). Unreleased, the refusal and the close each tear it down
+	// again, by which time the interrupt has landed.
+	f.released = r.tearDown(fl.handle, fl.executor, fl.marker, fmt.Sprintf(
 		"%s is collected: its commits are on %s and its report is archived beside its attempt "+
 			"record, so the worker is finished and its credential and worktree go now rather than after an "+
 			"integrate, a gate and a close it is no part of. The branch is kept; the close retires it",

@@ -1,8 +1,12 @@
 package herdr
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,6 +165,62 @@ func handleFor(record *attemptRecord) *subprocess.JobHandle {
 // appended drops exactly the part that makes it unique, and two attempts of
 // one long tick id then share one agent name.
 func agentName(tickID string, attempt int) string {
+	return nameWithSuffix(tickID, "-a"+strconv.Itoa(attempt))
+}
+
+// jobAgentName is the herdr agent name — and the workspace label — for ONE
+// JOB, not one attempt. An attempt number is not a job identity: a tick's
+// implement attempt, the repair job its failed gate dispatches and the
+// resolve job its conflict dispatches all carry the SAME attempt number, and
+// naming them by it gave the repair the name of the implement attempt whose
+// pane was still there. herdr refused the launch (agent_name_taken) and the
+// run stopped on a failed gate it had a repair for (epic-6in, 4i8 attempt 3).
+//
+// The discriminator is read off the job id the run minted, in the run's own
+// spelling (PR #79's retry ordinals included), so the sidebar names the job
+// the way the run's feed does:
+//
+//	run-<run>/tick-<t>/attempt-3     → tick-<t>-a3
+//	run-<run>/tick-<t>/repair-3      → tick-<t>-a3-repair
+//	run-<run>/tick-<t>/resolve-3-r2  → tick-<t>-a3-resolve-r2
+//	run-<run>/base-fold-2            → tick-<epic>-fold-2
+//
+// A job id of any other shape is still given a name of its own — the attempt
+// suffix and a digest of the job id — because job ids are unique where
+// attempt numbers are not.
+func jobAgentName(spec *subprocess.JobSpec, attempt int) string {
+	return nameWithSuffix(tickOf(spec), jobSuffix(spec.JobID, attempt))
+}
+
+var (
+	attemptJobSegment  = regexp.MustCompile(`^attempt-(\d+)$`)
+	roleJobSegment     = regexp.MustCompile(`^(repair|resolve)-(\d+)(-r\d+)?$`)
+	baseFoldJobSegment = regexp.MustCompile(`^base-fold-(\d+)$`)
+)
+
+// jobSuffix is the job's discriminator: the part of the name that must
+// survive the 32-character budget whole.
+func jobSuffix(jobID string, attempt int) string {
+	segment := jobID
+	if i := strings.LastIndex(jobID, "/"); i >= 0 {
+		segment = jobID[i+1:]
+	}
+	if m := attemptJobSegment.FindStringSubmatch(segment); m != nil && m[1] == strconv.Itoa(attempt) {
+		return "-a" + m[1]
+	}
+	if m := roleJobSegment.FindStringSubmatch(segment); m != nil {
+		return "-a" + m[2] + "-" + m[1] + m[3]
+	}
+	if m := baseFoldJobSegment.FindStringSubmatch(segment); m != nil {
+		return "-fold-" + m[1]
+	}
+	sum := sha256.Sum256([]byte(jobID))
+	return "-a" + strconv.Itoa(attempt) + "-" + hex.EncodeToString(sum[:])[:6]
+}
+
+// nameWithSuffix is "tick-<id><suffix>" within herdr's name rule, with the
+// TICK ID — never the suffix — cut to the budget.
+func nameWithSuffix(tickID, suffix string) string {
 	sanitize := func(s string) string {
 		var b strings.Builder
 		for _, r := range strings.ToLower(s) {
@@ -173,7 +233,6 @@ func agentName(tickID string, attempt int) string {
 		}
 		return strings.Trim(b.String(), "-")
 	}
-	suffix := "-a" + fmt.Sprint(attempt)
 	id := sanitize(tickID)
 	if max := 32 - len("tick-") - len(suffix); max >= 0 && len(id) > max {
 		// sanitize emits ASCII only, so the cut lands between characters,

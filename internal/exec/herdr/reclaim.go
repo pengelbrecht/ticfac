@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -327,25 +328,17 @@ func tickFromSegments(value string) string {
 // stripAttemptSuffix removes the "-a<attempt>" discriminator this executor
 // puts on workspace labels (the "tick-<id>-a<n>" of agentName), so a label
 // read as evidence names the tick it is about. Tick ids can contain dashes
-// themselves, but the discriminator is always the FINAL "-a<digits>".
+// themselves, but the discriminator is always the FINAL "-a<digits>" — or,
+// since labels became job-scoped (jobAgentName), the final "-a<digits>-repair",
+// "-a<digits>-resolve-r<n>", "-a<digits>-<digest>" or "-fold-<n>".
 func stripAttemptSuffix(label string) string {
-	if i := strings.LastIndex(label, "-a"); i > 0 && isDigits(label[i+2:]) {
-		return label[:i]
+	if m := jobLabelSuffix.FindStringIndex(label); m != nil && m[0] > 0 {
+		return label[:m[0]]
 	}
 	return label
 }
 
-func isDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
+var jobLabelSuffix = regexp.MustCompile(`(-a\d+(-(repair|resolve)(-r\d+)?|-[0-9a-f]{6})?|-fold-\d+)$`)
 
 // ------------------------------------------------------- the authorisation ---
 
