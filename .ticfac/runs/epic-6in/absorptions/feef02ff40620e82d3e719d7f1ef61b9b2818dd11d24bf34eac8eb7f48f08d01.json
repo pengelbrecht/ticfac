@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "feef02ff40620e82d3e719d7f1ef61b9b2818dd11d24bf34eac8eb7f48f08d01",
+  "tick_id": "pengelbrecht/ticks:kzs",
+  "gating": false,
+  "basis": "rule",
+  "reason": "the finding is routed to pengelbrecht/ticks, and this run cannot fix another repository: its reporter claims it breaks no done item, and it gates none of this epic's done items whatever it claims — absorbing it would hold the epic on work no tick of this run can do. The repository's runners.toml lets this run file into pengelbrecht/ticks, and it filed the finding there as pengelbrecht/ticks:kzs",
+  "placement": "routed",
+  "target": "pengelbrecht/ticks",
+  "decided_at": "2026-09-28T05:31:46Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "060",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "660353e36794cfbcfab6b5da0a0fc968852d90ee",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:2300d2fefb7c03f5c83a8a9afdd29d639909492268a8e184c0930c8c48f2b9d4",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}
