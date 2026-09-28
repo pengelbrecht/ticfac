@@ -1,0 +1,18 @@
+{
+  "id": "3rc",
+  "title": "Bare ticfac overview shows the dashboard headline",
+  "gloss": "overview dashboard headline",
+  "description": "Epic hn6, wave 4, deliverable (c): the bare `ticfac` overview (internal/cli/overview.go, tick 2qz) adopts the dashboard's per-run headline. A person glancing at the listing then sees the same progress, health verdict and needs-you that `ticfac watch` shows for that run. The words come from the same function, so the two cannot disagree.\n\nToday, renderOverview prints one line per run: \"\u003crun-id\u003e: \u003cstate word\u003e — \u003creason\u003e — clear with: \u003ccmd\u003e\". Each overviewRun already carries the run's full statusmodel.Model when it was gathered (see overviewEntryOf and fullEntry). The watch renderer (internal/cli/watch_view.go) provides `dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string`. Its three lines are: (1) epic id + title + host · liveness; (2) progress bar n/m ticks · elapsed · ETA · health verdict; (3) the phase bar + needs-you.\n\nChange:\n- For every NON-history run whose model was gathered: keep the existing first line exactly as it is (scripts and tests grep it). Under it, print dashboardHeadline's lines 2 and 3, indented two spaces, with identity styles when stdout is not a TTY and ANSI styles when it is (reuse watchTerminalSize / the TTY check in watch.go; do not edit watch.go). Use the terminal width, or 100 when unknown.\n- History runs (`--all`) and runs whose model could not be gathered (the cheap entries) print exactly as today.\n- `ticfac --json` is unchanged: it already emits the model.\n\nFiles: internal/cli/overview.go, internal/cli/overview_test.go and internal/cli/overview_history_test.go (only where an exact-output assertion needs the new lines). Do not edit watch_view.go, watch.go, internal/statusmodel or cloudflare/.\n\nTests:\n- TestTheBareOverviewShowsTheDashboardHeadline: a local run fixture with 5/6 ticks closed and a healthy verdict prints \"5/6 ticks\" and \"healthy\" under its run line. A held run prints its needs-you command in the headline AND keeps the \"clear with:\" suffix on the first line.\n- TestTheBareOverviewHeadlineMatchesWatch: for the same model, the overview's headline lines equal dashboardHeadline(m, identity styles, 100)[1:3] with two spaces of indent. This is the one-model-two-renderers guarantee.\n- History runs still print one line each.\n- Existing: `go test -short -timeout 20m -run 'TestTheBareOverview' ./internal/cli/` passes.\n\nRun: `go test -short -timeout 20m -run 'TestTheBareOverview' ./internal/cli/`. Must still pass: `go test -short -timeout 20m ./internal/cli/`, and then `make gate`.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "u5n"
+  ],
+  "parent": "hn6",
+  "acceptance_criteria": "[1] Each live run in the bare overview prints dashboardHeadline's progress/verdict and phase/needs-you lines under its unchanged first line. [2] `go test -short -timeout 20m -run 'TestTheBareOverview' ./internal/cli/` passes, including the overview-equals-watch headline test. [3] `make gate` passes.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T18:41:10.753381Z",
+  "updated_at": "2026-09-28T18:41:10.753381Z"
+}
