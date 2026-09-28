@@ -15,6 +15,18 @@ The full suite (`make test`) is slow, and `internal/reconcile` alone takes
 20-30 minutes. Always pass `-timeout` when you run it directly: go's default
 of 10m kills it.
 
+## Read CI for YOUR commit, never an unfiltered run list
+
+Several agents push branches here at once, so `gh run list` without a filter
+shows other branches' runs, and one of them failing says nothing about yours.
+An agent once took another branch's red `go` job for its own and started a
+needless stress run. Always key CI to the commit you pushed:
+
+- `gh pr checks <your PR> --watch` (checks for the PR's head commit), or
+- `gh run list --commit $(git rev-parse HEAD)` / `--branch <your branch>`.
+
+Before acting on a failure, confirm its `headSha` is your HEAD.
+
 ## A live run may own the main checkout
 
 `ticfac run-epic` works from the main checkout. Do your work in a git
