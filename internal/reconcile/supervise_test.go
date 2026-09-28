@@ -312,12 +312,8 @@ func TestTheCapIsWhatStopsAResumableStopThatKeepsChangingTheTree(t *testing.T) {
 // short: the supervisor's rules over synthesised stops
 func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	t.Parallel()
-<<<<<<< HEAD
-	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient,
+	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient,
 		RefusedCloseoutOverRedCI, RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending} {
-=======
-	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient} {
->>>>>>> 77e400895bce0381639a83b4a07a13d0190a9228
 		if !resumesWithoutAPerson(reason) {
 			t.Errorf("%s is resumable by construction and the supervisor refuses to continue across it", reason)
 		}
