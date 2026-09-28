@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "6in",
+    "job_id": "run-epic-6in/tick-v7z/attempt-12",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+    "tick_id": "v7z"
+  },
+  "response": {
+    "findings": [],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-6in/tick-v7z/attempt-12",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-6in/v7z/RESULT-v7z.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "tdu's final review is still NOT READY (5 findings incl. high bib went to backlog unfixed), so landing PR #98 may need a person; settle 3e5 as fixed by 10db85f7; fix/carried-role-no-commits (e899445d) is unmerged"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T18:08:12Z",
+  "answered_at": "2026-09-28T18:08:12Z",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "v7z",
+    "attempt": 12,
+    "source_ref": "refs/heads/ticfac/run-epic-6in/tick-v7z/attempt-8",
+    "source_sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}
