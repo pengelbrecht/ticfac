@@ -127,6 +127,55 @@ func (r *Reconciler) profileForTier(role, tier string) (*profile.Profile, error)
 	return p, nil
 }
 
+// profileForRecordedExecutor resolves a role's profile from the profile set
+// that names `executor` — the executor an attempt's marker says it RAN on —
+// for a dispatch rebuilt from that marker when the run's own profile set
+// names another (dispatchFor). The candidates are the run's own set and every
+// set compiled into this binary, each under the run's substrate, no
+// substrate, and every declared substrate; the first whose profile names the
+// executor and is usable here wins. No executor is spelled here: the sets and
+// the substrates are walked, and the recorded name is matched. Nothing is
+// cached: this is the rare path, and the run's own tier profiles stay the
+// run's.
+func (r *Reconciler) profileForRecordedExecutor(role, tier, executor string) (*profile.Profile, error) {
+	if _, ok := r.profiles[role]; !ok {
+		role = "implement-tick"
+	}
+	dirs := append([]string{r.opts.ProfileDir}, profile.EmbeddedSets...)
+	substrates := []string{string(r.substrate), ""}
+	for _, s := range runconfig.Substrates {
+		if s != runconfig.SubstrateAuto {
+			substrates = append(substrates, string(s))
+		}
+	}
+	seen := map[string]bool{}
+	var named []string
+	for _, dir := range dirs {
+		for _, substrate := range substrates {
+			key := dir + "|" + substrate
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			p, err := profile.Resolve(role, profile.Options{
+				Dir: dir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: substrate,
+			})
+			if err != nil || p == nil {
+				continue
+			}
+			if p.Executor != executor {
+				named = append(named, p.Executor)
+				continue
+			}
+			if err := usableProfile(r.executors, p); err != nil {
+				return nil, err
+			}
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("the profile sets resolve role %s only to executor(s) %s", role, strings.Join(named, ", "))
+}
+
 // deriveTier is where the orchestrator stops CHOOSING a tier and starts
 // DERIVING one (tick 5eq): a pure function of the tick's facts, the attempt's
 // own durable state, the declared policy, and — since tick s45 — the tick's

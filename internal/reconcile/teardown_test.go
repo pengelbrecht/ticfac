@@ -94,7 +94,20 @@ func TestARejectedAttemptThatCarriedCommitsIsNotReadAsCancelled(t *testing.T) {
 	if strings.Contains(strings.ToLower(resumed.Failure.Message), "cancel") {
 		t.Errorf("the resumed run refuses over a cancellation nobody performed: %s", resumed.Failure.Message)
 	}
-	if !strings.Contains(resumed.Failure.Message, branchOf(marker.WriteRef)) {
+	// Since epic-6in 823 the run carries the first try's work into one more
+	// try by itself (rejected_work.go); the hold is the backstop for the try
+	// that spent the bound, and it names THAT try's branch.
+	latest := marker
+	all, err := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture").Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range all {
+		if record.TickID == "a1" && record.Attempt > latest.Attempt {
+			latest = handleFromMap(record.JobHandle)
+		}
+	}
+	if !strings.Contains(resumed.Failure.Message, branchOf(latest.WriteRef)) {
 		t.Errorf("the refusal does not name the branch the work is on: %s", resumed.Failure.Message)
 	}
 }
