@@ -230,6 +230,12 @@ type SetupOptions struct {
 	// same way a deploy harness does (Options.stageTicfac).
 	stageTicfac func(ctx context.Context, dir, version string) ([]string, error)
 
+	// verifyAttempts and verifyDelay bound the probe of a factory already
+	// recorded in the config (tests shorten them). Zero means
+	// recordedVerifyAttempts and defaultVerifyDelay.
+	verifyAttempts int
+	verifyDelay    time.Duration
+
 	// deployFn overrides the deploy invoked from the deployment rung (tests).
 	deployFn func(context.Context, Options) (*Result, error)
 
@@ -544,7 +550,19 @@ func setupDeployment(
 		return nil
 	}
 
-	if err := verifyOnce(ctx, client, url, cfg.Get(credentials.KeyToken)); err != nil {
+	// A factory that answered before and not now is usually the network (a
+	// route that went away, Wi-Fi roaming, a VPN reconnecting), so the probe
+	// is retried on what a deploy's verification calls transient, but only
+	// briefly: a factory that is really gone should say so in seconds.
+	attempts := opts.verifyAttempts
+	if attempts <= 0 {
+		attempts = recordedVerifyAttempts
+	}
+	delay := opts.verifyDelay
+	if delay <= 0 {
+		delay = defaultVerifyDelay
+	}
+	if err := verifyWithRetry(ctx, client, url, cfg.Get(credentials.KeyToken), attempts, delay); err != nil {
 		return fmt.Errorf("the factory recorded in %s did not answer: %w\n"+
 			"Run `ticfac factory deploy` to (re)deploy it, then run setup again", cfg.Path(), err)
 	}
