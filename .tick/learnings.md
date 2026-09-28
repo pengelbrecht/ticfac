@@ -6,10 +6,9 @@ Seeded from ticks' learnings 2026-09-02; last compacted at the 6in close-out, 20
 ## Planning an epic
 
 **Problem:** FOUR epics closed without the run their acceptance names (Phase 4, xte, yoh; 2jn's A1
-"init then run, claude in herdr" was traced by the review, tested with a stand-in child, and never
-run — 2jn itself ran on GLM subprocesses). **Rule:** When an epic's gate is a run, the FIRST tick wires
-the thinnest end-to-end path through the PRODUCTION entry point, and a named tick INSIDE the epic
-performs the run before the review. If the run lives elsewhere, the acceptance says so.
+run was traced and tested with a stand-in child, never run). **Rule:** When an epic's gate is a run,
+the FIRST tick wires the thinnest end-to-end path through the PRODUCTION entry point, and a named
+tick INSIDE the epic performs the run before the review; if the run lives elsewhere, say so.
 
 **Problem:** gvc absorbed none of its 21 findings; 2jn scored none of 30 (A1-A6 bind no command); 6in's
 done has no [A<n>] items to bind. **Cause:** the DATA the machinery reads was left to prose. **Rule:**
@@ -58,6 +57,11 @@ Settle in-flight state from durable evidence by whoever finds it, never by trust
 **Problem:** ncv stopped EIGHT times for untriaged findings; yoh needed a person ~20 times. **Rule:**
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
 it where a person already is (the PR). A resume replays a recorded decision, never buys it again.
+
+**Problem:** 6in's close-out took four attempts past its committed retro: attempt 8's BLOCKED left
+work no rule disposed of (a person typed `settle --carry-work`; #117), and attempt 11 re-verified the
+carried retro, committed nothing and was rejected "no-commits". **Rule:** Every honest answer needs a
+terminal verdict, "nothing new" on carried work included; a verifier commits its evidence anyway.
 
 **Problem:** `tk close` usage prints, promotions pointed at uncommitted ticks, a spawn blamed "the
 probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
@@ -108,23 +112,20 @@ into a finalize-reaching outcome, and a test fails each step past its retries.
 the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's own path), and make
 a derived key a function of the thing it identifies, not of its history.
 
-**Problem:** Wall-clock tests refused innocent work six times; ONE host-dependent SIGTERM temp-tree
-defect (8d6) failed at base in nine yoh ticks, four gvc refiles and five 2jn ticks. **Rule:** A gate
-verdict is about the tree only if the host is bounded; a guard on shared machine state attributes by a
-per-process temp root (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/`
-for the test's name: a promoted finding leaves the drafts.
+**Problem:** Wall-clock tests refused innocent work six times; ONE host-dependent SIGTERM defect (8d6)
+failed at base in nine yoh ticks, four gvc refiles and five 2jn ticks. **Rule:** A gate verdict is
+about the tree only if the host is bounded; a guard on shared machine state attributes by a per-process
+temp root (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/` for the test.
 
-**Problem:** wne's per-tick gates went green while 7 of 10 relevant tests skipped under `-short`;
-yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate; the
-review found three high defects there; dz1 broke an EndToEnd reconcile test and the epic branch's
-CI sat red 25 minutes, unread until the close-out. **Rule:** A test the gate does not run is not
-evidence: add it to the gate, or name the gap. A tick touching dispatch or claims runs the full
-`./internal/reconcile/` suite.
+**Problem:** wne's gates went green while 7 of 10 relevant tests skipped under `-short`; yoh's ts
+gate ran no vitest; gvc's absorption tests are all EndToEnd, and the review found three high defects
+there; dz1 broke an EndToEnd reconcile test and epic CI sat red, unread until the close-out.
+**Rule:** A test the gate does not run is not evidence: add it to the gate, or name the gap. A tick
+touching dispatch or claims runs the full `./internal/reconcile/` suite.
 
-**Problem:** 6in's close-out was admitted "CI green" two seconds after a red: the PR head was a
-`.ticfac/`-only commit whose only check runs were the pull_request run's SKIPPED jobs, forge.CI read
-all-skipped as green, and the walk back to the code commit never ran. **Rule:** A skip is not a pass:
-green needs an executed success per check; a head of only skips has no verdict of its own.
+**Problem:** 6in's close-out was admitted "CI green" two seconds after a red: forge.CI read a
+`.ticfac/`-only head whose checks were all SKIPPED as green, and never walked back to the code (#100).
+**Rule:** A skip is not a pass: green needs an executed success; a head of only skips has no verdict.
 
 ## Fixtures
 
@@ -132,9 +133,8 @@ green needs an executed success per check; a head of only skips has no verdict o
 work and report in ONE commit. **Rule:** A fake demands the identity and reproduces the real shape;
 a more forgiving fake certifies the defect it hides — fix it in the same change.
 
-**Problem:** Identical fixture commits shared a SHA; fake-runner keyed "first try" on TICFAC_ATTEMPT;
-verification workers left reports uncommitted. **Rule:** Make fixture commits differ; "the tick's
-first try" keys on `$TICFAC_TRY`; evidence output is committed even with no source change.
+**Problem:** Identical fixture commits shared a SHA; fake-runner keyed "first try" on TICFAC_ATTEMPT.
+**Rule:** Make fixture commits differ; "the tick's first try" keys on `$TICFAC_TRY`.
 
 ## Boundaries this repo pays to learn
 
