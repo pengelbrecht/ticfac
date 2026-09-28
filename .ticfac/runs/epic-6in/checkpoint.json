@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 109,
+  "sequence": 110,
   "state": "failed",
-  "reason": "v7z try 1 (run dispatch #8) was rejected and the work it committed is still there — ticfac/run-epic-6in/tick-v7z/attempt-8 carries 1fcee78373a0 on origin, and epic/6in does not have it — and nothing merged it. This run neither collects it again (the teardown that followed the refusal removed the attempt's worktree, so a second collect would report a missing report rather than the verdict the attempt really had) nor dispatches over it (that would orphan the only copy). Read the branch; then take the work, or release the attempt with `ticfac settle 6in v7z 8 --release \"<who>\"` and run the epic again for a fresh attempt.",
-  "updated_at": "2026-09-28T17:21:19Z",
+  "reason": "v7z did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: v7z try 1 (run dispatch #8) was rejected and the work it committed is still there — ticfac/run-epic-6in/tick-v7z/attempt-8 carries 1fcee78373a0 on origin, and epic/6in does not have it — and nothing merged it. This run neither collects it again (the teardown that followed the refusal removed the attempt's worktree, so a second collect would report a missing report rather than the verdict the attempt really had) nor dispatches over it (that would orphan the only copy). Read the branch; then take the work, or release the attempt with `ticfac settle 6in v7z 8 --release \"<who>\"` and run the epic again for a fresh attempt.",
+  "updated_at": "2026-09-28T17:21:23Z",
   "ticks": [
     {
       "tick_id": "060",
