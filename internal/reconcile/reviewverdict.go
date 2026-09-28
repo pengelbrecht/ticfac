@@ -27,7 +27,9 @@ import (
 // THE RULE, decided and stated: a review answering NOT READY does NOT hold
 // the close-out — it is CARRIED TO THE EPIC PR. The three reasons:
 //
-//   - The merge is a person's, by the repository's own close-out rule: a
+//   - The merge is a person's — by default, and ALWAYS for an epic its own
+//     review judged NOT READY, even where a repository opts in to the run
+//     merging its own ready PR (land.go, RefusedLandReviewNotReady): a
 //     review's NOT READY is a judgement about ACCEPTING the work, and the PR
 //     is where that judgement already lives. The same shape the operator
 //     chose for findings (tick aqm): carried to the one page a person

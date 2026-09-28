@@ -954,6 +954,51 @@ wallwip)
 		report
 	fi
 	;;
+land_repair)
+	# The READY PR (land.go): CI on the epic PR goes red after the base was
+	# folded in, and the run's answer is the plan-repair job, whose fake
+	# worker commits the fix the failing CI job named (ci-fix.txt, which the
+	# test's forge reads as the difference between red and green). A base
+	# fold that conflicts is the resolve-conflict job's union, as in the
+	# conflict mode. Every other job does its work and reports.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		printf 'the fix the red CI job named\n' > "$TICFAC_WORKTREE/ci-fix.txt"
+		git -C "$TICFAC_WORKTREE" add -A >/dev/null 2>&1
+		git -C "$TICFAC_WORKTREE" commit -q -m "repair: the fix the red CI job named" >/dev/null 2>&1
+		report
+	elif [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		resolve_union
+		report
+	else
+		commit
+		report
+	fi
+	;;
+finding_live_run)
+	# The epic-2jn tm5 shape: the work is done, and the report carries ONE
+	# finding whose remedy is a live run of an epic — which no worker can do
+	# from inside a tick — claiming done item A1.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found something only a live run can prove.\n\n'
+		printf '%s\n' '```findings'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "proposed-tick",'
+		printf '%s\n' '  "title": "Demonstrate A1 live: ticfac init + ticfac run in herdr on claude, and one epic via run --cloud",'
+		printf '%s\n' '  "body": "A1 was tested with a stand-in; no run started from ticfac init then ticfac run. Run the next epic that way and record the evidence.",'
+		printf '%s\n' '  "severity": "medium",'
+		printf '%s\n' '  "target": "",'
+		printf '%s\n' '  "done_item": "A1",'
+		printf '%s\n' '  "demonstrating_check": "none"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
 *)
 	printf 'unknown FAKE_RUNNER_MODE %s\n' "$mode" >&2
 	exit 64

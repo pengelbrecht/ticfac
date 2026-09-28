@@ -690,7 +690,9 @@ discovered bugs — create a tick rather than fixing beside the point.
 - Epic integration goes through a PR + CI gate: the orchestrator pushes the
   epic branch and opens a PR, and the epic close-out may not complete until
   CI is green on that PR. No direct merges of epic branches to the default
-  branch — the merge itself is a person's, and deliberately so.
+  branch — the merge itself is a person's, and deliberately so. The run
+  keeps the PR ready for that person: when the default branch moves, it
+  folds it in, re-runs the gate and waits for CI green again.
 
 ## Standing orders
 
