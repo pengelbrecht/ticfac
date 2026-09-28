@@ -455,11 +455,14 @@ func (r *attemptRecord) canPush() bool {
 // whoever was handed it. The supervisor answers it with "my runner has not
 // been reaped", which no reuse can fake; cancel answers it with the process's
 // own lock.
+//
+// The KILL is not sent once: it is sent again for as long as alive says the
+// group is still there (see killUntilGone for why one is not enough).
 func stopTree(pgid int, alive func() bool) {
 	if pgid <= 0 || !alive() {
 		return
 	}
-	_ = signalGroup(pgid, sigTerm())
+	_ = groupSignal(pgid, sigTerm())
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if !alive() {
@@ -467,10 +470,45 @@ func stopTree(pgid int, alive func() bool) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if alive() {
-		_ = signalGroup(pgid, sigKill())
+	killUntilGone(pgid, alive, killPersistence)
+}
+
+// killPersistence bounds how long a stop keeps re-sending SIGKILL to a group
+// its proof still calls alive. A member that survives this is not one a
+// missed signal explains, and the caller's own liveness read reports it.
+const killPersistence = 10 * time.Second
+
+// killUntilGone SIGKILLs a process group, and SIGKILLs it again every few
+// milliseconds for as long as alive says it is still there, up to within. It
+// reports whether the group is gone.
+//
+// ONE GROUP SIGNAL IS NOT A KILL. On macOS a child forked while killpg is
+// being delivered joins the group and never receives the signal: measured on
+// this host, one SIGKILL to a shell forking in a loop left a live member in 41
+// of 200 trials. A runner forks constantly — git, tools, test suites — so the
+// child a single kill misses is an ordinary event, not a curiosity, and it
+// holds the runner's lock: the attempt stays alive and keeps spending after a
+// cancel that "killed" it. A second signal reaches it, because the child is
+// still in the group; the only question is whether the group is still the
+// attempt's, and alive is the caller's proof of exactly that.
+func killUntilGone(pgid int, alive func() bool, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for {
+		if !alive() {
+			return true
+		}
+		_ = groupSignal(pgid, sigKill())
+		if !time.Now().Before(deadline) {
+			return !alive()
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// groupSignal is how the stop paths signal a process group: signalGroup, and
+// a seam a test replaces to make a signal miss, which is what the kernel does
+// to a member forked while a group signal is delivered (kill_repeat_test.go).
+var groupSignal = signalGroup
 
 func asExitError(err error, target **exec.ExitError) bool {
 	if e, ok := err.(*exec.ExitError); ok {
