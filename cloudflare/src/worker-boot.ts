@@ -231,6 +231,8 @@ export type WorkerBootInput = {
   harness?: string;
   model?: string;
   github_token?: string;
+  /** Where `github_token` is refreshed on the App rung; see sandbox.ts. */
+  github_token_url?: string;
   sandbox_image?: string;
   workdir?: string;
   cache_dir?: string;
@@ -431,6 +433,7 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     ["TICKS_HARNESS", input.harness ?? WORKER_DEFAULT_HARNESS],
     ["TICKS_MODEL", input.model ?? WORKER_DEFAULT_MODEL],
     ["GITHUB_TOKEN", input.github_token],
+    ["TICKS_GITHUB_TOKEN_URL", input.github_token_url],
     ["TICKS_SANDBOX_IMAGE", input.sandbox_image],
     ["TICKS_WORKDIR", input.workdir],
     ["TICKS_CACHE_DIR", input.cache_dir],

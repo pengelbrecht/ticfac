@@ -129,7 +129,7 @@ var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIIn
 	if err != nil {
 		return nil, fmt.Errorf("resolve the repository the forge mirrors: %w", err)
 	}
-	github := forge.GitHub{Token: token, Repo: ownerName}
+	github := forge.GitHub{Token: token, Repo: ownerName, Refresh: forge.FactoryTokenSourceFromEnv()}
 	pr, err := github.Find(ctx, "epic/"+epicID, "")
 	if err != nil {
 		return nil, err

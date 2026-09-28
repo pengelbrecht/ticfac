@@ -89,6 +89,20 @@ import {
   resolveFreeText,
 } from "./free-text";
 import { proxyModelRequest } from "./gateway";
+import {
+  GITHUB_APP_CALLBACK_PATH,
+  GITHUB_APP_INSTALLED_PATH,
+  GITHUB_APP_MANIFEST_PATH,
+  GITHUB_APP_PATH,
+  GITHUB_APP_START_PATH,
+  GITHUB_TOKEN_PATH,
+  githubAppRoute,
+  manifestCallbackRoute,
+  manifestFlowRoute,
+  manifestInstalledRoute,
+  manifestStartRoute,
+  runGitHubTokenRoute,
+} from "./github-app";
 import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
 import { runDailyDigest } from "./loop-digest";
 import { evaluateStatusAlerts } from "./notify";
@@ -1439,6 +1453,40 @@ export default {
     // `git push` stops: at the credential, not at an instruction.
     if (segments[0] === "api" && segments[1] === "git") {
       return await proxyGitRequest(env, request, segments.slice(2));
+    }
+
+    // A write-grade container asking for a fresh installation token (epic
+    // dm6). Beside the git door: its caller holds a run credential, never the
+    // operator's, and the run — not the request — names the repository.
+    if (url.pathname === GITHUB_TOKEN_PATH) {
+      return await runGitHubTokenRoute(env, request);
+    }
+
+    // Which GitHub rung is live, and a live read-only mint check for one
+    // repository (epic dm6) — what `ticfac factory status` and `ticfac
+    // doctor` ask, because only this Worker holds the App's key.
+    if (url.pathname === GITHUB_APP_PATH) {
+      return await githubAppRoute(env, request);
+    }
+
+    // The manifest flow (epic dm6): setup registers a one-time state here
+    // (operator-authenticated), and the operator's browser — on any device —
+    // walks the three exempt pages: the manifest post, GitHub's callback with
+    // the code this Worker exchanges and seals, and the after-install page.
+    if (url.pathname === GITHUB_APP_MANIFEST_PATH) {
+      return await manifestFlowRoute(env, request);
+    }
+    if (url.pathname === GITHUB_APP_START_PATH) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      return await manifestStartRoute(env, request);
+    }
+    if (url.pathname === GITHUB_APP_CALLBACK_PATH) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      return await manifestCallbackRoute(env, request);
+    }
+    if (url.pathname === GITHUB_APP_INSTALLED_PATH) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      return manifestInstalledRoute();
     }
 
     // The per-tick sandbox dispatch door (tick 8ty), beside the /api/git door

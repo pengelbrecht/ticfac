@@ -46,6 +46,7 @@
  * catch a miss.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { GITHUB_API_BASE_URL } from "./progress";
 import { parseToml, TomlParseError } from "./toml";
@@ -98,18 +99,15 @@ export function repoConfig(env: Env): RepoConfigReader {
  */
 export function githubRepoConfig(env: Env): RepoConfigReader {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github.raw",
     // GitHub rejects an API request with no user agent outright.
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async read(project: string, ref: string | null): Promise<string | null> {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       // No `ref` query at all for a default-branch read: GitHub's contents API
       // reads the default branch when the parameter is absent, and `?ref=`
       // with an empty value is a 422, not the same thing.

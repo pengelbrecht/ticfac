@@ -107,5 +107,9 @@ func pullRequestsForRun(repo, remote string) (forge.PullRequests, string, error)
 	if source == forge.TokenSourceGH {
 		note = "the close-out rule needs a forge: the GitHub token was fetched from `gh auth token`"
 	}
-	return forge.GitHub{Token: token, Repo: slug}, note, nil
+	// On the factory's App rung the token above is an hour-long installation
+	// token, and the run outlives it: the forge asks the factory's token door
+	// for the current one (epic dm6). Nil — the token is the only one — when
+	// no door was handed to this process.
+	return forge.GitHub{Token: token, Repo: slug, Refresh: forge.FactoryTokenSourceFromEnv()}, note, nil
 }

@@ -35,6 +35,7 @@
  * success.
  */
 
+import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 
 // -------------------------------------------------------------- the verdict ---
@@ -111,18 +112,15 @@ export function repoRefs(env: Env): RepoRefs {
  */
 export function githubRepoRefs(env: Env): RepoRefs {
   const base = (env.GITHUB_API_BASE_URL ?? GITHUB_API_BASE_URL).replace(/\/+$/, "");
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     accept: "application/vnd.github+json",
     // GitHub rejects an API request with no user agent outright.
     "user-agent": "ticks-factory",
   };
-  const token = env.GITHUB_TOKEN;
-  if (typeof token === "string" && token.trim() !== "") {
-    headers.authorization = `Bearer ${token.trim()}`;
-  }
 
   return {
     async list(project: string): Promise<Record<string, string>> {
+      const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const refs: Record<string, string> = {};
       for (let page = 1; page <= MAX_REF_PAGES; page++) {
         const url =
