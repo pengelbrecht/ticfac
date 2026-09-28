@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "none",
   "demonstrating_check": "docker run --rm --entrypoint ls <image> /root/.claude/skills/ticks/references",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:35:32Z",
+  "triaged_at": "2026-09-28T10:14:56Z",
+  "triaged_by": "ticfac run epic-6in absorbing o9q",
+  "promoted_as": "o9q",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "dz1",
