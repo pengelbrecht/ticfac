@@ -4,13 +4,14 @@
   "gloss": "port sandbox verbs to ticfac",
   "description": "The image (image/common.sh, entrypoint.sh, worker.sh, preflight.sh) calls tk sandbox environment|image|model|setup|substrate|toolchain|worker-prompt and tk cloud branch; ticks chz deletes them. Implement them in ticfac (the binary is already in the image), switch every call site and image/required-tk-commands (the tk entries keep only tracker commands: answer, list, version), and drop the prompt text telling a harness to run tk cloud spawn/collect/pr-body (entrypoint.sh 394-563) where run boots already use ticfac run-epic.",
   "notes": "2026-09-27 23:11 - r6w ported ticks internal/sandbox's SCRIPT tests into internal/sandboximage, plus the Go spelling of the image contract (constants, Dir/Path) in sandboximage.go. The tests of the Go VERBS were not ported, because they test tk's implementation and belong with the port. They are in ticks at 7b6c0b2f^:internal/sandbox: preflight_test.go (tk sandbox environment), model_test.go, setup_test.go, substrate_test.go, worker_parity_test.go (vs contracts/worker-boot-contract.json), image_parity_test.go (vs contracts/sandbox-image-cases.json) and entrypoint_realtk_test.go (the entrypoint against a real tk). The script tests stub tk and record every 'tk sandbox ...' call (f.tkCalls()), so switching the call sites to ticfac verbs means updating those stubs and assertions too.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "6in",
   "acceptance_criteria": "[A1] No image script calls a tk sandbox or tk cloud verb; required-tk-commands lists only tracker commands and its drift test passes. [A2] Each ported verb has a test pinning its output against the ticks implementation's fixture cases (sandbox-image-cases etc.). [A3] A container build with the new image passes the Dockerfile's required-commands layer. [V] Verified by: make vet \u0026\u0026 make gate, and in cloudflare/: pnpm typecheck \u0026\u0026 pnpm exec vitest run.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T14:04:43.518413421Z",
-  "updated_at": "2026-09-27T21:11:54.801051Z"
+  "updated_at": "2026-09-28T04:42:58.290638Z",
+  "started_at": "2026-09-28T04:42:58.290638Z"
 }
