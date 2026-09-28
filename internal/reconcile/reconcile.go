@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -689,6 +690,15 @@ type Reconciler struct {
 	// resolve the cadence of the executor the dispatch's MARKER names — the
 	// interval belongs to the executor, not to one global constant (tick u9l).
 	executors []KnownExecutor
+
+	// The leftover sweep's state (sweep.go): the executors that can sweep,
+	// built once per run; the unmerged branches it has already said it
+	// keeps, so a kept branch is one line in the feed rather than one per
+	// sweep; and the lock that makes sweeps one at a time.
+	sweepOnce sync.Once
+	sweepers  []namedSweeper
+	sweepKept map[string]bool
+	sweepMu   sync.Mutex
 
 	// feed is the run event stream a non-participant subscribes to, and
 	// feedErr is the first error appending to it — recorded once, never
@@ -1626,6 +1636,10 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	} else if ok {
 		r.sequence, r.ticks = checkpoint.Sequence, checkpoint.Ticks
 		if checkpoint.State.Terminal() && checkpoint.State != runstate.StateFailed {
+			// Nothing is restarted, but what the finished run left — a
+			// teardown its end could not complete — is still this run's to
+			// take down, and a re-run is the retry (sweep.go).
+			r.sweepClosed(ctx, checkpoint.State == runstate.StateCompleted)
 			r.record("", StageRunFinished, "the run is already %s: %s", checkpoint.State, checkpoint.Reason)
 			return r.result(checkpoint.State, checkpoint.Reason), nil
 		}
@@ -1710,6 +1724,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// read from already carries them.
 	r.settleClosedTicks(ctx, plan)
 
+	// What a previous incarnation left of the ticks that are closed — a
+	// killed orchestrator runs no close, and a teardown that failed was
+	// never retried — is swept before anything new is started (sweep.go).
+	r.sweepClosed(ctx, false)
+
 	if _, err := r.checkpoint(runstate.StateAdmitted, "the epic graph is read and the run is admitted"); err != nil {
 		return nil, err
 	}
@@ -1752,6 +1771,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// The run's end: every closed tick's leftovers, and — when the run
+	// completed — the jobs that name no tick too. A failed run keeps what
+	// its open ticks may be resumed from.
+	r.sweepClosed(ctx, len(failed) == 0)
 
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)
 	if len(failed) > 0 {
