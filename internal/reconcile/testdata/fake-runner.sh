@@ -1153,6 +1153,31 @@ closeout_red_carried_confirms)
 		report
 	fi
 	;;
+closeout_asks_twice)
+	# A close-out that stops to ask twice and finishes on its third try —
+	# but only a try that CARRIES the earlier tries' work: each asking try
+	# appends a line to asks-co.txt, and a try that finds two lines (its
+	# worktree was cut from both earlier tries' commits) finishes. A fresh
+	# try finds none and asks again.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		asks=0
+		if [ -e "$TICFAC_WORKTREE/asks-co.txt" ]; then
+			asks=$(wc -l < "$TICFAC_WORKTREE/asks-co.txt" | tr -d ' ')
+		fi
+		if [ "$asks" -lt 2 ]; then
+			printf 'asked on attempt %s\n' "$TICFAC_ATTEMPT" >> "$TICFAC_WORKTREE/asks-co.txt"
+			commit
+			status="BLOCKED"
+			report
+		else
+			commit
+			report
+		fi
+	else
+		commit
+		report
+	fi
+	;;
 finding_build_red)
 	# The prose rule's exception (epic-6in): the work is done, and the report
 	# carries ONE in-repository finding whose reporter claims it breaks the

@@ -443,6 +443,13 @@ func (r *Reconciler) heldQuestion(entry planEntry, attempts []runstate.Attempt, 
 		// ordinary disposition, as a review's always was.
 		return nil
 	}
+	if closeoutDecidesItself(entry.Role, blocked) {
+		// A close-out's question in no always-ask class (epic-6in v7z): it
+		// asked again after being told to decide, and the run decides it —
+		// the ordinary disposition carries its work into one more try, under
+		// the rejected-work bound. Only an always-ask question is a person's.
+		return nil
+	}
 	label := attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)
 	r.setAttempt(tick, existing.Attempt)
 	r.tearDownSettled(marker, label+" holds a question for a person", head != "")
@@ -469,4 +476,14 @@ func (r *Reconciler) heldQuestion(entry planEntry, attempts []runstate.Attempt, 
 			"\"<who>\" --carry-work` and run the epic again",
 		label, blocked.Status, blocked.Question, why, branchOf(marker.WriteRef), short(head), r.opts.EpicID, tick,
 		existing.Attempt)
+}
+
+// closeoutDecidesItself says a close-out's held question is the run's to
+// decide rather than a person's: it is in no always-ask class of the standing
+// orders (it held only because it came back from the try told to decide it).
+// The close-out is the epic's last step, and holding it for a question the
+// standing orders reserve for nobody leaves a finished epic waiting on a
+// person with nothing to decide (epic-6in v7z).
+func closeoutDecidesItself(role string, blocked blockedAnswer) bool {
+	return role == "closeout-epic" && blocked.Class == ""
 }

@@ -74,6 +74,10 @@ const (
 	// The steps of the bound a run release spends.
 	rejectedStepEscalate = "escalate"
 	rejectedStepCeiling  = "ceiling"
+	// rejectedStepSuperseded: a close-out answered over red CI, carried onto
+	// the repaired tree. It spends no rung of the bound: the attempt did not
+	// fail, the CI did, and the repair job is what bounds that loop.
+	rejectedStepSuperseded = "superseded"
 
 	// runReleaser is who a run release names. It is not a person, so it is
 	// recorded as it is rather than as a pseudonymous handle.
@@ -401,4 +405,42 @@ func classifyRecordedRejection(reason string) (string, bool, bool) {
 		return subprocess.VerdictMissingResult, true, true
 	}
 	return "", false, false
+}
+
+// carryOntoIntegration is the base a carried close-out is cut from: the
+// carried head merged onto the integration branch as origin has it (current),
+// so the close-out starts from its earlier work AND the epic as it is now.
+// When current is already in the carried head there is nothing to merge. The
+// merge commit is pushed to the carried attempt's own branch — a fast-forward,
+// its first parent is that branch's head — so every executor, local or not,
+// can resolve it. A conflict, or a merge that cannot be made durable, falls
+// back to the carried head alone, said on the feed.
+func (r *Reconciler) carryOntoIntegration(tick string, carried attemptHandle, head, current string) string {
+	if current == "" || current == head || r.git.contains(current, head) {
+		return head
+	}
+	name := r.attemptName(carried.TickID, carried.Attempt)
+	fallBack := func(why string) string {
+		r.record(tick, StageCarried, "the work %s carries (%s) could not be merged onto %s at %s (%s): the next "+
+			"try starts from the carried commits alone", name, short(head), r.branch, short(current), why)
+		return head
+	}
+	out, err := r.git.run("", "merge-tree", "--write-tree", "--no-messages", head, current)
+	if err != nil {
+		return fallBack("they conflict")
+	}
+	tree := strings.TrimSpace(strings.SplitN(out, "\n", 2)[0])
+	merged, err := r.git.run("", "commit-tree", tree, "-p", head, "-p", current, "-m",
+		fmt.Sprintf("ticfac: carry the work of %s onto %s", name, r.branch))
+	if err != nil {
+		return fallBack(firstLine(err.Error()))
+	}
+	branch := branchOf(carried.WriteRef)
+	if _, err := r.git.run("", "push", r.opts.Remote, merged+":"+refFor(branch)); err != nil {
+		return fallBack("the merge could not be put on " + r.opts.Remote + ": " + firstLine(err.Error()))
+	}
+	r.record(tick, StageCarried, "the work %s carries (%s) is merged onto %s at %s (%s, on %s): the next try "+
+		"starts from its commits over the epic as it is now", name, short(head), r.branch, short(current),
+		short(merged), branch)
+	return merged
 }
