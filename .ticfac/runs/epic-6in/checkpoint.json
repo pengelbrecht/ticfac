@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 6,
-  "state": "dispatching",
-  "reason": "dispatching 4i8 as attempt 3",
-  "updated_at": "2026-09-28T04:43:10Z",
+  "sequence": 7,
+  "state": "running",
+  "reason": "4i8 is running as attempt 3",
+  "updated_at": "2026-09-28T04:43:21Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "4i8",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 3
     },
     {
       "tick_id": "dz1",
