@@ -1,0 +1,13 @@
+{
+  "id": "i5n",
+  "title": "Commit ticfac's install block into image/Dockerfile so a plain build.sh image boots",
+  "description": "Since 46x the image scripts call `ticfac sandbox …`, but only the deploy's staged Dockerfile installs ticfac (internal/factory/ticfacbin.go); a hand `./build.sh` image has no ticfac and its entrypoint stops at resolve_substrate. ticfacbin.go already notes the fold into image/ is now possible since r6w; it should land, with the binaries still staged by the deploy.\n\nticfac run epic-6in filed this backlog tick from the finding b87b11592e24cde9ef4b3a10ff7f1cd56d2158c903a3bc7ad323ef6aca508977 (reported by run-epic-6in/tick-46x/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/b87b11592e24cde9ef4b3a10ff7f1cd56d2158c903a3bc7ad323ef6aca508977.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-46x/attempt-4",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:17:31Z",
+  "updated_at": "2026-09-28T10:17:31Z"
+}
