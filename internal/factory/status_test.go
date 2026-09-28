@@ -122,6 +122,75 @@ func TestStatusReportsCostTelemetry(t *testing.T) {
 	}
 }
 
+// The classifier rung (tick tum): Jev runs on Workers AI with the same
+// Cloudflare token and the gateway's account, so status reports whether it
+// ANSWERS — one tiny classification at the account's /ai/run — rather than
+// whether a key exists. Without the token the rung is not configured, and the
+// report says what that costs a run; with a refused token it is a failure.
+func TestStatusReportsWhetherJevAnswers(t *testing.T) {
+	h := newSetupHarness(t, "sk-provider-key")
+	h.configure(t, "sk-provider-key")
+
+	report, err := Status(context.Background(), h.statusOptions())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if report.Classifier.Configured {
+		t.Errorf("the classifier reads as configured with no Cloudflare token stored: %+v", report.Classifier)
+	}
+	var buf bytes.Buffer
+	report.Write(&buf)
+	if !strings.Contains(buf.String(), "classifier") || !strings.Contains(buf.String(), "[tier_policy.start]") {
+		t.Errorf("status does not say what a run without the classifier does:\n%s", buf.String())
+	}
+
+	rc, err := credentials.LoadFrom(h.ticfacrc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc.Set(credentials.KeyCloudflareAPIToken, testCloudflareToken)
+	if err := rc.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	offline := h.statusOptions()
+	offline.Offline = true
+	report, err = Status(context.Background(), offline)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !report.Classifier.Configured || report.Classifier.Checked || len(h.cloudflare.jevRuns()) != 0 {
+		t.Errorf("an offline status probed the classifier: %+v", report.Classifier)
+	}
+
+	report, err = Status(context.Background(), h.statusOptions())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !report.Classifier.Configured || !report.Classifier.Checked || !report.Classifier.OK {
+		t.Fatalf("the classifier state = %+v, want configured, checked and answering", report.Classifier)
+	}
+	if !strings.Contains(report.Classifier.Detail, "jev-1.13.0") {
+		t.Errorf("the classifier detail does not name the answering model: %q", report.Classifier.Detail)
+	}
+	runs := h.cloudflare.jevRuns()
+	if len(runs) != 1 || runs[0] != "/accounts/00000000000000000000000000000000/ai/run" {
+		t.Errorf("the classifier was asked at %v, want one run at the gateway account's /ai/run", runs)
+	}
+
+	rc.Set(credentials.KeyCloudflareAPIToken, "cf_wrong_token")
+	if err := rc.Save(); err != nil {
+		t.Fatal(err)
+	}
+	report, err = Status(context.Background(), h.statusOptions())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if report.Classifier.OK || !strings.Contains(strings.Join(report.Failures(), ","), "classifier") {
+		t.Errorf("a refused token left the classifier %+v, failures %v", report.Classifier, report.Failures())
+	}
+}
+
 // A rejected telemetry token is named as a failure like any other credential.
 func TestStatusReportsARejectedTelemetryToken(t *testing.T) {
 	h := newSetupHarness(t, "sk-provider-key")

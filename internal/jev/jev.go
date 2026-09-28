@@ -1,5 +1,8 @@
-// Package jev asks Jev, the TypeSafe AI "System One" model closed-enum
-// questions — text in, typed probabilistic decisions out.
+// Package jev asks Jev, the TypeSafe AI "System One" model, closed-enum
+// questions — text in, typed probabilistic decisions out. Jev is served by
+// Cloudflare Workers AI as typesafe/jev (tick tum): every call is Workers AI's
+// /ai/run, billed to the operator's Cloudflare account, never TypeSafe's own
+// API.
 //
 // WHAT THE CORE IS, since tick bse generalised it (absorbing wne's finding
 // dc02fb31: "internal/jev only knows the work-type Choice"): a Choice question
@@ -59,28 +62,48 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
-// DefaultAPIBase is the TypeSafe AI root.
-const DefaultAPIBase = "https://api.typesafe.ai"
+// DefaultAPIBase is Cloudflare's REST root: Jev runs on Workers AI, at
+// <root>/accounts/<account>/ai/run (tick tum). There is no TypeSafe API in
+// this path — billing is the operator's Cloudflare account.
+const DefaultAPIBase = "https://api.cloudflare.com/client/v4"
 
-// answersPath is the endpoint one classification round trip posts to. The
-// endpoint path is the one part of the wire the epic's notes do not pin; it
-// lives here alone so a correction is a one-line change.
-const answersPath = "/v1/answers"
+// Model is the Workers AI model id every round trip names.
+const Model = "typesafe/jev"
+
+// runPath is the Workers AI run endpoint, below the account on the REST root
+// and directly below the factory's gateway route (which knows its own account).
+const runPath = "/ai/run"
 
 // Config is everything needed to reach the classifier.
 type Config struct {
-	// APIBase is the API root; empty means DefaultAPIBase.
+	// APIBase is the API root; empty means DefaultAPIBase. Inside a sandbox it
+	// is the factory's gateway route (<AI_GATEWAY_BASE_URL>/jev), which runs
+	// the model on the deployment's own account.
 	APIBase string
-	// APIKey is the bearer token. Empty is the ABSENT classifier: a
-	// no-answer without dialling, so a run without classification configured
-	// degrades rather than fails.
+	// AccountID is the Cloudflare account Workers AI bills. Empty means the
+	// root already names one — the factory's gateway route does.
+	AccountID string
+	// APIKey is the bearer token: a Cloudflare API token locally, the run
+	// token on the gateway route. Empty is the ABSENT classifier: a no-answer
+	// without dialling, so a run without classification configured degrades
+	// rather than fails.
 	APIKey string
+}
+
+// endpoint is where one round trip posts.
+func (c Config) endpoint() string {
+	account := strings.TrimSpace(c.AccountID)
+	if account == "" {
+		return c.APIBase + runPath
+	}
+	return c.APIBase + "/accounts/" + url.PathEscape(account) + runPath
 }
 
 // Tick is the work-type question's input: the tick's title, description and
@@ -297,6 +320,10 @@ func (c *Client) roundTrip(ctx context.Context, built request, askedIDs []string
 		empty.Unavailable = "no API key is configured for the classifier: no question is answered, and every decision that would have consumed an answer falls back to its documented degradation"
 		return empty, nil
 	}
+	if c.config.APIBase == DefaultAPIBase && strings.TrimSpace(c.config.AccountID) == "" {
+		empty.Unavailable = "no Cloudflare account is configured for the classifier: Workers AI runs Jev under an account, so no question is answered, and every decision that would have consumed an answer falls back to its documented degradation"
+		return empty, nil
+	}
 
 	body, unavailable := c.post(ctx, built)
 	if unavailable != "" {
@@ -320,7 +347,7 @@ func (c *Client) post(ctx context.Context, built request) ([]byte, string) {
 		return nil, fmt.Sprintf("the classifier request could not be encoded: %v", err)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.config.APIBase+answersPath, bytes.NewReader(encoded))
+		c.config.endpoint(), bytes.NewReader(encoded))
 	if err != nil {
 		return nil, fmt.Sprintf("the classifier request could not be built: %v", err)
 	}
@@ -344,4 +371,40 @@ func (c *Client) post(ctx context.Context, built request) ([]byte, string) {
 			response.Status, strings.TrimSpace(string(body)))
 	}
 	return body, ""
+}
+
+// probeQuestionID keys the one question [Client.Probe] asks.
+const probeQuestionID = "probe"
+
+// Probe asks Jev one tiny, fixed Choice question — a couple of hundred input
+// tokens — and says whether it answered: the live check behind `ticfac doctor`
+// and `ticfac factory status`, which is the only way to know that a credential
+// that RESOLVES also CLASSIFIES (a token without Workers AI permission, a
+// wrong account and a model the account cannot run all resolve fine). The
+// error, when there is one, is the same no-answer reason a run would record.
+func (c *Client) Probe(ctx context.Context) (string, error) {
+	result, err := c.Ask(ctx, "Delete hello.txt and goodbye.txt from the repository root.", []Question{{
+		ID:           probeQuestionID,
+		Instructions: "Is the requested change already fully stated, or must it be worked out first?",
+		Choices: []Choice{
+			{Label: "stated", Criterion: Criterion{What: "The exact edit is named; doing it is applying it."}},
+			{Label: "decided", Criterion: Criterion{What: "Something must be worked out before any edit is known."}},
+		},
+	}})
+	if err != nil {
+		return "", err
+	}
+	if result.Unavailable != "" {
+		return "", fmt.Errorf("%s", result.Unavailable)
+	}
+	if reason, gap := result.Unanswered[probeQuestionID]; gap {
+		return "", fmt.Errorf("Jev answered, but not the probe question: %s", reason)
+	}
+	answer := result.Answers[probeQuestionID]
+	model := result.Model
+	if strings.TrimSpace(model) == "" {
+		model = "model unnamed"
+	}
+	return fmt.Sprintf("Jev answers on Workers AI (%s: %q at confidence %.2f, %d input tokens)",
+		model, answer.Choice, answer.Confidence, result.Usage.InputTokens), nil
 }

@@ -1,14 +1,16 @@
 {
   "id": "tum",
-  "title": "The classifier key gets a verified setup path: a ~/.ticfacrc home and a ticfac factory setup rung",
-  "gloss": "classifier key setup path",
-  "description": "Triaged 2026-09-23 from wne's close-out (findings 8e6b611b, adb8b0fb). x0k shipped the classifier key as $TICFAC_JEV_API_KEY locally and the TYPESAFE_API_KEY factory secret. Two gaps: (1) contracts/credential-ownership.json is closed (additionalProperties: false) and the Go constants must match it, so a factory_jev_api_key in ~/.ticfacrc needs a bundle change plus the matching constant, mirror and Worker secret; (2) every other factory credential is walked by 'ticfac factory setup' one verified rung at a time, while this one is set by hand and first noticed when a run degrades to a recorded no-answer. Add the home and a rung that verifies the key with one real, cheap classification before storing it.",
-  "status": "open",
+  "title": "Jev runs on Workers AI with the Cloudflare credential ticfac already holds",
+  "gloss": "Jev on Workers AI",
+  "description": "Superseded design (2026-09-28): x0k shipped the classifier on TypeSafe's own API — $TICFAC_JEV_API_KEY locally and a TYPESAFE_API_KEY Worker secret in the cloud — and this tick originally planned a ~/.ticfacrc home and a setup rung for that key. The operator has no TypeSafe key: Jev is served by Cloudflare Workers AI as typesafe/jev and billed to the operator's Cloudflare account (verified live: POST /accounts/\u003caccount\u003e/ai/run with {\"model\":\"typesafe/jev\",\"input\":{...}} answers result.result.answers). So there is no new credential to store or verify. Locally the classifier uses factory_cloudflare_api_token and the account in factory_gateway_url, both already in ~/.ticfacrc (env overrides TICFAC_JEV_API_TOKEN / TICFAC_JEV_ACCOUNT_ID / TICFAC_JEV_API_BASE for tests); in the cloud the factory Worker's /jev route runs typesafe/jev through the Workers AI REST API with its existing CLOUDFLARE_API_TOKEN secret, keeping the run-token exchange and kill switch, and is credit-billed so it needs no GATEWAY_ALLOWED_PROVIDERS opt-in. The TYPESAFE_API_KEY path is removed. 'ticfac doctor' and 'ticfac factory status' verify the credential by asking Jev one tiny question, which replaces the planned setup rung.",
+  "status": "closed",
   "priority": 3,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "The classifier key can live in ~/.ticfacrc under a key the credential-ownership contract declares; ticfac factory setup has a rung that verifies it with a real classification before writing it; and the contract and Go constants agree",
+  "acceptance_criteria": "The classifier needs no credential beyond the Cloudflare API token and account ~/.ticfacrc already holds (no contract key added); local and cloud paths call typesafe/jev on Workers AI and are tested against a fake Workers AI endpoint; the factory route no longer reads TYPESAFE_API_KEY; ticfac doctor and ticfac factory status report whether Jev answers with one live classification",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T17:35:35.330807Z",
-  "updated_at": "2026-09-27T06:30:32.016649Z"
+  "updated_at": "2026-09-28T11:06:26.804445Z",
+  "closed_at": "2026-09-28T11:06:20.621318Z",
+  "closed_reason": "Jev rewired to Workers AI (typesafe/jev) on the operator's existing Cloudflare token and account; doctor and factory status verify it live"
 }

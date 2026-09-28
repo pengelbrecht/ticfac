@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,9 +25,10 @@ import (
 //
 //   - a CLOUD run — the sandbox's AI_GATEWAY_BASE_URL/AI_GATEWAY_TOKEN —
 //     classifies through the factory's gateway route, presenting the run token
-//     the route exchanges for the deployment's key;
-//   - a LOCAL run — the operator's $TICFAC_JEV_API_KEY — classifies directly,
-//     on the operator's own credential;
+//     the route exchanges for a Workers AI run on the deployment's account;
+//   - a LOCAL run — the operator's Cloudflare API token and account (tick
+//     tum: ~/.ticfacrc, or $TICFAC_JEV_API_TOKEN/$TICFAC_JEV_ACCOUNT_ID) —
+//     classifies directly on Workers AI, at /accounts/<account>/ai/run;
 //   - no credential, or an unreachable classifier, is the documented
 //     degradation: nothing classified (or a recorded no-answer), every
 //     dispatch at [tier_policy.start].
@@ -79,19 +81,15 @@ func serveJev(t *testing.T) *jevStub {
 		stub.bodies = append(stub.bodies, string(body))
 		stub.mu.Unlock()
 
-		var request struct {
-			Questions []struct {
-				ID string `json:"id"`
-			} `json:"questions"`
-		}
-		if err := json.Unmarshal(body, &request); err != nil {
-			t.Errorf("the classifier request is not the wire shape: %v", err)
+		ids, err := workersAIQuestionIDs([]byte(body))
+		if err != nil {
+			t.Errorf("the classifier request is not a Workers AI run body: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		answers := make([]map[string]any, 0, len(request.Questions))
-		for _, question := range request.Questions {
-			answers = append(answers, dearWireAnswer(question.ID))
+		answers := make([]map[string]any, 0, len(ids))
+		for _, id := range ids {
+			answers = append(answers, dearWireAnswer(id))
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"result": map[string]any{
@@ -135,19 +133,36 @@ func (s *jevStub) questionIDs(t *testing.T) []string {
 	s.mu.Unlock()
 	ids := make([]string, 0, len(bodies))
 	for _, raw := range bodies {
-		var request struct {
-			Questions []struct {
-				ID string `json:"id"`
-			} `json:"questions"`
+		asked, err := workersAIQuestionIDs([]byte(raw))
+		if err != nil {
+			t.Fatalf("a recorded ask is not a Workers AI run body: %v", err)
 		}
-		if err := json.Unmarshal([]byte(raw), &request); err != nil {
-			t.Fatalf("a recorded ask is not the wire shape: %v", err)
-		}
-		for _, question := range request.Questions {
-			ids = append(ids, question.ID)
-		}
+		ids = append(ids, asked...)
 	}
 	return ids
+}
+
+// workersAIQuestionIDs reads the question ids out of a Workers AI run body
+// (tick tum): {"model": "typesafe/jev", "input": {"questions": {<id>: …}}}.
+func workersAIQuestionIDs(body []byte) ([]string, error) {
+	var run struct {
+		Model string `json:"model"`
+		Input struct {
+			Questions map[string]json.RawMessage `json:"questions"`
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(body, &run); err != nil {
+		return nil, err
+	}
+	if run.Model != jev.Model {
+		return nil, fmt.Errorf("the run names model %q, want %q", run.Model, jev.Model)
+	}
+	ids := make([]string, 0, len(run.Input.Questions))
+	for id := range run.Input.Questions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 // classifierFrom builds the classifier run-epic would build for one
@@ -156,27 +171,29 @@ func (s *jevStub) questionIDs(t *testing.T) []string {
 // hands back nil, which is the run's documented "classifies nothing".
 func classifierFrom(t *testing.T, environment map[string]string) (Classifier, string) {
 	t.Helper()
-	source := jev.ResolveCredential(func(name string) string { return environment[name] })
+	source := jev.ResolveCredential(func(name string) string { return environment[name] }, jev.Stored{})
 	if !source.Configured {
 		return nil, source.Note
 	}
 	return jev.New(source.Config, nil), source.Note
 }
 
-// A LOCAL run — the operator's own key in $TICFAC_JEV_API_KEY, no gateway route
-// in the environment — classifies each role-less tick through Jev over a real
-// HTTP round trip, presents the OPERATOR'S key (never anything run-scoped),
-// records the full distribution and the model identity on the run branch, and
-// the dispatch the record routed starts at the dear tier.
+// A LOCAL run — the operator's Cloudflare credential, no gateway route in the
+// environment — classifies each role-less tick through Jev on Workers AI over
+// a real HTTP round trip, presents the OPERATOR'S Cloudflare token (never
+// anything run-scoped) at its account's /ai/run, records the full
+// distribution and the model identity on the run branch, and the dispatch the
+// record routed starts at the dear tier.
 func TestALocalRunClassifiesOnTheOperatorsCredential(t *testing.T) {
 	t.Parallel()
 	stub := serveJev(t)
 	classifier, _ := classifierFrom(t, map[string]string{
-		"TICFAC_JEV_API_KEY":  "operator-key",
-		"TICFAC_JEV_API_BASE": stub.server.URL,
+		"TICFAC_JEV_API_TOKEN":  "operator-key",
+		"TICFAC_JEV_ACCOUNT_ID": "account-placeholder",
+		"TICFAC_JEV_API_BASE":   stub.server.URL,
 	})
 	if classifier == nil {
-		t.Fatal("the operator's key resolved no classifier")
+		t.Fatal("the operator's Cloudflare credential resolved no classifier")
 	}
 
 	f := newFixture(t, fixtureOptions{gate: massGate})
@@ -205,8 +222,8 @@ func TestALocalRunClassifiesOnTheOperatorsCredential(t *testing.T) {
 		t.Errorf("the classifier was asked about %v, want a1, a2 and b1 once each and never the role ticks", asked)
 	}
 	for i := 0; i < stub.asks(); i++ {
-		if stub.path(i) != "/v1/answers" {
-			t.Errorf("ask %d went to %q, want the classifier's own /v1/answers", i, stub.path(i))
+		if stub.path(i) != "/accounts/account-placeholder/ai/run" {
+			t.Errorf("ask %d went to %q, want Workers AI's /accounts/<account>/ai/run", i, stub.path(i))
 		}
 		if stub.bearerOf(i) != "Bearer operator-key" {
 			t.Errorf("ask %d presented %q, want the operator's key", i, stub.bearerOf(i))
@@ -254,9 +271,10 @@ func TestACloudRunClassifiesThroughTheGatewayRouteWithTheRunToken(t *testing.T) 
 	t.Parallel()
 	stub := serveJev(t)
 	classifier, _ := classifierFrom(t, map[string]string{
-		"AI_GATEWAY_BASE_URL": stub.server.URL + "/api/gateway",
-		"AI_GATEWAY_TOKEN":    "tkr_run-scoped",
-		"TICFAC_JEV_API_KEY":  "operator-key-must-not-be-used",
+		"AI_GATEWAY_BASE_URL":   stub.server.URL + "/api/gateway",
+		"AI_GATEWAY_TOKEN":      "tkr_run-scoped",
+		"TICFAC_JEV_API_TOKEN":  "operator-key-must-not-be-used",
+		"TICFAC_JEV_ACCOUNT_ID": "account-placeholder",
 	})
 	if classifier == nil {
 		t.Fatal("the sandbox's gateway route resolved no classifier")
@@ -288,8 +306,8 @@ func TestACloudRunClassifiesThroughTheGatewayRouteWithTheRunToken(t *testing.T) 
 		t.Errorf("the classifier was asked about %v, want the role-less ticks only", asked)
 	}
 	for i := 0; i < stub.asks(); i++ {
-		if stub.path(i) != "/api/gateway/jev/v1/answers" {
-			t.Errorf("ask %d went to %q, want the gateway route at /api/gateway/jev/v1/answers", i, stub.path(i))
+		if stub.path(i) != "/api/gateway/jev/ai/run" {
+			t.Errorf("ask %d went to %q, want the gateway route at /api/gateway/jev/ai/run", i, stub.path(i))
 		}
 		if stub.bearerOf(i) != "Bearer tkr_run-scoped" {
 			t.Errorf("ask %d presented %q, want the run's gateway token", i, stub.bearerOf(i))
@@ -365,11 +383,12 @@ func TestAnUnreachableClassifierThroughTheWiredClientDegradesToTheStartPolicy(t 
 	server.Close() // the address now refuses connections
 
 	classifier, _ := classifierFrom(t, map[string]string{
-		"TICFAC_JEV_API_KEY":  "operator-key",
-		"TICFAC_JEV_API_BASE": closed,
+		"TICFAC_JEV_API_TOKEN":  "operator-key",
+		"TICFAC_JEV_ACCOUNT_ID": "account-placeholder",
+		"TICFAC_JEV_API_BASE":   closed,
 	})
 	if classifier == nil {
-		t.Fatal("the operator's key resolved no classifier")
+		t.Fatal("the operator's Cloudflare credential resolved no classifier")
 	}
 
 	f := newFixture(t, fixtureOptions{gate: massGate})

@@ -25,15 +25,18 @@
  *    orchestrator's token dies, and the closeout boot mints a fresh one.
  * 5. **Cash spend is opted into, never arrived at.** Workers AI bills to the
  *    operator's own Cloudflare account; the other three rungs bill in real
- *    cash. Only `workers-ai` is routed unless `GATEWAY_ALLOWED_PROVIDERS`
+ *    cash. Only `workers-ai` (and `jev`, which Workers AI serves) is routed
+ *    unless `GATEWAY_ALLOWED_PROVIDERS`
  *    names another, so a mistyped model id or an edited config stops at a 403
  *    that states the billing consequence rather than moving a run's spend onto
  *    a card (tick fw6).
  *
  * One route breaks the first sentence's letter and keeps its spirit: the
- * `jev` route (tick x0k, epic wne), which serves a run's CLASSIFIER calls. Its
- * upstream is fixed in code (see JEV_API_BASE) because the operator's AI
- * Gateway has no TypeSafe provider to proxy — so it does not go through the
+ * `jev` route (tick x0k, epic wne; rewired by tick tum), which serves a run's
+ * CLASSIFIER calls. Jev is a Workers AI model (typesafe/jev), billed to the
+ * operator's Cloudflare account like the `workers-ai` rung, and this Worker
+ * runs it through the Workers AI REST API with the deployment's own
+ * CLOUDFLARE_API_TOKEN (see runJev) rather than proxying it through the
  * gateway — but it enters through this Worker and nowhere else, presents the
  * run token this Worker exchanges, and dies with it on revocation, which is
  * the whole of what D17 asks of a run's model path.
@@ -75,35 +78,33 @@ export type ProviderSlug = "anthropic" | "openai" | "openrouter" | "workers-ai" 
 
 type ProviderSpec = {
   /** The Worker secret holding the operator's key for this provider. */
-  secret:
-    | "ANTHROPIC_API_KEY"
-    | "OPENAI_API_KEY"
-    | "OPENROUTER_API_KEY"
-    | "CLOUDFLARE_API_TOKEN"
-    | "TYPESAFE_API_KEY";
+  secret: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "OPENROUTER_API_KEY" | "CLOUDFLARE_API_TOKEN";
   /** How the vendor wants the credential presented. */
   scheme: "x-api-key" | "bearer";
-  /**
-   * A FIXED upstream base, for routes the operator's AI Gateway cannot proxy:
-   * the request goes vendor-direct to this root, keeping the exchange, the
-   * kill switch and the refusal story that live in this Worker either way.
-   * Undefined means the operator's AI Gateway, as it has always meant.
-   */
-  upstream?: string;
 };
 
 /**
- * The classifier's API root (tick x0k, epic wne): where Jev answers.
+ * The classifier route (tick x0k, epic wne; rewired by tick tum): where a
+ * run's orchestrator asks Jev which KIND OF WORK each role-less tick is.
  *
- * Declared here because the operator's AI Gateway has no TypeSafe provider to
- * proxy — `/v1/answers` is neither OpenAI- nor Anthropic-shaped — so this one
- * route goes vendor-direct. Everything the run token buys still happens in
- * this Worker: the exchange of the run-scoped token for the deployment's
- * `TYPESAFE_API_KEY` secret, and the kill switch a revocation pulls. The Go
- * client pins the same root as its default (internal/jev's DefaultAPIBase),
- * and a parity test there fails the build if either side drifts.
+ * Jev is served by Cloudflare Workers AI as `typesafe/jev`, so the route runs
+ * it there — `POST <Cloudflare REST root>/accounts/<account>/ai/run` with
+ * `{"model": "typesafe/jev", "input": {…}}` — on the account the operator's
+ * AI Gateway URL names, with the deployment's own CLOUDFLARE_API_TOKEN. There
+ * is no TypeSafe key anywhere: billing is the operator's Cloudflare account.
+ * The Go client (internal/jev) posts the same run body to
+ * `<AI_GATEWAY_BASE_URL>/jev/ai/run`, and a parity test there fails the build
+ * if the slug, the path or the model drift.
+ *
+ * Why REST and not an `env.AI` binding: the binding would need an `[ai]` entry
+ * in wrangler.toml, which the Workers test pool can only serve against a real,
+ * authenticated account; the REST call needs nothing the deployment does not
+ * already hold, and is tested with the same injected fetcher as every other
+ * route.
  */
-const JEV_API_BASE = "https://api.typesafe.ai";
+export const JEV_ROUTE_SLUG = "jev";
+export const JEV_ROUTE_PATH = "ai/run";
+export const JEV_MODEL = "typesafe/jev";
 
 const PROVIDERS: Record<ProviderSlug, ProviderSpec> = {
   anthropic: { secret: "ANTHROPIC_API_KEY", scheme: "x-api-key" },
@@ -112,15 +113,10 @@ const PROVIDERS: Record<ProviderSlug, ProviderSpec> = {
   // Workers AI bills to the operator's own Cloudflare account, so its
   // credential is the account API token rather than a vendor key.
   "workers-ai": { secret: "CLOUDFLARE_API_TOKEN", scheme: "bearer" },
-  // The classifier route (tick x0k, epic wne): a run's orchestrator asks Jev
-  // which KIND OF WORK each role-less tick is before its first dispatch. It
-  // rides the same gateway prefix and the same run token as every other model
-  // call, but its upstream is fixed: the operator's AI Gateway has no
-  // TypeSafe provider to proxy, so this one route goes vendor-direct while
-  // the token exchange and the kill switch stay here. Cash-billed like the
-  // three BYOK rungs, so it is opted into with GATEWAY_ALLOWED_PROVIDERS the
-  // same way, never by the key alone.
-  jev: { secret: "TYPESAFE_API_KEY", scheme: "bearer", upstream: JEV_API_BASE },
+  // The classifier route: Jev on Workers AI, the same account and the same
+  // token as the rung above, so it is credit-billed like it and routed by
+  // default. It is served by runJev, not proxied (see JEV_MODEL).
+  jev: { secret: "CLOUDFLARE_API_TOKEN", scheme: "bearer" },
 };
 
 export const PROVIDER_SLUGS = Object.keys(PROVIDERS) as ProviderSlug[];
@@ -138,6 +134,16 @@ export const PROVIDER_SLUGS = Object.keys(PROVIDERS) as ProviderSlug[];
 export const CREDIT_BILLED_PROVIDER: ProviderSlug = "workers-ai";
 
 /**
+ * Every route billed to the operator's own Cloudflare account, and therefore
+ * routed with no opt-in: Workers AI, and Jev, which Workers AI serves on the
+ * same account (tick tum).
+ */
+export const CREDIT_BILLED_PROVIDERS: readonly ProviderSlug[] = [
+  CREDIT_BILLED_PROVIDER,
+  JEV_ROUTE_SLUG,
+];
+
+/**
  * The var that opts a deployment into cash-billed inference (tick fw6).
  *
  * A wrangler `[vars]` list of provider slugs, so moving a factory onto a
@@ -151,12 +157,13 @@ export const PROVIDER_OPT_IN_VAR = "GATEWAY_ALLOWED_PROVIDERS";
 /**
  * The providers this deployment will route, credit-billed first.
  *
- * Fails closed in both directions: no var means Workers AI alone, and an entry
- * that is not a provider slug is logged and dropped rather than guessed at — an
- * allow-list that widens on a typo is not an allow-list.
+ * Fails closed in both directions: no var means the credit-billed routes alone
+ * (Workers AI and Jev on it), and an entry that is not a provider slug is
+ * logged and dropped rather than guessed at — an allow-list that widens on a
+ * typo is not an allow-list.
  */
 export function allowedProviders(env: Env): ProviderSlug[] {
-  const allowed = new Set<ProviderSlug>([CREDIT_BILLED_PROVIDER]);
+  const allowed = new Set<ProviderSlug>(CREDIT_BILLED_PROVIDERS);
   const raw = textVar((env as unknown as Record<string, unknown>)[PROVIDER_OPT_IN_VAR]);
   if (raw !== null) {
     for (const entry of raw.split(/[\s,]+/).filter((part) => part !== "")) {
@@ -849,34 +856,25 @@ export async function proxyModelRequest(
     });
   }
 
+  if (slug === JEV_ROUTE_SLUG) {
+    return await runJev(env, request, path, key, config.config, authorized.run, options);
+  }
+
   const upstream = new URL(request.url);
-  const target =
-    provider.upstream !== undefined
-      ? `${provider.upstream}/${path.slice(1).join("/")}${upstream.search}`
-      : `${config.config.base_url}/${path.join("/")}${upstream.search}`;
+  const target = `${config.config.base_url}/${path.join("/")}${upstream.search}`;
 
   const headers = sanitizedHeaders(request);
   if (provider.scheme === "x-api-key") headers.set("x-api-key", key);
   else headers.set("authorization", `Bearer ${key}`);
-  // Attribution is the AI Gateway's own language: `cf-aig-*` headers and the
-  // session affinity key are for the operator's gateway to read and stamp in
-  // its logs. A vendor-direct route has no such reader — and must not carry
-  // the operator's Cloudflare token to a vendor — so the exchange's credential
-  // is the only thing these requests carry beyond what the caller sent.
-  if (provider.upstream === undefined) {
-    // Attribution the caller cannot forge or suppress (D17).
-    headers.set(
-      "cf-aig-metadata",
-      JSON.stringify(gatewayMetadata(authorized.token, authorized.run)),
-    );
-    // One run, one model instance, so its unchanging prompt prefix stays cached
-    // on that instance instead of being re-processed at full price every turn.
-    headers.set(SESSION_AFFINITY_HEADER, sessionAffinityKey(authorized.run));
-    // The operator's gateway may itself be authenticated; when it is, the same
-    // account token that reads its logs is what opens it.
-    const gatewayAuth = textVar(env.CLOUDFLARE_API_TOKEN);
-    if (gatewayAuth !== null) headers.set("cf-aig-authorization", `Bearer ${gatewayAuth}`);
-  }
+  // Attribution the caller cannot forge or suppress (D17).
+  headers.set("cf-aig-metadata", JSON.stringify(gatewayMetadata(authorized.token, authorized.run)));
+  // One run, one model instance, so its unchanging prompt prefix stays cached
+  // on that instance instead of being re-processed at full price every turn.
+  headers.set(SESSION_AFFINITY_HEADER, sessionAffinityKey(authorized.run));
+  // The operator's gateway may itself be authenticated; when it is, the same
+  // account token that reads its logs is what opens it.
+  const gatewayAuth = textVar(env.CLOUDFLARE_API_TOKEN);
+  if (gatewayAuth !== null) headers.set("cf-aig-authorization", `Bearer ${gatewayAuth}`);
 
   let body: BodyInit | null =
     request.method === "GET" || request.method === "HEAD" ? null : request.body;
@@ -917,6 +915,92 @@ export async function proxyModelRequest(
       status: 502,
       error: "gateway_unreachable",
       detail: `the AI Gateway at ${config.config.base_url} could not be reached`,
+    });
+  }
+}
+
+/**
+ * Serves one classification on the `jev` route: the run token is already
+ * exchanged and `apiToken` is the deployment's CLOUDFLARE_API_TOKEN, so what
+ * is left is to run typesafe/jev on Workers AI, on the account the gateway URL
+ * names, and hand Cloudflare's own envelope back — the Go client reads
+ * `result.result.answers` from it exactly as it does locally.
+ *
+ * The route runs ONE model: a body naming any other is refused rather than
+ * rewritten, so a run token cannot buy arbitrary Workers AI inference through
+ * the classifier's door, and nothing but the model and its input is forwarded
+ * — none of the caller's headers reach Cloudflare's API.
+ */
+async function runJev(
+  env: Env,
+  request: Request,
+  path: string[],
+  apiToken: string,
+  gateway: GatewayConfig,
+  run: Run,
+  options: ProxyOptions,
+): Promise<Response> {
+  if (request.method !== "POST" || path.slice(1).join("/") !== JEV_ROUTE_PATH) {
+    return jsonError({
+      status: 404,
+      error: "unknown_jev_route",
+      detail: `the classifier route serves POST ${GATEWAY_PATH_PREFIX}/${JEV_ROUTE_SLUG}/${JEV_ROUTE_PATH} only`,
+    });
+  }
+  if (gateway.account_id === null) {
+    return jsonError({
+      status: 503,
+      error: "gateway_not_configured",
+      detail:
+        "AI_GATEWAY_BASE_URL names no Cloudflare account, so Jev cannot run on Workers AI; " +
+        "run `ticfac factory setup` to configure a Cloudflare AI Gateway",
+    });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await request.text());
+  } catch {
+    parsed = null;
+  }
+  const body =
+    parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  const input = body?.input;
+  if (body === null || input === null || typeof input !== "object") {
+    return jsonError({
+      status: 400,
+      error: "jev_input_required",
+      detail: `the classifier route takes a Workers AI run body: {"model": "${JEV_MODEL}", "input": {"state", "questions"}}`,
+    });
+  }
+  if (body.model !== undefined && body.model !== JEV_MODEL) {
+    return jsonError({
+      status: 400,
+      error: "jev_model_only",
+      detail: `the classifier route runs ${JEV_MODEL} only, not ${JSON.stringify(body.model)}`,
+    });
+  }
+
+  const apiBase = (textVar(env.CLOUDFLARE_API_BASE_URL) ?? DEFAULT_CLOUDFLARE_API_BASE).replace(
+    /\/+$/,
+    "",
+  );
+  const target = `${apiBase}/accounts/${encodeURIComponent(gateway.account_id)}/${JEV_ROUTE_PATH}`;
+  const fetcher = options.fetcher ?? fetch;
+  try {
+    return await fetcher(target, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiToken}` },
+      body: JSON.stringify({ model: JEV_MODEL, input }),
+    });
+  } catch (error) {
+    console.error(
+      `factory gateway: run ${run.run_id} could not reach Workers AI for Jev: ${String(error)}`,
+    );
+    return jsonError({
+      status: 502,
+      error: "gateway_unreachable",
+      detail: "Workers AI could not be reached to run Jev",
     });
   }
 }

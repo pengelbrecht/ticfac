@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 )
 
 // `tk factory status` answers two questions the ladder leaves open: what is
@@ -79,11 +80,18 @@ type StatusReport struct {
 	// identical cost reported either way. Status is where an operator can see
 	// that before submitting a run.
 	Billing CredentialState
+	// Classifier is whether Jev — typesafe/jev on Workers AI, the model a
+	// run classifies its ticks with (tick tum) — answers on the Cloudflare
+	// credential above. It stores nothing of its own: the cost-telemetry
+	// token and the gateway's account are the whole credential, so it is
+	// configured exactly when both are, and its live check is one tiny
+	// classification.
+	Classifier CredentialState
 }
 
 // rungs returns the report's states in the order the ladder is walked.
 func (r *StatusReport) rungs() []CredentialState {
-	return []CredentialState{r.Deployment, r.GitHub, r.Gateway, r.Telemetry, r.Billing}
+	return []CredentialState{r.Deployment, r.GitHub, r.Gateway, r.Telemetry, r.Billing, r.Classifier}
 }
 
 // Configured reports whether any rung has been walked at all.
@@ -304,6 +312,28 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 		}
 	}
 
+	// The classifier: Jev on Workers AI, on the same token and account.
+	report.Classifier = CredentialState{Name: "classifier"}
+	if account, _, ok := gatewayIDs(gateway); ok && telemetry != "" {
+		report.Classifier.Configured = true
+		report.Classifier.Summary = "Jev (" + jev.Model + ") on Workers AI — the Cloudflare API token above, on the gateway's account"
+		switch {
+		case opts.Offline:
+			report.Classifier.Detail = "not checked (--offline)"
+		default:
+			report.Classifier.Checked = true
+			classifier := jev.New(jev.Config{
+				APIBase: strings.TrimSuffix(strings.TrimSpace(opts.CloudflareAPIBase), "/"), AccountID: account, APIKey: telemetry,
+			}, client)
+			if detail, err := classifier.Probe(ctx); err != nil {
+				report.Classifier.Detail = "rejected: " + err.Error()
+			} else {
+				report.Classifier.OK = true
+				report.Classifier.Detail = "live, " + detail
+			}
+		}
+	}
+
 	return report, nil
 }
 
@@ -338,6 +368,12 @@ func (r *StatusReport) Write(w io.Writer) {
 				// say the flag: a budget with nothing to act on is a fact the
 				// operator should choose, not discover after a run.
 				hint = "run cost is unknown and the cost budget cannot act — add one with 'ticfac factory setup --cloudflare-api-token <token>'"
+			}
+			if state.Name == "classifier" {
+				// It rides the telemetry token and the gateway's account, so
+				// the remedy is theirs — and the cost of going without is a
+				// run that classifies nothing, not a run that stops.
+				hint = "Jev runs on Workers AI with the cost-telemetry token and the gateway's account — without both, runs classify nothing and every dispatch starts at [tier_policy.start]"
 			}
 			fmt.Fprintf(w, "  state         not configured — %s\n", hint)
 			continue
