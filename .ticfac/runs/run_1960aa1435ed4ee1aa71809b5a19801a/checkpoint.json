@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_1960aa1435ed4ee1aa71809b5a19801a",
   "epic_id": "hn6",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting r5i attempt 1",
-  "updated_at": "2026-09-28T23:00:34Z",
+  "sequence": 5,
+  "state": "integrating",
+  "reason": "integrating r5i attempt 1 into epic/hn6",
+  "updated_at": "2026-09-28T23:00:55Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
