@@ -1,7 +1,7 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the 2jn close-out, 2026-09-27.
+Seeded from ticks' learnings 2026-09-02; last compacted at the 6in close-out, 2026-09-28.
 
 ## Planning an epic
 
@@ -11,12 +11,10 @@ run — 2jn itself ran on GLM subprocesses). **Rule:** When an epic's gate is a 
 the thinnest end-to-end path through the PRODUCTION entry point, and a named tick INSIDE the epic
 performs the run before the review. If the run lives elsewhere, the acceptance says so.
 
-**Problem:** gvc absorbed none of its 21 findings (run by a pre-absorption binary, acceptance never
-marked). 2jn absorbed 30 and SCORED none: A1-A6 bind no command, so no item ever became runnable and
-every prediction stayed unchecked. **Cause:** the DATA the machinery reads was left to prose or to a
-tick. **Rule:** An epic that changes the orchestrator names the NEXT run on the rebuilt binary as its
-demonstration; marked [A<n>] items AND a command per item land at planning, before wave 1, or the
-run absorbs on guesses it can never score.
+**Problem:** gvc absorbed none of its 21 findings; 2jn scored none of 30 (A1-A6 bind no command); 6in's
+done has no [A<n>] items to bind. **Cause:** the DATA the machinery reads was left to prose. **Rule:**
+An epic that changes the orchestrator names the NEXT run on the rebuilt binary as its demonstration;
+[A<n>] items AND a command per item land at planning, or the run absorbs on guesses it cannot score.
 
 **Problem:** 2jn's review said NOT READY with ten findings; each became its own parallel tick, three
 of them rewrote exit-code logic (bot, 4mv, then bkg/rix/vqc), and the post-review burst took 16 ticks,
@@ -31,11 +29,15 @@ FINAL resolved value, keyed on what actually crosses the boundary (the executor)
 **Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; mrn died on add/add.
 **Rule:** A tick that DECLARES a vocabulary and one that CONSUMES it are different waves.
 
-**Problem:** l6t deleted the wave path, and with it four things it alone produced: the worker's
-harness bound, streamed logs, per-tick board events, and cron sweeps. Each was found later, one
-finding at a time (9iz, 925). **Rule:** A deletion tick first LISTS every effect the deleted path
-produced (events, bounds, logs, schedules), then names each one's new owner or records it as
-dropped. A deletion's acceptance is that list, not "tests still pass".
+**Problem:** l6t deleted the wave path and four things only it produced (harness bound, logs, board
+events, cron sweeps), each found later; after ticks' chz, four of 6in's fourteen findings were docs
+still naming deleted verbs and files. **Rule:** A deletion tick first LISTS every effect the deleted
+path produced and every pointer to it in BOTH repos (grep the name), then names each one's new owner
+or records it as dropped. Its acceptance is that list, not "tests still pass".
+
+**Problem:** dz1 took over the width tk 0.32.0 stopped enforcing, and a re-run under a new run id now
+holds on the claim its own STOPPED predecessor left. **Rule:** An enforcement moving into this repo
+brings its exemptions; test the resume and re-run paths, not only the refusal it exists for.
 
 ## Orchestration
 
@@ -60,7 +62,9 @@ it where a person already is (the PR). A resume replays a recorded decision, nev
 **Problem:** `tk close` usage prints, promotions pointed at uncommitted ticks, a spawn blamed "the
 probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
-## Git state the run does not own
+**Problem:** Ticks here that change the ticks repo were undispatchable (ha9: SEVEN dispatches); klq's
+"mark xte, wne, gvc" needed a tracker write its worker's boundary forbids. **Rule:** A tick lives where
+its CODE is AND where its worker can write; another repo's change is an `upstream-tick`, never a child here.
 
 **Problem:** Two runs died with `conflict_exists`: the run-state store resolved origin through
 `FETCH_HEAD`, one file shared by every process on the checkout, and a watcher's fetch rewrote it.
@@ -83,18 +87,6 @@ own argv. **Rule:** No `tail`/`head` in a watcher pipeline. Hold the PID and che
 not created the check runs yet. **Rule:** Absence right after creation is "not yet". Bound a wait for
 the thing to APPEAR before calling it "never".
 
-## Where a tick lives
-
-**Problem:** Ticks here that change the ticks repo were undispatchable (ha9: SEVEN dispatches); klq's
-"mark xte, wne, gvc" needed a tracker write its worker's boundary forbids. **Rule:** A tick lives where
-its CODE is AND where its worker can write; another repo's change is an `upstream-tick`, never a child here.
-
-## Provider and model configuration
-
-**Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
-GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable at a time.
-**Problem:** GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** Off-vendor, set `compat.thinkingFormat`.
-
 ## Reviews and repairs
 
 **Problem:** A review's "blocker" was repaired and the repair regressed; a regression test "failed
@@ -116,18 +108,23 @@ into a finalize-reaching outcome, and a test fails each step past its retries.
 the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's own path), and make
 a derived key a function of the thing it identifies, not of its history.
 
-**Problem:** The integrated gate refused innocent work six times through wall-clock tests measuring
-the host; a host-dependent git fixture failed at base in NINE yoh ticks, four gvc refiles, and five
-2jn backlog ticks (zv1, mtq, 0wp, 1zw, bsn) for ONE SIGTERM temp-tree defect 8d6 fixed. **Rule:**
-A gate verdict is about the tree only if the host is bounded — and a guard on shared machine state
-(7ag: sibling suites write ~/.ticfac/registry mid-gate) attributes by a per-process temp root, not
-a snapshot diff (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/` for the
-test's name: a promoted finding leaves the drafts, so the next worker cannot see it there.
+**Problem:** Wall-clock tests refused innocent work six times; ONE host-dependent SIGTERM temp-tree
+defect (8d6) failed at base in nine yoh ticks, four gvc refiles and five 2jn ticks. **Rule:** A gate
+verdict is about the tree only if the host is bounded; a guard on shared machine state attributes by a
+per-process temp root (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/`
+for the test's name: a promoted finding leaves the drafts.
 
 **Problem:** wne's per-tick gates went green while 7 of 10 relevant tests skipped under `-short`;
 yoh's ts gate ran no vitest; every gvc absorption test is EndToEnd, skipped by the gate; the
-review found three high defects there. **Rule:** A tick's evidence runs under the gate's own
-flags — a test the gate does not run is not evidence: add it to the gate, or name the gap.
+review found three high defects there; dz1 broke an EndToEnd reconcile test and the epic branch's
+CI sat red 25 minutes, unread until the close-out. **Rule:** A test the gate does not run is not
+evidence: add it to the gate, or name the gap. A tick touching dispatch or claims runs the full
+`./internal/reconcile/` suite.
+
+**Problem:** 6in's close-out was admitted "CI green" two seconds after a red: the PR head was a
+`.ticfac/`-only commit whose only check runs were the pull_request run's SKIPPED jobs, forge.CI read
+all-skipped as green, and the walk back to the code commit never ran. **Rule:** A skip is not a pass:
+green needs an executed success per check; a head of only skips has no verdict of its own.
 
 ## Fixtures
 
@@ -141,10 +138,13 @@ first try" keys on `$TICFAC_TRY`; evidence output is committed even with no sour
 
 ## Boundaries this repo pays to learn
 
-**Problem:** A new `factory_*` key in ~/.ticfacrc contradicts the pinned credential-ownership
-contract (additionalProperties: false — "an unknown factory_ key is a typo"). **Rule:** The config FILE's key
-vocabulary is the bundle's — but the $TICFAC_* ENVIRONMENT is this repo's own operator-preference surface
-(TICFAC_RUNNER, TICFAC_JEV_API_KEY): set-once defaults live there, as i1r's --status-push reading $TICFAC_STATUS_PUSH does, no bundle re-cut needed.
+**Problem:** A new `factory_*` key in ~/.ticfacrc contradicts the pinned credential-ownership contract
+("an unknown factory_ key is a typo"). **Rule:** The config FILE's keys are the bundle's; the $TICFAC_*
+ENVIRONMENT is this repo's operator-preference surface (TICFAC_RUNNER, $TICFAC_STATUS_PUSH): no re-cut.
 
-**Problem:** A login-route test read the login page's own 401 as the login's answer: `SELF.fetch`
-FOLLOWS a 303. **Rule:** A redirect-asserting route test passes `redirect: "manual"`.
+**Problem:** A login-route test read the login page's own 401: `SELF.fetch` FOLLOWS a 303. **Rule:**
+A redirect-asserting route test passes `redirect: "manual"`.
+
+**Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
+GLM. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise. Change one variable at a time.
+**Problem:** GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** Off-vendor, set `compat.thinkingFormat`.
