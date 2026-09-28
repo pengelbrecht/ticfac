@@ -2,6 +2,7 @@
   "id": "bva",
   "title": "The run dispatches a tick another party holds claimed once the width has room",
   "description": "planFrom keeps in_progress ticks in the plan whoever claimed them. Since dz1 a foreign claim no longer bypasses the width (OwnClaim), but when the width has room the run still admits that tick, claims it again and starts a worker over another run's or a person's live claim. The window should skip ticks whose claim is not its own (or hold on them) rather than dispatching into them.\n\nticfac run epic-6in filed this backlog tick from the finding 08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388 (reported by run-epic-6in/tick-dz1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388.json on the run branch.",
+  "notes": "2026-09-28 12:14 - ticfac run epic-6in: created by absorbing finding 08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-6in/tick-dz1/attempt-6",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T10:14:16Z",
-  "updated_at": "2026-09-28T10:14:16Z"
+  "updated_at": "2026-09-28T10:14:24.436652Z"
 }
