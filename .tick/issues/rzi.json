@@ -2,6 +2,7 @@
   "id": "rzi",
   "title": "Re-review 6in after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic 6in again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (tdu, decision 1) judged it NOT READY: DONE (NOT READY); its blocking finding(s): \"ticfac sandbox image needs ticfac's source tree, so the container's declared-image check is always skipped\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run: it holds for a person with your reasons.",
+  "notes": "2026-09-28 21:30 - ticfac run epic-6in: rzi try 1 (run dispatch #14) reported a finding the run itself decided — proposed-tick \"Real-ticfac entrypoint test for the declared-image refusal\" (key 63d8d9bfd383b7995976f2e89e01e34a7ffb41790f913c2dbd942cb45bbcea64, severity medium, for this repository) is promoted to a backlog tick with an owner, i2w; the decision record is on the run branch at .ticfac/runs/epic-6in/absorptions/63d8d9bfd383b7995976f2e89e01e34a7ffb41790f913c2dbd942cb45bbcea64.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -13,6 +14,6 @@
   "role": "review",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T19:06:19Z",
-  "updated_at": "2026-09-28T19:27:04.105995Z",
+  "updated_at": "2026-09-28T19:30:26.597694Z",
   "started_at": "2026-09-28T19:27:04.105995Z"
 }
