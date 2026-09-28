@@ -8,13 +8,18 @@
 #   - it reads the tick record in its worktree and does the work;
 #   - it commits the work on its branch, writes its report at the absolute
 #     path the prompt owns, and reports done;
-#   - interrupted (agent.send_keys ctrl+c), it stops spending and exits.
+#   - interrupted (agent.send_keys), it stops spending and exits.
 #
 # argv: <worktree> <prompt-file> <status-file> <interrupt-file> <mode>
 #
 # modes:
 #   implement           read the tick record, do what it says, report DONE
 #   sleep               report working, then wait to be interrupted
+#   esc_only            pi's keybindings (epic-6in, 2026-09-28): report
+#                       working; Escape (app.interrupt) aborts the turn and
+#                       the agent goes back to its prompt — `idle`, still
+#                       running, never exiting and never reporting; ctrl+c
+#                       (app.clear) clears the editor and stops nothing
 #   ignore              report working and NEVER stop: the interrupt file
 #                       lands and is never honoured — the agent inside a
 #                       long shell call that never reads it (tick rj0), the
@@ -72,6 +77,19 @@ if [ "$mode" = "sleep" ]; then
 	done
 	echo "fake agent: interrupted; stopping without committing" >&2
 	exit 130
+fi
+
+if [ "$mode" = "esc_only" ]; then
+	# Only Escape interrupts a turn. The interrupt file holds the key
+	# sequence of the LAST agent.send_keys, space-separated.
+	wait_for_prompt
+	report_working
+	while :; do
+		if [ -f "$interrupt_file" ] && grep -qw esc "$interrupt_file"; then
+			printf 'idle\n' > "$status_file"
+		fi
+		sleep 0.05
+	done
 fi
 
 if [ "$mode" = "ignore" ]; then

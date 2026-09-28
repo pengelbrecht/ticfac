@@ -66,6 +66,32 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 			want:   RemoteTransient,
 		},
 		{
+			// gitbin.TransportEnv's low-speed bound firing on an https remote
+			// that accepted the connection and went silent — epic-6in's
+			// thirty-minute checkpoint push, bounded. Captured from git
+			// 2.50 by TestAPushToASilentHTTPSRemoteGivesUpInsideTheBoundAndIsTransient
+			// (there with a 2-second window), verbatim but for the host.
+			name:   "an https remote that went silent before answering",
+			stderr: "fatal: unable to access 'https://github.com/pengelbrecht/ticfac.git/': Operation too slow. Less than 1000 bytes/sec transferred the last 60 seconds",
+			want:   RemoteTransient,
+		},
+		{
+			// The same bound firing once the pack is moving: git wraps curl's
+			// code in its RPC line.
+			name: "an https transfer that went silent mid-pack",
+			stderr: "error: RPC failed; curl 28 Operation too slow. Less than 1000 bytes/sec transferred the last 60 seconds\n" +
+				"send-pack: unexpected disconnect while reading sideband packet\n" +
+				"fatal: the remote end hung up unexpectedly",
+			want: RemoteTransient,
+		},
+		{
+			// curl's own connect timeout (300s by default; git has no knob
+			// for it) on a remote that never answered the SYN.
+			name:   "an https connect that curl gave up on",
+			stderr: "fatal: unable to access 'https://github.com/o/r.git/': Failed to connect to github.com port 443 after 300000 ms: Timeout was reached",
+			want:   RemoteTransient,
+		},
+		{
 			// The remote's storage failing mid-push: what halted epic-2jn's
 			// checkpoint on 2026-09-27, verbatim but for the paths.
 			name: "the remote failing to write the pack it received",

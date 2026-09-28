@@ -58,6 +58,13 @@ import (
 // It returns the body and the number of findings it carries, for the feed
 // line the write leaves.
 func (r *Reconciler) closeoutPRBody() (string, int, error) {
+	return r.composePRBody("")
+}
+
+// composePRBody is closeoutPRBody with one section the record does not hold
+// appended before the closing line: the readying's account of what it checked
+// the PR against (land.go). Everything else is recomposed from the record.
+func (r *Reconciler) composePRBody(readinessSection string) (string, int, error) {
 	if _, err := r.store.Fetch(); err != nil {
 		return "", 0, fmt.Errorf("read the run state on %s: %w", r.branch, err)
 	}
@@ -86,7 +93,22 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			"in .tick/config.md: the epic close-out may not complete until CI (%s) is green on this PR.",
 		r.runID, r.closeoutRule.CIWorkflow)
 
-	body.WriteString("\n\n## The review's verdict\n\n")
+	// For the REVIEWER (operator, 2026-09-28): the PR is the touch point an
+	// epic handed over to ticfac comes back through, read by a person and
+	// their own agent. So the body opens with what they need first — where
+	// to look, what the epic did, and its done — before the record's detail.
+	absorptions, err := r.store.Absorptions()
+	if err != nil {
+		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
+	}
+	body.WriteString("\n\n## Where to look first\n\n")
+	body.WriteString(r.lookFirst(decisions, final, findings, absorptions))
+	body.WriteString("\n## What this epic did\n\n")
+	body.WriteString(r.epicSummary())
+	body.WriteString("\n## Definition of done\n\n")
+	body.WriteString(r.doneEvidence())
+
+	body.WriteString("\n## The review's verdict\n\n")
 	if final < 0 {
 		// The body states the absence rather than staying silent about it:
 		// a PR that says nothing about the review reads as "no review found
@@ -179,10 +201,6 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 	// reads — never from memory of what the run intended. The write is an
 	// overwrite like the whole body is, so a resumed close-out composed after
 	// a second scoring pass carries each fact once.
-	absorptions, err := r.store.Absorptions()
-	if err != nil {
-		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
-	}
 	scored := map[string]runstate.PredictionScore{}
 	if scores, err := r.store.PredictionScores(); err != nil {
 		return "", 0, fmt.Errorf("read the run's checked predictions: %w", err)
@@ -223,6 +241,8 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 			body.WriteString("\n")
 		}
 	}
+
+	body.WriteString(readinessSection)
 
 	fmt.Fprintf(&body,
 		"\nThe durable record is the run's own state under .ticfac/runs/%s/ on %s; this body is the "+

@@ -42,8 +42,9 @@ func git(dir string, args ...string) (string, error) {
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	// A git that reads the invoking user's hooks, editors or pagers is a git
-	// that can block forever in a non-interactive executor.
-	cmd.Env = append(os.Environ(),
+	// that can block forever in a non-interactive executor. So is one whose
+	// push or fetch waits on a silent remote: gitbin.TransportEnv bounds it.
+	cmd.Env = append(append(os.Environ(), gitbin.TransportEnv()...),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",

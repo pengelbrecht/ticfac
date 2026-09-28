@@ -50,7 +50,15 @@ failed, and nothing is held).
 `ticfac status` is the one exception: it exits the run's liveness, 0 alive, 1 not.
 
 The epic finishes when its run completes: every tick gated and merged onto
-the epic branch, the PR opened, CI green on it. The MERGE is a person's.
+the epic branch, and the PR READY — the default branch folded in (a conflict
+is the run's resolve job's), the integrated gate green on the fold, CI green
+on the PR head, and the body written for its reviewer (where to look first,
+what the epic did, the done items and their evidence, the review's verdict,
+the findings and where each went). The MERGE is a person's by default. If the
+default branch moves before the merge, `ticfac run <epic>` again re-readies
+the PR — fold, gate, CI — with nobody merging by hand. A repository whose
+.tick/config.md Rules say "the run merges its own PR" opts in to the run
+merging the ready PR itself, with tk's merge drivers, as a merge commit.
 A run that ends holding something for a person exits 3 and names the wait
 kind; clear it (triage, settle, the fix it names) and run again. A run that
 ends FAILED — its last line names what did not pass — exits 1; fix what the

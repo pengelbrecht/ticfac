@@ -44,8 +44,8 @@ func TestCancelRevokesThenInterrupts(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("agent.send_keys was called %d times, want exactly one interrupt", len(sent))
 	}
-	if sent[0].Keys == nil || strings.Join(sent[0].Keys, ",") != "ctrl+c" {
-		t.Errorf("keys = %v, want ctrl+c: the documented interactive interrupt", sent[0].Keys)
+	if sent[0].Keys == nil || strings.Join(sent[0].Keys, ",") != "esc" {
+		t.Errorf("keys = %v, want esc: claude's own turn interrupt (interrupt.go)", sent[0].Keys)
 	}
 
 	// The revocation is durable and a re-Start is refused — that is the

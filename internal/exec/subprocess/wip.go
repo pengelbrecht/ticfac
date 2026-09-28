@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
@@ -320,6 +321,11 @@ func UncommittedWork(worktree, artifactPrefix string) (bool, error) {
 // touches the worktree's own index — the agent may still be alive and running
 // its own git when the snapshot is taken, and a snapshot that disturbed the
 // working state it is preserving would be worse than none.
+//
+// Nothing it runs today reaches a remote, but it runs whatever argv it is
+// handed, so it carries gitbin.TransportEnv like every such runner: the guard
+// (TestEveryGitThatCanReachARemoteIsBounded) asks that of a runner, not of a
+// caller.
 func snapshotGit(dir string, env []string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -327,7 +333,7 @@ func snapshotGit(dir string, env []string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	// A git that reads the invoking user's hooks, editors or pagers is a git
 	// that can block forever in a non-interactive executor.
-	cmd.Env = append(append(os.Environ(),
+	cmd.Env = append(append(append(os.Environ(), gitbin.TransportEnv()...),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
@@ -346,7 +352,7 @@ func snapshotGitStdin(dir string, env []string, stdin []byte, args ...string) (s
 	cmd.Dir = dir
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	cmd.Env = append(append(os.Environ(),
+	cmd.Env = append(append(append(os.Environ(), gitbin.TransportEnv()...),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",

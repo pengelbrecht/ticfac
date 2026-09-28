@@ -1,0 +1,14 @@
+{
+  "id": "wv2",
+  "title": "Progress-aware wall clock for implement ticks: soft deadline, extension on progress, hard cap",
+  "gloss": "progress-aware wall clock",
+  "description": "In epic-6in (2026-09-28) 2 of 4 strong-tier (pi/GLM) implement attempts ran out the fixed 3600s bound while making real progress (uncommitted +4166/-274 over 36 files; +1946/-55 over 20), zero commits; each cost 60 min plus a frontier retry. The strong attempts that succeeded took 49 and 53 min. The bound is one constant (DefaultWallSeconds). Policy: (1) the wall clock becomes a soft deadline, defaultable per role and tier in runners.toml and overridable per tick (wall_minutes); (2) 10 min before it the worker is nudged once to commit its WIP; (3) at the soft deadline, extend in 20-min steps while the branch moved or the worktree changed in the last 10 min, each a wall_clock_extended event naming the evidence, else stop as today; (4) a hard cap (default 2x soft) is never extended. Also: the worker prompt asks for small commits as it goes. And: a resumed run adopts and polls its live workers before slow startup work (sweeps, folds), so a wall clock fires on time across a restart.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[A1] a worker still changing its worktree at the soft deadline is extended and the event names the evidence; [A2] a worker with no change for 10 min is stopped at the soft deadline; [A3] nothing runs past the hard cap; [A4] the commit-WIP nudge is sent exactly once before the soft deadline; [A5] a per-tick wall_minutes overrides the tier default; [A6] a restarted run polls adopted workers before it sweeps",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T08:38:06.234777Z",
+  "updated_at": "2026-09-28T08:38:06.234777Z"
+}

@@ -157,6 +157,15 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return r.decideRoutedFinding(ctx, marker, *standing, dispatch, false)
 	}
 
+	// A finding whose remedy is a LIVE RUN — run another epic, demonstrate
+	// the product on a real substrate — is not a worker's tick whatever done
+	// item it claims (liverun.go): no worker inside this epic can run an
+	// epic. It becomes a backlog tick outside the epic, for the next epic run
+	// to satisfy, and gates nothing here.
+	if needsLiveRun(*standing) {
+		return r.decideLiveRunFinding(ctx, marker, *standing, dispatch)
+	}
+
 	// The epic's own definition of done, decided once: [A<n>] items resolved
 	// against the [evidence.acceptance] table of the repository's own
 	// runners.toml. The three outcomes of Decide are all taken: an enumerated
@@ -422,6 +431,9 @@ func placementLine(record runstate.Absorption) string {
 		return "placed before the close-out, which does not start while it is open; the review had already run"
 	case runstate.AbsorptionRouted:
 		return fmt.Sprintf("filed in %s's own tracker as %s", record.Target, record.TickID)
+	case runstate.AbsorptionNextRun:
+		return fmt.Sprintf("a backlog tick outside the epic, labelled %s: its remedy is a live run of an epic, "+
+			"for the next epic run to satisfy", liveRunLabel)
 	case runstate.AbsorptionBacklog:
 		if record.Target != "" {
 			return fmt.Sprintf("a backlog tick here naming %s, for a person to carry there", record.Target)
@@ -435,6 +447,10 @@ func placementLine(record runstate.Absorption) string {
 // verdictLine is the verdict as the record's reader reads it: which item, and
 // what decided.
 func verdictLine(record runstate.Absorption) string {
+	if isLiveRun(record) {
+		return "its remedy is a live run of an epic, which no worker inside this one can do, so it gates no item " +
+			"of this epic's done"
+	}
 	if record.Basis == runstate.AbsorptionRule {
 		return fmt.Sprintf("routed to %s, which this run cannot fix, so it gates no item of this epic's done",
 			record.Target)
@@ -492,6 +508,20 @@ func absorbedTickRecord(runID string, finding runstate.Finding, record runstate.
 			runID, finding.Key, finding.DiscoveredFrom, runID, finding.Key)
 	}
 	title := finding.Title
+	var labels []string
+	if isLiveRun(record) {
+		// A finding only the NEXT epic run can satisfy (liverun.go): outside
+		// the epic, labelled so that run finds it, and saying what to record.
+		title = "Next epic run: " + finding.Title
+		labels = []string{liveRunLabel}
+		how = fmt.Sprintf(
+			"ticfac run %s filed this backlog tick from the finding %s (reported by %s) instead of absorbing it: its "+
+				"remedy is a live run — running an epic, or the product on a real substrate — which no worker inside "+
+				"an epic can do. Satisfy it with the next epic run made the way it names, record that run's id and "+
+				"outcome here, and close this tick. The decision record is .ticfac/runs/%s/absorptions/%s.json on "+
+				"the run branch.",
+			runID, finding.Key, finding.DiscoveredFrom, runID, finding.Key)
+	}
 	if record.Target != "" {
 		// The local tracking tick of a finding routed to ANOTHER repository
 		// (routed.go): titled with the target and saying who it is for, so a
@@ -523,6 +553,7 @@ func absorbedTickRecord(runID string, finding runstate.Finding, record runstate.
 	// the close-out does not start while it is open; a backlog tick has no
 	// parent, which is what makes it backlog rather than the epic's to absorb.
 	tick.Parent = parent
+	tick.Labels = labels
 	return tick
 }
 

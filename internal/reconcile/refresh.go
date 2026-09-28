@@ -49,7 +49,13 @@ import (
 // refreshFromBase folds the epic's base branch into the integration branch as
 // origin has both, and answers with a typed refusal when they do not merge.
 func (r *Reconciler) refreshFromBase(ctx context.Context) error {
-	base := branchName(r.baseBranch(ctx), r.opts.Remote)
+	return r.refreshFrom(ctx, branchName(r.baseBranch(ctx), r.opts.Remote))
+}
+
+// refreshFrom is refreshFromBase against a named branch: the fold at run
+// start, and the landing's fold of the branch the epic PR merges into
+// (land.go) — one fold, with one resolve job and one lease, whoever asks.
+func (r *Reconciler) refreshFrom(ctx context.Context, base string) error {
 	if base == "" || base == r.branch {
 		return nil
 	}
