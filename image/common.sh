@@ -54,6 +54,34 @@ die() {
 }
 
 # ---------------------------------------------------------------------------
+# The git transport bound
+# ---------------------------------------------------------------------------
+# Every git this container starts that reaches origin — the clone's fetches,
+# the worker's push, the orchestrator's run-branch fetch and push, and every
+# push the harness makes on its own — inherits these, so a remote that goes
+# silent fails the command in about a minute instead of holding the container
+# until its wall clock. They are gitbin.TransportEnv's values, stated here for
+# the shell because the scripts' own gits never pass through the Go side
+# (TestTheImageBoundsItsGitTransportLikeTheBinary pins the two together, and
+# fails on a script that reaches a remote without sourcing this file).
+#
+#   - ssh (tick pul): no connect timeout and no keepalive by default, so a
+#     connection that dies without a FIN is waited on forever. Ten seconds to
+#     connect, four missed fifteen-second keepalives to give up.
+#   - https (epic-6in): curl, under git, has no low-speed abort by default; a
+#     push sat thirty minutes in a silent `git remote-https`. Under 1000
+#     bytes/s for 60s is "Operation too slow" (curl 28) — far below any
+#     transfer that is moving, and the same minute as the ssh bound.
+#
+# Assigned here, at source time, because an exported variable is what reaches
+# every git and the harness alike. A value the operator (or the control plane)
+# already set is theirs and is kept, one variable at a time, exactly as the Go
+# side keeps it.
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4}"
+export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-60}"
+
+# ---------------------------------------------------------------------------
 # Inputs
 # ---------------------------------------------------------------------------
 repo_url="${TICKS_REPO_URL:-}"
