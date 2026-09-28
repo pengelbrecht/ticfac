@@ -7,8 +7,8 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "The checkpoint carries a rejection class (bundle 1.1.0, contract tests updated); resume reads it before the phrase fallback; a test rewords a rejection message and resume still classifies it",
+  "acceptance_criteria": "[A1] The rejection class is a closed enum in the run-state contract (bundle 1.1.0): PutCheckpoint refuses a rejection without a valid class, and a checkpoint read with an unknown class is treated as unclassifiable (hold, logged), never guessed; [A2] a guard test walks every code path that rejects an attempt (AST or a registry of refusal sites) and fails if one records a rejection without a class; [A3] a table/property test proves the class written agrees with the collect verdict and refusal reason for every rejection path (the same mapping #117's phrase classifier encodes), so the structured field and the prose can never disagree; [A4] resume reads the class first and uses the phrase classifier only for checkpoints written before 1.1.0; a test rewords a rejection message and resume still classifies it; [A5] a legacy checkpoint (pre-1.1.0) still resumes via the fallback",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:16:44.233661Z",
-  "updated_at": "2026-09-28T18:16:44.233661Z"
+  "updated_at": "2026-09-28T18:24:43.095697Z"
 }
