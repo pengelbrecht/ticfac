@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 9,
-  "state": "integrating",
-  "reason": "integrating 060 attempt 1 into epic/6in",
-  "updated_at": "2026-09-28T05:32:03Z",
+  "sequence": 10,
+  "state": "gating",
+  "reason": "running the integrated gate for 060 on 3753359e8d9a",
+  "updated_at": "2026-09-28T05:32:15Z",
   "ticks": [
     {
       "tick_id": "060",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
