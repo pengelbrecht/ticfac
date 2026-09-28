@@ -29,11 +29,12 @@ import (
 //  0. wrangler, logged in — the precondition everything else needs.
 //  1. a deployment — offered, never assumed (D16: the factory runs in the
 //     operator's own account or not at all).
-//  2. a GitHub credential — the DEVICE FLOW against the ticks GitHub App is
-//     the shipped rung (D11): a code, one browser approval, and the operator
-//     picks the repositories right there. --github-token stays the manual
-//     escape hatch, and an operator who registers their OWN App gets the
-//     private-key rung and its per-run installation tokens as the upgrade.
+//  2. a GitHub credential — the factory's OWN GitHub App is the top rung
+//     (D11's private-key rung, epic dm6, githubapp_rung.go): the factory hosts
+//     the manifest flow, the operator clicks "Create" and "Install" on any
+//     device, and every run gets its own token for one repository. Below it,
+//     the DEVICE FLOW against the ticks GitHub App (a code, one approval),
+//     and --github-token as the manual escape hatch.
 //  3. model access — the operator's own AI Gateway (D17) plus the provider
 //     behind it. Workers AI is the rung with no key at all: inference bills to
 //     the same Cloudflare account through the Worker's own binding.
@@ -134,6 +135,7 @@ func SecretSinks(configPath string) (workerSecrets []string, localFiles []string
 		SecretGitHubToken,
 		SecretGatewayBaseURL,
 		SecretCloudflareAPIToken,
+		SecretGitHubAppSealingKey,
 	}
 	for _, spec := range Providers {
 		if spec.NeedsKey() {
@@ -187,6 +189,18 @@ type SetupOptions struct {
 	// GitHubOAuthBase overrides https://github.com — the host the device flow
 	// runs on, which is NOT the REST API host (GHES, tests).
 	GitHubOAuthBase string
+
+	// GitHubApp chooses the App rung: "" or "auto" offers it when the factory
+	// has no App yet, "yes" walks it without asking, "no" skips it for the
+	// token rungs below (device flow, then PAT). A --github-token answer skips
+	// it too, unless "yes" says otherwise.
+	GitHubApp string
+	// GitHubOrg registers the App under an organization rather than the
+	// signed-in user.
+	GitHubOrg string
+	// GitHubAppWait bounds the wait for the operator's two clicks; zero means
+	// DefaultGitHubAppWait.
+	GitHubAppWait time.Duration
 
 	// Answers supplied up front instead of prompted for.
 	GitHubToken string
@@ -251,8 +265,13 @@ type SetupResult struct {
 	// GitHubRepoChecked reports whether the repo-scope probe ran; false means
 	// no repository could be resolved to check against.
 	GitHubRepoChecked bool
-	// GitHubAuth is how the credential was obtained: AuthDeviceFlow or AuthPAT.
+	// GitHubAuth is how the credential was obtained: AuthApp, AuthDeviceFlow
+	// or AuthPAT.
 	GitHubAuth string
+	// GitHubAppID and GitHubAppSlug name the factory's own GitHub App when
+	// the App rung is the one that answered.
+	GitHubAppID   string
+	GitHubAppSlug string
 	// GitHubTokenExpiresAt is when the credential stops working. Zero means it
 	// does not expire, which is what a GitHub App registered with user-token
 	// expiration turned off issues.
@@ -277,16 +296,12 @@ type SetupResult struct {
 // defaultGitHubAPIBase is GitHub's REST root.
 const defaultGitHubAPIBase = "https://api.github.com"
 
-// gitHubAppUpgradeNote is the TOP rung of the D11 ladder. It is printed, not
-// walked, and it always will be: minting per-run installation tokens needs a
-// GitHub App's PRIVATE KEY, and a key shipped inside tk would let any holder
-// mint tokens for every installation of the shared App. So that rung belongs
-// to an operator who registers an App under their own account; the flow below
-// needs only the shared App's public client id.
-const gitHubAppUpgradeNote = "Upgrade path (later, optional): your OWN GitHub App gives the factory\n" +
-	"per-run installation tokens and the two credential grades of D11. It needs\n" +
-	"that App's private key, which is why ticks cannot ship it.\n" +
-	"See docs/factory-credentials.md."
+// gitHubAppUpgradeNote points a walk that fell through to the PAT prompt back
+// up the ladder: the factory's own GitHub App (epic dm6) needs no token at
+// all, and it is one flag away.
+const gitHubAppUpgradeNote = "No token needed at all: `ticfac factory setup --github-app yes` registers\n" +
+	"the factory's OWN GitHub App (two clicks, on any device), and every run then\n" +
+	"gets its own short-lived token for one repository."
 
 // GitHub credential kinds, as recorded in ~/.ticfacrc. They are not cosmetic:
 // only a device-flow credential can be renewed without a browser, and only a
@@ -572,6 +587,13 @@ func setupGitHub(
 		apiBase = defaultGitHubAPIBase
 	}
 
+	// The top rung: the factory's own GitHub App (epic dm6), registered
+	// through a manifest flow the factory itself hosts. When it answers there
+	// is no token to create, store or renew here at all.
+	if handled, err := setupGitHubApp(ctx, w, in, out, client, cfg, opts, repo, result); err != nil || handled {
+		return err
+	}
+
 	// --github-token is the manual escape hatch, and it bypasses everything
 	// below: an operator who supplies a credential is not asked to approve one.
 	cred := githubCredential{Token: strings.TrimSpace(opts.GitHubToken), Auth: AuthPAT}
@@ -825,6 +847,8 @@ func storeGitHubCredential(
 // describeAuth names the rung a stored credential came from.
 func describeAuth(auth string) string {
 	switch auth {
+	case AuthApp:
+		return "the factory's own GitHub App"
 	case AuthDeviceFlow:
 		return "device flow"
 	case AuthPAT:
