@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 127,
-  "state": "running",
-  "reason": "v7z is running as attempt 12",
-  "updated_at": "2026-09-28T18:04:11Z",
+  "sequence": 128,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for v7z",
+  "updated_at": "2026-09-28T18:08:09Z",
   "ticks": [
     {
       "tick_id": "060",
