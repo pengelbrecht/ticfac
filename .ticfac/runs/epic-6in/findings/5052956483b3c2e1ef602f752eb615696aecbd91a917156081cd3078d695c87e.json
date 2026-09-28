@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "none",
   "demonstrating_check": "go test ./internal/sandboximage/ -run TestWorker (a new case: TICKS_WORKER_TIMEOUT set, first run exits 0 late, nudge hangs)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:52:11Z",
+  "triaged_at": "2026-09-28T10:15:30Z",
+  "triaged_by": "ticfac run epic-6in absorbing gmq",
+  "promoted_as": "gmq",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "tdu",
