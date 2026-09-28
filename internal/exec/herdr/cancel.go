@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
@@ -16,8 +17,9 @@ import (
 // Revocation is therefore the DURABLE REFUSAL TO REISSUE, recorded before
 // any stop is requested so a cancel that is itself killed halfway through
 // still leaves an attempt that can never boot again. The stop is the
-// interrupt herdr itself offers a human: agent.send_keys with ctrl+c, the
-// same surface `herdr agent send-keys` drives. It stops the SPENDING; the
+// harness's own interrupt delivered through agent.send_keys, the same
+// surface `herdr agent send-keys` drives: Escape for pi, claude and codex,
+// ctrl+c for a kind nobody has verified (interrupt.go). It stops the SPENDING; the
 // agent's process stays where it is until Dispose tears the workspace down,
 // because closing the pane is teardown and not a stop.
 //
@@ -58,10 +60,19 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 
 	// The agent to interrupt is the one the handle names, or the one the
 	// attempt record holds when the handle is the minimal adoption shape.
+	// The kind decides WHICH keys interrupt it: the record's, or this
+	// executor's own when no record was ever written.
 	target := local.AgentName
-	if record, err := st.readAttempt(); err == nil && target == "" {
-		target = record.AgentName
+	kind := e.opts.Kind
+	if record, err := st.readAttempt(); err == nil {
+		if target == "" {
+			target = record.AgentName
+		}
+		if record.Kind != "" {
+			kind = record.Kind
+		}
 	}
+	keys := interruptKeys(kind)
 
 	// An attempt that has already SETTLED ITSELF is one there is nothing
 	// left to stop, and recording a stop over it is a sentence about an
@@ -107,15 +118,16 @@ func (e *Executor) Cancel(h *subprocess.JobHandle) (*subprocess.CancelAck, error
 	//    agent is recorded as the observation it is.
 	agent, stopErr := e.client.AgentSendKeys(context.Background(), client.AgentSendKeysParams{
 		Target: target,
-		Keys:   []string{"ctrl+c"},
+		Keys:   keys,
 	})
 	stopRequested := false
 	switch {
 	case stopErr == nil:
 		stopRequested = true
-		detail := "interrupted the agent with ctrl+c after the dispatch was revoked"
+		chord := strings.Join(keys, " ")
+		detail := "interrupted the agent with " + chord + " after the dispatch was revoked"
 		if settled {
-			detail = "interrupted the agent with ctrl+c over an attempt that had settled itself: " +
+			detail = "interrupted the agent with " + chord + " over an attempt that had settled itself: " +
 				"recorded as the observation it is, never as a cancellation over the verdict"
 		}
 		status := ""
