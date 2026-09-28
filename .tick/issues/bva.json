@@ -1,0 +1,13 @@
+{
+  "id": "bva",
+  "title": "The run dispatches a tick another party holds claimed once the width has room",
+  "description": "planFrom keeps in_progress ticks in the plan whoever claimed them. Since dz1 a foreign claim no longer bypasses the width (OwnClaim), but when the width has room the run still admits that tick, claims it again and starts a worker over another run's or a person's live claim. The window should skip ticks whose claim is not its own (or hold on them) rather than dispatching into them.\n\nticfac run epic-6in filed this backlog tick from the finding 08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388 (reported by run-epic-6in/tick-dz1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/08e5bcc0cd19ee188745c9f034bedb699410821cff7e11e0481c995fd7ad3388.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-dz1/attempt-6",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:14:16Z",
+  "updated_at": "2026-09-28T10:14:16Z"
+}
