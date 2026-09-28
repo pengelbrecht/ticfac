@@ -144,6 +144,10 @@ type harness struct {
 	// state catches up with the pane it just destroyed, which is exactly
 	// what the close's agent.get confirmation step exists for.
 	paneCloseLingers bool
+	// paneCloseTakesWorkspace makes pane.close drop the workspace the pane
+	// lived in while leaving its worktree registered and on disk — what the
+	// live herdr did to epic-6in's 46x attempt 2 at its wall clock.
+	paneCloseTakesWorkspace bool
 	// failRemoveOnce makes the NEXT worktree.remove answer an operational
 	// error before doing anything — the simulated kill between the steps
 	// of a disposal, before herdr ever accepted the removal.
@@ -193,6 +197,9 @@ type harnessOptions struct {
 	// accepted but agent.get keeps answering live (see the field on
 	// harness).
 	paneCloseLingers bool
+	// paneCloseTakesWorkspace makes a pane.close drop the pane's workspace
+	// and leave its worktree behind (see the field on harness).
+	paneCloseTakesWorkspace bool
 	// serverVersion and serverProtocol, when set, are what the fake's ping
 	// handshake advertises; zero keeps the canonical 0.8.2 / protocol 20
 	// reply. A non-default pair also answers WITHOUT a capabilities block,
@@ -220,11 +227,12 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	h := &harness{
 		t: t, repo: repo, state: state, workspaces: map[string]harnessWorkspace{},
 		spawn: opts.spawnAgent, mode: opts.agentMode,
-		snapshotOmitsWorktrees: opts.snapshotOmitsWorktrees,
-		paneCloseLingers:       opts.paneCloseLingers,
-		promptFile:             filepath.Join(state, "prompt.txt"),
-		statusFile:             filepath.Join(state, "status"),
-		interruptFile:          filepath.Join(state, "interrupt"),
+		snapshotOmitsWorktrees:  opts.snapshotOmitsWorktrees,
+		paneCloseLingers:        opts.paneCloseLingers,
+		paneCloseTakesWorkspace: opts.paneCloseTakesWorkspace,
+		promptFile:              filepath.Join(state, "prompt.txt"),
+		statusFile:              filepath.Join(state, "status"),
+		interruptFile:           filepath.Join(state, "interrupt"),
 	}
 	h.serverVersion, h.serverProtocol = "0.8.2", 20
 	if opts.serverVersion != "" {
@@ -562,6 +570,16 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		lingers := h.paneCloseLingers
 		if !lingers {
 			h.paneClosed = true
+		}
+		if h.paneCloseTakesWorkspace {
+			// herdr 0.9.1 as epic-6in observed it: closing a workspace's
+			// only pane takes the WORKSPACE with it, and leaves the git
+			// worktree registered and on disk.
+			for id := range h.workspaces {
+				if strings.HasPrefix(p.PaneID, id+":") {
+					delete(h.workspaces, id)
+				}
+			}
 		}
 		cmd := h.agentCmd
 		h.mu.Unlock()

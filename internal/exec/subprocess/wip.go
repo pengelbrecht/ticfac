@@ -27,15 +27,17 @@ import (
 // hold uncommitted work:
 //   - the herdr wall-clock pane close, which takes the checkout with the pane
 //     (rj0's gate, kept where it is);
-//   - this package's dispose, whose worktree remove is --force — the one
-//     other unconditional destruction, and the path a REJECTED attempt or a
-//     person's release takes.
+//   - this package's dispose, whose worktree remove is --force — the path a
+//     REJECTED attempt or a person's release takes;
+//   - the herdr executor's dispose, which forces its removal past dirt only
+//     once the dirt is preserved — refusing instead stranded the attempt,
+//     since no retry could ever answer the refusal differently (epic-6in);
+//   - the run's leftover sweep (PreserveUncommitted, leftovers.go), which
+//     removes by name what no handle will ever dispose.
 //
-// It is deliberately NOT taken anywhere else. Every other teardown refuses
-// rather than destroys — herdr's worktree.remove without Force answers
-// workspace-refused over dirt, and neither executor deletes a branch whose
-// commits no remote has — so the work survives those paths in place, and a
-// snapshot there would only litter the repository. An operator release that
+// It is deliberately NOT taken anywhere else — a clean worktree takes none,
+// and neither executor deletes a branch whose commits no remote has — so a
+// snapshot never litters the repository for nothing. An operator release that
 // means to CARRY work forward does it with real commits (--carry-work), not
 // with a snapshot.
 //

@@ -2901,9 +2901,14 @@ func (r *Reconciler) cleanUp(handle *subprocess.JobHandle, executor Executor, ma
 		// holds of it is torn down from its state, and a host holding none
 		// has nothing to tear down.
 		r.tearDownSettled(marker, reason, false)
-		return
+	} else {
+		r.tearDown(handle, executor, marker, reason, false)
 	}
-	r.tearDown(handle, executor, marker, reason, false)
+	// The tick is closed, so nothing of it will be asked for again: every
+	// other job of it this run made — an earlier attempt, a repair or resolve
+	// job, a start that never ran — and anything this teardown failed to take
+	// goes too, by name (sweep.go). A branch holding unmerged commits stays.
+	r.sweepTick(marker.TickID)
 }
 
 // disposeRejected is cleanUp for an attempt that will never be merged.
