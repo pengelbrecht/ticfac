@@ -260,7 +260,12 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		fmt.Fprintf(stderr, "ticfac run-epic: exactly one epic id is required\n")
 		return 2
 	}
-	epicID := rest[0]
+	// The epic id or its run id's spelling (runid.go), never doubled.
+	epicID := epicIDOfArg(rest[0])
+	if epicID == "" {
+		fmt.Fprintf(stderr, "ticfac run-epic: %q names no epic\n", rest[0])
+		return 2
+	}
 
 	// The document's writer and the prose's, kept apart from the first line
 	// (tick 8v3): with --json the run's own words — the startup line, the
@@ -923,7 +928,14 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "ticfac settle: exactly one epic id, tick id and attempt number are required\n")
 		return 2
 	}
-	epicID, tickID := rest[0], rest[1]
+	// The epic id or its run id (epic-<id>), the same spellings every run
+	// command takes (runid.go): the prefix is never doubled into a run id
+	// of epic-epic-<id>.
+	epicID, tickID := epicIDOfArg(rest[0]), rest[1]
+	if epicID == "" {
+		fmt.Fprintf(stderr, "ticfac settle: %q names no epic\n", rest[0])
+		return 2
+	}
 	attempt, err := strconv.Atoi(rest[2])
 	if err != nil || attempt < 1 {
 		fmt.Fprintf(stderr, "ticfac settle: %q is not an attempt number\n", rest[2])

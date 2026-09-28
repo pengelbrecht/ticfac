@@ -308,7 +308,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	// run's internal identity stays epic-<epic-id> either way — run-epic
 	// derives it from the epic id it is given, so the prefix is stripped
 	// here and never doubled.
-	epicID := strings.TrimPrefix(rest[0], "epic-")
+	epicID := epicIDOfArg(rest[0])
 	if epicID == "" {
 		fmt.Fprintf(stderr, "ticfac run: %q names no epic\n", rest[0])
 		return 2
@@ -326,7 +326,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	// exit code cannot disagree.
 	finish := func(action, state, note string) int {
 		if *fl.asJSON {
-			if err := emitRunJSON(action, state, note, epicID, "epic-"+epicID, fl, stdout); err != nil {
+			if err := emitRunJSON(action, state, note, epicID, runIDOfEpic(epicID), fl, stdout); err != nil {
 				fmt.Fprintf(stderr, "ticfac run %s: %v\n", epicID, err)
 				return 1
 			}
@@ -369,7 +369,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 		return runCloudCommand(ctx, epicID, repo, fl, stdout, stderr)
 	}
 
-	runID := "epic-" + epicID
+	runID := runIDOfEpic(epicID)
 
 	// The liveness that decides attach from resume is the run's own claim,
 	// never a guess: runlife's probe, the same answer `ticfac status` gives.

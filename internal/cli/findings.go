@@ -113,12 +113,12 @@ surface will not make for you.`,
 // returned: the tick an absorb files names the epic the tracker knows, not
 // the spelling that was typed.
 func resolveFindingsRun(epicID, repo, remote, branch, runID string) (string, string, string, string, string, error) {
-	epicID = strings.TrimPrefix(epicID, "epic-")
+	epicID = epicIDOfArg(epicID)
 	if branch == "" {
 		branch = "epic/" + epicID
 	}
 	if runID == "" {
-		runID = "epic-" + epicID
+		runID = runIDOfEpic(epicID)
 	}
 	if repo == "" {
 		var err error
@@ -159,7 +159,7 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 	epicID := rest[0]
 	// The epic id is accepted with its own `epic-` prefix everywhere; a
 	// prefix with nothing behind it names no epic.
-	if strings.TrimPrefix(epicID, "epic-") == "" {
+	if epicIDOfArg(epicID) == "" {
 		fmt.Fprintf(stderr, "ticfac findings: %q names no epic\n", epicID)
 		return exitUsage
 	}
@@ -361,7 +361,7 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 	}
 	// The epic id is accepted with its own `epic-` prefix everywhere; a
 	// prefix with nothing behind it names no epic.
-	if strings.TrimPrefix(epicID, "epic-") == "" {
+	if epicIDOfArg(epicID) == "" {
 		fmt.Fprintf(stderr, "ticfac finding: %q names no epic\n", epicID)
 		return exitUsage
 	}
