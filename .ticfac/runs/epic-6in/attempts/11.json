@@ -1,0 +1,50 @@
+{
+  "schema_version": 3,
+  "attempt": 11,
+  "tick_id": "v7z",
+  "dispatched_at": "2026-09-28T17:38:09Z",
+  "job_handle": {
+    "attempt": 11,
+    "base_sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+    "executor": "herdr",
+    "job_id": "run-epic-6in/tick-v7z/attempt-11",
+    "model": "opus",
+    "prompt_digest": "sha256:3ce3337fc2a4974604bbcb7cef95a138845814ffc158a55a5c489b974b9974f0",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "v7z",
+      "attempt": 8,
+      "write_ref": "refs/heads/ticfac/run-epic-6in/tick-v7z/attempt-8",
+      "sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+      "released_by": "person-97ac31e84ef9d393226c70c05416751376534af7b6cbb2b3b1d72d68f64a59d5"
+    },
+    "role": "closeout-epic",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1",
+    "tick_id": "v7z",
+    "tier": "",
+    "touch": null,
+    "try": 2,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-epic-6in/tick-v7z/attempt-11"
+  },
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "v7z",
+    "attempt": 11,
+    "source_ref": "refs/heads/ticfac/run-epic-6in/tick-v7z/attempt-8",
+    "source_sha": "1fcee78373a0f02aef8e196d5e4b33d6094041ee",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  }
+}
