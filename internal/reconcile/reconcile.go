@@ -660,6 +660,14 @@ type Options struct {
 	// control. Names are contracts/lifecycle-invariants.json's guard names.
 	guardsOff map[string]bool
 
+	// proseFindingsForAPerson restores the pre-epic-6in answer to a finding
+	// against a prose acceptance — left untriaged, for a person — and nothing
+	// in production sets it. It exists for the tests of the machinery that
+	// still guards every finding the run did NOT decide (the close-out's
+	// untriaged-findings hold, the PR body that carries them): the prose rule
+	// (prose.go) decides the findings those tests used to reach it with.
+	proseFindingsForAPerson bool
+
 	// stopAfter kills this reconciler the moment a named stage is reached. It
 	// exists for the restart tests, which have to cut the run at a point a
 	// crash could genuinely land on — between a dispatch and its record,
@@ -1048,6 +1056,12 @@ const (
 	StageLanded        = "landed"
 	StageLandVerified  = "land_verified"
 	StageLandSkipped   = "land_skipped"
+
+	// StageCIRestarted: the code the epic PR would merge had no executed CI
+	// verdict — its runs were cancelled by a later push that changed only
+	// ignored paths — so the run restarted them, once (closeout_ci.go,
+	// epic-6in). An automatic intervention, recorded as one.
+	StageCIRestarted = "ci_restarted"
 
 	// StageWallClock is the line a bound's firing owes the feed (tick emk):
 	// the wall clock fired and the attempt has NOT settled, which is the
@@ -2444,6 +2458,15 @@ const (
 	RefusedCloseoutCIAbsent  = "closeout_ci_absent"         // no CI appeared on the PR head within the wait's bound
 	RefusedCloseoutCI        = "closeout_ci_failed"         // CI red; the message names the failing job
 	RefusedCloseoutCIPending = "closeout_ci_pending"        // CI still pending past the run's bound
+
+	// RefusedCloseoutOverRedCI is a close-out that answered BLOCKED having
+	// been dispatched over code whose CI was RED — read truthfully by the
+	// run, never parsed from the answer (epic-6in: a false green from
+	// all-skipped PR checks admitted it). The answer is about the tree, and
+	// the tree is the repair job's: the next incarnation's admission repairs
+	// the red CI and dispatches a fresh close-out over the green, so this
+	// stop resumes without a person (supervise.go).
+	RefusedCloseoutOverRedCI = "closeout_dispatched_over_red_ci"
 
 	// RefusedCloseoutPRFindings is the integrity check that replaces the
 	// per-tick findings hold (tick aqm): a finding the run filed that does

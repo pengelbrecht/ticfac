@@ -34,8 +34,9 @@ import (
 //     and restarting from a fresh clone;
 //  4. a finding the done is reachable without still becomes a backlog tick
 //     with an owner, and is still reported;
-//  5. an epic whose done is prose refuses to absorb and says so, leaving the
-//     finding a person's at the close-out hold.
+//  5. an epic whose done is prose decides by the run's rule (epic-6in): a
+//     backlog tick, unless the reporter claims the build or CI is broken,
+//     which is absorbed — never a finding left for a person.
 
 // setEpicAcceptance writes the epic's own definition of done: the [A<n>]-marked
 // items the absorption decision is driven against.
@@ -442,58 +443,108 @@ func TestAClassifiedNoneBecomesABacklogTickAsAPrediction(t *testing.T) {
 	}
 }
 
-// 5. THE REFUSAL: an epic whose acceptance carries no [A<n>] items has a done
-// that is prose, nothing can be pointed at, and the run refuses to absorb
-// rather than guessing — says so in the feed, and leaves the finding a
-// person's at the close-out hold.
-func TestAnEpicWithAProseDoneRefusesToAbsorbAndSaysSo(t *testing.T) {
+// 5. PROSE IS NOT A PERSON'S DECISION (epic-6in): an epic whose acceptance
+// carries no [A<n>] items has a done nothing can be pointed at, so there is
+// no item a finding could gate — and no judgement for a person to make. The
+// run's rule decides: a BACKLOG tick with an owner, the reason recorded, and
+// the run completes. (It used to leave the finding "for a person", and 6in's
+// close-out held the whole run on fifteen of them.)
+func TestAProseDoneTurnsAFindingIntoABacklogTickNotAHold(t *testing.T) {
 	shorttest.EndToEnd(t)
 	t.Parallel()
 
 	f := newFixture(t, fixtureOptions{mode: "finding_local"})
 	// The fixture's default epic acceptance: no [A<n>] marks at all.
 
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local"})
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.State != runstate.StateFailed {
-		t.Fatalf("the run ended %s, want failed on the close-out's untriaged hold: the refusal leaves the finding a person's",
-			result.State)
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): a finding against a prose done is backlog work, not a hold for a person",
+			result.State, result.Failure)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedFindingUntriaged {
-		t.Fatalf("the failure is %+v, want the close-out's untriaged-findings hold", result.Failure)
+	record := absorbingAbsorption(t, f.Repo, r)
+	if record.Gating || record.Placement != runstate.AbsorptionBacklog || record.Basis != runstate.AbsorptionRule {
+		t.Fatalf("the decision is %+v, want a non-gating backlog decision by the run's rule", record)
 	}
-
-	// THE RUN SAID SO: the feed names the refusal, so an operator reading why
-	// the close-out is held sees that the run refused to guess at a done that
-	// is prose, not that a finding fell on the floor.
+	if !strings.Contains(record.Reason, "prose") {
+		t.Errorf("the recorded reason does not say the acceptance is prose: %q", record.Reason)
+	}
+	tick, err := f.Tracker.Show(context.Background(), record.TickID)
+	if err != nil {
+		t.Fatalf("the backlog tick %s does not exist: %v", record.TickID, err)
+	}
+	if tick.Parent != "" {
+		t.Errorf("the backlog tick's parent is %q, want none: it is not the running epic's work", tick.Parent)
+	}
+	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
+	finding, ok, err := store.Finding(record.Key)
+	if err != nil || !ok {
+		t.Fatalf("read the finding: %v %v", ok, err)
+	}
+	if finding.Status != runstate.FindingPromoted || finding.PromotedAs != record.TickID {
+		t.Fatalf("the finding is %s promoted as %s, want promoted as the backlog tick %s", finding.Status,
+			finding.PromotedAs, record.TickID)
+	}
 	events := feedStages(t, f.Repo.Dir, "r-fixture")
-	line := detailOfStage(events, StageAbsorptionRefused)
-	if line == "" {
-		t.Fatalf("no %s line in the feed: a refusal nobody can see reads as a finding that vanished; stages: %v",
-			StageAbsorptionRefused, feedStagesOf(events))
+	if line := detailOfStage(events, StageAbsorptionRefused); line != "" {
+		t.Errorf("the run still left the finding for a person: %q", line)
 	}
-	if !strings.Contains(line, "refuses to absorb") && !strings.Contains(line, "refusing to absorb") {
-		t.Errorf("the refusal line does not say the run refused to absorb: %q", line)
+	if line := detailOfStage(events, StageBacklogged); line == "" {
+		t.Errorf("no %s line: a decision nobody can see reads as a finding that vanished; stages: %v",
+			StageBacklogged, feedStagesOf(events))
 	}
+}
 
-	// And the decision was NOT made: no absorption record, no tick created, the
-	// draft still proposed and still holding the close-out for a person.
-	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
-	records, err := store.Absorptions()
+// 5b. THE EXCEPTION: a finding whose reporter claims it breaks the build or
+// CI gates ANY done, prose or not — a red build is an epic PR nobody can
+// merge — so it is absorbed into the running epic as a child the run works
+// before the hand-over. 6in's own close-out filed one ("… dz1 regression; full
+// suite red").
+func TestAProseDoneAbsorbsAFindingThatClaimsTheBuildIsRed(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "finding_build_red"})
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_build_red"})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("run: %v", err)
 	}
-	if len(records) != 0 {
-		t.Fatalf("the run recorded %d absorption decision(s) over a done that is prose: it must refuse to absorb rather than guess", len(records))
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v)", result.State, result.Failure)
 	}
-	findings, err := store.Findings()
-	if err != nil {
-		t.Fatal(err)
+	record := absorbingAbsorption(t, f.Repo, r)
+	if !record.Gating || record.Basis != runstate.AbsorptionRule || record.Placement == runstate.AbsorptionBacklog {
+		t.Fatalf("the decision is %+v, want a gating absorption by the run's rule, placed before the hand-over", record)
 	}
-	if len(findings) != 1 || findings[0].Status != runstate.FindingProposed {
-		t.Fatalf("the finding is %+v, want one still proposed and waiting for a person", findings)
+	if _, inEpic := epicChildren(t, f)[record.TickID]; !inEpic {
+		t.Errorf("the absorbed tick %s is not a child of the running epic", record.TickID)
+	}
+	order := orderOf(r)
+	if _, dispatched := order.dispatched[record.TickID]; !dispatched {
+		t.Errorf("the absorbed tick %s was never worked: a claimed red build is fixed before the hand-over",
+			record.TickID)
+	}
+}
+
+// short: the claim reader over titles in memory; no repository, no run
+func TestTheBuildBreakageClaimReadsTheReportersClaimOnly(t *testing.T) {
+	t.Parallel()
+	for title, want := range map[string]bool{
+		"A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)": true,
+		"The build is broken on linux after the parser change":                                                                 true,
+		"This change breaks the build under -race":                                                                             true,
+		"internal/cli fails to compile without the tk package":                                                                 true,
+		"CI is red on the epic branch":                                                                                         true,
+		"forge.CI reads a head whose every check run is SKIPPED as green, and admitted 6in's close-out over a red go job":      false,
+		"No mechanical guard that ticfac never imports or requires a ticks Go package":                                         false,
+		"runners-config.md still documents tk cloud spawn/wait/collect, which no longer exist":                                 false,
+		"Worker boundary shim guards tk but not ticfac on the harness PATH":                                                    false,
+	} {
+		if got := claimsBuildBreakage(runstate.Finding{Title: title}); got != want {
+			t.Errorf("claimsBuildBreakage(%q) = %v, want %v", title, got, want)
+		}
 	}
 }
 

@@ -398,6 +398,35 @@ func (r *Reconciler) admitCloseout(ctx context.Context, entry planEntry) error {
 		case forge.CIRed:
 			r.record(tick, StageCloseoutHeld, "CI on the epic PR #%d is red: %s failed", pr.Number,
 				strings.Join(report.Failing, ", "))
+			// RED CI BEFORE THE CLOSE-OUT IS A GATE FAILURE, NEVER A HOLD
+			// (epic-6in, 2026-09-28). The epic's integrated code fails CI — a
+			// full-suite regression the per-tick short gate could not see —
+			// and the repair is the tree's, which is what the repair job is
+			// for: exactly as the readying answers a red CI (land.go). It is
+			// dispatched under the latest attempt of a tick this run closed,
+			// the work the red is about, with the failing jobs as its
+			// evidence; its merge is gated as usual, and the admission then
+			// asks CI again about the repaired tree. A close-out is never
+			// dispatched over red CI: it would find the red, answer BLOCKED,
+			// and hold the run for a person the repair job replaces.
+			owner, err := r.ciRepairOwner(ctx)
+			if err != nil {
+				return err
+			}
+			if owner != nil {
+				r.record(tick, StageGateFailed, "CI on the epic PR #%d is red on %s: %s failed; the close-out of %s "+
+					"is not dispatched over it — the repair job is, under %s", pr.Number, short(ciSHA),
+					strings.Join(report.Failing, ", "), r.opts.EpicID,
+					r.attemptName(owner.marker.TickID, owner.marker.Attempt))
+				if err := r.repairRedCI(ctx, owner.entry, owner.marker, pr, ciSHA, report, "closeout-ci"); err != nil {
+					return err
+				}
+				// The repair merged and its gate passed: CI is asked again,
+				// about the repaired tree, with a fresh bound — the repair
+				// took the time the old one was counting.
+				deadline = r.now().Add(r.opts.GateTimeout)
+				continue
+			}
 			return r.refuse(RefusedCloseoutCI, tick,
 				"CI is red on the epic PR #%d (%s): the failing job is %s. The close-out of %s is not admitted "+
 					"until CI is green on the PR, and the rule the repository declares is: %s",
@@ -609,15 +638,31 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 				ciSubject(ciSHA, ciIsHead, pr))
 			return nil
 		case forge.CIRed:
+			r.record(tick, StageCloseoutHeld,
+				"CI on the epic PR #%d is red on the head that includes the close-out's own commits: %s failed",
+				pr.Number, strings.Join(report.Failing, ", "))
+			// Red CI at the close is the tree's to repair, as at the
+			// admission and the readying (epic-6in): the repair job is
+			// dispatched over it under the close-out's own attempt, its merge
+			// is gated, and the close is gated again behind it — which closes
+			// the tick, so this caller's close is over.
+			if r.store != nil {
+				entry := planEntry{TickID: tick, Role: marker.Role, Title: r.titles[tick]}
+				if entry.Role == "" {
+					entry.Role = "closeout-epic"
+				}
+				if err := r.repairRedCI(ctx, entry, marker, pr, ciSHA, report, "close-ci"); err != nil {
+					r.setTick(tick, "rejected")
+					return err
+				}
+				return errClosedBehindRepair
+			}
 			// The refusal is typed apart from the admission's (tick sqx):
 			// both are red CI, but the repairs point at different writers —
 			// the epic's tree at the admission, the close-out's own writes
 			// here — and a person reading the run's record reads WHICH red
 			// CI stopped the run from the reason alone.
 			r.setTick(tick, "rejected")
-			r.record(tick, StageCloseoutHeld,
-				"CI on the epic PR #%d is red on the head that includes the close-out's own commits: %s failed",
-				pr.Number, strings.Join(report.Failing, ", "))
 			return r.refuse(RefusedCloseoutCIOnClose, tick,
 				"CI is red on the epic PR #%d (%s) on the head that includes the close-out's own commits (merged as %s): "+
 					"the failing job is %s. The close-out of %s is NOT closed behind it, and the rule the repository "+

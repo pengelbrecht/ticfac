@@ -315,6 +315,15 @@ func (r *Reconciler) settleBeforeDispatch(ctx context.Context, entry planEntry) 
 	// settle runs again over a graph that has closed them; only when nothing
 	// this run is doing can close a child does the gate's refusal stand.
 	if entry.Role == "closeout-epic" {
+		// Every finding still waiting for a triage is decided first, by the
+		// same rules as at its filing (prose.go): the close-out's findings
+		// gate must meet decisions, not a queue for a person, and a finding
+		// absorbed here is a child the open-children gate below waits behind.
+		if r.store != nil {
+			if err := r.decideUndecidedFindings(ctx); err != nil {
+				return true, err
+			}
+		}
 		open, refusal, err := r.gateCloseoutOnOpenChildren(ctx, entry)
 		if err != nil {
 			return true, err
@@ -546,6 +555,24 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			failed++
 			continue
 		case holdAttemptWork:
+			// A CLOSE-OUT dispatched over RED CI is superseded, not held
+			// (epic-6in). Its answer was about the tree — the run's own
+			// truthful read of CI on the code it was cut from is red — and the
+			// admission this dispatch passed has since answered that with the
+			// repair job and seen CI green. Its commits (a retro written over
+			// a tree that was about to change) stay on its branch on origin;
+			// the close-out is dispatched afresh over the repaired tree. No
+			// rung is earned: the attempt did not fail, the CI did.
+			if entry.Role == "closeout-epic" {
+				if failing, red := r.closeoutDispatchedOverRedCI(ctx, marker); red {
+					r.record(tick, StageRedispatched,
+						"%s was rejected after it was dispatched over red CI (%s failed on the code of %s); its "+
+							"commits stay where they are (%s), and a new try is dispatched over the repaired tree",
+						attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt),
+						strings.Join(failing, ", "), short(marker.BaseSHA), where)
+					continue
+				}
+			}
 			// REJECTED, and the commits are still there. Dispatching over it
 			// would orphan the only copy of what a person has to look at, and
 			// collecting it again would report a missing report this run
