@@ -686,6 +686,9 @@ type Reconciler struct {
 
 	base    string
 	baseRef string
+	// folded is the merge commit the last refreshFrom pushed, "" when the
+	// branch already carried the base: the one fold a run start must gate.
+	folded string
 
 	// tracker is the tracker as this run uses it: pointed at a worktree on the
 	// integration branch, and pushing every write. It is built in Run, because
@@ -1754,7 +1757,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// diverges from the base the moment either side writes: a tick filed on the
 	// base after the branch forked is one this run cannot see until the fold
 	// happens (refresh.go).
-	if err := r.refreshFromBase(ctx); err != nil {
+	err = r.refreshFromBase(ctx)
+	if err == nil {
+		err = r.gateRunStartFold(ctx)
+	}
+	if err != nil {
 		var refusal *Refusal
 		if !asRefusal(err, &refusal) {
 			return nil, fmt.Errorf("reconcile: refresh %s from the epic's base branch: %w", r.branch, err)
