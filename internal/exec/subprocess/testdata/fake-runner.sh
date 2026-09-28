@@ -53,6 +53,13 @@ busy_then_hang|hang)
 	# tool call that hangs: busy_then_hang first burns CPU in a child process
 	# for FAKE_RUNNER_BUSY seconds — a test suite that is working, not stuck —
 	# then both modes sit in a child that uses no CPU and writes nothing.
+	#
+	# `hang` is also every killed-worker test's runner, and it forks — git,
+	# then the sleeper — the way a real worker does. It used to have a case of
+	# its own below that exec'd the sleeper so a group kill had one member to
+	# reach; this case shadowed it (the first matching pattern wins), and the
+	# forked child a single group kill can miss is exactly what the stop paths
+	# must handle anyway (killUntilGone), so there is one hang, and it forks.
 	if [ -n "${TICFAC_STUCK_NUDGE:-}" ] && [ "$mode" = "busy_then_hang" ]; then
 		commit
 		report
@@ -298,14 +305,6 @@ report_then_hang)
 	# tree, record NO refusal, and acknowledge that no stop was requested.
 	commit
 	report
-	exec sleep 86400
-	;;
-hang)
-	# Commits, then never finishes: the shape of a worker that is killed.
-	# `exec` replaces this shell with the sleeper, so the runner's process
-	# group has exactly one member for a group-kill to reach, never a
-	# transient window with a forked child the group signal could miss.
-	commit
 	exec sleep 86400
 	;;
 quota_exhausted)
