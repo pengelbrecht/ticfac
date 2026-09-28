@@ -218,6 +218,8 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 		// What the tick's earlier attempts left PRESERVED (tick pbb), for the
 		// same section of the worker prompt the local executor renders.
 		PriorSnapshots: d.PriorSnapshots,
+		// The stuck watch's window (tick wv2), the run's.
+		StuckAfter: d.StuckAfter,
 	})
 	if err != nil {
 		return nil, reconcile.Substrate{}, err

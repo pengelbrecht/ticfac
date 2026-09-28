@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // inspect: pid liveness, worktree state, commits beyond the recorded base, and
@@ -152,6 +153,10 @@ func (e *Executor) observe(st *store, record *attemptRecord) (state, detail stri
 			return StateRunning, ""
 		}
 		code, _ := st.exitCode()
+		if st.stuckStopped() {
+			raw, _ := os.ReadFile(st.path(fileStuckStopped))
+			return StateFailed, strings.TrimSpace(string(raw)) + fmt.Sprintf("; no report at %s", record.ResultPath)
+		}
 		if st.wallClockExceeded() {
 			return StateFailed, fmt.Sprintf("stopped at its wall clock of %ds with no report at %s",
 				record.WallSeconds, record.ResultPath)

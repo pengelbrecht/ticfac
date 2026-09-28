@@ -294,6 +294,32 @@ func (p *TierPolicy) overrideLabel(facts TickFacts) (tierLabel, error) {
 	return one, nil
 }
 
+// WallSecondsFor is the declared backstop for one role at one tier, most
+// specific first — "<role>.<tier>", then "<role>", then "<tier>", every role
+// spelling accepted — and where it was declared. False when nothing declares
+// one, and the run's own default governs.
+func (p *TierPolicy) WallSecondsFor(role string, tier Tier) (int, string, bool) {
+	if p == nil || len(p.WallSeconds) == 0 {
+		return 0, "", false
+	}
+	var keys []string
+	for _, name := range roleAliases(role) {
+		if tier != "" {
+			keys = append(keys, name+"."+string(tier))
+		}
+	}
+	keys = append(keys, roleAliases(role)...)
+	if tier != "" {
+		keys = append(keys, string(tier))
+	}
+	for _, key := range keys {
+		if s, ok := p.WallSeconds[key]; ok {
+			return s, "tier_policy.wall_seconds." + key, true
+		}
+	}
+	return 0, "", false
+}
+
 // roleTier reads the declared route for a process role. Both spellings the
 // ecosystem uses are accepted, as everywhere else roles are named.
 func (p *TierPolicy) roleTier(role string) (Tier, bool) {

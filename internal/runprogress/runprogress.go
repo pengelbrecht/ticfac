@@ -256,6 +256,18 @@ func AttemptSince(repo, writeRef string, since, now time.Time) (Attempt, bool, e
 	return Attempt{TickID: tick, Attempt: attempt, Branch: writeRef}, false, nil
 }
 
+// Of measures one attempt its caller can already address — the branch it
+// writes and the worktree it runs in — without the census or the attempt-ref
+// vocabulary: an EXECUTOR asking about its own attempt at its wall clock
+// (tick wv2) knows both, and must not depend on the ref spelling the run
+// happens to mint. The same two facts, the same honesty: a fact that cannot
+// be read stays null.
+func Of(repo, branch, worktree string, now time.Time) Attempt {
+	changedAt, _, _ := worktreeChangedAt(worktree, time.Time{})
+	movedAt, _ := branchMovedAt(repo, branch)
+	return filled(branch, worktree, "", 0, now, movedAt, changedAt, nil)
+}
+
 // filled assembles one Attempt from its measured facts. A zero time is no
 // fact: it stays null rather than being reported as the epoch.
 func filled(branch, worktree, tick string, attempt int, now, movedAt, changedAt time.Time, changed *int) Attempt {

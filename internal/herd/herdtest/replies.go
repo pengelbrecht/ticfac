@@ -442,6 +442,23 @@ func (s *Server) handlePaneClose(_ *testing.T, req Request, w *ConnWriter) error
 	return RespondJSON(w, req.ID, map[string]any{"type": "ok"})
 }
 
+// handlePaneProcessInfo answers pane.process_info with the pane id and NO
+// shell pid: a fake pane runs no process the caller could walk. A test that
+// needs a process tree routes the method itself.
+func (s *Server) handlePaneProcessInfo(_ *testing.T, req Request, w *ConnWriter) error {
+	var p struct {
+		PaneID string `json:"pane_id"`
+	}
+	_ = json.Unmarshal(req.Params, &p)
+	if p.PaneID == "" {
+		return RespondErr(w, req.ID, CodeInvalidRequest, "pane.process_info needs a pane_id")
+	}
+	return RespondJSON(w, req.ID, map[string]any{
+		"type":         "pane_process_info",
+		"process_info": map[string]any{"pane_id": p.PaneID, "foreground_processes": []any{}},
+	})
+}
+
 func (s *Server) handlePaneRead(_ *testing.T, req Request, w *ConnWriter) error {
 	s.mu.Lock()
 	truncated := s.paneTruncated

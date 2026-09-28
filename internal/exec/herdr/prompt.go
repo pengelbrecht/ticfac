@@ -36,6 +36,9 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	// epic-2jn vqc: a worker backgrounded the gate and ended its turn to
 	// wait for a notification nobody delivers to an ended turn.
 	fmt.Fprintf(&b, "%s\n\n", subprocess.HeadlessLine)
+	// tick wv2: epic-6in's two stopped workers left thousands of lines
+	// uncommitted; only committed work is certain to survive a stop.
+	fmt.Fprintf(&b, "%s\n\n", subprocess.SmallCommitsLine)
 
 	fmt.Fprintf(&b, "## The job\n\n")
 	fmt.Fprintf(&b, "- role: %s\n", spec.Role)
@@ -48,7 +51,7 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	}
 	fmt.Fprintf(&b, "- worktree: %s (your working directory)\n", record.Worktree)
 	fmt.Fprintf(&b, "- branch: %s (from %s)\n", record.Branch, short(record.BaseSHA))
-	fmt.Fprintf(&b, "- wall clock: %d seconds\n\n", record.WallSeconds)
+	fmt.Fprintf(&b, "- wall clock: %d seconds, a runaway backstop; a worker that shows no activity for a while is nudged, and then stopped\n\n", record.WallSeconds)
 
 	if record.TickID != "" && record.TickID != "job" {
 		fmt.Fprintf(&b, "The unit of work is recorded at .tick/issues/%s.json in this worktree. Read it there,\n", record.TickID)

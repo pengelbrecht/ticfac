@@ -89,6 +89,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	_, cancelled := st.cancelled()
 	agentGone := st.agentGone()
 	wallExceeded := st.wallExceeded()
+	stuck := st.stuckStopped()
 
 	// x6j's hold, at the one place a verdict could have been minted out of
 	// the substrate's silence. No report, no cancellation, no settlement
@@ -115,7 +116,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			record.Attempt, record.JobID, record.ResultPath)
 	}
 
-	verdict, outcome, class, reason := classify(record.Spec.Role, commits, hasReport, report, violations, artifactViolations, cancelled, wallExceeded)
+	verdict, outcome, class, reason := classify(record.Spec.Role, commits, hasReport, report, violations, artifactViolations, cancelled, wallExceeded, stuck)
 
 	result := &subprocess.JobResult{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -241,7 +242,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 // liveness-unknown hold in CollectDetail returned first — so every branch
 // below is a verdict from durable evidence, never a guess.
 func classify(role string, commits int, hasReport bool, report subprocess.Report,
-	violations, artifactViolations []string, cancelled, wallExceeded bool) (verdict, outcome, class, reason string) {
+	violations, artifactViolations []string, cancelled, wallExceeded, stuck bool) (verdict, outcome, class, reason string) {
 
 	// The order is the LOCAL executor's own, because it is the collect
 	// vocabulary's: the same tick with the same facts must collect the same
@@ -263,6 +264,12 @@ func classify(role string, commits int, hasReport bool, report subprocess.Report
 		// executor's collect answers.
 		if wallExceeded {
 			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureWallClockExceeded, reasonWallClockStopped
+		}
+		if stuck {
+			// Stopped by the stuck watch (activity.go): a worker that
+			// stopped making progress is a runner failure, the class the
+			// spent idle nudges settle as too.
+			return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonStuckStopped
 		}
 		if !hasReport {
 			// No report, on an attempt the durable layer settled: the
@@ -312,6 +319,8 @@ const (
 	// the message keyed on it can say what happened without inheriting the
 	// settled or unsettled sentence.
 	reasonWallClockStopped = "stopped-at-wall-clock"
+	// reasonStuckStopped is the stuck watch's stop (tick wv2).
+	reasonStuckStopped = "stopped-as-stuck"
 )
 
 // collectMessage keeps two failures from sharing one sentence.
@@ -319,6 +328,10 @@ func collectMessage(reason, class string, record *attemptRecord, violations []st
 	switch reason {
 	case subprocess.VerdictReadyToMerge:
 		return ""
+	case reasonStuckStopped:
+		return fmt.Sprintf("it was stopped as stuck: it showed no activity — no transcript event, no tool-process "+
+			"CPU, no worktree or branch change — for the stuck window, was nudged, and showed none for as long "+
+			"again; there is no report at %s", record.ResultPath)
 	case subprocess.VerdictNoCommits:
 		return fmt.Sprintf("the attempt branch carries no commit beyond the base it was cut from (%s)", short(record.BaseSHA))
 	case subprocess.VerdictBoundaryViolation:

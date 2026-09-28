@@ -877,6 +877,10 @@ type fixtureOptions struct {
 	// Zero leaves the default.
 	stallWarn time.Duration
 
+	// stuckAfter overrides the stuck watch's window (tick wv2) for the same
+	// reason: fifteen minutes is testable in a second and a half.
+	stuckAfter time.Duration
+
 	// progressProbe overrides how often a live attempt's worktree is walked
 	// for the liveness record (tick dh1). The fixture's default is the
 	// harness's own cadence rather than the production minute: a probe that
@@ -1007,6 +1011,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		AutoResumeBackoff:    time.Millisecond,
 		PullRequests:         opts.pullRequests,
 		StallWarnAfter:       opts.stallWarn,
+		StuckAfter:           opts.stuckAfter,
 		ProgressProbeEvery:   progressProbe,
 		GateHeartbeatEvery:   opts.gateHeartbeat,
 		Sleep:                func(time.Duration) { time.Sleep(5 * time.Millisecond) },
@@ -1057,6 +1062,9 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		// What the tick's earlier attempts left PRESERVED (tick pbb),
 		// forwarded the same way.
 		PriorSnapshots: d.PriorSnapshots,
+		// The stuck watch's window, forwarded the way the production
+		// factories forward it (tick wv2).
+		StuckAfter: d.StuckAfter,
 	})
 	if err != nil {
 		return nil, Substrate{}, err

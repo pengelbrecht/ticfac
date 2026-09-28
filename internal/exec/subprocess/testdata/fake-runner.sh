@@ -47,6 +47,26 @@ report)
 	commit
 	report
 	;;
+busy_then_hang|hang)
+	# The stuck watch (tick wv2). Re-prompted as stuck (TICFAC_STUCK_NUDGE),
+	# busy_then_hang finishes: a commit and the report. Otherwise it is a
+	# tool call that hangs: busy_then_hang first burns CPU in a child process
+	# for FAKE_RUNNER_BUSY seconds — a test suite that is working, not stuck —
+	# then both modes sit in a child that uses no CPU and writes nothing.
+	if [ -n "${TICFAC_STUCK_NUDGE:-}" ] && [ "$mode" = "busy_then_hang" ]; then
+		commit
+		report
+		exit 0
+	fi
+	if [ "$mode" = "busy_then_hang" ]; then
+		sh -c 'while :; do :; done' &
+		burner=$!
+		sleep "${FAKE_RUNNER_BUSY:-3}"
+		kill "$burner" 2>/dev/null
+		wait "$burner" 2>/dev/null
+	fi
+	sleep 3600
+	;;
 review_not_ready)
 	# The b50 shape at the executor: the review's report carries its typed
 	# verdict — DONE_WITH_CONCERNS in the status vocabulary, NOT READY in its

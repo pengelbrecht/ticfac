@@ -196,6 +196,11 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 	if st.idleSettled() {
 		return subprocess.StateFailed, idleSettledDetail(record)
 	}
+	// This executor stopped the agent as stuck (activity.go): its own
+	// durable record, read before herdr is asked anything.
+	if st.stuckStopped() {
+		return subprocess.StateFailed, st.stuckStopDetail()
+	}
 
 	agent, err := e.client.AgentGet(context.Background(), record.AgentName)
 	switch {
@@ -264,6 +269,12 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		// not working on anything: it is re-prompted, and after the last
 		// nudge settled (nudge.go, epic-2jn vqc).
 		if state, detail, handled := e.nudgeIdle(st, record, agent); handled {
+			return state, detail
+		}
+		// A live agent that is not at its prompt is watched for activity
+		// (activity.go, tick wv2): quiet on every signal is stuck, and a
+		// stuck agent is nudged, then stopped.
+		if state, detail, handled := e.watchActivity(st, record, agent); handled {
 			return state, detail
 		}
 		return subprocess.StateRunning, fmt.Sprintf(

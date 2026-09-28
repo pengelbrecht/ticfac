@@ -33,9 +33,12 @@ const (
 	fileRunnerPID     = "runner.pid"
 	fileSupervisorPID = "supervisor.pid"
 	fileWallExceeded  = "wall_clock_exceeded"
-	fileLastPush      = "last_push"
-	filePrompt        = "prompt.md"
-	fileResult        = "result.json"
+	// fileStuckStopped is the supervisor's record that it stopped the runner
+	// as stuck (tick wv2, activity.go): what inspect and collect settle on.
+	fileStuckStopped = "stuck-stopped"
+	fileLastPush     = "last_push"
+	filePrompt       = "prompt.md"
+	fileResult       = "result.json"
 	// FileReportArchive is the attempt's report, copied out of the worktree at
 	// collect. The worktree is removed at teardown and the report is excluded
 	// from the branch by design, so without this copy the analysis an attempt
@@ -98,6 +101,14 @@ type attemptRecord struct {
 	// and is never nudged.
 	Session   string   `json:"session,omitempty"`
 	NudgeArgv []string `json:"nudge_argv,omitempty"`
+
+	// StuckAfterMS is the stuck watch's window (activity.go, tick wv2): a
+	// runner with no transcript event, no tool-process CPU and no worktree
+	// or branch change for this long is nudged — interrupted and re-prompted
+	// in its own session with StuckArgv — and, quiet as long again, stopped.
+	// Zero is an attempt recorded without the watch: it is never watched.
+	StuckAfterMS int64    `json:"stuck_after_ms,omitempty"`
+	StuckArgv    []string `json:"stuck_argv,omitempty"`
 
 	// Model and RolePrompt are what the caller's PROFILE resolved for this
 	// job. They are recorded because "which model ran this, under which role
@@ -378,6 +389,8 @@ func (s *store) exitCode() (int, bool) {
 }
 
 func (s *store) wallClockExceeded() bool { return s.exists(fileWallExceeded) }
+
+func (s *store) stuckStopped() bool { return s.exists(fileStuckStopped) }
 
 func (s *store) runnerPID() int     { return s.pidIn(fileRunnerPID) }
 func (s *store) supervisorPID() int { return s.pidIn(fileSupervisorPID) }

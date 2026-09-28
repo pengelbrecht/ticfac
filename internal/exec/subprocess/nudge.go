@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // The nudge: a runner that exited 0 without its report is prompted again
@@ -102,6 +103,23 @@ func nudgeArgv(name string, override []string, at launch, record *attemptRecord)
 	fresh := at
 	fresh.Session = ""
 	fresh.Prompt = at.Prompt + freshNudgeSection(record)
+	return resolveRunner(name, override, fresh)
+}
+
+// stuckArgv is the argv the stuck watch re-prompts a runner with: its own
+// session resumed with the stuck prompt, or — with no session to resume — the
+// launch repeated with the fresh-run section, as the report nudge does.
+func stuckArgv(name string, override []string, at launch, record *attemptRecord, after time.Duration) ([]string, error) {
+	text := StuckPrompt("the supervisor stopped its tool processes and re-prompted it", after)
+	if at.Session != "" && len(override) == 0 {
+		resume := at
+		resume.Resume = true
+		resume.Prompt = text
+		return resolveRunner(name, nil, resume)
+	}
+	fresh := at
+	fresh.Session = ""
+	fresh.Prompt = at.Prompt + "\n## This job already ran once on this worktree\n\n" + text + "\n"
 	return resolveRunner(name, override, fresh)
 }
 

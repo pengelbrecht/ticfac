@@ -766,6 +766,22 @@ func validateTierPolicy(cfg *Config, md toml.MetaData, add addFunc) {
 		}
 	}
 
+	for _, key := range sortedKeys(p.WallSeconds) {
+		path := "tier_policy.wall_seconds." + key
+		role, tier, scoped := strings.Cut(key, ".")
+		switch {
+		case scoped && (!tierPolicyRoleNames[role] || !isKnownTier(tier)):
+			add(path, fmt.Sprintf("%q is not <role>.<tier>: the role one of implement-tick/implement, review-epic/review, closeout-epic/closeout, plan-epic/plan and the tier one of %s", key, tierList()))
+			continue
+		case !scoped && !tierPolicyRoleNames[key] && !isKnownTier(key):
+			add(path, fmt.Sprintf("%q is neither a tier (%s) nor a role this policy can be asked about", key, tierList()))
+			continue
+		}
+		if p.WallSeconds[key] < 60 {
+			add(path, fmt.Sprintf("%d is not a backstop (>= 60 seconds): the wall clock only stops a runaway worker; a stuck one is found by the stuck watch", p.WallSeconds[key]))
+		}
+	}
+
 	if p.RateLimit != nil {
 		if md.IsDefined("tier_policy", "rate_limit", "response") && p.RateLimit.Response != "backoff-and-retry" {
 			add("tier_policy.rate_limit.response", fmt.Sprintf("%q is not one of the answers this package will declare — backoff-and-retry is the only one: an immediate retry is how a transient 429 became a dead worker on wave 2", p.RateLimit.Response))

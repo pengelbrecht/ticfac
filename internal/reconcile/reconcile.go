@@ -50,7 +50,15 @@ const (
 	DefaultStepCap = 8 * time.Minute
 
 	// DefaultWallSeconds bounds one job. An unbounded job is one nothing stops.
-	DefaultWallSeconds = 3600
+	// It is a runaway BACKSTOP, eight hours (tick wv2): a stuck worker is
+	// found by the executors' stuck watch from what it is visibly doing, and
+	// the bound only stops one that is busy forever. epic-6in's fixed 3600s
+	// stopped two workers that were working (wall.go).
+	DefaultWallSeconds = 8 * 3600
+
+	// DefaultStuckAfter is how long a worker may show no activity before the
+	// stuck watch nudges it, and again before it stops it (tick wv2).
+	DefaultStuckAfter = subprocess.DefaultStuckAfter
 
 	// DefaultGateTimeout bounds one gate command, and it is deliberately
 	// LONGER than the timeouts a gate command declares for itself.
@@ -312,6 +320,12 @@ type Dispatch struct {
 	// issued the number that will govern (Appendix A #12).
 	BudgetUSD *float64
 
+	// WallSeconds is the backstop this dispatch is issued (wall.go); zero is
+	// the run's own. StuckAfter is the stuck watch's window, the run's, for
+	// the executor this dispatch builds (tick wv2).
+	WallSeconds int
+	StuckAfter  time.Duration
+
 	// Tier is the capability tier this dispatch was DERIVED under (tick 5eq) —
 	// the rung of the [tier_policy] ladder that routed the profile, "" when
 	// no tier was derived (no policy, base values). It rides on the marker for
@@ -497,8 +511,14 @@ type Options struct {
 	// StepCap bounds one leg of a long wait.
 	StepCap time.Duration
 
-	// WallSeconds bounds one job.
+	// WallSeconds bounds one job: the runaway backstop, unless the tier
+	// policy or a tick's label says otherwise (wall.go).
 	WallSeconds int
+
+	// StuckAfter is the stuck watch's window, handed to every executor this
+	// run builds (tick wv2). Zero is DefaultStuckAfter; negative turns the
+	// watch off.
+	StuckAfter time.Duration
 
 	// StallWarnAfter is how long an in-flight attempt may produce nothing
 	// durable — its branch unmoved, its worktree unchanged — before the run
@@ -1143,6 +1163,20 @@ func New(opts Options) (*Reconciler, error) {
 	if opts.NewExecutor == nil {
 		return nil, fmt.Errorf("reconcile: %s: nothing implements start/inspect/cancel/collect", NoExecutorMessage)
 	}
+	// Every executor this run builds is handed the run's stuck window (tick
+	// wv2), in one place, whichever path built the dispatch.
+	if build := opts.NewExecutor; build != nil {
+		stuck := opts.StuckAfter
+		if stuck == 0 {
+			stuck = DefaultStuckAfter
+		}
+		opts.NewExecutor = func(d Dispatch) (Executor, Substrate, error) {
+			if d.StuckAfter == 0 {
+				d.StuckAfter = stuck
+			}
+			return build(d)
+		}
+	}
 	if opts.Remote == "" {
 		opts.Remote = "origin"
 	}
@@ -1178,6 +1212,9 @@ func New(opts Options) (*Reconciler, error) {
 	}
 	if opts.WallSeconds <= 0 {
 		opts.WallSeconds = DefaultWallSeconds
+	}
+	if opts.StuckAfter == 0 {
+		opts.StuckAfter = DefaultStuckAfter
 	}
 	if opts.StallWarnAfter == 0 {
 		opts.StallWarnAfter = DefaultStallWarnAfter
@@ -1692,6 +1729,11 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 				checkpoint.State, checkpoint.Reason)
 		}
 	}
+
+	// Every live worker a previous incarnation left is polled BEFORE the slow
+	// startup work below (tick wv2, wall.go): the poll is where a herdr
+	// worker's stuck watch and backstop run.
+	r.pollStanding()
 
 	// The epic's BASE branch, folded in before anything is planned. The
 	// integration branch is where this run reads its tracker from, and it
@@ -2311,8 +2353,12 @@ const (
 	// because that one is about the AUTHORITY a write is under; this one is
 	// about the tick's own declaration of its scope, and it sends the repair
 	// at the label or the tick's scope, not at the write.
-	RefusedWaveOverlap     = "wave_composition_conflict"
-	RefusedTouchLabel      = "touch_label_invalid"
+	RefusedWaveOverlap = "wave_composition_conflict"
+	RefusedTouchLabel  = "touch_label_invalid"
+	// RefusedWallLabel is a tick's `wall_minutes:` label that is not a
+	// whole number of minutes (wall.go, tick wv2), refused in the tier
+	// label's shape: loudly, naming the tick and the label.
+	RefusedWallLabel       = "wall_label_invalid"
 	RefusedUndeclaredTouch = "undeclared_file_touched"
 
 	// The two the FINDINGS channel adds (tick 7vn). A worker's discoveries
