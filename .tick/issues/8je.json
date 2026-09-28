@@ -1,0 +1,13 @@
+{
+  "id": "8je",
+  "title": "Close-out PR body no longer lists commits a run inherited from its submitted base",
+  "description": "tk cloud pr-body enumerated every commit on the run branch the run did not create (cargo from a submission made off a branch ahead of default). ticks deleted it and ticfac's closeout_body.go carries only the review verdict and findings, so that cargo is now silent in the epic PR body. The entrypoint prompt and image/README were reworded to stop promising it.\n\nticfac run epic-6in filed this backlog tick from the finding e4e4e16eb51a476df084424ccdf7208d939c9e0f134125c9ffa27768b2ac5b56 (reported by run-epic-6in/tick-46x/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/e4e4e16eb51a476df084424ccdf7208d939c9e0f134125c9ffa27768b2ac5b56.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-46x/attempt-4",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:18:04Z",
+  "updated_at": "2026-09-28T10:18:04Z"
+}
