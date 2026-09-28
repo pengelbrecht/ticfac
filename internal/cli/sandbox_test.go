@@ -131,6 +131,45 @@ func TestSandboxImageDeclaredOnlyIsSilentWhenNothingIsDeclared(t *testing.T) {
 	}
 }
 
+// `--declared-only` must answer with NO ticfac checkout above the cwd:
+// the entrypoint's declared-image check (image/common.sh repo_setup) runs in
+// a worker container that holds the repository it cloned and nothing else,
+// and a verb that exits 1 when it cannot read image/Dockerfile off a tree
+// it is not in makes the check a no-op there (tick bib).
+func TestSandboxImageDeclaredOnlyAnswersOutsideTheModule(t *testing.T) {
+	root := sandboxRepo(t, sandboxRunners)
+	// The cwd is what makes this the tick-bib reproduction: a temp directory
+	// has no go.mod above it, standing in for a worker container, where no
+	// ticfac checkout exists beside the binary. Reading the default tk
+	// version off the working tree failed there, the verb exited 1, and
+	// image/common.sh's `|| declared=""` swallowed it — so the container's
+	// declared-image check never refused a mismatched image.
+	t.Chdir(t.TempDir())
+	code, out, stderr := runCloudArgs(t, []string{"sandbox", "image", "--root", root, "--declared-only"})
+	if code != exitSuccess {
+		t.Fatalf("ticfac sandbox image outside the module: %s\n%s", stderr.String(), out.String())
+	}
+	if got := strings.TrimSpace(out.String()); got != "registry.example.com/acme/orchestrator:2.0.0" {
+		t.Errorf("output = %q, want the declared reference", got)
+	}
+}
+
+// The same answer for the fallback: `sandbox image` with no --tk-version
+// resolves the base image's pin from the embedded image context, so it works
+// wherever the binary runs — not only where a ticfac checkout happens to sit
+// above the cwd.
+func TestSandboxImageResolvesTheDefaultOutsideTheModule(t *testing.T) {
+	root := sandboxRepo(t, sandboxValidRunners)
+	t.Chdir(t.TempDir())
+	code, out, stderr := runCloudArgs(t, []string{"sandbox", "image", "--root", root})
+	if code != exitSuccess {
+		t.Fatalf("ticfac sandbox image outside the module: %s\n%s", stderr.String(), out.String())
+	}
+	if got := strings.TrimSpace(out.String()); !strings.HasPrefix(got, "ticks-orchestrator:") {
+		t.Errorf("image = %q, want the version-pinned base", got)
+	}
+}
+
 func TestSandboxToolchainPrintsTheDeclaredPins(t *testing.T) {
 	root := sandboxRepo(t, sandboxRunners)
 	code, out, stderr := runCloudArgs(t, []string{"sandbox", "toolchain", "--root", root})
