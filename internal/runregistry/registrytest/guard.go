@@ -38,6 +38,15 @@
 //
 // internal/cli and internal/runlife hold the two suites that claim runs;
 // any package that joins them must take this TestMain with them.
+//
+// AND THE HALF THAT IS NOT OPT-IN. A package that forgets this TestMain —
+// or a child spawned with an environment that dropped the redirect — is not
+// left to the scan: runregistry itself refuses a test binary with no
+// redirect any read or write of the operator's registry, by a panic that
+// fails the package at the line that lost it (runregistry's
+// refuseTheOperatorsRegistryUnderTest). The scan remains for the one writer
+// that refusal cannot see: a NON-test binary a test builds and runs (`go
+// build ./cmd/ticfac`), whose leak still names a repo under this root.
 package registrytest
 
 import (
@@ -90,16 +99,11 @@ func setup() (string, error) {
 	return root, nil
 }
 
-// operatorDir names the operator's real registry directory, computed the
-// way runregistry computes it with no redirect in the environment — derived
-// from runregistry itself rather than spelled here, so the two cannot drift.
-// Only TestMain time is safe for the unset-and-restore: no test is running.
+// operatorDir names the operator's real registry directory — the one
+// runregistry itself falls back to with no redirect, derived from it rather
+// than spelled here, so the two cannot drift.
 func operatorDir() string {
-	redirected := os.Getenv(runregistry.RegistryDirEnv)
-	os.Unsetenv(runregistry.RegistryDirEnv)
-	dir := runregistry.Dir()
-	os.Setenv(runregistry.RegistryDirEnv, redirected)
-	return dir
+	return runregistry.OperatorDir()
 }
 
 // scan reads the operator's real registry and returns the registrations this

@@ -10,7 +10,7 @@ import (
 // LiveTestEnv is the explicit opt-in for the live round-trip test. The test
 // also requires HERDR_ENV=1, and is skipped under `go test -short`, so it
 // never runs in CI by accident.
-const LiveTestEnv = "TK_HERD_LIVE_TEST"
+const LiveTestEnv = liveOptInEnv
 
 // TestLiveRoundTrip talks to the real herdr server on this machine. It is
 // read-only: ping, session.snapshot, agent.list and worktree.list create no
