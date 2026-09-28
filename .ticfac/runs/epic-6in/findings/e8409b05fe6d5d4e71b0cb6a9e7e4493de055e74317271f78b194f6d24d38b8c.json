@@ -12,8 +12,11 @@
   "attempt": 8,
   "done_item": "none",
   "demonstrating_check": "go test -count=1 -timeout 10m -run TestARunUnderANewRunIDIsOfferedThePreviousRunsReports ./internal/reconcile/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T09:27:01Z",
+  "triaged_at": "2026-09-28T10:18:27Z",
+  "triaged_by": "ticfac run epic-6in absorbing 823",
+  "promoted_as": "823",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "v7z",
