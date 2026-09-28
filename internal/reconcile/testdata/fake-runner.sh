@@ -739,7 +739,12 @@ ask)
 			answered=yes
 		fi
 	fi
-	commit
+	# FAKE_RUNNER_ASK_COMMIT=no: the asking worker commits nothing before it
+	# asks (the no-commits shape); once answered it commits like any other.
+	if [ "${FAKE_RUNNER_ASK_COMMIT:-yes}" != "no" ] || [ "$answered" = "yes" ] ||
+		[ "$TICFAC_TICK" != "${FAKE_RUNNER_ASK_TICK:-a1}" ]; then
+		commit
+	fi
 	if [ "$TICFAC_TICK" != "${FAKE_RUNNER_ASK_TICK:-a1}" ]; then
 		report
 	elif [ "$answered" = "yes" ]; then
@@ -753,6 +758,22 @@ ask)
 		} > "$TICFAC_RESULT_PATH"
 	else
 		status="BLOCKED — ${FAKE_RUNNER_QUESTION:-a question}"
+		report
+	fi
+	;;
+empty-first)
+	# A genuine collect failure (tick tyd's follow-up): a tick's FIRST TRY
+	# says it is done with concerns and commits nothing, so the collect is
+	# `no-commits` and the attempt is spent — collect_failed, a stop, and a
+	# redispatch on resume. It is NOT a question: since tyd a worker that
+	# answers BLOCKED is answered in-run, so the resume-and-redispatch path
+	# needs a worker that failed without asking. Every later try commits.
+	# Keyed on $TICFAC_TRY, the tick's own try, like blocked-first.
+	if [ "$TICFAC_TRY" = "1" ]; then
+		status="DONE_WITH_CONCERNS — the change needed nothing committed"
+		report
+	else
+		commit
 		report
 	fi
 	;;
@@ -882,6 +903,33 @@ hang-undeclared)
 	printf 'a file nobody declared\n' > "$TICFAC_WORKTREE/sneaky-${TICFAC_TICK}.txt"
 	commit
 	exec sleep 86400
+	;;
+stuck-first)
+	# The epic-6in 823 shape: a1's FIRST TRY commits real work and then goes
+	# quiet — the network went away under it — so the stuck watch stops it and
+	# it collects as missing-result WITH commits. Every later try (and every
+	# other tick) does its work and reports. Keyed on $TICFAC_TRY, never the
+	# run-wide attempt number (tick vw0).
+	# The nudge re-prompts it in its own session, which runs this script
+	# again: it touches nothing the second time, so it stays quiet and the
+	# watch stops it.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		[ -e "$TICFAC_WORKTREE/$file" ] || commit
+		exec sleep 86400
+	fi
+	commit
+	report
+	;;
+boundary-first)
+	# a1's FIRST TRY writes under the tracker's authority (the boundary mode's
+	# forged record) beside its work and reports DONE — rejected on the
+	# merits. Every later try is clean.
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		mkdir -p "$TICFAC_WORKTREE/.tick/issues"
+		printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
+	fi
+	commit
+	report
 	;;
 hang)
 	# Commits, then never finishes: the shape of a worker that is killed.

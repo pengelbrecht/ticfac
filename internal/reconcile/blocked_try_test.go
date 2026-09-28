@@ -3,6 +3,8 @@ package reconcile
 import (
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The fixture's blocked-first modes key on the tick's OWN first try, not on
@@ -71,16 +73,36 @@ func runWideAttemptsOf(t *testing.T, f *fixture, tick string) []int {
 	return numbers
 }
 
+// blockedAnsweredInRun asserts one tick's FIRST TRY (run-wide number first)
+// reported STATUS: BLOCKED and that the run answered it in-run (tick tyd) —
+// decided under the standing orders by a later try — rather than closing on it.
+func blockedAnsweredInRun(t *testing.T, f *fixture, r *Reconciler, tick string, first int) {
+	t.Helper()
+	report := archivedReport(t, f, markerOfAttempt(t, f, tick, first))
+	if !strings.Contains(report, "STATUS: BLOCKED") {
+		t.Fatalf("%s's first try (run-wide attempt %d) reported:\n%s\nwant STATUS: BLOCKED — the mode must "+
+			"trigger on the tick's own first try whatever the run-wide number", tick, first, report)
+	}
+	if _, ok := journalLine(r, tick, StageBlockedDecide); !ok {
+		t.Fatalf("%s's BLOCKED first try was not answered in-run: its stages are %v", tick, r.Stages(tick))
+	}
+	if got := f.Tracker.count("close:" + tick); got != 1 {
+		t.Fatalf("%s closed %d times, want once — on the later try, never on the BLOCKED answer", tick, got)
+	}
+}
+
 // finding_blocked: the v3i shape gates on a1's OWN first try. Dispatched
 // behind a2, a1's first try draws the run-wide number 2 — and must still
 // answer BLOCKED with nothing committed, not quietly do the work because the
-// run-wide number moved off 1.
+// run-wide number moved off 1. Since tick tyd the BLOCKED answer is answered
+// in-run (decided under the standing orders by the next try), so the proof is
+// the first try's own report and the in-run answer, not a stopped run.
 func TestFindingBlockedTriggersOnTheTicksOwnFirstTryNotTheRunWideNumber(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "finding_blocked"})
 	dispatchAnotherTickFirst(t, f)
 
-	reconciler, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_blocked"})
+	reconciler, _, err := f.run(f.Repo, fixtureOptions{mode: "finding_blocked"})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -88,95 +110,39 @@ func TestFindingBlockedTriggersOnTheTicksOwnFirstTryNotTheRunWideNumber(t *testi
 	if got := f.Tracker.count("close:a2"); got != 1 {
 		t.Fatalf("a2, dispatched first, closed %d times, want 1: without it this test proves nothing", got)
 	}
-	if result.Failure == nil {
-		t.Fatalf("run state %s: a1's first try answered DONE — finding_blocked keyed on the run-wide "+
-			"attempt number, which moved to 2 when another tick was dispatched first", result.State)
-	}
-	if result.Failure.TickID != "a1" {
-		t.Fatalf("the refusal is for %s, want a1", result.Failure.TickID)
-	}
-	// The verdict itself, not merely that the run stopped: in this mode a1's
-	// later answers also carry findings, and since tick aqm those findings ride
-	// to the close-out rather than refusing the attempt's close — so the
-	// refusal this run owes is a1's own BLOCKED answer. The fixture's
-	// contract is that the FIRST TRY answers BLOCKED with nothing committed —
-	// which the collect vocabulary honestly calls no-commits, exactly as it
-	// does for the blocked-first shape.
-	if result.Failure.Reason != RefusedCollect {
-		t.Fatalf("the refusal is %s (%s), want %s: a1's first try must be refused for answering BLOCKED "+
-			"with nothing committed, not for anything a DONE answer could also have caused",
-			result.Failure.Reason, result.Failure.Message, RefusedCollect)
-	}
-	report := archivedReport(t, f, markerOfAttempt(t, f, "a1", 2))
-	if !strings.Contains(report, "STATUS: BLOCKED") {
-		t.Fatalf("a1's first try (run-wide attempt 2) reported:\n%s\nwant STATUS: BLOCKED — the mode "+
-			"must trigger on the tick's own first try whatever the run-wide number", report)
-	}
-	if got := f.Tracker.count("close:a1"); got != 0 {
-		t.Fatalf("a1 closed %d times on a BLOCKED answer, want 0", got)
-	}
-	rejected := false
-	for _, event := range reconciler.Journal() {
-		if event.Stage == StageRejected && event.Tick == "a1" && strings.Contains(event.Detail, "no-commits") {
-			rejected = true
-		}
-	}
-	if !rejected {
-		t.Fatalf("no %s line for a1 naming the no-commits verdict of its blocked first try; its stages are %v",
-			StageRejected, reconciler.Stages("a1"))
-	}
 	// The premise, as durable fact: a1's first try IS run-wide attempt 2.
 	// If a fixture change ever makes a1 draw 1 again, this test stops
 	// covering the bug and must say so rather than pass vacuously.
 	numbers := runWideAttemptsOf(t, f, "a1")
-	if len(numbers) != 1 || numbers[0] != 2 {
-		t.Fatalf("a1 was dispatched as %v, want exactly [2]: the test only proves anything while "+
+	if len(numbers) < 1 || numbers[0] != 2 {
+		t.Fatalf("a1 was dispatched as %v, want its first try at 2: the test only proves anything while "+
 			"another tick's dispatch moves the run-wide number off the tick's own try", numbers)
 	}
+	blockedAnsweredInRun(t, f, reconciler, "a1", 2)
 }
 
 // blocked-first blocks EVERY tick's own first try — including one whose first
-// try draws a run-wide number far from 1, on a resume where an earlier tick's
-// spent attempt has already moved the counter twice.
+// try draws a run-wide number other than 1 because another tick went first.
 func TestBlockedFirstTriggersOnTheTicksOwnFirstTryNotTheRunWideNumber(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "blocked-first"})
 	dispatchAnotherTickFirst(t, f)
 
-	// Incarnation one: a2, dispatched first, draws the run-wide number 1 and
-	// answers BLOCKED with nothing committed; the run rejects it and stops.
-	_, first, err := f.run(f.Repo, fixtureOptions{mode: "blocked-first"})
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "blocked-first"})
 	if err != nil {
-		t.Fatalf("first run: %v", err)
+		t.Fatalf("run: %v", err)
 	}
-	if first.Failure == nil || first.Failure.TickID != "a2" {
-		t.Fatalf("the first run's refusal is %+v, want a2's first try refused", first.Failure)
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): every BLOCKED first try is answered in-run", result.State, result.Failure)
 	}
-
-	// Incarnation two: a2's SECOND try commits and answers DONE and the tick
-	// closes; a1 is then dispatched for the FIRST time — at the run-wide
-	// number 3, because the run has already made two dispatches. Its own
-	// first try must block exactly as a1's does in every other fixture.
-	_, second, err := f.run(f.Repo, fixtureOptions{mode: "blocked-first"})
-	if err != nil {
-		t.Fatalf("second run: %v", err)
+	a2 := runWideAttemptsOf(t, f, "a2")
+	a1 := runWideAttemptsOf(t, f, "a1")
+	if len(a2) < 1 || a2[0] != 1 {
+		t.Fatalf("a2 was dispatched as %v, want its first try at 1", a2)
 	}
-	if got := f.Tracker.count("close:a2"); got != 1 {
-		t.Fatalf("a2 closed %d times on its second try, want 1", got)
+	if len(a1) < 1 || a1[0] == 1 {
+		t.Fatalf("a1 was dispatched as %v, want its first try off the run-wide number 1", a1)
 	}
-	if second.Failure == nil {
-		t.Fatalf("run state %s: a1's first try answered DONE — blocked-first keyed on the run-wide "+
-			"attempt number, which was 3 by the time a1 was first dispatched", second.State)
-	}
-	if second.Failure.TickID != "a1" {
-		t.Fatalf("the second run's refusal is for %s, want a1", second.Failure.TickID)
-	}
-	if got := f.Tracker.count("close:a1"); got != 0 {
-		t.Fatalf("a1 closed %d times on a BLOCKED answer, want 0", got)
-	}
-	numbers := runWideAttemptsOf(t, f, "a1")
-	if len(numbers) != 1 || numbers[0] != 3 {
-		t.Fatalf("a1 was dispatched as %v, want exactly [3]: the test only proves anything while "+
-			"the run-wide number has moved off the tick's own try", numbers)
-	}
+	blockedAnsweredInRun(t, f, r, "a2", a2[0])
+	blockedAnsweredInRun(t, f, r, "a1", a1[0])
 }

@@ -28,6 +28,11 @@ import (
 var executorBin string
 
 func TestMain(m *testing.M) {
+	// A helper mode, not a test run: this binary re-invoked as a supervisor
+	// whose group signals miss the runner's children (supervisor_stop_test.go).
+	if len(os.Args) > 1 && os.Args[1] == superviseMissingChildrenArg {
+		os.Exit(superviseMissingChildren(os.Args[2:]))
+	}
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
@@ -133,19 +138,23 @@ type fixture struct {
 }
 
 type fixtureOptions struct {
-	mode         string
-	status       string
-	sleep        string
-	runnerArgv   []string
-	pushInterval time.Duration
-	attempt      int
-	guardsOff    map[string]bool
-	noRemote     bool
-	name         string
-	stateDir     string
-	model        string
-	rolePrompt   string
-	writeFile    func(path string, data []byte, perm fs.FileMode) error
+	// supervisorArgv replaces the built executor as the supervisor, for a test
+	// that runs the supervisor as a helper mode of the test binary itself
+	// (see superviseMissingChildren).
+	supervisorArgv []string
+	mode           string
+	status         string
+	sleep          string
+	runnerArgv     []string
+	pushInterval   time.Duration
+	attempt        int
+	guardsOff      map[string]bool
+	noRemote       bool
+	name           string
+	stateDir       string
+	model          string
+	rolePrompt     string
+	writeFile      func(path string, data []byte, perm fs.FileMode) error
 	// stuckAfter is the stuck watch's window; zero keeps the default.
 	stuckAfter time.Duration
 	// env is extra NAME=value pairs for the fake runner.
@@ -177,6 +186,10 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if interval == 0 {
 		interval = time.Second
 	}
+	supervisorArgv := []string{executorBin, "supervise"}
+	if len(opts.supervisorArgv) > 0 {
+		supervisorArgv = opts.supervisorArgv
+	}
 	executor, err := New(Options{
 		Repo:           repo.Dir,
 		StateDir:       state,
@@ -184,7 +197,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		RunnerArgv:     argv,
 		Model:          opts.model,
 		RolePrompt:     opts.rolePrompt,
-		SupervisorArgv: []string{executorBin, "supervise"},
+		SupervisorArgv: supervisorArgv,
 		Remote:         remote,
 		Attempt:        opts.attempt,
 		PushInterval:   interval,

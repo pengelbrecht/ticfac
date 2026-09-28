@@ -26,12 +26,24 @@ import (
 //
 // Linux is where /proc can say so directly, so the zombie answer lives here.
 
-// processZombie answers whether pid exists and has DIED, its exit status read
-// by the kernel and collected by no one — a corpse awaiting a reap that may
-// never come. It is what lets processAlive tell a dead child from a live one
-// without trusting anyone to have reaped the dead one (kill_unix_test.go).
+// processZombie answers whether pid has DIED as far as /proc can tell: its
+// exit status read by the kernel and collected by no one — a corpse awaiting
+// a reap that may never come — or already reaped. It is what lets
+// processAlive tell a dead child from a live one without trusting anyone to
+// have reaped the dead one (kill_unix_test.go).
 func processZombie(pid int) bool {
-	return procState(pid) == "Z"
+	return deadByProcState(procState(pid))
+}
+
+// deadByProcState reads a /proc state letter as life or death. A state that
+// cannot be read is DEATH, not life: processAlive asks signal 0 first and
+// /proc second, and a zombie reaped between the two leaves no /proc entry.
+// Reading that gap as "not a zombie, so alive" failed
+// TestAGateThatTimesOutTakesItsChildrenWithIt on CI (PR #113's go race job,
+// 2026-09-28, in 0.31s): its wait loop saw the killed child dead, and the
+// very next check, a reap later, saw it "alive".
+func deadByProcState(state string) bool {
+	return state == "" || state == "Z" || state == "X"
 }
 
 // procState is the state letter out of /proc/<pid>/stat, or "" when the pid is
@@ -84,5 +96,15 @@ func TestAReapPendingZombieIsNotAlive(t *testing.T) {
 	}
 	if processAlive(pid) {
 		t.Errorf("processAlive(pid %d) answered true for a zombie: the child is dead, and only nobody's reap is pending", pid)
+	}
+}
+
+// short: a table over state letters; no process.
+func TestAPidWhoseProcEntryVanishedIsDeadNotAlive(t *testing.T) {
+	t.Parallel()
+	for state, dead := range map[string]bool{"": true, "Z": true, "X": true, "R": false, "S": false, "D": false, "T": false} {
+		if got := deadByProcState(state); got != dead {
+			t.Errorf("state %q reads dead=%v, want %v", state, got, dead)
+		}
 	}
 }

@@ -1089,6 +1089,12 @@ const (
 	// epic-6in). An automatic intervention, recorded as one.
 	StageCIRestarted = "ci_restarted"
 
+	// StageHostSuspended: one of the run's waits took far more wall clock
+	// than it asked for, so the host was suspended through it — asleep, or a
+	// paused VM (suspend.go, epic-6in). It explains a silence in the feed as
+	// the machine's, not the run's.
+	StageHostSuspended = "host_suspended"
+
 	// StageWallClock is the line a bound's firing owes the feed (tick emk):
 	// the wall clock fired and the attempt has NOT settled, which is the
 	// moment the run stops making progress on its own — the moment a
@@ -1278,7 +1284,12 @@ func New(opts Options) (*Reconciler, error) {
 		opts.Now = time.Now
 	}
 	if opts.Sleep == nil {
-		opts.Sleep = time.Sleep
+		// Against the wall clock, not time.Sleep's: on macOS that clock stops
+		// while the host sleeps, and a poll owed during a suspension would
+		// otherwise serve out its awake-time remainder after the wake
+		// (suspend.go, epic-6in).
+		now := opts.Now
+		opts.Sleep = func(d time.Duration) { sleepByWallClock(d, now, time.Sleep) }
 	}
 	if opts.ExecStateRoot == "" {
 		opts.ExecStateRoot = filepath.Join(subprocess.DefaultStateDir(), "runs")
@@ -1442,7 +1453,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.progressProbe = opts.ProgressProbeEvery
 	r.gateHeartbeat = opts.GateHeartbeatEvery
 	r.now = opts.Now
-	r.sleep = opts.Sleep
+	r.sleep = r.waitSleep(opts.Sleep)
 	r.guardsOff = opts.guardsOff
 	r.lastPolled = map[string]time.Time{}
 	r.liveness = map[string]string{}

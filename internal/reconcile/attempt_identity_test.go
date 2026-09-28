@@ -126,7 +126,7 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 	t.Parallel()
 	t.Run("the rejected attempt is disposed", func(t *testing.T) {
 		t.Parallel()
-		opts := fixtureOptions{mode: "blocked-first"}
+		opts := fixtureOptions{mode: "empty-first"}
 		f := newFixture(t, opts)
 
 		_, result, err := f.run(f.Repo, opts)
@@ -152,13 +152,13 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 
 	t.Run("the next attempt is dispatched in the same checkout", func(t *testing.T) {
 		t.Parallel()
-		opts := fixtureOptions{mode: "blocked-first"}
+		opts := fixtureOptions{mode: "empty-first"}
 		f := newFixture(t, opts)
 
 		// Cut the run the moment the rejection is durable — BEFORE any
 		// teardown — so the second incarnation meets exactly what a crash
 		// leaves behind: attempt 1's branch and worktree, still there.
-		killed := fixtureOptions{mode: "blocked-first", stopAfter: stopAt("a1", StageRejected)}
+		killed := fixtureOptions{mode: "empty-first", stopAfter: stopAt("a1", StageRejected)}
 		_, _, err := f.run(f.Repo, killed)
 		killedAfter(t, err, "a1", StageRejected)
 
@@ -171,7 +171,7 @@ func TestARejectedAttemptIsTornDownAndTheNextIsDispatchedInTheSameCheckout(t *te
 				branchOf(first.Source.WriteRef))
 		}
 
-		// The SAME checkout, not a fresh clone. Under blocked-first keyed on the
+		// The SAME checkout, not a fresh clone. Under empty-first keyed on the
 		// tick's OWN try (tick vw0), the restart settles a1's redispatch — the
 		// half under test — and then dispatches a2 for the first time, whose
 		// own first try blocks exactly as a1's did and refuses the run again:

@@ -130,19 +130,19 @@ func TestAClaimIsOnOriginBeforeTheJobIsStarted(t *testing.T) {
 
 // Appendix A #6, for an attempt there is nothing left to adopt.
 //
-// A worker that answered BLOCKED with no commits leaves a settled attempt and
+// A worker that committed nothing (empty-first: a collect failure, not a question) leaves a settled attempt and
 // an empty write ref. Adopting it would re-collect the same refusal for as long
 // as the run is restarted, so once the rejection is durable the next
 // incarnation dispatches a NEW attempt — at the integration branch as origin
 // has it, which by then carries the blocker closed.
 func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T) {
 	t.Parallel()
-	blocked := fixtureOptions{mode: "blocked-first"}
+	blocked := fixtureOptions{mode: "empty-first"}
 	f := newFixture(t, blocked)
 
 	// The cut is after the rejection is recorded, which is where a crash would
 	// leave a run that had just been told its worker is blocked.
-	killed := fixtureOptions{mode: "blocked-first", stopAfter: stopAt("a1", StageRejected)}
+	killed := fixtureOptions{mode: "empty-first", stopAfter: stopAt("a1", StageRejected)}
 	_, _, err := f.run(f.Repo, killed)
 	killedAfter(t, err, "a1", StageRejected)
 
@@ -178,7 +178,7 @@ func TestARejectedAttemptThatLeftNothingIsRedispatchedAsANewAttempt(t *testing.T
 	if err != nil {
 		t.Fatalf("the restart did not finish: %v", err)
 	}
-	// blocked-first keys on the tick's OWN first try (tick vw0), so the
+	// empty-first keys on the tick's OWN first try (tick vw0), so the
 	// restart settles a1's redispatch — the half under test — and then
 	// dispatches a2 for the first time, whose own first try blocks exactly as
 	// a1's did and refuses the run again. a1's redispatch is asserted off

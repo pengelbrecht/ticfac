@@ -108,6 +108,12 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     standing orders (tick tyd). The window requeues it in-run; should the
 //     refusal escape, the next incarnation reads the recorded answer and
 //     dispatches the same way.
+//   - RefusedRejectedRedispatch: an attempt was rejected with work and the
+//     run disposed of the work itself by the rejection's class — carried
+//     for an operational failure, released fresh on the merits
+//     (rejected_work.go). The window requeues it in-run; should it escape,
+//     the next incarnation reads the recorded release and dispatches the
+//     same way.
 //   - RefusedClaimWidth: the tracker refused a claim because the epic's
 //     declared width is full (tick 3mp). It is a fact about the WORLD — another
 //     run's claims, a tick a person holds — not a verdict on this run's work,
@@ -147,7 +153,7 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
-		RefusedBlockedRedispatch:
+		RefusedBlockedRedispatch, RefusedRejectedRedispatch:
 		return true
 	}
 	return waitsOnCI(reason)

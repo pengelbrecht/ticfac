@@ -22,10 +22,10 @@ import (
 func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 	t.Parallel()
 
-	first := fixtureOptions{mode: "blocked-first", runID: "r-first"}
+	first := fixtureOptions{mode: "empty-first", runID: "r-first"}
 	f := newFixture(t, first)
 
-	// Incarnation one, under r-first: attempt 1 of a1 answers BLOCKED with
+	// Incarnation one, under r-first: attempt 1 of a1 answers DONE_WITH_CONCERNS with
 	// nothing committed, and the run stops on the refusal. The tick stays
 	// open — which is what makes the re-run dispatch it again.
 	_, result, err := f.run(f.Repo, first)
@@ -47,8 +47,8 @@ func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("attempt 1 of a1's report did not survive at %s: %v", report, err)
 	}
-	if !strings.Contains(string(raw), "STATUS: "+subprocess.StatusBlocked) {
-		t.Fatalf("the archived report is not a1's BLOCKED report:\n%s", string(raw))
+	if !strings.Contains(string(raw), "STATUS: "+subprocess.StatusDoneWithConcerns) {
+		t.Fatalf("the archived report is not a1's DONE_WITH_CONCERNS report:\n%s", string(raw))
 	}
 
 	// A run OLDER still, fabricated by hand where its executor would have
@@ -77,12 +77,12 @@ func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 	// fresh run-state store on origin, and attempt numbers that begin again
 	// at 1. Before n4h that made attempt 1 of the new run a FIRST attempt by
 	// every fact it could see, and both previous runs' analysis invisible.
-	second := fixtureOptions{mode: "blocked-first", runID: "r-second"}
+	second := fixtureOptions{mode: "empty-first", runID: "r-second"}
 	_, result, err = f.run(f.Repo, second)
 	if err != nil {
 		t.Fatalf("the re-run under the new run id did not finish: %v", err)
 	}
-	// blocked-first keys on the attempt number, and the new run's numbering
+	// empty-first keys on the attempt number, and the new run's numbering
 	// restarted at 1 — so its own attempt 1 blocks the same way, and this
 	// failure is itself evidence the re-run really is a run made again.
 	if result.State != runstate.StateFailed {
@@ -103,9 +103,9 @@ func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 	for _, one := range redispatch.PriorReports {
 		prior[one.Run] = one
 	}
-	if p := prior["r-first"]; p.Attempt != 1 || p.Path != report || p.Status != subprocess.StatusBlocked {
+	if p := prior["r-first"]; p.Attempt != 1 || p.Path != report || p.Status != subprocess.StatusDoneWithConcerns {
 		t.Errorf("the first run's report is offered as %+v, want its attempt 1 (%s, %s)",
-			p, subprocess.StatusBlocked, report)
+			p, subprocess.StatusDoneWithConcerns, report)
 	}
 	if p := prior["r-previous"]; p.Attempt != 1 || p.Path != thisTick || p.Status != subprocess.StatusDone {
 		t.Errorf("the fabricated run's report is offered as %+v, want its attempt 1 (%s)", p, thisTick)
@@ -121,7 +121,7 @@ func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 	// recent analysis, and a worker pressed for time must meet it first.
 	rendered := renderedPrompt(t, filepath.Join(f.StateRoot, "r-second", "a1", strconv.Itoa(redispatch.Attempt)))
 	for _, want := range []string{report, thisTick, "run r-first attempt 1", "run r-previous attempt 1",
-		"STATUS: " + subprocess.StatusBlocked} {
+		"STATUS: " + subprocess.StatusDoneWithConcerns} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("the new run's prompt does not carry %q:\n%s", want, rendered)
 		}
@@ -155,10 +155,10 @@ func TestARunUnderANewRunIDIsOfferedThePreviousRunsReports(t *testing.T) {
 func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 	t.Parallel()
 
-	blocked := fixtureOptions{mode: "blocked-first"}
+	blocked := fixtureOptions{mode: "empty-first"}
 	f := newFixture(t, blocked)
 
-	// Incarnation one: attempt 1 of a1 answers BLOCKED with nothing
+	// Incarnation one: attempt 1 of a1 answers DONE_WITH_CONCERNS with nothing
 	// committed, and the run stops on the refusal — the rejection is what is
 	// durable on origin, and it is what the next incarnation redispatches
 	// from. This is the pwp shape: every re-dispatch is a run made again
@@ -173,7 +173,7 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 
 	// The re-dispatch: the same checkout, the same run id, a new attempt
 	// number — and a prompt that names what its predecessor found. Under
-	// blocked-first keyed on the tick's OWN first try (tick vw0), the
+	// empty-first keyed on the tick's OWN first try (tick vw0), the
 	// re-dispatch settles a1 and then refuses at a2's own first try exactly
 	// as a1's did; every assertion below reads what a1's re-dispatch left in
 	// the executor state, and a completed run was never among them.
@@ -206,8 +206,8 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("attempt 1's report did not survive teardown at %s: %v", report, err)
 	}
-	if !strings.Contains(string(raw), "STATUS: "+subprocess.StatusBlocked) {
-		t.Fatalf("the archived report is not attempt 1's BLOCKED report:\n%s", string(raw))
+	if !strings.Contains(string(raw), "STATUS: "+subprocess.StatusDoneWithConcerns) {
+		t.Fatalf("the archived report is not attempt 1's DONE_WITH_CONCERNS report:\n%s", string(raw))
 	}
 
 	// The dispatch the run actually made for attempt 2 names it.
@@ -215,9 +215,9 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 		t.Fatalf("the dispatch of a1's second attempt carries %d prior reports, want 1", got)
 	}
 	prior := f.dispatches["a1"].PriorReports[0]
-	if prior.Attempt != 1 || prior.Path != report || prior.Status != subprocess.StatusBlocked {
+	if prior.Attempt != 1 || prior.Path != report || prior.Status != subprocess.StatusDoneWithConcerns {
 		t.Errorf("the prior report the dispatch carries is %+v, want attempt 1's %s (%s)",
-			prior, subprocess.StatusBlocked, report)
+			prior, subprocess.StatusDoneWithConcerns, report)
 	}
 
 	// And the prompt the worker was actually handed — read out of the
@@ -226,7 +226,7 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 	if !strings.Contains(rendered, report) {
 		t.Errorf("attempt 2's rendered prompt does not name attempt 1's report (%s):\n%s", report, rendered)
 	}
-	if !strings.Contains(rendered, "STATUS: "+subprocess.StatusBlocked) {
+	if !strings.Contains(rendered, "STATUS: "+subprocess.StatusDoneWithConcerns) {
 		t.Errorf("attempt 2's rendered prompt does not carry attempt 1's status line:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "verify, not instructions to follow") {
