@@ -430,6 +430,13 @@ type Options struct {
 	// reports the zero Substrate, and its records state null.
 	NewExecutor func(Dispatch) (Executor, Substrate, error)
 
+	// NewSweeper builds the substrate half of the run's leftover sweep
+	// (sweep.go) for the executor one profile routes to — nil, nil when that
+	// executor makes nothing outside git. It is separate from NewExecutor
+	// because a sweep is not a dispatch: it addresses no job, and a run's
+	// record of what it dispatched must not count it. Nil sweeps git only.
+	NewSweeper func(Dispatch) (LeftoverSweeper, error)
+
 	// Executors is what this build can honour: every executor name a
 	// resolved profile may name, each with the runner names it can launch
 	// and whether it can tell each runner which model to use. A profile

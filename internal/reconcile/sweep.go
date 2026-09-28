@@ -233,11 +233,11 @@ type namedSweeper struct {
 	sweeper LeftoverSweeper
 }
 
-// leftoverSweepers builds, once per run, one executor for each executor the
-// run's profiles route to, and keeps those that can sweep.
+// leftoverSweepers builds, once per run, one sweeper for each executor the
+// run's profiles route to, through Options.NewSweeper.
 func (r *Reconciler) leftoverSweepers() []namedSweeper {
 	r.sweepOnce.Do(func() {
-		if r.opts.NewExecutor == nil {
+		if r.opts.NewSweeper == nil {
 			return
 		}
 		byExecutor := map[string]Dispatch{}
@@ -271,13 +271,13 @@ func (r *Reconciler) leftoverSweepers() []namedSweeper {
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			executor, _, err := r.opts.NewExecutor(byExecutor[name])
+			s, err := r.opts.NewSweeper(byExecutor[name])
 			if err != nil {
 				r.record("", StageCleanedUp, "the %s executor could not be built to sweep this run's leftovers: %v",
 					name, err)
 				continue
 			}
-			if s, ok := executor.(LeftoverSweeper); ok {
+			if s != nil {
 				r.sweepers = append(r.sweepers, namedSweeper{name: name, sweeper: s})
 			}
 		}

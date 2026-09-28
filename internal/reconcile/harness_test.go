@@ -832,6 +832,17 @@ type fixture struct {
 	// wrap decorates every executor this fixture builds, for a test that has
 	// to see the ORDER the reconciler asks for operations in.
 	wrap func(Executor) Executor
+
+	// sweeper is the substrate half of the run's leftover sweep, for a test
+	// that stands one in (sweep_test.go). Nil is the local executor's
+	// answer: it makes nothing outside git.
+	sweeper LeftoverSweeper
+}
+
+func (f *fixture) newSweeper(Dispatch) (LeftoverSweeper, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.sweeper, nil
 }
 
 type fixtureOptions struct {
@@ -1002,6 +1013,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		guardsOff:            opts.guardsOff,
 		stopAfter:            opts.stopAfter,
 		NewExecutor:          f.newExecutor,
+		NewSweeper:           f.newSweeper,
 		Substrate:            opts.substrate,
 		GatingClassifier:     opts.gatingClassifier,
 		AbsorptionDepthBound: opts.absorptionDepth,

@@ -16,10 +16,9 @@ import (
 // resume, and at run end — and a step that fails is retried by the next
 // sweep, never left for a person.
 
-// sweepingExecutor stands in for an executor with a substrate half — the
+// sweepingExecutor stands in for the substrate half of the sweep — the
 // herdr executor's workspaces — and records every scope it was asked to sweep.
 type sweepingExecutor struct {
-	Executor
 	log *sweepLog
 }
 
@@ -82,7 +81,7 @@ func TestTheRunSweepsWhatItsClosedTicksLeftBehind(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
 	log := &sweepLog{}
-	f.wrap = func(inner Executor) Executor { return &sweepingExecutor{Executor: inner, log: log} }
+	f.sweeper = &sweepingExecutor{log: log}
 	repo := f.Repo.Dir
 
 	// a1 is already closed — the killed run closed it and died before its

@@ -106,6 +106,28 @@ func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Ex
 	}
 }
 
+// sweeperFactory builds the substrate half of the run's leftover sweep for the
+// executor a profile routes to (reconcile/sweep.go). Only herdr makes
+// resources outside git — workspaces and panes — so only a herdr profile gets
+// one; every other executor's leftovers are git's, which the run sweeps
+// itself.
+func sweeperFactory(gate string) func(reconcile.Dispatch) (reconcile.LeftoverSweeper, error) {
+	return func(d reconcile.Dispatch) (reconcile.LeftoverSweeper, error) {
+		if d.Profile == nil || d.Profile.Executor != herdr.ExecutorName {
+			return nil, nil
+		}
+		executor, _, err := herdrExecutor(gate, d)
+		if err != nil {
+			return nil, err
+		}
+		sweeper, ok := executor.(reconcile.LeftoverSweeper)
+		if !ok {
+			return nil, fmt.Errorf("the herdr executor cannot sweep")
+		}
+		return sweeper, nil
+	}
+}
+
 // honouredNames is the honoured set the way a refusal should spell it: the
 // names a profile may name, comma-separated. Kept beside the set it renders
 // so the two cannot drift.
