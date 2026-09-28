@@ -53,6 +53,17 @@ loud.
 
 ---
 
+## 1.0.1
+
+PATCH: one description, no rule. `status-model.json`'s epic `phase`
+description now says the merge is a person's *by default* and that a
+repository may opt in to the run merging its own ready PR — the wording main's
+#92 gave it. The merge of main into epic/6in carried that edit in without
+re-cutting this bundle, so the digests no longer matched; this is the re-cut.
+No consumer has anything to do.
+
+---
+
 ## 1.0.0
 
 MAJOR by ownership, MINOR by content: ticfac takes the bundle over.

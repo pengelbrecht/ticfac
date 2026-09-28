@@ -19,7 +19,8 @@ const DefaultSocketPath = ".config/herdr/herdr.sock"
 var ErrNoHomeDir = errors.New("herd/client: cannot resolve default herdr socket path: no home directory")
 
 // ResolveSocketPath returns the herdr socket path to dial, in the order
-// documented by skills/ticks/references/runners-config.md:
+// documented by internal/runconfig/runners-config.md (ticfac's copy of the
+// reference ticks dropped with its execution surface, tick dz1):
 //
 //  1. explicit, when non-empty (this is `orchestration.socket` from
 //     .tick/runners.toml);

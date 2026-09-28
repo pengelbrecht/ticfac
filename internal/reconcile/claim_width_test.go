@@ -1,7 +1,9 @@
 package reconcile
 
 import (
+	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -178,6 +180,98 @@ func TestATrackerRefusingAClaimHoldsTheRunAndKeepsItsWork(t *testing.T) {
 	if !adopted {
 		t.Error("the resumed run dispatched over the held attempt instead of adopting it by identity: the work " +
 			"the hold preserved was paid for twice")
+	}
+}
+
+// TestASecondRunUnderOneEpicIsHeldAtAWidthTheFirstRunFills is tick dz1's
+// acceptance, and it is the retirement of the guard everything above was
+// built against: tk 0.32.0 no longer refuses an over-width claim (exit 8
+// retired when ticks became tracker-only, epic chz), so the width is no
+// longer enforced where the run cannot argue with it — it is enforced HERE,
+// by the run's own arithmetic, or it is not enforced at all.
+//
+// The world it states: ANOTHER run under the same epic holds both claims the
+// width allows, exactly as the graph reports them in dispatch.in_flight_ids.
+// The tracker refuses nothing — 0.32.0 has no exit 8, and it would grant this
+// run a third claim the moment it asked. The run must not ask: it counts the
+// claims itself, sees the width is full of claims that are not its own, and
+// HOLDS — the same hold, the same feed line and the same resumable checkpoint
+// the tracker's own refusal used to produce — until the other holder closes.
+func TestASecondRunUnderOneEpicIsHeldAtAWidthTheFirstRunFills(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: wideGate})
+	// The first run under this epic holds the whole width: both claims of a
+	// declared width of 2, read by the graph as in_flight_ids with an owner
+	// that is not this run. The tracker enforces NOTHING (dz1 retired the only
+	// refusal it had): every claim this fake is asked for is granted.
+	f.Tracker.holdClaimsAs(t, "another-run", "a1", "a2")
+
+	r, result, err := f.run(f.Repo, fixtureOptions{gate: wideGate})
+	if err != nil {
+		t.Fatalf("the run should have HELD, not returned an operational error: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedClaimWidth {
+		t.Fatalf("the run ended %s with failure %+v, want a %s refusal: without the tracker's exit 8 the width is this run's own arithmetic, and an over-claim is a defect in it",
+			result.State, result.Failure, RefusedClaimWidth)
+	}
+	if result.State != runstate.StateFailed {
+		t.Errorf("the run ended %s; a held run is checkpointed so it can be resumed", result.State)
+	}
+
+	// It never ASKED. This is the assertion that separates dz1's hold from
+	// 3mp's: the tracker would have granted the claim — that is what retiring
+	// exit 8 means — so any claim this run took was an over-claim the width
+	// forbade, and the count above is the only thing that stopped it.
+	for _, id := range []string{"a1", "a2", "b1"} {
+		if got := f.Tracker.count("claim:" + id); got != 0 {
+			t.Errorf("the run asked the tracker for %s's claim %d time(s) under a width the other run filled: without exit 8 the tracker would have granted it, and the grant would have been the over-claim the width exists to stop",
+				id, got)
+		}
+	}
+
+	// The hold is VISIBLE in the vocabulary a watcher matches on, and the run
+	// dispatched nothing: with no claim of its own there is no work in flight
+	// to walk away from, and the feed says so in the hold's own words.
+	held, dispatched := false, false
+	for _, event := range r.Journal() {
+		switch {
+		case event.Stage == StageRunHeld:
+			held = true
+		case event.Stage == StageDispatched:
+			dispatched = true
+		}
+	}
+	if !held {
+		t.Errorf("no %s line in the feed: a hold nobody can see is a stall by definition", StageRunHeld)
+	}
+	if dispatched {
+		t.Error("the run dispatched a worker under a width the other run filled: it claimed past the width the tracker no longer guards")
+	}
+	if !strings.Contains(result.Failure.Message, "in_flight_ids") {
+		t.Errorf("the refusal does not say where its count came from: %q", result.Failure.Message)
+	}
+
+	// The first run finished and CLOSED its ticks — a claim lives until its
+	// tick closes — and the resumed run re-derives from the graph, works what
+	// is left, and closes the epic out without redoing the other run's work.
+	ctx := context.Background()
+	for _, id := range []string{"a1", "a2"} {
+		if _, err := f.Tracker.Close(ctx, id); err != nil {
+			t.Fatalf("close the other run's %s: %v", id, err)
+		}
+	}
+	_, resumed, err := f.run(f.Repo, fixtureOptions{gate: wideGate})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if resumed.State != runstate.StateCompleted {
+		t.Fatalf("the resumed run ended %s: %s (failure %+v)", resumed.State, resumed.Reason, resumed.Failure)
+	}
+	for _, id := range []string{"b1", "rv", "co"} {
+		if !slices.Contains(resumed.Closed, id) {
+			t.Errorf("the resumed run closed %v, want %s among them: the other run's claims must cost nothing of the epic's remaining work",
+				resumed.Closed, id)
+		}
 	}
 }
 

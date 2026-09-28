@@ -385,7 +385,7 @@ describe("branch ownership is structural", () => {
  *
  *  - `tk herd spawn` names a worker's branch `<worktree_branch_prefix><tick-id>`
  *    and that prefix defaults to `tick/` — it is the branch this very tick runs
- *    on. `skills/ticks/references/herdr-runner.md` further documents setting it
+ *    on. `worktree_branch_prefix` (internal/runconfig/runners-config.md) can set it
  *    to `tick/<epic-id>/`, which produces a name SHAPE-IDENTICAL to the cloud
  *    worker's `tick/<epic>/<tick>`. No segment count can separate them.
  *  - `epic/<id>` is pushed by whichever orchestrator ran the epic, and

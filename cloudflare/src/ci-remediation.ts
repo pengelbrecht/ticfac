@@ -59,8 +59,8 @@
  *    namespace are created on an operator's laptop, by the dozen, every wave.
  *  - The distinction is not repairable by shape. `tick/<epic>/<tick>` looks
  *    like the cloud worker's own two-segment name, but
- *    `skills/ticks/references/herdr-runner.md` documents setting
- *    `worktree_branch_prefix = "tick/<epic-id>/"` for exactly that layout — so
+ *    `worktree_branch_prefix` (internal/runconfig/runners-config.md) can be
+ *    set to `"tick/<epic-id>/"`, which is exactly that layout — so
  *    a segment count separates nothing either.
  *  - `epic/<id>` is pushed by whichever orchestrator ran the epic. A cloud
  *    closeout pushes one; so does a person's local orchestrator, which is what

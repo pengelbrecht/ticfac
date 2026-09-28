@@ -1,6 +1,6 @@
 # `.tick/runners.toml` — runner routing configuration
 
-> **Owned by ticfac since ticks became tracker-only** (ticks epic chz, which deleted `skills/ticks/references/`): the execution half of `.tick/runners.toml` is validated by ticfac's reader (`internal/runconfig` in this repository), and this document is its authoring reference. The two tracker tables at the end — `[signals]`, `[sweeps]` — are still **ticks'**: tk remains their author-time validator, and ticfac's reader tolerates them as foreign tables. The runner-contract companion docs this file used to sit beside (`agent-runner.md`, `herdr-runner.md`, `pi-runner.md`) were deleted with them; the surviving per-kind lookup table is [`herdr-kinds.md`](herdr-kinds.md), beside this file.
+> **Owned by ticfac since ticks became tracker-only** (ticks epic chz, which deleted `skills/ticks/references/`): the execution half of `.tick/runners.toml` is validated by ticfac's reader (`internal/runconfig` in this repository), and this document is its authoring reference. The two tracker tables at the end — `[signals]`, `[sweeps]` — are still **ticks'**: tk remains their author-time validator, and ticfac's reader tolerates them as foreign tables. The runner-contract companion docs this file used to sit beside in the ticks skill — `agent-runner.md` (the runner-neutral execution contract), `herdr-runner.md` (the herdr substrate), the four harness adapters `claude-runner.md`, `codex-runner.md`, `pi-runner.md` and `prime-runner.md` — live HERE now, beside this file and the per-kind lookup table [`herdr-kinds.md`](herdr-kinds.md) (tick dz1), because ticks dropped them with the rest of its execution surface.
 
 This file defines `.tick/runners.toml`: the per-repo configuration that decides **which substrate orchestrates a run** (herdr panes versus the harness's own subagent primitive), **which worker serves each task role and tier**, **which commands a run may execute, in which phase**, and **which other repositories a run may file a routed finding into**.
 
@@ -28,7 +28,7 @@ Validate a config by parsing the TOML and checking the resulting object against 
 ```bash
 python3 - <<'PY'
 import json, tomllib, jsonschema
-schema = json.load(open("skills/ticks/references/runners-config.schema.json"))
+schema = json.load(open("internal/runconfig/runners-config.schema.json"))
 config = tomllib.load(open(".tick/runners.toml", "rb"))
 jsonschema.Draft202012Validator(schema).validate(config)
 print("ok")
@@ -185,7 +185,7 @@ The retired inline form, `[roles.<name>.substrates.<substrate>]`, is refused wit
 
 ### One table, one kind per reader
 
-`[roles]` is one table and more than one program reads it. The herdr-substrate spawner (`ticfac run-epic`) compiles a cell into a herdr spawn of that `kind`. The **pi extension** (`extensions/ticks-runner`, the runner adapter behind `/ticks-plan` and `/ticks-run`) compiles the same cell into `pi --provider/--model/--thinking` and spawns that subprocess itself. Because `model` lives **in the kind's own namespace**, a cell only means anything to the reader that dispatches that kind: `sonnet` is a `claude` id, `gpt-5.6-luna` is a `codex` id, and neither is a name `pi --model` takes.
+`[roles]` is one table and more than one program reads it. The herdr-substrate spawner (`ticfac run-epic`) compiles a cell into a herdr spawn of that `kind`. The **pi extension** (ticks' `extensions/ticks-runner`, the runner adapter behind `/ticks-plan` and `/ticks-run`, until ticks deleted it with its execution surface at chz) compiled the same cell into `pi --provider/--model/--thinking` and spawned that subprocess itself. Because `model` lives **in the kind's own namespace**, a cell only means anything to the reader that dispatches that kind: `sonnet` is a `claude` id, `gpt-5.6-luna` is a `codex` id, and neither is a name `pi --model` takes.
 
 So **one `[roles]` table cannot carry a herdr routing and a pi routing at the same time.** It carries the kind's, and a second reader may not help itself to the model string with the kind dropped.
 
@@ -223,7 +223,7 @@ as the `Model` pattern `^@?[A-Za-z0-9][A-Za-z0-9_.+-]*(/@?[A-Za-z0-9][A-Za-z0-9_
 
 **A `:` is still rejected.** Effort is its own key; pi's `model:thinking` shorthand is what the spawner *emits*, never what the config carries.
 
-The pattern is enforced in four places that must agree — `runners-config.schema.json`, the Go loader (`internal/runnersconfig`), the Python reference validator (`scripts/verify-runners-config.py`, which reads the schema) and the pi extension (`extensions/ticks-runner/config.ts`) — because a file that one reader accepts and another rejects is worse than a file both refuse.
+The pattern is enforced in two places that must agree — `runners-config.schema.json` and the Go loader (`internal/runconfig`) — because a file that one reader accepts and another rejects is worse than a file both refuse. (Two more readers enforced it while ticks carried an execution surface: ticks' Python reference validator and its pi extension. Both left ticks with chz.)
 
 ### Shape versus compatibility
 

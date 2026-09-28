@@ -42,7 +42,7 @@
  * The design doc writes the sweep policy as a markdown bullet in
  * `.tick/config.md`. It is implemented here against `.tick/runners.toml`, for
  * the reason tick 0vb already settled for `[signals.sources.*]` and recorded
- * in `skills/ticks/references/runners-config.md`:
+ * in `internal/runconfig/runners-config.md`:
  *
  *   *if a PROGRAM parses it and a mistake fails closed, it needs a schema; if
  *   a MODEL reads it, markdown is right.*

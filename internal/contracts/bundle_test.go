@@ -190,9 +190,16 @@ func TestAVersionWithNoChangelogEntryIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stripped := strings.Replace(string(raw), "\n## 1.0.0\n", "\n## 1.0.0-renamed\n", 1)
+	// The CURRENT version's entry, read from the manifest, so a re-cut does
+	// not leave this test removing a heading the check no longer looks for.
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	readJSON(t, filepath.Join(root, DirName, BundleFile), &manifest)
+	heading := "\n## " + manifest.Version + "\n"
+	stripped := strings.Replace(string(raw), heading, "\n## "+manifest.Version+"-renamed\n", 1)
 	if stripped == string(raw) {
-		t.Fatal("the changelog no longer carries a `## 1.0.0` heading for this test to remove")
+		t.Fatalf("the changelog no longer carries a `## %s` heading for this test to remove", manifest.Version)
 	}
 	if err := os.WriteFile(path, []byte(stripped), 0o644); err != nil {
 		t.Fatal(err)

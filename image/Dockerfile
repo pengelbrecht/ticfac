@@ -42,8 +42,8 @@ FROM docker.io/cloudflare/sandbox:0.12.7-python@sha256:6dfa7301e69d3e5cd8e0404b9
 # assume. Building an entrypoint that runs a subcommand no release has yet is
 # `./build.sh --tk-ref <pushed commit>`; without it the assertion at the end of
 # the tk block below fails the build and names what is missing.
-ARG TK_VERSION=0.31.0
-ARG TK_SOURCE_REF=v0.31.0
+ARG TK_VERSION=0.32.0
+ARG TK_SOURCE_REF=v0.32.0
 ARG TK_MODULE=github.com/pengelbrecht/ticks/cmd/tk
 
 ARG OMP_VERSION=17.3.8
