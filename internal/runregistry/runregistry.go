@@ -38,7 +38,9 @@
 // because the last claim is the run that is driving. Release does NOT remove
 // it: a finished run stays enumerable — its own terminal records answer what
 // its absent pidfile cannot — and only a run id claimed again elsewhere moves
-// the answer.
+// the answer. The one thing that ends a registration is its checkout
+// ceasing to exist: every exported reader then treats it as absent and
+// removes it (see standing), because it names nothing anybody can read.
 package runregistry
 
 import (
@@ -49,6 +51,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 	"time"
 )
 
@@ -80,10 +83,51 @@ type Registration struct {
 // Dir is where registrations live: $TICFAC_REGISTRY_DIR when set, else
 // ~/.ticfac/registry — machine-local state, never inside a checkout, which is
 // the very thing a registration names.
+//
+// A TEST BINARY with no redirect is refused the operator's directory, by a
+// panic: see refuseTheOperatorsRegistryUnderTest.
 func Dir() string {
 	if dir := strings.TrimSpace(os.Getenv(RegistryDirEnv)); dir != "" {
 		return dir
 	}
+	refuseTheOperatorsRegistryUnderTest()
+	return OperatorDir()
+}
+
+// refuseTheOperatorsRegistryUnderTest is the half of tick 7ag's guard that
+// cannot be opted out of. registrytest.GuardMain redirects a package's
+// registry and scans the real one afterwards — but only in a package whose
+// TestMain calls it. On 2026-09-27 a tick branch whose internal/cli TestMain
+// only dispatched its re-exec'd child (9sz's, written before the redirect
+// existed) ran the whole cli suite against the operator's real
+// ~/.ticfac/registry: eight phantom runs (epic-bar, epic-det, epic-foo,
+// epic-rmod, epic-run, r-1, r-sigterm, r-status), each naming a deleted
+// go-test temp dir, listed "held for a person" by the bare `ticfac`.
+//
+// So every read and write of the registry passes this check: a test binary
+// (testing.Testing() — true in every child a test re-execs from its own
+// binary as well) whose environment names no redirect has lost it, whether
+// its package never took the guard or a child was spawned with an
+// environment that dropped the variable, and it must not touch the
+// operator's machine. It panics rather than returning an error because the
+// one writer, runlife.Claim, treats a failed registration as best effort
+// and would log an error no test reads: a panic fails the package, loudly,
+// at the line that lost the redirect. A production binary is never a test
+// binary, so this never fires outside a test.
+func refuseTheOperatorsRegistryUnderTest() {
+	if !testing.Testing() {
+		return
+	}
+	panic(fmt.Sprintf("runregistry: a test binary reached the operator's real run registry %s: "+
+		"%s is not set in this process's environment. A test that claims or registers a run must "+
+		"run under a redirected registry — registrytest.GuardMain as the package's TestMain sets "+
+		"one, and every child the test spawns must inherit it (tick 7ag)",
+		OperatorDir(), RegistryDirEnv))
+}
+
+// OperatorDir is the machine's own registry, ~/.ticfac/registry, whatever
+// the environment says: the directory Dir falls back to with no redirect.
+func OperatorDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(os.TempDir(), "ticfac", "registry")
@@ -169,8 +213,55 @@ func writeFile(dir string, reg Registration) error {
 // Lookup reads one run's registration. The second return says whether the
 // machine holds one; a registration that exists but will not decode is an
 // error, never a silent absence.
+//
+// A registration whose checkout no longer exists is no registration: it is
+// pruned and reported absent (see standing).
 func Lookup(runID string) (Registration, bool, error) {
-	return read(Dir(), runID)
+	dir := Dir()
+	reg, ok, err := read(dir, runID)
+	if err != nil || !ok {
+		return reg, ok, err
+	}
+	if !standing(dir, reg) {
+		return Registration{}, false, nil
+	}
+	return reg, true, nil
+}
+
+// standing says whether a registration still names a checkout on this
+// machine, and removes it from dir when it does not.
+//
+// A registration exists to say where a run's pidfile, feed and worktrees can
+// be read. One whose checkout has been deleted — a test's temp checkout, a
+// worktree someone removed — names nothing any probe can read, and nothing a
+// person can act on: listed, it reads as a dead run "held for a person"
+// with a resume command that can only fail. So every exported reader treats
+// it as absent, and removes it so the machine's registry cleans itself the
+// first time anything reads it. The durable facts of the run live on origin
+// and are not touched; only the machine's pointer to a directory that is
+// gone is.
+//
+// Only a checkout that is certainly gone counts: a stat that fails for any
+// other reason (permissions, an unmounted volume's I/O error) leaves the
+// registration standing, and a registration another machine wrote (a path
+// host-local there) is never judged here. The removal re-reads the file
+// first and removes it only if it still says what was judged, so a run that
+// re-registered elsewhere in the meantime keeps its new registration.
+func standing(dir string, reg Registration) bool {
+	if reg.Repo == "" {
+		return true
+	}
+	if host, err := os.Hostname(); err == nil && reg.Host != "" && reg.Host != host {
+		return true
+	}
+	if _, err := os.Stat(reg.Repo); !errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	path := filepath.Join(dir, reg.RunID+".json")
+	if again, ok, err := read(dir, reg.RunID); err == nil && ok && again == reg {
+		_ = os.Remove(path)
+	}
+	return false
 }
 
 // read is Lookup against a named directory.
@@ -198,7 +289,12 @@ func read(dir, runID string) (Registration, bool, error) {
 // today. The second return says whether a registration named the repo, so a
 // caller that wants to state the difference can.
 func WorkingRepo(runID, fallback string) (string, bool) {
-	return workingRepo(Dir(), runID, fallback)
+	dir := Dir()
+	reg, ok, err := read(dir, runID)
+	if err != nil || !ok || reg.Repo == "" || !standing(dir, reg) {
+		return fallback, false
+	}
+	return reg.Repo, true
 }
 
 // workingRepo is WorkingRepo against a named directory. A registration that
@@ -216,8 +312,22 @@ func workingRepo(dir, runID, fallback string) (string, bool) {
 // a listing surface starts from. An absent registry is an empty list, not an
 // error, and a registration that cannot be decoded is an error, not a skip: a
 // listing that quietly drops a run is the silence this package exists to end.
+//
+// A registration whose checkout no longer exists is not listed, and is
+// pruned (see standing): a listing's rows are runs a person can act on.
 func List() ([]Registration, error) {
-	return list(Dir())
+	dir := Dir()
+	regs, err := list(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := regs[:0]
+	for _, reg := range regs {
+		if standing(dir, reg) {
+			out = append(out, reg)
+		}
+	}
+	return out, nil
 }
 
 // list is List against a named directory.

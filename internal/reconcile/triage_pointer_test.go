@@ -37,6 +37,22 @@ func TestTheTriagePointerTeachesTheEverydayPathNotThe64HexCommand(t *testing.T) 
 				"everyday path: %q", want, p)
 		}
 	}
+	// Since PR #85 the run disposes of a finding routed to another repository
+	// itself — filed into the target's tracker when .tick/runners.toml allows
+	// it, else a local backlog tick naming the target — and it never holds the
+	// run. The pointer must say that, not send a person to settle it by hand.
+	for _, want := range []string{
+		"routed to another repository",
+		".tick/runners.toml",
+		"backlog tick",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the triage pointer does not say how the run disposes of a routed finding (%q): %q", want, p)
+		}
+	}
+	if strings.Contains(p, "keeps its routing") {
+		t.Errorf("the triage pointer still tells a person to settle a routed finding by hand: %q", p)
+	}
 	for _, old := range []string{
 		"ticfac finding qeu", // the old shape: the command with the key in tow
 		"--promote-as",

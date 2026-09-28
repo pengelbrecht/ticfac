@@ -215,20 +215,24 @@ func TestListSortsAndRefusesCorruption(t *testing.T) {
 func TestTheExportedSurfaceReadsDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(RegistryDirEnv, dir)
+	// A checkout that stands: the exported surface answers only for
+	// registrations whose checkout still exists (see
+	// TestARegistrationWhoseCheckoutIsGoneIsNoRegistration).
+	working := t.TempDir()
 
-	if err := Register("epic-env", "/the/working/checkout"); err != nil {
+	if err := Register("epic-env", working); err != nil {
 		t.Fatal(err)
 	}
 	reg, ok, err := Lookup("epic-env")
 	if err != nil || !ok {
 		t.Fatalf("Lookup after Register: ok=%v err=%v", ok, err)
 	}
-	if reg.Repo != "/the/working/checkout" {
-		t.Errorf("registration repo %q, want /the/working/checkout", reg.Repo)
+	if reg.Repo != working {
+		t.Errorf("registration repo %q, want %s", reg.Repo, working)
 	}
 
 	repo, registered := WorkingRepo("epic-env", "/fallback")
-	if !registered || repo != "/the/working/checkout" {
+	if !registered || repo != working {
 		t.Errorf("WorkingRepo through Dir(): repo=%q registered=%v", repo, registered)
 	}
 
@@ -252,13 +256,124 @@ func TestTheExportedSurfaceReadsDir(t *testing.T) {
 	}
 }
 
+// The default is the machine's own ticfac state. It is read through
+// OperatorDir, the one spelling of it that never refuses: Dir() in a test
+// binary with no redirect refuses (see
+// TestATestBinaryWithNoRedirectRefusesTheOperatorsRegistry), and HOME is
+// moved so no assertion here could touch the real directory.
+//
+// Serial: t.Setenv cannot be used with t.Parallel.
 func TestDirDefaultsToTheMachineStateDir(t *testing.T) {
 	t.Setenv(RegistryDirEnv, "")
+	t.Setenv("HOME", t.TempDir())
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Skip("no home directory on this host")
 	}
-	if got := Dir(); got != filepath.Join(home, ".ticfac", "registry") {
-		t.Errorf("Dir() = %q, want %q", got, filepath.Join(home, ".ticfac", "registry"))
+	if got := OperatorDir(); got != filepath.Join(home, ".ticfac", "registry") {
+		t.Errorf("OperatorDir() = %q, want %q", got, filepath.Join(home, ".ticfac", "registry"))
+	}
+}
+
+// Tick 7ag's guard was opt-in: a package whose TestMain did not call
+// registrytest.GuardMain -- the 9sz branch's own dispatch-only TestMain on
+// 2026-09-27 was one -- ran every claim in its suite against the operator's
+// real ~/.ticfac/registry, and eight phantom runs pointing at deleted temp
+// dirs surfaced in the bare `ticfac` overview. So the refusal lives where
+// every writer and reader passes: a TEST BINARY (testing.Testing(), which is
+// also true of every child a test re-execs from its own binary) whose
+// environment names no redirect is refused the operator's registry
+// outright -- loudly, by a panic that fails the package, because Claim
+// treats a failed registration as best effort and would log an error
+// nobody reads.
+//
+// HOME is moved first, so a regression that writes anyway writes into this
+// test's temp dir and never onto the operator's machine.
+//
+// Serial: t.Setenv cannot be used with t.Parallel.
+func TestATestBinaryWithNoRedirectRefusesTheOperatorsRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(RegistryDirEnv, "")
+	operator := filepath.Join(home, ".ticfac", "registry")
+
+	mustPanic := func(what string, fn func()) {
+		t.Helper()
+		defer func() {
+			if recover() == nil {
+				t.Errorf("%s in a test binary with no %s redirect did not refuse", what, RegistryDirEnv)
+			}
+		}()
+		fn()
+	}
+	mustPanic("Register", func() { _ = Register("epic-leak", t.TempDir()) })
+	mustPanic("Lookup", func() { _, _, _ = Lookup("epic-leak") })
+	mustPanic("List", func() { _, _ = List() })
+	mustPanic("WorkingRepo", func() { _, _ = WorkingRepo("epic-leak", "/fallback") })
+
+	if _, err := os.Stat(filepath.Join(operator, "epic-leak.json")); err == nil {
+		t.Errorf("the refused registration was written anyway, into %s", operator)
+	}
+
+	// A redirect is all a test needs: the refusal is about WHERE, never
+	// about whether a test may register at all.
+	t.Setenv(RegistryDirEnv, t.TempDir())
+	if err := Register("epic-ok", t.TempDir()); err != nil {
+		t.Errorf("a redirected registration was refused: %v", err)
+	}
+}
+
+// A registration names the checkout a run works in, and one whose checkout
+// no longer exists names nothing a probe, a listing or a person can act on:
+// the eight test strays of 2026-09-27 each pointed at a deleted go-test temp
+// dir and read as "held for a person" in the bare `ticfac`. Every exported
+// reader treats it as no registration at all and removes it, so the
+// machine's registry cleans itself the first time anything reads it: List
+// drops it, Lookup and WorkingRepo answer as though it were absent. A
+// registration whose checkout stands is untouched.
+//
+// Serial: t.Setenv cannot be used with t.Parallel.
+func TestARegistrationWhoseCheckoutIsGoneIsNoRegistration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(RegistryDirEnv, dir)
+	standing := t.TempDir()
+	gone := filepath.Join(t.TempDir(), "deleted-checkout")
+	if err := os.MkdirAll(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for id, repo := range map[string]string{"epic-here": standing, "epic-gone": gone, "epic-gone2": gone} {
+		if err := Register(id, repo); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok, err := Lookup("epic-gone2"); ok || err != nil {
+		t.Errorf("Lookup of a registration naming a deleted checkout: ok=%v err=%v, want absent", ok, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "epic-gone2.json")); !os.IsNotExist(err) {
+		t.Errorf("Lookup left the registration naming a deleted checkout in place (stat: %v)", err)
+	}
+	if repo, registered := WorkingRepo("epic-gone", "/fallback"); registered || repo != "/fallback" {
+		t.Errorf("WorkingRepo of a registration naming a deleted checkout = %q (registered %v), want the fallback", repo, registered)
+	}
+	if err := Register("epic-gone", gone+"-never"); err != nil {
+		t.Fatal(err)
+	}
+
+	regs, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(regs) != 1 || regs[0].RunID != "epic-here" {
+		t.Errorf("List() = %v, want only the registration whose checkout stands", regs)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "epic-gone.json")); !os.IsNotExist(err) {
+		t.Errorf("List left the registration naming a deleted checkout in place (stat: %v)", err)
+	}
+	if repo, registered := WorkingRepo("epic-here", "/fallback"); !registered || repo != standing {
+		t.Errorf("WorkingRepo of a standing registration = %q (registered %v), want %s", repo, registered, standing)
 	}
 }

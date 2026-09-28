@@ -583,6 +583,13 @@ func TestRunNeedsExactlyOneEpicID(t *testing.T) {
 // discipline's own rules for load-bearing tests (the only subprocesses are
 // the children under test and runlife's ps).
 func TestRunStartsDetachedAttachesAndResumesForReal(t *testing.T) {
+	// The production herdr probe runs too, and it must never reach the
+	// operator's own herdr: a test started from a herdr pane inherits the
+	// live server's socket in HERDR_SOCKET_PATH, and this test pinged it on
+	// every run (and handed the child the herdr profile set because it
+	// answered). A socket path nothing listens on is "no live herdr" — the
+	// case this test is not about, answered the same on every host.
+	t.Setenv("HERDR_SOCKET_PATH", filepath.Join(t.TempDir(), "no-herdr.sock"))
 	repo := t.TempDir()
 	runID := "epic-det"
 	startLog := filepath.Join(runlife.Dir(repo, runID), startLogName)

@@ -9,6 +9,7 @@ import {
 } from "../src/artifacts";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { insertRun } from "../src/db";
+import { appendFeed, FINAL_FEED_SEQ, runFinishedFeedEvent } from "../src/run-feed";
 
 /**
  * `tk cloud logs <run>` — what the container printed.
@@ -186,5 +187,36 @@ describe("GET /api/runs/:id/logs", () => {
     await recordedRun(runID);
     const res = await get(`/api/runs/${runID}/logs?max_bytes=${HARNESS_TAIL_MAX_BYTES + 1}`);
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /api/runs/:id/events", () => {
+  // The bare `ticfac` warned "the feed read for run_… carried 1132 bytes
+  // against a 1130-byte standing size" for every cloud run: this route stated
+  // `text.length` — UTF-16 code units — as the feed's byte size, and every
+  // feed line carries an em dash (one code unit, three UTF-8 bytes). The size
+  // is the cursor a follower walks the bytes by, so it is UTF-8 bytes.
+  it("states the feed's size in UTF-8 bytes, not UTF-16 code units", async () => {
+    const runID = "run_feed_bytes";
+    await recordedRun(runID);
+    await appendFeed(env, {
+      project: PROJECT,
+      run_id: runID,
+      seq: FINAL_FEED_SEQ,
+      events: [
+        runFinishedFeedEvent({
+          run_id: runID,
+          detail: "failed: the orchestrator exited 8 — boot 3",
+        }),
+      ],
+    });
+
+    const res = await get(`/api/runs/${runID}/events`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { text: string; bytes: number; total_bytes: number };
+    const utf8 = new TextEncoder().encode(body.text).length;
+    expect(utf8).toBeGreaterThan(body.text.length);
+    expect(body.bytes).toBe(utf8);
+    expect(body.total_bytes).toBe(utf8);
   });
 });

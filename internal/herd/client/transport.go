@@ -68,6 +68,7 @@ func (t *UnixTransport) Dial(ctx context.Context) (Conn, error) {
 	if timeout <= 0 {
 		timeout = DefaultDialTimeout
 	}
+	refuseTheOperatorsHerdrUnderTest(t.SocketPath)
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

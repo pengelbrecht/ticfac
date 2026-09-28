@@ -36,6 +36,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -121,9 +122,15 @@ func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int
 	if int64(len(text)) != size {
 		// The route serves the whole feed; a mismatch is a read that
 		// bounded it — reported and answered honestly at the bytes that
-		// did arrive, never guessed past.
-		fmt.Fprintf(s.warn, "# the feed read for %s carried %d bytes against a %d-byte standing size; following only what arrived\n",
-			s.runID, len(text), size)
+		// did arrive, never guessed past. Except the one mismatch that is
+		// no such thing: a factory deployed before it counted UTF-8 bytes
+		// states JavaScript's `text.length`, UTF-16 code units, and every
+		// feed line carrying an em dash reads two bytes "short" of a read
+		// that was whole. That count is the same whole feed, not a warning.
+		if !feedSizeInUTF16Units(text, size) {
+			fmt.Fprintf(s.warn, "# the feed read for %s carried %d bytes against a %d-byte standing size; following only what arrived\n",
+				s.runID, len(text), size)
+		}
 		size = int64(len(text))
 	}
 	if size <= cursor {
@@ -433,4 +440,15 @@ func runLevel(event runfeed.Event) bool {
 // stopping. A run stopping is still a run that exists as work.
 func cloudRunStillGoing(state string) bool {
 	return !isFinishedCloudRun(state)
+}
+
+// feedSizeInUTF16Units reports whether size is text's length in UTF-16 code
+// units — the count a factory deployed before its events route counted UTF-8
+// bytes states for a whole feed (JavaScript's `string.length`).
+func feedSizeInUTF16Units(text string, size int64) bool {
+	units := int64(0)
+	for _, r := range text {
+		units += int64(utf16.RuneLen(r))
+	}
+	return units == size
 }

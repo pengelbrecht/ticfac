@@ -511,14 +511,19 @@ async function runFeedRoute(runID: string, env: Env): Promise<Response> {
     );
   }
   const text = await readRunFeed(env.ARTIFACTS, run.project, runID);
+  // UTF-8 bytes, never `text.length`: the size is the cursor a follower walks
+  // the feed's bytes by, and `length` counts UTF-16 code units — every line
+  // carrying an em dash read two bytes "short", and the client warned that
+  // the read had been bounded on every cloud run, every time.
+  const bytes = new TextEncoder().encode(text).length;
   return Response.json({
     run_id: runID,
     project: run.project,
     state: run.state,
     trace_id: run.trace_id,
     text,
-    bytes: text.length,
-    total_bytes: text.length,
+    bytes,
+    total_bytes: bytes,
   });
 }
 
