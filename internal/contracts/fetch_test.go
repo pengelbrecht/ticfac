@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,32 +88,43 @@ func TestExtractBundleRefusesSomethingThatIsNotAnArchive(t *testing.T) {
 }
 
 // Diff is what the CI contracts job asserts: the vendored bytes ARE what ticks
-// published at the pinned ref. Here it is shown to be able to say no.
-func TestDiffSeesAVendoredEdit(t *testing.T) {
-	root := throwaway(t)
-
-	upstream := map[string][]byte{}
-	entries, err := os.ReadDir(filepath.Join(root, DirName))
+// published at the pinned ref, under the ticks bundle version the pin names.
+// The upstream fixture here is ticks' 7.0.0-shaped fetch: ticks' own manifest
+// plus the two files it lists. Here Diff is shown to be able to say no.
+func upstreamAtPin(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+	pin, err := LoadPin(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range entries {
-		raw, err := os.ReadFile(filepath.Join(root, DirName, e.Name()))
+	upstream := map[string][]byte{
+		BundleFile: []byte(`{"version":"` + pin.BundleVersion + `","files":["tk-json-manifest.json","tracker-layout.json"],"digests":{"tk-json-manifest.json":"` + pin.Digests["tk-json-manifest.json"] + `","tracker-layout.json":"` + pin.Digests["tracker-layout.json"] + `"}}`),
+	}
+	for _, name := range pin.Files {
+		raw, err := os.ReadFile(filepath.Join(root, DirName, name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		upstream[e.Name()] = raw
+		upstream[name] = raw
 	}
+	return upstream
+}
+
+func TestDiffSeesAVendoredEdit(t *testing.T) {
+	root := throwaway(t)
+	upstream := upstreamAtPin(t, root)
 
 	problems, err := Diff(root, upstream)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(problems) != 0 {
-		t.Fatalf("an untouched copy differed from itself: %v", problems)
+		t.Fatalf("an untouched copy differed from its own upstream: %v", problems)
 	}
 
-	path := filepath.Join(root, DirName, "message-context.json")
+	// An edit to a ticks-owned file is the one thing both halves of the
+	// mechanism must catch: the pin's digest offline, Diff online.
+	path := filepath.Join(root, DirName, "tk-json-manifest.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -124,18 +136,82 @@ func TestDiffSeesAVendoredEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(problems) != 1 || !strings.Contains(problems[0], "message-context.json") {
-		t.Errorf("Diff did not name the edited file: %v", problems)
+	if len(problems) != 1 || !strings.Contains(problems[0], "tk-json-manifest.json") {
+		t.Errorf("Diff did not name the edited ticks-owned file: %v", problems)
 	}
 
-	delete(upstream, "message-context.json")
+	// An edit to a TICFAC-owned contract is none of Diff's business: ticks no
+	// longer ships it, and this repository is its authority now.
+	local := filepath.Join(root, DirName, "message-context.json")
+	raw, err = os.ReadFile(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, append(raw, ' '), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	problems, err = Diff(root, upstream)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(problems) != 1 || !strings.Contains(problems[0], "absent upstream") {
-		t.Errorf("Diff did not report a file vendored here and absent upstream: %v", problems)
+	if len(problems) != 1 { // still only the ticks-owned edit from before
+		t.Errorf("Diff reported %d problems over a ticfac-owned edit it must not compare upstream: %v", len(problems), problems)
 	}
+}
+
+// The pin's digests are a recorded claim about ticks' bundle; ticks' manifest
+// at the ref is the authority. A pin whose digests are not what ticks
+// published for the version it names is refused — this is the check that
+// binds `bundleVersion` to bytes, the one the offline gate cannot make.
+func TestDiffBindsThePinsDigestsToTicksManifest(t *testing.T) {
+	root := throwaway(t)
+	upstream := upstreamAtPin(t, root)
+
+	// A digest disagreement between the pin and ticks' manifest.
+	var manifest map[string]any
+	if err := json.Unmarshal(upstream[BundleFile], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["digests"].(map[string]any)["tk-json-manifest.json"] = strings.Repeat("0", 64)
+	rebuilt, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream[BundleFile] = rebuilt
+	problems, err := Diff(root, upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) != 1 || !strings.Contains(problems[0], "disagree") {
+		t.Errorf("Diff did not refuse a pin whose digests are not what ticks published: %v", problems)
+	}
+
+	// A version disagreement between the pin and ticks' manifest.
+	upstream = upstreamAtPin(t, root)
+	upstream[BundleFile] = bytes.Replace(upstream[BundleFile], []byte(pinVersion(t, root)), []byte("9.9.9"), 1)
+	problems, err = Diff(root, upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) == 0 || !strings.Contains(strings.Join(problems, " "), "pins ") {
+		t.Errorf("Diff did not refuse a pin whose version the ref does not publish: %v", problems)
+	}
+
+	// A fetch without ticks' manifest cannot bind the version at all.
+	upstream = upstreamAtPin(t, root)
+	delete(upstream, BundleFile)
+	if _, err := Diff(root, upstream); err == nil {
+		t.Error("a fetch without ticks' bundle.json was accepted; the version would bind to nothing")
+	}
+}
+
+func pinVersion(t *testing.T, root string) string {
+	t.Helper()
+	pin, err := LoadPin(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pin.BundleVersion
 }
 
 func keysOf(m map[string][]byte) []string {

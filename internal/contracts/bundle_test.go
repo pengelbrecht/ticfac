@@ -155,13 +155,23 @@ func TestAMissingFixtureIsRefused(t *testing.T) {
 	refuses(t, root, "a listed fixture is missing")
 }
 
-func TestAStaleBundleVersionPinIsRefused(t *testing.T) {
+// An edit to a ticks-owned contract is caught TWICE offline: by ticfac's
+// bundle digest and by the pin's own digest. This is the replacement for the
+// stale-bundle-version refusal of the vendored era: `bundleVersion` now names
+// ticks' bundle, and binding it to bytes is verify-upstream's job online (see
+// fetch_test.go) — but the BYTES the pin records are checked here, offline,
+// every test run.
+func TestAnEditedTicksOwnedFixtureIsRefused(t *testing.T) {
 	root := throwaway(t)
-	var pin map[string]any
-	readJSON(t, filepath.Join(root, PinFile), &pin)
-	pin["bundleVersion"] = "2.1.1"
-	writeJSON(t, filepath.Join(root, PinFile), pin)
-	refuses(t, root, "the pin names a bundle version the vendored copy is not")
+	path := filepath.Join(root, DirName, "tk-json-manifest.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(raw, []byte("\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refuses(t, root, "a ticks-owned contract was edited here")
 }
 
 func TestAnAbsentBundleVersionIsRefused(t *testing.T) {
@@ -180,16 +190,16 @@ func TestAVersionWithNoChangelogEntryIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stripped := strings.Replace(string(raw), "\n## 3.0.0\n", "\n## 3.0.0-renamed\n", 1)
+	stripped := strings.Replace(string(raw), "\n## 1.0.0\n", "\n## 1.0.0-renamed\n", 1)
 	if stripped == string(raw) {
-		t.Fatal("the changelog no longer carries a `## 3.0.0` heading for this test to remove")
+		t.Fatal("the changelog no longer carries a `## 1.0.0` heading for this test to remove")
 	}
 	if err := os.WriteFile(path, []byte(stripped), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The changelog is itself pinned by digest, so this breaks twice over —
-	// which is the point: a vendored copy that cannot say what its version
-	// changed has been copied, not pinned.
+	// ticfac authors this changelog, so an ordinary edit is legitimate
+	// authoring and must NOT be a refusal — the one edit that is a refusal is
+	// the one that makes the current version unsayable: removing its entry.
 	refuses(t, root, "the bundle version has no changelog entry")
 }
 
@@ -250,19 +260,6 @@ func TestADeletedLedgerEntryIsRefused(t *testing.T) {
 	recutPin(t, root)
 
 	refuses(t, root, "the version's ledger entry was deleted")
-}
-
-func TestAnEditedChangelogIsRefused(t *testing.T) {
-	root := throwaway(t)
-	path := filepath.Join(root, DirName, ChangelogFile)
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, append(raw, []byte("\nedited locally\n")...), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	refuses(t, root, "the vendored changelog was edited")
 }
 
 func TestADeletedPinIsRefused(t *testing.T) {
@@ -367,29 +364,33 @@ func recutManifest(t *testing.T, dir string) {
 	writeJSON(t, filepath.Join(dir, BundleFile), manifest)
 }
 
-// recutPin regenerates the pin's digests from whatever is on disk, so that a
-// test exercising the manifest's ledger is not merely failing the pin.
+// recutPin regenerates the pin's digests for the pinned ticks files from
+// whatever is on disk, so that a test exercising ticfac's manifest ledger is
+// not merely failing the pin. The pin's files never change: ticfac's bundle
+// grew around them, and the pin's list is the ownership statement itself.
 func recutPin(t *testing.T, root string) {
 	t.Helper()
 	dir := filepath.Join(root, DirName)
 	var pin map[string]any
 	readJSON(t, filepath.Join(root, PinFile), &pin)
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	digests := map[string]any{}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+	for _, name := range filesOf(pin) {
+		raw, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		digests[e.Name()] = FileDigest(raw)
+		digests[name] = FileDigest(raw)
 	}
 	pin["digests"] = digests
 	writeJSON(t, filepath.Join(root, PinFile), pin)
+}
+
+func filesOf(pin map[string]any) []string {
+	list, _ := pin["files"].([]any)
+	out := make([]string, 0, len(list))
+	for _, name := range list {
+		out = append(out, name.(string))
+	}
+	return out
 }

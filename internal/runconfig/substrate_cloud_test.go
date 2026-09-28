@@ -191,9 +191,12 @@ func TestCloudPassesValidation(t *testing.T) {
 	}
 }
 
-// In ticks' copy of this package this file ends with TestSubstrateEnumMatchesTheSchema,
-// which reads runners-config.schema.json from ticks' skill references and
-// fails when the Go Substrates enum and the schema's enum disagree. That
-// cross-check is a ticks-side obligation (the schema lives there); the gap it
-// leaves HERE — the substrate enum is not yet pinned in the contract bundle
-// ticfac vendors — is recorded as a follow-up on epic av8.
+// The substrate enum's cross-checks both land in this repository now: the
+// schema lives beside the authoring doc (runners-config.schema.json, taken
+// over from ticks when it became tracker-only) and the enum is pinned in
+// contracts/runners-config-contract.json, which
+// internal/contracts/parity/runners_config_test.go asserts against this
+// reader and against runconfig.Substrates. The follow-up this comment used to
+// record (the enum not yet pinned in the bundle) was closed by the contract's
+// substrate section; the schema's own enum is covered by the doc it ships
+// with, which no longer has a second repository to drift from.

@@ -63,6 +63,7 @@ func TestVersionJSONReportsTheContractBundle(t *testing.T) {
 		ContractBundle  string `json:"contract_bundle"`
 		TicksRepository string `json:"ticks_repository"`
 		TicksRef        string `json:"ticks_ref"`
+		TicksBundle     string `json:"ticks_bundle"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &info); err != nil {
 		t.Fatalf("version --json is not JSON: %v\n%s", err, stdout.String())
@@ -74,9 +75,11 @@ func TestVersionJSONReportsTheContractBundle(t *testing.T) {
 		t.Errorf("version --json must name the bundle and the ticks ref it was built against: %+v", info)
 	}
 
-	// The embedded answer must equal the vendored one. They are embedded so
-	// that a binary and the tree beside it cannot disagree; this asserts the
-	// embedding is of the right files.
+	// The embedded answer must equal the tree's. They are embedded so that a
+	// binary and the tree beside it cannot disagree; this asserts the
+	// embedding is of the right files. Since the ownership split (tick 4i8)
+	// there are TWO version claims, both checked: ticfac's own bundle, and
+	// the ticks bundle the two ticks-owned files were vendored from.
 	root, err := repoRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -93,6 +96,29 @@ func TestVersionJSONReportsTheContractBundle(t *testing.T) {
 	}
 	if info.ContractBundle != bundle.Version {
 		t.Errorf("the binary reports bundle %s; contracts/bundle.json is %s", info.ContractBundle, bundle.Version)
+	}
+	raw, err = os.ReadFile(filepath.Join(root, "contracts.pin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pin struct {
+		BundleVersion string `json:"bundleVersion"`
+		Ref           string `json:"ref"`
+	}
+	if err := json.Unmarshal(raw, &pin); err != nil {
+		t.Fatal(err)
+	}
+	if info.TicksBundle != pin.BundleVersion {
+		t.Errorf("the binary reports ticks bundle %s; contracts.pin.json pins %s", info.TicksBundle, pin.BundleVersion)
+	}
+	if info.TicksRef != pin.Ref {
+		t.Errorf("the binary reports ticks ref %s; contracts.pin.json records %s", info.TicksRef, pin.Ref)
+	}
+	if info.TicksBundle == info.ContractBundle && info.TicksBundle != "" {
+		// Not a failure — the two version series are independent and today
+		// ticfac's restarts at 1.0.0 while ticks' is at 7.0.0 — but a
+		// coincidence this loud should be a deliberate act, so say it.
+		t.Logf("ticfac's bundle version and ticks' coincide at %s; make sure that is intended", info.ContractBundle)
 	}
 }
 

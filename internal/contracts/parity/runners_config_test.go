@@ -79,6 +79,25 @@ type runnersConfig struct {
 		Refused           []string `json:"refused"`
 		RefusedTOMLValues []string `json:"refused_toml_values"`
 	} `json:"substrate"`
+	Findings struct {
+		Path           string `json:"path"`
+		TargetPattern  string `json:"target_pattern"`
+		TargetRule     string `json:"target_rule"`
+		FileRule       string `json:"file_rule"`
+		RemoteRule     string `json:"remote_rule"`
+		RefusalMessage string `json:"refusal_message"`
+		Accepted       []struct {
+			Name string `json:"name"`
+			Why  string `json:"why"`
+			Toml string `json:"toml"`
+		} `json:"accepted"`
+		Refused []struct {
+			Name                string `json:"name"`
+			Why                 string `json:"why"`
+			Toml                string `json:"toml"`
+			ExpectErrorContains string `json:"expect_error_contains"`
+		} `json:"refused"`
+	} `json:"findings"`
 }
 
 // acceptImage is ticfac's implementation of the image rule.
@@ -418,4 +437,63 @@ func equalSlices(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// The [findings] table (added when ticfac took this contract over, tick 4i8):
+// the `[findings.route."owner/name"]` allowlist that lets a run FILE a finding
+// a worker routed to another repository into that repository's own tracker.
+// The table joined the format after this file stopped being vendored (ticfac
+// #85), so until ticfac authored the contract it was covered only by ticfac's
+// own config tests (internal/runconfig/findings_test.go). Pinned here it gains
+// a cross-check those tests cannot make: the target pattern the contract pins
+// and the reader's own FindingTargetPattern are ONE pattern, so a reader that
+// widened its target vocabulary without re-cutting the contract fails here.
+func TestTheFindingsTableMatchesTheRealReader(t *testing.T) {
+	var c runnersConfig
+	readContract(t, runnersConfigFile, &c)
+
+	if c.Findings.Path == "" {
+		t.Fatal("the findings rule names no config path")
+	}
+	if _, err := regexp.Compile(c.Findings.TargetPattern); err != nil {
+		t.Fatalf("the pinned target pattern does not compile in Go: %v", err)
+	}
+	if c.Findings.TargetPattern != runconfig.FindingTargetPattern.String() {
+		t.Errorf("the contract pins the target pattern %q,\nthe reader's own FindingTargetPattern is %q — one pattern, two spellings",
+			c.Findings.TargetPattern, runconfig.FindingTargetPattern.String())
+	}
+	if c.Findings.TargetRule == "" || c.Findings.FileRule == "" || c.Findings.RemoteRule == "" {
+		t.Error("the findings rule does not state its target, file and remote rules")
+	}
+
+	for _, accepted := range c.Findings.Accepted {
+		t.Run("accepts "+accepted.Name, func(t *testing.T) {
+			cfg, err := runconfig.Parse([]byte(accepted.Toml))
+			if err != nil {
+				t.Fatalf("the contract accepts this file and ticfac's reader refuses it:\n%s\n%v", accepted.Toml, err)
+			}
+			route, ok := cfg.FindingRoute("pengelbrecht/ticks")
+			if !ok || !route.File {
+				t.Errorf("the contract's file = true route answered %+v, %v", route, ok)
+			}
+			route, ok = cfg.FindingRoute("example/elsewhere")
+			if !ok || route.File || route.Remote != "git@example.com:example/elsewhere.git" {
+				t.Errorf("the contract's explicit-remote route answered %+v, %v", route, ok)
+			}
+			if _, ok := cfg.FindingRoute("example/undeclared"); ok {
+				t.Error("an undeclared target answered a route: the allowlist must be explicit")
+			}
+		})
+	}
+	for _, refused := range c.Findings.Refused {
+		t.Run("refuses "+refused.Name, func(t *testing.T) {
+			_, err := runconfig.Parse([]byte(refused.Toml))
+			if err == nil {
+				t.Fatalf("the contract refuses this file and ticfac's reader accepted it:\n%s", refused.Toml)
+			}
+			if !strings.Contains(err.Error(), refused.ExpectErrorContains) {
+				t.Errorf("the refusal is %q, the contract pins %q", err.Error(), refused.ExpectErrorContains)
+			}
+		})
+	}
 }
