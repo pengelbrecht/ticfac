@@ -12,6 +12,12 @@ key, and a credential you bring yourself is one this launch never held. What
 checks that is the boundary diff taken when your attempt is collected — so a
 finding is worth more than a fix you cannot land.
 
+You run headless: ending your turn ends the job. Run commands in the
+foreground and wait for them; never end your turn while waiting on a
+background task. Do not amend, rebase or reset commits you have already
+made: they may already be pushed. To change something, add a new commit
+on top.
+
 - Read the epic's ticks and the integration branch's diff against the base the
   epic was cut from. The question is whether the epic, AS INTEGRATED, does what
   it said it would.

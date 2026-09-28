@@ -198,7 +198,29 @@ exit "${TICKS_TEST_WORKER_EXIT:-0}"
 	// stand-in serves both, so a pi worker is held to exactly omp's contract.
 	writeStub(t, filepath.Join(f.binDir, "omp"), agent)
 	writeStub(t, filepath.Join(f.binDir, "pi"), agent)
-	writeStub(t, filepath.Join(f.binDir, "claude"), harnessStubPreamble+`exit 0
+	// claude answers the same stand-in contract omp and pi are held to, plus
+	// the one fact only a claude run can record: the background-tasks switch
+	// the entrypoint exports for it (tick 060), read back by its test.
+	writeStub(t, filepath.Join(f.binDir, "claude"), harnessStubPreamble+`{
+  printf 'CWD=%s\n' "$PWD"
+  printf 'BG=%s\n' "${CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:-unset}"
+  for a in "$@"; do printf 'ARG=%s\n' "$a"; done
+} > "$TICKS_TEST_RECORD"
+if [ -n "${TICKS_TEST_WORKER_DIRTY:-}" ]; then printf 'half a tick\n' > partial.txt; fi
+if [ -n "${TICKS_TEST_WORKER_SLEEP:-}" ]; then sleep "$TICKS_TEST_WORKER_SLEEP"; fi
+if [ -n "${TICKS_TEST_WORKER_HOLD:-}" ]; then
+  n=0
+  while [ ! -f "$TICKS_TEST_WORKER_HOLD" ] && [ "$n" -lt 600 ]; do sleep 0.05; n=$((n+1)); done
+fi
+if [ -n "${TICKS_TEST_WORKER_COMMIT:-}" ]; then
+  printf 'work\n' > worked.txt
+  git add worked.txt
+  git commit -q -m "tick ${TICKS_TICK}: the work"
+fi
+if [ -n "${TICKS_TEST_WORKER_RESULT:-}" ]; then
+  printf '# %s\n\nI did the thing.\n\n%s\n' "${TICKS_TICK}" "${TICKS_TEST_WORKER_RESULT}" > "RESULT-${TICKS_TICK}.md"
+fi
+exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `)
 	writeStub(t, filepath.Join(f.binDir, "mise"), "exit 0\n")
 	// `tk` delegates the same four questions the orchestrator asks plus the
@@ -704,6 +726,247 @@ func TestWorkerFallbackReportSeparatesTheShapesOfANoReportRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ------------------------------------------------------ the early-exit nudge ---
+
+// sessionIDPattern is what a session the entrypoint names looks like in the
+// stand-in harness's recording: one UUID-shaped argument per run, identical
+// across the runs of one attempt.
+var sessionIDPattern = regexp.MustCompile(
+	`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+
+// runBlocks reads the per-run record a nudge test's stand-in appends to —
+// every invocation opens with a RUN line, then the joined arguments — so a
+// test can count the runs and compare sessions across them. The arguments
+// are a BLOCK rather than a line because the nudge prompt is multi-line.
+func runBlocks(t *testing.T, path string) []string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the harness never ran (no run record at %s): %v", path, err)
+	}
+	body := strings.TrimSpace(string(b))
+	if body == "" {
+		t.Fatalf("the run record at %s is empty", path)
+	}
+	runs := strings.Split("\n"+body+"\n", "\nRUN\n")
+	if len(runs) < 2 || strings.TrimSpace(runs[0]) != "" {
+		t.Fatalf("the run record at %s does not open with a RUN marker:\n%s", path, body)
+	}
+	return runs[1:]
+}
+
+// tick 060, the port of the local subprocess executor's nudge (epic-2jn vqc):
+// a harness that ends its turn to wait on a notification nobody delivers
+// exits 0 with no report — "The gate is still running. I'll wait for its
+// completion notification." — and a worker that ran its harness once with no
+// fallback was missing-result immediately. The harness is re-prompted before
+// that verdict, in its OWN session when the entrypoint can name one, so a
+// worker that finishes when asked again is a worker that finished.
+func TestWorkerRepromptsAHarnessThatEndsItsTurnWithNoReport(t *testing.T) {
+	shorttest.EndToEnd(t) // its fixtures are built inside subtests
+	for _, harness := range []string{"pi", "claude", "omp"} {
+		t.Run(harness, func(t *testing.T) {
+			f := newWorkerFixture(t)
+			f.env[EnvHarness] = harness
+			runsPath := filepath.Join(f.root, "nudge-runs")
+			f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
+			// The first turn does nothing at all — the vqc shape — and the
+			// whole job happens when the agent is asked again. A harness with
+			// no session this script can name (omp) is asked again with the
+			// WHOLE prompt plus the fresh-run section, so it matches either
+			// marker.
+			writeStub(t, filepath.Join(f.binDir, harness), harnessStubPreamble+`{
+  printf 'RUN\n'
+  printf '%s\n' "$*"
+} >> "$TICKS_TEST_NUDGE_RUNS"
+case "$*" in
+*"You ended your turn without writing your report"*|*"This job already ran once on this checkout"*)
+  printf 'work\n' > worked.txt
+  git add worked.txt
+  git commit -q -m "tick ${TICKS_TICK}: the work"
+  printf '# %s\n\nI did the thing once I was asked again.\n\nSTATUS: DONE\n' "${TICKS_TICK}" > "RESULT-${TICKS_TICK}.md"
+  ;;
+esac
+{
+  printf 'CWD=%s\n' "$PWD"
+  for a in "$@"; do printf 'ARG=%s\n' "$a"; done
+} > "$TICKS_TEST_RECORD"
+exit 0
+`)
+			out, code := f.run()
+			if code != 0 {
+				t.Fatalf("a harness that finished when re-prompted still gave exit %d:\n%s", code, out)
+			}
+			mustContain(t, out, "nudge 1 of 2", "the re-prompt the container made")
+			runs := runBlocks(t, runsPath)
+			if len(runs) != 2 {
+				t.Fatalf("%d harness run(s), want 2 (the first turn and one nudge):\n%s", len(runs), out)
+			}
+			rec := f.harnessRecord()
+			if harness == "omp" {
+				// omp has no session this entrypoint can name, so its nudge is a
+				// fresh run carrying the whole prompt and the section that says a
+				// run before it already worked here — a restart, and honestly one.
+				if id := sessionIDPattern.FindString(runs[0] + runs[1]); id != "" {
+					t.Errorf("omp was handed a session id %q it has no flag for", id)
+				}
+				mustContain(t, runs[1], "This job already ran once on this checkout", "the fresh-run section")
+				mustContain(t, runs[1], "implement the tick", "the whole prompt, re-run")
+			} else {
+				// The re-prompt goes to the SAME session the first run started:
+				// that is the whole difference between a nudge and a re-dispatch.
+				first, second := sessionIDPattern.FindString(runs[0]), sessionIDPattern.FindString(runs[1])
+				if first == "" || first != second {
+					t.Errorf("the runs are not in one session (%q then %q): a fresh run would lose the first turn's context", first, second)
+				}
+				if !strings.Contains(runs[1], "You ended your turn without writing your report") {
+					t.Errorf("the re-prompt does not say what is missing:\n%s", runs[1])
+				}
+				// Through the harness's own session flag, which is what makes the
+				// same session a resume rather than a restart. pi's --session-id
+				// is also its start flag (one flag, both turns); claude resumes
+				// with a flag the first run does not carry.
+				if harness == "claude" {
+					mustContain(t, rec, "ARG=--resume", "claude's resume of its own session")
+					if strings.Contains(strings.Split(rec, "ARG=--resume")[0], "ARG=--session-id") {
+						t.Errorf("the re-prompted claude started a NEW session instead of resuming:\n%s", rec)
+					}
+				} else {
+					mustContain(t, rec, "ARG=--session-id", "pi's session flag, start and resume in one")
+				}
+			}
+			branch := WorkerBranch(f.epic, f.tick)
+			if _, ok := f.remoteFile(branch, "worked.txt"); !ok {
+				t.Error("the work the nudged run did is not on the pushed branch")
+			}
+			report, ok := f.remoteFile(branch, WorkerResultFile(f.tick))
+			if !ok {
+				t.Fatalf("no report reached origin:\n%s", out)
+			}
+			mustContain(t, report, "STATUS: DONE", "the agent's own verdict once it finished")
+		})
+	}
+}
+
+// A harness that never reports is re-prompted at most WorkerNudgeMax times
+// — the same bound as the local executor's — and only then is the tick
+// reported missing-result, by the container's own fallback account.
+func TestWorkerSpendsItsNudgesBeforeReportingMissingResult(t *testing.T) {
+	f := newWorkerFixture(t)
+	delete(f.env, "TICKS_TEST_WORKER_RESULT")
+	delete(f.env, "TICKS_TEST_WORKER_COMMIT")
+	runsPath := filepath.Join(f.root, "nudge-runs")
+	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
+	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+  printf 'RUN\n'
+  printf '%s\n' "$*"
+} >> "$TICKS_TEST_NUDGE_RUNS"
+exit 0
+`)
+	out, code := f.run()
+	if code != ExitWorkerAgent {
+		t.Fatalf("a harness that never reported gave exit %d, want %d:\n%s", code, ExitWorkerAgent, out)
+	}
+	runs := runBlocks(t, runsPath)
+	if len(runs) != 1+WorkerNudgeMax {
+		t.Fatalf("%d harness run(s), want %d (the first run plus every nudge):\n%s", len(runs), 1+WorkerNudgeMax, out)
+	}
+	mustContain(t, out, "nudge 2 of 2", "the last nudge the container made")
+	for i := 1; i < len(runs); i++ {
+		if !strings.Contains(runs[i], "You ended your turn without writing your report") {
+			t.Errorf("harness run %d was not told what is missing:\n%s", i+1, runs[i])
+		}
+	}
+	// All the runs share one session: the nudges resume the attempt, they do
+	// not restart it.
+	sessions := map[string]bool{}
+	for _, r := range runs {
+		if id := sessionIDPattern.FindString(r); id != "" {
+			sessions[id] = true
+		}
+	}
+	if len(sessions) != 1 {
+		t.Errorf("the runs used %d session(s), want one: a nudged harness resumes, it does not restart", len(sessions))
+	}
+	report, ok := f.remoteFile(WorkerBranch(f.epic, f.tick), WorkerResultFile(f.tick))
+	if !ok {
+		t.Fatalf("no report reached origin:\n%s", out)
+	}
+	mustContain(t, report, "wrote no report", "the container's account of the agent")
+}
+
+// A harness that FAILED is not nudged: its non-zero exit and its own words are
+// what the container classifies, and prompting it again would spend a turn on
+// a broken argv or an exhausted quota.
+func TestAFailedHarnessIsNotNudged(t *testing.T) {
+	f := newWorkerFixture(t)
+	delete(f.env, "TICKS_TEST_WORKER_RESULT")
+	delete(f.env, "TICKS_TEST_WORKER_COMMIT")
+	f.env["TICKS_TEST_WORKER_EXIT"] = "3"
+	runsPath := filepath.Join(f.root, "nudge-runs")
+	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
+	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+  printf 'RUN\n'
+  printf '%s\n' "$*"
+} >> "$TICKS_TEST_NUDGE_RUNS"
+exit "${TICKS_TEST_WORKER_EXIT:-0}"
+`)
+	out, code := f.run()
+	if code != ExitWorkerAgent {
+		t.Fatalf("a failed harness gave exit %d, want %d:\n%s", code, ExitWorkerAgent, out)
+	}
+	if runs := runBlocks(t, runsPath); len(runs) != 1 {
+		t.Fatalf("%d harness run(s), want 1 — a failed harness is never re-prompted:\n%s", len(runs), out)
+	}
+	if strings.Contains(out, "nudge") {
+		t.Errorf("a failed harness was nudged:\n%s", out)
+	}
+}
+
+// A harness that wrote its report is never nudged: the nudge exists for the
+// missing report, and re-prompting a finished worker would spend a turn
+// re-doing finished work.
+func TestAHarnessThatWroteItsReportIsNotNudged(t *testing.T) {
+	f := newWorkerFixture(t)
+	runsPath := filepath.Join(f.root, "nudge-runs")
+	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
+	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+  printf 'RUN\n'
+  printf '%s\n' "$*"
+} >> "$TICKS_TEST_NUDGE_RUNS"
+printf 'work\n' > worked.txt
+git add worked.txt
+git commit -q -m "tick ${TICKS_TICK}: the work"
+printf '# %s\n\nI did the thing.\n\nSTATUS: DONE\n' "${TICKS_TICK}" > "RESULT-${TICKS_TICK}.md"
+exit 0
+`)
+	out, code := f.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	if runs := runBlocks(t, runsPath); len(runs) != 1 {
+		t.Fatalf("%d harness run(s), want 1 — a reporting harness is never re-prompted:\n%s", len(runs), out)
+	}
+	if strings.Contains(out, "nudge") {
+		t.Errorf("a harness that had reported was nudged:\n%s", out)
+	}
+}
+
+// claude runs with its background tasks off (tick 060, ported with the
+// nudge): in print mode a background task is a turn that ends while the work
+// it waits on is still running — the stall the nudge recovers, and this is
+// the switch that prevents it. The local executor's runner table launches
+// claude the same way.
+func TestWorkerRunsClaudeWithoutBackgroundTasks(t *testing.T) {
+	f := newWorkerFixture(t)
+	f.env[EnvHarness] = "claude"
+	out, code := f.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	mustContain(t, f.harnessRecord(), "BG=1", "claude's background tasks disabled")
 }
 
 // The worst outcome this script can produce: work that exists only in a

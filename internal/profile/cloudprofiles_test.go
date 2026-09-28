@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
 
 // The cloud dispatch profile set (tick njj, epic xte): profiles-cloudflare-sandbox/
@@ -133,6 +134,42 @@ func TestNoProfileTheCloudContainerSelectsStartsAClaudeProcess(t *testing.T) {
 		if p.Runner != "pi" {
 			t.Errorf("%s names runner %q: the operator's constraint is that cloud workers run via pi, "+
 				"so a profile naming any other runner is one no cloud run should select", role, p.Runner)
+		}
+	}
+}
+
+// Every role prompt the cloud container can dispatch on runs VERBATIM in
+// the container (TICKS_ROLE_PROMPT): unlike a local or herdr worker, nothing
+// appends the executors' own prompt mechanics to it, so the two lines #77/#78
+// added to those executors have to be in the prompt text itself. Without the
+// headless line, a cloud worker that ends its turn to wait on a background
+// task is the vqc stall tick 060's nudge exists to recover; without the no-
+// amend line, an agent can rewrite a branch an earlier attempt already pushed
+// and this container adopted.
+//
+// short: reads of this repository's own profile files; no I/O.
+func TestCloudRolePromptsCarryTheHeadlessAndNoAmendLines(t *testing.T) {
+	// The prompt files are markdown and wrap at 78 columns; the line is one
+	// sentence, so the comparison is on the whitespace-collapsed text.
+	collapse := func(s string) string {
+		return strings.Join(strings.Fields(s), " ")
+	}
+	headless := collapse(subprocess.HeadlessLine)
+	noAmend := "Do not amend, rebase or reset commits you have already made: they may already be pushed"
+	dir := cloudProfileDir(t)
+	roles := append(append([]string{}, Roles...), RoleResolveConflict, RoleRepairGate)
+	for _, role := range roles {
+		p, err := Resolve(role, Options{Dir: dir})
+		if err != nil {
+			t.Fatalf("%s did not resolve from the cloud set: %v", role, err)
+		}
+		if !strings.Contains(collapse(p.Prompt), headless) {
+			t.Errorf("%s's prompt does not say ending the turn ends the job — the cloud set's prompt is the whole "+
+				"prompt, so a worker that waits on a background task is the stall the nudge recovers:\n%s", role, p.Prompt)
+		}
+		if !strings.Contains(collapse(p.Prompt), noAmend) {
+			t.Errorf("%s's prompt does not forbid amending already-made commits — an adopted branch's work is "+
+				"already pushed, and a rewrite destroys the evidence collect reads:\n%s", role, p.Prompt)
 		}
 	}
 }
