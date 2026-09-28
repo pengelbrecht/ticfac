@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 31,
-  "state": "integrating",
-  "reason": "integrating 46x attempt 4 into epic/6in",
-  "updated_at": "2026-09-28T06:41:09Z",
+  "sequence": 32,
+  "state": "gating",
+  "reason": "running the integrated gate for 46x on 2b0c770702ff",
+  "updated_at": "2026-09-28T06:41:22Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "46x",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 4
     },
     {
