@@ -24,8 +24,8 @@ import (
 // BOTH answers, attributed to the party that gave each.
 func TestTheFeedStatesTheRolesAnswerAndTheRunsVerdictSeparately(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{mode: "closeout_nocommit"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "closeout_nocommit"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "closeout_nocommit"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "closeout_nocommit"})
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
@@ -75,8 +75,8 @@ func TestTheFeedStatesTheRolesAnswerAndTheRunsVerdictSeparately(t *testing.T) {
 // test here is that collect was not what stopped the review.
 func TestAReviewWithNoCommitsIsNotAFailureAtTheRun(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{mode: "review_finding"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "review_finding"})
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
@@ -123,8 +123,8 @@ func collectedLineFor(t *testing.T, f *fixture, tick string) string {
 // fixture the rule was recorded for.
 func TestThePlainCollectStillRefusesAnImplementTicksEmptyBranch(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{mode: "nocommit"})
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "nocommit"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "nocommit"})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "nocommit"})
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}

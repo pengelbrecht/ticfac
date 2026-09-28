@@ -337,6 +337,11 @@ func (r *Reconciler) closeAfterGate(ctx context.Context, entry planEntry, marker
 	// deliverable, and their closes stand on the integrated gate above.
 	if entry.Role == "closeout-epic" {
 		if err := r.gateCloseoutClose(ctx, marker, merged); err != nil {
+			if errors.Is(err, errClosedBehindRepair) {
+				// CI was red at the close and the repair job answered it: its
+				// merge was gated and the close-out closed behind that gate.
+				return nil
+			}
 			return err
 		}
 	}

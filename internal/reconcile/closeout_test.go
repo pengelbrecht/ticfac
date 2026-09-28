@@ -527,11 +527,91 @@ func TestTheRunOpensTheEpicPR(t *testing.T) {
 	}
 }
 
-// A red CI refuses the close-out typed, NAMING THE FAILING JOB — the exact
-// answer the tick's acceptance demands, and the difference between a repair
-// and a mystery. The failing job is in the refusal, in the feed, and in the
-// durable checkpoint the run leaves.
-func TestRedCIRefusesTheCloseoutNamingTheFailingJob(t *testing.T) {
+// RED CI AT THE ADMISSION IS THE REPAIR JOB'S, NEVER A HOLD (epic-6in,
+// 2026-09-28). The epic's code fails CI — a full-suite regression no per-tick
+// short gate could see — and the close-out is not dispatched over it: the
+// plan-repair job is, with the failing jobs as its evidence, its merge gated
+// as usual, and the admission asks CI again about the repaired tree. The run
+// completes and nobody was asked anything.
+func TestRedCIAtTheAdmissionIsRepairedNeverHeld(t *testing.T) {
+	t.Parallel()
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{mode: "land_repair", pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareCloseoutRule(t, f.Repo)
+	pr.ci = func(sha string) forge.CIReport {
+		// Red on every tree without the repair's fix: the regression the
+		// full suite caught.
+		if !mustRunAllowingFailure(pr.origin, "git", "cat-file", "-e", sha+":ci-fix.txt") {
+			return forge.CIReport{State: forge.CIRed, Failing: []string{"go", "pi-runner"}}
+		}
+		return forge.CIReport{State: forge.CIGreen}
+	}
+
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "land_repair", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): red CI at the close-out's admission is the repair job's, not a stop",
+			result.State, result.Failure)
+	}
+	if got := showOnOrigin(t, f, "epic/qeu", "ci-fix.txt"); !strings.Contains(got, "the fix the red CI job named") {
+		t.Errorf("the repair's fix is not on the epic branch: %q", got)
+	}
+	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
+	evidence := false
+	for _, key := range store.EvidenceKeys() {
+		if strings.HasPrefix(key, "closeout-ci-") {
+			evidence = true
+		}
+	}
+	if !evidence {
+		t.Errorf("the red CI was not recorded as the repair's evidence: %v", store.EvidenceKeys())
+	}
+	decisions, err := store.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repaired := false
+	for _, d := range decisions {
+		if d.Role == RoleRepairGate && d.Response["status"] == "merged" {
+			repaired = true
+		}
+	}
+	if !repaired {
+		t.Error("no merged repair decision is recorded for the red CI")
+	}
+	// The close-out ran over the REPAIRED tree, never over the red one.
+	d := f.dispatch("co")
+	if d.TickID == "" {
+		t.Fatal("the close-out was never dispatched")
+	}
+	if !mustRunAllowingFailure(f.Repo.Origin, "git", "cat-file", "-e", d.BaseSHA+":ci-fix.txt") {
+		t.Errorf("the close-out was dispatched over %s, a tree without the repair: it was dispatched over red CI",
+			short(d.BaseSHA))
+	}
+	var named string
+	for _, e := range r.Journal() {
+		if e.Tick == "co" && e.Stage == StageGateFailed {
+			named = e.Detail
+		}
+	}
+	if !strings.Contains(named, "pi-runner") || !strings.Contains(named, "repair job") {
+		t.Errorf("the feed does not say the red CI (naming its jobs) went to the repair job: %q", named)
+	}
+	for _, e := range r.Journal() {
+		if e.Stage == StageRunHeld {
+			t.Errorf("the run held for a person: %s", e.Detail)
+		}
+	}
+}
+
+// A red CI the repair cannot cure still stops — ONE repair is what a run
+// spends on one tree — and the stop names the failing jobs and the PR, so the
+// next reader has the repair's address, not "CI failed". The close-out is
+// never dispatched over it.
+func TestRedCIThatTheRepairCannotCureStopsNamingTheFailingJob(t *testing.T) {
 	t.Parallel()
 	forge := &fakeForge{exists: true, pr: openPR(),
 		ci: []forge.CIReport{{State: forge.CIRed, Failing: []string{"go", "pi-runner"}}}}
@@ -544,41 +624,87 @@ func TestRedCIRefusesTheCloseoutNamingTheFailingJob(t *testing.T) {
 	if result.State != runstate.StateFailed {
 		t.Fatalf("the run ended %s", result.State)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCI {
-		t.Fatalf("the failure is %+v, want a %s refusal", result.Failure, RefusedCloseoutCI)
+	if result.Failure == nil || result.Failure.Reason != RefusedGate {
+		t.Fatalf("the failure is %+v, want the repair's %s stop", result.Failure, RefusedGate)
 	}
-	// The failing job is NAMED, not summarized as "CI failed": the two jobs
-	// the fake reports are the repair's address.
-	for _, job := range []string{"go", "pi-runner"} {
+	for _, job := range []string{"go", "pi-runner", "#7"} {
 		if !strings.Contains(result.Failure.Message, job) {
-			t.Errorf("the refusal does not name the failing job %q: %q", job, result.Failure.Message)
+			t.Errorf("the refusal does not name %q: %q", job, result.Failure.Message)
 		}
 	}
-	if !strings.Contains(result.Failure.Message, "#7") {
-		t.Errorf("the refusal does not name the PR it is about: %q", result.Failure.Message)
-	}
-	// The feed line says which half is unmet, and no close-out happened.
-	var held string
-	for _, e := range r.Journal() {
-		if e.Tick == "co" && e.Stage == StageCloseoutHeld {
-			held = e.Detail
-		}
-	}
-	if !strings.Contains(held, "red") || !strings.Contains(held, "pi-runner") {
-		t.Errorf("the feed line does not name the failing job: %q", held)
+	if !contains(r.Stages(""), StageRepairDispatched) && !anyTickHasStage(r, StageRepairDispatched) {
+		t.Error("no repair job was dispatched over the red CI")
 	}
 	if d := f.dispatch("co"); d.TickID != "" {
 		t.Fatal("the close-out was dispatched behind a red CI")
 	}
-	// The durable checkpoint carries the same name: a person reading the
-	// run's record reads the repair's address, not "the run broke".
-	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
-	checkpoint, ok, err := store.Checkpoint()
-	if err != nil || !ok {
-		t.Fatalf("no checkpoint on origin: %v", err)
+}
+
+// anyTickHasStage reports whether any line of the journal carries the stage.
+func anyTickHasStage(r *Reconciler, stage string) bool {
+	for _, e := range r.Journal() {
+		if e.Stage == stage {
+			return true
+		}
 	}
-	if !strings.Contains(checkpoint.Reason, "pi-runner") {
-		t.Errorf("the durable checkpoint does not name the failing job: %q", checkpoint.Reason)
+	return false
+}
+
+// EPIC-6IN, THE RESUME. A close-out a false green admitted runs over red code,
+// writes its retro, and answers BLOCKED — about CI. That is not a person's
+// question: the run reads CI on the code the close-out was cut from, finds it
+// red, and stops RESUMABLY; the next incarnation's admission repairs the red
+// CI, and the rejected close-out (its retro still on its branch) is superseded
+// by a fresh one over the repaired tree — never held as "rejected work nobody
+// merged". Supervised, the whole thing is one command with nobody asked.
+func TestACloseoutBlockedOnRedCIIsRepairedAndRedispatchedWithoutAPerson(t *testing.T) {
+	t.Parallel()
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{mode: "closeout_red", pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareCloseoutRule(t, f.Repo)
+	pr.ci = func(sha string) forge.CIReport {
+		if f.dispatch("co").TickID == "" {
+			// The false green 6in's close-out was admitted on.
+			return forge.CIReport{State: forge.CIGreen}
+		}
+		if !mustRunAllowingFailure(pr.origin, "git", "cat-file", "-e", sha+":ci-fix.txt") {
+			return forge.CIReport{State: forge.CIRed, Failing: []string{"go"}}
+		}
+		return forge.CIReport{State: forge.CIGreen}
+	}
+
+	_, result, err := f.supervise(f.Repo, fixtureOptions{mode: "closeout_red", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("supervise: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): a close-out BLOCKED on red CI is the repair job's, not a person's",
+			result.State, result.Failure)
+	}
+	events := feedStages(t, f.Repo.Dir, "r-fixture")
+	stopped := false
+	for _, e := range events {
+		if e.Stage == StageSupervisionHalted || e.Stage == StageRunHeld {
+			t.Errorf("the run stopped for a person: %s %s", e.Stage, e.Detail)
+		}
+		if strings.Contains(e.Detail, RefusedCloseoutOverRedCI) {
+			stopped = true
+		}
+	}
+	if !stopped {
+		t.Errorf("the BLOCKED answer over red CI was not recognised as %s; stages: %v", RefusedCloseoutOverRedCI,
+			feedStagesOf(events))
+	}
+	if got := showOnOrigin(t, f, "epic/qeu", "ci-fix.txt"); !strings.Contains(got, "the fix the red CI job named") {
+		t.Errorf("the repair's fix is not on the epic branch: %q", got)
+	}
+	current, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Status != "closed" {
+		t.Errorf("the close-out is %s, want closed behind a fresh close-out over the repaired tree", current.Status)
 	}
 }
 
@@ -815,76 +941,66 @@ func TestAResumedRunFindsThePROpenedAndDoesNotOpenAnother(t *testing.T) {
 // failed on, the admission stayed green, and the close stood behind
 // evidence about a head that no longer existed.
 //
-// A close-out whose own commits turn the PR's CI red is NOT closed: the
-// refusal names the failing job, the merge already on the integration
-// branch stays there for the repair to fix, and the tick stays open.
-func TestCloseoutOwnCommitsThatFailCIHoldTheClose(t *testing.T) {
+// A close-out whose own commits turn the PR's CI red is NOT closed behind
+// that red — and since epic-6in it is not a stop either: the red is the
+// tree's, the repair job is dispatched over it with the failing jobs as its
+// evidence, its merge is gated, and the close is gated again on the repaired
+// head, which is green. The close-out closes behind THAT.
+func TestCloseoutOwnCommitsThatFailCIAreRepairedBeforeTheClose(t *testing.T) {
 	t.Parallel()
 	// The CI sequence is the tick's whole point: green on the head as it
 	// stood when the close-out STARTED, red on the head its own commits
-	// made. The same PR, two different heads, two different answers.
+	// made, green on the head the repair made.
 	forge := &fakeForge{ci: []forge.CIReport{
 		{State: forge.CIGreen}, // the admission: the head before the close-out
 		{State: forge.CIRed, Failing: []string{"public-repo-guard", "go"}}, // the head after it
+		{State: forge.CIGreen}, // the head after the repair
 	}}
-	f := newFixture(t, fixtureOptions{pullRequests: forge})
+	f := newFixture(t, fixtureOptions{mode: "land_repair", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
-	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: forge})
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "land_repair", pullRequests: forge})
 	if err != nil {
-		t.Fatalf("the run should have finished with a failed state, not an error: %v", err)
+		t.Fatalf("the run did not finish: %v", err)
 	}
-	if result.State != runstate.StateFailed {
-		t.Fatalf("the run ended %s", result.State)
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): red CI on the close-out's own commits is the repair job's, not a stop",
+			result.State, result.Failure)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCIOnClose {
-		t.Fatalf("the failure is %+v, want a %s refusal", result.Failure, RefusedCloseoutCIOnClose)
-	}
-	// The failing job is NAMED, and so is the PR the red CI is on: the
-	// repair's address, not "the run broke".
-	for _, job := range []string{"public-repo-guard", "go"} {
-		if !strings.Contains(result.Failure.Message, job) {
-			t.Errorf("the refusal does not name the failing job %q: %q", job, result.Failure.Message)
-		}
-	}
-	if !strings.Contains(result.Failure.Message, "#7") {
-		t.Errorf("the refusal does not name the PR it is about: %q", result.Failure.Message)
-	}
-	// The feed line names the failing job too, at the close-out's scope.
+	// The feed names the failing jobs at the close-out's scope, and the
+	// repair that answered them.
 	var held string
 	for _, e := range r.Journal() {
-		if e.Tick == "co" && e.Stage == StageCloseoutHeld {
+		if e.Tick == "co" && e.Stage == StageCloseoutHeld && strings.Contains(e.Detail, "red") {
 			held = e.Detail
 		}
 	}
-	if !strings.Contains(held, "red") || !strings.Contains(held, "public-repo-guard") {
+	if !strings.Contains(held, "public-repo-guard") {
 		t.Errorf("the feed line does not name the failing job: %q", held)
 	}
-	// The close-out RAN — it was dispatched, and its commits are merged onto
-	// the integration branch. What is held is the CLOSE, not the merge: the
-	// work stays where CI can see it, so the repair is the tree the failing
-	// job names and not a redone close-out.
-	if d := f.dispatch("co"); d.TickID == "" {
-		t.Fatal("the close-out was never dispatched")
+	if !contains(r.Stages("co"), StageRepairDispatched) {
+		t.Errorf("no repair job was dispatched over the close's red CI: %v", r.Stages("co"))
 	}
+	// The close-out ran, its commits and the repair's are on the branch, and
+	// it closed behind the repaired head's green — never behind the red.
+	mustRun(t, f.Repo.Dir, "git", "fetch", "-q", "origin")
 	mustRun(t, f.Repo.Dir, "git", "cat-file", "-e", "origin/"+r.IntegrationBranch()+":work-co.txt")
-	// And the tick is not closed behind its own red CI.
+	mustRun(t, f.Repo.Dir, "git", "cat-file", "-e", "origin/"+r.IntegrationBranch()+":ci-fix.txt")
 	current, err := f.Tracker.Show(context.Background(), "co")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.Status == "closed" {
-		t.Fatal("the close-out tick was closed behind a CI its own commits turned red")
+	if current.Status != "closed" {
+		t.Fatalf("the close-out is %s, want closed behind the repaired head's green CI", current.Status)
 	}
-	// Everything before the close-out closed as usual: the close gate is a
-	// gate on the close-out's close, not a work gate on the epic.
-	for _, tick := range []string{"a1", "a2", "b1", "rv"} {
-		current, err := f.Tracker.Show(context.Background(), tick)
-		if err != nil {
-			t.Fatal(err)
+	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
+	evidence := false
+	for _, key := range store.EvidenceKeys() {
+		if strings.HasPrefix(key, "close-ci-co-") {
+			evidence = true
 		}
-		if current.Status != "closed" {
-			t.Errorf("%s is %s: the close-out's close gate is not a work gate", tick, current.Status)
-		}
+	}
+	if !evidence {
+		t.Errorf("the close's red CI was not recorded as the repair's evidence: %v", store.EvidenceKeys())
 	}
 }
 
@@ -988,22 +1104,29 @@ func TestRedCIIsRerunOnceAndAdmittedWhenTheRerunIsGreen(t *testing.T) {
 	}
 }
 
-// Once means once: a job red again after its re-run refuses the close-out
-// exactly as red CI always did, naming the job.
-func TestRedCIAlreadyRerunStillRefusesTheCloseout(t *testing.T) {
+// Once means once: a job red again after its re-run is not re-run a second
+// time — it is a real red, and since epic-6in a real red is the repair job's
+// (the close-out is never admitted over it), not a hold.
+func TestRedCIAlreadyRerunIsRepairedNotRerunAgain(t *testing.T) {
 	t.Parallel()
 	pr := &rerunningForge{attempts: map[int64]int{42: 1}, fakeForge: &fakeForge{exists: true, pr: openPR(),
 		ci: []forge.CIReport{{State: forge.CIRed, Failing: []string{"typescript"}, FailingRuns: []int64{42}}}}}
 	f := newFixture(t, fixtureOptions{pullRequests: pr})
 	declareCloseoutRule(t, f.Repo)
-	_, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedCloseoutCI {
-		t.Fatalf("the failure is %+v, want a %s refusal after the one re-run", result.Failure, RefusedCloseoutCI)
-	}
 	if len(pr.reruns) != 0 {
 		t.Errorf("re-ran %v a second time", pr.reruns)
+	}
+	if !anyTickHasStage(r, StageRepairDispatched) {
+		t.Errorf("the red CI was not answered with the repair job (%+v)", result.Failure)
+	}
+	if result.Failure != nil && result.Failure.Reason == RefusedCloseoutCI {
+		t.Errorf("the red CI held the close-out (%s) instead of going to the repair job", result.Failure.Reason)
+	}
+	if d := f.dispatch("co"); d.TickID != "" {
+		t.Error("the close-out was dispatched behind a red CI")
 	}
 }

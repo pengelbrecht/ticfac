@@ -41,10 +41,10 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 	// PR and then holds over the untriaged findings, naming the PR that
 	// carries them.
 	forge := &fakeForge{}
-	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
 	repo := f.Repo
-	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
+	_, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestTheEpicPRCarriesTheReviewsVerdictAndEveryFinding(t *testing.T) {
 
 	// The resumed run closes the close-out behind the same PR, whose body now
 	// carries each finding with its triage state.
-	r, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
+	r, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
@@ -166,10 +166,10 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 	t.Parallel()
 
 	forge := &fakeForge{}
-	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
 	repo := f.Repo
-	_, result, err := f.run(repo, fixtureOptions{mode: "finding", pullRequests: forge})
+	_, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -198,14 +198,14 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 	// The resumed run finds the PR the held incarnation opened, and is cut
 	// the moment the body is rewritten at the admission.
 	_, _, err = f.run(repo, fixtureOptions{
-		mode: "finding", pullRequests: forge, stopAfter: stopAt("co", StagePROpened),
+		proseFindingsForAPerson: true, mode: "finding", pullRequests: forge, stopAfter: stopAt("co", StagePROpened),
 	})
 	killedAfter(t, err, "co", StagePROpened)
 
 	// The restarted run reads everything from origin, on a fresh clone, and
 	// finds the PR the killed incarnation found — never opening a second one.
 	restart := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restart"))
-	_, result, err = f.run(restart, fixtureOptions{mode: "finding", pullRequests: forge})
+	_, result, err = f.run(restart, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,9 +265,9 @@ func TestTheCloseOutRefusesWhenAFiledFindingIsMissingFromThePR(t *testing.T) {
 	t.Parallel()
 
 	forge := &fakeForge{dropFromReadback: "An upstream finding routed to another repository"}
-	f := newFixture(t, fixtureOptions{mode: "finding", pullRequests: forge})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding", pullRequests: forge})
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("the run should have finished with a failed state, not an error: %v", err)
 	}
@@ -307,11 +307,11 @@ func TestTheCloseOutRefusesWhenAFiledFindingIsMissingFromThePR(t *testing.T) {
 func TestTheCloseOutsOwnFindingReachesThePRBody(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, fixtureOptions{mode: "closeout_finding"})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "closeout_finding"})
 	declareCloseoutRule(t, f.Repo)
 	repo := f.Repo
 	forge := &fakeForge{}
-	r, result, err := f.run(repo, fixtureOptions{mode: "closeout_finding", pullRequests: forge})
+	r, result, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "closeout_finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestTheCloseOutsOwnFindingReachesThePRBody(t *testing.T) {
 	if !found {
 		t.Fatal("the close-out's own finding was never drafted")
 	}
-	_, result, err = f.run(repo, fixtureOptions{mode: "closeout_finding", pullRequests: forge})
+	_, result, err = f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "closeout_finding", pullRequests: forge})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
@@ -430,7 +430,7 @@ func TestTheEpicPRCarriesWhatWasAbsorbedAndEachCheckedPrediction(t *testing.T) {
 	t.Parallel()
 
 	forge := &fakeForge{}
-	f := newFixture(t, fixtureOptions{mode: "finding_local", pullRequests: forge})
+	f := newFixture(t, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_local", pullRequests: forge})
 	declareCloseoutRule(t, f.Repo)
 	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
 	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.7, "none": 0.3}, "A2")}
@@ -441,7 +441,7 @@ func TestTheEpicPRCarriesWhatWasAbsorbedAndEachCheckedPrediction(t *testing.T) {
 	// checked prediction is the wrong one: the fact the retro must report
 	// rather than hide.
 	write(t, filepath.Join(f.Repo.Dir, ".tick", "runners.toml"), scoringGate)
-	_, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", gatingClassifier: classifier,
+	_, result, err := f.run(f.Repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_local", gatingClassifier: classifier,
 		pullRequests: forge})
 	if err != nil {
 		t.Fatalf("the resumed run: %v", err)

@@ -37,14 +37,38 @@ func TestARoutedAbsorptionRecordAgreesWithItself(t *testing.T) {
 			a.Basis = AbsorptionPredicted
 			return a
 		}(),
-		"a rule with no target": func() Absorption {
+		"a rule with no target that names an item": func() Absorption {
 			a := routed("k2p", AbsorptionBacklog)
+			a.Target, a.Gating, a.ItemID = "", true, "A1"
+			return a
+		}(),
+		"a rule with no target filed in a tracker": func() Absorption {
+			a := routed("example/upstream:k2p", AbsorptionRouted)
 			a.Target = ""
 			return a
 		}(),
 	} {
 		if err := a.Validate(); err == nil {
 			t.Errorf("%s: a routed decision that contradicts itself validated: %+v", name, a)
+		}
+	}
+	// The PROSE rule (epic-6in) is a rule decision about THIS repository: a
+	// backlog tick, or a gating absorption naming no item for a claimed red
+	// build. Both validate.
+	for name, a := range map[string]Absorption{
+		"backlog": func() Absorption {
+			a := routed("k2p", AbsorptionBacklog)
+			a.Target = ""
+			return a
+		}(),
+		"a claimed red build": func() Absorption {
+			a := routed("k2p", AbsorptionBeforeReview)
+			a.Target, a.Gating = "", true
+			return a
+		}(),
+	} {
+		if err := a.Validate(); err != nil {
+			t.Errorf("the prose rule's %s decision does not validate: %v", name, err)
 		}
 	}
 }

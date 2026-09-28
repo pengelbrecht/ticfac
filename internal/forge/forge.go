@@ -151,6 +151,12 @@ type CIReport struct {
 	// for a caller that may re-run them (CIRerunner). Empty when the forge
 	// could not tell which run a check belongs to.
 	FailingRuns []int64
+	// CancelledRuns are the Actions workflow runs behind checks whose latest
+	// run concluded cancelled or stale — the checks a later push superseded
+	// (ci.yml's cancel-in-progress). Nothing ever re-runs them by itself, so
+	// the commit they were about has NO verdict until something does: a
+	// caller that needs one may restart them (CIRestarter).
+	CancelledRuns []int64
 }
 
 // CIRerunner is the optional half of the CI seam: re-run the failed jobs of
@@ -163,6 +169,20 @@ type CIReport struct {
 // genuinely red job fails the close-out on its second red, as it should.
 type CIRerunner interface {
 	RerunFailedOnce(ctx context.Context, runIDs []int64) (rerun []int64, err error)
+}
+
+// CIRestarter is the other optional half of the CI seam: restart workflow
+// runs that were CANCELLED before they concluded, ONCE each (epic-6in's
+// close-out, 2026-09-28). A run superseded by a later push is cancelled by
+// the workflow's own concurrency rule, and when the later push changed only
+// paths the workflow ignores, no run replaces it: the last commit that
+// changed code then has no executed verdict at all, and waiting cannot give
+// it one. Restarting is how the verdict is made to exist.
+//
+// Once, by GitHub's own run_attempt, for the same reason CIRerunner is: a
+// restarted reconciler cannot restart a run twice.
+type CIRestarter interface {
+	RestartCancelledOnce(ctx context.Context, runIDs []int64) (restarted []int64, err error)
 }
 
 // PullRequests is the seam the close-out rule needs: find the PR for the
@@ -563,6 +583,16 @@ func (g GitHub) Checks(ctx context.Context, pr PullRequest) ([]CheckRun, error) 
 // the report when its conclusion names a failure — `failure` and `timed_out`
 // — while `neutral` and `skipped` checks neither pass nor fail it, the way
 // GitHub itself treats them.
+//
+// And GREEN NEEDS A CHECK THAT RAN (epic-6in, 2026-09-28). A head whose every
+// latest check was skipped or neutral is not a head CI passed, it is a head
+// CI never looked at: ci.yml skips its pull_request jobs for an epic branch
+// (the push run carries them), and a push that changed only .ticfac/ starts
+// no push run at all — so 6in's checkpoint head carried five skipped checks
+// and nothing else, read green, and admitted a close-out over a red go job
+// on the code one commit back. Such a head answers `none`: no CI for this
+// code yet, which is exactly the state the caller's walk to the commit that
+// changed code (and its wait) exists for.
 func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 	runs, err := g.fetchCheckRuns(ctx, pr)
 	if err != nil {
@@ -580,8 +610,9 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 	// red; otherwise any cancelled/stale/action_required run makes it pending
 	// (re-runnable, and never a false green); otherwise green.
 	report := CIReport{State: CIGreen}
-	var running, failed, unsettled bool
+	var running, failed, unsettled, executed bool
 	seenRun := map[int64]bool{}
+	seenCancelled := map[int64]bool{}
 	for _, name := range order {
 		run := latest[name]
 		if run.Status != "completed" {
@@ -596,13 +627,22 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 				seenRun[id] = true
 				report.FailingRuns = append(report.FailingRuns, id)
 			}
-		case "success", "neutral", "skipped":
-			// Neither fails the report nor rescues a pending one.
+		case "success":
+			executed = true
+		case "neutral", "skipped":
+			// Neither fails the report nor rescues a pending one — and
+			// neither is a check that RAN, so neither can make it green.
 		default:
 			// cancelled, action_required, stale: not green, and saying the
 			// report is green would be the false close this seam exists to
-			// prevent. A person can fix them by re-running.
+			// prevent. They are fixed by running them again (CIRestarter).
 			unsettled = true
+			if run.Conclusion == "cancelled" || run.Conclusion == "stale" {
+				if id := actionsRunID(run.DetailsURL); id != 0 && !seenCancelled[id] {
+					seenCancelled[id] = true
+					report.CancelledRuns = append(report.CancelledRuns, id)
+				}
+			}
 		}
 	}
 	switch {
@@ -612,6 +652,10 @@ func (g GitHub) CI(ctx context.Context, pr PullRequest) (CIReport, error) {
 		report.State = CIRed
 	case unsettled:
 		report.State = CIPending
+	case !executed:
+		// Every latest check was skipped or neutral: nothing ran on this
+		// code, so there is no verdict to call green.
+		report.State = CINone
 	}
 	return report, nil
 }
@@ -654,6 +698,31 @@ func (g GitHub) RerunFailedOnce(ctx context.Context, runIDs []int64) ([]int64, e
 		rerun = append(rerun, id)
 	}
 	return rerun, nil
+}
+
+// RestartCancelledOnce re-runs each CANCELLED workflow run still on its
+// first attempt — the whole run, since a cancelled run has no failed jobs to
+// re-run — and answers which it restarted. A run already past its first
+// attempt is left alone: once, by GitHub's own count.
+func (g GitHub) RestartCancelledOnce(ctx context.Context, runIDs []int64) ([]int64, error) {
+	var restarted []int64
+	for _, id := range runIDs {
+		var run struct {
+			RunAttempt int `json:"run_attempt"`
+		}
+		path := "/repos/" + g.Repo + "/actions/runs/" + strconv.FormatInt(id, 10)
+		if err := g.call(ctx, http.MethodGet, path, nil, &run); err != nil {
+			return restarted, err
+		}
+		if run.RunAttempt > 1 {
+			continue
+		}
+		if err := g.call(ctx, http.MethodPost, path+"/rerun", nil, nil); err != nil {
+			return restarted, err
+		}
+		restarted = append(restarted, id)
+	}
+	return restarted, nil
 }
 
 func splitRepo(repo string) (owner, name string, ok bool) {

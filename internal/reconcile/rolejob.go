@@ -372,6 +372,22 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 	if needsHuman(answer.Status) {
 		r.setTick(tick, "rejected")
 		r.record(tick, StageRejected, "%s answered %s", entry.Role, answer.Status)
+		// Except a close-out dispatched over RED CI (epic-6in): whatever its
+		// prose says, the run's own truthful read of CI on the code it was cut
+		// from is red, and that is the tree's to repair, not a person's to
+		// decide. The stop resumes by itself: the admission repairs the red
+		// CI, and a fresh close-out is dispatched over the green.
+		if entry.Role == "closeout-epic" {
+			if failing, red := r.closeoutDispatchedOverRedCI(ctx, marker); red {
+				return nil, nil, r.refuse(RefusedCloseoutOverRedCI, tick,
+					"the %s job for %s answered %s, and it was dispatched over code whose CI is red (%s failed on "+
+						"the code of %s): the answer is about the tree, which is the repair job's, not a person's. "+
+						"The run resumes: the admission answers the red CI with the repair job and dispatches a fresh "+
+						"close-out over the green. What the job said: %s",
+					entry.Role, tick, answer.Status, strings.Join(failing, ", "), short(marker.BaseSHA),
+					answer.Summary)
+			}
+		}
 		return nil, nil, r.refuse(RefusedRoleAnswer, tick,
 			"the %s job for %s answered %s: %s. The tick stays open, because a role job's answer IS its verdict and "+
 				"this one asks for a person", entry.Role, tick, answer.Status, answer.Summary)

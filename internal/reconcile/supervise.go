@@ -114,6 +114,11 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //   - RefusedStale: the integration branch moved under a gate, so its evidence
 //     is no longer about what would be published (gate.go). Re-deriving is the
 //     entire repair, it is keyed by commit, and a person has no part in it.
+//   - RefusedCloseoutOverRedCI: a close-out answered BLOCKED over code whose
+//     CI the run itself reads as red (epic-6in). The next incarnation's
+//     admission answers the red CI with the repair job — the tree changes —
+//     and dispatches a fresh close-out over the green; nobody has anything to
+//     decide.
 //
 // RefusedGate is deliberately ABSENT, and the omission is the argument. A gate
 // that failed is resumable only when the tree has since CHANGED — and under
@@ -124,7 +129,7 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // person; that is the case go6 names, and it is this one.
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
-	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient:
+	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI:
 		return true
 	}
 	return false

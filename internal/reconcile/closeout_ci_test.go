@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -208,5 +209,139 @@ func TestAPendingAncestorDoesNotEndTheWalk(t *testing.T) {
 	}
 	if isHead {
 		t.Error("the verdict is reported as the head's own, but it came from an ancestor")
+	}
+}
+
+// restartingForge is the fake forge with the CIRestarter half: it records
+// which cancelled workflow runs the run restarted, once each.
+type restartingForge struct {
+	*fakeForge
+	restarted []int64
+}
+
+var _ forge.CIRestarter = (*restartingForge)(nil)
+
+func (f *restartingForge) RestartCancelledOnce(_ context.Context, runIDs []int64) ([]int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restarted = append(f.restarted, runIDs...)
+	return runIDs, nil
+}
+
+// EPIC-6IN, THE READ. The epic PR's head was a .ticfac/-only checkpoint:
+// ci.yml skips its pull_request jobs for epic heads and ignores .ticfac/** on
+// push, so nothing EXECUTED on it — which the forge now answers as none, not
+// green (internal/forge) — and the commit that last changed code carried the
+// verdict that mattered: a red go job. The close-out must read that red, about
+// that commit, and say it is not the head's.
+func TestACheckpointOnlyHeadResolvesToItsCodeAncestorsRedRun(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	code := commitOn(t, f.Repo, ".tick/issues/v7z.json", `{"id":"v7z","status":"in_progress"}`)
+	commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":7}`)
+	head := commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":8}`)
+	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
+
+	pr := &forge.PullRequest{Number: 98, URL: "https://example/pr/98", HeadRef: "epic/qeu", BaseRef: "main", HeadSHA: head}
+	forgeFake := &fakeForge{exists: true, pr: pr, bySHA: map[string]forge.CIReport{
+		code: {State: forge.CIRed, Failing: []string{"go"}, FailingRuns: []int64{36400030743}},
+		// head: every check skipped, which the forge answers as none
+	}}
+	r, err := New(f.options(f.Repo, fixtureOptions{pullRequests: forgeFake}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, sha, isHead, err := r.ciForTree(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ciForTree: %v", err)
+	}
+	if report.State != forge.CIRed {
+		t.Fatalf("CI reads %s, want red: the code this PR would merge failed go, whatever the head's skips say", report.State)
+	}
+	if sha != code || isHead {
+		t.Errorf("the verdict is about %s (head: %v), want the commit that last changed code, %s", short(sha), isHead, short(code))
+	}
+}
+
+// EPIC-6IN, THE WAIT THAT NEVER ENDS. The commit that last changed code (the
+// fold of main) had its push run CANCELLED by the next push, which changed
+// only .ticfac/ and so started no run of its own; the verdict before it is
+// about other code. Nothing will ever run CI on this code again, so a wait is
+// a wait for nothing: the run restarts the cancelled run, once, says so, and
+// waits for THAT.
+func TestACancelledCodeCommitIsRestartedNotWaitedOnForever(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	older := commitOn(t, f.Repo, "internal/thing/thing.go", "package thing\n")
+	fold := commitOn(t, f.Repo, "internal/thing/more.go", "package thing\n\nfunc More() {}\n")
+	head := commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":3}`)
+	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
+
+	pr := &forge.PullRequest{Number: 98, URL: "https://example/pr/98", HeadRef: "epic/qeu", BaseRef: "main", HeadSHA: head}
+	forgeFake := &restartingForge{fakeForge: &fakeForge{exists: true, pr: pr, bySHA: map[string]forge.CIReport{
+		older: {State: forge.CIRed, Failing: []string{"go"}},
+		fold:  {State: forge.CIPending, CancelledRuns: []int64{36402263709}},
+	}}}
+	r, err := New(f.options(f.Repo, fixtureOptions{pullRequests: forgeFake}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, _, _, err := r.ciForTree(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ciForTree: %v", err)
+	}
+	if report.State != forge.CIPending {
+		t.Errorf("CI reads %s, want pending: a restarted run is a real wait (and the red before the fold is about "+
+			"other code, so it is never borrowed)", report.State)
+	}
+	if fmt.Sprint(forgeFake.restarted) != "[36402263709]" {
+		t.Errorf("restarted %v, want the fold's cancelled run once: without it nothing ever runs CI on this code",
+			forgeFake.restarted)
+	}
+	if !contains(r.Stages(""), StageCIRestarted) {
+		t.Errorf("the restart is not in the feed (%v): an automatic intervention nobody can see", r.Stages(""))
+	}
+}
+
+// short: reads .github/workflows/ci.yml as text; no repository, no run
+//
+// The walk borrows a verdict across commits that change only runStatePrefix
+// because CI ignores exactly those paths: a commit touching nothing else
+// starts no run. The two lists must be one list. If ci.yml ignores more, a
+// head changing only the extra paths gets no run and no borrowable verdict
+// (the close-out waits for nothing); if it ignores less, the borrow is still
+// sound but the walk and the workflow no longer describe each other.
+func TestTheWorkflowIgnoresExactlyTheRunStatePaths(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lists [][]string
+	var current []string
+	in := false
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "paths-ignore:":
+			in, current = true, nil
+		case in && strings.HasPrefix(trimmed, "- "):
+			current = append(current, strings.Trim(strings.TrimPrefix(trimmed, "- "), `"'`))
+		case in && (trimmed == "" || strings.HasPrefix(trimmed, "#")):
+		case in:
+			lists, in = append(lists, current), false
+		}
+	}
+	if in {
+		lists = append(lists, current)
+	}
+	if len(lists) != 2 {
+		t.Fatalf("ci.yml carries %d paths-ignore lists, want two (push and pull_request): %v", len(lists), lists)
+	}
+	for _, list := range lists {
+		if len(list) != 1 || list[0] != runStatePrefix+"**" {
+			t.Errorf("ci.yml ignores %v, want exactly [%s**]: the close-out's walk sees past %s commits only",
+				list, runStatePrefix, runStatePrefix)
+		}
 	}
 }
