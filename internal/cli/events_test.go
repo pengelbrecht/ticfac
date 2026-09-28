@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runlife"
 )
 
 // The subscription surface of the run event feed (tick u9l): `ticfac events`
@@ -59,8 +60,15 @@ func TestEventsPrintsTheFeedThatStands(t *testing.T) {
 }
 
 func TestEventsNamesARunThatHasNotWritten(t *testing.T) {
+	// The run's directory stands — its claim made it — but no line has
+	// been written. An id with no directory at all is a different answer
+	// (runid_test.go).
+	repo := t.TempDir()
+	if err := os.MkdirAll(runlife.Dir(repo, "r-none"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	var stdout, stderr syncBuffer
-	code := Run([]string{"events", "--repo", t.TempDir(), "r-none"}, &stdout, &stderr)
+	code := Run([]string{"events", "--repo", repo, "r-none"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a run with no feed printed nothing and exited 0")
 	}

@@ -199,7 +199,7 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 	epicID := args[0]
 	// The epic id is accepted with its own `epic-` prefix everywhere — a
 	// prefix with nothing behind it names no epic.
-	if strings.TrimPrefix(epicID, "epic-") == "" {
+	if epicIDOfArg(epicID) == "" {
 		fmt.Fprintf(stderr, "ticfac triage %q names no epic\n", epicID)
 		return exitUsage
 	}

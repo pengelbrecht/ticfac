@@ -75,6 +75,13 @@ func statusFixture(t *testing.T, now time.Time) string {
 	if err := os.Chtimes(filepath.Join(worktree, "work-a1.txt"), now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	// Every run that ever ran here left its log directory — the claim made
+	// it — which is how `status` knows r-status names a run rather than an
+	// id nobody found (runid.go). A test that never claims still stands in
+	// a checkout the run ran in.
+	if err := os.MkdirAll(runlife.Dir(repo, "r-status"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return repo
 }
 

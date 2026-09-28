@@ -294,9 +294,12 @@ func ageOf(stamp string, now time.Time) string {
 // newStatusCommand builds the cobra command for `status`.
 func newStatusCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status <run-id>",
+		Use:   "status <run-id|epic-id>",
 		Short: "is the run alive, and when did it last say anything",
-		Long: `The one-shot liveness answer (and, with --follow, the live table): is the
+		Long: `The run is named by its run id (epic-6in) or by the epic id it was started
+with (6in, as in 'ticfac run 6in'); 'ticfac' alone lists the runs there are.
+
+The one-shot liveness answer (and, with --follow, the live table): is the
 run alive — a pidfile plus process start time for a local run, the Workflow's
 own state for one the cloud hosts — when did it last say anything, and what is
 each in-flight attempt doing.
@@ -324,7 +327,7 @@ alike; the exit code stays liveness's answer alone.`,
 func statusCommand(ctx context.Context, args []string, repo *string, asJSON, follow *bool, interval *time.Duration, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
-		fmt.Fprintf(stderr, "ticfac status: exactly one run id is required\n")
+		fmt.Fprintf(stderr, "ticfac status: exactly one run id (epic-<id>) or epic id is required\n")
 		return 2
 	}
 	if *asJSON && *follow {
@@ -342,7 +345,10 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		}
 		*repo = wd
 	}
-	runID := rest[0]
+	// The run id or the epic id, resolved once (runid.go): `ticfac status
+	// 6in` answers for epic-6in, the run `ticfac run 6in` started.
+	resolution := resolveRunArg(*repo, rest[0])
+	runID := resolution.RunID
 	if *follow {
 		return statusFollow(ctx, *repo, runID, *interval, stdout, stderr)
 	}
@@ -375,6 +381,14 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 				fmt.Fprintf(stderr, "ticfac status: %s has no run here, and the factory could not be asked for it: %v\n", runID, err)
 			}
 		}
+	}
+
+	// No spelling named a run here and no factory claimed one: that is an
+	// id nobody found, not a run that is not running — say which spellings
+	// were looked for and where the runs there are can be listed.
+	if !resolution.Known && status.State == runlife.NotRunning && status.LastEvent == nil && len(status.Attempts) == 0 {
+		fmt.Fprintln(stderr, unknownRunMessage("status", *repo, rest[0], resolution))
+		return 1
 	}
 
 	if *asJSON {

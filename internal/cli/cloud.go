@@ -367,6 +367,13 @@ func cloudRun(ctx context.Context, args []string, notify *string, queue *bool, m
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one epic id is required")
 	}
+	// The epic id or its run id's spelling (runid.go): the factory is asked
+	// for the epic the tracker knows, never for "epic-<id>".
+	epicID := epicIDOfArg(rest[0])
+	if epicID == "" {
+		return newExitError(exitUsage, "%q names no epic", rest[0])
+	}
+	rest = []string{epicID}
 
 	client, err := newCloudClient()
 	if err != nil {

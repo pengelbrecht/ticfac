@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -171,8 +172,15 @@ func TestWatchNeedsExactlyOneRunID(t *testing.T) {
 }
 
 func TestWatchNamesARunThatNeverRanHere(t *testing.T) {
+	// The run's directory stands — a claim made it and released it — but
+	// no line was ever written and nothing claims the run now. An id with
+	// no directory at all is a different answer (runid_test.go).
+	repo := t.TempDir()
+	if err := os.MkdirAll(runlife.Dir(repo, "r-none"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	var stdout, stderr syncBuffer
-	code := Run([]string{"watch", "--repo", t.TempDir(), "r-none"}, &stdout, &stderr)
+	code := Run([]string{"watch", "--repo", repo, "r-none"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a run with no feed and no live claim was watched without complaint")
 	}
