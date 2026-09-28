@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 27,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-28T06:01:43Z",
+  "sequence": 28,
+  "state": "dispatching",
+  "reason": "dispatching 46x as attempt 4",
+  "updated_at": "2026-09-28T06:01:49Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "46x",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 2
     },
     {
