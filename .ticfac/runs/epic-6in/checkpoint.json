@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 15,
-  "state": "gating",
-  "reason": "running the integrated gate for 4i8 on eb9cdf73adb5",
-  "updated_at": "2026-09-28T05:37:12Z",
+  "sequence": 16,
+  "state": "failed",
+  "reason": "the integrated gate on eb9cdf73adb5 did not pass for 4i8 (go (fail)) and the repair job could not be started: herdr agent.start for tick-4i8-a3 failed: herdr agent.start failed: agent_name_taken: agent name tick-4i8-a3 is already used; candidates: terminal_id=term_65c83b46bb62292 pane_id=wX2:p1 workspace_id=wX2 tab_id=wX2:t1 cwd=/Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-6in-tick-4i8-attempt-3 status=Idle",
+  "updated_at": "2026-09-28T05:38:46Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "4i8",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 3
     },
     {
