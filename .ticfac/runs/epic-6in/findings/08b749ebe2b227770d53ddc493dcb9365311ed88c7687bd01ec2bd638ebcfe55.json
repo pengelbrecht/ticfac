@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "A2",
   "demonstrating_check": "git grep -n 'extensions/ticks-runner' -- ':!.tick' ':!.ticfac'",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:35:45Z",
+  "triaged_at": "2026-09-28T10:14:04Z",
+  "triaged_by": "ticfac run epic-6in absorbing 2bp",
+  "promoted_as": "2bp",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "dz1",
