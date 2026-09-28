@@ -108,6 +108,11 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 	body.WriteString("\n## Definition of done\n\n")
 	body.WriteString(r.doneEvidence())
 
+	// The workers that stopped to ask (tick tyd): the questions that hold for
+	// a person first — the PR is where they are asked — then how the run
+	// answered the others. Absent when no worker asked anything.
+	body.WriteString(r.blockedHoldsSection())
+
 	body.WriteString("\n## The review's verdict\n\n")
 	if final < 0 {
 		// The body states the absence rather than staying silent about it:

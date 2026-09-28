@@ -103,6 +103,11 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     no commits, nothing mergeable. The next incarnation redispatches it,
 //     which is what the run's own terminal reason already says it does. There
 //     is nothing for a person to decide about work that does not exist.
+//   - RefusedBlockedRedispatch: a worker stopped to ask and the run answered
+//     by dispatching the tick again, one tier up or to decide under the
+//     standing orders (tick tyd). The window requeues it in-run; should the
+//     refusal escape, the next incarnation reads the recorded answer and
+//     dispatches the same way.
 //   - RefusedClaimWidth: the tracker refused a claim because the epic's
 //     declared width is full (tick 3mp). It is a fact about the WORLD — another
 //     run's claims, a tick a person holds — not a verdict on this run's work,
@@ -132,7 +137,8 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // person; that is the case go6 names, and it is this one.
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
-	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI:
+	case RefusedCollect, RefusedClaimWidth, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
+		RefusedBlockedRedispatch:
 		return true
 	}
 	return waitsOnCI(reason)

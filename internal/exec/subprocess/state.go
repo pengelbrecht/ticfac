@@ -135,6 +135,11 @@ type attemptRecord struct {
 	// attempt whose record says so.
 	PriorSnapshots []PriorSnapshot `json:"prior_snapshots,omitempty"`
 
+	// Escalation is the earlier attempt that stopped to ask (tick tyd), as
+	// the dispatch handed it over: recorded for the same reason the prior
+	// reports are — the prompt file beside this record is the rendered whole.
+	Escalation *Escalation `json:"escalation,omitempty"`
+
 	WallSeconds  int `json:"wall_seconds"`
 	PushInterval int `json:"push_interval_seconds"`
 

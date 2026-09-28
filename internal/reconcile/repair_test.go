@@ -700,18 +700,19 @@ func TestAnAttemptThatCommittedAndAnsweredBlockedIsAnEscalationAndNotAMerge(t *t
 	}
 
 	// And running the epic again does NOT quietly answer the escalation by
-	// dispatching over it: the attempt holds commits nothing merged, so the
-	// resume reports them and names the branch. A person settles it — which is
-	// the same route every rejected attempt that left work already takes.
+	// dispatching over it: the question is in an always-ask class (a
+	// credential, tick tyd), so the resume holds it again in its own words
+	// and names the branch the work is on. A person settles it — which is the
+	// same route every rejected attempt that left work already takes.
 	second, resumed, err := f.run(f.Repo, escalating)
 	if err != nil {
 		t.Fatalf("the resumed run did not finish: %v", err)
 	}
-	if resumed.Failure == nil || resumed.Failure.Reason != RefusedRejectedWork {
-		t.Fatalf("the resumed run failed as %+v, want %s", resumed.Failure, RefusedRejectedWork)
+	if resumed.Failure == nil || resumed.Failure.Reason != RefusedNeedsHuman || resumed.Failure.TickID != "a1" {
+		t.Fatalf("the resumed run failed as %+v, want %s on a1", resumed.Failure, RefusedNeedsHuman)
 	}
-	if !strings.Contains(resumed.Failure.Message, branch) {
-		t.Errorf("the resumed refusal does not name the branch the work is on: %s", resumed.Failure.Message)
+	if !strings.Contains(resumed.Failure.Message, branch) || !strings.Contains(resumed.Failure.Message, "production credential") {
+		t.Errorf("the resumed refusal does not name the question and the branch the work is on: %s", resumed.Failure.Message)
 	}
 	if got := second.Stages("a1"); contains(got, StageRedispatched) || contains(got, StageDispatched) {
 		t.Errorf("the escalated attempt was dispatched over rather than reported: %v", got)

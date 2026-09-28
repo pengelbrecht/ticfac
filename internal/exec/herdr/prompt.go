@@ -70,6 +70,10 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	// read, never evidence of completion and never to merge.
 	b.WriteString(subprocess.PriorSnapshotsSection(record.PriorSnapshots))
 
+	// The earlier attempt that stopped to ask (tick tyd): the same section
+	// the local executor renders.
+	b.WriteString(subprocess.EscalationSection(record.Escalation))
+
 	fmt.Fprintf(&b, "## Your report — the ONLY channel\n\n")
 	fmt.Fprintf(&b, "Write your report to this EXACT ABSOLUTE PATH:\n\n    %s\n\n", record.ResultPath)
 	fmt.Fprintf(&b, "Write it there whatever your working directory is when you finish — the path is\n")

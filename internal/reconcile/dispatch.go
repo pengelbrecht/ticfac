@@ -537,6 +537,32 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// for — one tick, two jobs, and the run pays for both.
 			break
 		}
+		// An attempt whose worker stopped to ask and was answered by
+		// dispatching the tick again (tick tyd): it is neither adopted nor
+		// held. The next try starts from its commits, as a carried release
+		// does, and it earns the rung the escalation promised.
+		if blocked, ok := r.blockedAnswerOf(tick, existing.Attempt); ok && blocked.Step != blockedHold &&
+			adoptable == nil && !r.blockedWorkIntegrated(marker) {
+			failed++
+			if head := r.blockedWorkHead(marker); head != "" {
+				if carry == nil || existing.Attempt > carry.marker.Attempt {
+					carry = &carriedWork{marker: marker, by: "ticfac (" + blocked.Status + ", " + blocked.Step + ")",
+						at: r.now().UTC().Format(time.RFC3339)}
+				}
+			}
+			r.record(tick, StageRedispatched,
+				"%s answered %s (%q) and is answered by a new try (%s) that starts from its work on %s",
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), blocked.Status,
+				blocked.Question, blocked.Step, branchOf(marker.WriteRef))
+			continue
+		}
+		// A held question (tick tyd) is held again on resume in its own words
+		// — the question and the class that reserves it for a person — rather
+		// than as anonymous rejected work. A person's release (above) is what
+		// moves it on.
+		if held := r.heldQuestion(entry, attempts, *existing, marker, adoptable == nil); held != nil {
+			return nil, nil, marker, held
+		}
 		disposition, where := r.disposition(*existing, marker)
 		switch disposition {
 		case redispatchAttempt:
@@ -1382,6 +1408,9 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		// before it committed, kept on a wip ref the re-dispatch points the
 		// worker at — gathered here for the same reason the reports are.
 		PriorSnapshots: r.priorSnapshots(entry.TickID, number),
+		// The earlier attempt that stopped to ask (tick tyd): its question,
+		// and whether this dispatch decides it under the standing orders.
+		Escalation: r.escalationFor(entry.TickID, number, tier),
 	}
 	if r.budget.Effective > 0 {
 		effective := r.budget.Effective
@@ -1720,6 +1749,9 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// still start the attempt, and the preserved work is the half of a
 	// stopped predecessor's legacy the prompt must not start blind over.
 	dispatch.PriorSnapshots = r.priorSnapshots(marker.TickID, marker.Attempt)
+	// And the earlier attempt that stopped to ask (tick tyd), re-derived for
+	// the same reason: the rebuilt dispatch can still start the attempt.
+	dispatch.Escalation = r.escalationFor(marker.TickID, marker.Attempt, marker.Tier)
 	// The profile an adopted attempt re-joins is the one it was DISPATCHED
 	// under: the marker's own tier, not whatever this incarnation would
 	// derive today. A config edited between incarnations does not retro-fit a
@@ -1763,6 +1795,11 @@ func (r *Reconciler) carryHead(marker attemptHandle) (string, error) {
 	}
 	if head == "" {
 		head = r.attemptWorkHead(marker)
+	}
+	if head == "" {
+		// A carried attempt that added nothing of its own delivers the work
+		// it carried (tick isp), and that is what carrying it carries.
+		head = r.carriedDelivery(marker)
 	}
 	if head == "" {
 		return "", fmt.Errorf(
@@ -2576,7 +2613,7 @@ func (r *Reconciler) dispatchedAt(marker attemptHandle) (time.Time, bool) {
 
 // ---------------------------------------------------------- the collect ---
 
-func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
+func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
 	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
 		return nil, err
 	}
@@ -2711,10 +2748,12 @@ func (r *Reconciler) collect(ctx context.Context, handle *subprocess.JobHandle, 
 		r.record(marker.TickID, StageRejected, "the worker answered %s: %s", answer.Status, answer.Summary)
 		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
 			" answered "+answer.Status)
-		return nil, r.refuse(RefusedNeedsHuman, marker.TickID,
-			"%s answered %s: %s. Its work is on %s and is NOT merged and the tick is NOT closed: a "+
-				"worker that asks for a person is not answered by merging what it wrote and closing the tick behind it",
-			r.attemptName(marker.TickID, marker.Attempt), answer.Status, answer.Summary, branchOf(marker.WriteRef))
+		// Tick tyd: the question is not a stop. It goes one tier up with
+		// the question, or at the ceiling to a worker told to decide it
+		// under the standing orders; only an always-ask class holds.
+		// Nothing is merged and the tick is not closed either way: a worker
+		// that asks is not answered by merging what it wrote.
+		return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
 	}
 	_ = status
 	return collected, nil
@@ -3189,6 +3228,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			PushInterval:   pushInterval,
 			PriorReports:   d.PriorReports,
 			PriorSnapshots: d.PriorSnapshots,
+			Escalation:     d.Escalation,
 			StuckAfter:     d.StuckAfter,
 		})
 		if err != nil {
