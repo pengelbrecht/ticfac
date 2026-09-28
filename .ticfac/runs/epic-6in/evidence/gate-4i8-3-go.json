@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-4i8-3-go",
+  "provenance": {
+    "run_id": "epic-6in",
+    "tick_id": "4i8",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/6in",
+    "source_sha": "eb9cdf73adb57b14821941de420c57dc3dfc078c",
+    "integration_ref": "refs/heads/epic/6in",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:2300d2fefb7c03f5c83a8a9afdd29d639909492268a8e184c0930c8c48f2b9d4",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.1"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-09-28T05:37:23Z",
+  "finished_at": "2026-09-28T05:38:23Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/acceptance\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t52.305s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.188s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t2.141s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t8.198s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t0.548s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t46.422s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t19.076s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t2.505s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gating\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t2.312s\n--- FAIL: TestPBTNothingInCloudflareResolvesOutsideWorkersAI (0.52s)\n    cloudrule_pbt_test.go:109: only 15 of the generated configs resolved at all (485 refused): the generator is not exercising the rule\n    cloudrule_pbt_test.go:111: resolved 15, refused 485\nFAIL\nFAIL\tgithub.com/pengelbrecht/ticfac/internal/profile\t2.923s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t24.142s\nok  \tgithub.com/pengelbrecht/ticfac/internal/release\t7.205s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t5.141s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t2.406s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry/registrytest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t3.676s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboximage\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t1.875s\n?   \tgithub.com/pengelbrecht/ticfac/internal/skills\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t0.747s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tempdir\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.686s\nFAIL\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:6e03a443885af31fa5b0d450c6d7f3289ccc9b5916851161a03878f5e9f69b07",
+  "persistence_uri": "git:refs/heads/epic/6in:.ticfac/runs/epic-6in/evidence/gate-4i8-3-go.json"
+}
