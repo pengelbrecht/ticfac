@@ -1,0 +1,14 @@
+{
+  "id": "tyd",
+  "title": "A worker answering BLOCKED or NEEDS_CONTEXT is re-dispatched a tier up with its question; at the ceiling the repo's standing orders decide",
+  "gloss": "BLOCKED escalates, never holds",
+  "description": "Today an implement worker's BLOCKED/NEEDS_CONTEXT is attempt_needs_human: the run stops for a person (dispatch.go ~2934, RefusedNeedsHuman). Under the hand-off model the next human touch point is the PR. Instead: re-dispatch one tier up with the worker's question and detail in the prompt ('an earlier attempt stopped here because: …; decide and proceed'); at the ceiling, apply .tick/config.md's standing orders (decide-and-log classes) — the worker decides and logs; only a question in an 'always ask' class becomes a hold, and that hold is surfaced in the epic PR body rather than stopping unrelated ticks where possible. Every step an event naming the question.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A BLOCKED implement answer is re-dispatched at the next tier with the question in the prompt; at the ceiling a decide-and-log question is decided and logged; only an always-ask class holds, and the hold names the question",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T10:39:04.989623Z",
+  "updated_at": "2026-09-28T10:39:04.989623Z"
+}

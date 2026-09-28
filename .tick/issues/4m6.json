@@ -1,0 +1,14 @@
+{
+  "id": "4m6",
+  "title": "Report linter: the worker checks its report before finishing, and collect pushes an invalid report back to the same session",
+  "gloss": "report linter + pushback",
+  "description": "Operator, 2026-09-28. One checker, the same parser collect uses, validates everything a role's prompt asks for: a final STATUS line with a valid word; a findings block that parses and validates (field-level errors); REVIEW-VERDICT for review jobs; close-out evidence per done item; whatever the role's output schema declares. (1) Every worker prompt tells the worker to run it (ticfac-exec-subprocess lint-report \u003cpath\u003e, also in the cloud image) and fix what it reports before stopping. (2) At collect, a report that fails lint is pushed back to the SAME session with the lint errors (reusing the #78/#81 re-prompt path; herdr: typed into the pane), at most twice, before the attempt fails. Removes finding_invalid holds, most malformed-report missing-results, and the review no-verdict refusal. Includes findings format v2 (see description of the companion change in the PR).",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A report with an unreadable findings block is pushed back with the parse error and accepted on the corrected second answer; a lint-clean report is always accepted by collect (property test over generated reports); the prompt instructs the lint step; the linter is present in the sandbox image",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T10:39:04.927267Z",
+  "updated_at": "2026-09-28T10:39:04.927267Z"
+}
