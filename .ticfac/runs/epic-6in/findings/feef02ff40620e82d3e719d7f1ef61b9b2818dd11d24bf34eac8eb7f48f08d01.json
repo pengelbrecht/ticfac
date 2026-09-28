@@ -11,8 +11,11 @@
   "tick_id": "060",
   "attempt": 1,
   "done_item": "none",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T05:31:44Z",
+  "triaged_at": "2026-09-28T05:31:53Z",
+  "triaged_by": "ticfac run epic-6in filing pengelbrecht/ticks:kzs",
+  "promoted_as": "pengelbrecht/ticks:kzs",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "060",
