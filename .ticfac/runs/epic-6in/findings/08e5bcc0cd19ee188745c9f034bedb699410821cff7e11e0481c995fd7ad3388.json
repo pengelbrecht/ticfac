@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "none",
   "demonstrating_check": "TestASecondRunUnderOneEpicIsHeldAtAWidthTheFirstRunFills",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:35:38Z",
+  "triaged_at": "2026-09-28T10:14:21Z",
+  "triaged_by": "ticfac run epic-6in absorbing bva",
+  "promoted_as": "bva",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "dz1",
