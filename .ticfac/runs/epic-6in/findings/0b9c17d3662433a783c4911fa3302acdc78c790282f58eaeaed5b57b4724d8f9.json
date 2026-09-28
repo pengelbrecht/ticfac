@@ -12,8 +12,11 @@
   "attempt": 4,
   "done_item": "none",
   "demonstrating_check": "TestWorkerDeniesTheAgentTkAndSaysTheAttemptHappened",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T06:40:37Z",
+  "triaged_at": "2026-09-28T10:14:38Z",
+  "triaged_by": "ticfac run epic-6in absorbing kxl",
+  "promoted_as": "kxl",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "46x",
