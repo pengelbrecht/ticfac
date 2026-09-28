@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 8,
-  "state": "collecting",
-  "reason": "collecting 060 attempt 1",
-  "updated_at": "2026-09-28T05:31:39Z",
+  "sequence": 9,
+  "state": "integrating",
+  "reason": "integrating 060 attempt 1 into epic/6in",
+  "updated_at": "2026-09-28T05:32:03Z",
   "ticks": [
     {
       "tick_id": "060",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
