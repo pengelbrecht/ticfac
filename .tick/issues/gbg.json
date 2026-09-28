@@ -1,0 +1,15 @@
+{
+  "id": "gbg",
+  "title": "The factory marks a run record orphaned when Cloudflare reports no Workflow instance for it",
+  "gloss": "factory sweeps orphaned runs",
+  "description": "From #87 (2026-09-28): three factory run records (run_9e40b956, run_2e66e765, run_f15efdfb) sat at 'stopping' with no ticks-run Workflow instance on Cloudflare. The client now reads that as orphaned (only on Cloudflare's explicit 404), but the factory itself never finishes such a record, because it refuses to finish a record when the instance read fails, and a missing instance and a failed read currently share one error path. Separate the two in the factory (a typed not-found from the Workflows binding, not error-text matching), then sweep: a record whose instance is definitively absent becomes failed/orphaned, and releases any project lease it holds. Verify whether a frozen 'stopping' record holds the lease today and blocks ticfac run --cloud.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "dha",
+  "acceptance_criteria": "A vitest test: a record with no Workflow instance is finished as orphaned and its lease released; a record whose instance read fails transiently is left alone",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T05:53:03.257861Z",
+  "updated_at": "2026-09-28T05:53:03.257861Z"
+}
