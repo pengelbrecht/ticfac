@@ -24,10 +24,11 @@ import (
 // these tests are about the run's own behaviour, and the GitHub surface's
 // answers are proven against an httptest server in internal/forge.
 
-// theCloseoutRule is the rule verbatim from this repository's own
-// .tick/config.md — the same line the production run that routed this tick
-// had to rediscover by hand. The fixture declaring it is therefore not an
-// invented spelling: it is the one that exists.
+// theCloseoutRule is the PR + CI gate as this repository's own
+// .tick/config.md declared it when the production run that routed this tick
+// had to rediscover it by hand — not an invented spelling. It says nothing
+// about who merges, so a repository declaring it gets the product default:
+// the run keeps the PR ready and a person merges it (land.go).
 const theCloseoutRule = "- Epic integration goes through a PR + CI gate: the orchestrator pushes the " +
 	"epic branch and opens a PR; the epic close-out may not complete until the CI workflow " +
 	"(.github/workflows/ci.yml) is green on that PR. No direct merges of epic branches to the " +
@@ -290,6 +291,13 @@ func TestThisRepoDeclaresTheRuleItNowEnforces(t *testing.T) {
 	}
 	if rule.CIWorkflow != ".github/workflows/ci.yml" {
 		t.Errorf("the declared workflow is %q, want .github/workflows/ci.yml", rule.CIWorkflow)
+	}
+	// And it opts in to the run merging its own ready PR (land.go; the
+	// operator's 2026-09-28 decision, for development velocity) — the
+	// product default `ticfac init` writes stays a person's merge.
+	if !rule.Lands() {
+		t.Errorf("this repository's rule does not opt in to the run merging its own PR (person merges: %v, %q)",
+			rule.PersonMerges, rule.MergeStated)
 	}
 }
 
@@ -910,8 +918,10 @@ func TestCloseoutClosesBehindGreenCIOnItsOwnCommits(t *testing.T) {
 	if contains(stages, StageRejected) {
 		t.Errorf("stages %v reject a close-out whose own commits' CI turned green", stages)
 	}
-	if got := forge.count("ci"); got != 3 {
-		t.Errorf("CI was asked %d times, want 3: admission, pending, green", got)
+	// Four since the READY PR (land.go): after the close-out closes, the
+	// readying asks once more, for the head the PR is handed over on.
+	if got := forge.count("ci"); got != 4 {
+		t.Errorf("CI was asked %d times, want 4: admission, pending, green, and the readying's", got)
 	}
 	current, err := f.Tracker.Show(context.Background(), "co")
 	if err != nil {

@@ -223,12 +223,19 @@ func TestAResumedCloseOutRewritesTheBodyNotAppendsToIt(t *testing.T) {
 	// restarted run's admission and close gate — and a VIEW recomposed from
 	// unchanged records is unchanged, which is what makes writing more than
 	// once safe. The held incarnation's bodies differ only in the triage
-	// state, which is the record changing, not the view drifting.
+	// state, which is the record changing, not the view drifting. The
+	// readying's write after the close-out closed (land.go) is a later
+	// record — the close-out tick is closed by then, and the body says what
+	// the readying checked — so the comparison is of the close-out's own
+	// writes, and the readying's is held to "each finding once" below.
 	bodies := forge.allBodies()
 	if len(bodies) < 5 {
 		t.Fatalf("the PR was written %d times across three incarnations, want at least 5", len(bodies))
 	}
 	for i := 2; i < len(bodies); i++ {
+		if strings.Contains(bodies[i], "\n## Readiness\n") {
+			continue
+		}
 		if bodies[i] != bodies[2] {
 			t.Errorf("write %d after the triage composed a different body:\n%s\n%s", i, bodies[2], bodies[i])
 		}

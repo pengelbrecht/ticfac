@@ -143,7 +143,7 @@
         "phase": {
           "type": "string",
           "enum": ["plan", "waves", "review", "closeout", "ci", "merge", "done", "failed", "cancelled"],
-          "description": "Where the epic stands. The merge is a person's, deliberately (see .tick/config.md): everything up to it is work a run can prove it did, and the merge is the judgement about whether to accept it."
+          "description": "Where the epic stands. The merge is a person's by default (see .tick/config.md): everything up to it — a READY PR, kept ready as the base moves — is work a run can prove it did, and the merge is the judgement about whether to accept it. A repository may opt in to the run merging its own ready PR."
         },
         "phases": {
           "type": "array",
