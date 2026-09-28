@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "none",
   "demonstrating_check": "ticfac sandbox image --declared-only --root <repo declaring [sandbox].image>, run from a directory outside the ticfac module",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T08:52:05Z",
+  "triaged_at": "2026-09-28T10:17:18Z",
+  "triaged_by": "ticfac run epic-6in absorbing bib",
+  "promoted_as": "bib",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "tdu",
