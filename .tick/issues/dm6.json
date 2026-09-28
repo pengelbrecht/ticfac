@@ -1,0 +1,14 @@
+{
+  "id": "dm6",
+  "title": "GitHub App access: the operator's own App (manifest flow), per-run installation tokens minted by the factory",
+  "gloss": "GitHub App access",
+  "description": "Operator, 2026-09-28: no per-repo PATs. Build D11's private-key rung (setup.go ~281, cloudflare/src/credentials.ts): (1) ticfac factory setup creates the operator's own GitHub App via GitHub's App manifest flow (pre-filled permissions: contents rw, pull_requests rw, checks/actions read, metadata read, workflows only if needed; webhook optional), the operator clicks Create and Install (all repos or selected); ticfac receives app id + private key via the manifest code exchange — nothing pasted by hand; (2) the private key is stored as a factory Worker secret (not in ~/.ticfacrc); (3) the factory mints an installation token per run, down-scoped to the run's repository and needed permissions, and sandboxes keep getting their short-lived per-attempt credential from it; (4) local ticfac commands that need GitHub keep using gh/GITHUB_TOKEN; (5) PAT and device-flow rungs remain as fallbacks; doctor and factory status name the active rung; (6) commits/PRs attributed to the App bot. Contracts ticfac owns (credential-ownership) updated.",
+  "status": "open",
+  "priority": 1,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[A1] ticfac factory setup walks the manifest flow and stores the App's key as a Worker secret with no manual paste; [A2] a cloud run on a repo the App is installed on pushes and opens its PR with a token minted for that run and scoped to that repo; [A3] no PAT is needed for any repo the App is installed on; [A4] doctor/factory status report the App rung live",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T16:49:25.859321Z",
+  "updated_at": "2026-09-28T16:49:25.859321Z"
+}
