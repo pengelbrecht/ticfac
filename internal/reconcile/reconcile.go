@@ -675,6 +675,13 @@ type Options struct {
 	// (prose.go) decides the findings those tests used to reach it with.
 	proseFindingsForAPerson bool
 
+	// notReadyForAPerson restores the pre-fix answer to a final review's NOT
+	// READY — carried to the PR and held at the land, never acted on
+	// (review_rounds.go) — and nothing in production sets it. It exists to
+	// make, in a test, the run an older build left held land_review_not_ready
+	// (epic-6in), which the new build then resumes.
+	notReadyForAPerson bool
+
 	// stopAfter kills this reconciler the moment a named stage is reached. It
 	// exists for the restart tests, which have to cut the run at a point a
 	// crash could genuinely land on — between a dispatch and its record,
@@ -957,6 +964,11 @@ const (
 	// owner. Still reported: unattended means nobody has to be there, not
 	// that nobody is ever told.
 	StageBacklogged = "finding_backlogged"
+	// StageReviewRound: the final review judged the epic NOT READY and the
+	// run acts on it (review_rounds.go) — its blocking findings absorbed into
+	// the epic and a re-review placed behind them — or says why a blocking
+	// finding is not the run's to absorb.
+	StageReviewRound = "review_round"
 	// StageFindingRouted: the finding is routed to ANOTHER repository the
 	// repository's runners.toml lets the run file into, and the run filed it
 	// there as a tick in that repository's own tracker (routed.go). It gates
@@ -1852,11 +1864,26 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		}
 		return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 	}
+<<<<<<< HEAD
 	// The width's raw material (tick dz1): the claims the graph itself counts
 	// under this epic, whoever holds them — this run's, another run's, a
 	// person's. Re-read the same way at every graph read below (replan);
 	// tk stopped enforcing this at 0.32.0, so this count is the enforcement.
 	r.inFlightIDs = graph.Dispatch.InFlightIDs
+=======
+	// A final review that judged the epic NOT READY is acted on before the
+	// plan is read (review_rounds.go): a run held land_review_not_ready by an
+	// older build — epic-6in — resumes by absorbing the review's blocking
+	// findings and reviewing again, never by waiting for a person; and a run
+	// killed between the review's close and that step finishes it here.
+	if acted, err := r.answerNotReadyReview(ctx); err != nil {
+		return nil, fmt.Errorf("reconcile: act on the final review's NOT READY: %w", err)
+	} else if acted {
+		if graph, err = r.tracker.Graph(ctx, r.opts.EpicID); err != nil {
+			return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
+		}
+	}
+>>>>>>> fbf02c5f2cb8049c1041662d2816c4f1b1219e06
 	plan := planFrom(graph)
 	if len(plan) == 0 {
 		// Every tick is closed. A run whose close-out ran and whose readying

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // Options configures a deploy.
@@ -573,6 +574,11 @@ const (
 	defaultVerifyAttempts = 6
 	defaultVerifyDelay    = 2 * time.Second
 	maxVerifyDelay        = 8 * time.Second
+
+	// recordedVerifyAttempts bounds setup's probe of a factory it already has
+	// on record: three probes, 2s and 4s apart. A recorded factory has no
+	// propagation to wait out, so this covers a network blip and no more.
+	recordedVerifyAttempts = 3
 )
 
 type verificationFailure struct {
@@ -588,6 +594,11 @@ func verificationError(err error, retryable bool) error {
 }
 
 func isRetryableVerificationError(err error) bool {
+	// "no route to host" / "network is unreachable" is the network, whatever
+	// wrapped it: the next probe may find the route (or the other family).
+	if httpnet.IsUnreachable(err) {
+		return true
+	}
 	var failure *verificationFailure
 	if errors.As(err, &failure) {
 		return failure.retryable
@@ -620,7 +631,7 @@ func verificationBackoff(base time.Duration, retryNumber int) time.Duration {
 func verifyEndpoint(ctx context.Context, opts Options, url, token string) error {
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 	attempts := opts.verifyAttempts
 	if attempts <= 0 {
@@ -631,6 +642,20 @@ func verifyEndpoint(ctx context.Context, opts Options, url, token string) error 
 		delay = defaultVerifyDelay
 	}
 
+	lastErr := verifyWithRetry(ctx, client, url, token, attempts, delay)
+	if lastErr == nil || (ctx.Err() != nil && errors.Is(lastErr, ctx.Err())) {
+		return lastErr
+	}
+	return fmt.Errorf(
+		"the bundle deployed and %s holds the credentials, but verifying %s failed: %w\n"+
+			"Re-run `ticfac factory deploy` once the endpoint is reachable; nothing is lost by running it again",
+		credentials.FileName, url, lastErr)
+}
+
+// verifyWithRetry probes up to attempts times, waiting a capped exponential
+// backoff between probes, and retries only what isRetryableVerificationError
+// calls transient. It returns nil, the context's error, or the last probe's.
+func verifyWithRetry(ctx context.Context, client *http.Client, url, token string, attempts int, delay time.Duration) error {
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
 		lastErr = verifyOnce(ctx, client, url, token)
@@ -640,24 +665,15 @@ func verifyEndpoint(ctx context.Context, opts Options, url, token string) error 
 		if attempt >= attempts || !isRetryableVerificationError(lastErr) {
 			break
 		}
-		wait := verificationBackoff(delay, attempt)
-		timer := time.NewTimer(wait)
+		timer := time.NewTimer(verificationBackoff(delay, attempt))
 		select {
 		case <-ctx.Done():
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
+			timer.Stop()
 			return ctx.Err()
 		case <-timer.C:
 		}
 	}
-	return fmt.Errorf(
-		"the bundle deployed and %s holds the credentials, but verifying %s failed: %w\n"+
-			"Re-run `ticfac factory deploy` once the endpoint is reachable; nothing is lost by running it again",
-		credentials.FileName, url, lastErr)
+	return lastErr
 }
 
 func verifyOnce(ctx context.Context, client *http.Client, url, token string) error {

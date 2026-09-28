@@ -609,17 +609,40 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			// (epic-6in). Its answer was about the tree — the run's own
 			// truthful read of CI on the code it was cut from is red — and the
 			// admission this dispatch passed has since answered that with the
-			// repair job and seen CI green. Its commits (a retro written over
-			// a tree that was about to change) stay on its branch on origin;
-			// the close-out is dispatched afresh over the repaired tree. No
-			// rung is earned: the attempt did not fail, the CI did.
+			// repair job and seen CI green. No rung is earned: the attempt did
+			// not fail, the CI did.
+			//
+			// Its commits go FORWARD (epic-6in v7z): the retro is still valid,
+			// so the next close-out is cut from them merged onto the repaired
+			// tree (planDispatch), and the run records the release carrying
+			// them — the same decision whichever path meets the rejection,
+			// here or at the backstop below once CI reads green.
 			if entry.Role == "closeout-epic" {
 				if failing, red := r.closeoutDispatchedOverRedCI(ctx, marker); red {
+					label := attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)
+					if head := r.rejectedWorkHead(marker); head != "" && !r.integrated(head) {
+						reason := "answered over red CI"
+						if err := r.recordRunRelease(marker, reason, rejectedStepSuperseded, true, marker.WriteRef,
+							head); err != nil {
+							r.record(tick, StageRejected, "the run's release of %s could not be recorded (%v); its "+
+								"work is carried all the same", label, err)
+						}
+						if carry == nil || existing.Attempt > carry.marker.Attempt {
+							carry = &carriedWork{marker: marker, by: runReleaser + " (" + reason + ")",
+								at: r.now().UTC().Format(time.RFC3339)}
+						}
+						r.record(tick, StageRejectedWorkCarried,
+							"%s was rejected after it was dispatched over red CI (%s failed on the code of %s): its "+
+								"answer was about the tree, not its commits (%s on %s), so the run released it carrying "+
+								"them, and a new try is dispatched from them over the repaired tree",
+							label, strings.Join(failing, ", "), short(marker.BaseSHA), short(head),
+							branchOf(marker.WriteRef))
+						continue
+					}
 					r.record(tick, StageRedispatched,
 						"%s was rejected after it was dispatched over red CI (%s failed on the code of %s); its "+
 							"commits stay where they are (%s), and a new try is dispatched over the repaired tree",
-						attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt),
-						strings.Join(failing, ", "), short(marker.BaseSHA), where)
+						label, strings.Join(failing, ", "), short(marker.BaseSHA), where)
 					continue
 				}
 			}
@@ -1434,7 +1457,17 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		if err != nil {
 			return Dispatch{}, attemptHandle{}, err
 		}
+		current := base
 		base = head
+		// A CLOSE-OUT is about the epic as it is now, carried or not: the
+		// carried work (its retro) goes forward, merged onto the integration
+		// branch as origin has it, so a tree repaired since the rejected
+		// close-out was cut — the red CI it answered about — is under the
+		// next one too (epic-6in v7z). resumed_from still names the carried
+		// commits themselves; only where the worker starts moves.
+		if entry.Role == "closeout-epic" {
+			base = r.carryOntoIntegration(entry.TickID, carry.marker, head, current)
+		}
 		resumed = &resumedFrom{
 			TickID: carry.marker.TickID, Attempt: carry.marker.Attempt,
 			WriteRef: carry.marker.WriteRef, SHA: head, ReleasedBy: carry.by,
@@ -2961,15 +2994,26 @@ func (r *Reconciler) checkCarriedWork(marker attemptHandle, collected *subproces
 		return nil, fmt.Errorf("read the base %s was carried from, to check the carried commits: %w",
 			r.attemptName(marker.TickID, marker.Attempt), err)
 	}
-	out, err := r.git.run("", "diff", "--name-only", "--no-renames", base, head)
-	if err != nil {
-		return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
-			r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
-	}
 	var changed []string
-	for _, path := range strings.Split(strings.TrimSpace(out), "\n") {
-		if path != "" {
-			changed = append(changed, path)
+	if r.carriedOntoMerge(marker) {
+		// Some try in the carry chain was cut from carried work MERGED onto
+		// the integration branch (a carried close-out): the integration
+		// history that merge brought in is not this tick's, so the carried
+		// commits are measured link by link, each above the base its own
+		// try was cut from. The executor checked this try's own.
+		if changed, err = r.carriedPaths(marker); err != nil {
+			return nil, err
+		}
+	} else {
+		out, err := r.git.run("", "diff", "--name-only", "--no-renames", base, head)
+		if err != nil {
+			return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
+				r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
+		}
+		for _, path := range strings.Split(strings.TrimSpace(out), "\n") {
+			if path != "" {
+				changed = append(changed, path)
+			}
 		}
 	}
 	violations := newPaths(collected.BoundaryViolations, subprocess.BoundaryViolations(changed))

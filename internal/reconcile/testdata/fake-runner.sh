@@ -104,6 +104,33 @@ report_with_findings() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+# A review that judges the epic NOT READY the way the review-epic contract
+# asks since epic-6in: detail on the verdict line ($1), and the blocking
+# finding as a high-severity finding ($2) beside a low one that is not a
+# reason and stays backlog.
+review_not_ready_report() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The review judged the epic not ready.\n\n'
+		printf '%s\n' '```findings v2'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "defect",'
+		printf '%s\n' "  \"title\": \"$2\","
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "body": "The reason the epic is not ready."'
+		printf '%s\n' '}, {'
+		printf '%s\n' '  "kind": "proposal",'
+		printf '%s\n' '  "title": "A polish the review noticed on the way",'
+		printf '%s\n' '  "severity": "low"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\n'
+		printf 'REVIEW-VERDICT: NOT READY — %s\n' "$1"
+		printf 'STATUS: DONE_WITH_CONCERNS\n'
+	} > "$TICFAC_RESULT_PATH"
+}
+
 # The gate-repair worker (tick wj6): the gate failed because a deletion left
 # a stale reference — a check that reads a file the tick deleted. The fake
 # stands in for an agent that read the failing check's output out of the
@@ -573,11 +600,28 @@ review_not_ready)
 	# CONCERNS in the status vocabulary, its own typed line stating the verdict —
 	# over the empty branch a correct read-only review leaves. The run must
 	# record that answer as its own verdict, never as the collect vocabulary's
-	# ready-to-merge, and carry it to the epic PR. Every other tick is the
-	# plain report mode.
-	if [ "$TICFAC_TICK" = "rv" ]; then
-		status="DONE_WITH_CONCERNS"
-		FAKE_RUNNER_REVIEW_VERDICT="NOT READY — the Phase 4 gate run never happened"
+	# ready-to-merge, and carry it to the epic PR. Since epic-6in the NOT READY
+	# names a blocking (high) finding, which the run absorbs and fixes before
+	# reviewing again — and in THIS mode the re-review is NOT READY too, so the
+	# bound on review rounds is what is left. Every other tick is the plain
+	# report mode.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
+		review_not_ready_report "the Phase 4 gate still never ran" "The Phase 4 gate still never ran after the fix"
+	else
+		commit
+		report
+	fi
+	;;
+review_not_ready_then_ready)
+	# The epic-6in fix: the first review judges the epic NOT READY naming one
+	# blocking (high) finding and one low one; the run absorbs the blocking one
+	# into the epic, works it (the plain report mode), and reviews again — and
+	# the re-review answers READY.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
 		report
 	else
 		commit
@@ -1118,6 +1162,61 @@ closeout_red_uncarried)
 		commit
 		status="BLOCKED"
 		report
+	else
+		commit
+		report
+	fi
+	;;
+stuck-first-then-nothing)
+	# stuck-first, and a1's LATER tries find the carried work complete and add
+	# nothing: a report over the carried head, no commit of their own. The
+	# carried attempt's delivery is the carried work (the epic-6in v7z shape,
+	# on an implement tick).
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		[ -e "$TICFAC_WORKTREE/$file" ] || commit
+		exec sleep 86400
+	fi
+	[ "$TICFAC_TICK" = "a1" ] || commit
+	report
+	;;
+closeout_red_carried_confirms)
+	# Epic-6in's v7z, as it really stalled: the close-out, cut from the
+	# integration branch, writes its retro and answers BLOCKED; the close-out
+	# cut from that retro (its work CARRIED) finds the retro already done,
+	# commits NOTHING and answers DONE_WITH_CONCERNS. Every other job does its
+	# work and reports.
+	if [ "$TICFAC_TICK" = "co" ] && [ ! -e "$TICFAC_WORKTREE/$file" ]; then
+		commit
+		status="BLOCKED"
+		report
+	elif [ "$TICFAC_TICK" = "co" ]; then
+		status="DONE_WITH_CONCERNS"
+		report
+	else
+		commit
+		report
+	fi
+	;;
+closeout_asks_twice)
+	# A close-out that stops to ask twice and finishes on its third try —
+	# but only a try that CARRIES the earlier tries' work: each asking try
+	# appends a line to asks-co.txt, and a try that finds two lines (its
+	# worktree was cut from both earlier tries' commits) finishes. A fresh
+	# try finds none and asks again.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		asks=0
+		if [ -e "$TICFAC_WORKTREE/asks-co.txt" ]; then
+			asks=$(wc -l < "$TICFAC_WORKTREE/asks-co.txt" | tr -d ' ')
+		fi
+		if [ "$asks" -lt 2 ]; then
+			printf 'asked on attempt %s\n' "$TICFAC_ATTEMPT" >> "$TICFAC_WORKTREE/asks-co.txt"
+			commit
+			status="BLOCKED"
+			report
+		else
+			commit
+			report
+		fi
 	else
 		commit
 		report

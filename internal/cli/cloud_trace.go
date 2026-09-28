@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"slices"
 	"sort"
 	"strings"
@@ -19,11 +18,12 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // cloudTraceHTTPClient is a package variable so command tests can exercise the
 // AI Gateway logs protocol without binding a loopback listener.
-var cloudTraceHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var cloudTraceHTTPClient = httpnet.Client(30 * time.Second)
 
 // cloudTraceDetailWorkers bounds how many detail bodies are read at once. A run
 // makes tens to hundreds of model calls and each needs its own request, so this
@@ -84,7 +84,7 @@ func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, 
 		return newExitError(exitGeneric, "%v", err)
 	}
 	if cloudTraceHTTPClient == nil {
-		cloudTraceHTTPClient = &http.Client{Timeout: 30 * time.Second}
+		cloudTraceHTTPClient = httpnet.Client(30 * time.Second)
 	}
 	client := gatewaytrace.New(traceConfig, cloudTraceHTTPClient)
 

@@ -140,8 +140,13 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //   - RefusedCloseoutOverRedCI: a close-out answered BLOCKED over code whose
 //     CI the run itself reads as red (epic-6in). The next incarnation's
 //     admission answers the red CI with the repair job — the tree changes —
-//     and dispatches a fresh close-out over the green; nobody has anything to
-//     decide.
+//     and dispatches a new close-out over the green, carrying the rejected
+//     one's commits (its retro); nobody has anything to decide.
+//
+// And one hold is continued when the stopped incarnation finds the run can
+// decide it (supervisedStop.Decides): a close-out's RefusedRoleAnswer over a
+// question in no always-ask class (holdDecidesItself). An always-ask question
+// stays a person's.
 //
 // RefusedGate is deliberately ABSENT, and the omission is the argument. A gate
 // that failed is resumable only when the tree has since CHANGED — and under
@@ -188,6 +193,11 @@ type supervisedStop struct {
 	// the moment of the stop, or treeUnreadable. See integrationTree: it is
 	// deliberately not the branch head.
 	Tree string
+
+	// Decides is set on a hold whose next actor is the RUN after all: a
+	// close-out's question in no always-ask class, which the next
+	// incarnation disposes of by itself (holdDecidesItself).
+	Decides bool
 }
 
 // treeUnreadable is the tree of a stop whose integration head could not be
@@ -238,6 +248,7 @@ func (r *Reconciler) stopOf(result *Result, err error) (supervisedStop, bool) {
 		stop.Reason = result.Failure.Reason
 		stop.TickID = result.Failure.TickID
 		stop.Message = result.Failure.Message
+		stop.Decides = r.holdDecidesItself(stop)
 		return stop, true
 	default:
 		stop.Message = result.Reason
@@ -410,7 +421,7 @@ func haltReason(stop, previous supervisedStop, made, capped int) string {
 	case stop.Reason == StoppedRemoteAuthRefused:
 		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent or " +
 			"an access grant is a person's to fix, and the refusal below says what to check"
-	case !resumesWithoutAPerson(stop.Reason):
+	case !resumesWithoutAPerson(stop.Reason) && !stop.Decides:
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"
 	case stop.sameStop(previous) && !waitsOnCI(stop.Reason):
@@ -464,4 +475,48 @@ func autoResumeNote(resumes int) string {
 	}
 	return fmt.Sprintf(". This incarnation was reached after %d AUTOMATIC CONTINUATION(S) of this run, each one "+
 		"an intervention nobody typed: the run did not reach here unattended", resumes)
+}
+
+// holdDecidesItself says a close-out's role-answer hold is one the next
+// incarnation decides without a person (epic-6in v7z): the close-out asked
+// again after being told to decide, its question is in no always-ask class,
+// and the rejected-work bound is not spent — so the resume carries its work
+// into one more try (heldQuestion, then disposeUndecidedRejection). A genuine
+// always-ask question (tick tyd) is still a person's, and so is a close-out
+// whose one further try at the bound was already spent.
+func (r *Reconciler) holdDecidesItself(stop supervisedStop) bool {
+	if stop.Reason != RefusedRoleAnswer || stop.TickID == "" || r.store == nil {
+		return false
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return false
+	}
+	attempts, err := r.store.Attempts()
+	if err != nil {
+		return false
+	}
+	var latest *runstate.Attempt
+	for i := range attempts {
+		if attempts[i].TickID == stop.TickID && (latest == nil || attempts[i].Attempt > latest.Attempt) {
+			latest = &attempts[i]
+		}
+	}
+	if latest == nil {
+		return false
+	}
+	marker := handleFromMap(latest.JobHandle)
+	blocked, ok := r.blockedAnswerOf(stop.TickID, latest.Attempt)
+	if !ok || !closeoutDecidesItself(marker.Role, blocked) {
+		return false
+	}
+	released, err := r.settlements()
+	if err != nil {
+		return false
+	}
+	for _, prior := range runReleasesOf(released, stop.TickID) {
+		if prior.step == rejectedStepCeiling {
+			return false
+		}
+	}
+	return true
 }

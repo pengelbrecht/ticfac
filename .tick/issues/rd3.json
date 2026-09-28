@@ -1,0 +1,14 @@
+{
+  "id": "rd3",
+  "title": "A rejection records a structured class in the run checkpoint (ticfac bundle 1.1.0)",
+  "gloss": "structured rejection class",
+  "description": "Deferred from #117/#120 (2026-09-28): resume classifies a rejected attempt with no disposition by matching phrases in the checkpoint's prose reason (#117). Rewording a message would silently stop classification (fails safe to the hold). Add a structured rejection class to the run-state checkpoint written at rejection time, and read it first; keep the phrase classifier only for legacy checkpoints. Blocked on 4i8 (ticfac owns its contracts) landing on main with epic 6in: until then contracts/ticfac-run-state.json is pinned to ticks and verified byte for byte.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[A1] The rejection class is a closed enum in the run-state contract (bundle 1.1.0): PutCheckpoint refuses a rejection without a valid class, and a checkpoint read with an unknown class is treated as unclassifiable (hold, logged), never guessed; [A2] a guard test walks every code path that rejects an attempt (AST or a registry of refusal sites) and fails if one records a rejection without a class; [A3] a table/property test proves the class written agrees with the collect verdict and refusal reason for every rejection path (the same mapping #117's phrase classifier encodes), so the structured field and the prose can never disagree; [A4] resume reads the class first and uses the phrase classifier only for checkpoints written before 1.1.0; a test rewords a rejection message and resume still classifies it; [A5] a legacy checkpoint (pre-1.1.0) still resumes via the fallback",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T18:16:44.233661Z",
+  "updated_at": "2026-09-28T18:24:43.095697Z"
+}

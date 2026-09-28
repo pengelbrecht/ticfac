@@ -228,9 +228,11 @@ func TestARejectedCloseoutWithWorkAndNoDispositionIsCarriedOnResumeWithNoPerson(
 		t.Fatalf("the new close-out resumed from %+v, want attempt %d's work at %s", next.ResumedFrom,
 			rejected.Attempt, short(head))
 	}
-	if next.BaseSHA != head {
-		t.Errorf("the new close-out was cut from %s, want the rejected close-out's head %s", short(next.BaseSHA),
-			short(head))
+	// A close-out is cut from the carried commits merged onto the integration
+	// branch as it is now, so its base carries the rejected head.
+	if !mustRunAllowingFailure(f.Repo.Origin, "git", "merge-base", "--is-ancestor", head, next.BaseSHA) {
+		t.Errorf("the new close-out was cut from %s, which does not carry the rejected close-out's head %s",
+			short(next.BaseSHA), short(head))
 	}
 	if !strings.HasPrefix(next.ResumedFrom.ReleasedBy, runReleaser) {
 		t.Errorf("the carry is attributed to %q, want the run", next.ResumedFrom.ReleasedBy)

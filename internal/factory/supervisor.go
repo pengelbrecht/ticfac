@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // A run's SUPERVISOR is its Cloudflare Workflow instance, and this file is the
@@ -302,7 +304,7 @@ func ReadSupervisor(ctx context.Context, runID string, opts SupervisorOptions) (
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 
 	endpoint := fmt.Sprintf("%s/accounts/%s/workflows/%s/instances/%s",

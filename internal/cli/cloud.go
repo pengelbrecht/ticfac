@@ -31,6 +31,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // newCloudCommand builds the `cloud` group: the cobra command whose Long is
@@ -106,7 +107,7 @@ remediation may NOT do.
 // cloudHTTPClient is a package variable so command tests can exercise the
 // factory protocol without binding a loopback listener. Production calls use
 // the ordinary client with a bounded timeout.
-var cloudHTTPClient = &http.Client{Timeout: 15 * time.Second}
+var cloudHTTPClient = httpnet.Client(15 * time.Second)
 
 type cloudClient struct {
 	baseURL string
@@ -130,7 +131,7 @@ func newCloudClient() (*cloudClient, error) {
 		return nil, fmt.Errorf("factory endpoint is invalid; run 'ticfac factory setup' to configure it")
 	}
 	if cloudHTTPClient == nil {
-		cloudHTTPClient = &http.Client{Timeout: 15 * time.Second}
+		cloudHTTPClient = httpnet.Client(15 * time.Second)
 	}
 	return &cloudClient{baseURL: baseURL, token: token, http: cloudHTTPClient}, nil
 }

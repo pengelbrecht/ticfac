@@ -457,26 +457,31 @@ func (r *Reconciler) landedAt(baseHead, epicHead string) (string, bool) {
 // landingReviewHold refuses to merge an epic whose final review judged it NOT
 // READY: that verdict is carried on the PR (reviewverdict.go), and accepting
 // work the run's own review rejected is not a step the run takes for anybody.
+//
+// It is reached only once the run has acted on the NOT READY itself
+// (review_rounds.go): a review whose blocking findings could be absorbed has
+// had them absorbed, fixed and the epic reviewed again, so the hold is the
+// review that is STILL NOT READY after maxReviewRounds rounds — or one that
+// named nothing the run could fix — and it names the remaining reasons.
 func (r *Reconciler) landingReviewHold(tick string) (*Refusal, error) {
-	decisions, err := r.store.Decisions()
+	rounds, err := r.readReviewRounds()
 	if err != nil {
-		return nil, fmt.Errorf("read the run's decisions for the final review's verdict: %w", err)
+		return nil, err
 	}
-	final := -1
-	for i := range decisions {
-		if decisions[i].Role == "review-epic" {
-			final = i
-		}
-	}
-	if final < 0 || reviewVerdictOf(decisions[final].Response) != subprocess.ReviewVerdictNotReady {
+	if rounds.final == nil || reviewVerdictOf(rounds.final.Response) != subprocess.ReviewVerdictNotReady {
 		return nil, nil
 	}
-	summary, _ := decisions[final].Response["summary"].(string)
+	final := *rounds.final
+	why := fmt.Sprintf("after %d review round(s), the bound being %d", rounds.rounds, maxReviewRounds)
+	if rounds.rounds < maxReviewRounds {
+		why = "and it named no blocking finding the run could absorb and fix"
+	}
 	return r.refuse(RefusedLandReviewNotReady, tick,
-		"the run does not merge the epic %s: its final review (decision %d) judged it NOT READY — %s. The verdict "+
-			"is on the epic PR, and accepting work the run's own review rejected is a person's judgement: merge the "+
-			"PR by hand to accept it (a re-run then finds it merged), or close it",
-		r.opts.EpicID, decisions[final].Decision, summary), nil
+		"the run does not merge the epic %s: its final review (decision %d) still judges it NOT READY %s. What "+
+			"the review says would make it ready: %s. The verdict is on the epic PR, and accepting work the run's own "+
+			"review rejected is a person's judgement: fix what it names and run the epic again, merge the PR by hand "+
+			"to accept it (a re-run then finds it merged), or close it",
+		r.opts.EpicID, final.Decision, why, notReadyReasons(final)), nil
 }
 
 // landingAttemptHead is what the readying's gate fingerprint names as the

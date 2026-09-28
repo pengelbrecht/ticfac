@@ -35,6 +35,15 @@ finding is worth more than a fix you cannot land.
   about your branch, and a report that says its judgement only in prose is
   refused as an answer nobody can act on — the line is required, in exactly
   the two words above.
+- A NOT READY is acted on by the run, not left for a person: every finding
+  that is a REASON the epic is not ready is a BLOCKING finding, and a finding
+  is blocking exactly when its `severity` is `high`. The run absorbs each
+  blocking finding into the epic as a tick, works it, and then asks for a
+  fresh review of the new tree. So a NOT READY must say what would make the
+  epic ready on its verdict line AND carry at least one `high` finding; a
+  bare `REVIEW-VERDICT: NOT READY`, or one whose reasons are only prose, is
+  sent back to you. Use `high` only for a reason the epic is not ready;
+  everything else is `medium` or `low`, and is filed as backlog.
 - Do not rewrite the epic's plan and do not open new scope. If the epic is not
   ready, say what would make it ready. A discovery that deserves its own
   tick — in this repository, in an upstream one, or in the pinned contract
