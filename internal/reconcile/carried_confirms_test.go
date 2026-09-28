@@ -68,12 +68,15 @@ func TestACarriedCloseoutThatAddsNothingDeliversTheCarriedRetro(t *testing.T) {
 			result.State, result.Failure, journalText(r))
 	}
 	next := markerOfTry(t, r, "co", 2)
-	if next.ResumedFrom == nil || next.BaseSHA != retro {
-		t.Fatalf("the second close-out was cut from %s (resumed from %+v), want the carried retro %s",
+	// A carried close-out is cut from the carried retro merged onto the
+	// integration branch as it is now (carryOntoIntegration).
+	if next.ResumedFrom == nil || next.ResumedFrom.SHA != retro ||
+		!mustRunAllowingFailure(f.Repo.Origin, "git", "merge-base", "--is-ancestor", retro, next.BaseSHA) {
+		t.Fatalf("the second close-out was cut from %s (resumed from %+v), want a base carrying the retro %s",
 			short(next.BaseSHA), next.ResumedFrom, short(retro))
 	}
 	if head := strings.TrimSpace(runGitQuiet(f.Repo.Origin, "rev-parse", "--verify", "--quiet",
-		refFor(branchOf(next.WriteRef)))); head != "" && head != retro {
+		refFor(branchOf(next.WriteRef)))); head != "" && head != next.BaseSHA {
 		t.Fatalf("the carried close-out committed %s beyond the retro; the scenario proves nothing", short(head))
 	}
 	for _, e := range r.Journal() {

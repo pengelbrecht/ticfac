@@ -2989,28 +2989,31 @@ func (r *Reconciler) checkCarriedWork(marker attemptHandle, collected *subproces
 		return collected, nil
 	}
 	head := *collected.Result.Source.HeadSHA
-	if marker.ResumedFrom.SHA != "" && marker.BaseSHA != "" && marker.BaseSHA != marker.ResumedFrom.SHA {
-		// The dispatch was cut from the carried work MERGED onto the
-		// integration branch (a carried close-out): the executor checked
-		// everything above that merge, and what is left to check is the
-		// carried commits themselves — never the integration branch's own
-		// history, which the merge brought in and which is not this tick's.
-		head = marker.ResumedFrom.SHA
-	}
 	base, err := r.carriedBase(marker)
 	if err != nil {
 		return nil, fmt.Errorf("read the base %s was carried from, to check the carried commits: %w",
 			r.attemptName(marker.TickID, marker.Attempt), err)
 	}
-	out, err := r.git.run("", "diff", "--name-only", "--no-renames", base, head)
-	if err != nil {
-		return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
-			r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
-	}
 	var changed []string
-	for _, path := range strings.Split(strings.TrimSpace(out), "\n") {
-		if path != "" {
-			changed = append(changed, path)
+	if r.carriedOntoMerge(marker) {
+		// Some try in the carry chain was cut from carried work MERGED onto
+		// the integration branch (a carried close-out): the integration
+		// history that merge brought in is not this tick's, so the carried
+		// commits are measured link by link, each above the base its own
+		// try was cut from. The executor checked this try's own.
+		if changed, err = r.carriedPaths(marker); err != nil {
+			return nil, err
+		}
+	} else {
+		out, err := r.git.run("", "diff", "--name-only", "--no-renames", base, head)
+		if err != nil {
+			return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
+				r.attemptName(marker.TickID, marker.Attempt), short(base), short(head), err)
+		}
+		for _, path := range strings.Split(strings.TrimSpace(out), "\n") {
+			if path != "" {
+				changed = append(changed, path)
+			}
 		}
 	}
 	violations := newPaths(collected.BoundaryViolations, subprocess.BoundaryViolations(changed))

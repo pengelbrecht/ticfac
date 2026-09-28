@@ -444,3 +444,62 @@ func (r *Reconciler) carryOntoIntegration(tick string, carried attemptHandle, he
 		short(merged), branch)
 	return merged
 }
+
+// carriedOntoMerge says some try in marker's carry chain (marker included)
+// was cut from its carried work merged onto the integration branch — its base
+// is not the head it resumed from.
+func (r *Reconciler) carriedOntoMerge(marker attemptHandle) bool {
+	seen := map[int]bool{}
+	for marker.ResumedFrom != nil && !seen[marker.ResumedFrom.Attempt] {
+		if marker.BaseSHA != "" && marker.ResumedFrom.SHA != "" && marker.BaseSHA != marker.ResumedFrom.SHA {
+			return true
+		}
+		seen[marker.ResumedFrom.Attempt] = true
+		record, ok, err := r.store.Attempt(marker.ResumedFrom.Attempt)
+		if err != nil || !ok {
+			return false
+		}
+		marker = handleFromMap(record.JobHandle)
+	}
+	return false
+}
+
+// carriedPaths is every path the carried tries of marker's chain changed, each
+// measured above the base that try was cut from, up to the head the next try
+// resumed from — never the integration history a merged base brought in.
+func (r *Reconciler) carriedPaths(marker attemptHandle) ([]string, error) {
+	seen := map[int]bool{}
+	set := map[string]bool{}
+	var out []string
+	for marker.ResumedFrom != nil {
+		from := marker.ResumedFrom
+		if seen[from.Attempt] {
+			return nil, fmt.Errorf("the carries of %s form a cycle at attempt %d", marker.TickID, from.Attempt)
+		}
+		seen[from.Attempt] = true
+		record, ok, err := r.store.Attempt(from.Attempt)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || record.TickID != from.TickID {
+			return nil, fmt.Errorf("no marker on %s for %s", r.opts.Remote, r.attemptName(from.TickID, from.Attempt))
+		}
+		prev := handleFromMap(record.JobHandle)
+		if prev.BaseSHA == "" || from.SHA == "" {
+			return nil, fmt.Errorf("the marker of %s names no base", r.attemptName(prev.TickID, prev.Attempt))
+		}
+		diff, err := r.git.run("", "diff", "--name-only", "--no-renames", prev.BaseSHA, from.SHA)
+		if err != nil {
+			return nil, fmt.Errorf("read the files %s carries between %s and %s: %w",
+				r.attemptName(prev.TickID, prev.Attempt), short(prev.BaseSHA), short(from.SHA), err)
+		}
+		for _, path := range strings.Split(strings.TrimSpace(diff), "\n") {
+			if path != "" && !set[path] {
+				set[path] = true
+				out = append(out, path)
+			}
+		}
+		marker = prev
+	}
+	return out, nil
+}
