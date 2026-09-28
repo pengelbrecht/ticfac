@@ -363,7 +363,7 @@ func interruptRequested(st *store) bool {
 // land, re-asking the liveness question until the agent stops working.
 //
 // The reconciler tears a collected attempt down the moment its facts are
-// durable: revoke (ctrl+c through herdr), then dispose, in the same second.
+// durable: revoke (the harness interrupt through herdr), then dispose, in the same second.
 // herdr's status for the agent lags the interrupt, so the dispose read
 // `working` and refused — every time, on an agent that was idle a minute
 // later — and the attempt's pane outlived the run with its agent still

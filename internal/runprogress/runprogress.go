@@ -34,6 +34,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // attemptRefPrefix is the namespace every attempt's write ref lives under.
@@ -402,7 +404,7 @@ func worktreeChangedAt(dir string, since time.Time) (time.Time, *int, bool) {
 func git(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), gitbin.TransportEnv()...)
 	var out, errBuf strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf

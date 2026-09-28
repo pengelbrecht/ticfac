@@ -28,6 +28,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // The door's path, spelled as the Worker serves it (cloudflare/src/run-done.ts;
@@ -191,7 +193,7 @@ func remoteHead(ctx context.Context, repo, remote, branch string) (string, error
 		repo = "."
 	}
 	cmd := exec.CommandContext(ctx, "git", "-C", repo, "ls-remote", remote, "refs/heads/"+branch)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), gitbin.TransportEnv()...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote: %w", err)

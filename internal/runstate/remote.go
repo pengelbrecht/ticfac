@@ -171,6 +171,16 @@ var transientMarkers = []string{
 	// Couldn't connect to server". Nothing was asked, so nothing was refused.
 	"failed to connect to",
 	"couldn't connect to server",
+	// curl giving up on a connection that went silent (curl 28,
+	// CURLE_OPERATION_TIMEDOUT): gitbin.TransportEnv's low-speed bound firing
+	// on an https remote that accepted the connection and stopped answering —
+	// epic-6in's thirty-minute checkpoint push, 2026-09-28, once bounded.
+	// Waiting on the first request of a push or fetch, git says only
+	// "fatal: unable to access '<url>': Operation too slow. Less than 1000
+	// bytes/sec transferred the last 60 seconds", with no "RPC failed" and no
+	// "timed out" to recognise it by; mid-pack it is "error: RPC failed; curl
+	// 28 Operation too slow ...". Nothing was answered, so nothing was refused.
+	"operation too slow",
 	// The remote's own storage failing mid-push: the request reached it and
 	// was never answered with a no — the server could not write the pack it
 	// had just received. Seen on 2026-09-27, when epic-2jn's checkpoint push
@@ -261,8 +271,8 @@ type RemoteRetryNotice struct {
 // RemoteRetry bounds how long a transient remote failure is waited through.
 //
 // The BOUND is what makes this safe, and it is not a detail. Retrying forever
-// recreates the exact hang the ssh transport bound (tick pul, TransportEnv
-// above) exists to prevent: a run alive, holding its workers, emitting
+// recreates the exact hang the transport bound (tick pul; gitbin.TransportEnv)
+// exists to prevent: a run alive, holding its workers, emitting
 // nothing, indistinguishable from a run that is working. This repository's
 // standing rule is that a hang is worse than a refusal, and an unbounded
 // retry is a hang assembled out of refusals.
@@ -285,8 +295,8 @@ type RemoteRetry struct {
 
 // DefaultRemoteAttempts and DefaultRemoteBackoff are the bound: four tries,
 // waiting 2s, 4s and 8s between them, so fourteen seconds of waiting at the
-// outside. Each attempt is itself bounded by TransportEnv — about a minute of
-// silence before ssh concludes a connection is gone — so the worst case is a
+// outside. Each attempt is itself bounded by gitbin.TransportEnv — about a minute of
+// silence before ssh or curl concludes a connection is gone — so the worst case is a
 // little over four minutes before the run stops and says so. That is long
 // enough to ride out a reset and a short blip, and short enough that a person
 // reading the feed sees a run that is stuck on the network rather than a run

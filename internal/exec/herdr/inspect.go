@@ -156,7 +156,7 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 			// and dispose then refuses it as a working agent forever. The
 			// stop is delivered here, without changing the verdict the
 			// report settles.
-			stop := e.stopAtWall(st, record, record.PaneID)
+			stop := e.stopAtWall(st, record, record.PaneID, "")
 			switch {
 			case stop.delivered:
 				detail += fmt.Sprintf("; the agent is past its wall clock of %ds and the stop was delivered through herdr — "+
@@ -211,8 +211,13 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 		// reaches it — the reconciler's poll is the clock that reaches the
 		// bound, and the stop lands within one poll of it (wall.go).
 		if e.pastWall(record) {
-			stop := e.stopAtWall(st, record, agent.PaneID)
+			stop := e.stopAtWall(st, record, agent.PaneID, agent.AgentStatus)
 			switch {
+			case stop.delivered && stop.settled && stop.closed && stop.honoured:
+				return subprocess.StateFailed, fmt.Sprintf(
+					"stopped at its wall clock of %ds: the agent honoured the interrupt and returned to its prompt, "+
+						"so the pane was closed without waiting out the grace: no report at %s",
+					record.WallSeconds, record.ResultPath)
 			case stop.delivered && stop.settled && stop.closed:
 				return subprocess.StateFailed, fmt.Sprintf(
 					"stopped at its wall clock of %ds by closing the pane after the interrupt went unhonoured for the grace: no report at %s",
@@ -235,14 +240,14 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 				// is not confirmed gone yet: the pane herdr opened in its place
 				// is a shell, and only agent.get's positive answer settles.
 				return subprocess.StateRunning, fmt.Sprintf(
-					"the wall clock of %ds passed, the interrupt went unhonoured for the grace, and the pane was closed through herdr: "+
+					"the wall clock of %ds passed, %s, and the pane was closed through herdr: "+
 						"the settlement waits for herdr to answer that the agent is gone",
-					record.WallSeconds)
+					record.WallSeconds, stop.why())
 			case stop.held != "":
 				return subprocess.StateRunning, fmt.Sprintf(
-					"the wall clock of %ds passed, the interrupt went unhonoured for the grace, and the pane close is held this poll (%s): "+
+					"the wall clock of %ds passed, %s, and the pane close is held this poll (%s): "+
 						"it is re-attempted at every poll",
-					record.WallSeconds, stop.held)
+					record.WallSeconds, stop.why(), stop.held)
 			case stop.delivered:
 				return subprocess.StateRunning, fmt.Sprintf(
 					"the wall clock of %ds passed and the agent %s was interrupted through herdr, but it has not exited: "+

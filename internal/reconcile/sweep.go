@@ -4,10 +4,12 @@ import (
 	"context"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The leftover sweep (epic-6in).
@@ -32,9 +34,13 @@ import (
 // down in the one order a teardown uses: the substrate's workspace and panes
 // (each executor's half), then the git worktree and its registration, then
 // the branch — only when its commits are merged or it carries none. A branch
-// holding commits nothing merged is KEPT, as disposal keeps it; a wip ref is
-// never swept (tick pbb: it retires only with the record naming it), and a
-// worktree holding uncommitted work has it put on a wip ref of its own first.
+// holding commits nothing merged is KEPT, as disposal keeps it; a worktree
+// holding uncommitted work has it put on a wip ref of its own first, and one
+// whose local-executor attempt still has a live process is left for the next
+// sweep (tick tyv). Last, the closed tick's wip refs retire, locally and on
+// the remote (tick tyv): a snapshot is material for a later attempt of its
+// tick (pbb), and a closed tick has none. The feed names every snapshot's
+// commit, which the object store keeps until git's gc expires it.
 //
 // The sweep runs where the run knows a tick needs nothing more: when the tick
 // closes (after its cleanUp), at run start and resume (for every tick the
@@ -93,6 +99,10 @@ func (r *Reconciler) sweepLeftovers(ctx context.Context, tick string, sweepable 
 	defer r.sweepMu.Unlock()
 	scope := subprocess.SweepScope{Namespace: r.sweepNamespace(), Sweepable: sweepable}
 	say := func(format string, args ...any) { r.record(tick, StageCleanedUp, format, args...) }
+	// The wip refs go last, whatever else this sweep managed: they are
+	// independent of every worktree and branch, and a snapshot this sweep
+	// takes before a forced removal retires with the rest of its tick's.
+	defer r.pruneWip(scope, say)
 
 	// The substrate's half first: a workspace removed after its worktree is
 	// a workspace open on a directory that no longer exists.
@@ -132,6 +142,15 @@ func (r *Reconciler) sweepLeftovers(ctx context.Context, tick string, sweepable 
 		}
 		if held[canonicalPath(reg.Path)] {
 			checkedOut[reg.Branch] = true
+			continue
+		}
+		if pids := subprocess.LiveAttemptProcesses(reg.Path); len(pids) > 0 {
+			// A local-executor attempt still running in it (tick tyv): the
+			// substrate half holds nothing for that executor, so its
+			// processes are asked about here, by pid.
+			checkedOut[reg.Branch] = true
+			say("not swept: the worktree %s of %s: its attempt's process is alive (%s); the next sweep retries",
+				reg.Path, reg.Branch, pidList(pids))
 			continue
 		}
 		snap, preserved, err := subprocess.PreserveUncommitted(reg.Path, subprocess.JobOfBranch(reg.Branch), "")
@@ -225,6 +244,104 @@ func (r *Reconciler) integrationHeads() []string {
 		heads = append(heads, r.base)
 	}
 	return heads
+}
+
+// wipNamespace is the ref prefix every wip snapshot of this run lives under:
+// refs/ticfac/wip/run-<run>/, spelled the way WipRefFor spells a job id.
+func (r *Reconciler) wipNamespace() string {
+	return subprocess.WipRefFor(strings.TrimSuffix(subprocess.JobOfBranch(r.sweepNamespace()), "/")) + "/"
+}
+
+// pruneWip retires the wip refs of every tick in scope, locally and on the
+// remote (tick tyv). An evacuation and a wall-clock stop push their snapshot
+// to the remote, and PurgeState retires only the local ref: nothing retired
+// the remote's, so they accumulated there run after run. A snapshot is
+// material for a LATER attempt of its tick, and a closed tick has none — so
+// its close retires them, as it retires the attempt branch. A deletion that
+// fails is recorded and left for the next sweep; it never stops the run.
+func (r *Reconciler) pruneWip(scope subprocess.SweepScope, say func(string, ...any)) {
+	prefix := r.wipNamespace()
+	covered := func(ref string) bool {
+		rest, ok := strings.CutPrefix(ref, prefix)
+		if !ok || rest == "" {
+			return false
+		}
+		first, _, _ := strings.Cut(rest, "/")
+		tick, _ := strings.CutPrefix(first, "tick-")
+		if tick == first {
+			tick = ""
+		}
+		return scope.Sweepable != nil && scope.Sweepable(tick)
+	}
+
+	if out, err := r.git.run("", "for-each-ref", "--format=%(refname)", prefix); err != nil {
+		say("not swept: the run's wip refs could not be listed (%v); the next sweep retries", err)
+	} else {
+		for _, line := range strings.Split(out, "\n") {
+			ref := strings.TrimSpace(line)
+			if ref == "" || !covered(ref) {
+				continue
+			}
+			if _, err := r.git.run("", "update-ref", "-d", ref); err != nil {
+				say("not swept: the wip ref %s could not be deleted (%v); the next sweep retries", ref, err)
+				continue
+			}
+			say("swept: retired the wip ref %s — its tick is closed", ref)
+		}
+	}
+
+	if r.git.remote == "" {
+		return
+	}
+	out, err := r.git.run("", "ls-remote", r.git.remote, prefix+"*")
+	if err != nil {
+		say("not swept: the run's wip refs on %s could not be listed (%s: %s); the next sweep retries",
+			r.git.remote, remoteFailure(err), firstLine(err.Error()))
+		return
+	}
+	var remote []string
+	for _, line := range strings.Split(out, "\n") {
+		_, ref, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if ok && covered(ref) {
+			remote = append(remote, ref)
+		}
+	}
+	if len(remote) == 0 {
+		return
+	}
+	sort.Strings(remote)
+	args := []string{"push", "--quiet", r.git.remote}
+	for _, ref := range remote {
+		args = append(args, ":"+ref)
+	}
+	if _, err := r.git.run("", args...); err != nil {
+		say("not swept: the wip refs %s on %s could not be deleted (%s: %s); the next sweep retries",
+			strings.Join(remote, ", "), r.git.remote, remoteFailure(err), firstLine(err.Error()))
+		return
+	}
+	say("swept: deleted the wip refs %s on %s — their tick is closed", strings.Join(remote, ", "), r.git.remote)
+}
+
+// remoteFailure names what a failed remote step was, in runstate's
+// classification: whether waiting could have changed the answer.
+func remoteFailure(err error) string {
+	switch runstate.ClassifyRemote(err) {
+	case runstate.RemoteTransient:
+		return "a transient remote failure"
+	case runstate.RemoteAuthRefused:
+		return "the remote refused this machine's credentials"
+	case runstate.RemoteTerminal:
+		return "the remote refused it"
+	}
+	return "an unclassified remote failure"
+}
+
+func pidList(pids []int) string {
+	words := make([]string, len(pids))
+	for i, pid := range pids {
+		words[i] = "pid " + strconv.Itoa(pid)
+	}
+	return strings.Join(words, ", ")
 }
 
 // namedSweeper is one executor's sweep, under the executor's name.

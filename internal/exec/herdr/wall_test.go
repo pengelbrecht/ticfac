@@ -104,8 +104,8 @@ func TestInspectStopsAWorkerPastItsWallClock(t *testing.T) {
 	if len(sent) == 0 {
 		t.Fatal("the worker ran past its wall clock and herdr was never asked to stop it")
 	}
-	if keys := strings.Join(sent[0].Keys, ","); keys != "ctrl+c" {
-		t.Errorf("the stop was sent as %q, want ctrl+c: the same interrupt surface cancel uses", keys)
+	if keys := strings.Join(sent[0].Keys, ","); keys != "esc" {
+		t.Errorf("the stop was sent as %q, want esc: claude's own turn interrupt (interrupt.go), the same keys cancel sends", keys)
 	}
 
 	// The stop is recorded durably as a wall-clock stop, and NOT as a

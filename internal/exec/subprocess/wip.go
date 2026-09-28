@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
@@ -44,8 +45,10 @@ import (
 // The snapshot is NOT evidence of completion and is never merged. It is
 // material a LATER attempt of the same tick is pointed at in its prompt —
 // the nvn shape for reports, applied to work — and it is pruned by
-// PurgeState, the same explicit step that retires the record naming it:
-// nothing else prunes it, because it must outlive the attempt's own teardown
+// PurgeState, the same explicit step that retires the record naming it, or by
+// the run's leftover sweep once its tick is closed (tick tyv) — locally and on
+// the remote an evacuation pushed it to — when no later attempt can want it.
+// Nothing else prunes it, because it must outlive the attempt's own teardown
 // exactly as long as the archived report does.
 
 // FileWIPSnapshot is where an executor records that an attempt's uncommitted
@@ -318,6 +321,11 @@ func UncommittedWork(worktree, artifactPrefix string) (bool, error) {
 // touches the worktree's own index — the agent may still be alive and running
 // its own git when the snapshot is taken, and a snapshot that disturbed the
 // working state it is preserving would be worse than none.
+//
+// Nothing it runs today reaches a remote, but it runs whatever argv it is
+// handed, so it carries gitbin.TransportEnv like every such runner: the guard
+// (TestEveryGitThatCanReachARemoteIsBounded) asks that of a runner, not of a
+// caller.
 func snapshotGit(dir string, env []string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -325,7 +333,7 @@ func snapshotGit(dir string, env []string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	// A git that reads the invoking user's hooks, editors or pagers is a git
 	// that can block forever in a non-interactive executor.
-	cmd.Env = append(append(os.Environ(),
+	cmd.Env = append(append(append(os.Environ(), gitbin.TransportEnv()...),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
@@ -344,7 +352,7 @@ func snapshotGitStdin(dir string, env []string, stdin []byte, args ...string) (s
 	cmd.Dir = dir
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	cmd.Env = append(append(os.Environ(),
+	cmd.Env = append(append(append(os.Environ(), gitbin.TransportEnv()...),
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
