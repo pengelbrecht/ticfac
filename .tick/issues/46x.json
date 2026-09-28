@@ -12,6 +12,6 @@
   "acceptance_criteria": "[A1] No image script calls a tk sandbox or tk cloud verb; required-tk-commands lists only tracker commands and its drift test passes. [A2] Each ported verb has a test pinning its output against the ticks implementation's fixture cases (sandbox-image-cases etc.). [A3] A container build with the new image passes the Dockerfile's required-commands layer. [V] Verified by: make vet \u0026\u0026 make gate, and in cloudflare/: pnpm typecheck \u0026\u0026 pnpm exec vitest run.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T14:04:43.518413421Z",
-  "updated_at": "2026-09-28T04:42:58.290638Z",
+  "updated_at": "2026-09-28T06:01:55.001626Z",
   "started_at": "2026-09-28T04:42:58.290638Z"
 }
