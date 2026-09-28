@@ -119,20 +119,31 @@ func TestFollowSourceResumesFromTheCursor(t *testing.T) {
 	cursor := located[len(located)-1].End
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var mu sync.Mutex
 	var seen []Event
+	seenNow := func() []Event {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]Event(nil), seen...)
+	}
 	var done = make(chan struct{})
 	go func() {
-		err = FollowSource(ctx, source, time.Millisecond, cursor, func(e Event) { seen = append(seen, e) })
+		_ = FollowSource(ctx, source, time.Millisecond, cursor, func(e Event) {
+			mu.Lock()
+			seen = append(seen, e)
+			mu.Unlock()
+		})
 		close(done)
 	}()
+	defer func() { cancel(); <-done }()
 	// The standing line is never delivered: it stands before the cursor.
 	time.Sleep(50 * time.Millisecond)
 	source.append(t, NewEvent(time.Now(), "r-1", "a1", &attempt, "collected", "the line that lands"))
 	deadline := time.Now().Add(5 * time.Second)
-	for len(seen) == 0 && time.Now().Before(deadline) {
+	for len(seenNow()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
+	seen = seenNow()
 	if len(seen) == 0 {
 		t.Fatal("the line after the cursor was never delivered")
 	}
