@@ -1123,6 +1123,36 @@ closeout_red_uncarried)
 		report
 	fi
 	;;
+stuck-first-then-nothing)
+	# stuck-first, and a1's LATER tries find the carried work complete and add
+	# nothing: a report over the carried head, no commit of their own. The
+	# carried attempt's delivery is the carried work (the epic-6in v7z shape,
+	# on an implement tick).
+	if [ "$TICFAC_TICK" = "a1" ] && [ "$TICFAC_TRY" = "1" ]; then
+		[ -e "$TICFAC_WORKTREE/$file" ] || commit
+		exec sleep 86400
+	fi
+	[ "$TICFAC_TICK" = "a1" ] || commit
+	report
+	;;
+closeout_red_carried_confirms)
+	# Epic-6in's v7z, as it really stalled: the close-out, cut from the
+	# integration branch, writes its retro and answers BLOCKED; the close-out
+	# cut from that retro (its work CARRIED) finds the retro already done,
+	# commits NOTHING and answers DONE_WITH_CONCERNS. Every other job does its
+	# work and reports.
+	if [ "$TICFAC_TICK" = "co" ] && [ ! -e "$TICFAC_WORKTREE/$file" ]; then
+		commit
+		status="BLOCKED"
+		report
+	elif [ "$TICFAC_TICK" = "co" ]; then
+		status="DONE_WITH_CONCERNS"
+		report
+	else
+		commit
+		report
+	fi
+	;;
 finding_build_red)
 	# The prose rule's exception (epic-6in): the work is done, and the report
 	# carries ONE in-repository finding whose reporter claims it breaks the
