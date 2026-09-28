@@ -285,6 +285,17 @@ func (s trackerState) waves() [][]string {
 	if len(s.BlockedBy) == 0 {
 		return s.Waves
 	}
+	// Only the epic's CHILDREN are its graph: a backlog tick a promotion
+	// filed is in Order (the tracker holds it) but not in the epic, exactly as
+	// the declared-waves branch of CreateTick keeps it out.
+	var order []string
+	for _, id := range s.Order {
+		if tick, ok := s.Ticks[id]; ok && tick.Parent != s.Epic && strings.HasPrefix(tick.CreatedBy, "ticfac run ") {
+			continue
+		}
+		order = append(order, id)
+	}
+	s.Order = order
 	wave := map[string]int{}
 	for _, id := range s.Order {
 		wave[id] = 1
@@ -454,6 +465,14 @@ func (f *fakeTracker) CreateTick(_ context.Context, tick tk.Tick) (tk.Tick, erro
 	}
 	state.Ticks[tick.ID] = tick
 	state.Order = append(state.Order, tick.ID)
+	// A role tick the run creates (a re-review, review_rounds.go) carries its
+	// role in the record, and tk's graph answers it from there.
+	if tick.Role != "" {
+		if state.Roles == nil {
+			state.Roles = map[string]string{}
+		}
+		state.Roles[tick.ID] = tick.Role
+	}
 	// A tick with no edges of its own layers into the FIRST wave — exactly as
 	// tk layers it — so the fixture with declared waves (no BlockedBy) still
 	// shows the run the tick it has to work. A fixture that declared edges is
@@ -509,6 +528,35 @@ func (f *fakeTracker) BlockOn(_ context.Context, tickID, blocker string) error {
 		return fmt.Errorf("no tick %s", tickID)
 	}
 	tick.BlockedBy = state.BlockedBy[tickID]
+	return f.record(tick)
+}
+
+// Adopt is the fake's half of the adoption seam (review_rounds.go): an
+// existing tick — a backlog tick a promotion filed — made a child of the
+// epic, so the epic's graph now carries it. Idempotent, like tk's parent.
+func (f *fakeTracker) Adopt(_ context.Context, tickID, parent string) error {
+	f.tally("adopt:" + tickID)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state, err := f.load()
+	if err != nil {
+		return err
+	}
+	tick, ok := state.Ticks[tickID]
+	if !ok {
+		return fmt.Errorf("no tick %s", tickID)
+	}
+	if tick.Parent == parent {
+		return nil
+	}
+	tick.Parent = parent
+	state.Ticks[tickID] = tick
+	if len(state.BlockedBy) == 0 && len(state.Waves) > 0 && parent == state.Epic {
+		state.Waves[0] = append(state.Waves[0], tickID)
+	}
+	if err := f.save(state); err != nil {
+		return err
+	}
 	return f.record(tick)
 }
 
@@ -929,6 +977,9 @@ type fixtureOptions struct {
 	// acceptance untriaged (Options.proseFindingsForAPerson): for the tests of
 	// the untriaged-findings hold and the PR body that carries such findings.
 	proseFindingsForAPerson bool
+	// notReadyForAPerson makes the run an older build made of a NOT READY
+	// review (Options.notReadyForAPerson): carried and held, never acted on.
+	notReadyForAPerson bool
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -1026,6 +1077,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		Substrate:               opts.substrate,
 		GatingClassifier:        opts.gatingClassifier,
 		proseFindingsForAPerson: opts.proseFindingsForAPerson,
+		notReadyForAPerson:      opts.notReadyForAPerson,
 		AbsorptionDepthBound:    opts.absorptionDepth,
 		// A depth the test NAMES is explicit — the person's raise over the
 		// recorded bound — and zero adopts whatever the run branch records

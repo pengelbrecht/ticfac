@@ -104,6 +104,33 @@ report_with_findings() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+# A review that judges the epic NOT READY the way the review-epic contract
+# asks since epic-6in: detail on the verdict line ($1), and the blocking
+# finding as a high-severity finding ($2) beside a low one that is not a
+# reason and stays backlog.
+review_not_ready_report() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The review judged the epic not ready.\n\n'
+		printf '%s\n' '```findings v2'
+		printf '%s\n' '[{'
+		printf '%s\n' '  "kind": "defect",'
+		printf '%s\n' "  \"title\": \"$2\","
+		printf '%s\n' '  "severity": "high",'
+		printf '%s\n' '  "body": "The reason the epic is not ready."'
+		printf '%s\n' '}, {'
+		printf '%s\n' '  "kind": "proposal",'
+		printf '%s\n' '  "title": "A polish the review noticed on the way",'
+		printf '%s\n' '  "severity": "low"'
+		printf '%s\n' '}]'
+		printf '%s\n' '```'
+		printf '\n'
+		printf 'REVIEW-VERDICT: NOT READY — %s\n' "$1"
+		printf 'STATUS: DONE_WITH_CONCERNS\n'
+	} > "$TICFAC_RESULT_PATH"
+}
+
 # The gate-repair worker (tick wj6): the gate failed because a deletion left
 # a stale reference — a check that reads a file the tick deleted. The fake
 # stands in for an agent that read the failing check's output out of the
@@ -573,11 +600,28 @@ review_not_ready)
 	# CONCERNS in the status vocabulary, its own typed line stating the verdict —
 	# over the empty branch a correct read-only review leaves. The run must
 	# record that answer as its own verdict, never as the collect vocabulary's
-	# ready-to-merge, and carry it to the epic PR. Every other tick is the
-	# plain report mode.
-	if [ "$TICFAC_TICK" = "rv" ]; then
-		status="DONE_WITH_CONCERNS"
-		FAKE_RUNNER_REVIEW_VERDICT="NOT READY — the Phase 4 gate run never happened"
+	# ready-to-merge, and carry it to the epic PR. Since epic-6in the NOT READY
+	# names a blocking (high) finding, which the run absorbs and fixes before
+	# reviewing again — and in THIS mode the re-review is NOT READY too, so the
+	# bound on review rounds is what is left. Every other tick is the plain
+	# report mode.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
+		review_not_ready_report "the Phase 4 gate still never ran" "The Phase 4 gate still never ran after the fix"
+	else
+		commit
+		report
+	fi
+	;;
+review_not_ready_then_ready)
+	# The epic-6in fix: the first review judges the epic NOT READY naming one
+	# blocking (high) finding and one low one; the run absorbs the blocking one
+	# into the epic, works it (the plain report mode), and reviews again — and
+	# the re-review answers READY.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
 		report
 	else
 		commit

@@ -83,7 +83,16 @@ review_not_ready)
 	if [ "$TICFAC_ROLE" = "review-epic" ]; then
 		status="DONE_WITH_CONCERNS"
 		FAKE_RUNNER_REVIEW_VERDICT="NOT READY — the reconciler was never wired to the run"
-		report
+		# A NOT READY names its blocking finding (epic-6in): a high one.
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "${TICFAC_TICK}"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "The reconciler is never wired to the run", "severity": "high"}]'
+			printf '%s\n\n' '```'
+			verdict_line
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
 	else
 		commit
 		report

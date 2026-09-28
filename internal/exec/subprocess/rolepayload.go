@@ -53,6 +53,11 @@ func RoleResultPayload(role string, report Report, verdict string, commits int, 
 	}
 	if role == "review-epic" {
 		payload["review_verdict"] = report.ReviewVerdict
+		// What the review said would make the epic ready (epic-6in): the
+		// verdict line's own detail, carried beside the verdict so a hold, the
+		// re-review's prompt and the PR body state the REASONS, never a bare
+		// "NOT READY".
+		payload["review_verdict_detail"] = report.ReviewVerdictDetail
 		return payload
 	}
 	payload["verdict"] = verdict
@@ -76,6 +81,9 @@ func RoleSummary(role string, report Report, verdict string) string {
 		return report.Detail
 	}
 	if role == "review-epic" && report.ReviewVerdict != "" {
+		if report.ReviewVerdictDetail != "" {
+			return fmt.Sprintf("%s (%s — %s)", report.Status, report.ReviewVerdict, report.ReviewVerdictDetail)
+		}
 		return fmt.Sprintf("%s (%s)", report.Status, report.ReviewVerdict)
 	}
 	return fmt.Sprintf("%s (%s)", report.Status, verdict)

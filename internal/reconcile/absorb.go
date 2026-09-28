@@ -864,13 +864,22 @@ func (r *Reconciler) reviewTick(ctx context.Context) (string, bool) {
 	if err != nil {
 		return "", false
 	}
+	// An OPEN review first: after a NOT READY the epic carries its closed
+	// review and the open re-review behind it (review_rounds.go), and a
+	// finding absorbed now is fixed before the review still to come.
+	first := ""
 	for _, wave := range graph.Waves {
 		for _, task := range wave.Tasks {
 			if task.Role != "review" {
 				continue
 			}
-			return task.ID, task.Status == "open"
+			if task.Status == "open" {
+				return task.ID, true
+			}
+			if first == "" {
+				first = task.ID
+			}
 		}
 	}
-	return "", false
+	return first, false
 }

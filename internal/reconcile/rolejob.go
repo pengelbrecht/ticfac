@@ -589,6 +589,15 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 	if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is closed", tick)); err != nil {
 		return err
 	}
+	// A review that judged the epic NOT READY is the run's to act on
+	// (review_rounds.go): its blocking findings become the epic's work, and a
+	// re-review is placed behind them and before the close-out — which the
+	// close-out's open-children gate then works first.
+	if answer.Role == "review-epic" {
+		if _, err := r.answerNotReadyReview(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
