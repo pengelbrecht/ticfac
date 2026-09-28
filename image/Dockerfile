@@ -184,7 +184,7 @@ RUN set -euo pipefail; \
 # release.
 #
 # This is the fix for a chicken-and-egg the release pin created: the entrypoint
-# below runs `tk sandbox ...`, an epic adds that subcommand, and the newest
+# below ran tk verbs an epic could add, and the newest
 # released tk does not have it yet — so the image could only ever be one
 # release behind the bundle it boots, and a container booted, streamed, and
 # then died with "unknown command: sandbox". Source removes the lag entirely:
@@ -215,6 +215,9 @@ RUN set -euo pipefail; \
 # container boots and then dies mid-run. The list is derived from the scripts
 # themselves (internal/factory.EntrypointTkCommands) and shipped in the build
 # context, so this assertion cannot go stale the way a hand-written one does.
+# It carries TRACKER commands only (tick 46x): the sandbox verbs and the branch
+# write moved to ticfac, whose binary the deploy stages from the same tree as
+# these scripts, so the two cannot disagree about a verb's existence.
 # Failing HERE fails the deploy, with the missing subcommand named.
 COPY required-tk-commands /usr/local/share/ticks/required-tk-commands
 RUN set -euo pipefail; \

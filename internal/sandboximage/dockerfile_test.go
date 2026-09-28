@@ -329,7 +329,7 @@ func TestRequiredTkCommandsCoverTheEntrypoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EntrypointTkCommands: %v", err)
 	}
-	for _, want := range []string{"sandbox environment", "sandbox setup", "version"} {
+	for _, want := range []string{"answer", "list", "version"} {
 		found := false
 		for _, c := range commands {
 			if c == want {
@@ -338,6 +338,16 @@ func TestRequiredTkCommandsCoverTheEntrypoint(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("the entrypoint runs `tk %s` but the scanner did not see it: %q", want, commands)
+		}
+	}
+	// The reverse guard (tick 46x): the sandbox verbs and the branch write
+	// moved to ticfac, so a tk entry here would gate the image build on a
+	// subcommand the tracker-only tk no longer has.
+	for _, gone := range []string{"sandbox environment", "sandbox setup", "sandbox model", "sandbox image", "sandbox toolchain", "sandbox substrate", "sandbox worker-prompt", "cloud branch"} {
+		for _, c := range commands {
+			if c == gone {
+				t.Errorf("the entrypoint still runs `tk %s`, which ticks no longer has: %q", gone, commands)
+			}
 		}
 	}
 }

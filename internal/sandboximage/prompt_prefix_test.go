@@ -123,8 +123,8 @@ func TestPromptBuildersCallNothingThatVaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	builders := promptBuilderBodies(t, string(body))
-	if len(builders) != 4 {
-		t.Fatalf("expected the four prompt builders, found %d — has the entrypoint's prompt moved?", len(builders))
+	if len(builders) != 3 {
+		t.Fatalf("expected the three prompt builders, found %d — has the entrypoint's prompt moved?", len(builders))
 	}
 
 	for name, source := range builders {
@@ -142,9 +142,9 @@ func TestPromptBuildersCallNothingThatVaries(t *testing.T) {
 func promptBuilderBodies(t *testing.T, script string) map[string]string {
 	t.Helper()
 	bodies := map[string]string{}
-	// `dispatch_protocol` joined them with tick wiy: it composes prompt text
-	// like the other three, so it answers to the same rule.
-	for _, name := range []string{"reconcile_instruction", "prompt_footer", "harness_prompt", "dispatch_protocol"} {
+	// (The fourth builder, `dispatch_protocol`, went with tick 46x: it was
+	// the tk cloud spawn/wait/collect protocol, verbs that no longer exist.)
+	for _, name := range []string{"reconcile_instruction", "prompt_footer", "harness_prompt"} {
 		open := name + "() {"
 		start := strings.Index(script, open)
 		if start == -1 {

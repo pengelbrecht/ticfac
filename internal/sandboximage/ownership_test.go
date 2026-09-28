@@ -14,8 +14,10 @@ import (
 // and a comment pointing at a path in the other repository sends the next
 // editor looking for a file that is not there.
 //
-// `tk sandbox …` and `tk cloud branch` are deliberately NOT on this list: the
-// scripts still call them, and tick 46x ports them to ticfac.
+// `tk sandbox …` and `tk cloud branch` ARE on this list since tick 46x ported
+// them to ticfac: a script calling a verb the tracker-only tk no longer has is
+// a container that dies mid-run, and this guard is what [A1] of that tick
+// rests on mechanically.
 //
 // short: reads the image files and asserts on their text; no process runs
 func TestTheImageNamesNoVerbOrPathTicksDropped(t *testing.T) {
@@ -27,7 +29,7 @@ func TestTheImageNamesNoVerbOrPathTicksDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stale := []string{"tk factory", "cloud/sandbox", "cloud/factory", "internal/sandbox/"}
+	stale := []string{"tk factory", "tk sandbox", "tk cloud", "cloud/sandbox", "cloud/factory", "internal/sandbox/"}
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue

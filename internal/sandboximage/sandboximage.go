@@ -71,7 +71,7 @@ const (
 	// EnvSubstrate is the explicit dispatch-substrate override the container
 	// runs under. It is the same spelling tk's reader uses
 	// (ticks runnersconfig.SubstrateEnvVar) rather than a second one: the entrypoint
-	// exports it, `tk sandbox substrate` resolves it, and the harness and
+	// exports it, `ticfac sandbox substrate` resolves it, and the harness and
 	// everything it spawns inherit it. A cloud sandbox has no herdr server, so
 	// a repository whose tracked config pins herdr for its LOCAL runs is told
 	// the effective substrate here instead of having its checkout rewritten.
@@ -443,7 +443,7 @@ const (
 	//
 	// When it is set the worker runs its harness on it verbatim; when it is
 	// absent (a factory that predates it, or the image driven by hand) the
-	// worker renders its prompt from the checkout with `tk sandbox
+	// worker renders its prompt from the checkout with `ticfac sandbox
 	// worker-prompt`, as it always has.
 	EnvRolePrompt = "TICKS_ROLE_PROMPT"
 )
@@ -588,7 +588,7 @@ const (
 // chances before the missing-result verdict.
 const WorkerNudgeMax = 2
 
-// WorkerPromptAddendum is what `tk sandbox worker-prompt` appends to the
+// WorkerPromptAddendum is what `ticfac sandbox worker-prompt` appends to the
 // shared worker template.
 //
 // The template is written for a herdr worker in a worktree beside its

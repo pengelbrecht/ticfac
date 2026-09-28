@@ -5,9 +5,10 @@
 # Given a repository URL, a submitted SHA and an AI Gateway base URL, it clones
 # the repo at that SHA, verifies tk, provisions anything the repository needs
 # that the image does not already carry, runs the repository's own `[sandbox]`
-# setup, runs the `[environment.commands]` pre-flight through `tk`, exports
+# setup, runs the `[environment.commands]` pre-flight through `ticfac`, exports
 # TK_ACTOR=cloud:orchestrator, and execs the headless harness on the ticks
-# skill loop (docs/design/cloud-factory.md, Phase 1).
+# skill loop (docs/design/cloud-factory.md, Phase 1) — or, in the STAGED copy a
+# deploy writes, `ticfac run-epic` instead of the harness.
 #
 # It is NOT the container ENTRYPOINT — the Cloudflare sandbox control server
 # keeps that. The Run Workflow starts this command inside the running sandbox
@@ -84,7 +85,7 @@ stop_reason="${TICKS_STOP_REASON:-}"
 # says its workers are cloud sandboxes" and "this container IS one of them" from
 # being the same statement.
 substrate="${TICKS_SUBSTRATE:-harness}"
-# Filled in by resolve_substrate: what tk actually resolved, and the durable
+# Filled in by resolve_substrate: what ticfac actually resolved, and the durable
 # runner-state line the run records on its epic. Empty until then.
 substrate_resolved=""
 substrate_note=""
@@ -151,11 +152,11 @@ require_inputs() {
 
 # Which substrate dispatches this run's workers, settled once, out loud.
 #
-# `tk` owns the runners.toml parser and the substrate decision procedure, so
-# this shell asks it rather than learning either — the same delegation as
-# `tk sandbox model` and `tk sandbox setup`. Two lines come back: the resolved
-# substrate, and the `runner-state:` note the run records on its epic. The
-# reasoning goes to stderr, straight into this boot log.
+# `ticfac` owns the runners.toml parser and the substrate decision procedure,
+# so this shell asks it rather than learning either — the same delegation as
+# `ticfac sandbox model` and `ticfac sandbox setup`. Two lines come back: the
+# resolved substrate, and the `runner-state:` note the run records on its epic.
+# The reasoning goes to stderr, straight into this boot log.
 #
 # The protocol requires an explicit degradation — and an explicit override — to
 # be ANNOUNCED and noted rather than discovered later, so the resolution is
@@ -166,15 +167,15 @@ resolve_substrate() {
 	# the environment, and so does everything the harness later spawns.
 	export TICKS_SUBSTRATE="$substrate"
 	local resolved status
-	resolved="$(tk sandbox substrate --root "$workdir")"
+	resolved="$(ticfac sandbox substrate --root "$workdir")"
 	status=$?
 	if ((status != 0)); then
-		die $EXIT_CONFIG "tk could not resolve the dispatch substrate ('tk sandbox substrate' exited $status; its reason is above) — TICKS_SUBSTRATE is '${substrate}' and must be herdr, harness, auto or cloud. This is a stop: a run that does not know how it dispatches workers cannot dispatch any."
+		die $EXIT_CONFIG "ticfac could not resolve the dispatch substrate ('ticfac sandbox substrate' exited $status; its reason is above) — TICKS_SUBSTRATE is '${substrate}' and must be herdr, harness, auto or cloud. This is a stop: a run that does not know how it dispatches workers cannot dispatch any."
 	fi
 	substrate_resolved="$(printf '%s\n' "$resolved" | sed -n 1p | tr -d '[:space:]')"
 	substrate_note="$(printf '%s\n' "$resolved" | sed -n 2p)"
 	if [[ -z $substrate_resolved ]]; then
-		die $EXIT_CONFIG "tk resolved no dispatch substrate from TICKS_SUBSTRATE='${substrate}' and the checkout's ${workdir}/.tick/runners.toml — the image and this script disagree about 'tk sandbox substrate'"
+		die $EXIT_CONFIG "ticfac resolved no dispatch substrate from TICKS_SUBSTRATE='${substrate}' and the checkout's ${workdir}/.tick/runners.toml — the image and this script disagree about 'ticfac sandbox substrate'"
 	fi
 	say "substrate ${substrate_resolved} (requested ${substrate} via TICKS_SUBSTRATE; the checkout's own pin is read, never rewritten)"
 	say "${substrate_note}"
@@ -391,32 +392,12 @@ re-dispatch a worker that is still alive.
 PROMPT
 }
 
-# Why 'tk cloud spawn' does not block here, said once so no prompt has to
-# explain it twice.
-#
-# Only the control plane holds the SANDBOXES binding, so this container cannot
-# boot its own siblings. `tk cloud spawn` RECORDS the wave with the run's
-# supervisor, which dispatches it — checkpointed, budget-enforced, killable —
-# after this pass exits. So the pass ending is the handshake, not a failure,
-# and 'tk cloud wait' would sit here watching for containers that have not been
-# booted yet.
-dispatch_protocol() {
-	cat <<'PROMPT'
-The dispatch protocol, which is not the local one:
-
-- 'tk cloud spawn' here does not boot anything and does not block. It records
-  the wave with this run's supervisor, which boots the containers after this
-  pass exits. Exit 0 as soon as spawn succeeds.
-- Do NOT run 'tk cloud wait' or 'tk cloud collect' on a wave you just
-  requested: its containers do not exist yet. You will be booted again once
-  they have run, and THAT pass collects them.
-- One wave per pass. Requesting a wave and then continuing to work is how two
-  orchestrators end up on one tick.
-- If spawn is refused, do not exit as if it succeeded: read the reason. A
-  refusal means this run may not dispatch, so finish the epic on what is
-  already merged instead.
-PROMPT
-}
+# No dispatch protocol is taught here any more (tick 46x). The prompt once
+# told a harness to run tk's cloud spawn/wait/collect/pr-body verbs; those are
+# gone from ticks, and every run boot a deploy stages runs `ticfac run-epic`
+# instead of a harness on this prompt (internal/factory/ticfacentrypoint.go).
+# The cloud dispatch itself is the control plane's: only it holds the
+# SANDBOXES binding, so a container cannot boot its own siblings.
 
 # Shared tail: the facts every phase needs, stated identically so a reboot and a
 # first boot cannot drift apart on them.
@@ -434,7 +415,7 @@ prompt_footer() {
 		# checkout: a container that read its repository's `substrate = "cloud"`
 		# pin and concluded it should boot sibling containers would be fanning
 		# out with nothing arbitrating it.
-		guidance="Dispatch each wave as one cloud worker container per tick with 'tk cloud spawn <epic> --ticks a,b,c'. Do not dispatch subagents and do not edit .tick/runners.toml. This container cannot boot containers itself — spawn RECORDS the wave with the run's supervisor, which boots it after this pass exits (see the dispatch protocol below)."
+		guidance="Each wave is one cloud worker container per tick, dispatched by the control plane after this pass records it. Do not dispatch subagents and do not edit .tick/runners.toml. This container cannot boot containers itself, so record the wave and exit 0: the pass ending is the handshake, and the next boot collects the wave it ran."
 	else
 		guidance="The checkout's own pin is for runs where it applies; this sandbox has no herdr server. Do not probe for one, do not edit .tick/runners.toml, and do not stop over the mismatch — dispatch workers as subagents of this harness, in this container."
 	fi
@@ -469,15 +450,13 @@ each worker branch as it merges, each wave as it integrates, and tracker state
 immediately after every mutation batch — and do not wait for closeout to make
 work durable. Keep working on this branch: do not create a second integration
 branch, and do not push to the default branch yourself; merging ${run_branch}
-is closeout's job, through the PR and CI gate. Build that PR's body with
-'tk cloud pr-body' (it reads this container's environment) and open the PR with
-it: this branch descends from the SHA the run was submitted at, so when that
-submission came off a branch already ahead of the default branch, merging the
-PR lands those commits too — the body is what makes that cargo visible instead
-of silent.
+is closeout's job, through the PR and CI gate — and this branch descends from
+the SHA the run was submitted at, so when that submission came off a branch
+already ahead of the default branch, the PR's review is what makes that extra
+cargo visible instead of silent.
 
 If you do create any other branch and push it, record it with
-'tk cloud branch <name>' straight after. The factory decides whether it may
+'ticfac cloud branch <name>' straight after. The factory decides whether it may
 touch a branch from a record that something created it, not from the branch's
 name: an unrecorded branch is refused by CI remediation and reported in the
 daily digest until a person answers for it. ${run_branch} is already recorded
@@ -548,21 +527,21 @@ What just happened: ${stop_reason:-a wave of per-tick worker containers ran}.
 
 Your job this pass, in order:
 
-  1. Collect and merge what that wave pushed ('tk cloud collect', then merge
-     each ready-to-merge branch into ${run_branch}), run the integrated gate,
-     close the ticks that landed, and PUSH ${run_branch}. Commit tracker state
-     immediately after every mutation batch.
+  1. Collect and merge what that wave pushed (merge each ready-to-merge branch
+     into ${run_branch}), run the integrated gate, close the ticks that
+     landed, and PUSH ${run_branch}. Commit tracker state immediately after
+     every mutation batch.
   2. Compute the next wave with 'tk graph ${epic}' / 'tk next' — readiness is
      computed HERE, by tk, against the tracker state you have just written.
      Nothing
      upstream of this container knows what your merge actually landed.
-  3. If a next wave exists, dispatch it with
-     'tk cloud spawn ${epic} --ticks <ids>' and then EXIT 0 immediately.
+  3. If a next wave exists, record it the way the substrate guidance below
+     says and then EXIT 0 immediately — the pass ending is the handshake, and
+     the next boot collects the wave it ran.
   4. If nothing is left to dispatch, finish the epic instead: run its review
      and closeout process ticks, leave the tracker consistent with the branch,
-     open the PR with 'tk cloud pr-body', and exit 0.
+     open the PR through the ticks skill's closeout, and exit 0.
 
-$(dispatch_protocol)
 $(prompt_footer)
 PROMPT
 		;;

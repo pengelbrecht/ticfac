@@ -181,7 +181,7 @@ With neither override file a run reads exactly `runners.toml`. The rules:
 - **Under `cloud`, a role the cloud file does not declare is refused** at run start, and every role it declares must name its `kind`: the common file's kind was written for a laptop.
 - **The substrate that picks the file is decided from the common file** (and `TICKS_SUBSTRATE`); an override cannot move a run to another world.
 
-The retired inline form, `[roles.<name>.substrates.<substrate>]`, is refused with a pointer to the file it moved to. tk's own readers (`tk sandbox substrate`, the substrate decision) read only the common file.
+The retired inline form, `[roles.<name>.substrates.<substrate>]`, is refused with a pointer to the file it moved to. ticfac's own readers (`ticfac sandbox substrate`, the substrate decision) read only the common file.
 
 ### One table, one kind per reader
 
@@ -321,7 +321,7 @@ setup = [
 
 | Key | Meaning |
 |---|---|
-| `image` | Image reference the sandbox boots. Absent means the version-pinned base image. `tk sandbox image` prints the resolved reference; `--declared-only` prints one only when the repo declares it. In a cloud run the control plane reads this key at the submitted SHA and boots it; a deployment that does not serve that image fails the run naming both references rather than booting the base, and the container refuses a boot that is not what this file declares. |
+| `image` | Image reference the sandbox boots. Absent means the version-pinned base image. `ticfac sandbox image` prints the resolved reference; `--declared-only` prints one only when the repo declares it. In a cloud run the control plane reads this key at the submitted SHA and boots it; a deployment that does not serve that image fails the run naming both references rather than booting the base, and the container refuses a boot that is not what this file declares. |
 | `toolchain` | Extra `tool@version` pins provisioned through the version manager the base image already ships, into the project's persistent cache — resolved on first run, warm after. The version is required: an unpinned tool makes the warm sandbox and the cold one different environments. Ecosystem pins the image reads on its own (`go.mod`, `package.json`'s `packageManager`, `.node-version`, `.tool-versions`) do **not** belong here. |
 | `setup` | Idempotent, cache-populating commands run once per sandbox, in order, after the checkout and before the harness starts. An array, not a keyed table: order is the contract and nothing refers to a setup command by id. |
 
@@ -335,7 +335,7 @@ This is also the gap `[environment]` deliberately cannot close. An Environment c
 
 One implementation serves both substrates, so a local worker warms identically to a cloud one:
 
-- **Cloud.** The sandbox entrypoint runs `tk sandbox setup` after cloning the submitted SHA and before starting the harness. A failing setup command stops the boot with exit 6 — deliberately not best effort, because a wave started on a half-provisioned sandbox fails in every worker, at model prices.
+- **Cloud.** The sandbox entrypoint runs `ticfac sandbox setup` after cloning the submitted SHA and before starting the harness. A failing setup command stops the boot with exit 6 — deliberately not best effort, because a wave started on a half-provisioned sandbox fails in every worker, at model prices.
 - **Local.** The herdr-substrate spawner (`ticfac run-epic`) runs the same setup on the freshly created worktree, between `worktree.create` and `agent.start`. `setup` only: `image` and `toolchain` describe a container, and a local worker runs on the developer's own machine, whose toolchain is not this file's to install. `[environment.commands]` is what tells a developer their machine is missing something.
 
 *Once* is **once per checkout**: the record of what ran lives in the checkout's git directory — never in the worktree, where it would land in a worker's `git add -A` — so a fresh clone or a new worker worktree warms again (its working tree is as cold as its caches are warm), and a repeat call in the same checkout does nothing. The record is a fingerprint of the declared commands, so editing them re-warms. Commands must be idempotent regardless: the record buys time, never correctness, and a failed setup leaves none.
@@ -556,7 +556,7 @@ Two rules come with it, and both are the point:
 - **Fail closed.** A value that is not one of the four substrates is a stop naming the variable, never a silent fall back to the file.
 - **Say it.** An override is a deliberate choice rather than a degradation, but the run still states which substrate it resolved and why before dispatching the first worker, and records it durably: `runner-state: substrate=harness requested=harness config=herdr source=TICKS_SUBSTRATE reason=explicit-override`. The `config=` field is what lets a later reader tell configured intent from actual execution without opening the file at the run's base commit.
 
-`tk sandbox substrate` is the implementation, and it is what a boot script asks rather than parsing this file itself: two lines on stdout — the resolved substrate, then the note line — with the reasoning on stderr.
+`ticfac sandbox substrate` is the implementation, and it is what a boot script asks rather than parsing this file itself: two lines on stdout — the resolved substrate, then the note line — with the reasoning on stderr.
 
 ### Decision table
 
@@ -587,7 +587,7 @@ The distinction is the whole point, and getting it wrong costs more than the noi
 | `herdr` with no herdr | **loud** | the degradation below, plus the setting that would have made this run ordinary |
 | any value with `TICKS_SUBSTRATE` set | **loud** | a substrate the checkout did not ask for |
 
-`tk sandbox substrate` implements both registers: the resolved substrate and the `runner-state:` note on stdout, the statement — quiet or loud — on stderr. The note distinguishes them too: `reason=auto-no-herdr` is the ordinary path, `reason=herdr-unavailable` is the refused assertion.
+`ticfac sandbox substrate` implements both registers: the resolved substrate and the `runner-state:` note on stdout, the statement — quiet or loud — on stderr. The note distinguishes them too: `reason=auto-no-herdr` is the ordinary path, `reason=herdr-unavailable` is the refused assertion.
 
 ### Explicit degradation
 

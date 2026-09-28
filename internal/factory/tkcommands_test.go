@@ -25,22 +25,20 @@ func TestEntrypointTkCommandsAreDerivedFromTheScripts(t *testing.T) {
 		// --awaiting= is its tk-CLI discovery step, and tk answer is how a
 		// collected Telegram reply is written back onto the tick.
 		"answer",
-		// The container's write side for branch ownership (tick t4y): both
-		// entrypoints record the branch they create, so remediation can decide
-		// what it may push to from a record rather than from a name.
-		"cloud branch",
 		"list",
-		"sandbox environment",
-		"sandbox image",
-		"sandbox model",
-		"sandbox setup",
-		"sandbox substrate",
-		"sandbox toolchain",
-		// The worker entrypoint's own delegation: the job one per-tick
-		// container is given comes from the tracker in the checkout, read by
-		// tk rather than by the shell (tick tap).
-		"sandbox worker-prompt",
+		// verify_tk: the entrypoint checks the tk on PATH is the one the image
+		// pinned, so `tk version` is a requirement the same way the verbs were.
 		"version",
+	}
+	// The sandbox verbs and the branch write moved to ticfac (tick 46x): tk
+	// became tracker-only, the scripts call `ticfac …` for them, and a tk
+	// subcommand that no longer exists must not gate the image build.
+	for _, gone := range []string{"sandbox environment", "sandbox image", "sandbox model", "sandbox setup", "sandbox substrate", "sandbox toolchain", "sandbox worker-prompt", "cloud branch"} {
+		for _, c := range got {
+			if c == gone {
+				t.Errorf("the entrypoint still runs `tk %s`, which ticks no longer has — switch the call site to ticfac", c)
+			}
+		}
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("EntrypointTkCommands() = %q, want %q", got, want)

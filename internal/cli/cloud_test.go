@@ -494,6 +494,14 @@ func TestCloudExposesOnlyTheClosedCommandVocabulary(t *testing.T) {
 	// the other three — the credential it uses is the operator's own read-only
 	// Cloudflare token, not a door into the run.
 	observation := map[string]bool{"status": true, "logs": true, "trace": true, "supervisor": true}
+	// `branch` is the CONTAINER-side write (tick t4y, ported from tk in
+	// 46x): a sandbox records the branch its entrypoint just created so CI
+	// remediation can decide what it may push to. It authenticates with the
+	// run's own gateway token, not the operator's config, and it commands no
+	// run — the record is read to decide what remediation may NOT do. It
+	// widens neither D21's operator vocabulary nor the dispatch surface a
+	// LOCAL orchestrator once had (spawn/wait/collect stay gone).
+	containerWrite := map[string]bool{"branch": true}
 
 	dispatched := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(cloudUsage), "\n") {
@@ -508,13 +516,13 @@ func TestCloudExposesOnlyTheClosedCommandVocabulary(t *testing.T) {
 		}
 	}
 	for name := range dispatched {
-		if !steering[name] && !observation[name] {
-			t.Errorf("unexpected cloud command %q: it is neither a D21 verb nor a read-only observation", name)
+		if !steering[name] && !observation[name] && !containerWrite[name] {
+			t.Errorf("unexpected cloud command %q: it is neither a D21 verb, a read-only observation nor the container's own write side", name)
 		}
 	}
-	if len(dispatched) != len(steering)+len(observation) {
-		t.Fatalf("cloud commands = %d (%v), want exactly the %d D21 and observation verbs",
-			len(dispatched), dispatched, len(steering)+len(observation))
+	if len(dispatched) != len(steering)+len(observation)+len(containerWrite) {
+		t.Fatalf("cloud commands = %d (%v), want exactly the %d D21, observation and container-write verbs",
+			len(dispatched), dispatched, len(steering)+len(observation)+len(containerWrite))
 	}
 	if !strings.Contains(cloudUsage, "D21") {
 		t.Errorf("the cloud help does not say why a non-steering command does not widen D21's vocabulary")

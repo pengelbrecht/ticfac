@@ -60,9 +60,18 @@ var entrypointScripts = []string{"entrypoint.sh", "worker.sh", "common.sh", "pre
 // The chain stops at the first word that is not a bare lowercase token, which
 // is what keeps flags (`--root`), redirections (`2>/dev/null`) and operators
 // (`||`) out of it.
-var tkInvocation = regexp.MustCompile(
-	`(?m)(?:^|\$\(|[;&|]|\bexec[ \t]+|\bthen[ \t]+|\bdo[ \t]+|\belse[ \t]+)[ \t]*` +
-		`tk[ \t]+((?:[a-z][a-z0-9-]*)(?:[ \t]+[a-z][a-z0-9-]*){0,2})`)
+var tkInvocation = commandInvocation("tk")
+
+// ticfacInvocation is the same scan for `ticfac <sub> …`: the verbs the
+// scripts took over from tk when ticks became tracker-only (tick 46x).
+var ticfacInvocation = commandInvocation("ticfac")
+
+// commandInvocation builds the command-position scan for one binary.
+func commandInvocation(binary string) *regexp.Regexp {
+	return regexp.MustCompile(
+		`(?m)(?:^|\$\(|[;&|]|\bexec[ \t]+|\bthen[ \t]+|\bdo[ \t]+|\belse[ \t]+)[ \t]*` +
+			regexp.QuoteMeta(binary) + `[ \t]+((?:[a-z][a-z0-9-]*)(?:[ \t]+[a-z][a-z0-9-]*){0,2})`)
+}
 
 // commentLine is a whole-line shell comment. Dropping these first is what lets
 // the scanner ignore the prose in this repository's heavily commented scripts,
@@ -77,6 +86,18 @@ var commentLine = regexp.MustCompile(`(?m)^[ \t]*#.*$`)
 // nothing would tell the Dockerfile gate nothing, which is worse than an
 // error.
 func EntrypointTkCommands() ([]string, error) {
+	return entrypointCommands(tkInvocation)
+}
+
+// EntrypointTicfacCommands is [EntrypointTkCommands] for `ticfac`: every
+// ticfac subcommand chain the image's run scripts invoke. The Dockerfile does
+// not gate these — the deploy cross-compiles ticfac from the same tree as the
+// scripts — so ticfac's own tests prove each one exists in its command tree.
+func EntrypointTicfacCommands() ([]string, error) {
+	return entrypointCommands(ticfacInvocation)
+}
+
+func entrypointCommands(invocation *regexp.Regexp) ([]string, error) {
 	seen := make(map[string]bool)
 	for _, name := range entrypointScripts {
 		data, err := ReadSandboxFile(name)
@@ -84,7 +105,7 @@ func EntrypointTkCommands() ([]string, error) {
 			return nil, fmt.Errorf("reading the embedded %s: %w", name, err)
 		}
 		script := commentLine.ReplaceAllString(string(data), "")
-		for _, m := range tkInvocation.FindAllStringSubmatch(script, -1) {
+		for _, m := range invocation.FindAllStringSubmatch(script, -1) {
 			seen[strings.Join(strings.Fields(m[1]), " ")] = true
 		}
 	}
