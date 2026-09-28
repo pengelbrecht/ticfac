@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 34,
-  "state": "running",
-  "reason": "46x is closed",
-  "updated_at": "2026-09-28T06:42:51Z",
+  "sequence": 35,
+  "state": "dispatching",
+  "reason": "dispatching dz1 as attempt 5",
+  "updated_at": "2026-09-28T06:42:59Z",
   "ticks": [
     {
       "tick_id": "060",
