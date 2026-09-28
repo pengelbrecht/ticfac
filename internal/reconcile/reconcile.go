@@ -2003,7 +2003,32 @@ type planEntry struct {
 	// 8 retired, epic chz), so a run that dispatched over a foreign claim
 	// would be an over-claim nobody refused. OwnClaim is set where the run's
 	// own dispatch memory is (adoptionFirst) and follows Claimed on refresh.
+	//
+	// The two halves of a foreign claim are told apart beside it (tick 823,
+	// folding the finding 08e5bcc0): a claim a STOPPED run left is not a live
+	// party's, and one tick owns the distinction. StaleClaim marks the stopped
+	// run's half — the claim stands but its holder is over, so taking it over
+	// claims nothing the width has not already counted and starts no work a
+	// live worker is doing. What remains (Claimed, not this run's, not stale)
+	// is a LIVE foreign claim: the window never dispatches over it however
+	// much room the width has, and the run holds on it instead.
 	OwnClaim bool
+
+	// StaleClaim marks a Claimed tick whose foreign claim was left by a run
+	// that is OVER — read from the records that run left on the integration
+	// branch, never from the claim itself (staleClaims, claim.go). Set beside
+	// OwnClaim at adoption and follows Claimed on refresh, sticky while the
+	// claim stands: a stopped run stays stopped, and a holder this
+	// incarnation read as live is re-read by the next one.
+	StaleClaim bool
+
+	// ClaimHolder is the run whose dispatch marker is the most recent durable
+	// witness of the tick's foreign claim — the run that would be named as
+	// holding it. Empty when no record on the integration branch witnesses the
+	// claim at all (a person with tk, a run from another checkout). It is what
+	// the foreign-claim hold says out loud, and nothing else reads it: naming
+	// the holder in the hold is what lets an operator go and look.
+	ClaimHolder string
 
 	// InFlight marks a tick this run already has a live attempt of — a
 	// dispatched marker whose tick the checkpoint reads as dispatched,
@@ -2016,6 +2041,16 @@ type planEntry struct {
 // blockedBy reports whether this entry is sequenced behind one named tick.
 func (e planEntry) blockedBy(tick string) bool {
 	return slices.Contains(e.BlockedBy, tick)
+}
+
+// liveForeignClaim reports whether the tick's standing claim is another
+// party's AND that party is live by every record this run can read: not this
+// run's own (OwnClaim), and not one a stopped run left behind (StaleClaim) —
+// the two claims the window may take over. Everything else claimed is
+// somebody working on the tick right now, and the window never dispatches
+// over it however much room the width has (tick 823, finding 08e5bcc0).
+func (e planEntry) liveForeignClaim() bool {
+	return e.Claimed && !e.OwnClaim && !e.StaleClaim
 }
 
 // planFrom turns the graph into the order this run dispatches in.
@@ -2455,6 +2490,30 @@ const (
 	// kill the run.
 	RefusedClaimWidth = "claim_width"
 
+	// RefusedForeignClaim is the window refusing to dispatch over a claim
+	// this run did not make that the width leaves ROOM for (tick 823, folding
+	// the finding 08e5bcc0). Since dz1 a foreign claim counted against the
+	// width but nothing else bounded it, so with room under the width the run
+	// claimed the tick again and started a worker over another run's — or a
+	// person's — live claim. It holds instead: the holder's worker may be
+	// thinking in its own worktree right now, and a second worker on one tick
+	// is the over-claim the width exists to stop, whatever the width's
+	// arithmetic says about room.
+	//
+	// The claim a STOPPED run leaves is told apart from this one before the
+	// hold is ever raised (staleClaim, claim.go): a run whose durable records
+	// read finished holds nothing its own teardown was not owed, and a re-run
+	// under a new run id takes its orphaned claim over rather than holding
+	// forever on a holder with no event left to wait for. This refusal is what
+	// remains: a claim whose holder is LIVE by every record this run can read.
+	//
+	// It HOLDS the run rather than killing it, in the same resumable shape
+	// claim_width holds in: the claim ends when the holder's tick closes — or
+	// when the holder's run stops, which the next incarnation reads from the
+	// records it left — and a re-run under the same run id re-derives and
+	// proceeds the moment it does.
+	RefusedForeignClaim = "foreign_claim"
+
 	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), the sixth its own
 	// CLOSE gate adds (tick sqx), and the seventh the PR's WRITE half adds
 	// (tick 4sb): a body the forge could not put the run's record on — the
@@ -2606,6 +2665,11 @@ const collapsedMessage = "the tick did not pass"
 //   - RefusedFindingUntriaged: the close-out does not hand over while a
 //     finding of the run is untriaged (tick aqm moved the hold here from the
 //     per-tick close), and the triage is a person's;
+//   - RefusedClaimWidth and RefusedForeignClaim: the epic's width is full of
+//     claims this run does not hold (dz1), or a live foreign claim stands on
+//     the tick it would dispatch (tick 823, finding 08e5bcc0) — both facts
+//     about the world that resolve when the other holder's tick closes, and
+//     holds because the wait is the run's only honest answer;
 //   - RefusedAbsorptionDepth: the absorption recursion reached its bound
 //     (tick qjj) — whether the run was right to keep going is a judgement
 //     about the CHAIN, and the chain the stop carries is a person's to read.
@@ -2617,7 +2681,7 @@ func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
 		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
-		RefusedClaimWidth, RefusedAbsorptionDepth, RefusedLandReviewNotReady:
+		RefusedClaimWidth, RefusedForeignClaim, RefusedAbsorptionDepth, RefusedLandReviewNotReady:
 		return true
 	}
 	return false
