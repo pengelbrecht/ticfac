@@ -506,6 +506,30 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		marker := handleFromMap(existing.JobHandle)
 		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
+			if was.byRun {
+				// The RUN released it, by its rejection's class
+				// (rejected_work.go): the attempt ran and was rejected, so
+				// it earns the ladder its rung — unlike a person's release.
+				// The teardown is repeated in case the incarnation that
+				// recorded the release died before its own; it is
+				// idempotent and keeps the branch.
+				failed++
+				label := attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)
+				r.tearDownSettled(marker, label+" was rejected and released by the run", true)
+				if was.carry {
+					if carry == nil || existing.Attempt > carry.marker.Attempt {
+						carry = &carriedWork{marker: marker, by: runReleaser + " (" + was.reason + ")", at: was.at}
+					}
+					r.record(tick, StageSettled,
+						"%s was rejected (%s) and released by the run carrying its work; the next try starts from %s",
+						label, was.reason, branchOf(marker.WriteRef))
+				} else {
+					r.record(tick, StageSettled,
+						"%s was rejected on the merits (%s) and released by the run without its work, which stays on "+
+							"%s; the next try starts fresh", label, was.reason, branchOf(marker.WriteRef))
+				}
+				continue
+			}
 			if was.carry {
 				// The person released the attempt AND said its work goes
 				// forward: the next attempt is cut from the released branch,
@@ -621,15 +645,28 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			r.tearDownSettled(marker, fmt.Sprintf(
 				"%s was rejected and holds commits nothing merged",
 				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)), true)
+			// The BACKSTOP (epic-6in 823). A collect disposes of a rejected
+			// attempt's work by itself — carried or released by the
+			// rejection's class, recorded before the rejection is durable
+			// (rejected_work.go) — so a resume reaches this hold only for a
+			// rejection the run could not classify (a merge refused, work that
+			// reached origin late) or once the bound is spent: the ladder at
+			// its ceiling and the one further try there rejected too.
+			spent := ""
+			if prior := runReleasesOf(released, tick); len(prior) > 0 {
+				spent = fmt.Sprintf(" The run already released %d rejected attempt(s) of this tick by itself and its "+
+					"bound is spent (the tier ceiling, and the one further try at it), so this one is not "+
+					"disposed again.", len(prior))
+			}
 			return nil, nil, marker, r.refuse(RefusedRejectedWork, tick,
 				"%s was rejected and the work it committed is still there — %s — and nothing merged "+
 					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
 					"attempt's worktree, so a second collect would report a missing report rather than the verdict "+
 					"the attempt really had) nor dispatches over it (that would orphan the only copy). Read the "+
 					"branch; then take the work, or release the attempt with "+
-					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt",
+					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt.%s",
 				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.opts.EpicID,
-				tick, existing.Attempt)
+				tick, existing.Attempt, spent)
 		}
 		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
 		// the highest-numbered one, which is the one the pass remembers — the
@@ -1761,6 +1798,23 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		return Dispatch{}, fmt.Errorf("%s recorded tier %q and no profile resolves against the "+
 			"runner configuration as it stands: %w", r.attemptName(marker.TickID, marker.Attempt), marker.Tier, err)
 	}
+	// The EXECUTOR is the attempt's own, off its marker, and the profile a
+	// dispatch rebuilt from a marker is routed through has to name it: the
+	// executor factory builds the executor the profile names, and an
+	// executor refuses a handle naming another. `ticfac settle` resolved the
+	// local profile set by default, so a herdr attempt answered "handle
+	// names executor herdr; this is local-subprocess" until the person
+	// added `--profiles herdr` (epic-6in, 823) — a person made to say what
+	// the record already says. So the profile is resolved again from the
+	// set that names the recorded executor.
+	if marker.Executor != "" && profile != nil && profile.Executor != marker.Executor {
+		recorded, err := r.profileForRecordedExecutor(dispatch.Role, marker.Tier, marker.Executor)
+		if err != nil {
+			return Dispatch{}, fmt.Errorf("%s ran on executor %q, and no profile set this build carries resolves "+
+				"one naming it: %w", r.attemptName(marker.TickID, marker.Attempt), marker.Executor, err)
+		}
+		profile = recorded
+	}
 	dispatch.Profile = profile
 	return dispatch, nil
 }
@@ -2659,12 +2713,19 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// a base moved forward to the attempt's own head makes every change
 	// invisible, boundary violations included.
 	if collected.Result != nil && marker.BaseSHA != "" && collected.Result.Source.BaseSHA != marker.BaseSHA {
+		// On the merits: nothing the attempt committed can be believed, so
+		// it is released WITHOUT its work and the tick dispatched fresh
+		// (rejected_work.go) — decided before the rejection is durable.
+		redispatch := r.disposeRejectedWork(ctx, entry, marker, "the collected base is not the dispatched base", false)
 		if err := r.rejectDurably(marker, collected.Verdict, "the collected base is not the dispatched base"); err != nil {
 			return nil, err
 		}
 		r.record(marker.TickID, StageRejected, "the collect was measured from %s, not from the dispatched base %s",
 			short(collected.Result.Source.BaseSHA), short(marker.BaseSHA))
 		r.disposeRejected(handle, executor, marker, "the collected base is not the base this run dispatched")
+		if redispatch != nil {
+			return nil, redispatch
+		}
 		return nil, r.refuse(RefusedBoundary, marker.TickID,
 			"%s was collected against base %s, but this run dispatched it at %s: the diff the boundary "+
 				"check read is not the diff of this attempt, so nothing it reports about it can be believed",
@@ -2699,9 +2760,16 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	verdict := collected.Verdict
 	if len(collected.BoundaryViolations) > 0 {
 		if r.guarded(guardSubstrateEnforcesBoundary) {
+			// On the merits: the work is released WITHOUT carry — the branch
+			// is kept and named, the next try starts fresh (rejected_work.go).
+			redispatch := r.disposeRejectedWork(ctx, entry, marker,
+				"boundary violation: "+strings.Join(collected.BoundaryViolations, ", "), false)
 			r.setTick(marker.TickID, "rejected")
 			r.record(marker.TickID, StageRejected, "boundary violation: %s", strings.Join(collected.BoundaryViolations, ", "))
 			r.disposeRejected(handle, executor, marker, "the attempt wrote under an authority that is not its own")
+			if redispatch != nil {
+				return nil, redispatch
+			}
 			return nil, r.refuse(RefusedBoundary, marker.TickID,
 				"%s wrote under an authority that is not its own (%s): %s",
 				r.attemptName(marker.TickID, marker.Attempt), strings.Join(collected.BoundaryViolations, ", "), collected.Message)
@@ -2712,12 +2780,30 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		verdict = subprocess.VerdictReadyToMerge
 	}
 	if verdict != subprocess.VerdictReadyToMerge {
+		// An attempt that committed work is disposed by the rejection's class
+		// BEFORE the rejection is durable (rejected_work.go): missing-result
+		// is operational and its work is carried; nothing is left for a
+		// person to release by hand.
+		redispatch := r.disposeRejectedWork(ctx, entry, marker, collected.Verdict, rejectionCarries(collected.Verdict))
 		if err := r.rejectDurably(marker, collected.Verdict, collected.Message); err != nil {
 			return nil, err
 		}
 		r.record(marker.TickID, StageRejected, "%s: %s", collected.Verdict, collected.Message)
 		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
 			" is "+collected.Verdict)
+		if redispatch != nil {
+			return nil, redispatch
+		}
+		// A worker that stopped to ask with NOTHING committed (tick tyd's
+		// follow-up) is a question, not a failed collect: it takes the same
+		// in-run ladder as one that committed — a tier up with the question,
+		// at the ceiling the standing orders — rather than collect_failed and
+		// a stop for the supervisor to resume.
+		if collected.Verdict == subprocess.VerdictNoCommits && collected.Result != nil {
+			if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+				return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
+			}
+		}
 		return nil, r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
 			r.attemptName(marker.TickID, marker.Attempt), collected.Verdict, collected.Message)
 	}
@@ -2739,8 +2825,9 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// It runs AFTER the verdict check rather than before it because an attempt
 	// that is `no-commits` or `missing-result` is already refused and already
 	// torn down, and the verdict is the more specific thing to tell a person
-	// about it — `blocked-first`, the fixture that answers BLOCKED with nothing
-	// committed, keeps reading as `no-commits`, which is what it is.
+	// about it. The one exception is a `no-commits` attempt whose worker
+	// stopped to ask (`blocked-first`): since tick tyd that is a question, and
+	// the verdict check above hands it to the same ladder this branch does.
 	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
 		if err := r.rejectDurably(marker, collected.Verdict, answer.Status+": "+answer.Summary); err != nil {
 			return nil, err

@@ -231,8 +231,10 @@ every dispatch starts at [tier_policy.start].
 A long run wants the machine awake end to end. A machine that sleeps mid-run
 kills workers without settling them, and what it leaves — a held attempt, a
 missing report, a run stopped at nothing — looks exactly like a worker defect
-when it is the host's: wrap the run in caffeinate -i on macOS, or the
-equivalent elsewhere, rather than letting the machine sleep (tick 0z0).
+when it is the host's (tick 0z0). So on macOS the run holds the host awake
+itself for as long as its process lives (caffeinate -i -s -w <its pid>, said
+at startup); elsewhere, keep the host awake. A wait the host slept through
+anyway says so in the feed (host_suspended).
 
 A target repository may declare, in .tick/config.md's Rules section, that an
 epic integrates through a PR + CI gate: the run opens the epic PR itself,
@@ -424,6 +426,15 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// whose credential story starts with a question.
 	if forgeNote != "" {
 		fmt.Fprintf(stdout, "%s\n", forgeNote)
+	}
+
+	// The host is held awake for as long as this process lives (keepawake.go,
+	// epic-6in): an unattended run on a laptop that idles to sleep stalls
+	// until a person wakes it, and nothing in the run's feed says why.
+	awakeNote, releaseAwake := holdHostAwake(os.Getpid())
+	defer releaseAwake()
+	if awakeNote != "" {
+		fmt.Fprintf(stdout, "%s\n", awakeNote)
 	}
 
 	// What killed processes left in the temp directory (tick w9j): a SIGKILL

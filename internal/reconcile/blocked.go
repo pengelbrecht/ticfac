@@ -433,14 +433,19 @@ func (r *Reconciler) heldQuestion(entry planEntry, attempts []runstate.Attempt, 
 		return nil
 	}
 	head := r.blockedWorkHead(marker)
-	if head == "" || r.integrated(head) {
-		// No work to hold, or work somebody has since merged: the ordinary
-		// disposition answers it (redispatched, or finished from the branch).
+	if head != "" && r.integrated(head) {
+		// Work somebody has since merged: the ordinary disposition finishes
+		// it from the branch.
+		return nil
+	}
+	if head == "" && isRoleJob(entry.Role) {
+		// A role job's answer with nothing committed is re-asked by the
+		// ordinary disposition, as a review's always was.
 		return nil
 	}
 	label := attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)
 	r.setAttempt(tick, existing.Attempt)
-	r.tearDownSettled(marker, label+" holds a question for a person", true)
+	r.tearDownSettled(marker, label+" holds a question for a person", head != "")
 	reason := RefusedNeedsHuman
 	if isRoleJob(entry.Role) {
 		reason = RefusedRoleAnswer
@@ -448,6 +453,15 @@ func (r *Reconciler) heldQuestion(entry planEntry, attempts []runstate.Attempt, 
 	why := "it came back from the worker that was told to decide it under the standing orders"
 	if blocked.Class != "" {
 		why = fmt.Sprintf("it is in the always-ask class %q of the standing orders", blocked.Class)
+	}
+	if head == "" {
+		// Nothing committed (tick tyd's follow-up): still the person's
+		// question — a redispatch would only ask it again.
+		return r.refuse(reason, tick,
+			"%s answered %s: %s. The question still holds for a person because %s; it committed nothing. "+
+				"Answer it on the tick, then release the attempt with `ticfac settle %s %s %d --release \"<who>\"` "+
+				"and run the epic again",
+			label, blocked.Status, blocked.Question, why, r.opts.EpicID, tick, existing.Attempt)
 	}
 	return r.refuse(reason, tick,
 		"%s answered %s: %s. The question still holds for a person because %s; its work is on %s (%s) and is "+

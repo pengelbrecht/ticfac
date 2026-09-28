@@ -1,0 +1,15 @@
+{
+  "id": "z7w",
+  "title": "Property-test the ticfac CLI and TUI: Hegel for --json/exit codes, Bombadil for watch and the overview",
+  "gloss": "prop-test CLI + TUI",
+  "description": "Planned 2026-09-27 as notes on 8v3 and 2jn (both now closed, so it was never filed); unblocked since r6w put the toolchain on Go ≥1.26 (Hegel needs it). CLI with Hegel (hegel-go, stateful where useful): for generated argument sequences and run states — every --json command emits one document valid against its versioned schema; the exit code is always one from the documented table and agrees with the document's state word; --json never writes to stderr; flags parse in any order (#75's remedy rule). TUI with Bombadil (@antithesishq/bombadil, terminal driver) over 89m's ticfac watch and 2qz's bare ticfac overview, driven by fixture registries/feeds: a stale or orphaned run never shows as live (today's phantom 'running — in phase plan' cloud runs); a registry entry whose checkout is gone never shows (#86); every held or failed run shows the one command that clears it; history collapses into one line (#87); the first frame appears within its bound (#112). Browser driver for i1r's phone page if cheap. Load hegel-skill for the Hegel half. End with a short report of what the properties found.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
+  "acceptance_criteria": "The Hegel CLI properties and the Bombadil TUI properties run in CI (Bombadil job may be separate); each property was shown to fail against a seeded bug; the report lists real bugs found",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T16:50:35.967406Z",
+  "updated_at": "2026-09-28T16:50:35.967406Z"
+}

@@ -28,11 +28,11 @@ import (
 // records of the one it is continuing.
 func TestARunStoppedByARefusalResumesUnderTheSameRunID(t *testing.T) {
 	t.Parallel()
-	blocked := fixtureOptions{mode: "blocked-first"}
+	blocked := fixtureOptions{mode: "empty-first"}
 	f := newFixture(t, blocked)
 
 	// The whole first run, to its own end: no simulated kill anywhere. a1's
-	// worker answers BLOCKED with nothing committed, the attempt is rejected,
+	// worker says it is done and commits nothing, the attempt is rejected,
 	// and the run writes the terminal checkpoint a restart reads.
 	first, result, err := f.run(f.Repo, blocked)
 	if err != nil {

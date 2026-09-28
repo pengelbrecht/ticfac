@@ -152,6 +152,16 @@ type settlement struct {
 	// next dispatch of this tick is cut from its head (dispatch.go).
 	carry    bool
 	carryRef string
+
+	// byRun is set when the RUN made the release, not a person: a rejected
+	// attempt that carried work, disposed mechanically by the rejection's
+	// class (rejected_work.go). reason is the rejection it answered and step
+	// the rung of the bound it spent (escalate, or the one retry at the
+	// ceiling). A run release earns the ladder its rung: the attempt ran and
+	// failed; nobody else decided anything.
+	byRun  bool
+	reason string
+	step   string
 }
 
 func attemptKey(tick string, attempt int) string { return fmt.Sprintf("%s#%d", tick, attempt) }
@@ -691,6 +701,11 @@ func (r *Reconciler) settlements() (map[string]settlement, error) {
 		if disposition, _ := decision.Response["disposition"].(string); disposition == dispositionCarryWork {
 			s.carry = true
 			s.carryRef, _ = decision.Response["carry_ref"].(string)
+		}
+		if byRun, _ := decision.Response["by_run"].(bool); byRun {
+			s.byRun = true
+			s.reason, _ = decision.Response["reason"].(string)
+			s.step, _ = decision.Response["step"].(string)
 		}
 		out[attemptKey(tick, attempt)] = s
 	}

@@ -1,11 +1,13 @@
 package reconcile
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // TestSettleAddressesTheAttemptsOwnExecutor pins tick emk's recovery path.
@@ -66,6 +68,63 @@ func TestNoSettlementHandleHardcodesAnExecutor(t *testing.T) {
 	if strings.Contains(fn, "Executor:      subprocess.ExecutorName") || strings.Contains(fn, "Executor: subprocess.ExecutorName") {
 		t.Error("addressForSettlement names one executor literally: a handle must carry the executor its " +
 			"attempt was dispatched under, or every attempt of every other executor is unreleasable (tick emk)")
+	}
+}
+
+// TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor pins the
+// other half of tick emk, found on epic-6in (823, 2026-09-28): the HANDLE
+// named herdr, but the executor it was handed to was the local one, because
+// the dispatch rebuilt from the marker carried the profile the settle command
+// resolved — the local set, by default — and the executor factory routes on
+// the profile:
+//
+//	ticfac settle 6in 823 9: reconcile: inspect 823 try 1 (run dispatch #9):
+//	handle names executor "herdr"; this is local-subprocess
+//
+// Only `--profiles herdr` worked: a person made to say what the marker says.
+// The executor is resolved from the attempt's own record.
+func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.Executors = []KnownExecutor{
+		{Name: subprocess.ExecutorName, Runners: subprocess.KnownRunners(), AcceptsModel: subprocess.RunnerAcceptsModel},
+		{Name: "herdr", Runners: runconfig.KnownKinds(), AcceptsModel: func(string) bool { return true }},
+	}
+	var built []string
+	opts.NewExecutor = func(d Dispatch) (Executor, Substrate, error) {
+		if d.Profile != nil {
+			built = append(built, d.Profile.Executor)
+		}
+		return nil, Substrate{}, fmt.Errorf("the test builds no executor")
+	}
+	// The settle command's reconciler: no --profiles, so the local set.
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.base = f.Repo.Base
+	if p := r.profileFor("implement-tick"); p == nil || p.Executor != subprocess.ExecutorName {
+		t.Fatalf("fixture: the run's own profile set names %+v, want the local one", p)
+	}
+
+	marker := attemptHandle{
+		Executor: "herdr", JobID: "epic-6in/823/attempt-9", Attempt: 9, TickID: "823",
+		Role: "implement-tick", StateRoot: t.TempDir(),
+	}
+	dispatch, err := r.dispatchFor(marker)
+	if err != nil {
+		t.Fatalf("rebuild the dispatch of a herdr attempt: %v", err)
+	}
+	if dispatch.Profile == nil || dispatch.Profile.Executor != "herdr" {
+		t.Fatalf("the dispatch rebuilt from a herdr marker routes through profile %+v: the factory would build "+
+			"an executor that refuses the attempt's own handle", dispatch.Profile)
+	}
+
+	// And settle's own path asks the factory for THAT executor.
+	_, _, _, _ = r.addressForSettlement(marker)
+	if len(built) == 0 || built[len(built)-1] != "herdr" {
+		t.Errorf("settle asked the executor factory for %v, want herdr — the executor the marker names", built)
 	}
 }
 

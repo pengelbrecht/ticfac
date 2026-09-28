@@ -429,6 +429,21 @@ func Probe(repo, runID string, now time.Time) Status {
 		status.WallClocks = wallClocksOf(standing, fired, now)
 	}
 
+	live := Liveness(repo, runID)
+	status.State, status.Reason, status.Record = live.State, live.Reason, live.Record
+	return status
+}
+
+// Liveness is Probe's liveness answer alone — run.pid and the OS — without the
+// feed read and the attempt census Probe adds. A caller that asks only "is
+// this run alive" (the live table's every frame) must not pay a `git worktree
+// list` and a git read per attempt for measurements it never shows: on a
+// loaded host every one of those is a process spawn, and they are what kept
+// `status --follow` from drawing its first frame for seconds.
+func Liveness(repo, runID string) Status {
+	dir := Dir(repo, runID)
+	status := Status{RunID: runID, Log: filepath.Join(dir, LogName)}
+
 	record, ok, err := readRecord(dir)
 	switch {
 	case err != nil:

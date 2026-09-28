@@ -654,8 +654,13 @@ func TestProvenanceNamesTheMarkerExecutorNotTheReResolvedProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rebuild the dispatch from the marker: %v", err)
 	}
-	if redispatched.Profile == nil || redispatched.Profile.Executor != "herdr" {
-		t.Fatal("fixture bug: the re-resolved profile did not change executor; the scenario proves nothing")
+	// Since epic-6in 823 the rebuilt dispatch's PROFILE follows the marker
+	// too: the executor factory routes on the profile, and a profile naming
+	// the edited executor would build an executor that refuses the
+	// attempt's own handle.
+	if redispatched.Profile == nil || redispatched.Profile.Executor != marker.Executor {
+		t.Errorf("the rebuilt dispatch routes through a profile naming %+v, want the marker's %q",
+			redispatched.Profile, marker.Executor)
 	}
 
 	provenance := second.attemptProvenance(redispatched)

@@ -63,7 +63,17 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 	// Labels are read once per follow, not once per frame: a frame every two
 	// seconds must not spawn tk every two seconds, and a tick added mid-run
 	// only costs its label (it shows as its bare id), never its line.
-	labels := tickLabels(ctx, repo)
+	//
+	// And they are read BESIDE the frames, never before the first one: a
+	// label is decoration, and `tk version` plus `tk list` are two process
+	// spawns that, on a loaded host, kept the table blank for seconds (the
+	// first-frame test in status_firstframe_test.go). Until they arrive every
+	// tick shows as its bare id, which is what a tracker that cannot be read
+	// costs anyway.
+	labelsReady := make(chan map[string]string, 1)
+	load := tickLabels // read here, not in the goroutine: it is a seam tests swap
+	go func() { labelsReady <- load(ctx, repo) }()
+	var labels map[string]string
 
 	// Where the follow's ended-answer starts (tick 4nq, the cursor
 	// protection `ticfac watch` got in usx, for the surface that missed
@@ -78,8 +88,16 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 	// own last word, and the follow reports that ending rather than an
 	// open-ended silence — a run about to be resumed has not claimed yet,
 	// and its previous ending was the truth until the resume.
+	//
+	// The liveness answer that decides the cursor is the first frame's too:
+	// asked once (one `ps`), never a second time before anything is drawn.
 	cursor := int64(0)
-	if kind != "cloud" && runlife.Probe(repo, runID, time.Now()).State == runlife.Alive {
+	var first *runlife.Status
+	if kind != "cloud" {
+		live := runlife.Liveness(repo, runID)
+		first = &live
+	}
+	if first != nil && first.State == runlife.Alive {
 		located, _, err := feedStanding(ctx, source)
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
@@ -94,7 +112,14 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 
 	previous := 0
 	for {
-		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, cursor, stdout)
+		if labels == nil {
+			select {
+			case labels = <-labelsReady:
+			default:
+			}
+		}
+		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, cursor, first, stdout)
+		first = nil
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
@@ -129,7 +154,11 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 // the cursor (tick 4nq): an earlier incarnation's ending is history while a
 // live process claims the run, and the run's own last word when nothing
 // does — which ends the follow.
-func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, labels map[string]string, cursor int64, out io.Writer) (ended bool, lines []string, err error) {
+//
+// live, when the caller already asked, is this frame's liveness answer; nil
+// asks now. Only liveness is asked — never Probe's attempt census, which the
+// table does not show and which costs a process spawn per frame.
+func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *cloudFeedSource, kind, repo, runID string, labels map[string]string, cursor int64, live *runlife.Status, out io.Writer) (ended bool, lines []string, err error) {
 	located, _, err := feedStanding(ctx, source)
 	if err != nil {
 		return false, nil, err
@@ -157,7 +186,11 @@ func renderStatusFrame(ctx context.Context, source runfeed.Source, cloudSource *
 		// coming, so a follow ends on it as on the run's own terminal word.
 		ended = !cloudRunStillGoing(state) || answer.State == cloudLivenessOrphaned
 	default:
-		probe := runlife.Probe(repo, runID, time.Now())
+		if live == nil {
+			answer := runlife.Liveness(repo, runID)
+			live = &answer
+		}
+		probe := *live
 		alive = probe.State == runlife.Alive
 		liveness = fmt.Sprintf("%s — %s", probe.State, probe.Reason)
 		// The ended-answer carries the cursor's protection (tick 4nq): a
