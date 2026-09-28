@@ -1,0 +1,13 @@
+{
+  "id": "9dy",
+  "title": "Naked-container cloud-branch test fails wherever factory creds exist",
+  "description": "TestCloudBranchNamesTheConsequenceOfANakedContainer (internal/cli/cloud_branch_test.go) asserts the no-credential refusal, but nothing neutralizes TICKS_FACTORY_URL/TICKS_FACTORY_TOKEN, so in any environment that carries factory credentials — every ticfac worker container does — the command talks to the real factory and the test fails. It fails at the base commit too (reproduced at c948bb7), so `make gate` goes red in worker containers through no fault of the tick being gated. It should setenv the two variables empty, as its sibling tests do.\nevidence: internal/cli/cloud_branch_test.go:113-121; reproduction: go test -run TestCloudBranchNamesTheConsequenceOfANakedContainer ./internal/cli/ at c948bb7 with TICKS_FACTORY_TOKEN set\n\nticfac run run_1960aa1435ed4ee1aa71809b5a19801a filed this backlog tick from the finding f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b (reported by run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/absorptions/f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/attempt-1",
+  "created_by": "ticfac run run_1960aa1435ed4ee1aa71809b5a19801a",
+  "created_at": "2026-09-28T23:00:44Z",
+  "updated_at": "2026-09-28T23:00:44Z"
+}
