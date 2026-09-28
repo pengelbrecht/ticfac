@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // An AI Gateway carries a per-gateway Workers AI billing mode, and it decides
@@ -118,7 +120,7 @@ func CheckWorkersAIBilling(ctx context.Context, opts BillingOptions) (string, er
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 
 	observed, err := probeGatewayBillingMode(ctx, client, opts.CloudflareAPIBase, account, gateway, token)

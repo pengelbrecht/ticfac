@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 )
 
@@ -127,7 +128,7 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 	apiBase := strings.TrimSuffix(strings.TrimSpace(opts.GitHubAPIBase), "/")
 	if apiBase == "" {
@@ -368,7 +369,7 @@ func GitHubRung(ctx context.Context, opts StatusOptions) (CredentialState, error
 	}
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 	apiBase := strings.TrimSuffix(strings.TrimSpace(opts.GitHubAPIBase), "/")
 	if apiBase == "" {

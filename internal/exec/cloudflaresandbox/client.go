@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // The door's client: two routes, one mechanism.
@@ -111,7 +112,7 @@ func NewClient(baseURL, token string, timeout time.Duration, now func() time.Tim
 	return &Client{
 		baseURL: baseURL,
 		token:   token,
-		http:    &http.Client{Timeout: timeout},
+		http:    httpnet.Client(timeout),
 		now:     now,
 	}, nil
 }

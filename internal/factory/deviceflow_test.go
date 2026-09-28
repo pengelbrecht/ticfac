@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -356,6 +359,49 @@ func TestDeviceFlowGivesUpAtTheCodesOwnDeadline(t *testing.T) {
 	}
 	if got := len(clock.durations()); got > 6 {
 		t.Errorf("polled %d times inside a 20s window — the deadline is not bounding the loop", got)
+	}
+}
+
+// unreachableOnce fails the first token poll the way a host whose route went
+// away does, then lets every request through.
+type unreachableOnce struct {
+	mu     sync.Mutex
+	failed bool
+}
+
+func (u *unreachableOnce) RoundTrip(req *http.Request) (*http.Response, error) {
+	u.mu.Lock()
+	fail := !u.failed && req.URL.Path == accessTokenPath
+	u.failed = u.failed || fail
+	u.mu.Unlock()
+	if fail {
+		return nil, &net.OpError{Op: "dial", Net: "tcp",
+			Err: os.NewSyscallError("connect", syscall.EHOSTUNREACH)}
+	}
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// "no route to host" in the middle of the poll is the network, not GitHub's
+// answer: the poll goes on, bounded by the code's own expiry, instead of
+// throwing away a code the operator may be approving right now.
+func TestDeviceFlowKeepsPollingThroughAnUnreachableNetwork(t *testing.T) {
+	f := newFakeGitHubOAuth(t)
+	clock := newRecordedSleeps()
+	out := &bytes.Buffer{}
+	f.scriptTokens(tokenReply{body: map[string]any{"access_token": testDeviceToken, "token_type": "bearer"}})
+
+	opts := deviceFlowTestOptions(f, clock, out)
+	flaky := &unreachableOnce{}
+	opts.HTTPClient = &http.Client{Transport: flaky, Timeout: 10 * time.Second}
+	token, err := DeviceFlow(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("DeviceFlow gave up on an unreachable poll: %v\n%s", err, out.String())
+	}
+	if !flaky.failed {
+		t.Fatal("the unreachable poll never happened; the test proves nothing")
+	}
+	if token.AccessToken != testDeviceToken {
+		t.Fatalf("AccessToken = %q", token.AccessToken)
 	}
 }
 

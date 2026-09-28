@@ -66,6 +66,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
@@ -220,7 +221,7 @@ type Client struct {
 // whole epic's batch.
 func New(config Config, client *http.Client) *Client {
 	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+		client = httpnet.Client(60 * time.Second)
 	}
 	if strings.TrimSpace(config.APIBase) == "" {
 		config.APIBase = DefaultAPIBase

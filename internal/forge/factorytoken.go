@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // The factory's GitHub token door, as the forge inside a cloud container
@@ -53,7 +55,7 @@ func FactoryTokenSourceFromEnv() func(context.Context) (string, error) {
 // each.
 func FactoryTokenSource(url, runToken string, client *http.Client, now func() time.Time) func(context.Context) (string, error) {
 	if client == nil {
-		client = &http.Client{Timeout: 20 * time.Second}
+		client = httpnet.Client(20 * time.Second)
 	}
 	if now == nil {
 		now = time.Now
