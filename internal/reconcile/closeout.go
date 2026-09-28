@@ -65,7 +65,27 @@ type CloseoutRule struct {
 	// Stated is the rule's own line, verbatim, for the messages a person
 	// reads: the repository's words, not this package's paraphrase of them.
 	Stated string
+	// RunMerges is the repository's OPT-IN to the run merging its own epic
+	// PR once it is ready (land.go), declared in the Rules section in one of
+	// the spellings runMergesPatterns recognises — "the run merges its own
+	// PR". The default, and the rule `ticfac init` writes, is the opposite:
+	// the run keeps the PR ready and a person merges it.
+	RunMerges bool
+	// PersonMerges says a Rules line keeps the merge for a person in so many
+	// words ("the merge is a person's", "a run never merges its own PR").
+	// It is the default anyway; stated, it also WINS over a RunMerges line
+	// beside it, because a merge a repository did not want is worse than a
+	// ready PR waiting for somebody.
+	PersonMerges bool
+	// MergeStated is the line that decided who merges, verbatim, for the
+	// feed: the opt-in's line when the run merges, else the person's.
+	MergeStated string
 }
+
+// Lands reports whether the run merges the ready epic PR itself: the PR + CI
+// gate is declared, the repository opted in, and nothing keeps the merge for
+// a person (land.go).
+func (rule CloseoutRule) Lands() bool { return rule.Declared && rule.RunMerges && !rule.PersonMerges }
 
 // DefaultCIWorkflow is the workflow the rule names when it names none. It is
 // GitHub's own convention, and the one both repositories that declare this
@@ -106,8 +126,14 @@ func ReadCloseoutRule(path string) (CloseoutRule, error) {
 // Only the `## Rules` section declares it — a prompt file or a standing
 // order mentioning a PR is not a rule a run enforces, and treating it as one
 // would be the same failure this tick fixes, pointed the other way.
+//
+// The whole section is read, because the landing's opt-out (PersonMerges)
+// may be a line of its own beside the gate's; it counts only when the gate
+// is declared — a repository with no PR has no merge to keep.
 func parseCloseoutRule(document string) (CloseoutRule, error) {
 	section := ""
+	var rule CloseoutRule
+	personMerges, runMerges := "", ""
 	for _, line := range strings.Split(document, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
@@ -119,16 +145,65 @@ func parseCloseoutRule(document string) (CloseoutRule, error) {
 		if section != "rules" {
 			continue
 		}
-		if !strings.Contains(strings.ToLower(trimmed), ruleAnchor) {
+		if personMerges == "" && matchesAny(trimmed, personMergesPatterns) {
+			personMerges = trimmed
+		}
+		if runMerges == "" && matchesAny(trimmed, runMergesPatterns) {
+			runMerges = trimmed
+		}
+		if rule.Declared || !strings.Contains(strings.ToLower(trimmed), ruleAnchor) {
 			continue
 		}
-		rule := CloseoutRule{Declared: true, CIWorkflow: DefaultCIWorkflow, Stated: trimmed}
+		rule = CloseoutRule{Declared: true, CIWorkflow: DefaultCIWorkflow, Stated: trimmed}
 		if found := workflowPattern.FindString(trimmed); found != "" {
 			rule.CIWorkflow = found
 		}
+	}
+	if !rule.Declared {
+		// A repository with no PR has no merge to decide.
 		return rule, nil
 	}
-	return CloseoutRule{}, nil
+	switch {
+	case personMerges != "":
+		rule.PersonMerges, rule.MergeStated = true, personMerges
+	case runMerges != "":
+		rule.RunMerges, rule.MergeStated = true, runMerges
+	}
+	return rule, nil
+}
+
+// runMergesPatterns are the spellings of the OPT-IN: the run merges its own
+// epic PR once it is ready (land.go). The canonical one is this repository's
+// own — "the run merges its own PR" — and the list is deliberately narrow: a
+// paraphrase it misses leaves the PR ready for a person, which is the safe
+// default, never a merge nobody asked for.
+var runMergesPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\bthe run (itself )?(merges|lands) (its own (pr|pull request)|the (epic|epic pr|epic's pr))\b`),
+}
+
+// personMergesPatterns are the spellings that keep the merge for a person in
+// so many words — the documented default, and when stated it wins over an
+// opt-in beside it. They are the phrases repositories already use: this
+// repository's own rule before 2026-09-28 ("the merge itself is a person's"),
+// the rule `ticfac init` writes, and the ticks repository's ("a run never
+// merges its own PR").
+var personMergesPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\bmerge (itself )?(is|stays|remains) (a|the) person's\b`),
+	regexp.MustCompile(`\bmerge (itself )?(is|stays|remains) with (a|the) person\b`),
+	regexp.MustCompile(`\bnever merges? (its|their) own (pr|pull request)\b`),
+	regexp.MustCompile(`\bthe merge\b.{0,80}\bstays with a person\b`),
+}
+
+// matchesAny reports whether one Rules line matches a pattern, read
+// lowercased with its curly apostrophes and markdown emphasis normalised away.
+func matchesAny(line string, patterns []*regexp.Regexp) bool {
+	normal := strings.NewReplacer("’", "'", "‘", "'", "*", "", "`", "").Replace(strings.ToLower(line))
+	for _, pattern := range patterns {
+		if pattern.MatchString(normal) {
+			return true
+		}
+	}
+	return false
 }
 
 // ------------------------------------------------- the admission itself ---

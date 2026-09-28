@@ -1003,6 +1003,32 @@ const (
 	// with every push, and this push was the close-out's own.
 	StageCloseoutCloseGated = "closeout_close_gated"
 
+	// The READY PR's stages (land.go, 2026-09-28): after the close-out, and
+	// whenever a completed run is re-entered, the run keeps the epic PR ready
+	// — the base folded in, the gate green on the fold, CI green on the head —
+	// and, where the repository opts in, merges it.
+	//
+	//   - StageLanding opens one pass of that loop, naming both heads;
+	//   - StageLandBaseMoved says the base (or the epic) moved during a pass,
+	//     so the next pass folds again;
+	//   - StageLandHeld is a wait on CI — the PR's, or the base's after a merge;
+	//   - StageLandCIGreen is CI green on the head the pass checked;
+	//   - StagePRReady is the pass that ended with the PR ready for a person;
+	//   - StageLanded is the epic merged into its base — by the run (the
+	//     opt-in), or found already merged;
+	//   - StageLandVerified is CI on the base's merge commit, green or stated
+	//     unverified;
+	//   - StageLandSkipped is a run with no PR to keep ready (no close-out ran,
+	//     or the PR was closed without merging).
+	StageLanding       = "landing"
+	StageLandBaseMoved = "land_base_moved"
+	StageLandHeld      = "land_held"
+	StageLandCIGreen   = "land_ci_green"
+	StagePRReady       = "pr_ready"
+	StageLanded        = "landed"
+	StageLandVerified  = "land_verified"
+	StageLandSkipped   = "land_skipped"
+
 	// StageWallClock is the line a bound's firing owes the feed (tick emk):
 	// the wall clock fired and the attempt has NOT settled, which is the
 	// moment the run stops making progress on its own — the moment a
@@ -1642,6 +1668,17 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return nil, err
 	} else if ok {
 		r.sequence, r.ticks = checkpoint.Sequence, checkpoint.Ticks
+		if checkpoint.State == runstate.StateCompleted && r.closeoutRule.Declared && r.opts.PullRequests != nil {
+			// A COMPLETED run re-entered is the epic PR kept ready (land.go):
+			// the base may have moved since — other PRs merged — and the PR
+			// gone stale, conflicted or red. The readying folds, gates and
+			// waits for CI again; a PR already merged or closed is left alone.
+			// Nothing else of the run is redone.
+			r.record("", StageResumed, "the run is completed (%s); it is re-entered to keep the epic PR ready",
+				checkpoint.Reason)
+			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
+				r.opts.EpicID))
+		}
 		if checkpoint.State.Terminal() && checkpoint.State != runstate.StateFailed {
 			// Nothing is restarted, but what the finished run left — a
 			// teardown its end could not complete — is still this run's to
@@ -1720,6 +1757,17 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	plan := planFrom(graph)
 	if len(plan) == 0 {
+		// Every tick is closed. A run whose close-out ran and whose readying
+		// of the epic PR stopped (land.go) resumes at the readying; any
+		// other epic with nothing open has nothing for a run to do.
+		if co, err := r.closeoutForLanding(); err == nil && co != nil && r.closeoutRule.Declared &&
+			r.opts.PullRequests != nil {
+			r.settleClosedTicks(ctx, plan)
+			r.record("", StageResumed, "every tick of %s is closed; the run resumes at keeping the epic PR ready",
+				r.opts.EpicID)
+			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
+				r.opts.EpicID))
+		}
 		return nil, fmt.Errorf("reconcile: epic %s has no dispatchable tick", r.opts.EpicID)
 	}
 	r.seedTicks(plan)
@@ -1777,6 +1825,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	failed, err := r.runPlan(ctx, plan)
 	if err != nil {
 		return nil, err
+	}
+	if len(failed) == 0 {
+		// Every tick closed: the run's job now ends at a READY epic PR, kept
+		// ready — and merged, where the repository opts in (land.go).
+		return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
+			r.opts.EpicID))
 	}
 
 	// The run's end: every closed tick's leftovers, and — when the run
@@ -2364,6 +2418,19 @@ const (
 	// the retro, the learnings, the records — rather than the epic's tree.
 	RefusedCloseoutCIOnClose = "closeout_ci_failed_on_close" // the close-out's own commits turned CI red
 
+	// The ones the READY PR adds (land.go, 2026-09-28), each sending the next
+	// repair somewhere different. A red CI or a failing gate on the fold is
+	// NOT among them: those are the repair job's, and past its allowance they
+	// are the gate's own refusal. RefusedLandReviewNotReady HOLDS for a
+	// person — the run does not merge work its own review rejected; every
+	// other one is a failure a re-run resumes from.
+	RefusedLandPR             = "land_pr_unmet"         // the PR (or its CI) could not be read, or is gone unmerged
+	RefusedLandCIPending      = "land_ci_pending"       // CI on the PR still pending past the run's bound
+	RefusedLandBaseMoving     = "land_base_moving"      // the base moved on every pass of the bound
+	RefusedLandPush           = "land_push_refused"     // the remote declined the merge's push (opt-in)
+	RefusedLandBaseCI         = "land_base_ci_failed"   // CI red on the base's merge commit (opt-in)
+	RefusedLandReviewNotReady = "land_review_not_ready" // the final review said NOT READY; the merge is a person's
+
 	// The two a RUNNING epic's own liveness adds (tick 3h0). A run is not
 	// working a snapshot: a person absorbs a finding into the epic as a new
 	// tick while the run is going, adds a blocked_by edge to it mid-run, or
@@ -2455,7 +2522,7 @@ func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
 		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
-		RefusedClaimWidth, RefusedAbsorptionDepth:
+		RefusedClaimWidth, RefusedAbsorptionDepth, RefusedLandReviewNotReady:
 		return true
 	}
 	return false

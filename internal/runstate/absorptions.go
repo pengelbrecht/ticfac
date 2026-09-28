@@ -84,11 +84,16 @@ const (
 	// The record's TickID is "<owner/name>:<tick-id>", the promotion's
 	// spelling for a routed finding.
 	AbsorptionRouted = "routed"
+	// AbsorptionNextRun: the finding's remedy is a LIVE RUN of an epic (epic
+	// 2jn's tm5), which no worker inside this one can do — so the run's rule
+	// files it as a backlog tick outside the epic, labelled for the next epic
+	// run to satisfy, and it gates nothing here.
+	AbsorptionNextRun = "next-run"
 )
 
 // AbsorptionPlacements is the closed placement vocabulary.
 var AbsorptionPlacements = []string{
-	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog, AbsorptionRouted,
+	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog, AbsorptionRouted, AbsorptionNextRun,
 }
 
 // Absorption is one decision, at `.ticfac/runs/<run-id>/absorptions/<key>.json`,
@@ -187,12 +192,20 @@ func (a Absorption) Validate() error {
 			return fmt.Errorf("absorption of %s is not gating and names item %s: a verdict that says the done is "+
 				"reachable names no item it breaks", a.Key, a.ItemID)
 		}
-		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted {
+		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted && a.Placement != AbsorptionNextRun {
 			return fmt.Errorf("absorption of %s is not gating and placed %q: a finding the done is reachable "+
 				"without becomes a backlog tick, not a child of the running epic", a.Key, a.Placement)
 		}
 	}
-	if a.Basis == AbsorptionRule || a.Target != "" || a.Placement == AbsorptionRouted {
+	if a.Placement == AbsorptionNextRun {
+		// The live-run rule's own agreement with itself: decided by rule,
+		// about this repository, gating nothing.
+		if a.Target != "" || a.Basis != AbsorptionRule || a.Gating || a.Confidence != 0 || a.Model != "" {
+			return fmt.Errorf("absorption of %s is placed for the next run and is not the live-run rule's "+
+				"decision (target %q, basis %q, gating %v): a live-run remedy is decided by rule, here, gating "+
+				"nothing", a.Key, a.Target, a.Basis, a.Gating)
+		}
+	} else if a.Basis == AbsorptionRule || a.Target != "" || a.Placement == AbsorptionRouted {
 		// The routed decision's own agreement with itself: a finding routed
 		// to another repository is decided by the run's rule, never gates
 		// this epic, and names where it went.
