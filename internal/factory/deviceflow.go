@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // The GitHub device flow — how `tk factory setup` gets a GitHub credential
@@ -72,7 +74,7 @@ func (o DeviceFlowOptions) client() *http.Client {
 	if o.HTTPClient != nil {
 		return o.HTTPClient
 	}
-	return &http.Client{Timeout: 15 * time.Second}
+	return httpnet.Client(15 * time.Second)
 }
 
 func (o DeviceFlowOptions) base() string {
@@ -251,6 +253,12 @@ func pollForUserToken(ctx context.Context, opts DeviceFlowOptions, code *DeviceC
 
 		body, status, err := postForm(ctx, opts, opts.base()+accessTokenPath, form)
 		if err != nil {
+			// A route that went away (Wi-Fi roaming, a VPN reconnecting) is
+			// the network, not GitHub's answer: poll again, and let the
+			// code's own expiry bound it.
+			if httpnet.IsUnreachable(err) && ctx.Err() == nil {
+				continue
+			}
 			return nil, fmt.Errorf("polling GitHub for the approved token: %w", err)
 		}
 		var reply tokenResponse

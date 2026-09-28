@@ -17,6 +17,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // `ticfac factory setup` is the first-run walk for a personal factory, and it is
@@ -428,7 +429,7 @@ func Setup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 
 	bundleDir := opts.BundleDir

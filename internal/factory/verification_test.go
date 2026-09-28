@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -74,6 +77,33 @@ func TestVerifyEndpointExhaustionRemainsActionable(t *testing.T) {
 	}
 	if got := calls.Load(); got != 3 {
 		t.Errorf("HTTP calls = %d, want exactly the configured attempts", got)
+	}
+}
+
+// "no route to host" is the network, however the probe that met it labelled
+// it: a deploy's verification keeps probing through it.
+func TestVerifyEndpointRetriesAnUnreachableNetwork(t *testing.T) {
+	var calls atomic.Int32
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch calls.Add(1) {
+		case 1:
+			return nil, &net.OpError{Op: "dial", Net: "tcp",
+				Err: os.NewSyscallError("connect", syscall.EHOSTUNREACH)}
+		case 2:
+			return verificationResponse(http.StatusOK,
+				`{"bindings":{"sandboxes":true},"auth":{"configured":true}}`), nil
+		default:
+			return verificationResponse(http.StatusNotFound, `{"error":"not found"}`), nil
+		}
+	})}
+	opts := Options{HTTPClient: client, verifyAttempts: 2, verifyDelay: time.Millisecond}
+	if err := verifyEndpoint(context.Background(), opts, "https://factory.example.com", "tkf_test"); err != nil {
+		t.Fatalf("verifyEndpoint: %v", err)
+	}
+	unreachable := verificationError(fmt.Errorf("probe: %w", &net.OpError{Op: "dial", Net: "tcp",
+		Err: os.NewSyscallError("connect", syscall.ENETUNREACH)}), false)
+	if !isRetryableVerificationError(unreachable) {
+		t.Error("an unreachable network was classified as a final answer")
 	}
 }
 

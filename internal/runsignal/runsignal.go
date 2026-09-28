@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // The door's path, spelled as the Worker serves it (cloudflare/src/run-done.ts;
@@ -78,7 +79,7 @@ func New(factoryURL, token string, log io.Writer) *Signaller {
 		url:   strings.TrimRight(strings.TrimSpace(factoryURL), "/"),
 		token: strings.TrimSpace(token),
 		log:   log,
-		http:  &http.Client{Timeout: httpTimeout},
+		http:  httpnet.Client(httpTimeout),
 	}
 }
 

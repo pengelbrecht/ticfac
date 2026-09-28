@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // Options configures a deploy.
@@ -588,6 +589,11 @@ func verificationError(err error, retryable bool) error {
 }
 
 func isRetryableVerificationError(err error) bool {
+	// "no route to host" / "network is unreachable" is the network, whatever
+	// wrapped it: the next probe may find the route (or the other family).
+	if httpnet.IsUnreachable(err) {
+		return true
+	}
 	var failure *verificationFailure
 	if errors.As(err, &failure) {
 		return failure.retryable
@@ -620,7 +626,7 @@ func verificationBackoff(base time.Duration, retryNumber int) time.Duration {
 func verifyEndpoint(ctx context.Context, opts Options, url, token string) error {
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = httpnet.Client(15 * time.Second)
 	}
 	attempts := opts.verifyAttempts
 	if attempts <= 0 {

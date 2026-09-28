@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // defaultHarnessBytes is what a Loader reads when its caller leaves
@@ -315,7 +317,7 @@ func NewClient(baseURL, token string, httpClient *http.Client) (*Client, error) 
 		return nil, fmt.Errorf("factory endpoint is invalid; run 'ticfac factory setup' to configure it")
 	}
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
+		httpClient = httpnet.Client(15 * time.Second)
 	}
 	return &Client{baseURL: baseURL, token: token, http: httpClient}, nil
 }

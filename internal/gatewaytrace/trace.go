@@ -44,6 +44,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
 // DefaultAPIBase is Cloudflare's REST root, matching internal/factory.
@@ -124,7 +125,7 @@ type Client struct {
 // New builds a Client. A nil http client gets one with a bounded timeout.
 func New(config Config, client *http.Client) *Client {
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = httpnet.Client(30 * time.Second)
 	}
 	if strings.TrimSpace(config.APIBase) == "" {
 		config.APIBase = DefaultAPIBase
