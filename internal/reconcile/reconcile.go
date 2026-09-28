@@ -1864,13 +1864,6 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		}
 		return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 	}
-<<<<<<< HEAD
-	// The width's raw material (tick dz1): the claims the graph itself counts
-	// under this epic, whoever holds them — this run's, another run's, a
-	// person's. Re-read the same way at every graph read below (replan);
-	// tk stopped enforcing this at 0.32.0, so this count is the enforcement.
-	r.inFlightIDs = graph.Dispatch.InFlightIDs
-=======
 	// A final review that judged the epic NOT READY is acted on before the
 	// plan is read (review_rounds.go): a run held land_review_not_ready by an
 	// older build — epic-6in — resumes by absorbing the review's blocking
@@ -1883,7 +1876,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 		}
 	}
->>>>>>> fbf02c5f2cb8049c1041662d2816c4f1b1219e06
+	// The width's raw material (tick dz1): the claims the graph itself counts
+	// under this epic, whoever holds them — this run's, another run's, a
+	// person's. Taken from the graph the plan is read from (after any re-read
+	// above), and re-read the same way at every graph read below (replan);
+	// tk stopped enforcing this at 0.32.0, so this count is the enforcement.
+	r.inFlightIDs = graph.Dispatch.InFlightIDs
 	plan := planFrom(graph)
 	if len(plan) == 0 {
 		// Every tick is closed. A run whose close-out ran and whose readying
