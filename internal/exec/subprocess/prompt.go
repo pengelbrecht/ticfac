@@ -38,6 +38,9 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	// ended its turn to wait for it, which in print mode ends the process.
 	// The model cannot see that it runs in print mode, so it is told.
 	fmt.Fprintf(&b, "%s\n\n", HeadlessLine)
+	// tick wv2: epic-6in's two stopped workers left thousands of lines
+	// uncommitted; only committed work is certain to survive a stop.
+	fmt.Fprintf(&b, "%s\n\n", SmallCommitsLine)
 
 	fmt.Fprintf(&b, "## The job\n\n")
 	fmt.Fprintf(&b, "- role: %s\n", spec.Role)
@@ -50,7 +53,7 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	}
 	fmt.Fprintf(&b, "- worktree: %s\n", record.Worktree)
 	fmt.Fprintf(&b, "- branch: %s (from %s)\n", record.Branch, short(record.BaseSHA))
-	fmt.Fprintf(&b, "- wall clock: %d seconds; you are stopped at it\n\n", record.WallSeconds)
+	fmt.Fprintf(&b, "- wall clock: %d seconds, a runaway backstop you are stopped at; a runner that shows no activity for a while is re-prompted, and then stopped\n\n", record.WallSeconds)
 
 	// Where the work is written down. The JobSpec names its inputs by id and
 	// carries no task text — the records are closed — and a worker may not run

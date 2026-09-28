@@ -50,7 +50,7 @@ func TestMethodConstantsMatchVocabulary(t *testing.T) {
 		MethodAgentStart, MethodAgentPrompt, MethodAgentSendKeys, MethodAgentWait,
 		MethodAgentList, MethodAgentGet,
 		MethodPaneClose,
-		MethodPaneRead, MethodPaneWaitForOutput,
+		MethodPaneRead, MethodPaneWaitForOutput, MethodPaneProcessInfo,
 		MethodPaneReportMetadata, MethodWorkspaceReportMetadata,
 		MethodEventsSubscribe, MethodEventsWait,
 		MethodNotificationShow,
@@ -65,7 +65,7 @@ func TestResultDiscriminatorConstantsMatchVocabulary(t *testing.T) {
 		resultWorkspaceInfo,
 		resultAgentStarted, resultAgentPrompted, resultAgentInfo,
 		resultAgentList,
-		resultPaneRead, resultOutputMatched,
+		resultPaneRead, resultPaneProcessInfo, resultOutputMatched,
 		resultSubscriptionStarted, resultWaitMatched,
 		resultNotificationShow, resultOK,
 	})

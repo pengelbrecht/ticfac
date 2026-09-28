@@ -111,6 +111,10 @@ var watchKeepStages = map[string]bool{
 	reconcile.StageRunHeld:      true,
 	reconcile.StageWallClock:    true,
 	reconcile.StageStallWarned:  true,
+	// The stuck watch (tick wv2): a nudge and a stop are both worth coming
+	// back to.
+	reconcile.StageStuckNudged:  true,
+	reconcile.StageStuckStopped: true,
 }
 
 // watchIsTerminal says whether a writer is a terminal: the seam the live

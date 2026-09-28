@@ -236,6 +236,11 @@ func (e *Executor) classify(st *store, role string, commits int, hasReport bool,
 		if st.wallClockExceeded() {
 			return VerdictMissingResult, OutcomeFailed, FailureWallClockExceeded, VerdictMissingResult
 		}
+		if st.stuckStopped() {
+			// Stopped by the stuck watch (activity.go, tick wv2): a runner
+			// that stopped making progress is a runner failure.
+			return VerdictMissingResult, OutcomeFailed, FailureRunnerError, reasonStuckStopped
+		}
 		return VerdictMissingResult, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictMissingResult
 	case commits == 0 && NoCommitsIsFailure(role):
 		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
@@ -328,6 +333,9 @@ const reasonCancelled = "cancelled"
 // gets its own message key the same way reasonCancelled does.
 const reasonArtifactCommitted = "artifact-committed"
 
+// reasonStuckStopped is the stuck watch's stop (activity.go, tick wv2).
+const reasonStuckStopped = "stopped-as-stuck"
+
 // failureMessages keeps two failures from sharing one sentence. Appendix A #9
 // is not about the class field, which has six values for many more failures —
 // it is about the MESSAGE a person reads, and "the run broke" is the message
@@ -344,7 +352,10 @@ var failureMessages = map[string]string{
 	VerdictMissingResult:    "there is no report at the path this executor owns, so the attempt never said what it did",
 	reasonCancelled:         "the attempt was cancelled: its credential was revoked and then it was stopped",
 	reasonArtifactCommitted: "committed its own report or artifact into the branch, under the prefix this executor owns",
-	VerdictReadyToMerge:     "",
+	reasonStuckStopped: "it was stopped as stuck: it showed no activity — no transcript event, no tool-process CPU, " +
+		"no worktree or branch change — for the stuck window, was nudged, and showed none for as long again; " +
+		"there is no report at the path this executor owns",
+	VerdictReadyToMerge: "",
 }
 
 const collapsedMessage = "the attempt failed"

@@ -439,6 +439,41 @@ func (c *Client) PaneClose(ctx context.Context, params PaneCloseParams) error {
 	return c.call(ctx, MethodPaneClose, resultOK, params, nil)
 }
 
+// PaneProcessInfo is what pane.process_info answers about one pane: its
+// shell's pid and the processes in the terminal's foreground group.
+type PaneProcessInfo struct {
+	PaneID                 string        `json:"pane_id"`
+	ShellPID               *int          `json:"shell_pid,omitempty"`
+	ForegroundProcessGroup *int          `json:"foreground_process_group_id,omitempty"`
+	ForegroundProcesses    []PaneProcess `json:"foreground_processes,omitempty"`
+	TTY                    *string       `json:"tty,omitempty"`
+}
+
+// PaneProcess is one foreground process of a pane.
+type PaneProcess struct {
+	PID  int      `json:"pid"`
+	Name string   `json:"name"`
+	Argv []string `json:"argv,omitempty"`
+	Cwd  *string  `json:"cwd,omitempty"`
+}
+
+// PaneProcessInfo asks herdr for a pane's process information (herdr 0.9.1 /
+// protocol 22 schema: params PaneProcessInfoParams{pane_id}, result
+// `pane_process_info` carrying `process_info`). The stuck watch (tick wv2)
+// reads the shell pid from it and walks the process tree under it by pid.
+func (c *Client) PaneProcessInfo(ctx context.Context, paneID string) (*PaneProcessInfo, error) {
+	if paneID == "" {
+		return nil, fmt.Errorf("herd/client: pane.process_info needs a pane id")
+	}
+	var out struct {
+		ProcessInfo PaneProcessInfo `json:"process_info"`
+	}
+	if err := c.call(ctx, MethodPaneProcessInfo, resultPaneProcessInfo, map[string]string{"pane_id": paneID}, &out); err != nil {
+		return nil, err
+	}
+	return &out.ProcessInfo, nil
+}
+
 // PaneReadParams are the parameters of pane.read.
 type PaneReadParams struct {
 	// PaneID is the pane to read. Required.

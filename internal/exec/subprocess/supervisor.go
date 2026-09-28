@@ -174,6 +174,23 @@ func Supervise(stateDir string) error {
 		wall = timer.C
 	}
 
+	// The stuck watch (activity.go, tick wv2): the runner's transcript, the
+	// CPU of its tool processes (walked by pid from the runner, which leads
+	// its own process group) and its worktree and branch, looked at every
+	// CheckEvery(window). Quiet on all of them for the window: the runner
+	// is interrupted and re-prompted in its own session (stuckRestart), and
+	// quiet as long again, stopped and settled as stuck.
+	var watch activityWatch
+	stuckAfter := time.Duration(record.StuckAfterMS) * time.Millisecond
+	var stuckTick <-chan time.Time
+	if stuckAfter > 0 {
+		t := time.NewTicker(CheckEvery(stuckAfter))
+		defer t.Stop()
+		stuckTick = t.C
+		watch.state.FirstSeenAt = time.Now()
+	}
+	stuckRestart := false
+
 	// runTurn starts one runner process and waits for it. settled is true
 	// when the attempt was settled on the way — the runner could not be
 	// started, or the supervisor itself was stopped — and runner.exit is
@@ -263,6 +280,35 @@ func Supervise(stateDir string) error {
 					note("the timed push of %s failed; the next tick tries again", record.Branch)
 				}
 
+			case <-stuckTick:
+				if stuckRestart || watch.state.StuckStopped {
+					// This turn is already being stopped; the next look belongs
+					// to the turn after it, if there is one.
+					break
+				}
+				switch step, evidence := watch.look(record, runnerPID, stuckAfter); step {
+				case StuckNudge:
+					if len(record.StuckArgv) == 0 {
+						watch.state.StuckNudgedAt = time.Now()
+						observe(ObsHeartbeat, StuckNudgeDetail("the runner cannot be spoken to mid-turn and carries no stuck argv", evidence))
+						break
+					}
+					watch.state.StuckNudgedAt = time.Now()
+					observe(ObsHeartbeat, StuckNudgeDetail(fmt.Sprintf("the %s runner (pid %d) was interrupted and is "+
+						"re-prompted in its own session", record.Runner, runnerPID), evidence))
+					note("the runner appears stuck; interrupting it to re-prompt it: %s", evidence)
+					stuckRestart = true
+					stopTree(runnerPID, runnerAlive)
+				case StuckStop:
+					detail := StuckStopDetail(fmt.Sprintf("the %s runner (pid %d) was stopped by its supervisor",
+						record.Runner, runnerPID), evidence)
+					note("%s", detail)
+					watch.state.StuckStopped = true
+					_ = atomicWrite(st.path(fileStuckStopped), []byte(detail+"\n"), 0o644)
+					observe(ObsExited, detail)
+					stopTree(runnerPID, runnerAlive)
+				}
+
 			case <-wall:
 				note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
 				_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
@@ -296,6 +342,17 @@ func Supervise(stateDir string) error {
 		observe(ObsCredentialIssued, box.note(record))
 		note("started %s (pid %d) on %s", record.Runner, pid, record.Branch)
 	})
+	// The stuck nudge: the watch stopped the runner to re-prompt it in its
+	// own session. The re-prompted runner is watched the same way, and a
+	// second silence is a stop, not another nudge (DecideStuck).
+	for stuckRestart && !settled && !st.stuckStopped() && !st.wallClockExceeded() {
+		stuckRestart = false
+		code, settled, err = runTurn(record.StuckArgv,
+			append(append([]string{}, runnerEnv...), EnvStuckNudge+"=1"),
+			func(pid int) {
+				observe(ObsStarted, fmt.Sprintf("the %s runner was re-prompted as stuck, pid %d", record.Runner, pid))
+			})
+	}
 	// The nudge (nudge.go): a runner that exited 0 with no report is prompted
 	// again, a bounded number of times, before the attempt settles.
 	for nudged := 0; !settled; {

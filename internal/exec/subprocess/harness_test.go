@@ -146,6 +146,10 @@ type fixtureOptions struct {
 	model        string
 	rolePrompt   string
 	writeFile    func(path string, data []byte, perm fs.FileMode) error
+	// stuckAfter is the stuck watch's window; zero keeps the default.
+	stuckAfter time.Duration
+	// env is extra NAME=value pairs for the fake runner.
+	env []string
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -186,6 +190,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		PushInterval:   interval,
 		guardsOff:      opts.guardsOff,
 		writeFile:      opts.writeFile,
+		StuckAfter:     opts.stuckAfter,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -218,6 +223,7 @@ func fakeRunnerArgv(t *testing.T, opts fixtureOptions) []string {
 	if opts.sleep != "" {
 		argv = append(argv, "FAKE_RUNNER_SLEEP="+opts.sleep)
 	}
+	argv = append(argv, opts.env...)
 	return append(argv, "/bin/sh", script, promptPlaceholder)
 }
 

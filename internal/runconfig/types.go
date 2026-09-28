@@ -326,6 +326,14 @@ type TierPolicy struct {
 	Roles       map[string]Tier  `toml:"roles"`
 	Concurrency map[string]int   `toml:"concurrency"`
 	RateLimit   *TierRateLimit   `toml:"rate_limit"`
+	// WallSeconds is the RUNAWAY BACKSTOP per role and tier (tick wv2): the
+	// wall clock is no longer how a stuck worker is found — the stuck watch
+	// is, from what the worker is visibly doing — so the bound is generous and
+	// only stops a worker that is busy forever. Keys are a tier ("strong"), a
+	// role ("implement"), or a role and a tier ("implement.strong"); the most
+	// specific wins, then the run's own --wall. A tick's `wall_minutes:<n>`
+	// label overrides all of them.
+	WallSeconds map[string]int `toml:"wall_seconds"`
 	// The classification-routing cells. An empty DearWorkTypes (the whole
 	// trio omitted) is the legitimate stance of a repository that routes no
 	// classification anywhere: a recorded classification then promotes
