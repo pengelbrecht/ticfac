@@ -1,0 +1,13 @@
+{
+  "id": "n68",
+  "title": "Foreign-claim takeover can seize a person's claim on a tick a dead run released",
+  "description": "claim.go reads the holder as the run with the most recent dispatch marker, and calls the claim stale when that run's checkpoint is terminal and its row for the tick is not 'closed'. Suppose a run released a tick without closing it (row 'rejected' or 'ready'), then ended failed or cancelled, and a person later claimed the tick with tk. That person leaves no marker, so the dead run is still the newest witness and the person's live claim reads as stale and is taken over. The file's own contract says a person's claim is treated as LIVE. Seen by reading the code, not reproduced. A fix could require the claim to predate the holder's terminal checkpoint, or treat only 'dispatched' or 'reported' rows as orphans.\nevidence: internal/reconcile/claim.go foreignClaims (w.stale = exists \u0026\u0026 Terminal() \u0026\u0026 !closedRow) and closedRow\n\nticfac run epic-6in filed this backlog tick from the finding 8a2f4d80b57a9426bba895c1887594a2068fe649890a3c336f9452e2e7f88141 (reported by run-epic-6in/tick-rzi/attempt-14): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/8a2f4d80b57a9426bba895c1887594a2068fe649890a3c336f9452e2e7f88141.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-rzi/attempt-14",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T19:30:37Z",
+  "updated_at": "2026-09-28T19:30:37Z"
+}
