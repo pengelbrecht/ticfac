@@ -316,17 +316,19 @@ func TestTheEvacuationPreservesWorkWhenTheWorkerDiesWithItsContainer(t *testing.
 	// is readable where it was pointed: in the replacement's own checkout.
 	wipRef := "refs/ticfac/wip/run-r-fixture/tick-a1/attempt-1"
 	dispatch := f.dispatch("a1")
-	pointed := false
+	pointed := ""
 	for _, snap := range dispatch.PriorSnapshots {
 		if snap.Ref == wipRef {
-			pointed = true
+			pointed = snap.Commit
 		}
 	}
-	if !pointed {
-		t.Errorf("the restarted a1 was not pointed at %s: its prior snapshots are %+v\nthe flush's account:\n%s",
+	if pointed == "" {
+		t.Fatalf("the restarted a1 was not pointed at %s: its prior snapshots are %+v\nthe flush's account:\n%s",
 			wipRef, dispatch.PriorSnapshots, account)
 	}
-	if wip := mustRun(t, clone.Dir, "git", "show", wipRef+":wip-a1.txt"); !strings.Contains(wip, "uncommitted work of a1") {
+	// a1 closed, so its wip ref has retired (tick tyv); the commit it was
+	// pointed at is still in the replacement's object store.
+	if wip := mustRun(t, clone.Dir, "git", "show", pointed+":wip-a1.txt"); !strings.Contains(wip, "uncommitted work of a1") {
 		t.Errorf("the preserved work in the replacement's checkout reads %q", wip)
 	}
 	resumedNote := false
