@@ -12,8 +12,11 @@
   "attempt": 4,
   "done_item": "none",
   "demonstrating_check": "TestTheCloseOutsOwnFindingReachesThePRBody",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T06:40:42Z",
+  "triaged_at": "2026-09-28T10:18:09Z",
+  "triaged_by": "ticfac run epic-6in absorbing 8je",
+  "promoted_as": "8je",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "46x",
