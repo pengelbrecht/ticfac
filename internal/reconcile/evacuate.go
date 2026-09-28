@@ -447,7 +447,7 @@ func (r *Reconciler) evacGit(dir string, deadline time.Time, args ...string) (st
 		"GIT_TERMINAL_PROMPT=0"),
 		"GIT_PAGER=cat"),
 		"GIT_OPTIONAL_LOCKS=0"),
-		runstate.TransportEnv()...)
+		gitbin.TransportEnv()...)
 	cmd.SysProcAttr = gateProcessGroup()
 	cmd.Cancel = func() error { return killGateGroup(cmd.Process.Pid) }
 	cmd.WaitDelay = evacWaitDelay

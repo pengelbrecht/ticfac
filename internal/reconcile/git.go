@@ -92,9 +92,9 @@ func (g *repoGit) onceEnv(dir string, extraEnv []string, args ...string) (stdout
 	}, gitbin.NoAutoMaintenance...), gitbin.NoRerere...)
 	cmd := exec.Command(gitbin.Path(), append(base, args...)...)
 	cmd.Dir = dir
-	// GIT_TERMINAL_PROMPT=0 bounds the prompt; runstate.TransportEnv bounds the
+	// GIT_TERMINAL_PROMPT=0 bounds the prompt; gitbin.TransportEnv bounds the
 	// network, which is the one that stopped a run for two and a half hours.
-	cmd.Env = append(append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), runstate.TransportEnv()...), extraEnv...)
+	cmd.Env = append(append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), gitbin.TransportEnv()...), extraEnv...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
 	err = cmd.Run()
