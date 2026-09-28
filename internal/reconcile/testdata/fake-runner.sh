@@ -739,7 +739,12 @@ ask)
 			answered=yes
 		fi
 	fi
-	commit
+	# FAKE_RUNNER_ASK_COMMIT=no: the asking worker commits nothing before it
+	# asks (the no-commits shape); once answered it commits like any other.
+	if [ "${FAKE_RUNNER_ASK_COMMIT:-yes}" != "no" ] || [ "$answered" = "yes" ] ||
+		[ "$TICFAC_TICK" != "${FAKE_RUNNER_ASK_TICK:-a1}" ]; then
+		commit
+	fi
 	if [ "$TICFAC_TICK" != "${FAKE_RUNNER_ASK_TICK:-a1}" ]; then
 		report
 	elif [ "$answered" = "yes" ]; then
@@ -753,6 +758,22 @@ ask)
 		} > "$TICFAC_RESULT_PATH"
 	else
 		status="BLOCKED — ${FAKE_RUNNER_QUESTION:-a question}"
+		report
+	fi
+	;;
+empty-first)
+	# A genuine collect failure (tick tyd's follow-up): a tick's FIRST TRY
+	# says it is done with concerns and commits nothing, so the collect is
+	# `no-commits` and the attempt is spent — collect_failed, a stop, and a
+	# redispatch on resume. It is NOT a question: since tyd a worker that
+	# answers BLOCKED is answered in-run, so the resume-and-redispatch path
+	# needs a worker that failed without asking. Every later try commits.
+	# Keyed on $TICFAC_TRY, the tick's own try, like blocked-first.
+	if [ "$TICFAC_TRY" = "1" ]; then
+		status="DONE_WITH_CONCERNS — the change needed nothing committed"
+		report
+	else
+		commit
 		report
 	fi
 	;;

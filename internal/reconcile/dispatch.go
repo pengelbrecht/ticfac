@@ -2718,6 +2718,16 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		r.record(marker.TickID, StageRejected, "%s: %s", collected.Verdict, collected.Message)
 		r.disposeRejected(handle, executor, marker, "attempt "+fmt.Sprint(marker.Attempt)+" of "+marker.TickID+
 			" is "+collected.Verdict)
+		// A worker that stopped to ask with NOTHING committed (tick tyd's
+		// follow-up) is a question, not a failed collect: it takes the same
+		// in-run ladder as one that committed — a tier up with the question,
+		// at the ceiling the standing orders — rather than collect_failed and
+		// a stop for the supervisor to resume.
+		if collected.Verdict == subprocess.VerdictNoCommits && collected.Result != nil {
+			if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+				return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
+			}
+		}
 		return nil, r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
 			r.attemptName(marker.TickID, marker.Attempt), collected.Verdict, collected.Message)
 	}
@@ -2739,8 +2749,9 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// It runs AFTER the verdict check rather than before it because an attempt
 	// that is `no-commits` or `missing-result` is already refused and already
 	// torn down, and the verdict is the more specific thing to tell a person
-	// about it — `blocked-first`, the fixture that answers BLOCKED with nothing
-	// committed, keeps reading as `no-commits`, which is what it is.
+	// about it. The one exception is a `no-commits` attempt whose worker
+	// stopped to ask (`blocked-first`): since tick tyd that is a question, and
+	// the verdict check above hands it to the same ladder this branch does.
 	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
 		if err := r.rejectDurably(marker, collected.Verdict, answer.Status+": "+answer.Summary); err != nil {
 			return nil, err

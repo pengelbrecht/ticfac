@@ -262,7 +262,7 @@ func TestAnUnrecognisedTierLabelIsRefusedLoudlyBeforeAnythingIsClaimed(t *testin
 // saying what it used.
 func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{gate: tierGate, mode: "blocked-first"})
+	f := newFixture(t, fixtureOptions{gate: tierGate, mode: "empty-first"})
 	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -276,11 +276,11 @@ func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 	// same run id — and a redispatch of a1 that derives from the FAILURE, not
 	// from a hunch.
 	clone := cloneRepo(t, f.Repo.Origin, f.Root+"/restarted")
-	restarted, result, err := f.run(clone, fixtureOptions{mode: "blocked-first"})
+	restarted, result, err := f.run(clone, fixtureOptions{mode: "empty-first"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// blocked-first keys on the tick's OWN first try (tick vw0), so the
+	// empty-first keys on the tick's OWN first try (tick vw0), so the
 	// restart settles a1's redispatch — the ladder under test — and then
 	// dispatches a2 for the first time, whose own first try blocks exactly as
 	// a1's did and refuses the run again. The assertions below read the
@@ -588,7 +588,7 @@ func TestAMassRoutedDispatchSelectsItsModelFromTheRecord(t *testing.T) {
 // the first attempt was, and the cold pass reaches the same ladder.
 func TestAFailedAttemptEarnsARungAboveTheClassifiedStart(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{gate: massGate, mode: "blocked-first"})
+	f := newFixture(t, fixtureOptions{gate: massGate, mode: "empty-first"})
 	// a1 clears the threshold; a2 and b1 do not — the ladder under test is
 	// a1's, and the fallback under test is theirs. Every incarnation answers
 	// per tick exactly the same way, so any answer a cold one was allowed to

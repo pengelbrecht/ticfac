@@ -295,13 +295,12 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 
 	// Attempt 1 of a1 answers BLOCKED with nothing committed, and its report
 	// carries the finding: the attempt is refused, the DISCOVERY is drafted.
-	_, result, err := f.run(repo, opts)
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.Failure == nil {
-		t.Fatalf("run state %s, want the refused attempt", result.State)
-	}
+	// Since tick tyd the run answers the question in-run, so it is cut the
+	// moment it decides to: the person triages before the next try reports.
+	_, _, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked",
+		stopAfter: stopAt("a1", StageBlockedDecide)})
+	killedAfter(t, err, "a1", StageBlockedDecide)
+	f.stopEverything()
 	s := draftsStore(t, repo)
 	findings, err := s.Findings()
 	if err != nil {
@@ -515,14 +514,12 @@ func TestAFixedFindingThatIsReportedAgainIsHeardAgain(t *testing.T) {
 
 	// Attempt 1 of a1 answers BLOCKED with nothing committed, and its report
 	// carries the two findings: the attempt is refused, the discoveries are
-	// drafted.
-	_, result, err := f.run(repo, opts)
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.Failure == nil {
-		t.Fatalf("run state %s, want the refused attempt", result.State)
-	}
+	// drafted. Since tick tyd the run answers the question in-run, so it is
+	// cut the moment it decides to: the person triages before the next try.
+	_, _, err := f.run(repo, fixtureOptions{proseFindingsForAPerson: true, mode: "finding_blocked",
+		stopAfter: stopAt("a1", StageBlockedDecide)})
+	killedAfter(t, err, "a1", StageBlockedDecide)
+	f.stopEverything()
 	s := draftsStore(t, repo)
 	findings, err := s.Findings()
 	if err != nil {
