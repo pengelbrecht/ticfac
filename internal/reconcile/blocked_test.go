@@ -10,6 +10,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // A worker that stops to ask is not a stopped run (tick tyd).
@@ -381,4 +382,90 @@ func markerOfTry(t *testing.T, r *Reconciler, tick string, try int) attemptHandl
 		}
 	}
 	return handleFromMap(lowest[try-1].JobHandle)
+}
+
+// askingEmptyRunner is askingRunner whose asking worker commits nothing
+// before it asks: the no-commits shape.
+func askingEmptyRunner(t *testing.T, tick, question, until string) []string {
+	t.Helper()
+	argv := askingRunner(t, tick, question, until)
+	return append([]string{argv[0], "FAKE_RUNNER_ASK_COMMIT=no"}, argv[1:]...)
+}
+
+// A worker that asks with NOTHING committed takes the same in-run ladder: a
+// tier up with the question, not collect_failed and a stop.
+func TestABlockedAnswerWithNoCommitsIsRedispatchedOneTierUpInRun(t *testing.T) {
+	t.Parallel()
+	const question = "which package owns the retry helper"
+	f := newFixture(t, fixtureOptions{gate: ladderGate})
+	f.Runner = askingEmptyRunner(t, "a1", question, "escalated")
+
+	r, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): a question with nothing committed must not stop it", result.State, result.Failure)
+	}
+	if got := markerTierOfTry(t, r, "a1", 2); got != "frontier" {
+		t.Errorf("a1's second try ran at %q, want frontier", got)
+	}
+	if escalated, ok := journalLine(r, "a1", StageBlockedEscalated); !ok || !strings.Contains(escalated, question) {
+		t.Errorf("the %s event does not name the question: %q", StageBlockedEscalated, escalated)
+	}
+	if dispatch := f.dispatch("a1"); dispatch.Escalation == nil || !strings.Contains(dispatch.Escalation.Question, question) {
+		t.Errorf("the re-dispatch's escalation is %+v, want the question", dispatch.Escalation)
+	}
+	if second := markerOfTry(t, r, "a1", 2); second.ResumedFrom != nil {
+		t.Errorf("the second try carried %+v; a question with nothing committed has nothing to carry", second.ResumedFrom)
+	}
+}
+
+// At the ceiling, a no-commit decide-and-log question is decided in-run; an
+// always-ask one holds naming it, and holds again on resume rather than being
+// redispatched.
+func TestANoCommitQuestionAtTheCeilingIsDecidedOrHeldByName(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	t.Run("decide", func(t *testing.T) {
+		t.Parallel()
+		const question = "which file layout should the new tests use"
+		f := newFixture(t, fixtureOptions{gate: ceilingGate})
+		declareStandingOrders(t, f.Repo)
+		f.Runner = askingEmptyRunner(t, "a1", question, "decide")
+		r, result, err := f.run(f.Repo, fixtureOptions{})
+		if err != nil {
+			t.Fatalf("the run did not finish: %v", err)
+		}
+		if result.State != runstate.StateCompleted {
+			t.Fatalf("the run ended %s (%+v)", result.State, result.Failure)
+		}
+		if decided, ok := journalLine(r, "a1", StageBlockedDecide); !ok || !strings.Contains(decided, question) {
+			t.Errorf("the %s event does not name the question: %q", StageBlockedDecide, decided)
+		}
+	})
+	t.Run("hold", func(t *testing.T) {
+		t.Parallel()
+		const question = "this needs a paid API subscription"
+		f := newFixture(t, fixtureOptions{gate: ceilingGate})
+		declareStandingOrders(t, f.Repo)
+		f.Runner = askingEmptyRunner(t, "a1", question, "decide")
+		_, result, err := f.run(f.Repo, fixtureOptions{})
+		if err != nil {
+			t.Fatalf("the run did not finish: %v", err)
+		}
+		if result.Failure == nil || result.Failure.Reason != RefusedNeedsHuman || !strings.Contains(result.Failure.Message, question) {
+			t.Fatalf("the run failed as %+v, want %s naming the question", result.Failure, RefusedNeedsHuman)
+		}
+		r, resumed, err := f.run(f.Repo, fixtureOptions{})
+		if err != nil {
+			t.Fatalf("the resumed run did not finish: %v", err)
+		}
+		if resumed.Failure == nil || resumed.Failure.Reason != RefusedNeedsHuman || !strings.Contains(resumed.Failure.Message, question) {
+			t.Fatalf("the resume failed as %+v, want the question held again", resumed.Failure)
+		}
+		if contains(r.Stages("a1"), StageDispatched) {
+			t.Errorf("the resume dispatched a held question again: %v", r.Stages("a1"))
+		}
+	})
 }

@@ -359,6 +359,19 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 		r.setTick(tick, "rejected")
 		r.record(tick, StageRejected, "the %s job made no commits: the role answered %s, and the run's verdict is %s",
 			entry.Role, roleAnswerOf(collected), collected.Verdict)
+		// A job that stopped to ask with nothing committed is a question
+		// (tick tyd): the standing orders answer it as they answer one that
+		// committed — unless a close-out asked over red CI, which is the
+		// repair job's (below, and in the needs-human branch).
+		if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+			overRed := false
+			if entry.Role == "closeout-epic" {
+				_, overRed = r.closeoutDispatchedOverRedCI(ctx, marker)
+			}
+			if !overRed {
+				return nil, nil, r.answerBlocked(ctx, entry, marker, answer, RefusedRoleAnswer)
+			}
+		}
 		return nil, nil, r.refuse(RefusedCollect, tick,
 			"the %s job for %s answered %s, and the run's verdict is %s (%s): %s. The tick is NOT closed: for this role an "+
 				"empty branch is an undelivered deliverable, whatever the answer says",

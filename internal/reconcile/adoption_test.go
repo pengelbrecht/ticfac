@@ -66,19 +66,19 @@ func a1AttemptCount(t *testing.T, f *fixture, tick string) int {
 // never on the older attempt's.
 func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{mode: "blocked-first"})
+	f := newFixture(t, fixtureOptions{mode: "empty-first"})
 
-	// Incarnation one: a1's attempt 1 answers BLOCKED and commits nothing. The
+	// Incarnation one: a1's attempt 1 answers DONE_WITH_CONCERNS and commits nothing. The
 	// run rejects it — settled, nothing on any ref — and is cut the moment
 	// the rejection is durable.
-	_, _, err := f.run(f.Repo, fixtureOptions{mode: "blocked-first", stopAfter: stopAt("a1", StageRejected)})
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "empty-first", stopAfter: stopAt("a1", StageRejected)})
 	killedAfter(t, err, "a1", StageRejected)
 
 	// Incarnation two: the spent attempt is redispatched and a NEW attempt of
 	// a1 commits work and answers DONE. The run is cut the moment that
 	// attempt SETTLES — after its commits and its report reached origin,
 	// before anything collects them.
-	_, _, err = f.run(f.Repo, fixtureOptions{mode: "blocked-first", stopAfter: stopAt("a1", StageWaiting)})
+	_, _, err = f.run(f.Repo, fixtureOptions{mode: "empty-first", stopAfter: stopAt("a1", StageWaiting)})
 	killedAfter(t, err, "a1", StageWaiting)
 
 	// Both attempts are ADOPTABLE on this resume: attempt 2's own dispatch
@@ -99,7 +99,7 @@ func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 
 	// The adoption took the NEWER attempt. The feed line carries the attempt
 	// it is about, and the close must stand on attempt 2's DONE — never on
-	// attempt 1's BLOCKED, which the run had already rejected.
+	// attempt 1's DONE_WITH_CONCERNS, which the run had already rejected.
 	events, err := runfeed.Read(runfeed.Path(f.Repo.Dir, "r-fixture"))
 	if err != nil {
 		t.Fatalf("read the run's feed: %v", err)
@@ -121,10 +121,10 @@ func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 
 	// The premise the acceptance names, proven on the two answers as they
 	// were archived: the attempts carried DIFFERENT reports — the older
-	// answered BLOCKED, the newer DONE — and the close stood on the newer.
+	// answered DONE_WITH_CONCERNS, the newer DONE — and the close stood on the newer.
 	older := archivedReport(t, f, attemptMarker(t, f, "a1", 1))
 	newer := archivedReport(t, f, attemptMarker(t, f, "a1", 2))
-	if !strings.Contains(older, "BLOCKED") || !strings.Contains(newer, "DONE") {
+	if !strings.Contains(older, "DONE_WITH_CONCERNS") || !strings.Contains(newer, "DONE") {
 		t.Fatalf("the two attempts of a1 do not carry different reports:\n--- attempt 1 ---\n%s\n--- attempt 2 ---\n%s",
 			older, newer)
 	}
@@ -152,9 +152,9 @@ func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 // look at, and adopting past it would close the tick without ever saying so.
 func TestAHeldAttemptStopsTheRunEvenWhenANewerAttemptIsAdoptable(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{mode: "blocked-first", gate: failingGate})
+	f := newFixture(t, fixtureOptions{mode: "empty-first", gate: failingGate})
 
-	// Attempt 1 answers BLOCKED and commits nothing: rejected with nothing
+	// Attempt 1 answers DONE_WITH_CONCERNS and commits nothing: rejected with nothing
 	// anywhere, the run fails, and the attempt's disposition on a resume is
 	// redispatch — which is what lets a second attempt be dispatched at all.
 	_, first, err := f.run(f.Repo, fixtureOptions{})
