@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 060 as attempt 1",
-  "updated_at": "2026-09-28T04:42:36Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "060 is running as attempt 1",
+  "updated_at": "2026-09-28T04:42:48Z",
   "ticks": [
     {
       "tick_id": "060",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "46x",
