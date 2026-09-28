@@ -2,6 +2,7 @@
   "id": "2bp",
   "title": "Retire the remaining prose pointers to ticks files chz deleted outside skills/ticks/references",
   "description": "extensions/ticks-runner/* (contracts/job-protocol.json, contracts/lifecycle-invariants.json's file field, cloudflare/src/toml.ts and run-room.ts, image/README.md, internal/factory/lifecycle/invariants_test.go) and runners-config.md's ticks-schemas/ codegen rationale still describe ticks files that no longer exist at v0.32.0. They read as provenance rather than links, and two are in contract files that need a bundle re-cut, so dz1 left them; references_test.go's guard could be widened to extensions/ticks-runner once they are reworded.\n\nticfac run epic-6in filed this backlog tick from the finding 08b749ebe2b227770d53ddc493dcb9365311ed88c7687bd01ec2bd638ebcfe55 (reported by run-epic-6in/tick-dz1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/08b749ebe2b227770d53ddc493dcb9365311ed88c7687bd01ec2bd638ebcfe55.json on the run branch.",
+  "notes": "2026-09-28 12:14 - ticfac run epic-6in: created by absorbing finding 08b749ebe2b227770d53ddc493dcb9365311ed88c7687bd01ec2bd638ebcfe55 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-6in/absorptions/08b749ebe2b227770d53ddc493dcb9365311ed88c7687bd01ec2bd638ebcfe55.json on epic/6in, and it says: the epic's acceptance is prose (the acceptance carries no [A\u003cn\u003e]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A\u003cn\u003e] items first (ticks goal-design.md, fact sheets), then decide absorption against them.), so there is no item the reporter's claim could gate and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The reporter does not claim it breaks the build or CI, the one claim that gates a prose done",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-6in/tick-dz1/attempt-6",
   "created_by": "ticfac run epic-6in",
   "created_at": "2026-09-28T10:13:59Z",
-  "updated_at": "2026-09-28T10:13:59Z"
+  "updated_at": "2026-09-28T10:14:07.753071Z"
 }
