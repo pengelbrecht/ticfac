@@ -21,7 +21,17 @@
     "This fixture lives beside the Go code because only Go reads it today. The",
     "moment a second reader exists — the factory's TypeScript, for the phone",
     "page — it moves to the pinned cross-language bundle the way every",
-    "two-reader contract does, and that move is the tick it files."
+    "two-reader contract does, and that move is the tick it files.",
+    "",
+    "The dashboard fields (epic hn6, wave 1 — tick r5i) are ADDITIVE within",
+    "schema_version 1: the per-tick pipeline cell, parent, duration, findings",
+    "and report, the per-try tier/reason/next_step, the per-worker handle and",
+    "activity window, the health verdict, the per-source cost lines, recent,",
+    "epic_title and gloss. The `dashboard` golden carries every one of them",
+    "populated — it is the fixture the wave-3 renderers and the phone page",
+    "test against. The version does not move: the phone page's snapshot",
+    "parser refuses any model version other than 1, and every reader of this",
+    "contract lives in this repository."
   ],
   "schema_version": 1,
   "contract": "ticfac.status_model",
@@ -47,7 +57,9 @@
   "checked_beyond_schema": [
     "generated_at is RFC3339",
     "a reader that meets a schema_version it does not know refuses the document rather than guessing at it",
-    "null and empty are different claims wherever the schema allows a null: waves null means the tracker could not be read, waves [] means it read and layered nothing; workers null means the census could not be taken (a cloud run), workers [] means no attempt stands"
+    "null and empty are different claims wherever the schema allows a null: waves null means the tracker could not be read, waves [] means it read and layered nothing; workers null means the census could not be taken (a cloud run), workers [] means no attempt stands",
+    "recent holds at most the last five feed lines, oldest first — the schema cannot count or order; the builder's test does",
+    "a cost line with metered false carries usd null — the anyOf pins it, the negative refuses it, and no renderer may print $0.00 for spend nobody measured"
   ],
 
   "records": {
@@ -58,8 +70,9 @@
         "description": "One run's whole answer. Closed: a field this schema does not name is a field no reader parses, and a model that grows a field nobody versioned breaks its renderers silently. Every field that can be genuinely absent is required-and-null rather than omittable, the convention the bundle's provenance object established.",
         "required": [
           "schema_version", "run_id", "epic_id", "host", "generated_at",
-          "degraded", "liveness", "lifecycle", "progress", "waves", "workers",
-          "waits_on", "attention", "health", "gates", "ci", "cost", "remaining"
+          "degraded", "liveness", "lifecycle", "progress", "epic_title",
+          "recent", "waves", "workers", "waits_on", "attention", "health",
+          "gates", "ci", "cost", "remaining"
         ],
         "additionalProperties": false,
         "properties": {
@@ -72,6 +85,8 @@
           "liveness": { "$ref": "#/$defs/liveness" },
           "lifecycle": { "$ref": "#/$defs/lifecycle" },
           "progress": { "$ref": "#/$defs/progress" },
+          "epic_title": { "$ref": "#/$defs/nullable_string", "description": "The epic's own title, copied straight off the tracker's graph. Null when the graph could not be read — an unread tracker and a titleless epic are different claims, and only the first is a claim at all." },
+          "recent": { "type": "array", "items": { "$ref": "#/$defs/feed_event" }, "description": "The run's own last words: the last five lines of the feed, oldest first — the tail a dashboard shows where a watcher once drowned in the whole stream. The same event shape liveness.last_event carries. Empty, never null, when the feed is empty or unreadable." },
           "waves": { "$ref": "#/$defs/waves" },
           "workers": { "$ref": "#/$defs/workers" },
           "waits_on": { "$ref": "#/$defs/wait_nullable", "description": "The one thing the run is blocked on. Null when nothing blocks it." },
@@ -231,25 +246,34 @@
     },
     "tick": {
       "type": "object",
-      "required": ["tick_id", "state", "absorbed", "try", "attempt", "tries", "tier", "model", "executor", "elapsed_seconds"],
+      "required": ["tick_id", "state", "absorbed", "pipeline", "parent_tick_id", "duration_seconds", "findings", "report", "try", "attempt", "tries", "tier", "model", "executor", "elapsed_seconds"],
       "additionalProperties": false,
       "properties": {
         "tick_id": { "type": "string" },
         "title": { "type": "string", "description": "The tracker's own title, for the person reading. Absent when the tracker states none." },
-        "role": { "type": "string", "description": "The tick's role (review, closeout) — the fact the lifecycle phases are derived from. Absent when the tick carries none." },
+        "gloss": { "type": "string", "description": "The tracker's own one-line gloss, copied straight off the graph task. Absent when the tracker states none." },
+        "role": { "type": "string", "description": "The tick's role (review, closeout) — the fact the lifecycle phases and the pipeline stage list derive from. Absent when the tick carries none." },
         "state": {
           "type": "string",
           "enum": ["ready", "dispatched", "reported", "integrated", "rejected", "closed"],
           "description": "The checkpoint's own closed vocabulary, from the durable records only — never a worker's own claim. The tracker's closed status backs it where the checkpoint has no row."
         },
         "absorbed": { "type": "boolean", "description": "The run itself created this tick by absorbing a finding into the epic it was running — the mid-run shape change a renderer shows as a marked row." },
+        "pipeline": {
+          "$ref": "#/$defs/pipeline",
+          "description": "The tick's own pipeline cell — the stages this role's tick passes through, each with its own state, the thing a dashboard fills left to right. The stage list is the role's: implement [claim, work, gate, merged], review [claim, review, closed], closeout [claim, work, ci, closed] — the same lists the Go builder spells as PipelineImplement, PipelineReview and PipelineCloseout."
+        },
+        "parent_tick_id": { "$ref": "#/$defs/nullable_string", "description": "The tick this row is indented under — a repair tick or an absorbed finding under its source tick. Null for a direct child of the epic: the rows never move, the children sit under their parent." },
+        "duration_seconds": { "$ref": "#/$defs/nullable_integer", "description": "From the tick's first dispatch to its close, or to generated_at while it is open. Null when no dispatch marker states a start." },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/tick_finding" }, "description": "The findings this tick's report drafted — key, title and whether each gates. Empty when it drafted none." },
+        "report": { "$ref": "#/$defs/tick_report_nullable", "description": "The attempt report a person drills into: its own one-line summary and its diff stats. Null when the report was not read." },
         "try": { "$ref": "#/$defs/nullable_integer", "description": "The tick's own try number of its current or last attempt (the h58 language: w9b#3 is the third try, not dispatch #3). Null when the records show no dispatch." },
         "attempt": { "$ref": "#/$defs/nullable_integer", "description": "That attempt's run-wide dispatch number — its identity." },
         "tries": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["try", "attempt", "outcome", "dispatched_at"],
+            "required": ["try", "attempt", "outcome", "dispatched_at", "tier", "reason", "next_step"],
             "additionalProperties": false,
             "properties": {
               "try": { "type": "integer" },
@@ -259,7 +283,10 @@
                 "enum": ["closed", "rejected", "gate-failed", "reported", "in-flight", "dispatched"],
                 "description": "From the durable records alone: the checkpoint's word, then the gate evidence that dispatch produced, then the census."
               },
-              "dispatched_at": { "type": "string", "description": "The attempt marker's own stamp. Empty when the marker could not be read — never guessed." }
+              "dispatched_at": { "type": "string", "description": "The attempt marker's own stamp. Empty when the marker could not be read — never guessed." },
+              "tier": { "$ref": "#/$defs/nullable_string", "description": "This attempt's provenance tier — the rung of the ladder that routed the model. Null when no record states it." },
+              "reason": { "$ref": "#/$defs/nullable_string", "description": "For an attempt that did not close, the record's own word for why — the sentence the dashboard shows instead of a bare \"rejected ×n\". Null when the attempt closed or nothing states why." },
+              "next_step": { "$ref": "#/$defs/nullable_string", "description": "What the run did next, for an attempt that did not close — the answer to \"and then what\". Null on the same terms as reason." }
             }
           }
         },
@@ -269,6 +296,61 @@
         "elapsed_seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long the current attempt has run, from its dispatch marker to generated_at. Null when the tick has no in-flight attempt." }
       }
     },
+    "pipeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "stage": { "$ref": "#/$defs/pipeline_stage" },
+          "state": { "$ref": "#/$defs/pipeline_state" }
+        }
+      },
+      "description": "One tick's pipeline cell. The stage list is the role's own, in the order a tick passes through it: implement [claim, work, gate, merged]; review [claim, review, closed]; closeout [claim, work, ci, closed]. Spelled once in the Go builder (PipelineImplement, PipelineReview, PipelineCloseout) and once here, so the two cannot drift over a list one side never agreed to."
+    },
+    "pipeline_stage": {
+      "type": "string",
+      "enum": ["claim", "work", "review", "gate", "ci", "merged", "closed"],
+      "description": "One stop of a tick's pipeline. The closed vocabulary across every role: claim, work, review, gate, ci, merged, closed — a stage outside it is a stage no renderer knows how to draw."
+    },
+    "pipeline_state": {
+      "type": "string",
+      "enum": ["pending", "active", "done", "failed"],
+      "description": "One stage's own state: not reached, happening now, behind it, or refused there. Deliberately not the phase states — a stage can fail where a phase only moves on."
+    },
+    "tick_finding": {
+      "type": "object",
+      "required": ["key", "title", "gating"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "description": "The finding's durable key — the same sha a triage addresses it by." },
+        "title": { "type": "string", "description": "The finding's own one line." },
+        "gating": { "type": ["boolean", "null"], "description": "Whether the finding gates the run's close-out. Null while nobody has triaged it yet — a draft has no answer, and null is that honest no-answer." }
+      }
+    },
+    "tick_report_nullable": {
+      "anyOf": [{ "$ref": "#/$defs/tick_report" }, { "type": "null" }]
+    },
+    "tick_report": {
+      "type": "object",
+      "required": ["summary", "diff"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "$ref": "#/$defs/nullable_string", "description": "The report's own one-line summary. Null when the report carried none." },
+        "diff": { "anyOf": [{ "$ref": "#/$defs/report_diff" }, { "type": "null" }], "description": "The report's diff as three counts. Null when the diff was not read." }
+      }
+    },
+    "report_diff": {
+      "type": "object",
+      "required": ["files", "insertions", "deletions"],
+      "additionalProperties": false,
+      "properties": {
+        "files": { "type": "integer" },
+        "insertions": { "type": "integer" },
+        "deletions": { "type": "integer" }
+      }
+    },
     "workers": {
       "type": ["array", "null"],
       "items": { "$ref": "#/$defs/worker" },
@@ -276,13 +358,15 @@
     },
     "worker": {
       "type": "object",
-      "required": ["tick_id", "attempt", "branch", "worktree", "elapsed_seconds", "branch_idle_seconds", "worktree_idle_seconds", "wall_clock", "silence_seconds", "last_turn_at", "last_turn"],
+      "required": ["tick_id", "attempt", "branch", "worktree", "handle", "activity", "elapsed_seconds", "branch_idle_seconds", "worktree_idle_seconds", "wall_clock", "silence_seconds", "last_turn_at", "last_turn"],
       "additionalProperties": false,
       "properties": {
         "tick_id": { "type": "string" },
         "attempt": { "type": "integer" },
         "branch": { "type": "string", "description": "The write ref the attempt owns." },
         "worktree": { "type": "string", "description": "The path git's registration names; empty when the attempt has no standing registration on this machine." },
+        "handle": { "$ref": "#/$defs/nullable_string", "description": "The executor's own name for the worker — for example a herdr pane or agent name — the word a person uses to find it on the machine. Null when the executor named none." },
+        "activity": { "$ref": "#/$defs/worker_activity_nullable", "description": "The worker's measured activity window: the sparkline a dashboard draws, the last action and when, the nudges the run sent. Null when nothing measured it." },
         "elapsed_seconds": { "$ref": "#/$defs/nullable_integer" },
         "branch_idle_seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long since the branch last moved. Not a verdict — a worker thinking hard legitimately commits nothing for a while." },
         "worktree_idle_seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long since the worktree last changed." },
@@ -304,6 +388,21 @@
         "silence_seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long since the runner's own session log last grew — pi appends on every turn, so the log's age is the worker's liveness (tick b1t). Null when the runner has no session log this machine can read." },
         "last_turn_at": { "$ref": "#/$defs/nullable_string" },
         "last_turn": { "$ref": "#/$defs/nullable_string", "description": "A one-line summary of the runner's last turn — the person's half, never parsed." }
+      }
+    },
+    "worker_activity_nullable": {
+      "anyOf": [{ "$ref": "#/$defs/worker_activity" }, { "type": "null" }]
+    },
+    "worker_activity": {
+      "type": "object",
+      "required": ["window_seconds", "buckets", "last_action", "last_action_at", "nudges"],
+      "additionalProperties": false,
+      "properties": {
+        "window_seconds": { "type": "integer", "description": "The width of the window the buckets cover." },
+        "buckets": { "type": "array", "items": { "type": "integer" }, "description": "One count per bucket, oldest first — the sparkline's own data." },
+        "last_action": { "$ref": "#/$defs/nullable_string", "description": "The last tool action the worker took, as its transcript states it. Null when the transcript states none." },
+        "last_action_at": { "$ref": "#/$defs/nullable_string", "description": "RFC3339, when the last action happened. Null on the same terms." },
+        "nudges": { "type": "integer", "description": "How many times the run nudged this worker for silence — stuck nudges made visible." }
       }
     },
     "wait": {
@@ -337,13 +436,34 @@
     },
     "health": {
       "type": "object",
-      "required": ["remote_retries", "interventions", "stall_warnings", "wall_clocks_fired"],
+      "required": ["remote_retries", "interventions", "stall_warnings", "wall_clocks_fired", "verdict"],
       "additionalProperties": false,
       "properties": {
         "remote_retries": { "type": "integer", "description": "The run's own typed remote_retried lines, counted." },
         "interventions": { "type": "integer", "description": "The interventions the run resumed by itself (resumed_automatically), counted." },
         "stall_warnings": { "type": "integer" },
-        "wall_clocks_fired": { "type": "integer" }
+        "wall_clocks_fired": { "type": "integer" },
+        "verdict": { "$ref": "#/$defs/health_verdict", "description": "The headline a dashboard answers \"is it healthy\" with — a word a person reads, not four counters they have to interpret. The raw counts stay beside it as the drill-in." }
+      }
+    },
+    "health_verdict": {
+      "type": "object",
+      "required": ["state", "summary", "recovered"],
+      "additionalProperties": false,
+      "properties": {
+        "state": { "type": "string", "enum": ["healthy", "degraded", "stopped"], "description": "The closed vocabulary of the headline.\n- healthy: the run needs nobody and recovered what it hit\n- degraded: something is wrong but the run is going\n- stopped: the run is not going" },
+        "summary": { "type": "string", "description": "The one-line why beside the word — the sentence a person reads under the headline, empty when the word says it all." },
+        "recovered": { "type": "array", "items": { "$ref": "#/$defs/recovery" }, "description": "What the run got past by itself, so it is shown as calm and not as alarms. Empty when nothing needed getting past." }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "required": ["what", "count", "seconds"],
+      "additionalProperties": false,
+      "properties": {
+        "what": { "type": "string", "description": "The thing recovered from, named the way the run's own line names it." },
+        "count": { "type": "integer", "description": "How many times." },
+        "seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long the last one took, where anything measured it. Null when nothing did." }
       }
     },
     "gate": {
@@ -410,12 +530,33 @@
     },
     "cost": {
       "type": "object",
-      "required": ["recorded_usd", "attempts", "basis"],
+      "required": ["recorded_usd", "attempts", "basis", "lines"],
       "additionalProperties": false,
       "properties": {
         "recorded_usd": { "type": "number", "description": "What the records state about money: the decision records' own usage. The basis names the coverage so the number cannot quietly claim more than the records do." },
         "attempts": { "type": "integer", "description": "How many dispatches the run paid for — the count a person multiplies by their own rates." },
-        "basis": { "type": "string" }
+        "basis": { "type": "string" },
+        "lines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/cost_line" },
+          "description": "The spend split per source: which river, whether anything measured it, the number where one exists. Empty when nothing has been split yet — and a line with no measurement states usd null and says so, never a fabricated $0.00."
+        }
+      }
+    },
+    "cost_line": {
+      "type": "object",
+      "required": ["source", "metered", "usd", "attempts", "basis"],
+      "additionalProperties": false,
+      "anyOf": [
+        { "$comment": "metered: a number exists or the reader truly has none yet", "properties": { "metered": { "type": "boolean", "enum": [true] } } },
+        { "$comment": "unmetered: there is no number to state, so there is none", "properties": { "metered": { "type": "boolean", "enum": [false] }, "usd": { "type": "null" } } }
+      ],
+      "properties": {
+        "source": { "type": "string", "enum": ["decisions", "workers-ai", "claude", "pi-local", "other"], "description": "Which river the line's spend ran through — the closed vocabulary the dashboard's cost row names." },
+        "metered": { "type": "boolean", "description": "Whether anything measured this line's spend. False means the usd MUST be null: a number where nothing was measured is a fabricated spend." },
+        "usd": { "type": ["number", "null"], "description": "The measured spend, where it was measured. Null otherwise — the whole point of the field." },
+        "attempts": { "type": "integer", "description": "How many dispatches this line covers — the count a person multiplies by their own rates when nothing measured the money." },
+        "basis": { "type": "string", "description": "Names what the number covers and where it came from, so it cannot quietly claim more than it does." }
       }
     },
     "remaining_nullable": {
@@ -472,6 +613,54 @@
         "ticks": { "total": 14, "closed": 1, "open": 13 },
         "waves": { "total": 3, "done": 0, "active": 1 }
       },
+      "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-27T04:07:41Z",
+          "run_id": "epic-2jn",
+          "tick_id": "nwj",
+          "attempt": 1,
+          "stage": "gate_passed",
+          "detail": "the integrated gate passed attempt 1 of nwj (go)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-27T04:08:00Z",
+          "run_id": "epic-2jn",
+          "tick_id": "nwj",
+          "attempt": 1,
+          "stage": "closed",
+          "detail": "nwj closed behind its integrated gate"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-27T05:20:00Z",
+          "run_id": "epic-2jn",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "remote_retried",
+          "detail": "origin refused the fetch; retry 1"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-27T05:25:12Z",
+          "run_id": "epic-2jn",
+          "tick_id": "6dh",
+          "attempt": 2,
+          "stage": "stall_warned",
+          "detail": "6dh try 1 is alive but has produced nothing durable for 15m"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-27T05:29:41Z",
+          "run_id": "epic-2jn",
+          "tick_id": "6dh",
+          "attempt": 2,
+          "stage": "dispatched",
+          "detail": "6dh try 1 dispatched (run dispatch #2, branch ticfac/run-epic-2jn/tick-6dh/attempt-2)"
+        }
+      ],
       "waves": [
         {
           "wave": 1,
@@ -481,11 +670,21 @@
               "tick_id": "nwj",
               "title": "The command surface on cobra + fang",
               "state": "closed",
+              "pipeline": [
+                { "stage": "claim", "state": "pending" },
+                { "stage": "work", "state": "pending" },
+                { "stage": "gate", "state": "pending" },
+                { "stage": "merged", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": null,
+              "findings": [],
+              "report": null,
               "absorbed": false,
               "try": 1,
               "attempt": 1,
               "tries": [
-                { "try": 1, "attempt": 1, "outcome": "closed", "dispatched_at": "2026-09-27T03:19:05Z" }
+                { "try": 1, "attempt": 1, "outcome": "closed", "dispatched_at": "2026-09-27T03:19:05Z", "tier": null, "reason": null, "next_step": null }
               ],
               "tier": "strong",
               "model": "claude-opus-5",
@@ -496,11 +695,21 @@
               "tick_id": "6dh",
               "title": "ticfac status --json: one model of every run",
               "state": "dispatched",
+              "pipeline": [
+                { "stage": "claim", "state": "pending" },
+                { "stage": "work", "state": "pending" },
+                { "stage": "gate", "state": "pending" },
+                { "stage": "merged", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": null,
+              "findings": [],
+              "report": null,
               "absorbed": false,
               "try": 1,
               "attempt": 2,
               "tries": [
-                { "try": 1, "attempt": 2, "outcome": "in-flight", "dispatched_at": "2026-09-27T04:08:08Z" }
+                { "try": 1, "attempt": 2, "outcome": "in-flight", "dispatched_at": "2026-09-27T04:08:08Z", "tier": null, "reason": null, "next_step": null }
               ],
               "tier": "strong",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
@@ -517,6 +726,16 @@
               "tick_id": "89m",
               "title": "ticfac watch: the whole epic at a glance",
               "state": "ready",
+              "pipeline": [
+                { "stage": "claim", "state": "pending" },
+                { "stage": "work", "state": "pending" },
+                { "stage": "gate", "state": "pending" },
+                { "stage": "merged", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": null,
+              "findings": [],
+              "report": null,
               "absorbed": false,
               "try": null,
               "attempt": null,
@@ -537,6 +756,15 @@
               "title": "Final review of the 2jn diff",
               "role": "review",
               "state": "ready",
+              "pipeline": [
+                { "stage": "claim", "state": "pending" },
+                { "stage": "review", "state": "pending" },
+                { "stage": "closed", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": null,
+              "findings": [],
+              "report": null,
               "absorbed": false,
               "try": null,
               "attempt": null,
@@ -555,6 +783,8 @@
           "attempt": 2,
           "branch": "refs/heads/ticfac/run-epic-2jn/tick-6dh/attempt-2",
           "worktree": "/worktrees/run-epic-2jn/tick-6dh/attempt-2",
+          "handle": null,
+          "activity": null,
           "elapsed_seconds": 4892,
           "branch_idle_seconds": 300,
           "worktree_idle_seconds": 120,
@@ -576,7 +806,8 @@
         "remote_retries": 1,
         "interventions": 0,
         "stall_warnings": 2,
-        "wall_clocks_fired": 0
+        "wall_clocks_fired": 0,
+        "verdict": { "state": "healthy", "summary": "", "recovered": [] }
       },
       "gates": [
         {
@@ -597,7 +828,8 @@
       "cost": {
         "recorded_usd": 0.04,
         "attempts": 2,
-        "basis": "usage recorded on decision records; worker jobs record no cost"
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": []
       },
       "remaining": null
     },
@@ -640,6 +872,54 @@
         "ticks": { "total": 14, "closed": 14, "open": 0 },
         "waves": { "total": 3, "done": 3, "active": 0 }
       },
+      "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T08:52:13Z",
+          "run_id": "run_1a2b3c4d5e6f",
+          "tick_id": "rrl",
+          "attempt": 9,
+          "stage": "gate_passed",
+          "detail": "the integrated gate passed attempt 9 of rrl (go)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T08:55:00Z",
+          "run_id": "run_1a2b3c4d5e6f",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "resumed_automatically",
+          "detail": "the run resumed a wedged collect by itself"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T08:58:47Z",
+          "run_id": "run_1a2b3c4d5e6f",
+          "tick_id": "rrl",
+          "attempt": 9,
+          "stage": "published",
+          "detail": "the close-out published the run records and the tag ticfac/run-epic-2jn"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T08:59:00Z",
+          "run_id": "run_1a2b3c4d5e6f",
+          "tick_id": "rrl",
+          "attempt": 9,
+          "stage": "closed",
+          "detail": "rrl closed behind its integrated gate"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T08:59:01Z",
+          "run_id": "run_1a2b3c4d5e6f",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "run_finished",
+          "detail": "completed: every tick closed behind the integrated gate"
+        }
+      ],
       "waves": [],
       "workers": null,
       "waits_on": {
@@ -662,7 +942,8 @@
         "remote_retries": 0,
         "interventions": 1,
         "stall_warnings": 0,
-        "wall_clocks_fired": 0
+        "wall_clocks_fired": 0,
+        "verdict": { "state": "healthy", "summary": "", "recovered": [] }
       },
       "gates": [],
       "ci": {
@@ -682,7 +963,319 @@
       "cost": {
         "recorded_usd": 0,
         "attempts": 9,
-        "basis": "usage recorded on decision records; worker jobs record no cost"
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": []
+      },
+      "remaining": null
+    },
+    "status_model_dashboard": {
+      "schema_version": 1,
+      "run_id": "epic-6in",
+      "epic_id": "6in",
+      "host": "local",
+      "generated_at": "2026-09-28T19:20:00Z",
+      "degraded": [],
+      "liveness": {
+        "alive": true,
+        "state": "alive",
+        "reason": "pid 24018 has been running since 2026-09-28T17:00:00Z",
+        "source": "run.pid",
+        "last_event": {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        },
+        "last_event_age_seconds": 948
+      },
+      "lifecycle": {
+        "phase": "waves",
+        "phases": [
+          { "phase": "plan", "state": "done" },
+          { "phase": "waves", "state": "active" },
+          { "phase": "review", "state": "done" },
+          { "phase": "closeout", "state": "active" },
+          { "phase": "ci", "state": "active" },
+          { "phase": "merge", "state": "pending" }
+        ],
+        "wave": { "active": 2, "total": 3 }
+      },
+      "progress": {
+        "ticks": { "total": 4, "closed": 2, "open": 2 },
+        "waves": { "total": 3, "done": 1, "active": 2 }
+      },
+      "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:49:00Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "gate_failed",
+          "detail": "the integrated gate refused attempt 4 of 46x (go)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:50:30Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "rejected",
+          "detail": "attempt 4 of 46x struck out: gofmt drifted in two files"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:55:04Z",
+          "run_id": "epic-6in",
+          "tick_id": "v7z",
+          "attempt": 5,
+          "stage": "published",
+          "detail": "the close-out published the run records and the tag ticfac/run-epic-6in"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:58:02Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 6,
+          "stage": "dispatched",
+          "detail": "46x try 2 dispatched (run dispatch #6, branch ticfac/run-epic-6in/tick-46x/attempt-6)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        }
+      ],
+      "waves": [
+        {
+          "wave": 1,
+          "state": "done",
+          "ticks": [
+            {
+              "tick_id": "060",
+              "title": "Cloud worker re-prompts a harness that ends its turn with no report, and runs claude with background tasks off",
+              "gloss": "cloud worker early-exit nudge",
+              "state": "closed",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "gate", "state": "done" },
+                { "stage": "merged", "state": "done" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2940,
+              "findings": [
+                { "key": "efdc8f82c4ef465cbc27d64fbe492c061e95adca009bc9a97bac43ef327cc271", "title": "the boot strap leaves the re-prompt off for herdr panes", "gating": true }
+              ],
+              "report": {
+                "summary": "re-prompt wired; claude runs with background tasks off",
+                "diff": { "files": 11, "insertions": 214, "deletions": 60 }
+              },
+              "absorbed": false,
+              "try": 1,
+              "attempt": 1,
+              "tries": [
+                { "try": 1, "attempt": 1, "outcome": "closed", "dispatched_at": "2026-09-28T17:11:00Z", "tier": "strong", "reason": null, "next_step": null }
+              ],
+              "tier": "strong",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            },
+            {
+              "tick_id": "823",
+              "title": "A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)",
+              "gloss": "re-run holds the stopped claim",
+              "state": "closed",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "gate", "state": "done" },
+                { "stage": "merged", "state": "done" }
+              ],
+              "parent_tick_id": "060",
+              "duration_seconds": 2070,
+              "findings": [
+                { "key": "c6f3f4810c646add97230d56a36d5bb069259dbb736b11667e74747a5b88353c", "title": "the full suite stays red on the resumed claim's width tests", "gating": null }
+              ],
+              "report": {
+                "summary": "the resume path releases the stopped predecessor's claim",
+                "diff": { "files": 6, "insertions": 148, "deletions": 32 }
+              },
+              "absorbed": true,
+              "try": 2,
+              "attempt": 3,
+              "tries": [
+                { "try": 1, "attempt": 2, "outcome": "gate-failed", "dispatched_at": "2026-09-28T18:00:30Z", "tier": "frontier", "reason": null, "next_step": null },
+                { "try": 2, "attempt": 3, "outcome": "closed", "dispatched_at": "2026-09-28T18:18:00Z", "tier": "frontier", "reason": null, "next_step": null }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            }
+          ]
+        },
+        {
+          "wave": 2,
+          "state": "active",
+          "ticks": [
+            {
+              "tick_id": "46x",
+              "title": "Port tk sandbox * and tk cloud branch into ticfac verbs the image calls",
+              "gloss": "port sandbox verbs to ticfac",
+              "state": "dispatched",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "gate", "state": "active" },
+                { "stage": "merged", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 3600,
+              "findings": [],
+              "report": null,
+              "absorbed": false,
+              "try": 2,
+              "attempt": 6,
+              "tries": [
+                { "try": 1, "attempt": 4, "outcome": "rejected", "dispatched_at": "2026-09-28T18:20:00Z", "tier": "strong", "reason": "gofmt drifted in two files", "next_step": "reformat and re-push on the next try" },
+                { "try": 2, "attempt": 6, "outcome": "in-flight", "dispatched_at": "2026-09-28T18:58:02Z", "tier": "frontier", "reason": null, "next_step": null }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "herdr",
+              "elapsed_seconds": 1318
+            }
+          ]
+        },
+        {
+          "wave": 3,
+          "state": "upcoming",
+          "ticks": [
+            {
+              "tick_id": "v7z",
+              "title": "Close out Phase 7: retro and project checkpoint",
+              "gloss": "close out phase 7",
+              "role": "closeout",
+              "state": "reported",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "ci", "state": "active" },
+                { "stage": "closed", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2400,
+              "findings": [],
+              "report": {
+                "summary": "the retro and the project checkpoint are in; the close-out waits for CI",
+                "diff": { "files": 2, "insertions": 84, "deletions": 12 }
+              },
+              "absorbed": false,
+              "try": 1,
+              "attempt": 5,
+              "tries": [
+                { "try": 1, "attempt": 5, "outcome": "reported", "dispatched_at": "2026-09-28T18:40:00Z", "tier": "closeout", "reason": null, "next_step": null }
+              ],
+              "tier": "closeout",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            }
+          ]
+        }
+      ],
+      "workers": [
+        {
+          "tick_id": "46x",
+          "attempt": 6,
+          "branch": "refs/heads/ticfac/run-epic-6in/tick-46x/attempt-6",
+          "worktree": "/worktrees/run-epic-6in/tick-46x/attempt-6",
+          "handle": "herdr pane tick-46x-a6",
+          "activity": {
+            "window_seconds": 600,
+            "buckets": [1, 3, 5, 8, 7, 5, 3, 1, 2, 5],
+            "last_action": "ran go test ./internal/reconcile",
+            "last_action_at": "2026-09-28T19:18:31Z",
+            "nudges": 1
+          },
+          "elapsed_seconds": 1318,
+          "branch_idle_seconds": 300,
+          "worktree_idle_seconds": 120,
+          "wall_clock": null,
+          "silence_seconds": 42,
+          "last_turn_at": "2026-09-28T19:19:18Z",
+          "last_turn": "assistant: read internal/reconcile/claim.go"
+        }
+      ],
+      "waits_on": {
+        "kind": "ci",
+        "what": "the close-out waits for CI green on the PR",
+        "since": "2026-09-28T19:04:12Z",
+        "needs_person": false,
+        "unblock_command": null
+      },
+      "attention": [],
+      "health": {
+        "remote_retries": 14,
+        "interventions": 0,
+        "stall_warnings": 1,
+        "wall_clocks_fired": 0,
+        "verdict": {
+          "state": "healthy",
+          "summary": "the run needs nobody — it recovered 14 network retries on its own",
+          "recovered": [
+            { "what": "net", "count": 14, "seconds": null }
+          ]
+        }
+      },
+      "gates": [
+        {
+          "key": "gate-46x-4-go",
+          "check": "go",
+          "result": "fail",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "4d8c0e9ab31f5520cc41be0d6a22f13e905f61c0c1ba4e8fd719c0a5233d94f1b",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "started_at": "2026-09-28T18:49:00Z",
+          "finished_at": "2026-09-28T18:49:58Z"
+        }
+      ],
+      "ci": {
+        "state": "red",
+        "pr": {
+          "number": 98,
+          "url": "https://github.com/example/ticfac/pull/98",
+          "head_ref": "epic/6in",
+          "head_sha": "9f2ab6e0e8f96fc3fdc87c2f681519bb0d191a7",
+          "base_ref": "main"
+        },
+        "checks": [
+          { "name": "go", "status": "in_progress", "conclusion": "", "started_at": "2026-09-28T19:14:00Z" },
+          { "name": "ts", "status": "completed", "conclusion": "success", "started_at": "2026-09-28T18:44:00Z" }
+        ]
+      },
+      "cost": {
+        "recorded_usd": 0.41,
+        "attempts": 6,
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": [
+          { "source": "workers-ai", "metered": true, "usd": 0.41, "attempts": 4, "basis": "gateway usage for 4 dispatches" },
+          { "source": "claude", "metered": false, "usd": null, "attempts": 2, "basis": "local claude on a Max subscription — not metered" }
+        ]
       },
       "remaining": null
     }
@@ -702,14 +1295,16 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": null,
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -727,14 +1322,16 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": null,
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -752,13 +1349,15 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -776,14 +1375,16 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": null,
         "workers": null,
         "waits_on": { "kind": "waiting-for-godot", "what": "a person", "since": null, "needs_person": true, "unblock_command": null },
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -801,14 +1402,16 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": null,
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null,
         "pretty": true
       }
@@ -827,14 +1430,16 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": null,
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -852,6 +1457,8 @@
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "waves", "phases": [], "wave": null },
         "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
         "waves": [
           {
             "wave": 1,
@@ -860,6 +1467,16 @@
               {
                 "tick_id": "6dh",
                 "state": "in_flight",
+                "pipeline": [
+                  { "stage": "claim", "state": "pending" },
+                  { "stage": "work", "state": "pending" },
+                  { "stage": "gate", "state": "pending" },
+                  { "stage": "merged", "state": "pending" }
+                ],
+                "parent_tick_id": null,
+                "duration_seconds": null,
+                "findings": [],
+                "report": null,
                 "absorbed": false,
                 "try": 1,
                 "attempt": 2,
@@ -875,10 +1492,127 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0 },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost" },
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "remaining": null
+      }
+    },
+    {
+      "record": "status_model",
+      "why": "a pipeline stage outside the closed vocabulary — the cell is the thing a dashboard fills left to right, and a stage no renderer knows is a stage the row cannot honestly draw",
+      "expect_error_contains": "$.waves[0].ticks[0].pipeline[1].stage: deploy is not one of the permitted values",
+      "document": {
+        "schema_version": 1,
+        "run_id": "epic-2jn",
+        "epic_id": "2jn",
+        "host": "local",
+        "generated_at": "2026-09-27T05:30:00Z",
+        "degraded": [],
+        "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
+        "lifecycle": { "phase": "waves", "phases": [], "wave": null },
+        "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
+        "waves": [
+          {
+            "wave": 1,
+            "state": "active",
+            "ticks": [
+              {
+                "tick_id": "6dh",
+                "state": "dispatched",
+                "pipeline": [
+                  { "stage": "claim", "state": "pending" },
+                  { "stage": "deploy", "state": "active" },
+                  { "stage": "gate", "state": "pending" },
+                  { "stage": "merged", "state": "pending" }
+                ],
+                "parent_tick_id": null,
+                "duration_seconds": null,
+                "findings": [],
+                "report": null,
+                "absorbed": false,
+                "try": 1,
+                "attempt": 2,
+                "tries": [],
+                "tier": null,
+                "model": null,
+                "executor": null,
+                "elapsed_seconds": null
+              }
+            ]
+          }
+        ],
+        "workers": null,
+        "waits_on": null,
+        "attention": [],
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "gates": [],
+        "ci": null,
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "remaining": null
+      }
+    },
+    {
+      "record": "status_model",
+      "why": "a cost line that claims a number for spend nothing measured — metered false MUST carry usd null, because an unmetered line wearing a $0.00 is a fabricated spend (hn6 rule 7)",
+      "expect_error_contains": "$.cost.lines[0]: value matches none of the anyOf alternatives",
+      "document": {
+        "schema_version": 1,
+        "run_id": "epic-2jn",
+        "epic_id": "2jn",
+        "host": "local",
+        "generated_at": "2026-09-27T05:30:00Z",
+        "degraded": [],
+        "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
+        "lifecycle": { "phase": "plan", "phases": [], "wave": null },
+        "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
+        "waves": null,
+        "workers": null,
+        "waits_on": null,
+        "attention": [],
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "gates": [],
+        "ci": null,
+        "cost": {
+          "recorded_usd": 0,
+          "attempts": 0,
+          "basis": "usage recorded on decision records; worker jobs record no cost",
+          "lines": [
+            { "source": "claude", "metered": false, "usd": 0, "attempts": 2, "basis": "local claude on a Max subscription — not metered" }
+          ]
+        },
+        "remaining": null
+      }
+    },
+    {
+      "record": "status_model",
+      "why": "a verdict state outside the closed vocabulary — the headline is a word a person reads, and a word nobody agreed to is a headline no renderer can print",
+      "expect_error_contains": "$.health.verdict.state: paused is not one of the permitted values",
+      "document": {
+        "schema_version": 1,
+        "run_id": "epic-2jn",
+        "epic_id": "2jn",
+        "host": "local",
+        "generated_at": "2026-09-27T05:30:00Z",
+        "degraded": [],
+        "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
+        "lifecycle": { "phase": "plan", "phases": [], "wave": null },
+        "progress": { "ticks": null, "waves": null },
+        "epic_title": null,
+        "recent": [],
+        "waves": null,
+        "workers": null,
+        "waits_on": null,
+        "attention": [],
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "paused", "summary": "", "recovered": [] } },
+        "gates": [],
+        "ci": null,
+        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     }

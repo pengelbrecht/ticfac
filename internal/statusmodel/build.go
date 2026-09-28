@@ -70,6 +70,21 @@ type Sources struct {
 	// runners keep no session log this machine can read).
 	Session func(worktree string) *Turn
 
+	// Activity answers one worker's measured activity window: the events
+	// of its transcript and its last action. Nil when there is no reader —
+	// every caller is nil-safe, and the model leaves activity null.
+	Activity func(executor, worktree string) *ActivityInput
+
+	// Report answers one (tick, attempt) report: its summary and its diff
+	// stats. Nil when there is no reader — the model leaves report null,
+	// which is the honest "the report was not read".
+	Report func(tickID string, attempt int) *ReportInput
+
+	// WorkerCost is what the run's host states about what the workers spent —
+	// the factory's own ground-truth number and the river it came from. Nil
+	// when no host stated one, and the model's cost lines answer empty.
+	WorkerCost *WorkerCostInput
+
 	// CI is the forge's answer for the epic PR, per check per head. Nil
 	// when there is no PR or the forge could not be asked.
 	CI *CIInput
@@ -144,15 +159,27 @@ func Build(src Sources) Model {
 	}
 
 	m.Liveness = buildLiveness(src)
+	// EpicTitle and Recent are direct carries: the graph's own title and the
+	// feed's own last five lines, oldest first — the one dashboards datum
+	// this tick computes for real (hn6 wave 1).
+	if src.Graph != nil {
+		title := src.Graph.Epic.Title
+		m.EpicTitle = &title
+	}
+	m.Recent = append([]runfeed.Event{}, src.Feed[max(0, len(src.Feed)-5):]...)
 	absorbed := absorbedTicks(recs.Absorptions)
 	m.Waves, m.Progress = buildWaves(src, recs, absorbed)
+	decorateTicks(src, recs, &m)
 	m.Workers = buildWorkers(src, recs)
+	decorateWorkers(src, recs, &m)
+	decorateReports(src, &m)
 	m.Health = buildHealth(src.Feed)
 	m.Gates = buildGates(recs.Evidence)
 	m.CI = buildCI(src.CI)
 	m.Cost = buildCost(recs)
 	m.Lifecycle = buildLifecycle(src, recs, m)
 	m.WaitsOn, m.Attention = buildWaits(src, recs, m)
+	m.Health.Verdict = buildVerdict(src, m)
 	m.Remaining = buildRemaining(src, recs, m)
 	return m
 }
@@ -291,6 +318,7 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 	t := Tick{
 		TickID:   task.ID,
 		Title:    task.Title,
+		Gloss:    task.Gloss,
 		Role:     task.Role,
 		State:    state,
 		Absorbed: absorbed,
@@ -456,26 +484,6 @@ func buildWorkers(src Sources, recs Records) *[]Worker {
 	return &workers
 }
 
-// buildHealth counts the run's own typed statements about its health — the
-// remote retries, the interventions it resumed by itself, the stall
-// warnings, the wall clock firings. Counts of lines, never parses of prose.
-func buildHealth(feed []runfeed.Event) Health {
-	h := Health{}
-	for _, e := range feed {
-		switch e.Stage {
-		case reconcile.StageRemoteRetried:
-			h.RemoteRetries++
-		case reconcile.StageResumedAutomatically:
-			h.Interventions++
-		case reconcile.StageStallWarned:
-			h.StallWarnings++
-		case reconcile.StageWallClock:
-			h.WallClocksFired++
-		}
-	}
-	return h
-}
-
 // buildGates carries the run's gate evidence per check per head, keyed by the
 // SOURCE the check ran on — the rule the gate's own evidence learned the
 // hard way (a run writes .ticfac/ to the branch it gates).
@@ -519,26 +527,6 @@ func buildCI(input *CIInput) *CI {
 		checks = []CheckState{}
 	}
 	return &CI{State: input.State, PR: input.PR, Checks: checks}
-}
-
-// buildCost sums what the records state about money: the decision records'
-// own usage, the only cost any record carries. The basis names the coverage
-// so the number cannot quietly claim more than the records do.
-func buildCost(recs Records) Cost {
-	cost := Cost{
-		Attempts: len(recs.Attempts),
-		Basis:    "usage recorded on decision records; worker jobs record no cost",
-	}
-	for _, d := range recs.Decisions {
-		usage, ok := d.Response["usage"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if usd, ok := usage["cost_usd"].(float64); ok {
-			cost.RecordedUSD += usd
-		}
-	}
-	return cost
 }
 
 // buildLifecycle derives where the epic stands, and each phase's state, from

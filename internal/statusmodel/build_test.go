@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -81,21 +82,27 @@ func evidence(key, check, tickID string, attempt int, result, phase, sourceSHA, 
 }
 
 // testGraph is the epic's own layering: three waves, a review and a closeout
-// behind them, one absorbed tick inside wave 2.
+// behind them, one absorbed tick inside wave 2 — and the epic's own title
+// and every task's gloss, the fields the dashboard copies straight off the
+// graph (hn6 wave 1).
 func testGraph() *tk.Graph {
 	return &tk.Graph{
+		Epic: tk.GraphEpic{
+			ID:    "2jn",
+			Title: "ticfac devex: one command to run, watch and triage an epic",
+		},
 		Waves: []tk.GraphWave{
 			{Wave: 1, Tasks: []tk.GraphTask{
-				{ID: "nwj", Title: "The command surface on cobra + fang", Status: "closed"},
-				{ID: "6dh", Title: "ticfac status --json: one model of every run", Status: "open"},
+				{ID: "nwj", Title: "The command surface on cobra + fang", Gloss: "cobra+fang command surface", Status: "closed"},
+				{ID: "6dh", Title: "ticfac status --json: one model of every run", Gloss: "one model of every run", Status: "open"},
 			}},
 			{Wave: 2, Tasks: []tk.GraphTask{
-				{ID: "89m", Title: "ticfac watch", Status: "open"},
-				{ID: "152", Title: "go.mod's go directive is now 1.24.2", Status: "open"},
+				{ID: "89m", Title: "ticfac watch", Gloss: "the whole epic at a glance", Status: "open"},
+				{ID: "152", Title: "go.mod's go directive is now 1.24.2", Gloss: "go directive bump", Status: "open"},
 			}},
 			{Wave: 3, Tasks: []tk.GraphTask{
-				{ID: "xbp", Title: "Final review of the 2jn diff", Status: "open", Role: "review"},
-				{ID: "rrl", Title: "Close out 2jn", Status: "open", Role: "closeout"},
+				{ID: "xbp", Title: "Final review of the 2jn diff", Gloss: "final review", Status: "open", Role: "review"},
+				{ID: "rrl", Title: "Close out 2jn", Gloss: "close out the epic", Status: "open", Role: "closeout"},
 			}},
 		},
 	}
@@ -359,12 +366,17 @@ func TestTheModelDerivesTheWorkers(t *testing.T) {
 }
 
 // TestTheModelCountsHealthFromTheFeed: retries, interventions, stall
-// warnings and firings are counts of the run's own typed lines.
+// warnings and firings are counts of the run's own typed lines. The verdict
+// rides beside them at its wave-1 value (healthy, nothing to say, nothing
+// recovered) — the real derivation is the wave-2 verdict tick's.
 func TestTheModelCountsHealthFromTheFeed(t *testing.T) {
 	t.Parallel()
 	model := Build(runningEpicSources())
-	want := Health{RemoteRetries: 1, Interventions: 1, StallWarnings: 1, WallClocksFired: 1}
-	if model.Health != want {
+	want := Health{
+		RemoteRetries: 1, Interventions: 1, StallWarnings: 1, WallClocksFired: 1,
+		Verdict: HealthVerdict{State: VerdictHealthy, Summary: "", Recovered: []Recovery{}},
+	}
+	if !reflect.DeepEqual(model.Health, want) {
 		t.Errorf("the health counts are %+v, want %+v", model.Health, want)
 	}
 }
