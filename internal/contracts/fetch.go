@@ -75,30 +75,76 @@ func ExtractBundle(r io.Reader, directory string) (map[string][]byte, error) {
 	return files, nil
 }
 
-// Diff compares the vendored copy under root against upstream, and returns one
-// line per disagreement. An empty result means the vendored bytes are exactly
-// what ticks published at the pinned ref.
+// Diff compares the vendored ticks-owned contracts under root against what
+// ticks published at the pinned ref, and returns one line per disagreement.
+// An empty result means the vendored bytes are exactly what ticks published,
+// at the ticks bundle version the pin names.
+//
+// It also closes the one gap the offline check cannot: ticks' own bundle
+// manifest travels with the fetch, so `bundleVersion` is bound to bytes HERE
+// — the pin's recorded digests must be exactly what ticks' manifest at this
+// ref publishes for that version. Offline those digests are a recorded claim;
+// online they are checked against the authority that cut them.
 func Diff(root string, upstream map[string][]byte) ([]string, error) {
-	dir := filepath.Join(root, DirName)
-	entries, err := os.ReadDir(dir)
+	pin, err := LoadPin(root)
 	if err != nil {
-		return nil, fmt.Errorf("%s is unreadable: %w", dir, err)
+		return nil, err
 	}
 
 	var problems []string
-	local := map[string]bool{}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		local[e.Name()] = true
-		if _, ok := upstream[e.Name()]; !ok {
-			problems = append(problems, fmt.Sprintf("%s is vendored here and absent upstream at the pinned ref", e.Name()))
+
+	// ticks' manifest at the pinned ref: the authority that says which
+	// bundle version these bytes are.
+	manifest, ok := upstream[BundleFile]
+	if !ok {
+		return nil, fmt.Errorf("the fetch carries no %s — the pinned ref does not publish a bundle manifest", BundleFile)
+	}
+	var b Bundle
+	if err := json.Unmarshal(manifest, &b); err != nil {
+		return nil, fmt.Errorf("upstream %s is not valid JSON: %w", BundleFile, err)
+	}
+	if b.Version != pin.BundleVersion {
+		problems = append(problems, fmt.Sprintf(
+			"ticks at %s publishes bundle %s; %s pins %s",
+			pin.Ref[:12], b.Version, PinFile, pin.BundleVersion))
+	}
+	if !sort.StringsAreSorted(b.Files) {
+		problems = append(problems, "upstream bundle.json is not sorted")
+	}
+	pinned := map[string]bool{}
+	for _, name := range pin.Files {
+		pinned[name] = true
+		if !contains(b.Files, name) {
+			problems = append(problems, fmt.Sprintf(
+				"%s is pinned here and ticks' bundle %s does not carry it", name, b.Version))
 		}
 	}
-	for name, body := range upstream {
-		if !local[name] {
-			problems = append(problems, fmt.Sprintf("%s is upstream at the pinned ref and not vendored here", name))
+	for _, name := range b.Files {
+		if !pinned[name] {
+			problems = append(problems, fmt.Sprintf(
+				"%s is in ticks' bundle %s and not pinned here", name, b.Version))
+		}
+	}
+	for _, name := range pin.Files {
+		published, ok := b.Digests[name]
+		if !ok {
+			problems = append(problems, fmt.Sprintf(
+				"ticks' bundle %s records no digest for %s", b.Version, name))
+			continue
+		}
+		if pin.Digests[name] != published {
+			problems = append(problems, fmt.Sprintf(
+				"%s: %s records %s, ticks' bundle %s publishes %s — the pin's bytes and its version disagree",
+				name, PinFile, pin.Digests[name], b.Version, published))
+		}
+	}
+
+	// The bytes on disk, against the bytes upstream.
+	dir := filepath.Join(root, DirName)
+	for _, name := range pin.Files {
+		body, ok := upstream[name]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s is upstream-pinned and absent from the fetch", name))
 			continue
 		}
 		have, err := os.ReadFile(filepath.Join(dir, name))
@@ -111,45 +157,66 @@ func Diff(root string, upstream map[string][]byte) ([]string, error) {
 				name, FileDigest(have), FileDigest(body)))
 		}
 	}
+
 	sort.Strings(problems)
 	return problems, nil
 }
 
-// Write replaces the vendored bundle with upstream and rewrites the pin's
-// digests. It is called only by `sync`, which is never on the test path.
+func contains(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// Write replaces the vendored ticks-owned contracts with upstream and
+// rewrites the pin's digests. It is called only by `sync`, which is never on
+// the test path — and it touches NOTHING else in contracts/: the ticfac-owned
+// contracts, ticfac's manifest and ticfac's changelog are authored here, not
+// fetched, and a fetch that overwrote them would be a fetch that destroyed
+// work.
+//
+// A fetch that changes a vendored file leaves ticfac's own manifest stale on
+// purpose: `sync` finishes by running the offline gate, which fails naming
+// exactly that until the ticfac bundle is re-cut (bump `version`, refresh the
+// digests, add the CHANGELOG entry) in the same deliberate act.
 func Write(root string, upstream map[string][]byte) error {
+	pin, err := LoadPin(root)
+	if err != nil {
+		return err
+	}
+
+	// Stage everything first: a fetch that cannot resolve every pinned file
+	// writes nothing at all.
+	staged := map[string][]byte{}
+	for _, name := range pin.Files {
+		body, ok := upstream[name]
+		if !ok {
+			return fmt.Errorf("the pinned ref does not carry %s — nothing was written; a partial vendor is exactly the half-updated state these fixtures exist to prevent", name)
+		}
+		staged[name] = body
+	}
+
 	dir := filepath.Join(root, DirName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("%s is unreadable: %w", dir, err)
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if _, ok := upstream[e.Name()]; !ok {
-			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
-				return err
-			}
-		}
-	}
-	for name, body := range upstream {
+	for name, body := range staged {
 		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
 			return err
 		}
 	}
 
-	return rewritePinDigests(root, upstream)
+	return rewritePinDigests(root, staged)
 }
 
-// rewritePinDigests updates `files` and `digests` in contracts.pin.json from
-// the bytes just written, and leaves every other field exactly as it was: the
-// pin's version and ref are a person's decision, not a side effect of a fetch.
-func rewritePinDigests(root string, upstream map[string][]byte) error {
+// rewritePinDigests updates `digests` in contracts.pin.json from the bytes
+// just written, and leaves every other field — the version, the ref, the file
+// list — exactly as it was: the pin's identity is a person's decision, not a
+// side effect of a fetch.
+func rewritePinDigests(root string, staged map[string][]byte) error {
 	path := filepath.Join(root, PinFile)
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -160,18 +227,8 @@ func rewritePinDigests(root string, upstream map[string][]byte) error {
 		return fmt.Errorf("%s is not valid JSON: %w", path, err)
 	}
 
-	b, err := Load(filepath.Join(root, DirName))
-	if err != nil {
-		return err
-	}
-	filesJSON, err := json.Marshal(b.Files)
-	if err != nil {
-		return err
-	}
-	document["files"] = filesJSON
-
 	digests := map[string]string{}
-	for name, body := range upstream {
+	for name, body := range staged {
 		digests[name] = FileDigest(body)
 	}
 	digestsJSON, err := json.Marshal(digests)

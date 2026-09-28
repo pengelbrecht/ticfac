@@ -21,12 +21,12 @@
  *
  * This module is a READER of the model, never a second opinion: the fields it
  * types are the fields the phone page and the alert evaluator read, and the
- * model's own shape stays pinned where 6dh pinned it (a Go-side contract
- * fixture, `internal/statusmodel/contract.json`; the second reader here is why
- * that fixture is now due to move into the pinned bundle — the finding 6dh
- * drafted, grown true by this file). A document whose `schema_version` is not
- * 1 is refused rather than guessed at — the rule every versioned surface
- * here holds.
+ * model's own shape is pinned in the contract bundle this factory reads too
+ * (contracts/status-model.json, moved in from the Go package when this second
+ * reader arrived — tick 4i8; cloudflare/test/status-model.test.ts runs the
+ * same goldens and refusals the Go readers run). A document whose
+ * `schema_version` is not 1 is refused rather than guessed at — the rule
+ * every versioned surface here holds.
  */
 
 import type { Run, RunProgressRecord } from "./db";

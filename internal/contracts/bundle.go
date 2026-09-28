@@ -1,5 +1,5 @@
 // Package contracts reads the versioned cross-language contract bundle that
-// ticfac vendors from ticks into the repository root `contracts/` directory.
+// lives in the repository root `contracts/` directory.
 //
 // The fixtures themselves are described by contracts/README.md: behavioural
 // case tables that more than one implementation asserts against, so a rule
@@ -10,11 +10,15 @@
 //
 //	does "contract bundle version X" name a fixed set of bytes?
 //
-// ticfac is the consumer ticks' cloud/factory/CONTRACTS.md was designed for: a
-// repository outside ticks that pins a bundle version by exact value. So the
-// check is re-implemented here in ticfac's own code rather than imported —
-// SPEC §3.2, and the standing rule that ticfac never imports a ticks Go
-// package. Two failures, not one:
+// Since tick 4i8 ticfac AUTHORS that bundle: every contract describing a
+// ticfac format is edited here and re-cut here, and the two contracts that
+// describe ticks' own formats (tk-json-manifest.json, tracker-layout.json)
+// are vendored from a pinned ticks release through contracts.pin.json — the
+// consumer-side mechanism this package grew up as, kept for exactly the two
+// files that still have an upstream. So the bundle check is this repository's
+// own code (it always was: SPEC §3.2, and the standing rule that ticfac never
+// imports a ticks Go package), and it is now also where the bundle is
+// authored. Two failures, not one:
 //
 //   - edit a vendored fixture, and its recorded per-file digest no longer
 //     matches the bytes on disk;
@@ -48,6 +52,11 @@ const (
 
 	// ChangelogFile records what changed in each bundle version.
 	ChangelogFile = "CHANGELOG.md"
+
+	// ReadmeFile says what the fixtures are and who owns them. It is the
+	// bundle's front door, not a fixture: the manifest cannot digest itself,
+	// and the readme is the same kind of self-description.
+	ReadmeFile = "README.md"
 )
 
 // semver, without pre-release or build metadata.
@@ -225,11 +234,13 @@ func Verify(dir string) error {
 		sort.Strings(problems)
 		return fmt.Errorf("contract bundle %s does not match %s:\n  %s\n\n%s",
 			b.Version, dir, strings.Join(problems, "\n  "),
-			"The vendored bundle is not the bundle it says it is. ticfac pins a bundle\n"+
-				"version by exact value, so the same version string must never mean two\n"+
-				"different sets of bytes. A vendored fixture is NOT edited here: change it in\n"+
-				"ticks, cut a new bundle version there, then move `ref` and `bundleVersion` in\n"+
-				"contracts.pin.json and run `go run ./cmd/contracts sync`.")
+			"The bundle is not the bundle it says it is. Consumers pin a bundle version\n"+
+				"by exact value, so the same version string must never mean two different\n"+
+				"sets of bytes. A ticfac-owned contract is edited here and RE-CUT here: bump\n"+
+				"`version` in bundle.json, add the CHANGELOG entry, and refresh the digests\n"+
+				"in the same commit. A ticks-owned contract (one contracts.pin.json still\n"+
+				"pins) is never edited here — change it in ticks, cut a bundle version there,\n"+
+				"then move `ref` and `bundleVersion` and run `go run ./cmd/contracts sync`.")
 	}
 
 	// The manifest agrees with the fixtures. The remaining question is the one
