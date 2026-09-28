@@ -580,6 +580,14 @@ const (
 	ExitWorkerAgent = 11
 )
 
+// WorkerNudgeMax is how many times the worker entrypoint re-prompts a harness
+// that ends its turn — exits 0 — without writing its report, before the
+// container gives up and reports the tick itself (tick 060). The same bound
+// as the local subprocess executor's (internal/exec/subprocess MaxNudges):
+// a cloud worker and a local one give a stalling harness the same number of
+// chances before the missing-result verdict.
+const WorkerNudgeMax = 2
+
 // WorkerPromptAddendum is what `tk sandbox worker-prompt` appends to the
 // shared worker template.
 //

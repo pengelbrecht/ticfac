@@ -644,6 +644,90 @@ run_cancel() {
 }
 
 # ---------------------------------------------------------------------------
+# The early-exit nudge (tick 060)
+#
+# PR #78 made the local subprocess executor re-prompt a runner that exits 0
+# with no report (epic-2jn vqc: the resolve job said "The gate is still
+# running. I'll wait for its completion notification.", ended its turn, and
+# in print mode ending the turn ends the process). This script ran the
+# harness ONCE with no fallback, so a cloud worker that did the same was
+# missing-result immediately. Same shape, same fix, ported: the harness is
+# re-prompted here too, at most NUDGE_MAX times — in its OWN session when
+# this script can name one for it (claude --resume, pi --session-id) and as
+# a fresh run on the same checkout when it cannot (omp) — before the
+# container gives up, salvages, writes the fallback report and pushes.
+#
+# Only a CLEAN exit with no report is nudged. A non-zero exit is the harness
+# failing, and prompting a failed harness again would spend a turn on a
+# broken argv or an exhausted quota; a bounded one (timeout's 124) is this
+# container's own bound firing, and nudges after it would spend a bound the
+# dispatcher does not extend.
+# ---------------------------------------------------------------------------
+# The same bound as the local executor's (internal/exec/subprocess/nudge.go,
+# MaxNudges): a worker told twice what is missing and still ending without its
+# report is not going to write it, and the wall clock is the outer bound.
+readonly NUDGE_MAX=2
+# What the nudge says about the turn ending — the same line every local
+# prompt carries (HeadlessLine), because the model cannot see that it runs in
+# print mode and every interactive habit it has says a background task will
+# call it back.
+readonly HEADLESS_LINE="You run headless: ending your turn ends the job. Run commands in the foreground and wait for them; never end your turn while waiting on a background task."
+
+# A session id a harness that takes one is started under and resumed by.
+# /proc first because that is what the container has, uuidgen for a
+# development host running the script by hand, and od so the answer never
+# depends on either.
+new_session_id() {
+	local hex
+	if [[ -r /proc/sys/kernel/random/uuid ]]; then
+		sed -n 1p /proc/sys/kernel/random/uuid
+		return 0
+	fi
+	if command -v uuidgen >/dev/null 2>&1; then
+		uuidgen
+		return 0
+	fi
+	hex="$(od -An -N16 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+	if [[ ${#hex} != 32 ]]; then
+		return 1
+	fi
+	printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+}
+
+# What a harness that resumes its own session is re-prompted with. Short on
+# purpose: the session still holds the whole job (the port of nudgePrompt).
+nudge_prompt_text() {
+	printf 'You ended your turn without writing your report. %s\n\nFinish the work you were doing: if you were waiting on a command, run it again in the foreground and wait for it. Commit on %s, then write your report to this exact absolute path, ending with its STATUS line:\n\n    %s\n' \
+		"$HEADLESS_LINE" "$worker_branch" "$workdir/$result_path"
+}
+
+# What is appended to the WHOLE prompt for a harness with no session to
+# resume: the fresh process starts blind, so it is told a run before it
+# already worked here (the port of freshNudgeSection).
+fresh_nudge_section() {
+	printf '\n## This job already ran once on this checkout\n\nA run before you ended without writing its report. Whatever it committed is on %s already: read `git log` and the checkout, finish the job, and write your report to %s as described above.\n' \
+		"$worker_branch" "$result_path"
+}
+
+# The decision after each harness run (the port of nudgeDue): every condition
+# is a reason the missing report is NOT the worker stopping early — or a bound
+# already spent.
+nudge_due() {
+	local status="$1" count="$2" started="$3"
+	((status == 0)) || return 1
+	((count < NUDGE_MAX)) || return 1
+	[[ -f $workdir/$result_path ]] && return 1
+	if cancel_requested; then
+		return 1
+	fi
+	if ((harness_timeout > 0)) && ((SECONDS - started >= harness_timeout)); then
+		warn "this container's own harness bound is already spent; not re-prompting the harness"
+		return 1
+	fi
+	return 0
+}
+
+# ---------------------------------------------------------------------------
 # The harness
 #
 # Not exec'd, and bounded when the caller bounded it: everything this script
@@ -656,7 +740,7 @@ run_cancel() {
 # status, and a harness killed by a signal reports 128+signum either way.
 # ---------------------------------------------------------------------------
 run_harness() {
-	local prompt="$1" status
+	local prompt="$1" session="${2:-}" resume="${3:-0}" status
 	export TK_ACTOR="$ACTOR"
 	export TICKS_RUN_ID="$run_id"
 	export TICKS_TICK="$tick_id"
@@ -673,14 +757,38 @@ run_harness() {
 		[[ -z $max_time ]] || cmd+=(--max-time "$max_time")
 		;;
 	pi)
-		# --approve is pi's whole full-auto story: it has no permission gate,
-		# only a trust prompt for project-local files, and this checkout is a
-		# path pi has never seen. pi has no --max-time; the container's own
-		# harness bound is what stops it.
-		cmd=(pi -p "$prompt" --approve --mode text --model "$harness_model_selector")
+		# --session-id is "use exact project session ID, creating it if
+		# missing" (pi 0.85.1 --help), so ONE flag both names the session up
+		# front and re-prompts it — the same runner table the local executor
+		# runs. --approve is pi's whole full-auto story: it has no permission
+		# gate, only a trust prompt for project-local files, and this checkout
+		# is a path pi has never seen. pi has no --max-time; the container's
+		# own harness bound is what stops it.
+		cmd=(pi -p)
+		[[ -z $session ]] || cmd+=(--session-id "$session")
+		cmd+=(--approve --mode text --model "$harness_model_selector" "$prompt")
 		;;
 	claude)
-		cmd=(claude -p "$prompt" --dangerously-skip-permissions --model "$model_id")
+		# --session-id names the session up front and --resume prompts it
+		# again in print mode with its whole history (claude 2.1.283) — that
+		# is what the nudge re-prompts through, exactly as the local
+		# executor's runner table does.
+		cmd=(claude -p)
+		if [[ -n $session ]]; then
+			if [[ $resume == 1 ]]; then
+				cmd+=(--resume "$session")
+			else
+				cmd+=(--session-id "$session")
+			fi
+		fi
+		cmd+=(--dangerously-skip-permissions --model "$model_id" "$prompt")
+		# Print mode ends the process when the model ends its turn, so a
+		# background task is a turn that ends while the work it waits on is
+		# still running (epic-2jn vqc). CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
+		# is Claude Code's documented switch for exactly that, and the same
+		# setting the local executor launches claude with — the nudge is the
+		# recovery for the stall this prevents.
+		export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
 		;;
 	esac
 
@@ -1046,8 +1154,43 @@ main() {
 	install_boundary_guard
 
 	build_worker_prompt
-	run_harness "$prompt_text"
+	# A session for the harness to run in, so an early exit can be re-prompted
+	# IN its own context rather than from scratch. omp has none this script can
+	# name; for it the nudge is a fresh run with a section saying a run before
+	# it already worked here.
+	local session_id=""
+	case "$harness" in
+	pi | claude)
+		if session_id="$(new_session_id)"; then
+			say "the $harness harness runs in session ${session_id}, so a turn that ends before the report can be resumed"
+		else
+			session_id=""
+			warn "could not name a session for the $harness harness; a turn that ends before the report will be re-run fresh rather than resumed"
+		fi
+		;;
+	esac
+	local harness_started=$SECONDS
+	run_harness "$prompt_text" "$session_id" 0
 	local harness_status=$?
+	# The nudge (tick 060): a clean exit with no report is the worker stopping
+	# early, not the worker finishing — re-prompt it, bounded, before the
+	# verdict below is decided. The loop re-reads everything the decision
+	# depends on, so a nudge that lands the report simply ends it.
+	local nudged=0
+	while nudge_due "$harness_status" "$nudged" "$harness_started"; do
+		nudged=$((nudged + 1))
+		local nudge_text how
+		if [[ -n $session_id ]]; then
+			nudge_text="$(nudge_prompt_text)"
+			how="re-prompting it in its own session"
+		else
+			nudge_text="${prompt_text}$(fresh_nudge_section)"
+			how="re-running it fresh on the same checkout"
+		fi
+		say "nudge ${nudged} of ${NUDGE_MAX}: the $harness harness exited 0 without writing its report at ${result_path}, and a headless worker that ends its turn early ends the job; $how"
+		run_harness "$nudge_text" "$session_id" 1
+		harness_status=$?
+	done
 
 	# From here on nothing may stop this script early: whatever happened, the
 	# durable layer gets the branch and the report.

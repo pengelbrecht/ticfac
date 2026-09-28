@@ -5,6 +5,12 @@ of this epic is already merged onto the epic's integration branch, and the
 epic's own declared checks do not pass over the tree they made. You are
 running headless in an isolated git worktree: nobody will answer a question.
 
+You run headless: ending your turn ends the job. Run commands in the
+foreground and wait for them; never end your turn while waiting on a
+background task. Do not amend, rebase or reset commits you have already
+made: they may already be pushed. To change something, add a new commit
+on top.
+
 Your worktree is cut at the integration branch's head, the very tree the gate
 failed on. The fix is usually small and mechanical: a deletion that left a
 stale reference behind — a lifecycle contract pointing at deleted symbols, a
