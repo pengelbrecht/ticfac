@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 33,
-  "state": "publishing",
-  "reason": "closing 46x behind the integrated gate on 2b0c770702ff",
-  "updated_at": "2026-09-28T06:42:43Z",
+  "sequence": 34,
+  "state": "running",
+  "reason": "46x is closed",
+  "updated_at": "2026-09-28T06:42:51Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "46x",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 4
     },
     {
