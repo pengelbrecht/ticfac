@@ -65,7 +65,7 @@ spelled in Go as PipelineImplement/PipelineReview/PipelineCloseout),
 per-try `tier`/`reason`/`next_step`, per-worker `handle` and `activity`,
 `health.verdict`, per-source `cost.lines` (usd MUST be null when metered is
 false — pinned by an anyOf and refused by a new negative), and the top-level
-`recent` and `epic_title`. One new golden, `status_model_dashboard`, carries
+`recent` and `epic_title`. One new golden, `dashboard`, carries
 every new field populated — it is the fixture the wave-3 renderers and the
 phone page test against — and three new negatives refuse an unknown pipeline
 stage, an unmetered line with a number, and an unknown verdict state.

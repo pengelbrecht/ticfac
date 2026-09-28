@@ -29,7 +29,7 @@
     "runners-config-contract.json": "602c3b077261ed745201b8d0a49c0133f17d87bea86d32282394721b6dfc861f",
     "sandbox-image-cases.json": "47bf74104bb6a682c9876c25177cd5ff4c31ec6dc477dd5f1182cb6d54e5d470",
     "signal-source-cases.json": "1adf66c382edb9d5fd15cfc1cdf01eb35795d232a823d6060ff3f69e493ed6df",
-    "status-model.json": "7e66ad2a66faa229edff65a8201362dc39cf72c4391824b7fae02a78a0df42fa",
+    "status-model.json": "2c523d0b16ba9e8d10aff454bbc6200434a2ab724e6b55bb12a7f1eb2042c2ad",
     "sweep-policy-cases.json": "7006ba3391618fdaf249084acf799f4fa67e49e3e89ac0baf89ba838b5641d0e",
     "sweep-selection-contract.json": "3d2eafd42b93b7d6e0b1bf45379c3e4008f3757bea5e03d70d58d5f8625f05ef",
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
@@ -40,6 +40,6 @@
   "version_digests": {
     "1.0.0": "4f25c9ef0f3da37693c249194cbcfefd5b86c2890543bad6f50c422661d9aa86",
     "1.0.1": "810ce72251a93f4db9668f4397973195763bb619099f3ee2e787a164f763dd78",
-    "1.1.0": "0a907242d8864e3b68d8a7f4d82eadb803cedec5472a04940ebf31d39adb70a5"
+    "1.1.0": "db0bbc96b5753a17c58e18dd1d5b26b3c8de9b90c30e46c9bc836b023778a616"
   }
 }

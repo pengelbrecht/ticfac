@@ -968,7 +968,7 @@
       },
       "remaining": null
     },
-    "status_model_dashboard": {
+    "dashboard": {
       "schema_version": 1,
       "run_id": "epic-6in",
       "epic_id": "6in",
