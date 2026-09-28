@@ -367,6 +367,10 @@ type cloudLiveness struct {
 	Current string `json:"current_step,omitempty"`
 }
 
+// cloudLivenessOrphaned is the liveness state of a run whose record claims it
+// is still going while Cloudflare has no Workflow instance for it at all.
+const cloudLivenessOrphaned = "orphaned"
+
 func cloudRunLiveness(ctx context.Context, runID, state string) cloudLiveness {
 	state = strings.TrimSpace(state)
 	if state == "" {
@@ -397,6 +401,23 @@ func cloudRunLiveness(ctx context.Context, runID, state string) cloudLiveness {
 		return liveness
 	}
 	supervisor, err := factory.ReadSupervisor(ctx, runID, opts)
+	var none *factory.NoSupervisorError
+	if errors.As(err, &none) && active {
+		// Cloudflare ANSWERED: there is no instance. The record is written by
+		// that instance, and the factory creates it in the same request that
+		// records the run (deleting the record when creation fails) — so a
+		// record still claiming life with no instance behind it was never
+		// booted or has outlived retention. Nothing will ever write it again:
+		// the run is dead, and its record is an orphan.
+		return cloudLiveness{
+			Alive:  false,
+			State:  cloudLivenessOrphaned,
+			Source: "workflow-supervisor",
+			Reason: fmt.Sprintf("the factory's record says %s, but Cloudflare has no %s Workflow instance for this run — "+
+				"never created, or past Cloudflare's retention — so the record is frozen and nothing is advancing the run",
+				state, none.Workflow),
+		}
+	}
 	if err != nil {
 		liveness.Reason += fmt.Sprintf("; the Workflow instance itself could not be asked (%v)", err)
 		return liveness
