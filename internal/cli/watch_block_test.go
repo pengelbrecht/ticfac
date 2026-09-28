@@ -15,7 +15,6 @@ package cli
 // is a person's to move.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -44,7 +43,7 @@ func fakeTerminal(t *testing.T) {
 // watchWaitsFor polls a condition on a short interval until it holds or the
 // deadline passes: a condition wait over an observable (what the watch has
 // printed), never a guess about the work's timing.
-func watchWaitsFor(t *testing.T, what string, holds func() bool, stdout, stderr *bytes.Buffer) {
+func watchWaitsFor(t *testing.T, what string, holds func() bool, stdout, stderr *syncBuffer) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
@@ -100,7 +99,7 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 	}
 	t.Cleanup(func() { life.Release("test") })
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
@@ -184,7 +183,7 @@ func TestWatchOnATerminalEndsHoldingForAPerson(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
 		reconcile.StageRunHeld, "attempt_unaddressed: nobody can say whether the attempt is running"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
@@ -265,7 +264,7 @@ func TestWatchOnATerminalFollowsACloudRun(t *testing.T) {
 	}}})
 	fakeTerminal(t)
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
@@ -327,7 +326,7 @@ func TestWatchOnATerminalEndsFailed(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
 		reconcile.StageRunFinished, "failed: t2 did not pass"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
@@ -382,7 +381,7 @@ func TestWatchOnATerminalEndsCancelled(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
 		reconcile.StageRunFinished, "the run is already cancelled: operator cancelled"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
@@ -437,7 +436,7 @@ func TestWatchOnATerminalEndsCancelledWhenAPersonStoppedTheRun(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
 		reconcile.StageRunDied, "cancelled: stopped by a signal (interrupt) before the run finished"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)

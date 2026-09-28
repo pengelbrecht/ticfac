@@ -38,9 +38,22 @@ func (f cloudRoundTripper) RoundTrip(request *http.Request) (*http.Response, err
 	return f(request)
 }
 
+// cloudFactoryMu guards every fake factory's request log: a test that reads
+// the log WHILE a command still runs (a follow it is waiting on) reads it
+// under this lock, through cloudFactoryRequests.
+var cloudFactoryMu sync.Mutex
+
+// cloudFactoryRequests is a snapshot of a fake factory's request log, safe to
+// take while the command that makes the requests is still running.
+func cloudFactoryRequests(requests *[]cloudFactoryRequest) []cloudFactoryRequest {
+	cloudFactoryMu.Lock()
+	defer cloudFactoryMu.Unlock()
+	return append([]cloudFactoryRequest(nil), (*requests)...)
+}
+
 func newCloudFactory(t *testing.T, handler func(cloudFactoryRequest) (int, any)) (string, *[]cloudFactoryRequest) {
 	t.Helper()
-	var mu sync.Mutex
+	mu := &cloudFactoryMu
 	requests := make([]cloudFactoryRequest, 0)
 	previousClient := cloudHTTPClient
 	cloudHTTPClient = &http.Client{Transport: cloudRoundTripper(func(r *http.Request) (*http.Response, error) {

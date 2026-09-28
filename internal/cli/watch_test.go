@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"syscall"
@@ -35,7 +34,7 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 		time.Date(2026, 9, 14, 12, 41, 4, 0, time.UTC), "r-1", "", nil, "run_finished",
 		"failed: nkf did not pass"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != ExitHeld {
 		t.Fatalf("exit code %d, want %d for a run that ended holding an attempt; stderr %q", code, ExitHeld, stderr.String())
@@ -73,7 +72,7 @@ func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
 		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, "run_finished",
 		"failed: t1 did not pass"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
 	if code != ExitHeld {
 		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
@@ -98,7 +97,7 @@ func TestWatchHoldAlertNamesTriageForAFindingHold(t *testing.T) {
 		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, "run_finished",
 		"holding: the close-out waits on untriaged findings"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
 	if code != ExitHeld {
 		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
@@ -126,7 +125,7 @@ func TestWatchPrefixShowsTheTicksTry(t *testing.T) {
 	}
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(at.Add(time.Hour), "r-1", "", nil, "run_finished", "completed"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit code %d; stderr %q", code, stderr.String())
 	}
@@ -149,7 +148,7 @@ func TestWatchReportsARunThatEndedOnItsOwn(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Date(2026, 9, 14, 12, 41, 3, 0, time.UTC), "r-1", "", nil, "run_finished", "completed: every tick closed"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code %d for a run that ended without holding anything; stderr %q", code, stderr.String())
@@ -164,7 +163,7 @@ func TestWatchReportsARunThatEndedOnItsOwn(t *testing.T) {
 
 func TestWatchNeedsExactlyOneRunID(t *testing.T) {
 	for _, args := range [][]string{{"watch"}, {"watch", "a", "b"}, {"watch", ""}} {
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		if code := Run(args, &stdout, &stderr); code != 2 {
 			t.Errorf("%v: exit code %d, want 2", args, code)
 		}
@@ -172,7 +171,7 @@ func TestWatchNeedsExactlyOneRunID(t *testing.T) {
 }
 
 func TestWatchNamesARunThatNeverRanHere(t *testing.T) {
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", t.TempDir(), "r-none"}, &stdout, &stderr)
 	if code == 0 {
 		t.Fatal("a run with no feed and no live claim was watched without complaint")
@@ -188,7 +187,7 @@ func TestWatchFollowsUntilTheRunEnds(t *testing.T) {
 	writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 		time.Now(), "r-1", "a1", &attempt, "dispatched", "attempt 2 started"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
@@ -260,7 +259,7 @@ func TestWatchOnAResumedRunDoesNotExitOnThePreviousIncarnationsTerminalLine(t *t
 	}
 	t.Cleanup(func() { life.Release("test") })
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
@@ -332,7 +331,7 @@ func TestWatchStartedWhileTheRunHoldsReportsTheHoldItJoined(t *testing.T) {
 		time.Now(), "r-1", "a2", &second, reconcile.StageRunHeld,
 		"attempt_unaddressed: nobody can say whether the attempt is running"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := make(chan int, 1)
 	go func() {
 		code <- Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
@@ -387,7 +386,7 @@ func TestWatchStartedWhileTheRunHoldsReportsTheHoldItJoined(t *testing.T) {
 // replay: the resumed run writes a marker, the watch prints it, and only a
 // watch that did not exit on the previous incarnation's ending can. It
 // waits on that condition, never on a guessed interval.
-func syncWatchMarker(t *testing.T, repo string, stdout *bytes.Buffer) {
+func syncWatchMarker(t *testing.T, repo string, stdout *syncBuffer) {
 	t.Helper()
 	for i := 0; i < 40; i++ {
 		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
@@ -421,7 +420,7 @@ func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
 		time.Date(2026, 9, 14, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished,
 		"failed: nkf did not pass: the integrated gate refused the work"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != exitGeneric {
 		t.Fatalf("exit code %d, want %d (the failed class) for a run whose own last line says failed; stderr %q", code, exitGeneric, stderr.String())
@@ -461,7 +460,7 @@ func TestWatchExitsFailedWhenTheRunDied(t *testing.T) {
 		time.Date(2026, 9, 14, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
 		"run-epic: the reconciler returned an operational error"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != exitGeneric {
 		t.Fatalf("exit code %d, want %d (the failed class) for a run that died without its own run_finished; stderr %q", code, exitGeneric, stderr.String())
@@ -507,7 +506,7 @@ func TestWatchByEpicIDFollowsTheCloudRunTheEpicHasInTheFactory(t *testing.T) {
 	})
 	configureCloudFactory(t, endpoint)
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d watching the factory's run for epic1, want 0:\n%s\n%s", code, stdout.String(), stderr.String())
@@ -552,7 +551,7 @@ func TestWatchByEpicIDNamesTheResumeByTheEpicNotTheFactoryRunID(t *testing.T) {
 	})
 	configureCloudFactory(t, endpoint)
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "epic-epic1"}, &stdout, &stderr)
 	if code != exitGeneric {
 		t.Fatalf("exit %d for the factory's failed run, want %d:\n%s\n%s", code, exitGeneric, stdout.String(), stderr.String())
@@ -581,7 +580,7 @@ func TestWatchExitsCancelledWhenTheRunEndedCancelled(t *testing.T) {
 		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished,
 		"cancelled: the operator stopped the run: stop requested"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != exitCancelled {
 		t.Fatalf("exit code %d, want %d (the cancelled class) for a run whose own last line says cancelled; stderr %q", code, exitCancelled, stderr.String())
@@ -619,7 +618,7 @@ func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
 		repo := t.TempDir()
 		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 			time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished, detail))
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 		if code != exitCancelled {
 			t.Errorf("%s: exit code %d, want %d; stderr %q", why, code, exitCancelled, stderr.String())
@@ -636,7 +635,7 @@ func TestWatchClassifiesEveryCancelledWordTheRunWrites(t *testing.T) {
 		repo := t.TempDir()
 		writeFeedEvent(t, repo, "r-1", runfeed.NewEvent(
 			time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "r-1", "", nil, reconcile.StageRunFinished, detail))
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 		if code != exitSuccess {
 			t.Errorf("a completed run's ending %q exited %d, want %d (done)", detail, code, exitSuccess)
@@ -659,7 +658,7 @@ func TestWatchExitsCancelledWhenAPersonStoppedTheRun(t *testing.T) {
 		time.Date(2026, 9, 27, 13, 6, 2, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
 		"cancelled: stopped by a signal (interrupt) before the run finished"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != exitCancelled {
 		t.Fatalf("exit code %d, want %d (the cancelled class) for a run a person stopped with Ctrl-C; stderr %q",
@@ -691,7 +690,7 @@ func TestWatchKeepsTheEvictionADeath(t *testing.T) {
 		time.Date(2026, 9, 27, 13, 6, 2, 0, time.UTC), "r-1", "", nil, reconcile.StageRunDied,
 		"stopped by a signal (terminated) before the run finished; evacuated: pushed the integration branch"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := Run([]string{"watch", "--repo", repo, "r-1"}, &stdout, &stderr)
 	if code != exitGeneric {
 		t.Fatalf("exit code %d, want %d (the failed class) for a run the platform evicted; stderr %q",

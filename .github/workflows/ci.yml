@@ -127,6 +127,27 @@ jobs:
             *) echo "the refusal does not say 'no executor configured'"; exit 1 ;;
           esac
 
+  # The race detector over the short suite, as its own job so it runs beside
+  # `go` and adds no wall time to CI (measured locally, 10-core darwin: the
+  # short suite 64s plain, 81s under -race). The short suite is where every
+  # concurrent seam is exercised — the follow, the watch, the detached
+  # attach, the overview's gathering — while `make test` stays as it is. A
+  # race is a bug, production or test side: this job stops one landing.
+  go-race:
+    name: go race
+    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test -race -short
+        run: make test-race
+
   contracts:
     name: contracts
     # An epic branch already gets a push-triggered run on the same head

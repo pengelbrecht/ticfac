@@ -20,7 +20,6 @@ package cli
 // child this command starts actually SURVIVES the terminal that started it.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -205,7 +204,7 @@ func TestRunStartsInHerdrPanesWithTheEmbeddedProfileSet(t *testing.T) {
 	attach := &attachRecorder{}
 	runAttach = attach.seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
@@ -239,7 +238,7 @@ func TestRunWithoutHerdrUsesTheBinarysDefaultProfiles(t *testing.T) {
 	runStartDetached = claimingSpawn(t, rec)
 	runAttach = (&attachRecorder{}).seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
 	}
@@ -264,7 +263,7 @@ func TestRunNoHerdrOptsOutOfTheProbeItself(t *testing.T) {
 	runStartDetached = claimingSpawn(t, rec)
 	runAttach = (&attachRecorder{}).seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := runBody(context.Background(), t, []string{"--repo", repo, "--no-herdr", "foo"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
 	}
@@ -291,7 +290,7 @@ func TestRunForwardsTheProfilesOverrideAndTheOptInWall(t *testing.T) {
 	runStartDetached = claimingSpawn(t, rec)
 	runAttach = (&attachRecorder{}).seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t,
 		[]string{"--repo", repo, "--profiles", filepath.Join(repo, "expert"), "--wall", "3600", "foo"},
 		&stdout, &stderr)
@@ -318,7 +317,7 @@ func TestRunInjectsNoWallClockWhenNoneIsNamed(t *testing.T) {
 	runAttach = (&attachRecorder{}).seam
 	runHerdrLive = func(context.Context, string) (string, error) { return "", fmt.Errorf("none") }
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
 	}
@@ -345,7 +344,7 @@ func TestRunDetectsALiveHerdrThroughTheRealSocket(t *testing.T) {
 	runStartDetached = claimingSpawn(t, rec)
 	runAttach = (&attachRecorder{}).seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
 	}
@@ -396,7 +395,7 @@ func TestRunAttachesALiveRunWithoutStartingAnother(t *testing.T) {
 	attach := &attachRecorder{}
 	runAttach = attach.seam
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
@@ -433,7 +432,7 @@ func TestRunResumesARunThatDiedWithoutReleasing(t *testing.T) {
 	runAttach = (&attachRecorder{}).seam
 	runHerdrLive = func(context.Context, string) (string, error) { return "", fmt.Errorf("none") }
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
@@ -473,7 +472,7 @@ func TestRunTreatsAnInterruptedAttachAsADetach(t *testing.T) {
 		return &fakeChild{}, nil
 	}
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	codec := make(chan int, 1)
 	go func() { codec <- runBody(ctx, t, []string{"--repo", repo, "foo"}, &stdout, &stderr) }()
 	deadline := time.Now().Add(5 * time.Second)
@@ -523,7 +522,7 @@ func TestRunRelaysAChildThatExitedWithoutClaiming(t *testing.T) {
 	runAttach = attach.seam
 	runHerdrLive = func(context.Context, string) (string, error) { return "", fmt.Errorf("none") }
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "foo"}, &stdout, &stderr)
 	if code != ExitNoExecutor {
 		t.Errorf("exit %d, want the child's own %d", code, ExitNoExecutor)
@@ -551,7 +550,7 @@ func TestRunAcceptsTheRunIDSpellingOfTheEpicID(t *testing.T) {
 	runAttach = attach.seam
 	runHerdrLive = func(context.Context, string) (string, error) { return "", fmt.Errorf("none") }
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	if code := runBody(context.Background(), t, []string{"--repo", repo, "epic-foo"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
 	}
@@ -565,7 +564,7 @@ func TestRunAcceptsTheRunIDSpellingOfTheEpicID(t *testing.T) {
 
 func TestRunNeedsExactlyOneEpicID(t *testing.T) {
 	for _, args := range [][]string{{"run"}, {"run", "a", "b"}, {"run", ""}, {"run", "epic-"}} {
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		if code := Run(args, &stdout, &stderr); code != 2 {
 			t.Errorf("%v: exit code %d, want 2", args, code)
 		}
@@ -620,7 +619,7 @@ func TestRunStartsDetachedAttachesAndResumesForReal(t *testing.T) {
 	// ends it: a real SIGINT to this process, which is exactly the signal a
 	// Ctrl-C sends — and exactly the signal the detached child must not get.
 	oneRun := func() (int, string) {
-		var stdout, stderr bytes.Buffer
+		var stdout, stderr syncBuffer
 		code := make(chan int, 1)
 		go func() { code <- Run([]string{"run", "--repo", repo, "det"}, &stdout, &stderr) }()
 		// The attach's own proof: the run's feed line, printed by the live
@@ -750,7 +749,7 @@ func TestRunJSONAnswersOnceWithProseOnStderr(t *testing.T) {
 	runAttach = attach.seam
 	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
@@ -790,7 +789,7 @@ func TestRunJSONAttachThatEndedFailedAnswersFailed(t *testing.T) {
 	runAttach = attach.seam
 	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
 	if code != exitGeneric {
 		t.Fatalf("exit %d, want %d (the failed class) for an attach that ended on a failed run: %s%s", code, exitGeneric, stdout.String(), stderr.String())
@@ -823,7 +822,7 @@ func TestRunJSONAttachThatEndedCancelledAnswersCancelled(t *testing.T) {
 	runAttach = attach.seam
 	herdrAnswers(t, "", fmt.Errorf("no herdr for the json test"))
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr syncBuffer
 	code := runBody(context.Background(), t, []string{"--repo", repo, "--json", "json"}, &stdout, &stderr)
 	if code != exitCancelled {
 		t.Fatalf("exit %d, want %d (the cancelled class) for an attach that ended on a cancelled run: %s%s", code, exitCancelled, stdout.String(), stderr.String())

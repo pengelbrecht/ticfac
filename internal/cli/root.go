@@ -41,6 +41,14 @@ import (
 // the trap tk's ResetFlags papered over), the writers are the caller's, and
 // the exit code is the contract a script branches on.
 func Run(args []string, stdout, stderr io.Writer) int {
+	return runContext(context.Background(), args, stdout, stderr)
+}
+
+// runContext is Run under a parent context: a test that leaves a
+// subscription open (`events --follow`) ends it by cancelling the parent,
+// and waits for it, instead of leaking a goroutine that outlives the test
+// and races the next test's seams.
+func runContext(parent context.Context, args []string, stdout, stderr io.Writer) int {
 	// Signal-aware, as the hand-rolled dispatcher was for the subscription
 	// commands (status/events/watch/factory/herd/cloud): a subscription is a
 	// thing a person leaves open, and Ctrl-C has to shut it down cleanly.
@@ -48,7 +56,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	// dispatcher installed — it adds nothing a command would notice, because
 	// the commands that manage signals themselves (run-epic's evacuation
 	// flush) install their own handlers and ignore the context cobra passes.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt)
 	defer stop()
 
 	root := newRootCommand(stdout, stderr)
