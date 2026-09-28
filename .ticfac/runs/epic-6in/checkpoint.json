@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 23,
-  "state": "collecting",
-  "reason": "collecting 46x attempt 2",
-  "updated_at": "2026-09-28T06:01:11Z",
+  "sequence": 24,
+  "state": "running",
+  "reason": "46x try 1 (run dispatch #2) is rejected (missing-result): it was stopped at its wall clock of 3600 seconds, and the agent was already gone when this executor next looked: the stop and the departure are both recorded, so the empty branch is what the bound left behind. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-6in/tick-46x/attempt-2 (commit d2612c9a12b1): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-6in/tick-46x/attempt-2^ refs/ticfac/wip/run-epic-6in/tick-46x/attempt-2` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
+  "updated_at": "2026-09-28T06:01:14Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "46x",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 2
     },
     {
