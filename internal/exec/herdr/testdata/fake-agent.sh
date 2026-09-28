@@ -104,6 +104,39 @@ if [ "$mode" = "ignore" ]; then
 	done
 fi
 
+if [ "$mode" = "bad_findings_then_fixed" ] || [ "$mode" = "bad_findings_forever" ]; then
+	# The report check's pushback (tick 4m6): the worker commits and writes a
+	# report whose findings block does not parse, then ends its turn. Pushed
+	# back (a new prompt saying the report fails the check), the _then_fixed
+	# worker rewrites it with a block that reads; the _forever worker ends
+	# every turn the same way. Each pushback is counted in
+	# <prompt-file>.pushbacks.
+	wait_for_prompt
+	report_working
+	printf 'the work\n' > "$worktree/work.txt"
+	git -C "$worktree" add work.txt
+	git -C "$worktree" commit --quiet -m "the work"
+	out=$(report_path)
+	mkdir -p "$(dirname "$out")"
+	printf '## Report\n\n```findings v2\n[{"kind": "defect",\n```\n\nSTATUS: DONE\n' > "$out"
+	rm -f "$prompt_file"
+	report_done
+	pushbacks=0
+	while :; do
+		if grep -q "does not pass the report check" "$prompt_file" 2>/dev/null; then
+			pushbacks=$((pushbacks + 1))
+			printf '%s\n' "$pushbacks" > "$prompt_file.pushbacks"
+			rm -f "$prompt_file"
+			report_working
+			if [ "$mode" = "bad_findings_then_fixed" ]; then
+				printf '## Report\n\n```findings v2\n[{"kind": "defect", "title": "fixed", "severity": "low"}]\n```\n\nSTATUS: DONE\n' > "$out"
+			fi
+			report_done
+		fi
+		sleep 0.05
+	done
+fi
+
 if [ "$mode" = "stop_early" ] || [ "$mode" = "never_report" ]; then
 	# epic-2jn vqc (2026-09-27): the worker commits, starts the gate "in the
 	# background" and ends its turn to wait for the notification — idle, no

@@ -198,7 +198,9 @@ func TestAReviewAnsweringNotReadyIsRecordedAsItsOwnVerdictAndCarriedToThePR(t *t
 // A review whose report never stated its judgement — the prose-only answer,
 // which is where NOT READY went to be recorded as its opposite — is refused:
 // the run fails naming the line the report lacked, and the review tick is NOT
-// closed behind an answer nobody can read.
+// closed behind an answer nobody can read. Since tick 4m6 the executor
+// pushes the report back first, and one that still lacks the line is
+// missing-result — a refusal the run retries, never a hold for a person.
 func TestAReviewThatNeverStatedItsVerdictIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -207,13 +209,16 @@ func TestAReviewThatNeverStatedItsVerdictIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedRoleResult {
-		t.Fatalf("failure %+v, want a %s refusal", result.Failure, RefusedRoleResult)
+	if result.Failure == nil || result.Failure.Reason != RefusedCollect {
+		t.Fatalf("failure %+v, want a %s refusal", result.Failure, RefusedCollect)
+	}
+	if !resumesWithoutAPerson(result.Failure.Reason) {
+		t.Fatalf("a review with no verdict stops the run for a person (%s)", result.Failure.Reason)
 	}
 	if result.Failure.TickID != "rv" {
 		t.Fatalf("the failure is about %s, want rv", result.Failure.TickID)
 	}
-	for _, want := range []string{"REVIEW-VERDICT", "prose"} {
+	for _, want := range []string{"REVIEW-VERDICT", "fails the report check"} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the refusal does not say %q: %q", want, result.Failure.Message)
 		}

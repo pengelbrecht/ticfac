@@ -316,7 +316,7 @@ func TestTheBoundaryRefusalMatchesTheLocalExecutors(t *testing.T) {
 	}}
 	violations := []string{".tick/issues/t1.json"}
 
-	msg := collectMessage(subprocess.VerdictBoundaryViolation, subprocess.FailureRunnerError, record, violations)
+	msg := collectMessage(subprocess.VerdictBoundaryViolation, subprocess.FailureRunnerError, record, violations, nil)
 	if want := subprocess.BoundaryRefusal(record.Spec.Role, record.Spec.ArtifactPrefix, violations); msg != want {
 		t.Errorf("the herdr refusal and the local executor's disagree about the same write:\n"+
 			"  herdr:    %q\n  subprocess: %q", msg, want)

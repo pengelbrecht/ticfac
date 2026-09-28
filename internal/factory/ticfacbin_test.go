@@ -9,7 +9,41 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
+
+// The report checker the worker prompts name (tick 4m6) ships in the sandbox
+// image: it is the executor binary the deploy already stages onto PATH, and
+// every cloud role prompt tells the worker to run it on its report.
+func TestTheReportCheckerShipsInTheSandboxImageAndEveryCloudPromptNamesIt(t *testing.T) {
+	t.Parallel()
+	staged := false
+	for _, binary := range ticfacStagedBinaries {
+		staged = staged || binary == subprocess.LintCommandName
+	}
+	if !staged {
+		t.Fatalf("%s is not among the staged binaries %v", subprocess.LintCommandName, ticfacStagedBinaries)
+	}
+	if !strings.Contains(ticfacInstallBlock, "/usr/local/bin/"+subprocess.LintCommandName) {
+		t.Fatalf("the install block does not put %s on PATH", subprocess.LintCommandName)
+	}
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"implement-tick", "review-epic", "closeout-epic"} {
+		raw, err := os.ReadFile(filepath.Join(root, cloudProfilesContextName, role+".md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := subprocess.LintCommandName + " lint-report RESULT-<tick id>.md --role " + role
+		if !strings.Contains(string(raw), want) || !strings.Contains(string(raw), "```findings v2") {
+			t.Errorf("the cloud %s prompt does not name the report check (%q) and the v2 findings block", role, want)
+		}
+	}
+}
 
 // ticfac in the orchestrator image (tick prs).
 //

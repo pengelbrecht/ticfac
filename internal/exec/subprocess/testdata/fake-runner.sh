@@ -178,6 +178,48 @@ findings_bad)
 		printf '\nSTATUS: %s\n' "$status"
 	} > "$TICFAC_RESULT_PATH"
 	;;
+findings_fixed_on_pushback)
+	# The report check's pushback (tick 4m6): the first turn commits and writes
+	# a report whose findings block does not parse. Pushed back
+	# (TICFAC_LINT_PUSHBACK set), it keeps the prompt it was pushed back with
+	# beside the attempt record and rewrites the report with a v2 block that
+	# reads.
+	if [ -z "${TICFAC_LINT_PUSHBACK:-}" ]; then
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "a block that never ends",'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+		exit 0
+	fi
+	printf '%s' "$prompt" > "$TICFAC_WORKTREE/../pushback-${TICFAC_LINT_PUSHBACK}.txt"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf '%s\n' '```findings v2'
+		printf '%s\n' '[{"kind": "defect", "title": "a block that reads now", "severity": "low"}]'
+		printf '%s\n' '```'
+		printf '\nSTATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
+review_verdict_on_pushback)
+	# A review that states its judgement only in prose (tick b50's refusal
+	# case), pushed back by the report check (tick 4m6): the second turn adds
+	# the typed REVIEW-VERDICT line.
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The epic is ready, the review says in prose.\n\n'
+		if [ -n "${TICFAC_LINT_PUSHBACK:-}" ]; then
+			printf '%s' "$prompt" > "$TICFAC_WORKTREE/../pushback-${TICFAC_LINT_PUSHBACK}.txt"
+			printf 'REVIEW-VERDICT: READY\n'
+		fi
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+	;;
 findings_folds)
 	# The fold case (tick ryv): a finding carrying a key the record does not
 	# know — the 3h0 shape, an extra "title_note" — from a worker whose work

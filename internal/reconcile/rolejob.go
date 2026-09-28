@@ -365,6 +365,21 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 			entry.Role, tick, roleAnswerOf(collected), collected.Verdict, collected.Result.Outcome, collected.Message)
 	}
 
+	// A role job that never said what it did in a form anyone can read —
+	// no report, or one that still failed the report check after the
+	// executor pushed it back (tick 4m6) — is missing-result, and it
+	// retries the way a plain tick's missing-result does. It is not a
+	// person's to decide: there is no answer to decide on, and holding the
+	// run behind "the review stated no REVIEW-VERDICT" is the stop the
+	// pushback exists to remove.
+	if collected.Verdict == subprocess.VerdictMissingResult {
+		r.setTick(tick, "rejected")
+		r.record(tick, StageRejected, "%s: %s", collected.Verdict, collected.Message)
+		return nil, nil, r.refuse(RefusedCollect, tick,
+			"the %s job for %s is %s: %s. The tick is NOT closed; the run dispatches it again",
+			entry.Role, tick, collected.Verdict, collected.Message)
+	}
+
 	answer := collected.Result.RoleResult
 	if err := ValidateRoleResult(answer, outputSchemaFor(entry.Role), entry.Role); err != nil {
 		r.setTick(tick, "rejected")

@@ -160,7 +160,7 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		Findings:           report.Findings,
 		FindingsProblem:    report.FindingsProblem,
 		FindingsFolded:     report.FindingsFolded,
-		Message:            collectMessage(reason, class, record, allViolations),
+		Message:            collectMessage(reason, class, record, allViolations, subprocess.ReportRefusal(record.Spec.Role, report)),
 	}
 
 	// The teardown marker, carried (tick rxe). A stop at the wall clock and a
@@ -282,6 +282,11 @@ func classify(role string, commits int, hasReport bool, report subprocess.Report
 		// finished and left an answer nobody can read — its own shape, not
 		// the same sentence as a report that was never written.
 		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportNoStatus
+	case len(subprocess.ReportRefusal(role, report)) > 0:
+		// A report collect cannot read past (tick 4m6), still failing the
+		// report check after the pushbacks typed into the agent's pane
+		// (nudge.go): missing-result, retried, never a hold.
+		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.ReasonReportInvalid
 	case commits == 0 && subprocess.NoCommitsIsFailure(role):
 		// Reached only with a readable report in hand: the worker CLAIMED an
 		// outcome and left the branch as it found it. That is the shape this
@@ -324,7 +329,7 @@ const (
 )
 
 // collectMessage keeps two failures from sharing one sentence.
-func collectMessage(reason, class string, record *attemptRecord, violations []string) string {
+func collectMessage(reason, class string, record *attemptRecord, violations, reportProblems []string) string {
 	switch reason {
 	case subprocess.VerdictReadyToMerge:
 		return ""
@@ -348,6 +353,8 @@ func collectMessage(reason, class string, record *attemptRecord, violations []st
 	case reasonReportNoStatus:
 		return fmt.Sprintf("the report at %s carries no STATUS line: the worker finished and left an answer nobody can read",
 			record.ResultPath)
+	case subprocess.ReasonReportInvalid:
+		return subprocess.ReportRefusalMessage(record.ResultPath, reportProblems)
 	case reasonArtifactCommitted:
 		// Not the tracker sentence: a committed report artifact is this
 		// executor's own boundary the agent bypassed, and telling a person

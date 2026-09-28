@@ -87,6 +87,10 @@ func renderWorkerPrompt(record *attemptRecord, spec *subprocess.JobSpec) string 
 	fmt.Fprintf(&b, "report itself — it lives under %s, which is the run's artifact space, not repository\n", spec.ArtifactPrefix)
 	fmt.Fprintf(&b, "content.\n\n")
 
+	// The report check (tick 4m6): the same section, in the same words, the
+	// local executor renders — the checker is the collect's own reader.
+	b.WriteString(subprocess.LintSection(lintCommand(record, spec.Role)))
+
 	fmt.Fprintf(&b, "## Boundaries\n\n")
 	fmt.Fprintf(&b, "- Do not run `tk`, and do not write under .tick/ or .ticfac/. Those are the\n")
 	fmt.Fprintf(&b, "  tracker's and the run's authorities, not yours. Every attempt is diffed against\n")

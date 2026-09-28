@@ -354,20 +354,38 @@ func Supervise(stateDir string) error {
 			})
 	}
 	// The nudge (nudge.go): a runner that exited 0 with no report is prompted
-	// again, a bounded number of times, before the attempt settles.
-	for nudged := 0; !settled; {
+	// again, a bounded number of times, before the attempt settles. And the
+	// pushback (pushback.go, tick 4m6): a runner that exited 0 with a report
+	// that fails the report check is sent the checker's errors in its own
+	// session, a bounded number of times. The two bounds are separate: a
+	// worker that forgot its report and then wrote a bad one is owed both.
+	how := "running it again on the same worktree: it has no session to resume"
+	if record.Session != "" {
+		how = "re-prompting its own session " + record.Session
+	}
+	for nudged, pushed := 0, 0; !settled; {
 		due, why := nudgeDue(st, record, code, nudged)
 		if !due {
-			if nudged > 0 {
-				note("no further nudge: %s", why)
+			lint, push, pwhy := lintPushbackDue(st, record, code, pushed)
+			if !push {
+				if nudged > 0 || pushed > 0 {
+					note("no further nudge or pushback: %s; %s", why, pwhy)
+				}
+				break
 			}
-			break
+			pushed++
+			n := pushed
+			code, settled, err = runTurn(withLintErrors(record.LintArgv, lint.Text()),
+				append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvLintPushback, n)),
+				func(pid int) {
+					observe(ObsStarted, LintPushbackDetail(n, fmt.Sprintf("the %s runner exited 0", record.Runner),
+						record.ResultPath, fmt.Sprintf("%s (pid %d)", how, pid), len(lint.Errors)))
+					note("the report fails the report check (%d error(s)); pushback %d of %d (pid %d), %s",
+						len(lint.Errors), n, MaxLintPushbacks, pid, how)
+				})
+			continue
 		}
 		nudged++
-		how := "running it again on the same worktree: it has no session to resume"
-		if record.Session != "" {
-			how = "re-prompting its own session " + record.Session
-		}
 		code, settled, err = runTurn(record.NudgeArgv,
 			append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvNudge, nudged)),
 			func(pid int) {
