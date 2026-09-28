@@ -4,10 +4,10 @@
   "gloss": "tk v0.32.0 adoption",
   "description": "After ticks chz releases v0.32.0: point factory.pin.json and the Dockerfile's TK_VERSION default (stale at 0.31.0) at the release, and take the runner references ticks' skill drops (agent-runner, runners-config + schema, herdr-kinds, prime/pi/claude/codex runners) into ticfac's docs or the ticfac skill (2jn A6).",
   "notes": "2026-09-27 08:06 - When this lands and tk 0.32.0+ is installed on the operator's Mac (with the updated ticks skill), remove the interim gloss instructions: the memory note tick-ids-need-a-gloss and the 'Tick ids always get a gloss' section in ~/.claude/CLAUDE.md - tk and its skill carry the rule now (operator, 2026-09-27).\n2026-09-27 08:25 - Gloss backfill waits for this tick (operator, 2026-09-27): after dz1 lands and tk 0.32.0+ is installed on the Mac, fill in --gloss for every OPEN tick with a title over 50 characters, in ticfac (~149) and ticks (~38). Not before: the Mac's current tk DROPS a gloss whenever it rewrites a tick (tested), so a backfill now would be erased by every claim and close a run makes (ticks tick n26 fixes that class).\n2026-09-27 08:29 - 2026-09-27 update: tk 0.32.0 was installed on the operator's Mac early, after ticfac's tk-facing tests passed against it: internal/tk's real-tk manifest test, plus the short suites of reconcile and cli. ticfac already counts claims itself within a run (#50), so the retired tk-side width refusal (exit 8) only matters for two runs on one epic. dz1 still owns enforcing that, and the pins. The old binary is at ~/.local/bin/tk.bak-pre-0.32. The gloss backfill and the retirement of the interim gloss instructions are done.\n2026-09-27 10:47 - ticks' go.mod is now go 1.26.0 (ticks #102 added Hegel). An image that builds tk from ticks at or after that commit needs Go \u003e= 1.26 in the image, which is r6w's GO_VERSION bump. Move factory.pin.json past ticks #102 only once that lands.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "46x",
     "r6w",
@@ -17,5 +17,6 @@
   "acceptance_criteria": "[A1] factory.pin.json and the Dockerfile default name v0.32.0 and the image build passes. [A2] The runner references live in ticfac and nothing in ticfac links to a ticks file that no longer exists. [V] Verified by: make vet \u0026\u0026 make gate, and in cloudflare/: pnpm typecheck \u0026\u0026 pnpm exec vitest run. [A3] Before factory.pin.json moves past ticks chz: tk no longer refuses a claim over max_parallel (exit 8 retired), so ticfac enforces the width itself — counting claims from graph --json dispatch.in_flight_ids (other runs' and people's claims included) — and a test shows a second run under one epic is held at the width without tk's exit 8.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-26T14:04:43.612403704Z",
-  "updated_at": "2026-09-27T08:47:46.358206Z"
+  "updated_at": "2026-09-28T06:43:04.247053Z",
+  "started_at": "2026-09-28T06:43:04.247053Z"
 }
