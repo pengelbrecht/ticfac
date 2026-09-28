@@ -1,0 +1,13 @@
+{
+  "id": "bik",
+  "title": "common.sh should refuse a failing declared-image read, not swallow it",
+  "description": "image/common.sh repo_setup still runs `ticfac sandbox image --declared-only ... 2\u003e/dev/null || declared=\"\"`. After tick bib the only nonzero path is a malformed .tick/runners.toml, which the next line (ticfac sandbox setup) refuses with EXIT_SETUP — so the check is not skippable today — but the swallow means any future regression of the verb would silently disable the declared-image check again. Making the line die with EXIT_SETUP on a nonzero exit would close that hole by construction.\nevidence: image/common.sh:1106\n\nticfac run epic-6in filed this backlog tick from the finding 39381dbefbbab23a1bf7287b6f3b6319fc82a4410410c0c69bd7666b5bc25813 (reported by run-epic-6in/tick-bib/attempt-13): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/39381dbefbbab23a1bf7287b6f3b6319fc82a4410410c0c69bd7666b5bc25813.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-bib/attempt-13",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T19:24:46Z",
+  "updated_at": "2026-09-28T19:24:46Z"
+}
