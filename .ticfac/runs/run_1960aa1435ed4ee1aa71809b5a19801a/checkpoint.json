@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_1960aa1435ed4ee1aa71809b5a19801a",
   "epic_id": "hn6",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching r5i as attempt 1",
-  "updated_at": "2026-09-28T22:04:30Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "r5i is running as attempt 1",
+  "updated_at": "2026-09-28T22:04:43Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "3gk",
