@@ -3,7 +3,7 @@
   "title": "Cloud worker re-prompts a harness that ends its turn with no report, and runs claude with background tasks off",
   "gloss": "cloud worker early-exit nudge",
   "description": "PR #78 (2026-09-27) made the local subprocess executor re-prompt a runner that exits 0 with no report (claude --resume / pi --session-id, at most twice) and launch claude with CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1. image/worker.sh runs pi -p / claude -p once with no fallback, so a cloud worker that ends its turn early (the vqc resolve-50 stall: 'The gate is still running. I'll wait for its completion notification.' then exit 0) is missing-result immediately. Port both to worker.sh once ticfac owns image/ (r6w). Also add the prompt lines from #77/#78 (never amend/rebase pushed commits; you run headless, never end your turn waiting on a background task) to tk sandbox worker-prompt or its ticfac replacement.",
-  "notes": "2026-09-28 07:31 - ticfac run epic-6in: 060 try 1 (run dispatch #1) reported a finding the run itself decided — upstream-tick \"tk sandbox worker-prompt's template still lacks the headless and no-amend lines tick 060 added to the cloud role prompts\" (key feef02ff40620e82d3e719d7f1ef61b9b2818dd11d24bf34eac8eb7f48f08d01, severity low, for pengelbrecht/ticks) is filed in the tracker of the repository it is routed to, as pengelbrecht/ticks:kzs; the decision record is on the run branch at .ticfac/runs/epic-6in/absorptions/feef02ff40620e82d3e719d7f1ef61b9b2818dd11d24bf34eac8eb7f48f08d01.json, and the draft is triaged as promoted.",
+  "notes": "2026-09-28 07:31 - ticfac run epic-6in: 060 try 1 (run dispatch #1) reported a finding the run itself decided — upstream-tick \"tk sandbox worker-prompt's template still lacks the headless and no-amend lines tick 060 added to the cloud role prompts\" (key feef02ff40620e82d3e719d7f1ef61b9b2818dd11d24bf34eac8eb7f48f08d01, severity low, for pengelbrecht/ticks) is filed in the tracker of the repository it is routed to, as pengelbrecht/ticks:kzs; the decision record is on the run branch at .ticfac/runs/epic-6in/absorptions/feef02ff40620e82d3e719d7f1ef61b9b2818dd11d24bf34eac8eb7f48f08d01.json, and the draft is triaged as promoted.\n2026-09-28 07:34 - ticfac run epic-6in: 060 try 1 (run dispatch #1) merged into epic/6in as 3753359e8d9a; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "A cloud worker whose harness exits 0 without a report is re-prompted in the same session up to twice before missing-result; a test in image/ or the sandbox harness covers it",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T20:21:13.966875Z",
-  "updated_at": "2026-09-28T05:31:55.118942Z",
+  "updated_at": "2026-09-28T05:34:13.566539Z",
   "started_at": "2026-09-28T04:42:41.3237Z"
 }
