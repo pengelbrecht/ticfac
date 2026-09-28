@@ -1,0 +1,13 @@
+{
+  "id": "ee5",
+  "title": "ticfac still carries the tk exit-8 width machinery that ticks 7.0.0 retired",
+  "description": "The re-vendored tk-json-manifest.json (ticks bundle 7.0.0) says tk never refuses a claim for width any more: the wave-width gate and its exit 8 left tk with the runner, and the orchestrator that owns the width caps dispatch itself. ticfac still carries ErrDispatchWidth (internal/tk), the RefusedClaimWidth hold (internal/reconcile, self-described as 'should be unreachable from the run's own arithmetic') and dispatch-window handling whose only producer is now a test fake. Harmless but dead: a tick should verify ticfac's own width arithmetic is the sole authority the 7.0.0 manifest names and shrink or re-comment the exit-8 path accordingly.\n\nticfac run epic-6in filed this backlog tick from the finding 2a8f79eaf6f83660f22328bae8c86911fb2fcadf2f84610626303d02fe12a6f2 (reported by run-epic-6in/tick-4i8/attempt-3): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-6in/absorptions/2a8f79eaf6f83660f22328bae8c86911fb2fcadf2f84610626303d02fe12a6f2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-6in/tick-4i8/attempt-3",
+  "created_by": "ticfac run epic-6in",
+  "created_at": "2026-09-28T10:15:08Z",
+  "updated_at": "2026-09-28T10:15:08Z"
+}
