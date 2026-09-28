@@ -30,6 +30,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // newCloudCommand builds the `cloud` group: the cobra command whose Long is
@@ -1184,6 +1185,9 @@ func cloudTkJSON(ctx context.Context, root string, args ...string) ([]byte, erro
 func cloudGit(ctx context.Context, root string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, "git", args...)
 	command.Dir = root
+	// It pushes the epic branch and reads it back with ls-remote: a silent
+	// remote must fail the command, not hold it (gitbin.TransportEnv).
+	command.Env = append(os.Environ(), gitbin.TransportEnv()...)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		message := strings.TrimSpace(string(output))

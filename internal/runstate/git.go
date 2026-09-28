@@ -41,39 +41,13 @@ func newGit(dir, authorName, authorEmail string, retry RemoteRetry) *git {
 		// refusal: fail loudly instead of waiting for a terminal nobody is at.
 		"GIT_TERMINAL_PROMPT=0",
 	)
-	// Both halves of this line's history matter: the transport bound (a git
-	// that has gone silent must give up) and the held-open object reader (a
-	// read must not cost a process). They are independent and the store wants
-	// both.
-	env = append(env, TransportEnv()...)
+	// The transport bound (gitbin.TransportEnv: a git that has gone silent
+	// must give up) is added per invocation, in once, where the guard that
+	// every network git carries it can see it. The held-open object reader
+	// never reaches a remote and does without it.
 	g := &git{dir: dir, env: env, retry: retry}
 	g.reader = newObjectReader(dir, env)
 	return g
-}
-
-// TransportEnv bounds a git transport that has gone silent, for the same
-// reason GIT_TERMINAL_PROMPT=0 is set above: a hang is worse than a refusal.
-//
-// The prompt was bounded and the network was not, and the network is the one
-// that actually stopped a run. A `git fetch` of epic/9pd held its ssh open for
-// two and a half hours while the reconciler waited inside it — alive, holding
-// the run, emitting nothing. Every watcher correctly reported a live process,
-// because it WAS a live process; the run was not stuck on a decision, it was
-// stuck on a socket nobody had told to give up.
-//
-// ssh's own defaults are the problem: no connect timeout, and no keepalive, so
-// a connection that dies without a FIN is waited on forever. Ten seconds to
-// establish, and four missed fifteen-second keepalives to conclude a live
-// connection has gone — about a minute of silence before git fails and the run
-// gets an error it can act on.
-//
-// An operator who has set GIT_SSH_COMMAND has said how to reach their remote,
-// and that is not ours to overwrite.
-func TransportEnv() []string {
-	if strings.TrimSpace(os.Getenv("GIT_SSH_COMMAND")) != "" {
-		return nil
-	}
-	return []string{"GIT_SSH_COMMAND=ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4"}
 }
 
 // run returns trimmed stdout, or an error carrying stderr — git says why in
@@ -149,7 +123,7 @@ func (g *git) tryCounted(stdin []byte, extraEnv []string, args ...string) (stdou
 func (g *git) once(stdin []byte, extraEnv []string, args ...string) (stdout, stderr string, err error) {
 	cmd := exec.Command(gitbin.Path(), append(append([]string{}, safeArgs...), args...)...)
 	cmd.Dir = g.dir
-	cmd.Env = append(append([]string{}, g.env...), extraEnv...)
+	cmd.Env = append(append(append([]string{}, g.env...), gitbin.TransportEnv()...), extraEnv...)
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
