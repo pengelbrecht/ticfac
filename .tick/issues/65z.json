@@ -1,0 +1,14 @@
+{
+  "id": "65z",
+  "title": "Two reconcile tests failed once in one local full-suite run and never again: record, and investigate on recurrence",
+  "gloss": "unreproduced reconcile flake",
+  "description": "During PR #92's local full-suite run (2026-09-28, host load 90-140), TestAWaveOfTwoTicksDeclaringTheSameFileIsRefusedAtDispatch saw 1 dispatch instead of 0 and TestADispatchGoesThroughTheExecutorItsProfileNames saw 6 instead of 5. An hour of stress (race and non-race, -parallel 4..16, -cpu 1,4, -count up to 40, whole package and isolated) never reproduced either on f72b79a3. Code reading found no path to either count on main (reconciler single-threaded; per-test state). The only log (scratchpad full.log) shows two runs' output interleaved and later failures only a partial checkout could produce (missing cloudflare/test/fixtures/classify-tick-decision.json), so the run may not have been on a complete tree of main. If either fails again anywhere, capture the directory, commit and full -v output and reopen the investigation; the stress harness to reuse is: go test -c then -race -count=20 -parallel 8 -run '\u003cname\u003e'.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Closed when either test fails again with full evidence and the cause is fixed, or after 30 days without a recurrence",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-28T09:00:32.547947Z",
+  "updated_at": "2026-09-28T09:00:32.547947Z"
+}
