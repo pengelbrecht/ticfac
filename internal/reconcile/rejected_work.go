@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -111,8 +112,10 @@ func runReleasesOf(released map[string]settlement, tick string) []settlement {
 // window requeues — or nil when the attempt is not the run's to dispose: it
 // committed nothing, its work is already integrated, it is a role job, a
 // person already released it, the bound is spent, or the release could not
-// be recorded. A nil answer leaves the collect's own refusal, and a resume's
-// backstop hold, exactly as they were.
+// be recorded. A nil answer leaves the collect's own refusal as it was; a
+// resume that meets the rejection with no decision recorded decides it then,
+// from the recorded reason (disposeUndecidedRejection) — which is how a role
+// job's rejected work is disposed.
 func (r *Reconciler) disposeRejectedWork(ctx context.Context, entry planEntry, marker attemptHandle,
 	reason string, carry bool) *Refusal {
 
@@ -142,6 +145,24 @@ func (r *Reconciler) disposeRejectedWork(ctx context.Context, entry planEntry, m
 		return r.rejectedRedispatch(tick, name, was.carry, was.reason, branch)
 	}
 
+	if !r.runDispose(ctx, entry, marker, released, head, reason, carry) {
+		return nil
+	}
+	return r.rejectedRedispatch(tick, name, carry, reason, branch)
+}
+
+// runDispose is the run's disposal of a rejected attempt's committed work
+// (head): the bound checked, the release recorded, the decision said on the
+// feed. False when the bound is spent or the release could not be recorded —
+// the attempt is then not disposed, and the backstop hold stands. Shared by
+// the collect (disposeRejectedWork) and by a resume that finds a rejection
+// with work and no decision (disposeUndecidedRejection).
+func (r *Reconciler) runDispose(ctx context.Context, entry planEntry, marker attemptHandle,
+	released map[string]settlement, head, reason string, carry bool) bool {
+
+	tick := marker.TickID
+	name := r.attemptName(tick, marker.Attempt)
+	branch := branchOf(marker.WriteRef)
 	step := rejectedStepCeiling
 	next := ""
 	if tier, up := r.escalatesAbove(ctx, entry, marker); up {
@@ -154,14 +175,14 @@ func (r *Reconciler) disposeRejectedWork(ctx context.Context, entry planEntry, m
 					"%s was rejected (%s) with work on %s (%s), and the run does NOT dispose of it: the tier "+
 						"ladder is at its ceiling and the one further try at the ceiling was rejected already. "+
 						"It is the bound that keeps a failing tick from looping", name, reason, branch, short(head))
-				return nil
+				return false
 			}
 		}
 	}
 
 	if err := r.recordRunRelease(marker, reason, step, carry, marker.WriteRef, head); err != nil {
 		r.record(tick, StageRejected, "the run's release of %s could not be recorded (%v): it is not disposed", name, err)
-		return nil
+		return false
 	}
 
 	where := "at the same tier: the ladder is at its ceiling, and this is the one further try it gets"
@@ -179,7 +200,7 @@ func (r *Reconciler) disposeRejectedWork(ctx context.Context, entry planEntry, m
 				"(%s) for anyone to read, and are not carried — and the next try starts fresh from %s, %s",
 			name, reason, branch, short(head), r.branch, where)
 	}
-	return r.rejectedRedispatch(tick, name, carry, reason, branch)
+	return true
 }
 
 func (r *Reconciler) rejectedRedispatch(tick, name string, carry bool, reason, branch string) *Refusal {
@@ -259,4 +280,125 @@ func (r *Reconciler) recordRunRelease(marker attemptHandle, reason, step string,
 // its commits are carried — or on the merits.
 func rejectionCarries(verdict string) bool {
 	return verdict != subprocess.VerdictBoundaryViolation
+}
+
+// A rejection with work and NO decision is decided on resume (epic-6in v7z).
+//
+// THE STALL. On 2026-09-28 v7z's close-out (attempt 8) answered BLOCKED over
+// red CI and was rejected with its retro committed — before the collect
+// disposed of rejected work at all, and through a role-job path that never
+// did. The build that resumed it included the disposal, but the disposal is
+// made AT REJECTION TIME: a rejection recorded before it existed, or by any
+// path that did not write one, has no decision, and the resume fell through to
+// the backstop hold. A person typed `ticfac settle --release … --carry-work`.
+//
+// THE RULE. Such a rejection is decided when the resume reaches it, by the
+// same classifier, from the reason the run RECORDED when it rejected the
+// attempt — the checkpoint's reason at the moment the tick became rejected at
+// that attempt, which is on the run branch in the checkpoint's history. The
+// decision is the same run release the collect writes, attributed to the run
+// with the reason, under the same bound; role jobs (close-out, review) follow
+// the same rule as implement ticks. Only a reason the classifier cannot place
+// keeps the hold, and the hold says so.
+
+// rejectedOnResume marks a run release decided on resume rather than by the
+// collect that rejected the attempt.
+const rejectedOnResume = "decided on resume from the recorded rejection"
+
+// disposeUndecidedRejection decides, on resume, a rejected attempt that
+// carries work and has no disposition record. It returns whether the run
+// disposed of it (and whether the work is carried, and the reason recorded),
+// or, when it did not, why — for the backstop hold to say.
+func (r *Reconciler) disposeUndecidedRejection(ctx context.Context, entry planEntry, marker attemptHandle,
+	released map[string]settlement) (disposed, carry bool, reason, why string) {
+
+	tick := marker.TickID
+	if _, ok := released[attemptKey(tick, marker.Attempt)]; ok {
+		return false, false, "", ""
+	}
+	head := r.rejectedWorkHead(marker)
+	if head == "" || r.integrated(head) {
+		return false, false, "", ""
+	}
+	recorded, found := r.recordedRejection(tick, marker.Attempt)
+	if !found {
+		return false, false, "", " The run found no recorded reason for this rejection in its checkpoint " +
+			"history, so it cannot decide whether the work is carried."
+	}
+	class, carries, ok := classifyRecordedRejection(recorded)
+	if !ok {
+		return false, false, "", fmt.Sprintf(" The rejection's recorded reason (%q) is none the run can classify "+
+			"as operational or on the merits, so it does not decide for itself whether the work is carried.",
+			firstLine(recorded))
+	}
+	reason = class + ", " + rejectedOnResume
+	if !r.runDispose(ctx, entry, marker, released, head, reason, carries) {
+		return false, false, "", ""
+	}
+	return true, carries, reason, ""
+}
+
+// recordedRejection is the reason the run recorded when it rejected this
+// attempt: the first checkpoint in which the tick is rejected at this attempt
+// and whose reason names the tick (a checkpoint written for another tick while
+// this one sat rejected says nothing about it).
+func (r *Reconciler) recordedRejection(tick string, attempt int) (string, bool) {
+	history, err := r.store.CheckpointHistory()
+	if err != nil {
+		return "", false
+	}
+	names := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(tick) + `($|[^A-Za-z0-9_-])`)
+	for _, checkpoint := range history {
+		for _, state := range checkpoint.Ticks {
+			if state.TickID == tick && state.State == "rejected" && state.Attempt == attempt &&
+				names.MatchString(checkpoint.Reason) {
+				return checkpoint.Reason, true
+			}
+		}
+	}
+	return "", false
+}
+
+// recordedVerdict is the collect verdict a rejectDurably reason states.
+var recordedVerdict = regexp.MustCompile(`is rejected \(([a-z-]+)\)`)
+
+// classifyRecordedRejection is rejectionCarries over a RECORDED reason rather
+// than a live verdict: the class the reason names, whether its work is
+// carried, and false when the reason names no class the run can act on.
+//
+//   - On the merits — a boundary violation, or a collect measured from a base
+//     the run did not dispatch: released without carry.
+//   - no-commits: NOT classified. That rejection recorded that nothing was
+//     committed; work found now arrived after it, and nothing the run recorded
+//     says what it is.
+//   - Operational — missing-result; a job that stopped to ask (BLOCKED,
+//     NEEDS_CONTEXT), which the standing orders answer from its commits; a
+//     close-out dispatched over red CI, whose answer is about the tree:
+//     carried.
+func classifyRecordedRejection(reason string) (string, bool, bool) {
+	switch {
+	case strings.Contains(reason, "authority that is not its own"),
+		strings.Contains(reason, "boundary violation"),
+		strings.Contains(reason, subprocess.VerdictBoundaryViolation):
+		return subprocess.VerdictBoundaryViolation, false, true
+	case strings.Contains(reason, "not the dispatched base"),
+		strings.Contains(reason, "not the base this run dispatched"),
+		strings.Contains(reason, "collected against base"):
+		return "the collected base is not the dispatched base", false, true
+	case strings.Contains(reason, subprocess.VerdictNoCommits):
+		return "", false, false
+	}
+	if m := recordedVerdict.FindStringSubmatch(reason); m != nil && m[1] == subprocess.VerdictMissingResult {
+		return subprocess.VerdictMissingResult, rejectionCarries(m[1]), true
+	}
+	switch {
+	case strings.Contains(reason, "whose CI is red"), strings.Contains(reason, "over red CI"):
+		return "answered over red CI", true, true
+	case strings.Contains(reason, "answered "+subprocess.StatusBlocked),
+		strings.Contains(reason, "answered "+subprocess.StatusNeedsContext):
+		return "stopped to ask", true, true
+	case strings.Contains(reason, subprocess.VerdictMissingResult):
+		return subprocess.VerdictMissingResult, true, true
+	}
+	return "", false, false
 }
