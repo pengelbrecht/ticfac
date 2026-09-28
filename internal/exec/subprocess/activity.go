@@ -81,9 +81,22 @@ type Proc struct {
 // table of their own.
 type ProcTable func() ([]Proc, error)
 
-// SystemProcs is the process table as `ps -A -o pid=,ppid=,time=` reports it
-// — the same columns on macOS and Linux.
+// SystemProcs is the process table: pid, parent and CPU time for every
+// process.
+//
+// Where the kernel publishes /proc it is read from there, because `ps`'s time
+// column is not fine enough on Linux: procps prints hh:mm:ss, so a tool that
+// has burned 0.8s of CPU reads as 00:00:00 (measured in a Linux container,
+// 2026-09-28: 80 ticks in /proc/<pid>/stat, "00:00:00" from ps). The stuck
+// watch asks whether a tool used cpuFloor(window) of CPU since the last look,
+// and against a whole-second column a busy tool that has not yet crossed a
+// second boundary looks idle — a runner whose tool is working is nudged as
+// stuck. /proc counts in clock ticks (USER_HZ, 100 a second on every Linux
+// architecture). macOS has no /proc, and its ps prints hundredths.
 func SystemProcs() ([]Proc, error) {
+	if procs, ok := ProcFSProcs("/proc"); ok {
+		return procs, nil
+	}
 	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,time=").Output()
 	if err != nil {
 		return nil, fmt.Errorf("read the process table: %w", err)
@@ -109,6 +122,64 @@ func ParseProcs(out []byte) []Proc {
 		procs = append(procs, Proc{PID: pid, PPID: ppid, CPU: cpu})
 	}
 	return procs
+}
+
+// userHZ is the unit of /proc/<pid>/stat's utime and stime: USER_HZ, which
+// the kernel fixes at 100 for every architecture's userspace ABI.
+const userHZ = 100
+
+// ProcFSProcs reads the process table from a /proc-shaped directory. ok is
+// false when root is not one (no <root>/self/stat), so the caller falls back
+// to ps; a process that exits mid-read is simply not in the table.
+func ProcFSProcs(root string) (procs []Proc, ok bool) {
+	if _, err := os.Stat(filepath.Join(root, "self", "stat")); err != nil {
+		return nil, false
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, false
+	}
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(root, entry.Name(), "stat"))
+		if err != nil {
+			continue
+		}
+		if p, ok := ParseProcStat(string(raw)); ok {
+			procs = append(procs, p)
+		}
+	}
+	return procs, true
+}
+
+// ParseProcStat reads one /proc/<pid>/stat line: pid, the command in
+// parentheses (which may itself contain spaces and parentheses, so the fields
+// are counted from the LAST ')'), then state, ppid, … utime (14) and stime
+// (15) in clock ticks.
+func ParseProcStat(line string) (Proc, bool) {
+	open := strings.IndexByte(line, '(')
+	closing := strings.LastIndexByte(line, ')')
+	if open < 0 || closing < open {
+		return Proc{}, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(line[:open]))
+	if err != nil {
+		return Proc{}, false
+	}
+	rest := strings.Fields(line[closing+1:])
+	// rest[0] is field 3 (state), so field n is rest[n-3].
+	if len(rest) < 13 {
+		return Proc{}, false
+	}
+	ppid, err1 := strconv.Atoi(rest[1])
+	utime, err2 := strconv.ParseInt(rest[11], 10, 64)
+	stime, err3 := strconv.ParseInt(rest[12], 10, 64)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return Proc{}, false
+	}
+	return Proc{PID: pid, PPID: ppid, CPU: time.Duration(utime+stime) * time.Second / userHZ}, true
 }
 
 // parseCPUTime reads ps's `time` column: [[dd-]hh:]mm:ss[.ff] (Linux prints
