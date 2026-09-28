@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -31,11 +32,12 @@ import (
 // bound: at the poll cadence the stop lands within one poll of the deadline,
 // well inside the reconciler's own settlement deadline. And it is the stop the
 // local supervisor would have made, made through the surfaces herdr offers:
-// the agent.send_keys interrupt chord the local Cancel uses — and, once that
-// courtesy has gone unhonoured for a grace, pane.close, the stop that takes
-// the agent herdr owns with it (tick rj0: an agent inside a long shell call
-// never reads the interrupt, and a bound only the reconciler's own deadline
-// notices is not a bound).
+// the agent.send_keys interrupt the local Cancel uses — the harness's own
+// key (interrupt.go) — and, once that courtesy has gone unhonoured for a
+// grace, or has been honoured by an agent that then sits at its prompt,
+// pane.close, the stop that takes the agent herdr owns with it (tick rj0: an
+// agent inside a long shell call never reads the interrupt, and a bound only
+// the reconciler's own deadline notices is not a bound).
 //
 // A stop at the wall clock says nothing about the WORK. It settles the
 // attempt; the branch and the report are still read the usual way — a worker
@@ -43,9 +45,9 @@ import (
 // and the failure class the stop carries (wall_clock_exceeded) is the same
 // closed vocabulary the local executor already collects.
 
-// interruptChord is herdr's own interrupt, the surface `herdr agent send-keys`
-// offers a human stopping an agent by hand. cancel.go sends the same chord.
-const interruptChord = "ctrl+c"
+// The interrupt is the harness's own (interrupt.go): Escape for pi, claude
+// and codex, herdr's generic ctrl+c for a kind nobody has verified. cancel.go
+// sends the same keys.
 
 // stopGrace is the courtesy the interrupt is given before the enforcement
 // escalates to closing the pane (tick rj0). An agent that DOES honour the
@@ -60,6 +62,13 @@ const interruptChord = "ctrl+c"
 // lands well inside the reconciler's settlement deadline, and it is a named
 // constant rather than a multiple of the poll interval because what it
 // bounds — an agent finishing its exit — is not cadenced by the poll at all.
+//
+// The grace is for an agent that is still WORKING. An agent herdr answers is
+// back at its prompt after the interrupt (honouredInterrupt) has honoured
+// it: an interactive harness interrupted mid-turn aborts the turn and waits
+// for input — it neither exits nor writes a report — so the grace would only
+// be two more minutes of a pane nobody will ever use. The escalation to the
+// close then proceeds at the next poll after the interrupt was accepted.
 const stopGrace = 2 * time.Minute
 
 // minStopProtocol is the OLDEST herdr protocol through which this executor
@@ -177,14 +186,30 @@ func (e *Executor) enforceableWall(spec *subprocess.JobSpec) error {
 // interrupt. `held` is the escalation's operational hold: this poll could
 // not proceed toward the close, and why — the close is re-attempted at the
 // next poll, and the observation stream carries the sentence.
+//
+// `honoured` marks a close made because the agent honoured the interrupt
+// and sat idle at its prompt, rather than because the grace ran out.
 type wallStop struct {
 	delivered bool
 	settled   bool
 	closed    bool
+	honoured  bool
 	held      string
 }
 
-func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string) wallStop {
+// why is the clause that says what the escalation to the close answered.
+func (w wallStop) why() string {
+	if w.honoured {
+		return "the agent honoured the interrupt and is back at its prompt"
+	}
+	return "the interrupt went unhonoured for the grace"
+}
+
+// status is herdr's answer about the agent at this poll, when the caller
+// has one ("" when it does not): an agent that is no longer working after an
+// accepted interrupt has honoured it, and is closed without waiting out the
+// grace.
+func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string, status client.AgentStatus) wallStop {
 	// The escalation (tick rj0). A PREVIOUS poll's interrupt was accepted
 	// (the wall marker carries its stamp), the grace has elapsed, and
 	// herdr still answers that the agent is live — this stopAtWall call is
@@ -193,12 +218,20 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string) w
 	// long shell call never reads; the close is the stop that actually
 	// stops the agent herdr owns. While the grace runs, the interrupt is
 	// re-delivered below exactly as before.
-	if accepted, ok := st.wallStopAcceptedAt(); ok && e.now().After(accepted.Add(stopGrace)) {
-		return e.closeAtWall(st, record, paneID)
+	if accepted, ok := st.wallStopAcceptedAt(); ok {
+		if honouredInterrupt(status) {
+			// An EARLIER poll's interrupt was accepted and the agent has
+			// left `working`: it honoured the interrupt and sits at its
+			// prompt. Nothing more will happen in the pane on its own.
+			return e.closeAtWall(st, record, paneID, true)
+		}
+		if e.now().After(accepted.Add(stopGrace)) {
+			return e.closeAtWall(st, record, paneID, false)
+		}
 	}
 	_, err := e.client.AgentSendKeys(context.Background(), client.AgentSendKeysParams{
 		Target: record.AgentName,
-		Keys:   []string{interruptChord},
+		Keys:   interruptKeys(record.Kind),
 	})
 	switch {
 	case client.IsCode(err, client.CodeAgentNotFound), client.IsCode(err, client.CodePaneNotFound):
@@ -229,8 +262,8 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string) w
 			Detail: "the wall-clock stop could not be recorded: " + markErr.Error()})
 	}
 	_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-		Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt was delivered through herdr",
-			record.AgentName, record.WallSeconds)})
+		Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt (%s, the harness's own) was delivered through herdr",
+			record.AgentName, record.WallSeconds, strings.Join(interruptKeys(record.Kind), " "))})
 	if st.agentGone() {
 		return wallStop{delivered: true, settled: true}
 	}
@@ -274,23 +307,33 @@ func (e *Executor) stopAtWall(st *store, record *attemptRecord, paneID string) w
 // close, exactly the confirmation the tick's acceptance names. A
 // pane_not_found on the close itself is the same positive answer one poll
 // earlier: the agent (and its pane) were already gone.
-func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) wallStop {
+//
+// honoured says WHY the close is happening: the agent honoured the
+// interrupt and sits idle at its prompt (the close is the tidy end of a
+// stop that already landed), or the interrupt went unhonoured for the grace
+// (the close is the stop). The mechanics are the same; the sentences differ,
+// because the record must say which one happened.
+func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string, honoured bool) wallStop {
+	why := "the interrupt went unhonoured for the grace"
+	if honoured {
+		why = "the agent honoured the interrupt and is back at its prompt, where it would sit until the grace ran out"
+	}
 	if paneID == "" {
 		// Nothing addresses the pane. Defensive — the record carries the
 		// pane worktree.create handed back — but a close into the void is
 		// not a stop, and the hold says so.
 		what := "the agent's pane is in none of the records this attempt holds"
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane close is held: %s",
-				record.WallSeconds, what)})
-		return wallStop{held: what}
+			Detail: fmt.Sprintf("the wall clock of %ds fired, %s, and the pane close is held: %s",
+				record.WallSeconds, why, what)})
+		return wallStop{held: what, honoured: honoured}
 	}
 	if err := e.snapshotUncommitted(st, record); err != nil {
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane close is held: "+
+			Detail: fmt.Sprintf("the wall clock of %ds fired, %s, and the pane close is held: "+
 				"the worktree could not be snapshotted first (%v) — the close never destroys work it has not preserved",
-				record.WallSeconds, err)})
-		return wallStop{held: "the worktree snapshot failed: " + err.Error()}
+				record.WallSeconds, why, err)})
+		return wallStop{held: "the worktree snapshot failed: " + err.Error(), honoured: honoured}
 	}
 	err := e.client.PaneClose(context.Background(), client.PaneCloseParams{PaneID: paneID})
 	switch {
@@ -301,14 +344,14 @@ func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) 
 		// interrupt keeps the settlement reading as a stop at the bound.
 		_ = st.markAgentGone(e.stamp())
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt went unhonoured for the grace, and herdr answered the pane %s was already gone when the close fired",
-				record.AgentName, record.WallSeconds, paneID)})
-		return wallStop{delivered: true, settled: true, closed: true}
+			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: %s, and herdr answered the pane %s was already gone when the close fired",
+				record.AgentName, record.WallSeconds, why, paneID)})
+		return wallStop{delivered: true, settled: true, closed: true, honoured: honoured}
 	case err != nil:
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
-			Detail: fmt.Sprintf("the wall clock of %ds fired, the interrupt went unhonoured for the grace, and the pane %s could not be closed through herdr (%v): the close is re-attempted at every poll",
-				record.WallSeconds, paneID, err)})
-		return wallStop{held: "herdr would not take the close: " + err.Error()}
+			Detail: fmt.Sprintf("the wall clock of %ds fired, %s, and the pane %s could not be closed through herdr (%v): the close is re-attempted at every poll",
+				record.WallSeconds, why, paneID, err)})
+		return wallStop{held: "herdr would not take the close: " + err.Error(), honoured: honoured}
 	}
 	// The close was accepted. Confirm the AGENT is gone — the positive
 	// answer the stop settles on; the pane herdr opened in its place is a
@@ -318,9 +361,9 @@ func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) 
 	case gone(gerr):
 		_ = st.markAgentGone(e.stamp())
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsExited,
-			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: the interrupt went unhonoured for the grace, so the pane %s was closed through herdr and herdr answers the agent is gone",
-				record.AgentName, record.WallSeconds, paneID)})
-		return wallStop{delivered: true, settled: true, closed: true}
+			Detail: fmt.Sprintf("stopped the agent %s at its wall clock of %ds: %s, so the pane %s was closed through herdr and herdr answers the agent is gone",
+				record.AgentName, record.WallSeconds, why, paneID)})
+		return wallStop{delivered: true, settled: true, closed: true, honoured: honoured}
 	case gerr == nil:
 		// herdr still resolves the agent — the close was accepted but the
 		// agent outlives it in herdr's records. Not settled; the next poll
@@ -329,12 +372,12 @@ func (e *Executor) closeAtWall(st *store, record *attemptRecord, paneID string) 
 		_ = st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
 			Detail: fmt.Sprintf("the pane %s was closed through herdr but herdr still answers the agent %s is live: the settlement waits for a positive answer that the agent is gone",
 				paneID, record.AgentName)})
-		return wallStop{delivered: true, closed: true}
+		return wallStop{delivered: true, closed: true, honoured: honoured}
 	default:
 		// herdr would not answer. The close is accepted and recorded; the
 		// settlement waits for a poll that can positively observe the agent
 		// gone, exactly as any settlement here does.
-		return wallStop{delivered: true, closed: true}
+		return wallStop{delivered: true, closed: true, honoured: honoured}
 	}
 }
 
