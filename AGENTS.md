@@ -1,5 +1,14 @@
 # Working in ticfac (for any agent: Claude, pi, Codex, …)
 
+## How much to run locally: targeted tests + `make gate`, then let CI verify
+
+Run the tests you touched or added (`go test -run '<names>' -timeout 20m ./<pkg>/`)
+and `make gate`, then push and let CI run the full suite. Don't run the full
+`internal/reconcile` suite locally as a matter of course: it takes 20-30 minutes
+and this host is shared with live runs and other agents. If CI goes red on your
+commit, fix it and push again. Run heavy local commands at low priority
+(GOTEST_PARALLEL=4, GOFLAGS=-p=2).
+
 ## Before you push: run `make gate`, not just your package
 
 `make gate` is gofmt, `go vet ./...` and the short suite across the whole
