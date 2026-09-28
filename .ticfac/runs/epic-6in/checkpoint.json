@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 115,
-  "state": "running",
-  "reason": "CI is green on the epic PR #98; the close-out of 6in is admitted",
-  "updated_at": "2026-09-28T17:38:02Z",
+  "sequence": 116,
+  "state": "dispatching",
+  "reason": "dispatching v7z as attempt 11",
+  "updated_at": "2026-09-28T17:38:07Z",
   "ticks": [
     {
       "tick_id": "060",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "v7z",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 8
     },
     {
