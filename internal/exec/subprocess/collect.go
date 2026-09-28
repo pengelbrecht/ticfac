@@ -156,6 +156,9 @@ func (e *Executor) CollectDetail(h *JobHandle) (*Collection, error) {
 		FindingsFolded:     report.FindingsFolded,
 		Message:            e.message(reason, class, record, append(append([]string{}, violations...), artifactViolations...)),
 	}
+	if reason == ReasonReportInvalid && e.guarded("distinct_failure_classes") {
+		collected.Message = ReportRefusalMessage(record.ResultPath, ReportRefusal(record.Spec.Role, report))
+	}
 
 	// The snapshot, named (tick lj4). A refusal that says nothing about an
 	// attempt's preserved work leaves an operator believing the hour is gone,
@@ -242,6 +245,13 @@ func (e *Executor) classify(st *store, role string, commits int, hasReport bool,
 			return VerdictMissingResult, OutcomeFailed, FailureRunnerError, reasonStuckStopped
 		}
 		return VerdictMissingResult, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictMissingResult
+	case len(ReportRefusal(role, report)) > 0:
+		// A report collect cannot read past (tick 4m6): the supervisor
+		// pushed it back to the worker's session with the check's errors,
+		// the pushbacks are spent, and it still fails. It is the closed
+		// vocabulary's missing-result — the attempt never said what it did
+		// in a form anyone can read — so it retries like one, never a hold.
+		return VerdictMissingResult, OutcomeFailed, FailureRunnerError, ReasonReportInvalid
 	case commits == 0 && NoCommitsIsFailure(role):
 		return VerdictNoCommits, OutcomeFailed, e.failureClass(st, FailureRunnerError), VerdictNoCommits
 	case len(violations) > 0:
@@ -355,6 +365,7 @@ var failureMessages = map[string]string{
 	reasonStuckStopped: "it was stopped as stuck: it showed no activity — no transcript event, no tool-process CPU, " +
 		"no worktree or branch change — for the stuck window, was nudged, and showed none for as long again; " +
 		"there is no report at the path this executor owns",
+	ReasonReportInvalid: "the report fails the report check",
 	VerdictReadyToMerge: "",
 }
 

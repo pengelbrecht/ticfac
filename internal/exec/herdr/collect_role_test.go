@@ -113,7 +113,13 @@ func collectRoleOverEmptyBranch(t *testing.T, role, tick string) *subprocess.Col
 	if err := os.MkdirAll(filepath.Dir(local.ResultPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(local.ResultPath, []byte("STATUS: DONE\n"), 0o644); err != nil {
+	// A review states its verdict (tick b50); without the line its report
+	// fails the report check (tick 4m6), which is a different question.
+	body := "STATUS: DONE\n"
+	if role == "review-epic" {
+		body = "REVIEW-VERDICT: READY\n" + body
+	}
+	if err := os.WriteFile(local.ResultPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	collected, err := h.ex.CollectDetail(handle)

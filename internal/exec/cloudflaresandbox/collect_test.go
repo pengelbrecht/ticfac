@@ -337,7 +337,10 @@ func TestCollectRefusesAReportOnlyAttempt(t *testing.T) {
 func TestCollectKeepsAReportOnlyReviewReadyToMerge(t *testing.T) {
 	h, repo, handle, branch := newCollectHarnessRole(t, "review-epic")
 	worker := repo.workerDir("worker")
-	repo.commitOn(worker, branch, "commit the report", map[string]string{resultFile("keh"): reportBody})
+	// A review's report states its verdict (tick b50) — without the line it
+	// fails the report check (tick 4m6), which is a different question.
+	review := strings.Replace(reportBody, "STATUS: DONE", "REVIEW-VERDICT: READY\nSTATUS: DONE", 1)
+	repo.commitOn(worker, branch, "commit the report", map[string]string{resultFile("keh"): review})
 
 	collected, err := h.ex.CollectDetail(handle)
 	if err != nil {
@@ -349,6 +352,28 @@ func TestCollectKeepsAReportOnlyReviewReadyToMerge(t *testing.T) {
 	}
 	if collected.Result.Outcome != subprocess.OutcomeSucceeded {
 		t.Errorf("outcome %q, want %q", collected.Result.Outcome, subprocess.OutcomeSucceeded)
+	}
+}
+
+// TestCollectFailsAReportThatFailsTheReportCheck: the report check (tick 4m6)
+// is the same on every substrate — a review that never states its verdict is
+// missing-result here too, retried by the run, never a hold.
+//
+// short: local throwaway git repositories; no network, no container.
+func TestCollectFailsAReportThatFailsTheReportCheck(t *testing.T) {
+	h, repo, handle, branch := newCollectHarnessRole(t, "review-epic")
+	worker := repo.workerDir("worker")
+	repo.commitOn(worker, branch, "commit the report", map[string]string{resultFile("keh"): reportBody})
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictMissingResult || collected.Result.Outcome != subprocess.OutcomeFailed {
+		t.Fatalf("verdict %s/%s, want missing-result/failed", collected.Verdict, collected.Result.Outcome)
+	}
+	if !strings.Contains(collected.Message, "fails the report check") || !strings.Contains(collected.Message, "REVIEW-VERDICT") {
+		t.Errorf("the refusal does not say what the check found: %q", collected.Message)
 	}
 }
 

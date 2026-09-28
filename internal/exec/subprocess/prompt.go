@@ -95,6 +95,12 @@ func renderPrompt(record *attemptRecord, spec *JobSpec) string {
 	fmt.Fprintf(&b, "already excludes — a plain `git add -A` will not pick it up — and if it lands on\n")
 	fmt.Fprintf(&b, "%s anyway this attempt is refused as a boundary violation, whatever else it did.\n\n", record.Branch)
 
+	// The report check (tick 4m6): the worker runs the same reader collect
+	// uses before it stops, and fixes what it says.
+	if record.LintCommand != "" {
+		b.WriteString(LintSection(record.LintCommand))
+	}
+
 	fmt.Fprintf(&b, "## Boundaries\n\n")
 	fmt.Fprintf(&b, "- Do not run `tk`, and do not write under %s. Those are the tracker's and the\n",
 		strings.Join(protectedPrefixes, " or "))

@@ -102,6 +102,14 @@ type attemptRecord struct {
 	Session   string   `json:"session,omitempty"`
 	NudgeArgv []string `json:"nudge_argv,omitempty"`
 
+	// LintCommand is the report check the prompt tells the worker to run,
+	// and LintArgv what the supervisor pushes a report that fails it back
+	// with (pushback.go, tick 4m6), its errors still a placeholder. An
+	// attempt recorded before the check carries neither and is never
+	// pushed back.
+	LintCommand string   `json:"lint_command,omitempty"`
+	LintArgv    []string `json:"lint_argv,omitempty"`
+
 	// StuckAfterMS is the stuck watch's window (activity.go, tick wv2): a
 	// runner with no transcript event, no tool-process CPU and no worktree
 	// or branch change for this long is nudged — interrupted and re-prompted

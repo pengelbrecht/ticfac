@@ -178,7 +178,8 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		FindingsProblem:    report.FindingsProblem,
 		FindingsFolded:     report.FindingsFolded,
 		Message: collectMessage(reason, class, record, head,
-			append(append([]string{}, violations...), artifactViolations...)),
+			append(append([]string{}, violations...), artifactViolations...),
+			subprocess.ReportRefusal(record.Spec.Role, report)),
 	}
 
 	// A PREVENTED boundary attempt is invisible in the diff — the container's
@@ -378,6 +379,11 @@ func classify(role string, commits int, reportOnly bool, hasReport bool, report 
 		// finished and left an answer nobody can read — its own shape, not
 		// the same sentence as a report that was never written.
 		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, reasonReportNoStatus
+	case len(subprocess.ReportRefusal(role, report)) > 0:
+		// A report collect cannot read past (tick 4m6). The container told
+		// its worker to run the report check; one that still fails it is the
+		// closed vocabulary's missing-result — retried, never a hold.
+		return subprocess.VerdictMissingResult, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.ReasonReportInvalid
 	case commits == 0 && subprocess.NoCommitsIsFailure(role):
 		return subprocess.VerdictNoCommits, subprocess.OutcomeFailed, subprocess.FailureRunnerError, subprocess.VerdictNoCommits
 	case reportOnly && subprocess.NoCommitsIsFailure(role):
@@ -422,10 +428,12 @@ const (
 )
 
 // collectMessage keeps two failures from sharing one sentence.
-func collectMessage(reason, class string, record *attemptRecord, head string, violations []string) string {
+func collectMessage(reason, class string, record *attemptRecord, head string, violations, reportProblems []string) string {
 	switch reason {
 	case subprocess.VerdictReadyToMerge:
 		return ""
+	case subprocess.ReasonReportInvalid:
+		return subprocess.ReportRefusalMessage(resultFile(record.TickID), reportProblems)
 	case subprocess.VerdictNoCommits:
 		return fmt.Sprintf("the attempt branch carries no commit beyond the base it was cut from (%s)",
 			shortSHA(record.BaseSHA))

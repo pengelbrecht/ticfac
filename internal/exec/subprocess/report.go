@@ -107,6 +107,14 @@ type Report struct {
 	// and the fold is the repair: kept, visibly, never thrown away.
 	FindingsFolded []string
 
+	// FindingsPresent is whether the report carries a findings block at all
+	// (tick 4m6): an explicit `[]` is present with no findings, a report
+	// that never wrote a block is not — "found nothing" and "forgot" are
+	// told apart. FindingsVersion is the block's format (FindingsV1/V2), 0
+	// with no block.
+	FindingsPresent bool
+	FindingsVersion int
+
 	// ReviewVerdict is the review's own judgement parsed off its typed
 	// REVIEW-VERDICT line — READY or NOT READY, the closed vocabulary above.
 	// Empty when the report carries none, whatever its prose says: prose is
@@ -134,6 +142,9 @@ func ParseReport(body string) Report {
 	var out Report
 	findings, problem, folded := ParseFindings(body)
 	out.Findings, out.FindingsProblem, out.FindingsFolded = findings, problem, folded
+	if block := ReadFindingsBlock(body); block.Present || block.Problem != "" {
+		out.FindingsPresent, out.FindingsVersion = true, block.Version
+	}
 	for _, raw := range strings.Split(body, "\n") {
 		trimmed := strings.Trim(strings.TrimRight(raw, "\r"), decorationCutset)
 		if m := statusLine.FindStringSubmatch(trimmed); m != nil {
