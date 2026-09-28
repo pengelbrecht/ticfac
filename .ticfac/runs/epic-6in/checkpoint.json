@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 22,
-  "state": "running",
-  "reason": "4i8 is closed",
-  "updated_at": "2026-09-28T06:01:03Z",
+  "sequence": 23,
+  "state": "collecting",
+  "reason": "collecting 46x attempt 2",
+  "updated_at": "2026-09-28T06:01:11Z",
   "ticks": [
     {
       "tick_id": "060",
