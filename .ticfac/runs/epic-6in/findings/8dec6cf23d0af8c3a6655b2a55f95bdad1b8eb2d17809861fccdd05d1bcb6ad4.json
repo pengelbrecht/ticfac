@@ -12,8 +12,11 @@
   "attempt": 4,
   "done_item": "none",
   "demonstrating_check": "grep -n 'tk cloud' internal/runconfig/runners-config.md",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-28T06:40:56Z",
+  "triaged_at": "2026-09-28T10:16:42Z",
+  "triaged_by": "ticfac run epic-6in absorbing 4cu",
+  "promoted_as": "4cu",
   "provenance": {
     "run_id": "epic-6in",
     "tick_id": "46x",
