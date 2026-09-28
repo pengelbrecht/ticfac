@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-6in",
   "epic_id": "6in",
-  "sequence": 132,
-  "state": "running",
-  "reason": "CI on the epic PR #98 is pending on the head that includes the close-out's own commits; the close-out of 6in is held",
-  "updated_at": "2026-09-28T18:14:01Z",
+  "sequence": 133,
+  "state": "publishing",
+  "reason": "closing v7z behind the integrated gate on 9fda65a3ecb3",
+  "updated_at": "2026-09-28T18:24:18Z",
   "ticks": [
     {
       "tick_id": "060",
