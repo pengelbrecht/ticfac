@@ -137,13 +137,15 @@ func newFactorySetupCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "walk the factory's credential ladder, one verified rung at a time",
-		Long:  "The first-run walk: a deployment, a GitHub credential (the device flow by\ndefault), and model access through the operator's own AI Gateway — every\nrung verified against the live service before it is stored. It prompts for\nanything a flag did not supply.",
+		Long:  "The first-run walk: a deployment, a GitHub credential (the factory's own\nGitHub App by default — one link, two clicks on any device; then the device\nflow or a PAT), and model access through the operator's own AI Gateway — every\nrung verified against the live service before it is stored. It prompts for\nanything a flag did not supply.",
 	}
 	fs := flag.NewFlagSet("factory setup", flag.ContinueOnError)
 	var (
 		bundleDir    = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		repo         = fs.String("repo", "", "the repository the GitHub credential must reach")
 		githubToken  = fs.String("github-token", "", "supply the GitHub credential by hand")
+		githubApp    = fs.String("github-app", "auto", "the factory's own GitHub App: auto (offer it), yes, or no (use a token rung)")
+		githubOrg    = fs.String("github-org", "", "register the GitHub App under this organization instead of your user")
 		githubAPI    = fs.String("github-api", "", "GitHub's REST root (tests, GHES)")
 		githubClient = fs.String("github-client", "", "the GitHub App client id for the device flow")
 		githubOAuth  = fs.String("github-oauth", "", "the host the device flow runs on")
@@ -157,13 +159,13 @@ func newFactorySetupCommand(stdout, stderr io.Writer) *cobra.Command {
 	)
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(factorySetup(args, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+		return codeToErr(factorySetup(args, bundleDir, repo, githubToken, githubApp, githubOrg, githubAPI, githubClient, githubOAuth,
 			gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, githubClient, githubOAuth,
+func factorySetup(args []string, bundleDir, repo, githubToken, githubApp, githubOrg, githubAPI, githubClient, githubOAuth,
 	gatewayURL, provider, providerKey, cfAPIToken, billingMode, cfAPIBase *string, asJSON *bool, stdout, stderr io.Writer) int {
 	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory setup: takes no positional arguments\n")
@@ -180,6 +182,8 @@ func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, github
 		GitHubAPIBase:        *githubAPI,
 		Repo:                 *repo,
 		GitHubToken:          *githubToken,
+		GitHubApp:            *githubApp,
+		GitHubOrg:            *githubOrg,
 		GitHubClientID:       *githubClient,
 		GitHubOAuthBase:      *githubOAuth,
 		GatewayURL:           *gatewayURL,
@@ -208,6 +212,8 @@ func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, github
 			GitHubLogin     string   `json:"github_login"`
 			GitHubAuth      string   `json:"github_auth"`
 			GitHubRefreshed bool     `json:"github_refreshed"`
+			GitHubAppID     string   `json:"github_app_id,omitempty"`
+			GitHubAppSlug   string   `json:"github_app_slug,omitempty"`
 			GatewayURL      string   `json:"gateway_url"`
 			Provider        string   `json:"provider"`
 			CostTelemetry   bool     `json:"cost_telemetry"`
@@ -222,6 +228,8 @@ func factorySetup(args []string, bundleDir, repo, githubToken, githubAPI, github
 			GitHubLogin:     result.GitHubLogin,
 			GitHubAuth:      result.GitHubAuth,
 			GitHubRefreshed: result.GitHubRefreshed,
+			GitHubAppID:     result.GitHubAppID,
+			GitHubAppSlug:   result.GitHubAppSlug,
 			GatewayURL:      result.GatewayURL,
 			Provider:        result.Provider,
 			CostTelemetry:   result.CostTelemetry,

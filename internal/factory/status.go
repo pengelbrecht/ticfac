@@ -168,50 +168,8 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 		}
 	}
 
-	// GitHub.
-	stored := storedGitHubCredential(cfg)
-	repo := cfg.Get(credentials.KeyGitHubRepo)
-	report.GitHub = CredentialState{Name: "github"}
-	if stored.Token != "" {
-		now := time.Now()
-		lifetime := DescribeGitHubLifetime(stored.ExpiresAt, now)
-		report.GitHub.Configured = true
-		report.GitHub.Summary = describeGitHub(stored.Auth, cfg.Get(credentials.KeyGitHubLogin), repo)
-		switch {
-		case opts.Offline:
-			report.GitHub.Detail = "not checked (--offline) — " + lifetime
-		case !stored.ExpiresAt.IsZero() && !stored.ExpiresAt.After(now):
-			// A passed deadline is a LOCAL fact, and a rejection on its own.
-			// Waiting for the probe to agree would report "live" for a
-			// credential the operator has to renew before the next run, which
-			// is the state this rung exists to surface.
-			report.GitHub.Checked = true
-			report.GitHub.Detail = fmt.Sprintf("rejected: %s — run `ticfac factory setup` to renew it%s",
-				lifetime, renewalCost(stored))
-		default:
-			report.GitHub.Checked = true
-			login, err := probeGitHubUser(ctx, client, apiBase, stored.Token)
-			if err != nil {
-				report.GitHub.Detail = "rejected: " + err.Error()
-				break
-			}
-			if repo == "" {
-				report.GitHub.OK = true
-				report.GitHub.Detail = fmt.Sprintf("live (@%s), %s; no repository recorded to check the scope against", login, lifetime)
-				break
-			}
-			push, err := probeGitHubRepo(ctx, client, apiBase, stored.Token, repo)
-			switch {
-			case err != nil:
-				report.GitHub.Detail = fmt.Sprintf("rejected for %s: %v", repo, err)
-			case !push:
-				report.GitHub.Detail = fmt.Sprintf("rejected: read-only on %s — the factory could not push", repo)
-			default:
-				report.GitHub.OK = true
-				report.GitHub.Detail = fmt.Sprintf("live (@%s), can write to %s, %s", login, repo, lifetime)
-			}
-		}
-	}
+	// GitHub: whichever rung is live, checked live unless offline.
+	report.GitHub = githubRungState(ctx, cfg, client, apiBase, url, opts.Offline)
 
 	// Gateway and the provider behind it.
 	gateway := strings.TrimSuffix(cfg.Get(credentials.KeyGatewayURL), "/")
@@ -337,6 +295,89 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 	return report, nil
 }
 
+// githubRungState is the github line: the factory is asked first which rung is
+// live — only it knows whether it holds its own GitHub App (epic dm6), and only
+// it can mint a token with one — and a factory that predates the App rung, or
+// could not be asked, is reported from the local mirror as before.
+func githubRungState(ctx context.Context, cfg *credentials.File, client *http.Client, apiBase, url string, offline bool) CredentialState {
+	stored := storedGitHubCredential(cfg)
+	repo := cfg.Get(credentials.KeyGitHubRepo)
+	state := CredentialState{Name: "github"}
+	if url != "" && !offline {
+		checkRepo := repo
+		if checkRepo == "" {
+			if detected, err := detectProject(); err == nil {
+				checkRepo = detected
+			}
+		}
+		if status, err := FetchGitHubAppStatus(ctx, client, url, cfg.Get(credentials.KeyToken), checkRepo); err == nil && status.Rung == AuthApp {
+			return GitHubAppState(status, checkRepo)
+		}
+	}
+	if stored.Token != "" {
+		now := time.Now()
+		lifetime := DescribeGitHubLifetime(stored.ExpiresAt, now)
+		state.Configured = true
+		state.Summary = describeGitHub(stored.Auth, cfg.Get(credentials.KeyGitHubLogin), repo)
+		switch {
+		case offline:
+			state.Detail = "not checked (--offline) — " + lifetime
+		case !stored.ExpiresAt.IsZero() && !stored.ExpiresAt.After(now):
+			// A passed deadline is a LOCAL fact, and a rejection on its own.
+			// Waiting for the probe to agree would report "live" for a
+			// credential the operator has to renew before the next run, which
+			// is the state this rung exists to surface.
+			state.Checked = true
+			state.Detail = fmt.Sprintf("rejected: %s — run `ticfac factory setup` to renew it%s",
+				lifetime, renewalCost(stored))
+		default:
+			state.Checked = true
+			login, err := probeGitHubUser(ctx, client, apiBase, stored.Token)
+			if err != nil {
+				state.Detail = "rejected: " + err.Error()
+				break
+			}
+			if repo == "" {
+				state.OK = true
+				state.Detail = fmt.Sprintf("live (@%s), %s; no repository recorded to check the scope against", login, lifetime)
+				break
+			}
+			push, err := probeGitHubRepo(ctx, client, apiBase, stored.Token, repo)
+			switch {
+			case err != nil:
+				state.Detail = fmt.Sprintf("rejected for %s: %v", repo, err)
+			case !push:
+				state.Detail = fmt.Sprintf("rejected: read-only on %s — the factory could not push", repo)
+			default:
+				state.OK = true
+				state.Detail = fmt.Sprintf("live (@%s), can write to %s, %s", login, repo, lifetime)
+			}
+		}
+	}
+
+	return state
+}
+
+// GitHubRung is the github line on its own, live: what `ticfac doctor` asks
+// for, so it names the rung the factory actually uses and checks it the way
+// status does — for the App rung, a read-only token minted for the repository.
+func GitHubRung(ctx context.Context, opts StatusOptions) (CredentialState, error) {
+	cfg, err := loadConfig(opts.ConfigPath)
+	if err != nil {
+		return CredentialState{}, err
+	}
+	client := opts.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+	apiBase := strings.TrimSuffix(strings.TrimSpace(opts.GitHubAPIBase), "/")
+	if apiBase == "" {
+		apiBase = defaultGitHubAPIBase
+	}
+	url := strings.TrimSuffix(cfg.Get(credentials.KeyURL), "/")
+	return githubRungState(ctx, cfg, client, apiBase, url, opts.Offline), nil
+}
+
 // describeBillingExpectation says which mode is asserted and whether that was
 // chosen or defaulted, because "postpaid because nobody said otherwise" and
 // "postpaid because the operator settled on it" read the same in a report and
@@ -404,10 +445,37 @@ func renewalCost(stored githubCredential) string {
 	}
 }
 
+// GitHubAppState is the github line for a factory on the App rung, from the
+// factory's own live answer: a read-only token minted for the repository, or
+// the reason none could be.
+func GitHubAppState(status *GitHubAppStatus, repo string) CredentialState {
+	state := CredentialState{Name: "github", Configured: true, Checked: true}
+	state.Summary = "rung: app — " + DescribeGitHubApp(status.App)
+	switch {
+	case status.App == nil:
+		state.Detail = "rejected: the factory names the App rung but no App"
+	case status.App.Error != "":
+		state.Detail = "rejected: " + status.App.Error
+	case repo == "" && len(status.App.Installations) > 0:
+		state.OK = true
+		state.Detail = "live, installed; no repository recorded to mint a token for — pass one with `ticfac factory setup --repo owner/name`"
+	case repo == "":
+		state.Detail = "rejected: the App is not installed anywhere — install it at " + status.App.InstallURL
+	case status.Check != nil && status.Check.OK:
+		state.OK = true
+		state.Detail = fmt.Sprintf("live: the factory minted a read-only token for %s (installation %d)", repo, status.Check.InstallationID)
+	case status.Check != nil && status.Check.Detail != "":
+		state.Detail = fmt.Sprintf("rejected for %s: %s", repo, status.Check.Detail)
+	default:
+		state.Detail = fmt.Sprintf("rejected for %s: the factory did not check it", repo)
+	}
+	return state
+}
+
 func describeGitHub(auth, login, repo string) string {
-	kind := "fine-grained PAT"
+	kind := "rung: pat — fine-grained PAT"
 	if auth == AuthDeviceFlow {
-		kind = "device flow (user-to-server token)"
+		kind = "rung: device-flow — device flow (user-to-server token)"
 	}
 	parts := []string{kind}
 	if login != "" {

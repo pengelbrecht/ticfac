@@ -635,6 +635,10 @@ func TestSecretSinksAreTheWorkerAndOneLocalFile(t *testing.T) {
 		SecretGatewayBaseURL:     true,
 		SecretCloudflareAPIToken: true,
 		SecretFactoryBaseURL:     true,
+		// The key the factory seals its GitHub App's credentials under (epic
+		// dm6). The App's private key itself is never a sink of this command:
+		// it goes from GitHub to the Worker and nowhere else.
+		SecretGitHubAppSealingKey: true,
 	}
 	for _, spec := range Providers {
 		if spec.SecretName != "" {

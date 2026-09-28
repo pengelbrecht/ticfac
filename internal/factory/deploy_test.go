@@ -43,6 +43,10 @@ type harness struct {
 	// noSandboxBinding makes /health report a deployment with no container
 	// binding — the shape the live factory had before this was declared.
 	noSandboxBinding atomic.Bool
+	// routes answers authenticated routes a test teaches the fake worker —
+	// the GitHub App rung's, say. Nil (or a false return) is the default 404,
+	// which is what a factory that predates the route answers.
+	routes atomic.Pointer[func(w http.ResponseWriter, r *http.Request) bool]
 }
 
 func newHarness(t *testing.T) *harness {
@@ -94,6 +98,9 @@ func newHarness(t *testing.T) *harness {
 		ok, err := verifyTokenAgainstHash(token, *hashPtr)
 		if err != nil || !ok {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if routes := h.routes.Load(); routes != nil && (*routes)(w, r) {
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
