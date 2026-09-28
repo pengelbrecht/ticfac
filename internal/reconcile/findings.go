@@ -84,7 +84,20 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 	if collected == nil {
 		return nil
 	}
+	if collected.FindingsProblem != "" && collected.Verdict != subprocess.VerdictReadyToMerge {
+		// The executor's report check (tick 4m6) already pushed the block
+		// back to the worker and, with the pushbacks spent, settled the
+		// attempt as missing-result: the attempt is refused by its verdict,
+		// which RETRIES it, rather than here, where the refusal held the run
+		// for a person. Nothing is drafted — nobody could read the block —
+		// and the record says why.
+		r.record(marker.TickID, StageRejected, "the report carried a findings block that could not be read, "+
+			"and still could not after it was pushed back: %s", collected.FindingsProblem)
+		return nil
+	}
 	if collected.FindingsProblem != "" {
+		// The backstop: a collect that let an unreadable block through
+		// to a mergeable verdict (an executor without the report check).
 		r.setTick(marker.TickID, "rejected")
 		r.record(marker.TickID, StageRejected, "the report carried a findings block that could not be read: %s",
 			collected.FindingsProblem)

@@ -141,6 +141,11 @@ func (e *Executor) observe(record *attemptRecord) (state, detail string) {
 	// worker that wrote its report has finished; an agent that is still
 	// running has not, whatever the pane looks like.
 	if report, has := e.readReport(record); has && report.Status != "" {
+		// A report that fails the report check is pushed back to the agent
+		// before it settles anything (pushback.go, tick 4m6).
+		if state, detail, handled := e.pushBackReport(st, record); handled {
+			return state, detail
+		}
 		head := headOf(record.Repo, record.Branch)
 		commits, _ := commitsBeyond(record.Repo, record.BaseSHA, head)
 		detail := fmt.Sprintf(

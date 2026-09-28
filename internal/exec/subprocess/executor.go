@@ -397,6 +397,9 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 	record.ResultRel, record.ResultPath = rel, abs
+	// The report check the prompt names (tick 4m6): this executable, which
+	// is the checker, with the job's own role, tick and worktree.
+	record.LintCommand = LintCommand(e.opts.SupervisorArgv[0], abs, spec.Role, record.TickID, record.Worktree)
 	record.RunnerEnv = append(runnerEnv(record, spec), runnerDefEnv(e.opts.Runner)...)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -434,6 +437,13 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 	record.NudgeArgv = nudge
+	// What a runner whose report fails the report check is pushed back with
+	// (pushback.go), rendered now for the same reason.
+	pushback, err := lintPushbackArgv(e.opts.Runner, e.opts.RunnerArgv, at, record)
+	if err != nil {
+		return nil, err
+	}
+	record.LintArgv = pushback
 	// The stuck watch's nudge (activity.go): the runner is interrupted and
 	// re-prompted in its own session, rendered now for the same reason.
 	if e.opts.StuckAfter >= 0 {

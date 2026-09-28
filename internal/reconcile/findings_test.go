@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -393,7 +394,11 @@ func TestARepeatedFindingOnALaterAttemptProposesNothingNew(t *testing.T) {
 }
 
 // 3. A findings block that does not parse refuses the attempt — never a
-// silent drop, and never a close behind findings nobody could read.
+// silent drop, and never a close behind findings nobody could read. Since
+// tick 4m6 the executor pushes the block back to the worker first, and a
+// block that stays unreadable fails the attempt as missing-result: a refusal
+// the run RETRIES, not the finding_report_invalid hold that stopped it for a
+// person.
 func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -402,8 +407,16 @@ func TestAnUnreadableFindingsBlockRefusesTheAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.Failure == nil || result.Failure.Reason != RefusedFindingInvalid {
-		t.Fatalf("failure %+v, want %s", result.Failure, RefusedFindingInvalid)
+	if result.Failure == nil || result.Failure.Reason != RefusedCollect {
+		t.Fatalf("failure %+v, want %s", result.Failure, RefusedCollect)
+	}
+	if !resumesWithoutAPerson(result.Failure.Reason) {
+		t.Fatalf("an unreadable report stops the run for a person (%s)", result.Failure.Reason)
+	}
+	for _, want := range []string{subprocess.VerdictMissingResult, "fails the report check", "findings block"} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the refusal does not say %q: %q", want, result.Failure.Message)
+		}
 	}
 	if got := f.Tracker.count("close:a1"); got != 0 {
 		t.Fatalf("a1 was closed %d times behind a findings block nobody could read", got)

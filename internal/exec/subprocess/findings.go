@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
@@ -197,11 +198,75 @@ func ValidFindingDoneItem(doneItem string) bool {
 }
 
 // findingsFence is the opening line of the findings block: a code fence with
-// the info string `findings` and nothing else on the line.
-var findingsFence = regexp.MustCompile("^```findings[ \\t]*$")
+// the info string `findings`, optionally followed by the block's format
+// version (`findings v2`), and nothing else on the line.
+var findingsFence = regexp.MustCompile("^```findings(?:[ \\t]+(v1|v2))?[ \\t]*$")
 
 // anyFence is any code-fence line, which is what CLOSES the findings block.
 var anyFence = regexp.MustCompile("^```")
+
+// The two formats of the findings block (tick 4m6). v1 is the format every
+// run before 4m6 wrote and every archived report carries, so it is read
+// forever; v2 is what the prompts ask for now. See findings_v2.go for the v2
+// shape and why it is shaped that way.
+const (
+	FindingsV1 = 1
+	FindingsV2 = 2
+)
+
+// FindingsBlock is everything the ONE reader of the findings block learned
+// about it — the collect's view (the typed list, or the problem that refuses
+// it) and the linter's (where the block is, which format it is, and every
+// repair the reader made to an item). ParseFindings and ParseReport are both
+// views of this; the linter reads it directly, so the checker and collect
+// can never disagree about what a block says (tick 4m6).
+type FindingsBlock struct {
+	// Present is whether the report carries a complete findings block at all.
+	// A block holding `[]` is Present with no findings — an explicit "I found
+	// nothing" — while a report with no block is not Present: the two are
+	// distinguishable, which is what the empty block is for.
+	Present bool
+	// Version is FindingsV1 or FindingsV2: the fence's own version when it
+	// names one, else the shape of the items (a v2-only key or kind makes an
+	// untagged block v2), else v1.
+	Version int
+	// Line is the 1-based line of the block's opening fence.
+	Line int
+	// Findings is the typed list, nil when the block is empty or refused.
+	Findings []Finding
+	// Problem is why the block is refused, empty when it is not.
+	Problem string
+	// Notes are the repairs the reader made rather than refusing: every key
+	// folded into a body and every value normalised, per item.
+	Notes []FindingNote
+	// Titles are the items' titles as written, for checks the record itself
+	// does not refuse (the title length rule).
+	Titles []string
+}
+
+// FindingNote is one repair the reader made to one item rather than refusing
+// the block: an unknown key folded into the body, or a value outside its
+// vocabulary normalised (the original value folded into the body).
+type FindingNote struct {
+	Index    int
+	Key      string
+	Original string
+	// Normalised is true for a value repaired in place, false for a key the
+	// record does not know that was folded.
+	Normalised bool
+	// Why is the reader's explanation, for the linter to show the worker.
+	Why string
+}
+
+// folded renders a note the way the collection has always named folds
+// (tick ryv): `findings[<i>] "<key>"`, and for a normalisation
+// `findings[<i>] "<key>" normalised from "<original>"`.
+func (n FindingNote) folded() string {
+	if n.Normalised {
+		return fmt.Sprintf("findings[%d] %q normalised from %q", n.Index, n.Key, n.Original)
+	}
+	return fmt.Sprintf("findings[%d] %q", n.Index, n.Key)
+}
 
 // ParseFindings reads the findings block out of a report body.
 //
@@ -213,107 +278,207 @@ var anyFence = regexp.MustCompile("^```")
 //
 // The return is the typed list and, when the report carries a block this
 // reader cannot accept, the problem with it. (nil, "", nil) means the report
-// carries no findings block at all; ([]Finding{}, "", nil) is not a return
-// value — a block that proposes nothing is the same as no block.
+// carries no findings, whether it has no block or an empty one;
+// ReadFindingsBlock says which.
 //
 // The third return names every finding key the block carried that the
-// finding record does not know, one per key, as `findings[<i>] "<key>"`.
-// Such a key is not a problem (tick ryv): the 3h0 worker finished its tick
-// and wrote a finding with an extra "title_note", and refusing the whole
-// attempt as finding_report_invalid threw away work that was fine. The key
-// and its value are FOLDED into the finding's body as a labelled line — the
-// strictness the fold replaces existed so a half-understood list never
-// silently loses the half it did not understand, and a labelled line in the
-// body keeps that promise: the unknown half is kept, visibly, beside the
-// finding it rode, and the fold is named so the attempt's records can note
-// it. What still refuses is everything the record can mean nothing by:
-// a missing required field, and a value the vocabularies do not carry.
+// finding record does not know, one per key, as `findings[<i>] "<key>"`,
+// and every value the reader normalised. Such a key is not a problem (tick
+// ryv): the 3h0 worker finished its tick and wrote a finding with an extra
+// "title_note", and refusing the whole attempt as finding_report_invalid
+// threw away work that was fine. The key and its value are FOLDED into the
+// finding's body as a labelled line. What still refuses is everything the
+// record can mean nothing by: a missing required field, and a value of the
+// wrong type.
 func ParseFindings(body string) (findings []Finding, problem string, folded []string) {
+	block := ReadFindingsBlock(body)
+	if block.Problem != "" {
+		return nil, block.Problem, nil
+	}
+	if len(block.Findings) == 0 {
+		return nil, "", nil
+	}
+	for _, note := range block.Notes {
+		folded = append(folded, note.folded())
+	}
+	return block.Findings, "", folded
+}
+
+// ReadFindingsBlock is the one reader of the findings block (see
+// FindingsBlock).
+func ReadFindingsBlock(body string) FindingsBlock {
 	var last []string
 	var block []string
+	lastLine, lastVersion := 0, 0
+	openLine, openVersion := 0, 0
 	open := false
-	for _, raw := range strings.Split(body, "\n") {
+	for i, raw := range strings.Split(body, "\n") {
 		line := strings.TrimRight(raw, "\r")
 		switch {
-		case !open && findingsFence.MatchString(line):
-			open, block = true, nil
-		case open && anyFence.MatchString(line):
+		case !open:
+			if m := findingsFence.FindStringSubmatch(line); m != nil {
+				open, block, openLine = true, nil, i+1
+				openVersion = 0
+				switch m[1] {
+				case "v1":
+					openVersion = FindingsV1
+				case "v2":
+					openVersion = FindingsV2
+				}
+			}
+		case anyFence.MatchString(line):
 			// Keep scanning: the LAST complete block is the one that counts.
 			open = false
-			last = block
-		case open:
+			last, lastLine, lastVersion = block, openLine, openVersion
+			if last == nil {
+				last = []string{}
+			}
+		default:
 			block = append(block, line)
 		}
 	}
 	if open {
-		return nil, "the report opens a findings block and never closes it", nil
+		return FindingsBlock{Line: openLine, Version: versionOr(openVersion),
+			Problem: fmt.Sprintf("the report opens a findings block (line %d) and never closes it", openLine)}
 	}
 	if last == nil {
-		return nil, "", nil
+		return FindingsBlock{}
 	}
+	out := FindingsBlock{Present: true, Line: lastLine, Version: versionOr(lastVersion)}
 
 	// Strict decode: the array itself is refused on anything but a JSON
 	// array, because a findings list a reader half-understands is one that
 	// silently loses the half it did not.
+	text := strings.Join(last, "\n")
 	var raw []json.RawMessage
-	dec := json.NewDecoder(bytes.NewReader([]byte(strings.Join(last, "\n"))))
+	dec := json.NewDecoder(bytes.NewReader([]byte(text)))
 	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Sprintf("the findings block is not a JSON array: %v", err), nil
+		out.Problem = fmt.Sprintf("the findings block%s is not a JSON array: %v", blockLineAt(text, lastLine, err), err)
+		return out
 	}
 	if dec.More() {
-		return nil, "the findings block carries trailing content after the array", nil
+		out.Problem = "the findings block carries trailing content after the array"
+		return out
 	}
-	out := []Finding{}
+	objects := make([]map[string]json.RawMessage, 0, len(raw))
 	for i, item := range raw {
 		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(item, &fields); err != nil {
-			return nil, fmt.Sprintf("findings[%d] is not an object: %v", i, err), nil
-		}
-		for _, name := range findingFields {
-			if _, ok := fields[name]; !ok {
-				return nil, fmt.Sprintf("findings[%d] omits %q; every field is required, empty included", i, name), nil
+		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
+			if err == nil {
+				err = fmt.Errorf("it is null")
 			}
+			out.Problem = fmt.Sprintf("findings[%d] is not an object: %v", i, err)
+			return out
 		}
-		// The fold (tick ryv): keys the finding record does not know are KEPT
-		// — appended to the finding's body as labelled lines, in key order —
-		// rather than refusing the attempt over an annotation. The strict
-		// decode still runs, over the KNOWN keys only, so what the record does
-		// not know is labelled as not known, never guessed at, and what it
-		// half-understands still cannot pass for what it reads.
-		unknown := make([]string, 0)
-		known := make(map[string]json.RawMessage, len(fields))
-		for name, value := range fields {
-			if knownFindingField[name] {
-				known[name] = value
-				continue
-			}
-			unknown = append(unknown, name)
+		objects = append(objects, fields)
+	}
+	if lastVersion == 0 && looksLikeV2(objects) {
+		out.Version = FindingsV2
+	}
+
+	findings := []Finding{}
+	for i, fields := range objects {
+		var (
+			finding Finding
+			notes   []FindingNote
+			problem string
+		)
+		if out.Version == FindingsV2 {
+			finding, notes, problem = readFindingV2(i, fields)
+		} else {
+			finding, notes, problem = readFindingV1(i, fields)
 		}
-		sort.Strings(unknown)
-		filtered, err := json.Marshal(known)
-		if err != nil {
-			return nil, fmt.Sprintf("findings[%d] could not be read: %v", i, err), nil
+		if problem != "" {
+			return FindingsBlock{Present: true, Line: out.Line, Version: out.Version, Problem: problem}
 		}
-		var finding Finding
-		dec := json.NewDecoder(bytes.NewReader(filtered))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&finding); err != nil {
-			return nil, fmt.Sprintf("findings[%d]: %v", i, err), nil
-		}
-		for _, name := range unknown {
-			finding.Body = foldIntoBody(finding.Body, name, fields[name])
-			folded = append(folded, fmt.Sprintf("findings[%d] %q", i, name))
-		}
-		folded = append(folded, normalizeFinding(&finding, i)...)
 		if err := finding.Validate(); err != nil {
-			return nil, err.Error(), nil
+			return FindingsBlock{Present: true, Line: out.Line, Version: out.Version,
+				Problem: fmt.Sprintf("findings[%d]: %v", i, err)}
 		}
-		out = append(out, finding)
+		var title string
+		_ = json.Unmarshal(fields["title"], &title)
+		out.Titles = append(out.Titles, title)
+		out.Notes = append(out.Notes, notes...)
+		findings = append(findings, finding)
 	}
-	if len(out) == 0 {
-		return nil, "", nil
+	if len(findings) > 0 {
+		out.Findings = findings
 	}
-	return out, "", folded
+	return out
+}
+
+func versionOr(v int) int {
+	if v == 0 {
+		return FindingsV1
+	}
+	return v
+}
+
+// blockLineAt names the report line a JSON syntax error in the block points
+// at, so the worker is told where to look rather than a byte offset.
+func blockLineAt(text string, fenceLine int, err error) string {
+	var offset int64 = -1
+	switch e := err.(type) {
+	case *json.SyntaxError:
+		offset = e.Offset
+	case *json.UnmarshalTypeError:
+		offset = e.Offset
+	default:
+		if err == io.ErrUnexpectedEOF {
+			// The JSON is cut short: the block's closing fence is where it
+			// ends, so that is the line to look above.
+			return fmt.Sprintf(" (it ends at report line %d before the JSON does)", fenceLine+1+strings.Count(text, "\n")+1)
+		}
+	}
+	if offset < 0 || offset > int64(len(text)) {
+		return ""
+	}
+	return fmt.Sprintf(" (report line %d)", fenceLine+1+strings.Count(text[:offset], "\n"))
+}
+
+// readFindingV1 reads one item of a v1 block: the five required fields, the
+// two optional evidence fields, unknown keys folded, closed-vocabulary values
+// normalised.
+func readFindingV1(i int, fields map[string]json.RawMessage) (Finding, []FindingNote, string) {
+	for _, name := range findingFields {
+		if _, ok := fields[name]; !ok {
+			return Finding{}, nil, fmt.Sprintf("findings[%d] omits %q; every field is required, empty included", i, name)
+		}
+	}
+	// The fold (tick ryv): keys the finding record does not know are KEPT
+	// — appended to the finding's body as labelled lines, in key order —
+	// rather than refusing the attempt over an annotation. The strict
+	// decode still runs, over the KNOWN keys only, so what the record does
+	// not know is labelled as not known, never guessed at, and what it
+	// half-understands still cannot pass for what it reads.
+	unknown := make([]string, 0)
+	known := make(map[string]json.RawMessage, len(fields))
+	for name, value := range fields {
+		if knownFindingField[name] {
+			known[name] = value
+			continue
+		}
+		unknown = append(unknown, name)
+	}
+	sort.Strings(unknown)
+	filtered, err := json.Marshal(known)
+	if err != nil {
+		return Finding{}, nil, fmt.Sprintf("findings[%d] could not be read: %v", i, err)
+	}
+	var finding Finding
+	dec := json.NewDecoder(bytes.NewReader(filtered))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&finding); err != nil {
+		return Finding{}, nil, fmt.Sprintf("findings[%d]: %v", i, err)
+	}
+	var notes []FindingNote
+	for _, name := range unknown {
+		finding.Body = foldIntoBody(finding.Body, name, fields[name])
+		notes = append(notes, FindingNote{Index: i, Key: name, Original: foldValue(fields[name]),
+			Why: "the v1 finding record has no such field (known: " + strings.Join(FindingFieldNames(), ", ") + ")"})
+	}
+	notes = append(notes, normalizeFinding(&finding, i)...)
+	return finding, notes, ""
 }
 
 // targetPrefixPattern finds an owner/name repository at the START of a
@@ -332,12 +497,12 @@ var targetPrefixPattern = regexp.MustCompile(`^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)
 //
 // An empty title is still a refusal: a finding nobody can name is one nobody
 // can triage, and no default names it.
-func normalizeFinding(f *Finding, index int) []string {
-	var folded []string
-	fold := func(key, value string) {
+func normalizeFinding(f *Finding, index int) []FindingNote {
+	var notes []FindingNote
+	fold := func(key, value, why string) {
 		raw, _ := json.Marshal(value)
 		f.Body = foldIntoBody(f.Body, key, raw)
-		folded = append(folded, fmt.Sprintf("findings[%d] %q normalised from %q", index, key, value))
+		notes = append(notes, FindingNote{Index: index, Key: key, Original: value, Normalised: true, Why: why})
 	}
 	if f.Target != "" && !targetRepositoryPattern.MatchString(f.Target) {
 		original := f.Target
@@ -347,24 +512,24 @@ func normalizeFinding(f *Finding, index int) []string {
 			f.Target = ""
 			// An upstream tick names ANOTHER repository by definition; with
 			// none recoverable it is a proposal for this one, and says so.
-			if f.Kind == "upstream-tick" {
-				f.Kind = "proposed-tick"
-				fold("kind", "upstream-tick")
+			if f.Kind == FindingKindUpstreamTick {
+				f.Kind = FindingKindProposedTick
+				fold("kind", FindingKindUpstreamTick, "an upstream tick needs an owner/name target")
 			}
 		}
-		fold("target", original)
+		fold("target", original, "target is an owner/name repository, e.g. pengelbrecht/ticks, or empty for this one")
 	}
 	if !oneOf(FindingKinds, f.Kind) {
 		original := f.Kind
-		f.Kind = "defect"
-		fold("kind", original)
+		f.Kind = FindingKindDefect
+		fold("kind", original, "kind is one of "+strings.Join(FindingKinds, ", "))
 	}
 	if !oneOf(FindingSeverities, f.Severity) {
 		original := f.Severity
-		f.Severity = "medium"
-		fold("severity", original)
+		f.Severity = FindingSeverityMedium
+		fold("severity", original, "severity is one of "+strings.Join(FindingSeverities, ", "))
 	}
-	return folded
+	return notes
 }
 
 // foldIntoBody appends one unknown key and its value to the finding's body

@@ -38,41 +38,48 @@ isolated git worktree that is yours alone. Nobody will answer a question.
   `findings` fenced block in your report, and it is drafted for the
   orchestrator mechanically:
 
-  ```findings
+  ```findings v2
   [
     {
-      "kind": "proposed-tick",
-      "title": "One line an orchestrator can triage without reading the body",
+      "kind": "defect",
+      "title": "One line an orchestrator can triage, at most 80 characters",
+      "severity": "medium",
       "body": "What you found and why it matters, in two or three sentences.",
-      "severity": "low",
-      "target": "",
-      "done_item": "A3",
-      "demonstrating_check": "go"
+      "target": "owner/name",
+      "breaks": {"item": "A3", "check": "go"},
+      "evidence": "internal/x/y.go:42, or a command and the line it fails with"
     }
   ]
   ```
 
-  `kind` is one of `proposed-tick` (a tick for this repository),
-  `upstream-tick` (a tick for ANOTHER repository — its `target` names which,
-  as owner/name), `contract` (a pinned contract bundle change) or `defect`
-  (a defect outside your tick's scope). `severity` is `low`, `medium` or
-  `high`. The five fields above are required, empty included. Two more fields
-  are the finding's EVIDENCE against the epic's definition of done, and they
-  are optional — a finding without them is still accepted, marked unlinked.
-  `done_item` names the `[A<n>]` item of the epic's acceptance criteria that
-  you believe this finding breaks, or `none` when it breaks none; read the
-  epic's tracker record for its `[A<n>]` marks. `demonstrating_check` names
-  the command or test that would demonstrate the breakage — one of the
-  repository's declared testing commands where one fits, else the test's
-  name. The claim is evidence, never the verdict: the run runs the named
-  check where it can, predicts where it cannot yet, and scores the claim
-  against what the done actually did. A finding is a DRAFT a person
+  `kind` is what the finding IS: `defect`, `proposal` (work worth a tick of
+  its own) or `contract-change` (a pinned contract-bundle change).
+  `severity` is `low`, `medium` or `high`. Only kind, title and severity are
+  required; keep the title to 80 characters. `target` is where it goes — the
+  repository it belongs on, as owner/name — and is omitted for the
+  repository being run. `breaks` is the finding's EVIDENCE against the
+  epic's definition of done, and it is optional: `item` names the `[A<n>]`
+  item of the epic's acceptance criteria that you believe this finding
+  breaks (read the epic's tracker record for its marks), and `check` the
+  declared testing command id or the command that would demonstrate it. Omit
+  `breaks` when the finding breaks no item — never write "none". `evidence`
+  is optional: where to look, as file:line or a command and the line it
+  fails with. When you found nothing, write the empty block, `[]`. The claim
+  is evidence, never the verdict: the run runs the named check where it can,
+  predicts where it cannot yet, and scores the claim against what the done
+  actually did. A finding is a DRAFT a person
   promotes — proposing scope costs you nothing, but nothing opens
   without the promotion, and the same finding repeated on a later attempt
   deduplicates rather than re-proposing.
 - Commit source and tests only — never build output, caches or coverage files.
 - If the task is ambiguous or something you need is missing, say so in the
   report rather than guessing.
+
+Before you stop, check your report with the same reader the run collects it
+with, and fix every error it prints until it exits 0 — a report that fails it
+is read as no report at all:
+
+    ticfac-exec-subprocess lint-report RESULT-<tick id>.md --role implement-tick --tick <tick id>
 
 Your report is the only channel that is read. It ends with the status line the
 job's instructions name, and it says what changed, what you ran, and what the
