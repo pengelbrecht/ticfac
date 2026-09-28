@@ -33,7 +33,7 @@ func TestPinnedVocabularySizes(t *testing.T) {
 	}{
 		{"methods", v.Methods, 103},
 		{"result_discriminators", v.ResultDiscriminators, 65},
-		{"error_codes", v.ErrorCodes, 9},
+		{"error_codes", v.ErrorCodes, 10},
 		{"event_kinds", v.EventKinds, 26},
 		{"subscription_event_kinds", v.SubscriptionEventKinds, 3},
 		{"subscription_types", v.SubscriptionTypes, 27},

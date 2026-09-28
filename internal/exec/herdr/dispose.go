@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
@@ -81,6 +82,9 @@ func (e *Executor) Dispose(h *subprocess.JobHandle, opts subprocess.DisposeOptio
 	// between then and the removal. The question is asked once more, and
 	// its FAILURE refuses as loudly as a bad answer.
 	state, detail, err := e.livenessForTeardown(record)
+	if err == nil && state == teardownWorking && persisted && interruptRequested(st) {
+		state, detail, err = e.awaitInterrupt(record)
+	}
 	if err != nil {
 		return refuse(subprocess.RefusedUnknown, "%s: attempt %d of %s is not torn down (%v)",
 			detail, record.Attempt, record.JobID, err)
@@ -309,6 +313,52 @@ func (e *Executor) livenessForTeardown(record *attemptRecord) (teardownState, st
 		detail += "; the launch was never confirmed — this is herdr's answer to a question the record could not settle"
 	}
 	return state, detail, nil
+}
+
+// DefaultInterruptGrace is how long a teardown waits for an interrupt this
+// executor delivered to land before it refuses a still-working agent.
+const DefaultInterruptGrace = 30 * time.Second
+
+// interruptRequested says this executor's Cancel delivered an interrupt to
+// the attempt's agent — the stop a teardown always follows (the
+// reconciler's order is revoke, then dispose).
+func interruptRequested(st *store) bool {
+	observations, _ := st.observationsFrom("")
+	for _, obs := range observations {
+		if obs.Kind == subprocess.ObsCancelRequested {
+			return true
+		}
+	}
+	return false
+}
+
+// awaitInterrupt gives the interrupt Cancel just delivered a bounded grace to
+// land, re-asking the liveness question until the agent stops working.
+//
+// The reconciler tears a collected attempt down the moment its facts are
+// durable: revoke (ctrl+c through herdr), then dispose, in the same second.
+// herdr's status for the agent lags the interrupt, so the dispose read
+// `working` and refused — every time, on an agent that was idle a minute
+// later — and the attempt's pane outlived the run with its agent still
+// holding its herdr name (epic-6in, 4i8 attempt 3). A still-working agent at
+// the end of the grace is refused exactly as before: the grace only stops a
+// refusal from being decided by a race.
+func (e *Executor) awaitInterrupt(record *attemptRecord) (teardownState, string, error) {
+	grace := e.opts.InterruptGrace
+	if grace <= 0 {
+		grace = DefaultInterruptGrace
+	}
+	deadline := e.now().Add(grace)
+	for {
+		state, detail, err := e.livenessForTeardown(record)
+		if err != nil || state != teardownWorking || !e.now().Before(deadline) {
+			if err == nil && state == teardownWorking {
+				detail += fmt.Sprintf(" — still, %s after the interrupt was delivered", grace)
+			}
+			return state, detail, err
+		}
+		time.Sleep(readinessPollInterval)
+	}
 }
 
 // archiveOwnReport moves the attempt's own untracked report out of the

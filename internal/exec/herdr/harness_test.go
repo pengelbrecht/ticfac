@@ -600,6 +600,7 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	// `working` and short enough not to stall the suite.
 	ex.opts.StartupTimeout = 3 * time.Second
 	ex.opts.ConfirmTimeout = 1 * time.Second
+	ex.opts.InterruptGrace = 1 * time.Second
 	h.ex = ex
 	return h
 }

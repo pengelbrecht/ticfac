@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -467,5 +468,95 @@ func TestAQuietGateIsWarnedAboutAndATalkativeOneIsNot(t *testing.T) {
 		t.Errorf("a gate that printed every 100ms for three seconds was warned about %d times: a stall warning "+
 			"that fires on a check which is plainly working is noise, and noise is how a real one gets ignored",
 			stalled)
+	}
+}
+
+// refusingRelease refuses the FIRST teardown of each attempt made at its
+// collect, the way the herdr executor refused epic-6in's 4i8 attempt 3: the
+// release revokes and disposes in the same second, herdr still reports the
+// interrupted agent `working`, and dispose refuses a working agent. Every
+// later teardown of the attempt goes through.
+type refusingRelease struct {
+	Executor
+	state *releaseLedger
+}
+
+type releaseLedger struct {
+	mu       sync.Mutex
+	refused  map[string]bool // job ids whose release teardown was refused
+	disposed map[string]bool // job ids some teardown actually disposed
+}
+
+func (e *refusingRelease) Dispose(handle *subprocess.JobHandle, opts subprocess.DisposeOptions) error {
+	e.state.mu.Lock()
+	if strings.Contains(opts.Reason, "is collected") && !e.state.refused[handle.JobID] {
+		e.state.refused[handle.JobID] = true
+		e.state.mu.Unlock()
+		return &subprocess.Refusal{Reason: subprocess.RefusedLive,
+			Message: "the agent is working and may be mid-turn about to commit (the interrupt has not landed yet)"}
+	}
+	e.state.mu.Unlock()
+	err := e.Executor.Dispose(handle, opts)
+	if err == nil {
+		e.state.mu.Lock()
+		e.state.disposed[handle.JobID] = true
+		e.state.mu.Unlock()
+	}
+	return err
+}
+
+// TestAReleaseTheExecutorRefusedIsTornDownAgainWhenTheTickIsRefused: a
+// refused release is not a release. It used to be taken as one — the finish
+// marked the worker gone before asking whether the teardown happened — so a
+// tick refused after its collect disposed of nothing, told the feed its
+// worktree "went when it was collected", and left the attempt's workspace (on
+// herdr: its pane, still holding its agent name) for the rest of the run.
+func TestAReleaseTheExecutorRefusedIsTornDownAgainWhenTheTickIsRefused(t *testing.T) {
+	t.Parallel()
+	refusing := `version = 2
+
+[orchestration]
+max_parallel = 1
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[testing.commands]
+tree = { command = "exit 3", description = "always refuses" }
+`
+	f := newFixture(t, fixtureOptions{gate: refusing})
+	ledger := &releaseLedger{refused: map[string]bool{}, disposed: map[string]bool{}}
+	f.wrap = func(inner Executor) Executor { return &refusingRelease{Executor: inner, state: ledger} }
+
+	r, result, err := f.run(f.Repo, fixtureOptions{gate: refusing})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(result.Closed) != 0 {
+		t.Fatalf("closed %v behind a gate that refuses everything", result.Closed)
+	}
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	attempts := 0
+	for jobID := range ledger.refused {
+		if !strings.Contains(jobID, "/attempt-") {
+			continue
+		}
+		attempts++
+		if !ledger.disposed[jobID] {
+			t.Errorf("%s: its release teardown was refused and nothing tore it down again — the attempt's "+
+				"workspace outlives the run", jobID)
+		}
+	}
+	if attempts == 0 {
+		t.Fatalf("no attempt's release teardown was attempted: the fixture is not exercising the release "+
+			"(the run ended %s: %+v)", result.State, result.Failure)
+	}
+	for _, event := range r.Journal() {
+		if strings.Contains(event.Detail, "went when it was collected") {
+			t.Errorf("the feed says %s's worktree went at the collect, and the executor refused that teardown: %s",
+				event.Tick, event.Detail)
+		}
 	}
 }

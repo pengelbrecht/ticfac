@@ -76,7 +76,7 @@ func TestErrorCodeConstantsMatchVocabulary(t *testing.T) {
 	diff(t, "error_codes", v.ErrorCodes.ClientUsed, []string{
 		CodeTimeout, CodeInvalidRequest,
 		CodeAgentNotFound, CodePaneNotFound, CodeWorkspaceNotFound,
-		CodeAgentPaneBusy, CodeAgentPromptStalled,
+		CodeAgentPaneBusy, CodeAgentPromptStalled, CodeAgentNameTaken,
 	})
 }
 
