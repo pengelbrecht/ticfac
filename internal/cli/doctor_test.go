@@ -42,6 +42,7 @@ type doctorSeams struct {
 	docker      func(context.Context) (string, error)
 	wrangler    func() (string, error)
 	factory     func(context.Context) (string, error)
+	classifier  func(context.Context) (string, error)
 }
 
 // saveDoctorSeams overrides every probe with ok (or with the one missing
@@ -60,11 +61,13 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 		docker:      doctorDocker,
 		wrangler:    doctorWrangler,
 		factory:     doctorFactory,
+		classifier:  doctorClassifier,
 	}
 	t.Cleanup(func() {
 		doctorTK, doctorHerdr, doctorGitHub, doctorForgeRemote, doctorGitIdentity =
 			saved.tk, saved.herdr, saved.github, saved.forgeRemote, saved.gitID
 		doctorDocker, doctorWrangler, doctorFactory = saved.docker, saved.wrangler, saved.factory
+		doctorClassifier = saved.classifier
 	})
 	ok := func(name string) func() (string, error) {
 		if name == missing {
@@ -87,6 +90,7 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 	doctorDocker = func(context.Context) (string, error) { return ok("docker")() }
 	doctorWrangler = ok("wrangler")
 	doctorFactory = func(context.Context) (string, error) { return ok("factory")() }
+	doctorClassifier = func(context.Context) (string, error) { return ok("classifier")() }
 }
 
 // errDoctorProbe is the one error shape the table's missing probes report.
@@ -143,6 +147,7 @@ func TestDoctorReportsEachMissingPrerequisiteWithItsFix(t *testing.T) {
 		{check: "herdr", fix: doctorFixHerdr},
 		{check: "github", fix: doctorFixGitHub},
 		{check: "git identity", fix: doctorFixGit},
+		{check: "classifier", fix: doctorFixClassifier},
 		{check: "docker", fix: doctorFixDocker, cloud: true},
 		{check: "wrangler", fix: doctorFixWrangler, cloud: true},
 		{check: "factory", fix: doctorFixFactory, cloud: true},
@@ -174,7 +179,7 @@ func TestDoctorWithEverythingPresentExitsZero(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("doctor with everything exits %d, want %d:\n%s", code, exitSuccess, stdout)
 	}
-	for _, check := range []string{runconfigFileName(), "tk", "herdr", "github", "git identity"} {
+	for _, check := range []string{runconfigFileName(), "tk", "herdr", "github", "git identity", "classifier"} {
 		if !strings.Contains(stdout, "ok       "+check) {
 			t.Errorf("the report has no ok line for %s:\n%s", check, stdout)
 		}

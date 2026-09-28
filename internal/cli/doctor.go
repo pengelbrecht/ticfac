@@ -43,6 +43,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	herdclient "github.com/pengelbrecht/ticfac/internal/herd/client"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -79,7 +80,11 @@ the command that clears it:
   github              the GitHub remote and credential the PR + CI close-out
                       rule needs — checked when the repository declares the rule
   git identity        the user.email and user.name a run's commits are attributed to
-  docker              cloud only: the sandbox image builds from one
+  classifier          Jev (typesafe/jev on Cloudflare Workers AI) answers one tiny
+                      question on the credential a run resolves — without it a
+                      run classifies nothing and every dispatch starts at
+                      [tier_policy.start]
+  docker             cloud only: the sandbox image builds from one
   wrangler            cloud only: the factory is driven through it
   factory             cloud only: a configured factory to boot the containers from
 
@@ -226,6 +231,26 @@ var (
 		return first, nil
 	}
 
+	// doctorClassifier answers for the classifier (tick tum): whether Jev —
+	// typesafe/jev on Cloudflare Workers AI — ANSWERS on the credential a
+	// local run would resolve, by asking it one tiny question (a couple of
+	// hundred input tokens). Resolving is not answering: a token without
+	// Workers AI permission, or a wrong account, resolves fine and classifies
+	// nothing, and the run finds out only by recording a no-answer per tick.
+	doctorClassifier = func(ctx context.Context) (string, error) {
+		source := resolveClassifierCredential()
+		if !source.Configured {
+			return "", fmt.Errorf("%s", source.Note)
+		}
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		detail, err := jev.New(source.Config, nil).Probe(ctx)
+		if err != nil {
+			return "", fmt.Errorf("Jev did not answer: %v — every dispatch would start at [tier_policy.start]", err)
+		}
+		return detail, nil
+	}
+
 	// doctorFactory answers for a configured factory, the same status
 	// `ticfac factory status` reads — offline here, because doctor reports
 	// what the machine holds, and the live re-check is the status command's
@@ -255,6 +280,10 @@ const (
 	doctorFixDocker      = "install Docker and start it (https://docs.docker.com/get-docker/)"
 	doctorFixWrangler    = "pnpm add -g wrangler"
 	doctorFixFactory     = "ticfac factory setup"
+	// The classifier runs on the Cloudflare credential the setup ladder
+	// already stores; the token needs Workers AI permission on the account
+	// the gateway URL names.
+	doctorFixClassifier = "ticfac factory setup --cloudflare-api-token <token> (a Cloudflare API token with Workers AI access, on the account factory_gateway_url names)"
 )
 
 // runDoctor is `doctor`'s body.
@@ -354,6 +383,9 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 		}())
 	}
 	checks = append(checks, check("git identity", doctorFixGit, func() (string, error) { return doctorGitIdentity(repo) }))
+	// Every run classifies its role-less ticks before their first dispatch,
+	// local or cloud, so the classifier is checked whatever the substrate.
+	checks = append(checks, check("classifier", doctorFixClassifier, func() (string, error) { return doctorClassifier(ctx) }))
 	// The herdr line is honest about what a missing herdr means: the
 	// substrate degrades to a plain harness, it does not stop the run — the
 	// fix is still on the line, because panes are where an operator watches
@@ -363,6 +395,9 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 			checks[i].Problem += " — runs degrade to a plain harness without it"
 		}
 	}
+	// The classifier line is honest the same way: without it a run
+	// classifies nothing and routes every dispatch at [tier_policy.start];
+	// it does not stop. (The probe's own notes already say so.)
 	if cloudish {
 		checks = append(checks,
 			check("docker", doctorFixDocker, func() (string, error) { return doctorDocker(ctx) }),

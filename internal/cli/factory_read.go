@@ -206,6 +206,7 @@ func factoryStatus(ctx context.Context, args []string, offline, check *bool, git
 				rung("gateway", report.Gateway),
 				rung("telemetry", report.Telemetry),
 				rung("billing", report.Billing),
+				rung("classifier", report.Classifier),
 			},
 		}
 		if failures := report.Failures(); len(failures) > 0 {

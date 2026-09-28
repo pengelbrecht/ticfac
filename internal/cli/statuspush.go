@@ -22,8 +22,7 @@ package cli
 //     nil and costs nothing. The tick named the opt-in "a ticfac config
 //     flag": the flag is a flag, and its config is the $TICFAC_* environment
 //     — the vocabulary this repository already owns for operator preferences
-//     ($TICFAC_RUNNER defaults `--runner` the same way; $TICFAC_JEV_API_KEY
-//     is the classifier's) — because ~/.ticfacrc's key vocabulary is the
+//     ($TICFAC_RUNNER defaults `--runner` the same way) — because ~/.ticfacrc's key vocabulary is the
 //     pinned credential-ownership bundle's and closed ("an unknown
 //     factory_ key is a typo"), so a `factory_status_push` key there is a
 //     bundle re-cut away and is drafted as a finding. The flag on the command
