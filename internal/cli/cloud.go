@@ -76,8 +76,8 @@ usage:
   ticfac cloud run <epic> [flags]        push the current branch and start a run
   ticfac cloud stop <run> [--now]         stop a live run, cleanly or right now
   ticfac cloud status [run]               runs, leases and queue; or one run
-  ticfac cloud logs <run> [-f] [--tail N] what the container printed
-  ticfac cloud trace <run>                what the model said and decided
+  ticfac cloud logs <run> [-f] [--tail N] [--tick <id>]  what the container printed
+  ticfac cloud trace <run> [--tick <id>]  what the model said and decided
   ticfac cloud supervisor <run> [--steps N] whether the Workflow is alive
   ticfac cloud branch <name> [--detail <why>]  record a branch this run created
 
@@ -88,6 +88,11 @@ run flags:
                           budget, never raise it
   --max-wall-clock <dur>  wall-clock ceiling for this run; may lower the
                           deployment budget, never raise it
+
+<run> is the factory's run id (run_ plus hex, or its head) or the epic id the
+run was started for: an epic id answers for the epic's live cloud run, else its
+latest. A tick id is not a run — logs and trace read one tick's worker with
+--tick, e.g. ticfac cloud trace <epic> --tick <tick>.
 
 The factory is self-deployed and authenticated with the factory_url and
 factory_token entries in ~/.ticfacrc. There is deliberately no cloud steering
@@ -546,14 +551,14 @@ func printCloudRunBudget(out io.Writer, budget *cloudEffectiveBudget) {
 }
 
 func runCloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdout, stderr io.Writer) int {
-	err := cloudStop(ctx, args, now, asJSON, stdout)
+	err := cloudStop(ctx, args, now, asJSON, stdout, stderr)
 	return reportCommand("cloud stop", err, stderr)
 }
 
 // newCloudStopCommand builds `cloud stop`'s cobra command.
 func newCloudStopCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "stop <run-id>",
+		Use:   "stop <run-id|epic-id>",
 		Short: "stop a live run, cleanly or right now",
 	}
 	fs := newFlagSet("cloud stop", nil)
@@ -566,7 +571,7 @@ func newCloudStopCommand(stdout, stderr io.Writer) *cobra.Command {
 	return cmd
 }
 
-func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdout io.Writer) error {
+func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
@@ -576,12 +581,18 @@ func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdo
 	if err != nil {
 		return newExitError(exitGeneric, "%v", err)
 	}
+	// The epic id the run was started with stops that epic's live run: the
+	// kill switch must not demand an id `ticfac run --cloud` never printed.
+	runID, err := cloudRunArg(ctx, "stop", rest[0], false, stderr)
+	if err != nil {
+		return err
+	}
 	requestedBy := cloudRequestedBy()
 	mode := "clean"
 	if *now {
 		mode = "hard"
 	}
-	path := "/api/runs/" + url.PathEscape(rest[0]) + "/stop"
+	path := "/api/runs/" + url.PathEscape(runID) + "/stop"
 	data, err := client.request(ctx, http.MethodPost, path, map[string]string{
 		"requested_by": requestedBy,
 		"mode":         mode,
@@ -609,7 +620,7 @@ func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdo
 		if *asJSON {
 			return emitCloudStopJSON("hard", state, response, stdout)
 		}
-		fmt.Fprintf(stdout, "Cloud hard stop performed: %s (%s)\n", rest[0], state)
+		fmt.Fprintf(stdout, "Cloud hard stop performed: %s (%s)\n", runID, state)
 		fmt.Fprintf(stdout, "  gateway credentials revoked: %d\n", response.TokensRevoked)
 		fmt.Fprintln(stdout, "  model traffic is refused from the next request; review and closeout will not run")
 		return nil
@@ -617,7 +628,7 @@ func cloudStop(ctx context.Context, args []string, now *bool, asJSON *bool, stdo
 	if *asJSON {
 		return emitCloudStopJSON("clean", state, response, stdout)
 	}
-	fmt.Fprintf(stdout, "Cloud clean stop requested: %s (%s)\n", rest[0], state)
+	fmt.Fprintf(stdout, "Cloud clean stop requested: %s (%s)\n", runID, state)
 	fmt.Fprintln(stdout, "  in-flight work finishes, then review and closeout run; use --now to revoke the credential immediately")
 	return nil
 }
@@ -656,7 +667,7 @@ func emitCloudStopJSON(performed, state string, response cloudStopResponse, stdo
 // newCloudStatusCommand builds `cloud status`'s cobra command.
 func newCloudStatusCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "status [run-id]",
+		Use:   "status [run-id|epic-id]",
 		Short: "runs, leases and queue; or one run",
 	}
 	fs := newFlagSet("cloud status", nil)
@@ -688,7 +699,7 @@ func cloudStatus(ctx context.Context, args []string, asJSON *bool, stdout, stder
 		// Resolved rather than looked up literally: the factory answers a
 		// prefix with "no run <prefix>", which is true of the prefix and reads
 		// as a verdict on the run (tick c5i).
-		runID, err := cloudRunIDArg(ctx, rest[0], stderr)
+		runID, err := cloudRunArg(ctx, "status", rest[0], false, stderr)
 		if err != nil {
 			return err
 		}
