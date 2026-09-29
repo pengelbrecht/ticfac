@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 11,
-  "state": "integrating",
-  "reason": "integrating r5i attempt 1 into epic/hn6",
-  "updated_at": "2026-09-29T13:30:15Z",
+  "sequence": 12,
+  "state": "gating",
+  "reason": "running the integrated gate for r5i on 767446cedbb6",
+  "updated_at": "2026-09-29T13:30:20Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "rejected",
+      "state": "integrated",
       "attempt": 1
     },
     {
