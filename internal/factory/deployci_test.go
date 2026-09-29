@@ -133,6 +133,8 @@ func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
 		"a failed or cancelled CI must never deploy")
 	workflowMustContain(t, workflow, "github.event.workflow_run.head_branch == 'main'",
 		"only main deploys; an epic branch's CI passing is not a release")
+	workflowMustContain(t, workflow, "github.event.workflow_run.event == 'workflow_dispatch'",
+		"a dispatched CI run on main cancels the push's run (ci.yml's concurrency), so its verdict must deploy too — or main's head may never deploy")
 	workflowMustContain(t, workflow, "github.event.workflow_run.head_sha",
 		"the deploy must check out the commit CI tested, not main's head at the time the event fired")
 	workflowMustContain(t, workflow, "cancel-in-progress: false",

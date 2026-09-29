@@ -98,14 +98,19 @@ permissions:
 jobs:
   deploy-factory:
     name: deploy-factory
-    # Only a push to main in this repository that CI passed. A cancelled or
-    # failed CI, a PR, an epic branch and a fork never deploy, and never take
-    # the concurrency slot below either: a job skipped by its `if` does not
-    # enter the group, so a skip cannot supersede a queued deploy.
+    # Only main in this repository, and only a CI run that passed. A
+    # cancelled or failed CI, a PR, an epic branch and a fork never deploy,
+    # and never take the concurrency slot below either: a job skipped by its
+    # `if` does not enter the group, so a skip cannot supersede a queued
+    # deploy. A DISPATCHED CI run on main counts as much as a push's: ci.yml's
+    # concurrency cancels main's push run when CI is dispatched on main (the
+    # run's silent-CI dispatch, an operator's re-run), and on 2026-09-29 that
+    # left the dispatched run as the only verdict main's head ever got — a
+    # push-only filter never deployed it.
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
