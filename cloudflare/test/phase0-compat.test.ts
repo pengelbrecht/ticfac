@@ -720,8 +720,8 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       FACTORY_MAX_INSTANCES: declaredMaxInstances(),
       GITHUB_CONSENT_LABEL: "tk",
       RUN_HARNESS: "pi",
-      RUN_MAX_COST_USD: "40",
-      RUN_MAX_WALL_CLOCK_MS: "14400000",
+      RUN_MAX_COST_USD: "250",
+      RUN_MAX_WALL_CLOCK_MS: "86400000",
       RUN_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       RUN_QUEUE_TTL_MS: "1800000",
       RUN_STOP_GRACE_MS: "300000",
@@ -795,16 +795,16 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // submission."
     const clamped = effectiveRunBudget(env, {
       max_cost_usd: 1_000,
-      max_wall_clock_ms: 24 * 60 * 60_000,
+      max_wall_clock_ms: 48 * 60 * 60_000,
     });
 
     expect(clamped.requested_max_cost_usd).toBe(1_000);
-    expect(clamped.requested_max_wall_clock_ms).toBe(24 * 60 * 60_000);
+    expect(clamped.requested_max_wall_clock_ms).toBe(48 * 60 * 60_000);
     expect(clamped.cost_clamped).toBe(true);
     expect(clamped.wall_clock_clamped).toBe(true);
     // The number that will actually govern — the deployment's, not the ask.
-    expect(clamped.max_cost_usd).toBe(40);
-    expect(clamped.max_wall_clock_ms).toBe(14_400_000);
+    expect(clamped.max_cost_usd).toBe(250);
+    expect(clamped.max_wall_clock_ms).toBe(86_400_000);
 
     const within = effectiveRunBudget(env, { max_cost_usd: 5, max_wall_clock_ms: 60_000 });
     expect(within.cost_clamped).toBe(false);
